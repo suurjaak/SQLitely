@@ -1,0 +1,1 @@
+@start pythonw "%~dp0\sqlitemate\main.py" %*

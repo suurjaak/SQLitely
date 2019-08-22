@@ -1,0 +1,2 @@
+recursive-include sqlitemate *.py *.ttf
+include INSTALL.md LICENSE.md README.md requirements.txt
