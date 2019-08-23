@@ -143,7 +143,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         tint_colour = wx.NamedColour(conf.BgColour)
         tint_factor = [((4 * x) % 256) / 255. for x in tint_colour]
         # Images shown on the default search content page
-        for name in ["Search", "Chats", "Info", "Tables", "SQL", "Contacts"]:
+        for name in ["Search", "Info", "Tables", "SQL"]:
             bmp = getattr(images, "Help" + name, None)
             if not bmp: continue # Continue for name in [..]
             bmp = bmp.Image.AdjustChannels(*tint_factor)
@@ -236,7 +236,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             conf.LinkColour = colourhex(wx.SYS_COLOUR_HOTLIGHT)
             conf.TitleColour = colourhex(wx.SYS_COLOUR_HOTLIGHT)
             conf.MainBgColour = conf.WidgetColour
-            conf.MessageTextColour = conf.FgColour
             conf.HelpCodeColour = colourhex(wx.SYS_COLOUR_HIGHLIGHT)
             conf.HelpBorderColour = colourhex(wx.SYS_COLOUR_ACTIVEBORDER)
 
@@ -1448,8 +1447,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 class DatabasePage(wx.Panel):
     """
     A wx.Notebook page for managing a single database file, has its own
-    Notebook with a number of pages for searching, browsing chat history and
-    database tables, information.
+    Notebook with a number of pages for searching, browsing, SQL, information.
     """
 
     def __init__(self, parent_notebook, title, db, memoryfs):
@@ -1561,7 +1559,7 @@ class DatabasePage(wx.Panel):
 
 
     def create_page_search(self, notebook):
-        """Creates a page for searching chats."""
+        """Creates a page for searching the database."""
         page = self.page_search = wx.Panel(parent=notebook)
         self.pageorder[page] = len(self.pageorder)
         notebook.AddPage(page, "Search")
@@ -1578,7 +1576,7 @@ class DatabasePage(wx.Panel):
             wx.ToolBar(parent=page, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         tb.SetToolBitmapSize((24, 24))
         tb.AddRadioTool(wx.ID_INDEX, bitmap=images.ToolbarTitle.Bitmap,
-            shortHelp="Search in chat title and participants")
+            shortHelp="Search in table and column names and types")
         tb.AddRadioTool(wx.ID_STATIC, bitmap=images.ToolbarTables.Bitmap,
             shortHelp="Search in all columns of all database tables")
         tb.AddSeparator()
@@ -1597,7 +1595,7 @@ class DatabasePage(wx.Panel):
 
         self.label_search.Label = "&Search in database:"
         if conf.SearchInNames:
-            self.label_search.Label = "&Search in table and column names:"
+            self.label_search.Label = "&Search in table and column names and types:"
 
         html = self.html_searchall = controls.TabbedHtmlWindow(parent=page)
         default = step.Template(templates.SEARCH_WELCOME_HTML).expand()
@@ -2025,9 +2023,6 @@ class DatabasePage(wx.Panel):
         if not self:
             return
         sash_pos = self.Size[1] / 3
-        panel1, panel2 = self.splitter_chats.Children
-        self.splitter_chats.Unsplit()
-        self.splitter_chats.SplitHorizontally(panel1, panel2, sash_pos)
         panel1, panel2 = self.splitter_tables.Children
         self.splitter_tables.Unsplit()
         self.splitter_tables.SplitVertically(panel1, panel2, 270)
@@ -2322,7 +2317,7 @@ class DatabasePage(wx.Panel):
         if wx.ID_INDEX == event.Id:
             conf.SearchInNames = True
             conf.SearchInTables = False
-            self.label_search.Label = "&Search in table and column names:"
+            self.label_search.Label = "&Search in table and column names and types:"
         elif wx.ID_STATIC == event.Id:
             conf.SearchInTables = True
             conf.SearchInNames = False
@@ -2428,7 +2423,7 @@ class DatabasePage(wx.Panel):
                     "partial_html": ""}
             if conf.SearchInNames:
                 data["table"] = "names"
-                fromtext = "table and column names"
+                fromtext = "table and column names and types"
             elif conf.SearchInTables:
                 data["table"] = "tables"
                 fromtext = "tables"

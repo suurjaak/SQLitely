@@ -78,7 +78,7 @@ LastSelectedFiles = ["", ""]
 RecentFiles = []
 
 """
-Texts entered in chat global search, used for drop down auto-complete.
+Texts entered in global search, used for drop down auto-complete.
 Last value can be an empty string: search box had no text.
 """
 SearchHistory = []
@@ -156,11 +156,8 @@ SearchResultsChunk = 50
 """Number of contact search results to yield in one chunk."""
 SearchContactsChunk = 10
 
-"""Name of font used in chat history."""
-HistoryFontName = "Tahoma"
-
-"""Font size in chat history."""
-HistoryFontSize = 8
+"""Name of font used in HTML content."""
+HtmlFontName = "Tahoma"
 
 """Window background colour."""
 BgColour = "#FFFFFF"
@@ -173,12 +170,6 @@ MainBgColour = "#FFFFFF"
 
 """Widget (button etc) background colour."""
 WidgetColour = "#D4D0C8"
-
-"""Default text colour for chat messages."""
-MessageTextColour = "#202020"
-
-"""Foreground colour for gauges."""
-GaugeColour = "#008000"
 
 """Disabled text colour."""
 DisabledColour = "#808080"
@@ -202,7 +193,7 @@ DBListForegroundColour = "#000000"
 """Colour used for titles."""
 TitleColour = "#3399FF"
 
-"""Descriptive text shown in chat history searchbox."""
+"""Descriptive text shown in history searchbox."""
 SearchDescription = "Search for.."
 
 """Foreground colour for error labels."""
