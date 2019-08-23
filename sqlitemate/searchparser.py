@@ -8,9 +8,9 @@ Parses a Google-like search grammar into SQL for querying a database.
 - quoted text is a literal phrase: "one two  three   ."
 - can use operator "OR" to make an either-or search: one OR two
 - words can be grouped with round brackets: (one two) OR (three four)
-- keywords chat:chatname, from:authorname,
+- keywords table:tablename, column:columnname,
   date:year[-month[-day]][..year[-month[-day]]],
-  value can be in quotes, e.g. chat:"link chat". Keywords are global, ignoring
+  value can be in quotes, e.g. table:"table name". Keywords are global, ignoring
   all groups and OR-expressions.
 - "-" immediately before: exclude words, phrases, grouped words and keywords
 - can also provide queries to search all fields in any table
@@ -112,7 +112,7 @@ class SearchQueryParser(object):
         @return         (SQL string, SQL parameter dict, word and phrase list, keyword map)
         """
         words = [] # All encountered text words and quoted phrases
-        keywords = collections.defaultdict(list) # {"from": [], "chat": [], ..}
+        keywords = collections.defaultdict(list) # {"table": [], "column": [], ..}
         sql_params = {} # Parameters for SQL query {"column_like0": "%word%", ..}
 
         try:
@@ -349,14 +349,14 @@ if "__main__" == __name__:
         'WORDTEST word "quoted words"',
         'ORTEST OR singleword OR (grouped words) OR lastword',
         'NEGATIONTEST -notword -"not this phrase" -(not these words) '
-                     '-chat:notthischat -from:notthisauthor -date:1..9999',
-        'WILDCARDTEST under_score percent% wild*card from:notawild*card',
+                     '-table:notthistable -column:notthiscolumn -date:1..9999',
+        'WILDCARDTEST under_score percent% wild*card table:notawild*card',
         'DATETEST date:2002 -date:2002-12-24..2003 date:..2002-12-29 '
                  'date:*-*-24',
-        'CHARACTERTEST ragnarök OR bust!½{[]}\\$$£@~§´` from:jörmungandr',
-        'KEYWORDTEST --from:notkeyword chats:notkeyword from: singleword '
-                    'chat:"quoted title" date:t date:20022-x-20..2003-x-y',
-        'WORDFAILTEST chat:parens in(anyword',
+        'CHARACTERTEST ragnarök OR bust!½{[]}\\$$£@~§´` table:jörmungandr',
+        'KEYWORDTEST --table:notkeyword tables:notkeyword table: singleword '
+                    'table:"quoted title" date:t date:20022-x-20..2003-x-y',
+        'WORDFAILTEST table:parens in(anyword',
         'BIGTEST OR word OR (grouped words) OR -(excluded grouped words) '
                 'OR -excludedword OR (word2 OR (nested grouped words)) '
                 'date:2011-11..2013-02 -date:2012-06..2012-08 '

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.08.2019
+@modified    23.08.2019
 ------------------------------------------------------------------------------
 """
 import re
@@ -36,7 +36,7 @@ from lib import util
     <title>{{title}}</title>
     <link rel="shortcut icon" type="image/png" href="data:image/ico;base64,{{!images.Icon16x16_8bit.data}}"/>
     <style>
-        * { font-family: {{conf.HistoryFontName}}; font-size: 11px; }
+        * { font-family: {{conf.HtmlFontName}}; font-size: 11px; }
         body {
             background: {{conf.HistoryBackgroundColour}};
             margin: 0px 10px 0px 10px;
@@ -57,7 +57,7 @@ from lib import util
         table.body_table > tbody > tr > td {
             background: white;
             width: 800px;
-            font-family: {{conf.HistoryFontName}};
+            font-family: {{conf.HtmlFontName}};
             font-size: 11px;
             border-radius: 10px;
             padding: 10px;
@@ -172,7 +172,7 @@ INSERT INTO {{table}} ({{str_cols}}) VALUES ({{", ".join(values)}});
 SEARCH_HEADER_HTML = """<%
 import conf
 %>
-<font size="2" face="{{conf.HistoryFontName}}" color="{{conf.FgColour}}">
+<font size="2" face="{{conf.HtmlFontName}}" color="{{conf.FgColour}}">
 Results for "{{text}}" from {{fromtext}}:
 <br /><br />
 """
@@ -186,7 +186,10 @@ Table <a href="table:{{table["name"]}}">
     <font color="{{conf.LinkColour}}">{{!pattern_replace.sub(wrap_b, escape(table["name"]))}}</font></a>:
 <table>
 %for col in columns:
-  <tr><td>{{!pattern_replace.sub(wrap_b, escape(col["name"]))}}</td><td>{{col["type"]}}</td></tr>
+  <tr>
+    <td>{{!pattern_replace.sub(wrap_b, escape(col["name"]))}}</td>
+    <td>{{!pattern_replace.sub(wrap_b, escape(col["type"]))}}</td>
+  </tr>
 %endfor
 </table>
 <br /><br />
@@ -244,7 +247,7 @@ ABOUT_HTML = """<%
 import sys
 import conf
 %>
-<font size="2" face="{{conf.HistoryFontName}}" color="{{conf.FgColour}}">
+<font size="2" face="{{conf.HtmlFontName}}" color="{{conf.FgColour}}">
 <table cellpadding="0" cellspacing="0"><tr><td valign="top">
 <img src="memory:{{conf.Title.lower()}}.png" /></td><td width="10"></td><td valign="center">
 <b>{{conf.Title}} version {{conf.Version}}</b>, {{conf.VersionDate}}.<br /><br />
@@ -301,7 +304,7 @@ Installer created with Nullsoft Scriptable Install System 3.0b1,
 SEARCH_WELCOME_HTML = """<%
 import conf
 %>
-<font face="{{conf.HistoryFontName}}" size="2" color="{{conf.FgColour}}">
+<font face="{{conf.HtmlFontName}}" size="2" color="{{conf.FgColour}}">
 <center>
 <h5><font color="{{conf.TitleColour}}">Explore the database</font></h5>
 <table cellpadding="10" cellspacing="0">
@@ -363,7 +366,7 @@ try:
 except ImportError:
     pyparsing = None
 %>
-<font size="2" face="{{conf.HistoryFontName}}" color="{{conf.FgColour}}">
+<font size="2" face="{{conf.HtmlFontName}}" color="{{conf.FgColour}}">
 %if not pyparsing:
 <b><font color="red">Search syntax currently limited:</font></b>&nbsp;&nbsp;pyparsing not installed.<br /><br /><br />
 %endif
@@ -554,7 +557,7 @@ helplink = "Search help"
 if "nt" == os.name: # In Windows, wx.HtmlWindow shows link whitespace quirkily
     helplink = helplink.replace(" ", "_")
 %>
-<font size="2" face="{{conf.HistoryFontName}}" color="{{conf.DisabledColour}}">
+<font size="2" face="{{conf.HtmlFontName}}" color="{{conf.DisabledColour}}">
 For searching from specific tables, add "table:name", and from specific columns, add "column:name".
 &nbsp;&nbsp;<a href=\"page:#help\"><font color="{{conf.LinkColour}}">{{helplink}}</font></a>.
 </font>

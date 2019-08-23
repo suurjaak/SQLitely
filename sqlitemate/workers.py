@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.08.2019
+@modified    23.08.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -138,17 +138,18 @@ class SearchThread(WorkerThread):
                 pattern_replace = re.compile(patt, re.IGNORECASE)
                 infotext = search["table"]
 
-                # Find from table and column names
+                # Find from table and column names and types
                 if not self._stop_work and "names" == search["table"] \
                 and match_words:
-                    infotext = "table and column names"
+                    infotext = "table and column names and types"
                     count = 0
                     template_tablemeta = FACTORY("tablemeta")
                     for table in search["db"].get_tables():
                         columns = search["db"].get_table_columns(table["name"])
                         table_matches = self.match_all(table["name"], match_words)
                         matching_columns = [c for c in columns
-                                            if self.match_all(c["name"], match_words)]
+                                            if self.match_all(c["name"], match_words)
+                                            or self.match_all(c["type"], match_words)]
                             
                         if table_matches or matching_columns:
                             count += 1

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.08.2019
+@modified    23.08.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -16,6 +16,7 @@ import base64
 import collections
 import copy
 import datetime
+import functools
 import hashlib
 import inspect
 import math
@@ -143,7 +144,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         tint_colour = wx.NamedColour(conf.BgColour)
         tint_factor = [((4 * x) % 256) / 255. for x in tint_colour]
         # Images shown on the default search content page
-        for name in ["Search", "Chats", "Info", "Tables", "SQL", "Contacts"]:
+        for name in ["Search", "Info", "Tables", "SQL"]:
             bmp = getattr(images, "Help" + name, None)
             if not bmp: continue # Continue for name in [..]
             bmp = bmp.Image.AdjustChannels(*tint_factor)
@@ -163,13 +164,25 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_page)
         notebook.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
                       self.on_close_page)
-        # Register Ctrl-F4 and Ctrl-W close handlers
-        id_close = wx.NewId()
+
+        # Register Ctrl-F4 and Ctrl-W close and Ctrl-1..9 tab handlers
         def on_close_hotkey(event):
             notebook and notebook.DeletePage(notebook.GetSelection())
-        notebook.SetAcceleratorTable(wx.AcceleratorTable([
-            (wx.ACCEL_CTRL, k, id_close) for k in (ord('W'), wx.WXK_F4)]))
+        def on_tab_hotkey(number, event):
+            if notebook and notebook.GetSelection() != number \
+            and number < notebook.GetPageCount():
+                notebook.SetSelection(number)
+                self.update_notebook_header()
+
+        id_close = wx.NewId()
+        accelerators = [(wx.ACCEL_CTRL, k, id_close) for k in (ord('W'), wx.WXK_F4)]
+        for i in range(9):
+            id_tab = wx.NewId()
+            accelerators += [(wx.ACCEL_CTRL, ord(str(i + 1)), id_tab)]
+            notebook.Bind(wx.EVT_MENU, functools.partial(on_tab_hotkey, i), id=id_tab)
+
         notebook.Bind(wx.EVT_MENU, on_close_hotkey, id=id_close)
+        notebook.SetAcceleratorTable(wx.AcceleratorTable(accelerators))
 
 
         class FileDrop(wx.FileDropTarget):
@@ -236,7 +249,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             conf.LinkColour = colourhex(wx.SYS_COLOUR_HOTLIGHT)
             conf.TitleColour = colourhex(wx.SYS_COLOUR_HOTLIGHT)
             conf.MainBgColour = conf.WidgetColour
-            conf.MessageTextColour = conf.FgColour
             conf.HelpCodeColour = colourhex(wx.SYS_COLOUR_HIGHLIGHT)
             conf.HelpBorderColour = colourhex(wx.SYS_COLOUR_ACTIVEBORDER)
 
@@ -513,6 +525,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         label_main.Font = wx.Font(14, wx.FONTFAMILY_SWISS,
             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
         BUTTONS_MAIN = [
+            ("new", "&New database", images.ButtonNew, 
+             "Create a new SQLite database."),
             ("opena", "&Open a database..", images.ButtonOpenA, 
              "Choose a database from your computer to open."),
             ("detect", "Detect databases", images.ButtonDetect,
@@ -578,6 +592,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                      self.on_dragstop_list_db)
         list_db.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_BEGIN_RDRAG,
                      self.on_cancel_drag_list_db)
+        button_new.Bind(wx.EVT_BUTTON,           self.on_new_database)
         button_opena.Bind(wx.EVT_BUTTON,         self.on_open_database)
         button_detect.Bind(wx.EVT_BUTTON,        self.on_detect_databases)
         button_folder.Bind(wx.EVT_BUTTON,        self.on_add_from_folder)
@@ -589,6 +604,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         panel_main.Sizer.Add(label_main, border=10, flag=wx.ALL)
         panel_main.Sizer.Add((0, 10))
+        panel_main.Sizer.Add(button_new, flag=wx.GROW)
         panel_main.Sizer.Add(button_opena, flag=wx.GROW)
         panel_main.Sizer.Add(button_detect, flag=wx.GROW)
         panel_main.Sizer.Add(button_folder, flag=wx.GROW)
@@ -617,6 +633,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_file = wx.Menu()
         menu.Append(menu_file, "&File")
 
+        menu_new_database = self.menu_new_database = menu_file.Append(
+            id=wx.ID_ANY, text="&New database\tCtrl-N",
+            help="Create a new SQLite database."
+        )
         menu_open_database = self.menu_open_database = menu_file.Append(
             id=wx.ID_ANY, text="&Open database...\tCtrl-O",
             help="Choose a database file to open."
@@ -672,6 +692,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_tray.Check(conf.TrayIconEnabled)
         menu_autoupdate_check.Check(conf.UpdateCheckAutomatic)
 
+        self.Bind(wx.EVT_MENU, self.on_new_database, menu_new_database)
         self.Bind(wx.EVT_MENU, self.on_open_database, menu_open_database)
         self.Bind(wx.EVT_MENU, self.on_open_options, menu_options)
         self.Bind(wx.EVT_MENU, self.on_exit, menu_exit)
@@ -968,10 +989,15 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.page_log.Show()
             self.notebook.SetSelection(self.notebook.GetPageCount() - 1)
             self.on_change_page(None)
+            self.menu_log.Check(True)
+        elif self.notebook.GetPageIndex(self.page_log) != self.notebook.GetSelection():
+            self.notebook.SetSelection(self.notebook.GetPageCount() - 1)
+            self.on_change_page(None)
+            self.menu_log.Check(True)
         else:
             self.page_log.is_hidden = True
             self.notebook.RemovePage(self.notebook.GetPageIndex(self.page_log))
-        self.menu_log.Check(not self.page_log.is_hidden)
+            self.menu_log.Check(False)
 
 
     def on_open_options(self, event):
@@ -1022,6 +1048,33 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if filename:
                 self.update_database_list(filename)
                 self.load_database_page(filename)
+
+
+    def on_new_database(self, event):
+        """
+        Handler for new database menu or button, displays a save file dialog,
+        creates and loads the chosen database.
+        """
+        self.dialog_savefile.Filename = "database"
+        self.dialog_savefile.Message = "Save new database as"
+        self.dialog_savefile.Wildcard = "SQLite database (*.db)|*.db"
+        self.dialog_savefile.WindowStyle |= wx.FD_OVERWRITE_PROMPT
+        if wx.ID_OK != self.dialog_savefile.ShowModal():
+            return
+
+        filename = self.dialog_savefile.GetPath()
+        try:
+            with open(filename, "w"): pass
+        except Exception:
+            main.log("Error creating %s.\n\n%s", filename,
+                     traceback.format_exc())
+            wx.MessageBox(
+                "Could not create %s.\n\n"
+                "Some other process may be using the file."
+                % filename, conf.Title, wx.OK | wx.ICON_WARNING)
+        else:
+            self.update_database_list(filename)
+            self.load_database_page(filename)
 
 
     def on_open_database_event(self, event):
@@ -1407,8 +1460,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 class DatabasePage(wx.Panel):
     """
     A wx.Notebook page for managing a single database file, has its own
-    Notebook with a number of pages for searching, browsing chat history and
-    database tables, information.
+    Notebook with a number of pages for searching, browsing, SQL, information.
     """
 
     def __init__(self, parent_notebook, title, db, memoryfs):
@@ -1520,7 +1572,7 @@ class DatabasePage(wx.Panel):
 
 
     def create_page_search(self, notebook):
-        """Creates a page for searching chats."""
+        """Creates a page for searching the database."""
         page = self.page_search = wx.Panel(parent=notebook)
         self.pageorder[page] = len(self.pageorder)
         notebook.AddPage(page, "Search")
@@ -1537,7 +1589,7 @@ class DatabasePage(wx.Panel):
             wx.ToolBar(parent=page, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         tb.SetToolBitmapSize((24, 24))
         tb.AddRadioTool(wx.ID_INDEX, bitmap=images.ToolbarTitle.Bitmap,
-            shortHelp="Search in chat title and participants")
+            shortHelp="Search in table and column names and types")
         tb.AddRadioTool(wx.ID_STATIC, bitmap=images.ToolbarTables.Bitmap,
             shortHelp="Search in all columns of all database tables")
         tb.AddSeparator()
@@ -1556,7 +1608,7 @@ class DatabasePage(wx.Panel):
 
         self.label_search.Label = "&Search in database:"
         if conf.SearchInNames:
-            self.label_search.Label = "&Search in table and column names:"
+            self.label_search.Label = "&Search in table and column names and types:"
 
         html = self.html_searchall = controls.TabbedHtmlWindow(parent=page)
         default = step.Template(templates.SEARCH_WELCOME_HTML).expand()
@@ -1665,11 +1717,17 @@ class DatabasePage(wx.Panel):
         button_export.SetToolTipString("Export rows to a file.")
         button_export.Bind(wx.EVT_BUTTON, self.on_button_export_grid)
         button_export.Enabled = False
+        button_close = self.button_close_grid_table = \
+            wx.Button(parent=panel2, label="&Close table")
+        button_close.Bind(wx.EVT_BUTTON, self.on_button_close_grid)
+        button_close.Enabled = False
         sizer_tb.Add(label_table, flag=wx.ALIGN_CENTER_VERTICAL)
         sizer_tb.AddStretchSpacer()
         sizer_tb.Add(button_reset, border=5, flag=wx.BOTTOM | wx.RIGHT |
                      wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_tb.Add(button_export, border=5, flag=wx.BOTTOM | wx.RIGHT |
+                     wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
+        sizer_tb.Add(button_close, border=5, flag=wx.BOTTOM | wx.RIGHT |
                      wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_tb.Add(tb, flag=wx.ALIGN_RIGHT)
         grid = self.grid_table = wx.grid.Grid(parent=panel2)
@@ -1740,12 +1798,17 @@ class DatabasePage(wx.Panel):
         button_export.SetToolTipString("Export result to a file.")
         button_export.Bind(wx.EVT_BUTTON, self.on_button_export_grid)
         button_export.Enabled = False
+        button_close = self.button_close_grid_sql = \
+            wx.Button(parent=panel2, label="&Close query")
+        button_close.Bind(wx.EVT_BUTTON, self.on_button_close_grid)
+        button_close.Enabled = False
         sizer_buttons.Add(button_sql, flag=wx.ALIGN_LEFT)
         sizer_buttons.Add(button_script, border=5, flag=wx.LEFT | wx.ALIGN_LEFT)
         sizer_buttons.AddStretchSpacer()
         sizer_buttons.Add(button_reset, border=5,
                           flag=wx.ALIGN_RIGHT | wx.RIGHT)
-        sizer_buttons.Add(button_export, flag=wx.ALIGN_RIGHT)
+        sizer_buttons.Add(button_export, border=5, flag=wx.RIGHT | wx.ALIGN_RIGHT)
+        sizer_buttons.Add(button_close, flag=wx.ALIGN_RIGHT)
         grid = self.grid_sql = wx.grid.Grid(parent=panel2)
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,
                   self.on_sort_grid_column)
@@ -1984,9 +2047,6 @@ class DatabasePage(wx.Panel):
         if not self:
             return
         sash_pos = self.Size[1] / 3
-        panel1, panel2 = self.splitter_chats.Children
-        self.splitter_chats.Unsplit()
-        self.splitter_chats.SplitHorizontally(panel1, panel2, sash_pos)
         panel1, panel2 = self.splitter_tables.Children
         self.splitter_tables.Unsplit()
         self.splitter_tables.SplitVertically(panel1, panel2, 270)
@@ -2082,6 +2142,7 @@ class DatabasePage(wx.Panel):
                         self.tb_grid.EnableTool(x, False)
                     self.button_reset_grid_table.Enabled = False
                     self.button_export_table.Enabled = False
+                    self.button_close_grid_table.Enabled = False
                 grid.Thaw()
                 self.page_tables.Refresh()
 
@@ -2281,7 +2342,7 @@ class DatabasePage(wx.Panel):
         if wx.ID_INDEX == event.Id:
             conf.SearchInNames = True
             conf.SearchInTables = False
-            self.label_search.Label = "&Search in table and column names:"
+            self.label_search.Label = "&Search in table and column names and types:"
         elif wx.ID_STATIC == event.Id:
             conf.SearchInTables = True
             conf.SearchInNames = False
@@ -2387,7 +2448,7 @@ class DatabasePage(wx.Panel):
                     "partial_html": ""}
             if conf.SearchInNames:
                 data["table"] = "names"
-                fromtext = "table and column names"
+                fromtext = "table and column names and types"
             elif conf.SearchInTables:
                 data["table"] = "tables"
                 fromtext = "tables"
@@ -2522,6 +2583,60 @@ class DatabasePage(wx.Panel):
                     busy.Close()
 
 
+    def on_button_close_grid(self, event):
+        """
+        Handler for clicking to close a grid.
+        """
+        is_table = (event.EventObject == self.button_close_grid_table)
+        grid = self.grid_table if is_table else self.grid_sql
+        if not grid.Table or not isinstance(grid.Table, SqliteGridBase):
+            return
+
+        if is_table:
+            info = grid.Table.GetChangedInfo()
+            if grid.Table.IsChanged():
+                response = wx.MessageBox(
+                    "There are unsaved changes. Are you sure you want to "
+                    "commit these changes (%s)?" % info,
+                    conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.ICON_QUESTION
+                )
+                if wx.CANCEL == response: return
+                if wx.YES == response:
+                    try:
+                        grid.Table.SaveChanges()
+                    except Exception as e:
+                        template = "Error saving table %s in \"%s\".\n\n%%r" % (
+                                   grid.Table.table, self.db)
+                        msg, msgfull = template % e, template % traceback.format_exc()
+                        main.status_flash(msg), main.log(msgfull)
+                        wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+                        return
+                else: grid.Table.UndoChanges()
+                self.on_change_table(None)
+
+            i = self.tree_tables.GetNext(self.tree_tables.RootItem)
+            while i:
+                self.tree_tables.SetItemBold(i, False)
+                i = self.tree_tables.GetNextSibling(i)
+
+            self.db_grids.pop(grid.Table.table, None)
+
+        grid.SetTable(None)
+        grid.Parent.Refresh()
+
+        if is_table:
+            self.label_table.Label = ""
+            self.tb_grid.EnableTool(wx.ID_ADD, False)
+            self.tb_grid.EnableTool(wx.ID_DELETE, False)
+            self.button_export_table.Enabled = False
+            self.button_reset_grid_table.Enabled = False
+            self.button_close_grid_table.Enabled = False
+        else:
+            self.button_export_sql.Enabled = False
+            self.button_reset_grid_sql.Enabled = False
+            self.button_close_grid_sql.Enabled = False
+
+
     def on_keydown_sql(self, event):
         """
         Handler for pressing a key in SQL editor, listens for Alt-Enter and
@@ -2592,6 +2707,7 @@ class DatabasePage(wx.Panel):
                 self.grid_sql.SetCellValue(0, 0, str(affected_rows))
                 self.button_reset_grid_sql.Enabled = False
                 self.button_export_sql.Enabled = False
+            self.button_close_grid_sql.Enabled = True
             main.logstatus_flash("Executed SQL \"%s\" (%s).", sql, self.db)
             size = self.grid_sql.Size
             self.grid_sql.Fit()
@@ -2774,6 +2890,7 @@ class DatabasePage(wx.Panel):
                 self.tb_grid.EnableTool(wx.ID_DELETE, True)
                 self.button_export_table.Enabled = True
                 self.button_reset_grid_table.Enabled = True
+                self.button_close_grid_table.Enabled = True
                 busy.Close()
             except Exception:
                 busy.Close()
