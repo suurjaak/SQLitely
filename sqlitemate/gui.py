@@ -1704,11 +1704,17 @@ class DatabasePage(wx.Panel):
         button_export.SetToolTipString("Export rows to a file.")
         button_export.Bind(wx.EVT_BUTTON, self.on_button_export_grid)
         button_export.Enabled = False
+        button_close = self.button_close_grid_table = \
+            wx.Button(parent=panel2, label="&Close table")
+        button_close.Bind(wx.EVT_BUTTON, self.on_button_close_grid)
+        button_close.Enabled = False
         sizer_tb.Add(label_table, flag=wx.ALIGN_CENTER_VERTICAL)
         sizer_tb.AddStretchSpacer()
         sizer_tb.Add(button_reset, border=5, flag=wx.BOTTOM | wx.RIGHT |
                      wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_tb.Add(button_export, border=5, flag=wx.BOTTOM | wx.RIGHT |
+                     wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
+        sizer_tb.Add(button_close, border=5, flag=wx.BOTTOM | wx.RIGHT |
                      wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_tb.Add(tb, flag=wx.ALIGN_RIGHT)
         grid = self.grid_table = wx.grid.Grid(parent=panel2)
@@ -1779,12 +1785,17 @@ class DatabasePage(wx.Panel):
         button_export.SetToolTipString("Export result to a file.")
         button_export.Bind(wx.EVT_BUTTON, self.on_button_export_grid)
         button_export.Enabled = False
+        button_close = self.button_close_grid_sql = \
+            wx.Button(parent=panel2, label="&Close query")
+        button_close.Bind(wx.EVT_BUTTON, self.on_button_close_grid)
+        button_close.Enabled = False
         sizer_buttons.Add(button_sql, flag=wx.ALIGN_LEFT)
         sizer_buttons.Add(button_script, border=5, flag=wx.LEFT | wx.ALIGN_LEFT)
         sizer_buttons.AddStretchSpacer()
         sizer_buttons.Add(button_reset, border=5,
                           flag=wx.ALIGN_RIGHT | wx.RIGHT)
-        sizer_buttons.Add(button_export, flag=wx.ALIGN_RIGHT)
+        sizer_buttons.Add(button_export, border=5, flag=wx.RIGHT | wx.ALIGN_RIGHT)
+        sizer_buttons.Add(button_close, flag=wx.ALIGN_RIGHT)
         grid = self.grid_sql = wx.grid.Grid(parent=panel2)
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,
                   self.on_sort_grid_column)
@@ -2118,6 +2129,7 @@ class DatabasePage(wx.Panel):
                         self.tb_grid.EnableTool(x, False)
                     self.button_reset_grid_table.Enabled = False
                     self.button_export_table.Enabled = False
+                    self.button_close_grid_table.Enabled = False
                 grid.Thaw()
                 self.page_tables.Refresh()
 
@@ -2558,6 +2570,60 @@ class DatabasePage(wx.Panel):
                     busy.Close()
 
 
+    def on_button_close_grid(self, event):
+        """
+        Handler for clicking to close a grid.
+        """
+        is_table = (event.EventObject == self.button_close_grid_table)
+        grid = self.grid_table if is_table else self.grid_sql
+        if not grid.Table or not isinstance(grid.Table, SqliteGridBase):
+            return
+
+        if is_table:
+            info = grid.Table.GetChangedInfo()
+            if grid.Table.IsChanged():
+                response = wx.MessageBox(
+                    "There are unsaved changes. Are you sure you want to "
+                    "commit these changes (%s)?" % info,
+                    conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.ICON_QUESTION
+                )
+                if wx.CANCEL == response: return
+                if wx.YES == response:
+                    try:
+                        grid.Table.SaveChanges()
+                    except Exception as e:
+                        template = "Error saving table %s in \"%s\".\n\n%%r" % (
+                                   grid.Table.table, self.db)
+                        msg, msgfull = template % e, template % traceback.format_exc()
+                        main.status_flash(msg), main.log(msgfull)
+                        wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+                        return
+                else: grid.Table.UndoChanges()
+                self.on_change_table(None)
+
+            i = self.tree_tables.GetNext(self.tree_tables.RootItem)
+            while i:
+                self.tree_tables.SetItemBold(i, False)
+                i = self.tree_tables.GetNextSibling(i)
+
+            self.db_grids.pop(grid.Table.table, None)
+
+        grid.SetTable(None)
+        grid.Parent.Refresh()
+
+        if is_table:
+            self.label_table.Label = ""
+            self.tb_grid.EnableTool(wx.ID_ADD, False)
+            self.tb_grid.EnableTool(wx.ID_DELETE, False)
+            self.button_export_table.Enabled = False
+            self.button_reset_grid_table.Enabled = False
+            self.button_close_grid_table.Enabled = False
+        else:
+            self.button_export_sql.Enabled = False
+            self.button_reset_grid_sql.Enabled = False
+            self.button_close_grid_sql.Enabled = False
+
+
     def on_keydown_sql(self, event):
         """
         Handler for pressing a key in SQL editor, listens for Alt-Enter and
@@ -2628,6 +2694,7 @@ class DatabasePage(wx.Panel):
                 self.grid_sql.SetCellValue(0, 0, str(affected_rows))
                 self.button_reset_grid_sql.Enabled = False
                 self.button_export_sql.Enabled = False
+            self.button_close_grid_sql.Enabled = True
             main.logstatus_flash("Executed SQL \"%s\" (%s).", sql, self.db)
             size = self.grid_sql.Size
             self.grid_sql.Fit()
@@ -2810,6 +2877,7 @@ class DatabasePage(wx.Panel):
                 self.tb_grid.EnableTool(wx.ID_DELETE, True)
                 self.button_export_table.Enabled = True
                 self.button_reset_grid_table.Enabled = True
+                self.button_close_grid_table.Enabled = True
                 busy.Close()
             except Exception:
                 busy.Close()
