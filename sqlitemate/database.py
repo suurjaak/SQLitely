@@ -11,6 +11,7 @@ Released under the MIT License.
 @modified    22.08.2019
 ------------------------------------------------------------------------------
 """
+import copy
 import datetime
 import os
 import sqlite3
@@ -309,7 +310,7 @@ class Database(object):
                     main.log("Error getting %s column data for %s.\n\n%s",
                              table, self.filename, traceback.format_exc())
                 self.tables[table]["columns"] = table_columns
-        return table_columns
+        return copy.deepcopy(table_columns)
 
 
     def update_fileinfo(self):

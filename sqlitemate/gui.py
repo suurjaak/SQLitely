@@ -714,7 +714,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         Handler for clicking "About SQLiteMate" menu, opens a small info frame.
         """
-        text = step.Template(templates.ABOUT_TEXT).expand()
+        text = step.Template(templates.ABOUT_HTML).expand()
         AboutDialog(self, text).ShowModal()
 
 
@@ -1536,21 +1536,21 @@ class DatabasePage(wx.Panel):
         tb = self.tb_search_settings = \
             wx.ToolBar(parent=page, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         tb.SetToolBitmapSize((24, 24))
-        # tb.AddRadioTool(wx.ID_INDEX, bitmap=images.ToolbarTitle.Bitmap,
-        #     shortHelp="Search in chat title and participants")
-        # tb.AddRadioTool(wx.ID_STATIC, bitmap=images.ToolbarTables.Bitmap,
-        #     shortHelp="Search in all columns of all database tables")
-        # tb.AddSeparator()
+        tb.AddRadioTool(wx.ID_INDEX, bitmap=images.ToolbarTitle.Bitmap,
+            shortHelp="Search in chat title and participants")
+        tb.AddRadioTool(wx.ID_STATIC, bitmap=images.ToolbarTables.Bitmap,
+            shortHelp="Search in all columns of all database tables")
+        tb.AddSeparator()
         tb.AddCheckTool(wx.ID_NEW, bitmap=images.ToolbarTabs.Bitmap,
             shortHelp="New tab for each search  (Alt-N)", longHelp="")
         tb.AddSimpleTool(wx.ID_STOP, bitmap=images.ToolbarStopped.Bitmap,
             shortHelpString="Stop current search, if any")
         tb.Realize()
-        # tb.ToggleTool(wx.ID_INDEX, conf.SearchInNames)
-        # tb.ToggleTool(wx.ID_STATIC, conf.SearchInTables)
+        tb.ToggleTool(wx.ID_INDEX, conf.SearchInNames)
+        tb.ToggleTool(wx.ID_STATIC, conf.SearchInTables)
         tb.ToggleTool(wx.ID_NEW, conf.SearchUseNewTab)
-        # self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_INDEX)
-        # self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_STATIC)
+        self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_INDEX)
+        self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_STATIC)
         self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_NEW)
         self.Bind(wx.EVT_TOOL, self.on_searchall_stop, id=wx.ID_STOP)
 
@@ -2192,7 +2192,7 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, on_selectall, id=item_selectall.GetId())
             self.html_searchall.PopupMenu(menu)
         elif link_data or href.startswith("file://"):
-            # Open the link, or file, or program internal link to chat or table
+            # Open the link, or file, or program internal link to table
             table_name, row = link_data.get("table"), link_data.get("row")
             if href.startswith("file://"):
                 filename = path = urllib.url2pathname(href[5:])
@@ -2204,7 +2204,7 @@ class DatabasePage(wx.Panel):
                     e = "The file \"%s\" cannot be found on this computer." % \
                         filename
                     messageBox(e, conf.Title, wx.OK | wx.ICON_INFORMATION)
-            elif table_name and row:
+            elif table_name:
                 tableitem = None
                 table_name = table_name.lower()
                 table = next((t for t in self.db.get_tables()
@@ -2214,7 +2214,7 @@ class DatabasePage(wx.Panel):
                     table2 = self.tree_tables.GetItemPyData(item)
                     if table2 and table2.lower() == table["name"].lower():
                         tableitem = item
-                        break # break while table and item and itek.IsOk()
+                        break # while table
                     item = self.tree_tables.GetNextSibling(item)
                 if tableitem:
                     self.notebook.SetSelection(self.pageorder[self.page_tables])
@@ -2227,30 +2227,32 @@ class DatabasePage(wx.Panel):
                     if self.tree_tables.Selection != tableitem:
                         self.tree_tables.SelectItem(tableitem)
                         wx.YieldIfNeeded()
-                    grid = self.grid_table
-                    if grid.Table.filters:
-                        grid.Table.ClearSort(refresh=False)
-                        grid.Table.ClearFilter()
+
                     # Search for matching row and scroll to it.
-                    table["columns"] = self.db.get_table_columns(table_name)
-                    id_fields = [c["name"] for c in table["columns"]
-                                 if c.get("pk_id")]
-                    if not id_fields: # No primary key fields: take all
-                        id_fields = [c["name"] for c in table["columns"]]
-                    row_id = [row[c] for c in id_fields]
-                    for i in range(grid.Table.GetNumberRows()):
-                        row2 = grid.Table.GetRow(i)
-                        row2_id = [row2[c] for c in id_fields]
-                        if row_id == row2_id:
-                            grid.MakeCellVisible(i, 0)
-                            grid.SelectRow(i)
-                            pagesize = grid.GetScrollPageSize(wx.VERTICAL)
-                            pxls = grid.GetScrollPixelsPerUnit()
-                            cell_coords = grid.CellToRect(i, 0)
-                            y = cell_coords.y / (pxls[1] or 15)
-                            x, y = 0, y - pagesize / 2
-                            grid.Scroll(x, y)
-                            break # break for i in range(self.grid_table..
+                    if row:
+                        grid = self.grid_table
+                        if grid.Table.filters:
+                            grid.Table.ClearSort(refresh=False)
+                            grid.Table.ClearFilter()
+                        table["columns"] = self.db.get_table_columns(table_name)
+                        id_fields = [c["name"] for c in table["columns"]
+                                     if c.get("pk_id")]
+                        if not id_fields: # No primary key fields: take all
+                            id_fields = [c["name"] for c in table["columns"]]
+                        row_id = [row[c] for c in id_fields]
+                        for i in range(grid.Table.GetNumberRows()):
+                            row2 = grid.Table.GetRow(i)
+                            row2_id = [row2[c] for c in id_fields]
+                            if row_id == row2_id:
+                                grid.MakeCellVisible(i, 0)
+                                grid.SelectRow(i)
+                                pagesize = grid.GetScrollPageSize(wx.VERTICAL)
+                                pxls = grid.GetScrollPixelsPerUnit()
+                                cell_coords = grid.CellToRect(i, 0)
+                                y = cell_coords.y / (pxls[1] or 15)
+                                x, y = 0, y - pagesize / 2
+                                grid.Scroll(x, y)
+                                break # for i
         elif href.startswith("page:"):
             # Go to database subpage
             page = href[5:]
@@ -2383,7 +2385,12 @@ class DatabasePage(wx.Panel):
             data = {"id": self.counter(), "db": self.db, "text": text, "map": {},
                     "width": html.Size.width * 5/9, "table": "",
                     "partial_html": ""}
-            fromtext = data["table"] = "tables"
+            if conf.SearchInNames:
+                data["table"] = "names"
+                fromtext = "table and column names"
+            elif conf.SearchInTables:
+                data["table"] = "tables"
+                fromtext = "tables"
             # Partially assembled HTML for current results
             template = step.Template(templates.SEARCH_HEADER_HTML, escape=True)
             data["partial_html"] = template.expand(locals())
