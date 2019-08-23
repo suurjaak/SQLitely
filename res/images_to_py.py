@@ -39,6 +39,8 @@ IMAGES = {
         "Large icon for home on start page.",
     "ButtonListDatabase.png":
         "Button for databases in database list.",
+    "ButtonNew.png":
+        "Large icon for new database on start page.",
     "ButtonOpen.png":
         "Button for open file on main page.",
     "ButtonOpenA.png":
