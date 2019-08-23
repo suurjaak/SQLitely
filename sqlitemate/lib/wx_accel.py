@@ -30,9 +30,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     19.11.2011
-@modified    22.08.2019
+@modified    23.08.2019
 ------------------------------------------------------------------------------
 """
+import functools
 import re
 import wx
 
@@ -347,14 +348,14 @@ def accelerate(window, use_heuristics=True, skipclicklabels=set()):
                 if label in skipclicklabels: continue # for ctrl, label
                 if DEBUG:
                     print("Binding click from label %s to %s." % (label, ctrl))
-                label.Bind(wx.EVT_LEFT_UP, lambda e: eventhandler([ctrl], "", e))
+                label.Bind(wx.EVT_LEFT_UP, functools.partial(eventhandler, [ctrl], ""))
                 skipclicklabels.add(label)
             if not key: continue # for key, targets
             ctrls = [t[0] for t in targets]
             if DEBUG: print("Binding %s to targets %s." %
                             (key, [type(t) for t in ctrls]))
             menu_item = dummy_menu.Append(wx.ID_ANY, text="&%s" % key)
-            window.Bind(wx.EVT_MENU, lambda e: eventhandler(ctrls, key, e),
+            window.Bind(wx.EVT_MENU, functools.partial(eventhandler, ctrls, key),
                         menu_item)
             accelerators.append((wx.ACCEL_ALT, ord(key), menu_item.Id))
         window.SetAcceleratorTable(wx.AcceleratorTable(accelerators))
