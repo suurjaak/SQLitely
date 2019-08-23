@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.08.2019
+@modified    23.08.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -513,6 +513,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         label_main.Font = wx.Font(14, wx.FONTFAMILY_SWISS,
             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
         BUTTONS_MAIN = [
+            ("new", "&New database", images.ButtonNew, 
+             "Create a new SQLite database."),
             ("opena", "&Open a database..", images.ButtonOpenA, 
              "Choose a database from your computer to open."),
             ("detect", "Detect databases", images.ButtonDetect,
@@ -578,6 +580,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                      self.on_dragstop_list_db)
         list_db.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_BEGIN_RDRAG,
                      self.on_cancel_drag_list_db)
+        button_new.Bind(wx.EVT_BUTTON,           self.on_new_database)
         button_opena.Bind(wx.EVT_BUTTON,         self.on_open_database)
         button_detect.Bind(wx.EVT_BUTTON,        self.on_detect_databases)
         button_folder.Bind(wx.EVT_BUTTON,        self.on_add_from_folder)
@@ -589,6 +592,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         panel_main.Sizer.Add(label_main, border=10, flag=wx.ALL)
         panel_main.Sizer.Add((0, 10))
+        panel_main.Sizer.Add(button_new, flag=wx.GROW)
         panel_main.Sizer.Add(button_opena, flag=wx.GROW)
         panel_main.Sizer.Add(button_detect, flag=wx.GROW)
         panel_main.Sizer.Add(button_folder, flag=wx.GROW)
@@ -617,6 +621,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_file = wx.Menu()
         menu.Append(menu_file, "&File")
 
+        menu_new_database = self.menu_new_database = menu_file.Append(
+            id=wx.ID_ANY, text="&New database\tCtrl-N",
+            help="Create a new SQLite database."
+        )
         menu_open_database = self.menu_open_database = menu_file.Append(
             id=wx.ID_ANY, text="&Open database...\tCtrl-O",
             help="Choose a database file to open."
@@ -672,6 +680,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_tray.Check(conf.TrayIconEnabled)
         menu_autoupdate_check.Check(conf.UpdateCheckAutomatic)
 
+        self.Bind(wx.EVT_MENU, self.on_new_database, menu_new_database)
         self.Bind(wx.EVT_MENU, self.on_open_database, menu_open_database)
         self.Bind(wx.EVT_MENU, self.on_open_options, menu_options)
         self.Bind(wx.EVT_MENU, self.on_exit, menu_exit)
@@ -968,10 +977,15 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.page_log.Show()
             self.notebook.SetSelection(self.notebook.GetPageCount() - 1)
             self.on_change_page(None)
+            self.menu_log.Check(True)
+        elif self.notebook.GetPageIndex(self.page_log) != self.notebook.GetSelection():
+            self.notebook.SetSelection(self.notebook.GetPageCount() - 1)
+            self.on_change_page(None)
+            self.menu_log.Check(True)
         else:
             self.page_log.is_hidden = True
             self.notebook.RemovePage(self.notebook.GetPageIndex(self.page_log))
-        self.menu_log.Check(not self.page_log.is_hidden)
+            self.menu_log.Check(False)
 
 
     def on_open_options(self, event):
@@ -1022,6 +1036,33 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if filename:
                 self.update_database_list(filename)
                 self.load_database_page(filename)
+
+
+    def on_new_database(self, event):
+        """
+        Handler for new database menu or button, displays a save file dialog,
+        creates and loads the chosen database.
+        """
+        self.dialog_savefile.Filename = "database"
+        self.dialog_savefile.Message = "Save new database as"
+        self.dialog_savefile.Wildcard = "SQLite database (*.db)|*.db"
+        self.dialog_savefile.WindowStyle |= wx.FD_OVERWRITE_PROMPT
+        if wx.ID_OK != self.dialog_savefile.ShowModal():
+            return
+
+        filename = self.dialog_savefile.GetPath()
+        try:
+            with open(filename, "w"): pass
+        except Exception:
+            main.log("Error creating %s.\n\n%s", filename,
+                     traceback.format_exc())
+            wx.MessageBox(
+                "Could not create %s.\n\n"
+                "Some other process may be using the file."
+                % filename, conf.Title, wx.OK | wx.ICON_WARNING)
+        else:
+            self.update_database_list(filename)
+            self.load_database_page(filename)
 
 
     def on_open_database_event(self, event):
@@ -1778,16 +1819,31 @@ class DatabasePage(wx.Panel):
         notebook.AddPage(page, "Information")
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        panel1, panel2 = wx.Panel(parent=page), wx.Panel(parent=page)
+        panel1 = self.panel_accountinfo = wx.Panel(parent=page)
+        panel2 = wx.Panel(parent=page)
         panel1.BackgroundColour = panel2.BackgroundColour = conf.BgColour
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_account = wx.BoxSizer(wx.HORIZONTAL)
+        label_account = wx.StaticText(parent=panel1,
+                                      label="Main account information")
+        label_account.Font = wx.Font(10, wx.FONTFAMILY_SWISS,
+            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
+        sizer1.Add(label_account, border=5, flag=wx.ALL)
 
+        sizer_accountinfo = wx.FlexGridSizer(cols=2, vgap=3, hgap=10)
+        self.sizer_accountinfo = sizer_accountinfo
+        sizer_accountinfo.AddGrowableCol(1, 1)
+
+        sizer_account.Add(sizer_accountinfo, proportion=1, flag=wx.GROW)
+        sizer1.Add(sizer_account, border=20, proportion=1,
+                   flag=wx.TOP | wx.GROW)
+
+        sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_file = wx.FlexGridSizer(cols=2, vgap=3, hgap=10)
-        label_file = wx.StaticText(parent=panel1, label="Database information")
+        label_file = wx.StaticText(parent=panel2, label="Database information")
         label_file.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                   wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
-        sizer1.Add(label_file, border=5, flag=wx.ALL)
+        sizer2.Add(label_file, border=5, flag=wx.ALL)
 
         names = ["edit_info_path", "edit_info_size", "edit_info_modified",
                  "edit_info_sha1", "edit_info_md5", ]
@@ -1797,12 +1853,12 @@ class DatabasePage(wx.Panel):
             if not name and not label:
                 sizer_file.AddSpacer(20), sizer_file.AddSpacer(20)
                 continue # continue for i, (name, label) in enumerate(..
-            labeltext = wx.StaticText(parent=panel1, label="%s:" % label)
+            labeltext = wx.StaticText(parent=panel2, label="%s:" % label)
             labeltext.ForegroundColour = wx.Colour(102, 102, 102)
-            valuetext = wx.TextCtrl(parent=panel1, value="Analyzing..",
+            valuetext = wx.TextCtrl(parent=panel2, value="Analyzing..",
                 style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH)
             valuetext.MinSize = (-1, 35)
-            valuetext.BackgroundColour = panel1.BackgroundColour
+            valuetext.BackgroundColour = panel2.BackgroundColour
             valuetext.SetEditable(False)
             sizer_file.Add(labeltext, border=5, flag=wx.LEFT)
             sizer_file.Add(valuetext, proportion=1, flag=wx.GROW)
@@ -1810,20 +1866,18 @@ class DatabasePage(wx.Panel):
         self.edit_info_path.Value = self.db.filename
 
         button_vacuum = self.button_vacuum = \
-            wx.Button(parent=panel1, label="Vacuum")
+            wx.Button(parent=panel2, label="Vacuum")
         button_check = self.button_check_integrity = \
-            wx.Button(parent=panel1, label="Check for corruption")
+            wx.Button(parent=panel2, label="Check for corruption")
         button_refresh = self.button_refresh_fileinfo = \
-            wx.Button(parent=panel1, label="Refresh")
+            wx.Button(parent=panel2, label="Refresh")
         button_vacuum.Enabled = button_check.Enabled = button_refresh.Enabled = False
         button_vacuum.SetToolTipString("Rebuild the database file, repacking "
                                        "it into a minimal amount of disk space.")
         button_check.SetToolTipString("Check database integrity for "
                                       "corruption and recovery.")
-        button_refresh.SetToolTipString("Refresh information")
 
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_buttons.AddSpacer(10)
         sizer_buttons.Add(button_vacuum)
         sizer_buttons.AddStretchSpacer()
         sizer_buttons.Add(button_check)
@@ -1836,8 +1890,8 @@ class DatabasePage(wx.Panel):
                   button_refresh)
 
         sizer_file.AddGrowableCol(1, 1)
-        sizer1.Add(sizer_file, border=20, proportion=1, flag=wx.TOP | wx.GROW)
-        sizer1.Add(sizer_buttons, proportion=1, flag=wx.GROW)
+        sizer2.Add(sizer_file, border=20, proportion=1, flag=wx.TOP | wx.GROW)
+        sizer2.Add(sizer_buttons, proportion=2, flag=wx.GROW)
 
         sizer.Add(panel1, proportion=1, border=5,
                   flag=wx.LEFT  | wx.TOP | wx.BOTTOM | wx.GROW)
