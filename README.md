@@ -21,8 +21,8 @@ Using The Program
 
 Searching an opened database supports a simple Google-like
 [query syntax](http://suurjaak.github.io/SQLiteMate/help.html).
-You can use keywords to search from specific tables only
-(`table:foo`), or from certain dates only 
+You can use keywords to search from specific tables and columns only
+(`table:foo`, `column:bar`), or from certain dates only 
 (`date:2012`, `date:2010..2013-06`). Search supports 
 wildcards, exact phrases, grouping, excluding, and either-or queries.
 

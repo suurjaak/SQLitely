@@ -714,7 +714,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         Handler for clicking "About SQLiteMate" menu, opens a small info frame.
         """
-        text = step.Template(templates.ABOUT_TEXT).expand()
+        text = step.Template(templates.ABOUT_HTML).expand()
         AboutDialog(self, text).ShowModal()
 
 
@@ -1536,21 +1536,21 @@ class DatabasePage(wx.Panel):
         tb = self.tb_search_settings = \
             wx.ToolBar(parent=page, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         tb.SetToolBitmapSize((24, 24))
-        # tb.AddRadioTool(wx.ID_INDEX, bitmap=images.ToolbarTitle.Bitmap,
-        #     shortHelp="Search in chat title and participants")
-        # tb.AddRadioTool(wx.ID_STATIC, bitmap=images.ToolbarTables.Bitmap,
-        #     shortHelp="Search in all columns of all database tables")
-        # tb.AddSeparator()
+        tb.AddRadioTool(wx.ID_INDEX, bitmap=images.ToolbarTitle.Bitmap,
+            shortHelp="Search in chat title and participants")
+        tb.AddRadioTool(wx.ID_STATIC, bitmap=images.ToolbarTables.Bitmap,
+            shortHelp="Search in all columns of all database tables")
+        tb.AddSeparator()
         tb.AddCheckTool(wx.ID_NEW, bitmap=images.ToolbarTabs.Bitmap,
             shortHelp="New tab for each search  (Alt-N)", longHelp="")
         tb.AddSimpleTool(wx.ID_STOP, bitmap=images.ToolbarStopped.Bitmap,
             shortHelpString="Stop current search, if any")
         tb.Realize()
-        # tb.ToggleTool(wx.ID_INDEX, conf.SearchInNames)
-        # tb.ToggleTool(wx.ID_STATIC, conf.SearchInTables)
+        tb.ToggleTool(wx.ID_INDEX, conf.SearchInNames)
+        tb.ToggleTool(wx.ID_STATIC, conf.SearchInTables)
         tb.ToggleTool(wx.ID_NEW, conf.SearchUseNewTab)
-        # self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_INDEX)
-        # self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_STATIC)
+        self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_INDEX)
+        self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_STATIC)
         self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_NEW)
         self.Bind(wx.EVT_TOOL, self.on_searchall_stop, id=wx.ID_STOP)
 
@@ -1778,31 +1778,16 @@ class DatabasePage(wx.Panel):
         notebook.AddPage(page, "Information")
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        panel1 = self.panel_accountinfo = wx.Panel(parent=page)
-        panel2 = wx.Panel(parent=page)
+        panel1, panel2 = wx.Panel(parent=page), wx.Panel(parent=page)
         panel1.BackgroundColour = panel2.BackgroundColour = conf.BgColour
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_account = wx.BoxSizer(wx.HORIZONTAL)
-        label_account = wx.StaticText(parent=panel1,
-                                      label="Main account information")
-        label_account.Font = wx.Font(10, wx.FONTFAMILY_SWISS,
-            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
-        sizer1.Add(label_account, border=5, flag=wx.ALL)
-
-        sizer_accountinfo = wx.FlexGridSizer(cols=2, vgap=3, hgap=10)
-        self.sizer_accountinfo = sizer_accountinfo
-        sizer_accountinfo.AddGrowableCol(1, 1)
-
-        sizer_account.Add(sizer_accountinfo, proportion=1, flag=wx.GROW)
-        sizer1.Add(sizer_account, border=20, proportion=1,
-                   flag=wx.TOP | wx.GROW)
-
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
+
         sizer_file = wx.FlexGridSizer(cols=2, vgap=3, hgap=10)
-        label_file = wx.StaticText(parent=panel2, label="Database information")
+        label_file = wx.StaticText(parent=panel1, label="Database information")
         label_file.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                   wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
-        sizer2.Add(label_file, border=5, flag=wx.ALL)
+        sizer1.Add(label_file, border=5, flag=wx.ALL)
 
         names = ["edit_info_path", "edit_info_size", "edit_info_modified",
                  "edit_info_sha1", "edit_info_md5", ]
@@ -1812,12 +1797,12 @@ class DatabasePage(wx.Panel):
             if not name and not label:
                 sizer_file.AddSpacer(20), sizer_file.AddSpacer(20)
                 continue # continue for i, (name, label) in enumerate(..
-            labeltext = wx.StaticText(parent=panel2, label="%s:" % label)
+            labeltext = wx.StaticText(parent=panel1, label="%s:" % label)
             labeltext.ForegroundColour = wx.Colour(102, 102, 102)
-            valuetext = wx.TextCtrl(parent=panel2, value="Analyzing..",
+            valuetext = wx.TextCtrl(parent=panel1, value="Analyzing..",
                 style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH)
             valuetext.MinSize = (-1, 35)
-            valuetext.BackgroundColour = panel2.BackgroundColour
+            valuetext.BackgroundColour = panel1.BackgroundColour
             valuetext.SetEditable(False)
             sizer_file.Add(labeltext, border=5, flag=wx.LEFT)
             sizer_file.Add(valuetext, proportion=1, flag=wx.GROW)
@@ -1825,18 +1810,20 @@ class DatabasePage(wx.Panel):
         self.edit_info_path.Value = self.db.filename
 
         button_vacuum = self.button_vacuum = \
-            wx.Button(parent=panel2, label="Vacuum")
+            wx.Button(parent=panel1, label="Vacuum")
         button_check = self.button_check_integrity = \
-            wx.Button(parent=panel2, label="Check for corruption")
+            wx.Button(parent=panel1, label="Check for corruption")
         button_refresh = self.button_refresh_fileinfo = \
-            wx.Button(parent=panel2, label="Refresh")
+            wx.Button(parent=panel1, label="Refresh")
         button_vacuum.Enabled = button_check.Enabled = button_refresh.Enabled = False
         button_vacuum.SetToolTipString("Rebuild the database file, repacking "
                                        "it into a minimal amount of disk space.")
         button_check.SetToolTipString("Check database integrity for "
                                       "corruption and recovery.")
+        button_refresh.SetToolTipString("Refresh information")
 
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_buttons.AddSpacer(10)
         sizer_buttons.Add(button_vacuum)
         sizer_buttons.AddStretchSpacer()
         sizer_buttons.Add(button_check)
@@ -1849,8 +1836,8 @@ class DatabasePage(wx.Panel):
                   button_refresh)
 
         sizer_file.AddGrowableCol(1, 1)
-        sizer2.Add(sizer_file, border=20, proportion=1, flag=wx.TOP | wx.GROW)
-        sizer2.Add(sizer_buttons, proportion=2, flag=wx.GROW)
+        sizer1.Add(sizer_file, border=20, proportion=1, flag=wx.TOP | wx.GROW)
+        sizer1.Add(sizer_buttons, proportion=1, flag=wx.GROW)
 
         sizer.Add(panel1, proportion=1, border=5,
                   flag=wx.LEFT  | wx.TOP | wx.BOTTOM | wx.GROW)
@@ -2192,7 +2179,7 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, on_selectall, id=item_selectall.GetId())
             self.html_searchall.PopupMenu(menu)
         elif link_data or href.startswith("file://"):
-            # Open the link, or file, or program internal link to chat or table
+            # Open the link, or file, or program internal link to table
             table_name, row = link_data.get("table"), link_data.get("row")
             if href.startswith("file://"):
                 filename = path = urllib.url2pathname(href[5:])
@@ -2204,7 +2191,7 @@ class DatabasePage(wx.Panel):
                     e = "The file \"%s\" cannot be found on this computer." % \
                         filename
                     messageBox(e, conf.Title, wx.OK | wx.ICON_INFORMATION)
-            elif table_name and row:
+            elif table_name:
                 tableitem = None
                 table_name = table_name.lower()
                 table = next((t for t in self.db.get_tables()
@@ -2214,7 +2201,7 @@ class DatabasePage(wx.Panel):
                     table2 = self.tree_tables.GetItemPyData(item)
                     if table2 and table2.lower() == table["name"].lower():
                         tableitem = item
-                        break # break while table and item and itek.IsOk()
+                        break # while table
                     item = self.tree_tables.GetNextSibling(item)
                 if tableitem:
                     self.notebook.SetSelection(self.pageorder[self.page_tables])
@@ -2227,30 +2214,32 @@ class DatabasePage(wx.Panel):
                     if self.tree_tables.Selection != tableitem:
                         self.tree_tables.SelectItem(tableitem)
                         wx.YieldIfNeeded()
-                    grid = self.grid_table
-                    if grid.Table.filters:
-                        grid.Table.ClearSort(refresh=False)
-                        grid.Table.ClearFilter()
+
                     # Search for matching row and scroll to it.
-                    table["columns"] = self.db.get_table_columns(table_name)
-                    id_fields = [c["name"] for c in table["columns"]
-                                 if c.get("pk_id")]
-                    if not id_fields: # No primary key fields: take all
-                        id_fields = [c["name"] for c in table["columns"]]
-                    row_id = [row[c] for c in id_fields]
-                    for i in range(grid.Table.GetNumberRows()):
-                        row2 = grid.Table.GetRow(i)
-                        row2_id = [row2[c] for c in id_fields]
-                        if row_id == row2_id:
-                            grid.MakeCellVisible(i, 0)
-                            grid.SelectRow(i)
-                            pagesize = grid.GetScrollPageSize(wx.VERTICAL)
-                            pxls = grid.GetScrollPixelsPerUnit()
-                            cell_coords = grid.CellToRect(i, 0)
-                            y = cell_coords.y / (pxls[1] or 15)
-                            x, y = 0, y - pagesize / 2
-                            grid.Scroll(x, y)
-                            break # break for i in range(self.grid_table..
+                    if row:
+                        grid = self.grid_table
+                        if grid.Table.filters:
+                            grid.Table.ClearSort(refresh=False)
+                            grid.Table.ClearFilter()
+                        table["columns"] = self.db.get_table_columns(table_name)
+                        id_fields = [c["name"] for c in table["columns"]
+                                     if c.get("pk_id")]
+                        if not id_fields: # No primary key fields: take all
+                            id_fields = [c["name"] for c in table["columns"]]
+                        row_id = [row[c] for c in id_fields]
+                        for i in range(grid.Table.GetNumberRows()):
+                            row2 = grid.Table.GetRow(i)
+                            row2_id = [row2[c] for c in id_fields]
+                            if row_id == row2_id:
+                                grid.MakeCellVisible(i, 0)
+                                grid.SelectRow(i)
+                                pagesize = grid.GetScrollPageSize(wx.VERTICAL)
+                                pxls = grid.GetScrollPixelsPerUnit()
+                                cell_coords = grid.CellToRect(i, 0)
+                                y = cell_coords.y / (pxls[1] or 15)
+                                x, y = 0, y - pagesize / 2
+                                grid.Scroll(x, y)
+                                break # for i
         elif href.startswith("page:"):
             # Go to database subpage
             page = href[5:]
@@ -2383,7 +2372,12 @@ class DatabasePage(wx.Panel):
             data = {"id": self.counter(), "db": self.db, "text": text, "map": {},
                     "width": html.Size.width * 5/9, "table": "",
                     "partial_html": ""}
-            fromtext = data["table"] = "tables"
+            if conf.SearchInNames:
+                data["table"] = "names"
+                fromtext = "table and column names"
+            elif conf.SearchInTables:
+                data["table"] = "tables"
+                fromtext = "tables"
             # Partially assembled HTML for current results
             template = step.Template(templates.SEARCH_HEADER_HTML, escape=True)
             data["partial_html"] = template.expand(locals())

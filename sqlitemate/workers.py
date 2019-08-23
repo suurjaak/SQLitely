@@ -105,7 +105,7 @@ class SearchThread(WorkerThread):
 
     def run(self):
         self._is_running = True
-        # For identifying "chat:xxx" and "from:xxx" keywords
+        # For identifying "table:xxx" and "column:xxx" keywords
         query_parser = searchparser.SearchQueryParser()
         result = None
         while self._is_running:
@@ -114,9 +114,9 @@ class SearchThread(WorkerThread):
                 if not search:
                     continue # continue while self._is_running
 
-                TEMPLATES = {
-                    "table":   templates.SEARCH_ROW_TABLE_HEADER_HTML,
-                    "row":     templates.SEARCH_ROW_TABLE_HTML, }
+                TEMPLATES = {"tablemeta": templates.SEARCH_ROW_TABLE_META_HTML,
+                             "table":     templates.SEARCH_ROW_TABLE_HEADER_HTML,
+                             "row":       templates.SEARCH_ROW_TABLE_HTML}
                 wrap_b = lambda x: "<b>%s</b>" % x.group(0)
                 FACTORY = lambda x: step.Template(TEMPLATES[x], escape=True)
                 main.log('Searching "%(text)s" in %(table)s (%(db)s).' % search)
@@ -128,73 +128,108 @@ class SearchThread(WorkerThread):
                 result_type, result_count, count = None, 0, 0
                 result = {"output": "", "map": {},
                           "search": search, "count": 0}
-                _, _, match_words = query_parser.Parse(search["text"])
+                _, _, match_words, _ = query_parser.Parse(search["text"])
 
                 # Turn wildcard characters * into regex-compatible .*
-                match_words_re = [".*".join(map(re.escape, w.split("*")))
-                                  for w in match_words]
+                match_words_re = [".*".join(re.escape(step.escape_html(x))
+                                  for w in match_words for x in w.split("*"))]
                 patt = "(%s)" % "|".join(match_words_re)
                 # For replacing matching words with <b>words</b>
                 pattern_replace = re.compile(patt, re.IGNORECASE)
-
                 infotext = search["table"]
-                infotext, result_type = "", "table row"
-                # Search over all fields of all tables.
-                template_table = FACTORY("table")
-                template_row = FACTORY("row")
-                for table in search["db"].get_tables():
-                    table["columns"] = search["db"].get_table_columns(
-                        table["name"])
-                    sql, params, words = query_parser.Parse(search["text"],
-                                                            table)
-                    if not sql:
-                        continue # continue for table in search["db"]..
-                    rows = search["db"].execute(sql, params)
-                    row = rows.fetchone()
-                    namepre, namesuf = ("<b>", "</b>") if row else ("", "")
-                    countpre, countsuf = (("<a href='#%s'>" % 
-                        step.escape_html(table["name"]), "</a>") if row
-                        else ("", ""))
-                    infotext += (", " if infotext else "") \
-                                + namepre + table["name"] + namesuf
-                    if not row:
-                        continue # continue for table in search["db"]..
-                    result["output"] = template_table.expand(locals())
+
+                # Find from table and column names
+                if not self._stop_work and "names" == search["table"] \
+                and match_words:
+                    infotext = "table and column names"
                     count = 0
-                    while row:
-                        count += 1
-                        result_count += 1
-                        result["output"] += template_row.expand(locals())
-                        key = "table:%s:%s" % (table["name"], count)
-                        result["map"][key] = {"table": table["name"],
-                                              "row": row}
-                        if not count % conf.SearchResultsChunk \
-                        and not self._drop_results:
+                    template_tablemeta = FACTORY("tablemeta")
+                    for table in search["db"].get_tables():
+                        columns = search["db"].get_table_columns(table["name"])
+                        table_matches = self.match_all(table["name"], match_words)
+                        matching_columns = [c for c in columns
+                                            if self.match_all(c["name"], match_words)]
+                            
+                        if table_matches or matching_columns:
+                            count += 1
+                            result_count += 1
+                            result["output"] += template_tablemeta.expand(locals())
+                            key = "table:%s" % table["name"]
+                            result["map"][key] = {"table": table["name"]}
+                            if not count % conf.SearchResultsChunk \
+                            and not self._drop_results:
+                                result["count"] = result_count
+                                self.postback(result)
+                                result = {"output": "", "map": {},
+                                          "search": search, "count": 0}
+                        if self._stop_work:
+                            break # break for contact in contacts
+                if result["output"] and not self._drop_results:
+                    result["count"] = result_count
+                    self.postback(result)
+                    result = {"output": "", "map": {},
+                              "search": search, "count": 0}
+
+
+                # Find from table content
+                if not self._stop_work and "tables" == search["table"]:
+                    infotext, result_type = "", "table row"
+                    # Search over all fields of all tables.
+                    template_table = FACTORY("table")
+                    template_row = FACTORY("row")
+                    for table in search["db"].get_tables():
+                        table["columns"] = search["db"].get_table_columns(table["name"])
+                        sql, params, words, keywords = \
+                            query_parser.Parse(search["text"], table)
+                        if not sql:
+                            continue # continue for table in search["db"]..
+                        cursor = search["db"].execute(sql, params)
+                        row = cursor.fetchone()
+                        namepre, namesuf = ("<b>", "</b>") if row else ("", "")
+                        countpre, countsuf = (("<a href='#%s'><font color='%s'>" % 
+                            (step.escape_html(table["name"]), conf.LinkColour),
+                            "</font></a>")) if row else ("", "")
+                        infotext += (", " if infotext else "") \
+                                    + namepre + table["name"] + namesuf
+                        if not row:
+                            continue # continue for table in search["db"]..
+                        result["output"] = template_table.expand(locals())
+                        count = 0
+                        while row:
+                            count += 1
+                            result_count += 1
+                            result["output"] += template_row.expand(locals())
+                            key = "table:%s:%s" % (table["name"], count)
+                            result["map"][key] = {"table": table["name"],
+                                                  "row": row}
+                            if not count % conf.SearchResultsChunk \
+                            and not self._drop_results:
+                                result["count"] = result_count
+                                self.postback(result)
+                                result = {"output": "", "map": {},
+                                          "search": search, "count": 0}
+                            if self._stop_work \
+                            or result_count >= conf.MaxSearchTableRows:
+                                break # break while row
+                            row = cursor.fetchone()
+                        if not self._drop_results:
+                            result["output"] += "</table></font>"
                             result["count"] = result_count
                             self.postback(result)
                             result = {"output": "", "map": {},
                                       "search": search, "count": 0}
+                        infotext += " (%s%s%s)" % (countpre, 
+                                    util.plural("result", count), countsuf)
                         if self._stop_work \
                         or result_count >= conf.MaxSearchTableRows:
-                            break # break while row
-                        row = rows.fetchone()
-                    if not self._drop_results:
-                        result["output"] += "</table>"
-                        result["count"] = result_count
-                        self.postback(result)
-                        result = {"output": "", "map": {},
-                                  "search": search, "count": 0}
-                    infotext += " (%s%s%s)" % (countpre, 
-                                util.plural("result", count), countsuf)
-                    if self._stop_work \
-                    or result_count >= conf.MaxSearchTableRows:
-                        break # break for table in search["db"]..
-                single_table = ("," not in infotext)
-                infotext = "table%s: %s" % \
-                           ("" if single_table else "s", infotext)
-                if not single_table:
-                    infotext += "; %s in total" % \
-                                util.plural("result", result_count)
+                            break # break for table in search["db"]..
+                    single_table = ("," not in infotext)
+                    infotext = "table%s: %s" % \
+                               ("" if single_table else "s", infotext)
+                    if not single_table:
+                        infotext += "; %s in total" % \
+                                    util.plural("result", result_count)
+
 
                 final_text = "No matches found."
                 if self._drop_results:

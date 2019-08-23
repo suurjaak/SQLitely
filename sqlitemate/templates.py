@@ -168,22 +168,37 @@ INSERT INTO {{table}} ({{str_cols}}) VALUES ({{", ".join(values)}});
 
 
 
-"""HTML template for search results header, start of HTML table."""
+"""HTML template for search results header."""
 SEARCH_HEADER_HTML = """<%
 import conf
 %>
 <font size="2" face="{{conf.HistoryFontName}}" color="{{conf.FgColour}}">
 Results for "{{text}}" from {{fromtext}}:
-%if "all tables" != fromtext:
 <br /><br />
-<table width="600" cellpadding="2" cellspacing="0">
-%endif
+"""
+
+
+"""HTML template for names search results header, stand-alone table."""
+SEARCH_ROW_TABLE_META_HTML = """<%
+import conf
+%>
+Table <a href="table:{{table["name"]}}">
+    <font color="{{conf.LinkColour}}">{{!pattern_replace.sub(wrap_b, escape(table["name"]))}}</font></a>:
+<table>
+%for col in columns:
+  <tr><td>{{!pattern_replace.sub(wrap_b, escape(col["name"]))}}</td><td>{{col["type"]}}</td></tr>
+%endfor
+</table>
+<br /><br />
 """
 
 
 """HTML template for table search results header, start of HTML table."""
-SEARCH_ROW_TABLE_HEADER_HTML = """
-<br /><br /><b><a name="{{table["name"]}}">Table {{table["name"]}}:</b></b><br />
+SEARCH_ROW_TABLE_HEADER_HTML = """<%
+import conf
+%>
+<font color="{{conf.FgColour}}">
+<br /><br /><b><a name="{{table["name"]}}">Table {{table["name"]}}:</a></b><br />
 <table border="1" cellpadding="4" cellspacing="0" width="1000">
 <tr>
 <th>#</th>
@@ -194,53 +209,38 @@ SEARCH_ROW_TABLE_HEADER_HTML = """
 """
 
 
-"""TXT template for table search results header."""
-SEARCH_ROW_TABLE_HEADER_TXT = """
-Table {{table["name"]}}:
-%for col in ["#"] + table["columns"]:
-{{col["name"]}}    
-%endfor
-"""
-
-
 """HTML template for search result of DB table row, HTML table row."""
 SEARCH_ROW_TABLE_HTML = """<%
 import re
 import conf, templates
+
+match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
 %>
 <tr>
-<td align="right" valign="top"><a href="table:{{table["name"]}}:{{count}}">{{count}}</a></td>
+<td align="right" valign="top">
+  <a href="table:{{table["name"]}}:{{count}}">
+    <font color="{{conf.LinkColour}}">{{count}}</font>
+  </a>
+</td>
 %for col in table["columns"]:
 <%
 value = row[col["name"]]
 value = value if value is not None else ""
 value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
+value = escape(value)
+
+if not (keywords.get("column") and not match_kw("column", col)) \
+and not (keywords.get("-column") and match_kw("-column", col)):
+    value = pattern_replace.sub(wrap_b, value)
 %>
-<td valign="top">{{!pattern_replace.sub(wrap_b, escape(value))}}</td>
+<td valign="top"><font color="{{conf.FgColour}}">{{!value}}</font></td>
 %endfor
 </tr>
 """
 
 
-"""TXT template for search result of DB table row."""
-SEARCH_ROW_TABLE_TXT = """<%
-import re
-import conf, templates
-%>
-{{count}}
-%for col in table["columns"]:
-<%
-value = row[col["name"]]
-value = value if value is not None else ""
-value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
-%>
-{{pattern_replace.sub(wrap_b, value)}}
-%endfor
-"""
-
-
 """Text shown in Help -> About dialog (HTML content)."""
-ABOUT_TEXT = """<%
+ABOUT_HTML = """<%
 import sys
 import conf
 %>
@@ -462,6 +462,23 @@ except ImportError:
   </tr>
   <tr>
     <td bgcolor="{{conf.BgColour}}" width="150">
+      <b>Search specific columns</b><br /><br />
+      <font color="{{conf.HelpCodeColour}}"><code>column:fromthiscolumn<br />
+      -column:notfromthiscolumn</code></font>
+      <br />
+    </td>
+    <td bgcolor="{{conf.BgColour}}">
+      <br /><br />
+      Use the keyword <font color="{{conf.HelpCodeColour}}"><code>column:name</code></font>
+      to constrain results to specific columns only.<br /><br />
+      Search from more than one column by adding more
+      <font color="{{conf.HelpCodeColour}}"><code>column:</code></font> keywords, or exclude certain
+      columns by adding a <font color="{{conf.HelpCodeColour}}"><code>-column:</code></font> keyword.
+      <br />
+    </td>
+  </tr>
+  <tr>
+    <td bgcolor="{{conf.BgColour}}" width="150">
       <b>Search from specific time periods</b><br /><br />
       <font color="{{conf.HelpCodeColour}}"><code>date:2008<br />date:2009-01<br />
       date:2005-12-24..2007</code></font>
@@ -522,7 +539,7 @@ except ImportError:
   <br /><br />
   All search text is case-insensitive. <br />
   Keywords are case-sensitive
-  (<code>OR</code>, <code>table:</code>, <code>date:</code>).
+  (<code>OR</code>, <code>table:</code>, <code>column:<(code>, <code>date:</code>).
 
 </td></tr></table>
 </font>
@@ -538,13 +555,7 @@ if "nt" == os.name: # In Windows, wx.HtmlWindow shows link whitespace quirkily
     helplink = helplink.replace(" ", "_")
 %>
 <font size="2" face="{{conf.HistoryFontName}}" color="{{conf.DisabledColour}}">
-For searching from specific tables, add "table:name".
+For searching from specific tables, add "table:name", and from specific columns, add "column:name".
 &nbsp;&nbsp;<a href=\"page:#help\"><font color="{{conf.LinkColour}}">{{helplink}}</font></a>.
 </font>
-"""
-
-
-"""Message template for copying to clipboard."""
-MESSAGE_CLIPBOARD = """
-[{{m["datetime"].strftime("%Y-%m-%d %H:%M:%S")}}] {{m["from_dispname"]}}: {{parser.parse(m, output={"format": "text"})}}
 """
