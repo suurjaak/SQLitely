@@ -1841,28 +1841,13 @@ class DatabasePage(wx.Panel):
         notebook.AddPage(page, "Information")
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        panel1 = self.panel_accountinfo = wx.Panel(parent=page)
-        panel2 = wx.Panel(parent=page)
+        panel1, panel2 = wx.Panel(parent=page), wx.Panel(parent=page)
         panel1.BackgroundColour = panel2.BackgroundColour = conf.BgColour
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_account = wx.BoxSizer(wx.HORIZONTAL)
-        label_account = wx.StaticText(parent=panel1,
-                                      label="Main account information")
-        label_account.Font = wx.Font(10, wx.FONTFAMILY_SWISS,
-            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
-        sizer1.Add(label_account, border=5, flag=wx.ALL)
-
-        sizer_accountinfo = wx.FlexGridSizer(cols=2, vgap=3, hgap=10)
-        self.sizer_accountinfo = sizer_accountinfo
-        sizer_accountinfo.AddGrowableCol(1, 1)
-
-        sizer_account.Add(sizer_accountinfo, proportion=1, flag=wx.GROW)
-        sizer1.Add(sizer_account, border=20, proportion=1,
-                   flag=wx.TOP | wx.GROW)
-
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
+
         sizer_file = wx.FlexGridSizer(cols=2, vgap=3, hgap=10)
-        label_file = wx.StaticText(parent=panel2, label="Database information")
+        label_file = wx.StaticText(parent=panel1, label="Database information")
         label_file.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                   wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
         sizer2.Add(label_file, border=5, flag=wx.ALL)
@@ -1875,12 +1860,12 @@ class DatabasePage(wx.Panel):
             if not name and not label:
                 sizer_file.AddSpacer(20), sizer_file.AddSpacer(20)
                 continue # continue for i, (name, label) in enumerate(..
-            labeltext = wx.StaticText(parent=panel2, label="%s:" % label)
+            labeltext = wx.StaticText(parent=panel1, label="%s:" % label)
             labeltext.ForegroundColour = wx.Colour(102, 102, 102)
-            valuetext = wx.TextCtrl(parent=panel2, value="Analyzing..",
+            valuetext = wx.TextCtrl(parent=panel1, value="Analyzing..",
                 style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH)
             valuetext.MinSize = (-1, 35)
-            valuetext.BackgroundColour = panel2.BackgroundColour
+            valuetext.BackgroundColour = panel1.BackgroundColour
             valuetext.SetEditable(False)
             sizer_file.Add(labeltext, border=5, flag=wx.LEFT)
             sizer_file.Add(valuetext, proportion=1, flag=wx.GROW)
@@ -1888,11 +1873,11 @@ class DatabasePage(wx.Panel):
         self.edit_info_path.Value = self.db.filename
 
         button_vacuum = self.button_vacuum = \
-            wx.Button(parent=panel2, label="Vacuum")
+            wx.Button(parent=panel1, label="Vacuum")
         button_check = self.button_check_integrity = \
-            wx.Button(parent=panel2, label="Check for corruption")
+            wx.Button(parent=panel1, label="Check for corruption")
         button_refresh = self.button_refresh_fileinfo = \
-            wx.Button(parent=panel2, label="Refresh")
+            wx.Button(parent=panel1, label="Refresh")
         button_vacuum.Enabled = button_check.Enabled = button_refresh.Enabled = False
         button_vacuum.SetToolTipString("Rebuild the database file, repacking "
                                        "it into a minimal amount of disk space.")
@@ -1913,7 +1898,7 @@ class DatabasePage(wx.Panel):
 
         sizer_file.AddGrowableCol(1, 1)
         sizer2.Add(sizer_file, border=20, proportion=1, flag=wx.TOP | wx.GROW)
-        sizer2.Add(sizer_buttons, proportion=2, flag=wx.GROW)
+        sizer2.Add(sizer_buttons, proportion=1, border=10, flag=wx.LEFT | wx.GROW)
 
         sizer.Add(panel1, proportion=1, border=5,
                   flag=wx.LEFT  | wx.TOP | wx.BOTTOM | wx.GROW)
