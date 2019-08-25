@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.08.2019
+@modified    25.08.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -218,7 +218,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if self.list_db.GetItemCount() > 1:
             self.list_db.SetFocus()
         else:
-            self.button_detect.SetFocus()
+            self.button_new.SetFocus()
 
         self.trayicon = wx.TaskBarIcon()
         if conf.TrayIconEnabled:
@@ -410,9 +410,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         conf.WindowSize = [-1, -1] if self.IsMaximized() else self.Size[:]
         conf.save()
         event.Skip()
-        l, p = self.list_db, self.panel_db_main.Parent # Right panel scroll
-        fn = lambda: self and (p.Layout(), l.SetColumnWidth(0, l.Size[1] - 5))
-        wx.CallAfter(fn)
+        # Right panel scroll
+        wx.CallAfter(lambda: self and self.panel_db_main.Parent.Layout())
 
 
     def on_move(self, event):
@@ -446,41 +445,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.notebook.SetAGWWindowStyleFlag(style)
 
 
-    def on_dragstop_list_db(self, event):
-        """Handler for stopping drag in the database list, rearranges list."""
-        start, stop = self.db_drag_start, max(1, event.GetIndex())
-        if start and start != stop:
-            filename = self.list_db.GetItemText(start)
-            self.list_db.DeleteItem(start)
-            idx = stop if start > stop else stop - 1
-            self.list_db.InsertImageStringItem(idx, filename, [1])
-            fgcolour = wx.NamedColour(conf.DBListForegroundColour)
-            bgcolour = wx.NamedColour(conf.DBListBackgroundColour)
-            self.list_db.SetItemBackgroundColour(idx, bgcolour)
-            self.list_db.SetItemTextColour(idx, fgcolour)
-            self.list_db.Select(idx)
-        self.db_drag_start = None
-
-
-    def on_dragstart_list_db(self, event):
-        """Handler for dragging items in the database list, cancels dragging."""
-        if event.GetIndex():
-            self.db_drag_start = event.GetIndex()
-        else:
-            self.db_drag_start = None
-            self.on_cancel_drag_list_db(event)
-
-
-    def on_cancel_drag_list_db(self, event):
-        """Handler for dragging items in the database list, cancels dragging."""
-        class HackEvent(object): # UltimateListCtrl hack to cancel drag.
-            def __init__(self, pos=wx.Point()): self._position = pos
-            def GetPosition(self): return self._position
-        try:
-            wx.CallAfter(self.list_db.Children[0].DragFinish, HackEvent())
-        except: raise
-
-
     def create_page_main(self, notebook):
         """Creates the main page with database list and buttons."""
         page = self.page_main = wx.Panel(notebook)
@@ -488,26 +452,23 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         notebook.AddPage(page, "Databases")
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        agw_style = (wx.LC_REPORT | wx.LC_NO_HEADER |
-                     wx.LC_SINGLE_SEL | wx.BORDER_NONE)
-        if hasattr(wx.lib.agw.ultimatelistctrl, "ULC_USER_ROW_HEIGHT"):
-            agw_style |= wx.lib.agw.ultimatelistctrl.ULC_USER_ROW_HEIGHT
-        list_db = self.list_db = wx.lib.agw.ultimatelistctrl. \
-            UltimateListCtrl(parent=page, agwStyle=agw_style)
+        list_db = self.list_db = controls.SortableUltimateListCtrl(parent=page,
+            agwStyle=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.BORDER_NONE)
         list_db.MinSize = 400, -1 # Maximize-restore would resize width to 100
-        list_db.InsertColumn(0, "")
-        il = wx.ImageList(*images.ButtonHome.Bitmap.Size)
-        il.Add(images.ButtonHome.Bitmap)
-        il.Add(images.ButtonListDatabase.Bitmap)
-        list_db.AssignImageList(il, wx.IMAGE_LIST_SMALL)
-        list_db.InsertImageStringItem(0, "Home", [0])
+
+        columns = [("name", "Name"), ("last_modified", "Modified"), ("size", "Size")]
+        frmt_dt = lambda r, c: r[c].strftime("%Y-%m-%d %H:%M:%S") if r.get(c) else ""
+        frmt_sz = lambda r, c: util.format_bytes(r[c]) if r.get(c) is not None else ""
+        formatters = {"last_modified": frmt_dt, "size": frmt_sz}
+        list_db.SetColumns(columns)
+        list_db.SetColumnFormatters(formatters)
+        list_db.SetColumnAlignment(2, wx.lib.agw.ultimatelistctrl.ULC_FORMAT_RIGHT)
+
+        list_db.AssignImages([images.ButtonHome.Bitmap, images.ButtonListDatabase.Bitmap])
         list_db.TextColour = wx.NamedColour(conf.DBListForegroundColour)
-        list_bgcolour = wx.NamedColour(conf.DBListBackgroundColour)
-        list_db.BackgroundColour = list_bgcolour
-        list_db.SetItemBackgroundColour(0, list_bgcolour)
-        if hasattr(list_db, "SetUserLineHeight"):
-            h = images.ButtonListDatabase.Bitmap.Size[1]
-            list_db.SetUserLineHeight(int(h * 1.5))
+        list_db.BackgroundColour = wx.NamedColour(conf.DBListBackgroundColour)
+        topdata = collections.defaultdict(lambda: None, name="Home")
+        list_db.SetTopRow(topdata, [0])
         list_db.Select(0)
 
         panel_right = wx.lib.scrolledpanel.ScrolledPanel(page)
@@ -529,10 +490,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
              "Create a new SQLite database."),
             ("opena", "&Open a database..", images.ButtonOpenA, 
              "Choose a database from your computer to open."),
+            ("folder", "&Import from folder.", images.ButtonFolder,
+             "Select a folder where to look for databases."),
             ("detect", "Detect databases", images.ButtonDetect,
              "Auto-detect databases from user folders."),
-            ("folder", "&Import from folder.", images.ButtonFolder,
-             "Select a folder where to look for databases "),
             ("missing", "Remove missing", images.ButtonRemoveMissing,
              "Remove non-existing files from the database list."),
             ("clear", "C&lear list", images.ButtonClear,
@@ -540,8 +501,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         for name, label, img, note in BUTTONS_MAIN:
             button = controls.NoteButton(panel_main, label, note, img.Bitmap)
             setattr(self, "button_" + name, button)
-            exec("button_%s = self.button_%s" % (name, name)) in {}, locals()
-        button_missing.Hide(); button_clear.Hide()
+        self.button_missing.Disable(); self.button_clear.Disable()
 
         # Create detail page labels, values and buttons
         label_db = self.label_db = wx.TextCtrl(parent=panel_detail, value="",
@@ -575,7 +535,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         for name, label, img, note in BUTTONS_DETAIL:
             button = controls.NoteButton(panel_detail, label, note, img.Bitmap)
             setattr(self, "button_" + name, button)
-            exec("button_%s = self.button_%s" % (name, name)) # Hack local name
 
         children = list(panel_main.Children) + list(panel_detail.Children)
         for c in [panel_main, panel_detail] + children:
@@ -586,43 +545,40 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         list_db.Bind(wx.EVT_LIST_ITEM_SELECTED,  self.on_select_list_db)
         list_db.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_open_from_list_db)
         list_db.Bind(wx.EVT_CHAR_HOOK,           self.on_list_db_key)
-        list_db.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_BEGIN_DRAG,
-                     self.on_dragstart_list_db)
-        list_db.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_END_DRAG,
-                     self.on_dragstop_list_db)
-        list_db.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_BEGIN_RDRAG,
-                     self.on_cancel_drag_list_db)
-        button_new.Bind(wx.EVT_BUTTON,           self.on_new_database)
-        button_opena.Bind(wx.EVT_BUTTON,         self.on_open_database)
-        button_detect.Bind(wx.EVT_BUTTON,        self.on_detect_databases)
-        button_folder.Bind(wx.EVT_BUTTON,        self.on_add_from_folder)
-        button_missing.Bind(wx.EVT_BUTTON,       self.on_remove_missing)
-        button_clear.Bind(wx.EVT_BUTTON,         self.on_clear_databases)
-        button_open.Bind(wx.EVT_BUTTON,          self.on_open_current_database)
-        button_saveas.Bind(wx.EVT_BUTTON,        self.on_save_database_as)
-        button_remove.Bind(wx.EVT_BUTTON,        self.on_remove_database)
+        list_db.Bind(wx.EVT_LIST_COL_CLICK,      self.on_sort_list_db)
+        self.button_new.Bind(wx.EVT_BUTTON,      self.on_new_database)
+        self.button_opena.Bind(wx.EVT_BUTTON,    self.on_open_database)
+        self.button_detect.Bind(wx.EVT_BUTTON,   self.on_detect_databases)
+        self.button_folder.Bind(wx.EVT_BUTTON,   self.on_add_from_folder)
+        self.button_missing.Bind(wx.EVT_BUTTON,  self.on_remove_missing)
+        self.button_clear.Bind(wx.EVT_BUTTON,    self.on_clear_databases)
+        self.button_open.Bind(wx.EVT_BUTTON,     self.on_open_current_database)
+        self.button_saveas.Bind(wx.EVT_BUTTON,   self.on_save_database_as)
+        self.button_remove.Bind(wx.EVT_BUTTON,   self.on_remove_database)
 
         panel_main.Sizer.Add(label_main, border=10, flag=wx.ALL)
         panel_main.Sizer.Add((0, 10))
-        panel_main.Sizer.Add(button_new, flag=wx.GROW)
-        panel_main.Sizer.Add(button_opena, flag=wx.GROW)
-        panel_main.Sizer.Add(button_detect, flag=wx.GROW)
-        panel_main.Sizer.Add(button_folder, flag=wx.GROW)
+        panel_main.Sizer.Add(self.button_new,    flag=wx.GROW)
+        panel_main.Sizer.Add(self.button_opena,  flag=wx.GROW)
+        panel_main.Sizer.Add(self.button_folder, flag=wx.GROW)
+        panel_main.Sizer.Add(self.button_detect, flag=wx.GROW)
         panel_main.Sizer.AddStretchSpacer()
-        panel_main.Sizer.Add(button_missing, flag=wx.GROW)
-        panel_main.Sizer.Add(button_clear, flag=wx.GROW)
+        panel_main.Sizer.Add(self.button_missing, flag=wx.GROW)
+        panel_main.Sizer.Add(self.button_clear,   flag=wx.GROW)
         panel_detail.Sizer.Add(label_db, border=10, flag=wx.ALL | wx.GROW)
         panel_detail.Sizer.Add(sizer_labels, border=10, flag=wx.ALL | wx.GROW)
         panel_detail.Sizer.AddStretchSpacer()
-        panel_detail.Sizer.Add(button_open, flag=wx.GROW)
-        panel_detail.Sizer.Add(button_saveas, flag=wx.GROW)
-        panel_detail.Sizer.Add(button_remove, flag=wx.GROW)
+        panel_detail.Sizer.Add(self.button_open,   flag=wx.GROW)
+        panel_detail.Sizer.Add(self.button_saveas, flag=wx.GROW)
+        panel_detail.Sizer.Add(self.button_remove, flag=wx.GROW)
         panel_right.Sizer.Add(panel_main, proportion=1, flag=wx.GROW)
         panel_right.Sizer.Add(panel_detail, proportion=1, flag=wx.GROW)
         sizer.Add(list_db, border=10, proportion=6, flag=wx.ALL | wx.GROW)
         sizer.Add(panel_right, border=10, proportion=4, flag=wx.ALL | wx.GROW)
         for filename in conf.DBFiles:
             self.update_database_list(filename)
+        if conf.DBSort and conf.DBSort[0] >= 0:
+            self.list_db.SortListItems(*conf.DBSort)
 
 
     def create_menu(self):
@@ -715,15 +671,26 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_list_db_key(self, event):
         """
-        Handler for pressing a key in dblist, loads selected database on Enter
-        and removes from list on Delete.
+        Handler for pressing a key in dblist, loads selected database on Enter,
+        removes from list on Delete, refreshes columns on F5.
         """
-        if self.list_db.GetFirstSelected() > 0 and not event.AltDown() \
+        elif self.list_db.GetFirstSelected() > 0 and not event.AltDown() \
         and event.KeyCode in [wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]:
             self.load_database_page(self.db_filename)
         elif event.KeyCode in [wx.WXK_DELETE] and self.db_filename:
             self.on_remove_database(None)
         event.Skip()
+
+
+    def on_sort_list_db(self, event):
+        """
+        Handler for sorting dblist, saves sort state.
+        """
+        event.Skip()
+        def save_sort_state():
+            conf.DBSort = self.list_db.GetSortState()
+            conf.save()
+        wx.CallAfter(save_sort_state)
 
 
     def on_menu_homepage(self, event):
@@ -842,7 +809,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if filename not in conf.DBFiles:
                 conf.DBFiles.append(filename)
                 conf.save()
-            data = collections.defaultdict(lambda: None)
+            data = collections.defaultdict(lambda: None, name=filename)
             if os.path.exists(filename):
                 data["size"] = os.path.getsize(filename)
                 data["last_modified"] = datetime.datetime.fromtimestamp(
@@ -853,11 +820,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 if filename not in self.db_filenames:
                     self.db_filenames[filename] = data
                     idx = self.list_db.GetItemCount()
-                    self.list_db.InsertImageStringItem(idx, filename, [1])
-                    fgcolour = wx.NamedColour(conf.DBListForegroundColour)
-                    bgcolour = wx.NamedColour(conf.DBListBackgroundColour)
-                    self.list_db.SetItemBackgroundColour(idx, bgcolour)
-                    self.list_db.SetItemTextColour(idx, fgcolour)
+                    self.list_db.AppendRow(data, [1])
                     # self is not shown: form creation time, reselect last file
                     if not self.Shown and filename in conf.LastSelectedFiles:
                         self.list_db.Select(idx)
@@ -869,10 +832,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                         wx.CallAfter(lambda: self and scroll_to_selected())
                     result = True
 
-        self.button_missing.Shown = (self.list_db.GetItemCount() > 1)
-        self.button_clear.Shown = (self.list_db.GetItemCount() > 1)
-        if self.Shown:
-            self.list_db.SetColumnWidth(0, self.list_db.Size.width - 5)
+        self.button_missing.Enable(self.list_db.GetItemCount() > 1)
+        self.button_clear.Enable(self.list_db.GetItemCount() > 1)
         return result
 
 
@@ -1041,11 +1002,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         dialog = wx.FileDialog(
             parent=self, message="Open", defaultFile="",
             wildcard="SQLite database (*.db)|*.db|All files|*.*",
-            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
+            style=wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE | wx.FD_OPEN | wx.RESIZE_BORDER
         )
         if wx.ID_OK == dialog.ShowModal():
-            filename = dialog.GetPath()
-            if filename:
+            for filename in dialog.GetPaths():
                 self.update_database_list(filename)
                 self.load_database_page(filename)
 

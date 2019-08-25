@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.08.2019
+@modified    25.08.2019
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -23,8 +23,8 @@ from lib import util
 
 """Program title, version number and version date."""
 Title = "SQLiteMate"
-Version = "1.0.dev4"
-VersionDate = "24.08.2019"
+Version = "1.0.dev5"
+VersionDate = "25.08.2019"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -38,7 +38,7 @@ else:
 ConfigFile = "%s.ini" % os.path.join(ApplicationDirectory, "etc", Title.lower())
 
 """List of attribute names that can be saved to and loaded from ConfigFile."""
-FileDirectives = ["ConsoleHistoryCommands", "DBDoBackup",  "DBFiles",
+FileDirectives = ["ConsoleHistoryCommands", "DBDoBackup",  "DBFiles", "DBSort",
     "LastActivePage", "LastSearchResults", "LastSelectedFiles",
     "LastUpdateCheck", "RecentFiles", "SearchHistory",
     "SearchInNames", "SearchInTables", "SearchUseNewTab",
@@ -61,6 +61,9 @@ DBDoBackup = False
 
 """All detected/added databases."""
 DBFiles = []
+
+"""Database list sort state, [col, ascending]."""
+DBSort = []
 
 """History of commands entered in console."""
 ConsoleHistoryCommands = []

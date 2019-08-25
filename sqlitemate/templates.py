@@ -489,7 +489,7 @@ except ImportError:
     </td>
     <td bgcolor="{{conf.BgColour}}">
       <br /><br />
-      To find rows from specific time periods (where row has timestamp columns), use the keyword
+      To find rows from specific time periods (where row has DATE/DATETIME columns), use the keyword
       <font color="{{conf.HelpCodeColour}}"><code>date:period</code></font> or
       <font color="{{conf.HelpCodeColour}}"><code>date:periodstart..periodend</code></font>.
       For the latter, either start or end can be omitted.<br /><br />
@@ -542,7 +542,7 @@ except ImportError:
   <br /><br />
   All search text is case-insensitive. <br />
   Keywords are case-sensitive
-  (<code>OR</code>, <code>table:</code>, <code>column:<(code>, <code>date:</code>).
+  (<code>OR</code>, <code>table:</code>, <code>column:</code>, <code>date:</code>).
 
 </td></tr></table>
 </font>

@@ -25,7 +25,8 @@ Stand-alone GUI components for wx:
 - ScrollingHtmlWindow(wx.html.HtmlWindow):
   HtmlWindow that remembers its scroll position on resize and append.
     
-- SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
+- SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
+                           wx.lib.mixins.listctrl.ColumnSorterMixin):
   A sortable list view that can be batch-populated, autosizes its columns,
   supports clipboard copy.
 
@@ -44,20 +45,18 @@ Stand-alone GUI components for wx:
   on 09.02.2006 in wxPython-users thread "TextCtrlAutoComplete",
   http://wxpython-users.1045709.n5.nabble.com/TextCtrlAutoComplete-td2348906.html
 
-- def BuildHistogram(data, barsize=(3, 30), colour="#2d8b57", maxval=None):
-  Paints and returns (wx.Bitmap, rects) with histogram plot from data.
-
 ------------------------------------------------------------------------------
 This file is part of SQLiteMate - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    28.06.2016
+@modified    25.08.2019
 ------------------------------------------------------------------------------
 """
 import ast
 import collections
+import copy
 import datetime
 import functools
 import locale
@@ -72,6 +71,7 @@ import wx.lib.agw.gradientbutton
 try: # ShapedButton requires PIL, might not be installed
     import wx.lib.agw.shapedbutton
 except Exception: pass 
+import wx.lib.agw.ultimatelistctrl
 import wx.lib.embeddedimage
 import wx.lib.mixins.listctrl
 import wx.lib.newevent
@@ -828,38 +828,96 @@ class ScrollingHtmlWindow(wx.html.HtmlWindow):
 
 
 
-class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
+class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
+                               wx.lib.mixins.listctrl.ColumnSorterMixin):
     """
-    A sortable list view that can be batch-populated, autosizes its columns,
+    A sortable list control that can be batch-populated, autosizes its columns,
     can be filtered by string value matched on any row column,
     supports clipboard copy.
     """
     COL_PADDING = 30
 
+    SmallUpArrow = wx.lib.embeddedimage.PyEmbeddedImage(
+        "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAADxJ"
+        "REFUOI1jZGRiZqAEMFGke2gY8P/f3/9kGwDTjM8QnAaga8JlCG3CAJdt2MQxDCAUaOjyjKMp"
+        "cRAYAABS2CPsss3BWQAAAABJRU5ErkJggg==")
+
+    #----------------------------------------------------------------------
+    SmallDownArrow = wx.lib.embeddedimage.PyEmbeddedImage(
+        "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAEhJ"
+        "REFUOI1jZGRiZqAEMFGke9QABgYGBgYWdIH///7+J6SJkYmZEacLkCUJacZqAD5DsInTLhDR"
+        "bcPlKrwugGnCFy6Mo3mBAQChDgRlP4RC7wAAAABJRU5ErkJggg==")
+
+
     def __init__(self, *args, **kwargs):
-        wx.ListView.__init__(self, *args, **kwargs)
+        if "agwStyle" in kwargs \
+        and hasattr(wx.lib.agw.ultimatelistctrl, "ULC_USER_ROW_HEIGHT"):
+            kwargs["agwStyle"] |= wx.lib.agw.ultimatelistctrl.ULC_USER_ROW_HEIGHT
+
+        wx.lib.agw.ultimatelistctrl.UltimateListCtrl.__init__(self, *args, **kwargs)
         wx.lib.mixins.listctrl.ColumnSorterMixin.__init__(self, 0)
-        self.itemDataMap = {} # {item_id: [values], } for ColumnSorterMixin
-        self._data_map = {} # {item_id: row dict, } currently visible data
-        self._id_rows = [] # [(item_id, {row dict}), ] all data items
-        self._columns = [] # [(name, label), ]
-        self._filter = "" # Filter string
-        self._col_widths = {} # {col_index: width in pixels, }
+        self.itemDataMap = {}   # {item_id: [values], } for ColumnSorterMixin
+        self._data_map = {}     # {item_id: row dict, } currently visible data
+        self._id_rows = []      # [(item_id, {row dict}), ] all data items
+        self._id_images = {}    # {item_id: imageIds}
+        self._columns = []      # [(name, label), ]
+        self._filter = ""       # Filter string
+        self._col_widths = {}   # {col_index: width in pixels, }
         self._col_maxwidth = -1 # Maximum width for auto-sized columns
-        # Remember row colour attributes { item_id: {SetItemTextColour: x,
-        # SetItemBackgroundColour: y, }, }
-        self._row_colours = collections.defaultdict(dict)
+        self._top_row = None    # List top row data dictionary, if any
+        self._drag_start = None # Item index currently dragged
+        self.counter = lambda x={"c": 0}: x.update(c=1+x["c"]) or x["c"]
+
+        il = wx.lib.agw.ultimatelistctrl.PyImageList(*self.SmallUpArrow.Bitmap.Size)
+        il.Add(self.SmallUpArrow.Bitmap)
+        il.Add(self.SmallDownArrow.Bitmap)
+        self.AssignImageList(il, wx.IMAGE_LIST_SMALL)
+        self._imagelist = il
+
         # Default row column formatter function
         frmt = lambda: lambda r, c: "" if r.get(c) is None else unicode(r[c])
         self._formatters = collections.defaultdict(frmt)
-        id_copy, id_selectall = wx.NewId(), wx.NewId()
+        id_copy = wx.NewId()
         entries = [(wx.ACCEL_CTRL, x, id_copy)
                    for x in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT)]
-        entries += [(wx.ACCEL_CTRL, ord("A"), id_selectall)]
         self.SetAcceleratorTable(wx.AcceleratorTable(entries))
         self.Bind(wx.EVT_MENU, self.OnCopy, id=id_copy)
-        self.Bind(wx.EVT_MENU, self.OnSelectAll, id=id_selectall)
-        self.counter = lambda x={"c": 0}: x.update(c=1+x["c"]) or x["c"]
+        self.Bind(wx.EVT_LIST_COL_CLICK, self.OnSort)
+        self.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_BEGIN_DRAG,  self.OnDragStart)
+        self.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_END_DRAG,    self.OnDragStop)
+        self.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_BEGIN_RDRAG, self.OnDragCancel)
+
+
+    def GetSortImages(self):
+        """For ColumnSorterMixin."""
+        return (0, 1)
+
+
+    def AssignImages(self, images):
+        """
+        Assigns images associated with the control.
+        SetTopRow/AppendRow/InsertRow/Populate use imageIds from this list.
+
+        @param   images  list of wx.Bitmap objects
+        """
+        for x in images: self._imagelist.Add(x)
+        if hasattr(self, "SetUserLineHeight"):
+            h = images[0].Size[1]
+            self.SetUserLineHeight(int(h * 1.5))
+
+
+    def SetTopRow(self, data, imageIds=()):
+        """
+        Adds special top row to list, not subject to sorting or filtering.
+
+        @param   data      item data dictionary
+        @param   imageIds  list of indexes for the images associated to top row
+        """
+        self._top_row = data
+        if imageIds:
+            imageIds = [x + 2 for x in imageIds] # Shift for sort arrows
+            self._id_images[-1] = imageIds
+        self._PopulateTopRow()
 
 
     def SetColumnFormatters(self, formatters):
@@ -869,38 +927,57 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
         @param   formatters  {col_name: function(rowdict, col_name), }
         """
         self._formatters.clear()
-        if formatters:
-            self._formatters.update(formatters)
+        if formatters: self._formatters.update(formatters)
 
 
-    def Populate(self, rows):
+    def Populate(self, rows, imageIds=()):
         """
         Populates the control with rows, clearing previous data, if any.
         Re-selects the previously selected row, if any.
 
-        @param   rows        a list of data dicts
+        @param   rows      a list of data dicts
+        @param   imageIds  list of indexes for the images associated to rows
         """
         self._col_widths.clear()
-        self._row_colours.clear()
-        self._id_rows = [(self.counter(), r) for r in rows]
+        self._id_rows[:] = []
+        if imageIds: imageIds = [x + 2 for x in imageIds] # Shift for sort arrows
+        for r in rows:
+            item_id = self.counter()
+            self._id_rows += [(item_id, r)]
+            if imageIds: self._id_images[item_id] = imageIds
         self.RefreshRows()
 
 
-    def AppendRow(self, data):
+    def AppendRow(self, data, imageIds=()):
         """
         Appends the specified data to the control as a new row.
 
-        @param   data     item data dictionary
+        @param   data      item data dictionary
+        @param   imageIds  list of indexes for the images associated to this row
+        """
+        self.InsertRow(self.GetItemCount(), data, imageIds)
+
+
+    def InsertRow(self, index, data, imageIds=()):
+        """
+        Inserts the specified data to the control at specified index as a new row.
+
+        @param   data      item data dictionary
+        @param   imageIds  list of indexes for the images associated to this row
         """
         item_id = self.counter()
+        if imageIds:
+            imageIds = [x + 2 for x in imageIds] # Shift for sort arrows
+            self._id_images[item_id] = imageIds
+
         if self._RowMatchesFilter(data):
             columns = [c[0] for c in self._columns]
-            index = self.ItemCount
-            col_value = self._formatters[columns[0]](data, columns[0])
-            self.InsertStringItem(index, col_value)
-            for i, col_name in [(i, x) for i, x in enumerate(columns) if i]:
+            for i, col_name in enumerate(columns):
                 col_value = self._formatters[col_name](data, col_name)
-                self.SetStringItem(index, i, col_value)
+
+                if imageIds and not i: self.InsertImageStringItem(index, col_value, imageIds)
+                elif not i: self.InsertStringItem(index, col_value)
+                else: self.SetStringItem(index, i, col_value)
                 col_width = self.GetTextExtent(col_value)[0] + self.COL_PADDING
                 if col_width > self._col_widths.get(i, 0):
                     self._col_widths[i] = col_width
@@ -908,9 +985,11 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
             self.SetItemData(index, item_id)
             self.itemDataMap[item_id] = [data[c] for c in columns]
             self._data_map[item_id] = data
-            self.SetItemImage(index, -1)
-            self.SetItemColumnImage(index, 0, -1)
+            self.SetItemBackgroundColour(index, self.BackgroundColour)
+            self.SetItemTextColour(index, self.TextColour)
         self._id_rows.append((item_id, data))
+        if self.GetSortState()[0] >= 0:
+            self.SortListItems(*self.GetSortState())
 
 
     def GetFilter(self):
@@ -941,22 +1020,11 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
             selected_ids.append(self.GetItemData(selected))
             selected = self.GetNextSelected(selected)
 
-        # Store row colour attributes
-        for i in range(self.ItemCount):
-            t, b = self.GetItemTextColour(i), self.GetItemBackgroundColour(i)
-            id = self.GetItemData(i)
-            for func, value in [(self.SetItemTextColour, t),
-                                (self.SetItemBackgroundColour, b)]:
-                if wx.NullColour != value:
-                    self._row_colours[id][func] = value
-                elif func in self._row_colours[id]:
-                    del self._row_colours[id][func]
-            if id in self._row_colours and not self._row_colours[id]:
-                del self._row_colours[id]
-
         self.Freeze()
-        wx.ListView.DeleteAllItems(self)
-        # To map list item data ID to row, ListView allows only integer per row
+        wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
+        self._PopulateTopRow()
+            
+        # To map list item data ID to row, ListCtrl allows only integer per row
         row_data_map = {} # {item_id: {row dict}, }
         item_data_map = {} # {item_id: [row values], }
         # For measuring by which to set column width: header or value
@@ -967,7 +1035,7 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
             # Keep space for sorting arrows.
             width = self.GetTextExtent(col_label + "  ")[0] + self.COL_PADDING
             header_lengths[col_name] = width
-        index = 0
+        index = self.GetItemCount()
         for item_id, row in self._id_rows:
             if not self._RowMatchesFilter(row):
                 continue # continue for index, (item_id, row) in enumerate(..)
@@ -975,10 +1043,12 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
             col_value = self._formatters[col_name](row, col_name)
             col_lengths[col_name] = max(col_lengths[col_name],
                                         self.GetTextExtent(col_value)[0] + self.COL_PADDING)
-            self.InsertStringItem(index, col_value)
+
+            if item_id in self._id_images:
+                self.InsertImageStringItem(index, col_value, self._id_images[item_id])
+            else: self.InsertStringItem(index, col_value)
+
             self.SetItemData(index, item_id)
-            self.SetItemImage(index, -1)
-            self.SetItemColumnImage(index, 0, -1)
             item_data_map[item_id] = {0: row[col_name]}
             row_data_map[item_id] = row
             col_index = 1 # First was already inserted
@@ -992,6 +1062,7 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
             index += 1
         self._data_map = row_data_map
         self.itemDataMap = item_data_map
+
         if self._id_rows and not self._col_widths:
             if self._col_maxwidth > 0:
                 for col_name, width in col_lengths.items():
@@ -1002,20 +1073,15 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
                 col_width = max(col_lengths[col_name], header_lengths[col_name])
                 self.SetColumnWidth(i, col_width)
                 self._col_widths[i] = col_width
-                #wx.LIST_AUTOSIZE, wx.LIST_AUTOSIZE_USEHEADER
         elif self._col_widths:
             for col, width in self._col_widths.items():
                 self.SetColumnWidth(col, width)
         if self.GetSortState()[0] >= 0:
             self.SortListItems(*self.GetSortState())
 
-        if selected_ids or self._row_colours:
-            idindx = dict((self.GetItemData(i), i)
-                          for i in range(self.ItemCount))
-        for item_id, attrs in self._row_colours.items(): # Re-colour rows
-            if item_id not in idindx: continue
-            [func(idindx[item_id], value) for func, value in attrs.items()]
         if selected_ids: # Re-select the previously selected items
+            idindx = dict((self.GetItemData(i), i)
+                          for i in range(self.GetItemCount()))
             [self.Select(idindx[i]) for i in selected_ids if i in idindx]
 
         self.Thaw()
@@ -1029,11 +1095,12 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
 
     def DeleteItem(self, index):
         """Deletes the row at the specified index."""
-        data_id = self.GetItemData(index)
-        data = self._data_map.get(data_id)
-        del self._data_map[data_id]
-        self._id_rows.remove((data_id, data))
-        return wx.ListView.DeleteItem(self, index)
+        item_id = self.GetItemData(index)
+        data = self._data_map.get(item_id)
+        del self._data_map[item_id]
+        self._id_rows.remove((item_id, data))
+        self._id_images.pop(item_id, None)
+        return wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteItem(self, index)
 
 
     def DeleteAllItems(self):
@@ -1041,9 +1108,11 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
         self.itemDataMap = {}
         self._data_map = {}
         self._id_rows = []
-        self._row_colours.clear()
+        for item_id in self._id_images:
+            if item_id >= 0: self._id_images.pop(item_id)
         self.Freeze()
-        result = wx.ListView.DeleteAllItems(self)
+        result = wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
+        self._PopulateTopRow()
         self.Thaw()
         return result
 
@@ -1068,11 +1137,22 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
         self.SetColumnCount(len(columns))
         for i, (name, label) in enumerate(columns):
             col_label = label + "  " # Keep space for sorting arrows.
-            self.InsertColumn(i + 1, col_label)
+            self.InsertColumn(i, col_label)
             self._col_widths[i] = max(self._col_widths.get(i, 0),
                 self.GetTextExtent(col_label)[0] + self.COL_PADDING)
             self.SetColumnWidth(i, self._col_widths[i])
-        self._columns = columns
+        self._columns = copy.deepcopy(columns)
+
+
+    def SetColumnAlignment(self, column, align):
+        """
+        Sets alignment for column at specified index.
+
+        @param   align  one of ULC_FORMAT_LEFT, ULC_FORMAT_RIGHT, ULC_FORMAT_CENTER
+        """
+        item = self.GetColumn(column)
+        item.SetAlign(align)
+        self.SetColumn(column, item)
 
 
     def GetItemMappedData(self, index):
@@ -1089,9 +1169,18 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
 
     def SortListItems(self, col=-1, ascending=1):
         """Sorts the list items on demand."""
+        selected_ids, selected = [], self.GetFirstSelected()
+        while selected >= 0:
+            selected_ids.append(self.GetItemData(selected))
+            selected = self.GetNextSelected(selected)
+
         wx.lib.mixins.listctrl.ColumnSorterMixin.SortListItems(
             self, col, ascending)
-        self.OnSortOrderChanged()
+
+        if selected_ids: # Re-select the previously selected items
+            idindx = dict((self.GetItemData(i), i)
+                          for i in range(self.GetItemCount()))
+            [self.Select(idindx[i]) for i in selected_ids if i in idindx]
 
 
     def GetColumnSorter(self):
@@ -1102,29 +1191,6 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
         sorter = self.__ColumnSorter if hasattr(self, "itemDataMap") \
             else wx.lib.mixins.listctrl.ColumnSorterMixin.GetColumnSorter(self)
         return sorter
-
-
-    def OnSortOrderChanged(self):
-        """
-        Callback called by ColumnSorterMixin after sort order has changed
-        (whenever user clicked column header), refreshes column header sort
-        direction info.
-        """
-        ARROWS = {True: u" ↓", False: u" ↑"}
-        col_sorted, ascending = self.GetSortState()
-        for i in range(self.ColumnCount):
-            col_item = self.GetColumn(i)
-            if i == col_sorted:
-                new_item = wx.ListItem()
-                t = col_item.Text.replace(ARROWS[0], "").replace(ARROWS[1], "")
-                new_item.Text = u"%s%s" % (t, ARROWS[ascending])
-                self.SetColumn(i, new_item)
-            elif any(i for i in ARROWS.values() if i in col_item.Text):
-                # Remove the previous sort arrow, if any
-                new_item = wx.ListItem()
-                t = col_item.Text.replace(ARROWS[0], "").replace(ARROWS[1], "")
-                new_item.Text = t
-                self.SetColumn(i, new_item)
 
 
     def OnCopy(self, event):
@@ -1143,9 +1209,74 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
             wx.TheClipboard.Close()
 
 
-    def OnSelectAll(self, event):
-        """Selects all rows."""
-        for i in range(self.ItemCount): self.Select(i)
+    def OnSort(self, event):
+        """Handler on clicking column, sorts list."""
+        sortstate = self.GetSortState()
+
+        col, ascending = self.GetSortState()
+        if col == event.GetColumn() and not ascending: # Clear sort 
+            self._col = -1
+            self._colSortFlag = [0] * self.GetColumnCount()
+            self.ClearColumnImage(col)
+            self.RefreshRows()
+        else:
+            ascending = 1 if col != event.GetColumn() else 1 - ascending
+            self.SortListItems(event.GetColumn(), ascending)
+
+
+    def OnDragStop(self, event):
+        """Handler for stopping drag in the list, rearranges list."""
+        start, stop = self._drag_start, max(1, event.GetIndex())
+        if start and start != stop:
+            item_id, data = self.GetItemData(start), self.GetItemMappedData(start)
+            imageIds = self._id_images.get(item_id) or ()
+            imageIds = [x - 2 for x in imageIds] # Shift for sort arrows
+            idx = stop if start > stop or stop == self.GetItemCount() - 1 \
+                  else stop - 1
+            self.DeleteItem(start)
+            self.InsertRow(idx, data, imageIds)
+            self.Select(idx)
+        self._drag_start = None
+
+
+    def OnDragStart(self, event):
+        """Handler for dragging items in the list, cancels dragging."""
+        if self.GetSortState()[0] < 0 \
+        and (not self._top_row or event.GetIndex()):
+            self._drag_start = event.GetIndex()
+        else:
+            self._drag_start = None
+            self.OnDragCancel(event)
+
+
+    def OnDragCancel(self, event):
+        """Handler for cancelling item drag in the list, cancels dragging."""
+        class HackEvent(object): # UltimateListCtrl hack to cancel drag.
+            def __init__(self, pos=wx.Point()): self._position = pos
+            def GetPosition(self): return self._position
+        try:
+            wx.CallAfter(self.Children[0].DragFinish, HackEvent())
+        except: raise
+
+
+    def _PopulateTopRow(self):
+        """Populates top row state, if any."""
+        if not self._top_row: return
+            
+        columns = [c[0] for c in self._columns]
+        col_value = self._formatters[columns[0]](self._top_row, columns[0])
+        if -1 in self._id_images:
+            self.InsertImageStringItem(0, col_value, self._id_images[-1])
+        else: self.InsertStringItem(0, col_value)
+        for i, col_name in enumerate(columns[1:], 1):
+            col_value = self._formatters[col_name](self._top_row, col_name)
+            self.SetStringItem(0, i, col_value)
+        self.SetItemBackgroundColour(0, self.BackgroundColour)
+
+        def resize():
+            w = sum((self.GetColumnWidth(i) for i in range(1, len(self._columns))), 0)
+            self.SetColumnWidth(0, self.Size[0] - w - 5)
+        if self.GetItemCount() == 1: wx.CallAfter(resize)
 
 
     def _RowMatchesFilter(self, row):
@@ -1165,8 +1296,11 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
     def __ColumnSorter(self, key1, key2):
         """
         Sort function fed to ColumnSorterMixin, is given two integers which we
-        have mapped on our own.
+        have mapped on our own. Returns -1, 0 or 1.
         """
+        if key1 not in self.itemDataMap or key2 not in self.itemDataMap:
+            return 0
+            
         col = self._col
         ascending = self._colSortFlag[col]
         item1 = self.itemDataMap[key1][col]
@@ -2006,39 +2140,3 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         self._ignore_textchange = True
         return wx.TextCtrl.SetValue(self, value)
     Value = property(GetValue, SetValue)
-
-
-
-def BuildHistogram(data, barsize=(3, 30), colour="#2d8b57", maxval=None):
-    """
-    Paints and returns (wx.Bitmap, rects) with histogram bar plot from data.
-
-    @return   (wx.Bitmap, [(x1, y1, x2, y2), ])
-    """
-    global BRUSH, PEN
-    bgcolour, border = "white", 1
-    rect_step = barsize[0] + (1 if barsize[0] < 10 else 2)
-    w, h = len(data) * rect_step + border + 1, barsize[1] + 2 * border
-    bmp = wx.EmptyBitmap(w, h)
-    dc = wx.MemoryDC()
-    dc.SelectObject(bmp)
-    dc.Brush = BRUSH(bgcolour)
-    dc.Pen = PEN(colour)
-    dc.Clear()
-    dc.DrawRectangle(0, 0, w, h)
-
-    bars = []
-    safediv = lambda a, b: a / float(b) if b else 0.0
-    maxval = maxval if maxval is not None else max(zip(*data)[1])
-    for i, (interval, val) in enumerate(data):
-        h = barsize[1] * safediv(val, maxval) + 1
-        if val and h < 1.5: h = 1.5 # Very low values produce no visual bar
-        x = i * rect_step + border + 1
-        y = bmp.Height - h
-        bars.append((x, y, barsize[0], h))
-    dc.Brush = BRUSH(colour)
-    dc.DrawRectangleList(bars)
-
-    dc.SelectObject(wx.NullBitmap)
-    rects = [(x, border, x+w, bmp.Height - 2*border) for x, y, w, h in bars]
-    return bmp, rects
