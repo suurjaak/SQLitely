@@ -313,7 +313,7 @@ import conf
     <table cellpadding="0" cellspacing="2"><tr><td>
         <a href="page:tables"><img src="memory:HelpTables.png" /></a>
       </td><td width="10"></td><td valign="center">
-        Browse, filter and change database tables,<br />
+        Browse, filter and change table data,<br />
         export as HTML, SQL INSERT-statements or spreadsheet.
       </td></tr><tr><td nowrap align="center">
         <a href="page:tables"><b><font color="{{conf.FgColour}}">Data</font></b></a><br />

@@ -144,7 +144,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         tint_colour = wx.NamedColour(conf.BgColour)
         tint_factor = [((4 * x) % 256) / 255. for x in tint_colour]
         # Images shown on the default search content page
-        for name in ["Search", "Info", "Tables", "SQL"]:
+        for name in ["Search", "Tables", "SQL", "Info"]:
             bmp = getattr(images, "Help" + name, None)
             if not bmp: continue # Continue for name in [..]
             bmp = bmp.Image.AdjustChannels(*tint_factor)
@@ -1523,15 +1523,15 @@ class DatabasePage(wx.Panel):
             parent=self, agwStyle=bookstyle, style=wx.BORDER_STATIC)
 
         il = wx.ImageList(32, 32)
-        idx1 = il.Add(images.PageTables.Bitmap)
-        idx2 = il.Add(images.PageSQL.Bitmap)
-        idx3 = il.Add(images.PageSearch.Bitmap)
+        idx1 = il.Add(images.PageSearch.Bitmap)
+        idx2 = il.Add(images.PageTables.Bitmap)
+        idx3 = il.Add(images.PageSQL.Bitmap)
         idx4 = il.Add(images.PageInfo.Bitmap)
         notebook.AssignImageList(il)
 
+        self.create_page_search(notebook)
         self.create_page_tables(notebook)
         self.create_page_sql(notebook)
-        self.create_page_search(notebook)
         self.create_page_info(notebook)
 
         notebook.SetPageImage(0, idx1)
@@ -1555,7 +1555,7 @@ class DatabasePage(wx.Panel):
         self.Layout()
         # Hack to get info-page multiline TextCtrls to layout without quirks.
         self.notebook.SetSelection(self.pageorder[self.page_info])
-        self.notebook.SetSelection(self.pageorder[self.page_tables])
+        self.notebook.SetSelection(self.pageorder[self.page_search])
         # Restore last active page
         if db.filename in conf.LastActivePage \
         and conf.LastActivePage[db.filename] != self.notebook.Selection:
