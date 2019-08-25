@@ -1639,7 +1639,7 @@ class DatabasePage(wx.Panel):
         """Creates a page for listing and browsing tables."""
         page = self.page_tables = wx.Panel(parent=notebook)
         self.pageorder[page] = len(self.pageorder)
-        notebook.AddPage(page, "Tables")
+        notebook.AddPage(page, "Data")
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
         splitter = self.splitter_tables = wx.SplitterWindow(
             parent=page, style=wx.BORDER_NONE
@@ -1754,7 +1754,7 @@ class DatabasePage(wx.Panel):
         """Creates a page for executing arbitrary SQL."""
         page = self.page_sql = wx.Panel(parent=notebook)
         self.pageorder[page] = len(self.pageorder)
-        notebook.AddPage(page, "SQL window")
+        notebook.AddPage(page, "SQL")
         sizer = page.Sizer = wx.BoxSizer(wx.VERTICAL)
         splitter = self.splitter_sql = \
             wx.SplitterWindow(parent=page, style=wx.BORDER_NONE)
@@ -1850,7 +1850,7 @@ class DatabasePage(wx.Panel):
         label_file = wx.StaticText(parent=panel1, label="Database information")
         label_file.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                   wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
-        sizer2.Add(label_file, border=5, flag=wx.ALL)
+        sizer1.Add(label_file, border=5, flag=wx.ALL)
 
         names = ["edit_info_path", "edit_info_size", "edit_info_modified",
                  "edit_info_sha1", "edit_info_md5", ]
@@ -1897,8 +1897,18 @@ class DatabasePage(wx.Panel):
                   button_refresh)
 
         sizer_file.AddGrowableCol(1, 1)
-        sizer2.Add(sizer_file, border=20, proportion=1, flag=wx.TOP | wx.GROW)
-        sizer2.Add(sizer_buttons, proportion=1, border=10, flag=wx.LEFT | wx.GROW)
+        sizer1.Add(sizer_file, border=20, proportion=1, flag=wx.TOP | wx.GROW)
+        sizer1.Add(sizer_buttons, proportion=1, border=10, flag=wx.LEFT | wx.GROW)
+
+        label_schema = wx.StaticText(parent=panel2, label="Database schema")
+        label_schema.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
+                                  wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
+        stc = self.stc_schema = controls.SQLiteTextCtrl(parent=panel2,
+            style=wx.BORDER_STATIC)
+        stc.SetText(self.db.get_sql())
+        stc.SetReadOnly(True)
+        sizer2.Add(label_schema, border=5, flag=wx.ALL | wx.GROW)
+        sizer2.Add(stc, proportion=1, border=10, flag=wx.TOP | wx.GROW)
 
         sizer.Add(panel1, proportion=1, border=5,
                   flag=wx.LEFT  | wx.TOP | wx.BOTTOM | wx.GROW)
@@ -2068,6 +2078,7 @@ class DatabasePage(wx.Panel):
             self.edit_info_md5.Value = md5.hexdigest()
         except Exception as e:
             self.edit_info_sha1.Value = self.edit_info_md5.Value = util.format_exc(e)
+        self.stc_schema.SetText(self.db.get_sql())
         self.button_vacuum.Enabled = True
         self.button_check_integrity.Enabled = True
         self.button_refresh_fileinfo.Enabled = True
@@ -2103,14 +2114,12 @@ class DatabasePage(wx.Panel):
 
                 tableitem = None
                 table_name = table_name.lower()
-                table = next((t for t in self.db.get_tables()
-                              if t["name"].lower() == table_name), None)
                 item = self.tree_tables.GetNext(self.tree_tables.RootItem)
-                while table and item and item.IsOk():
+                while table_name in self.db.schema["table"] and item and item.IsOk():
                     table2 = self.tree_tables.GetItemPyData(item)
-                    if table2 and table2.lower() == table["name"].lower():
+                    if table2 and table2.lower() == table_name:
                         tableitem = item
-                        break # break while table and item and itek.IsOk()
+                        break # while table_name
                     item = self.tree_tables.GetNextSibling(item)
                 if tableitem:
                     # Only way to create state change in wx.gizmos.TreeListCtrl
@@ -2253,14 +2262,12 @@ class DatabasePage(wx.Panel):
             elif table_name:
                 tableitem = None
                 table_name = table_name.lower()
-                table = next((t for t in self.db.get_tables()
-                              if t["name"].lower() == table_name), None)
                 item = self.tree_tables.GetNext(self.tree_tables.RootItem)
-                while table and item and item.IsOk():
+                while table_name in self.db.schema["table"] and item and item.IsOk():
                     table2 = self.tree_tables.GetItemPyData(item)
-                    if table2 and table2.lower() == table["name"].lower():
+                    if table2 and table2.lower() == table_name:
                         tableitem = item
-                        break # while table
+                        break # while table_name
                     item = self.tree_tables.GetNextSibling(item)
                 if tableitem:
                     self.notebook.SetSelection(self.pageorder[self.page_tables])
@@ -2535,7 +2542,7 @@ class DatabasePage(wx.Panel):
             sql = getattr(self, "last_sql", "")
         if grid_source.Table:
             if grid_source is self.grid_table:
-                table = self.db.tables[grid_source.Table.table.lower()]["name"]
+                table = self.db.schema["table"][grid_source.Table.table.lower()]["name"]
                 title = "Table - \"%s\"" % table
                 self.dialog_savefile.Wildcard = export.TABLE_WILDCARD
             else:
@@ -2778,14 +2785,14 @@ class DatabasePage(wx.Panel):
             self.grid_table.Table.SaveChanges()
             self.on_change_table(None)
             # Refresh tables list with updated row counts
-            tablemap = dict((t["name"], t) for t in self.db.get_tables(True))
+            tablemap = dict((t["name"], t)
+                            for t in self.db.get_tables(refresh=True, full=True))
             item = self.tree_tables.GetNext(self.tree_tables.RootItem)
             while item and item.IsOk():
                 table = self.tree_tables.GetItemPyData(item)
                 if table:
-                    self.tree_tables.SetItemText(item, "%d row%s" % (
-                        tablemap[table]["rows"],
-                        "s" if tablemap[table]["rows"] != 1 else " "
+                    self.tree_tables.SetItemText(item, util.plural(
+                        "row", tablemap[table]["rows"]
                     ), 1)
                     if table == self.grid_table.Table.table:
                         self.tree_tables.SetItemBold(item,
@@ -2967,15 +2974,15 @@ class DatabasePage(wx.Panel):
     def load_tables_data(self):
         """Loads table data into table tree and SQL editor."""
         try:
-            tables = self.db.get_tables()
+            tables = self.db.get_tables(full=True)
             # Fill table tree with information on row counts and columns
             self.tree_tables.DeleteAllItems()
             root = self.tree_tables.AddRoot("SQLITE")
             child = None
             for table in tables:
                 child = self.tree_tables.AppendItem(root, table["name"])
-                self.tree_tables.SetItemText(child, "%d row%s" % (
-                    table["rows"], "s" if table["rows"] != 1 else " "
+                self.tree_tables.SetItemText(child, util.plural(
+                    "row", table["rows"]
                 ), 1)
                 self.tree_tables.SetItemPyData(child, table["name"])
 
@@ -2993,10 +3000,10 @@ class DatabasePage(wx.Panel):
                 self.tree_tables.Collapse(child)
 
             # Add table and column names to SQL editor autocomplete
-            for t in tables:
-                coldata = self.db.get_table_columns(t["name"])
+            for table in tables:
+                coldata = self.db.get_table_columns(table["name"])
                 fields = [c["name"] for c in coldata]
-                self.stc_sql.AutoCompAddSubWords(t["name"], fields)
+                self.stc_sql.AutoCompAddSubWords(table["name"], fields)
         except Exception:
             if self:
                 errormsg = "Error loading table data from %s.\n\n%s" % \

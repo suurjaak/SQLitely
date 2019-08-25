@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.08.2019
+@modified    24.08.2019
 ------------------------------------------------------------------------------
 """
 import re
@@ -316,7 +316,7 @@ import conf
         Browse, filter and change database tables,<br />
         export as HTML, SQL INSERT-statements or spreadsheet.
       </td></tr><tr><td nowrap align="center">
-        <a href="page:tables"><b><font color="{{conf.FgColour}}">Tables</font></b></a><br />
+        <a href="page:tables"><b><font color="{{conf.FgColour}}">Data</font></b></a><br />
     </td></tr></table>
   </td>
   <td>
@@ -326,7 +326,7 @@ import conf
         Make direct SQL queries in the database,<br />
         export results as HTML or spreadsheet.
       </td></tr><tr><td nowrap align="center">
-        <a href="page:sql"><b><font color="{{conf.FgColour}}">SQL window</font></b></a><br />
+        <a href="page:sql"><b><font color="{{conf.FgColour}}">SQL</font></b></a><br />
     </td></tr></table>
   </td>
 </tr>
