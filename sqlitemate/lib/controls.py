@@ -30,6 +30,9 @@ Stand-alone GUI components for wx:
   A sortable list view that can be batch-populated, autosizes its columns,
   supports clipboard copy.
 
+- SearchCtrl(wx.TextCtrl):
+  Simple search control, with search icon and description.
+    
 - SQLiteTextCtrl(wx.stc.StyledTextCtrl):
   A StyledTextCtrl configured for SQLite syntax highlighting.
 
@@ -828,6 +831,92 @@ class ScrollingHtmlWindow(wx.html.HtmlWindow):
 
 
 
+class SearchCtrl(wx.TextCtrl):
+    """
+    A text control with search icon and description.
+    Fires EVT_TEXT_ENTER event on text change.
+    """
+    DESCRIPTION_COLOUR = None # Postpone to after wx.App creation
+
+
+    def __init__(self, parent, description="", **kwargs):
+        """
+        @param   description  description text shown if nothing entered yet
+        """
+        wx.TextCtrl.__init__(self, parent, **kwargs)
+        self._text_colour = self.GetForegroundColour()
+
+        if not SearchCtrl.DESCRIPTION_COLOUR:
+            graycolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)
+            SearchCtrl.DESCRIPTION_COLOUR = graycolour
+
+        self._description = description
+        self._description_on = False # Is textbox filled with description?
+        self._ignore_change  = False # Ignore text change in event handlers
+        if not self.Value:
+            self.Value = self._description
+            self.SetForegroundColour(self.DESCRIPTION_COLOUR)
+            self._description_on = True
+
+        self.Bind(wx.EVT_SET_FOCUS,  self.OnFocus,   self)
+        self.Bind(wx.EVT_KILL_FOCUS, self.OnFocus,   self)
+        self.Bind(wx.EVT_KEY_DOWN,   self.OnKeyDown, self)
+        self.Bind(wx.EVT_TEXT,       self.OnText,    self)
+
+
+    def OnFocus(self, event):
+        """
+        Handler for focusing/unfocusing the control, shows/hides description.
+        """
+        self._ignore_change = True
+        if self and self.FindFocus() == self:
+            if self._description_on:
+                self.Value = ""
+            self.SelectAll()
+        elif self:
+            if self._description and not self.Value:
+                # Control has been unfocused, set and colour description
+                wx.TextCtrl.SetValue(self, self._description)
+                self.SetForegroundColour(self.DESCRIPTION_COLOUR)
+                self._description_on = True
+        self._ignore_change = False
+        event.Skip() # Allow to propagate to parent, to show having focus
+
+
+    def OnKeyDown(self, event):
+        """Handler for keypress, empties text on escape."""
+        if event.KeyCode in [wx.WXK_ESCAPE] and self.Value:
+            self.Value = ""
+            wx.PostEvent(self, wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER))
+        event.Skip()
+
+
+    def OnText(self, event):
+        """Handler for text change, fires TEXT_ENTER event."""
+        if self._ignore_change: return
+        evt = wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER)
+        evt.String = self.Value
+        wx.PostEvent(self, evt)
+
+
+    def GetValue(self):
+        """
+        Returns the current value in the text field, or empty string if filled
+        with description.
+        """
+        value = wx.TextCtrl.GetValue(self)
+        if self._description_on:
+            value = ""
+        return value
+    def SetValue(self, value):
+        """Sets the value in the text entry field."""
+        self.SetForegroundColour(self._text_colour)
+        self._description_on = False
+        return wx.TextCtrl.SetValue(self, value)
+    Value = property(GetValue, SetValue)
+
+
+
 class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                                wx.lib.mixins.listctrl.ColumnSorterMixin):
     """
@@ -1284,10 +1373,10 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         result = True
         if self._filter:
             result = False
-            pattern = re.escape(self._filter)
+            patterns = map(re.escape, self._filter.split())
             for col_name, col_label in self._columns:
                 col_value = self._formatters[col_name](row, col_name)
-                if re.search(pattern, col_value, re.I):
+                if all(re.search(p, col_value, re.I) for p in patterns):
                     result = True
                     break
         return result

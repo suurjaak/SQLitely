@@ -411,7 +411,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         conf.save()
         event.Skip()
         # Right panel scroll
-        wx.CallAfter(lambda: self and self.panel_db_main.Parent.Layout())
+        wx.CallAfter(lambda: self and (self.list_db.RefreshRows(),
+                                       self.panel_db_main.Parent.Layout()))
 
 
     def on_move(self, event):
@@ -452,6 +453,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         notebook.AddPage(page, "Databases")
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
+        sizer_list = wx.BoxSizer(wx.VERTICAL)
+
+        edit_filter = self.edit_filter = controls.SearchCtrl(page, "Filter list")
         list_db = self.list_db = controls.SortableUltimateListCtrl(parent=page,
             agwStyle=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.BORDER_NONE)
         list_db.MinSize = 400, -1 # Maximize-restore would resize width to 100
@@ -474,9 +478,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         panel_right = wx.lib.scrolledpanel.ScrolledPanel(page)
         panel_right.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        panel_main = self.panel_db_main = wx.Panel(panel_right)
+        panel_main   = self.panel_db_main   = wx.Panel(panel_right)
         panel_detail = self.panel_db_detail = wx.Panel(panel_right)
-        panel_main.Sizer = wx.BoxSizer(wx.VERTICAL)
+        panel_main.MinSize   = 400, -1
+        panel_detail.MinSize = 400, -1
+        panel_main.Sizer   = wx.BoxSizer(wx.VERTICAL)
         panel_detail.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         # Create main page label and buttons
@@ -501,7 +507,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         for name, label, img, note in BUTTONS_MAIN:
             button = controls.NoteButton(panel_main, label, note, img.Bitmap)
             setattr(self, "button_" + name, button)
-        self.button_missing.Disable(); self.button_clear.Disable()
+        self.button_missing.Hide(); self.button_clear.Hide()
 
         # Create detail page labels, values and buttons
         label_db = self.label_db = wx.TextCtrl(parent=panel_detail, value="",
@@ -546,6 +552,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         list_db.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_open_from_list_db)
         list_db.Bind(wx.EVT_CHAR_HOOK,           self.on_list_db_key)
         list_db.Bind(wx.EVT_LIST_COL_CLICK,      self.on_sort_list_db)
+        edit_filter.Bind(wx.EVT_TEXT_ENTER,      self.on_filter_list_db)
         self.button_new.Bind(wx.EVT_BUTTON,      self.on_new_database)
         self.button_opena.Bind(wx.EVT_BUTTON,    self.on_open_database)
         self.button_detect.Bind(wx.EVT_BUTTON,   self.on_detect_databases)
@@ -565,15 +572,17 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         panel_main.Sizer.AddStretchSpacer()
         panel_main.Sizer.Add(self.button_missing, flag=wx.GROW)
         panel_main.Sizer.Add(self.button_clear,   flag=wx.GROW)
-        panel_detail.Sizer.Add(label_db, border=10, flag=wx.ALL | wx.GROW)
+        panel_detail.Sizer.Add(label_db,     border=10, flag=wx.ALL | wx.GROW)
         panel_detail.Sizer.Add(sizer_labels, border=10, flag=wx.ALL | wx.GROW)
         panel_detail.Sizer.AddStretchSpacer()
         panel_detail.Sizer.Add(self.button_open,   flag=wx.GROW)
         panel_detail.Sizer.Add(self.button_saveas, flag=wx.GROW)
         panel_detail.Sizer.Add(self.button_remove, flag=wx.GROW)
-        panel_right.Sizer.Add(panel_main, proportion=1, flag=wx.GROW)
+        panel_right.Sizer.Add(panel_main,   proportion=1, flag=wx.GROW)
         panel_right.Sizer.Add(panel_detail, proportion=1, flag=wx.GROW)
-        sizer.Add(list_db, border=10, proportion=6, flag=wx.ALL | wx.GROW)
+        sizer_list.Add(edit_filter, border=5, flag=wx.ALIGN_RIGHT | wx.BOTTOM)
+        sizer_list.Add(list_db, proportion=1, flag=wx.GROW)
+        sizer.Add(sizer_list,  border=10, proportion=6, flag=wx.ALL | wx.GROW)
         sizer.Add(panel_right, border=10, proportion=4, flag=wx.ALL | wx.GROW)
         for filename in conf.DBFiles:
             self.update_database_list(filename)
@@ -674,7 +683,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for pressing a key in dblist, loads selected database on Enter,
         removes from list on Delete, refreshes columns on F5.
         """
-        elif self.list_db.GetFirstSelected() > 0 and not event.AltDown() \
+        if self.list_db.GetFirstSelected() > 0 and not event.AltDown() \
         and event.KeyCode in [wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]:
             self.load_database_page(self.db_filename)
         elif event.KeyCode in [wx.WXK_DELETE] and self.db_filename:
@@ -683,14 +692,19 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
 
     def on_sort_list_db(self, event):
-        """
-        Handler for sorting dblist, saves sort state.
-        """
+        """Handler for sorting dblist, saves sort state."""
         event.Skip()
         def save_sort_state():
             conf.DBSort = self.list_db.GetSortState()
             conf.save()
         wx.CallAfter(save_sort_state)
+
+
+    def on_filter_list_db(self, event):
+        """Handler for filtering dblist, applies search filter."""
+        main.log("search event %r", event.String)
+        self.list_db.SetFilter(event.String.strip())
+        event.Skip()
 
 
     def on_menu_homepage(self, event):
@@ -832,8 +846,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                         wx.CallAfter(lambda: self and scroll_to_selected())
                     result = True
 
-        self.button_missing.Enable(self.list_db.GetItemCount() > 1)
-        self.button_clear.Enable(self.list_db.GetItemCount() > 1)
+        self.button_missing.Show(self.list_db.GetItemCount() > 1)
+        self.button_clear.Show(self.list_db.GetItemCount() > 1)
         return result
 
 
@@ -1073,6 +1087,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     self.update_database_list(filename)
                     count += 1
             self.button_folder.Enabled = True
+            self.list_db.RefreshRows()
             main.logstatus_flash("Detected %s under %s.",
                 util.plural("new database", count), folder)
 
@@ -1734,8 +1749,8 @@ class DatabasePage(wx.Panel):
         panel2 = self.panel_sql2 = wx.Panel(parent=splitter)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
         label_help = wx.StaticText(panel2, label=
-            "Alt-Enter runs the query contained in currently selected text or "
-            "on the current line. Ctrl-Space shows autocompletion list.")
+            "Alt-Enter/Ctrl-Enter runs the query contained in currently selected "
+            "text or on the current line. Ctrl-Space shows autocompletion list.")
         label_help.ForegroundColour = "grey"
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
         button_sql = self.button_sql = wx.Button(panel2, label="Execute S&QL")
@@ -2595,7 +2610,7 @@ class DatabasePage(wx.Panel):
         executes the currently selected line, or currently active line.
         """
         stc = event.GetEventObject()
-        if event.AltDown() and wx.WXK_RETURN == event.KeyCode:
+        if (event.AltDown() or event.ControlDown()) and wx.WXK_RETURN == event.KeyCode:
             sql = (stc.SelectedText or stc.CurLine[0]).strip()
             if sql:
                 self.execute_sql(sql)
