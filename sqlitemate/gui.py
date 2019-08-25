@@ -1754,13 +1754,31 @@ class DatabasePage(wx.Panel):
 
         panel1 = self.panel_sql1 = wx.Panel(parent=splitter)
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
+
+        sizer_top = wx.BoxSizer(wx.HORIZONTAL)
         label_stc = wx.StaticText(parent=panel1, label="SQ&L:")
+        tb = self.tb_sql = wx.ToolBar(parent=panel1,
+                                      style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN, wx.ART_TOOLBAR,
+                                       (16, 16))
+        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR,
+                                       (16, 16))
+        tb.SetToolBitmapSize(bmp1.Size)
+        tb.AddLabelTool(wx.ID_OPEN, "", bitmap=bmp1, shortHelp="Load SQL file")
+        tb.AddLabelTool(wx.ID_SAVE, "", bitmap=bmp2, shortHelp="Save SQL file")
+        tb.Realize()
+        tb.Bind(wx.EVT_TOOL, self.on_open_sql, id=wx.ID_OPEN)
+        tb.Bind(wx.EVT_TOOL, self.on_save_sql, id=wx.ID_SAVE)
+
         stc = self.stc_sql = controls.SQLiteTextCtrl(parent=panel1,
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
         stc.Bind(wx.EVT_KEY_DOWN, self.on_keydown_sql)
         stc.SetText(conf.SQLWindowTexts.get(self.db.filename, ""))
         stc.EmptyUndoBuffer() # So that undo does not clear the STC
-        sizer1.Add(label_stc, border=5, flag=wx.ALL)
+        sizer_top.Add(label_stc, border=5, flag=wx.ALL)
+        sizer_top.AddStretchSpacer()
+        sizer_top.Add(tb, flag=wx.ALIGN_RIGHT)
+        sizer1.Add(sizer_top, border=5, flag=wx.RIGHT | wx.GROW)
         sizer1.Add(stc, border=5, proportion=1, flag=wx.GROW | wx.LEFT)
 
         panel2 = self.panel_sql2 = wx.Panel(parent=splitter)
@@ -2619,6 +2637,49 @@ class DatabasePage(wx.Panel):
             self.button_export_sql.Enabled = False
             self.button_reset_grid_sql.Enabled = False
             self.button_close_grid_sql.Enabled = False
+
+
+    def on_open_sql(self, event):
+        """
+        Handler for loading SQL from file, opens file dialog and loads content.
+        """
+        dialog = wx.FileDialog(
+            parent=self, message="Open", defaultFile="",
+            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
+            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        filename = dialog.GetPath()
+        try:
+            with open(filename, "r") as f:
+                self.stc_sql.SetText(f.read())
+        except Exception as e:
+            msg = util.format_exc(e)
+            main.logstatus_flash(msg)
+            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+            
+
+    def on_save_sql(self, event):
+        """
+        Handler for saving SQL to file, opens file dialog and saves content.
+        """
+        dialog = wx.FileDialog(
+            parent=self, message="Save as",
+            defaultFile=os.path.splitext(os.path.basename(self.db.filename))[0] + " SQL",
+            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        filename = dialog.GetPath()
+        try:
+            with open(filename, "w") as f:
+                f.write(self.stc_sql.Text)
+        except Exception as e:
+            msg = util.format_exc(e)
+            main.logstatus_flash(msg)
+            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
 
 
     def on_keydown_sql(self, event):
