@@ -683,7 +683,26 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for pressing a key in dblist, loads selected database on Enter,
         removes from list on Delete, refreshes columns on F5.
         """
-        if self.list_db.GetFirstSelected() > 0 and not event.AltDown() \
+        if event.KeyCode in [wx.WXK_F5]:
+
+            items = []
+            selected = self.list_db.GetItemText(self.list_db.GetFirstSelected())
+            for filename in conf.DBFiles:
+                data = collections.defaultdict(lambda: None, name=filename)
+                if os.path.exists(filename):
+                    data["size"] = os.path.getsize(filename)
+                    data["last_modified"] = datetime.datetime.fromtimestamp(
+                                            os.path.getmtime(filename))
+                self.db_filenames[filename].update(data)
+                items.append(data)
+            self.list_db.Populate(items, [1])
+            if selected in self.db_filenames:
+                for i in range(1, self.list_db.GetItemCount()):
+                    if self.list_db.GetItemText(i) == selected:
+                        self.list_db.Select(i)
+                        break # for i
+
+        elif self.list_db.GetFirstSelected() > 0 and not event.AltDown() \
         and event.KeyCode in [wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]:
             self.load_database_page(self.db_filename)
         elif event.KeyCode in [wx.WXK_DELETE] and self.db_filename:
@@ -831,8 +850,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             data_old = self.db_filenames.get(filename)
             if not data_old or data_old["size"] != data["size"] \
             or data_old["last_modified"] != data["last_modified"]:
-                if filename not in self.db_filenames:
-                    self.db_filenames[filename] = data
+                self.db_filenames[filename] = data
+                if not data_old:
                     idx = self.list_db.GetItemCount()
                     self.list_db.AppendRow(data, [1])
                     # self is not shown: form creation time, reselect last file
@@ -1217,8 +1236,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.worker_detection.stop()
 
             # Save last selected files in db lists, to reselect them on rerun
-            conf.DBFiles = [self.list_db.GetItemText(i)
-                            for i in range(1, self.list_db.GetItemCount())]
             del conf.LastSelectedFiles[:]
             selected = self.list_db.GetFirstSelected()
             while selected > 0:
