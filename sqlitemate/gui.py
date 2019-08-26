@@ -2310,11 +2310,10 @@ class DatabasePage(wx.Panel):
                         if grid.Table.filters:
                             grid.Table.ClearSort(refresh=False)
                             grid.Table.ClearFilter()
-                        table["columns"] = self.db.get_table_columns(table_name)
-                        id_fields = [c["name"] for c in table["columns"]
-                                     if c.get("pk_id")]
+                        columns = self.db.get_table_columns(table_name)
+                        id_fields = [c["name"] for c in columns if c.get("pk_id")]
                         if not id_fields: # No primary key fields: take all
-                            id_fields = [c["name"] for c in table["columns"]]
+                            id_fields = [c["name"] for c in columns]
                         row_id = [row[c] for c in id_fields]
                         for i in range(grid.Table.GetNumberRows()):
                             row2 = grid.Table.GetRow(i)
