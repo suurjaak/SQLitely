@@ -233,6 +233,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         else:
             self.Show(True)
         wx.CallLater(20000, self.update_check)
+        wx.CallLater(1, self.populate_database_list)
+        wx.Yield()
 
 
     def init_colours(self):
@@ -584,10 +586,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         sizer_list.Add(list_db, proportion=1, flag=wx.GROW)
         sizer.Add(sizer_list,  border=10, proportion=6, flag=wx.ALL | wx.GROW)
         sizer.Add(panel_right, border=10, proportion=4, flag=wx.ALL | wx.GROW)
-        for filename in conf.DBFiles:
-            self.update_database_list(filename)
-        if conf.DBSort and conf.DBSort[0] >= 0:
-            self.list_db.SortListItems(*conf.DBSort)
 
 
     def create_menu(self):
@@ -830,6 +828,46 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             wx.Bell()
 
 
+    def populate_database_list(self):
+        """
+        Inserts all databases into the list, updates UI buttons.
+        """
+        items, selected_filename = [], None
+        for filename in conf.DBFiles:
+            filename = util.to_unicode(filename)
+            data = collections.defaultdict(lambda: None, name=filename)
+            if os.path.exists(filename):
+                data["size"] = os.path.getsize(filename)
+                data["last_modified"] = datetime.datetime.fromtimestamp(
+                                        os.path.getmtime(filename))
+            self.db_filenames[filename] = data
+            items.append(data)
+            if filename in conf.LastSelectedFiles: selected_filename = filename
+
+        self.list_db.Populate(items, [1])
+        if conf.DBSort and conf.DBSort[0] >= 0:
+            self.list_db.SortListItems(*conf.DBSort)
+
+        if selected_filename:
+            idx = -1
+            for i in range(1, self.list_db.GetItemCount()):
+                if self.list_db.GetItemText(i) == selected_filename:
+                    idx = i
+                    self.list_db.Select(i)
+                    break # for i
+
+            def scroll_to_selected():
+                if idx < self.list_db.GetCountPerPage(): return
+                lh = self.list_db.GetUserLineHeight()
+                dy = (idx - self.list_db.GetCountPerPage() / 2) * lh
+                self.list_db.ScrollList(0, dy)
+                self.list_db.Update()
+            wx.CallAfter(lambda: self and scroll_to_selected())
+
+        self.button_missing.Show(bool(items))
+        self.button_clear.Show(bool(items))
+
+
     def update_database_list(self, filename=""):
         """
         Inserts the database into the list, if not there already, and updates
@@ -857,16 +895,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 if not data_old:
                     idx = self.list_db.GetItemCount()
                     self.list_db.AppendRow(data, [1])
-                    # self is not shown: form creation time, reselect last file
-                    if not self.Shown and filename in conf.LastSelectedFiles:
-                        self.list_db.Select(idx)
-                        def scroll_to_selected():
-                            if idx < self.list_db.GetCountPerPage(): return
-                            lh = self.list_db.GetUserLineHeight()
-                            dy = (idx - self.list_db.GetCountPerPage() / 2) * lh
-                            self.list_db.ScrollList(0, dy)
-                        wx.CallAfter(lambda: self and scroll_to_selected())
-                    result = True
+                result = True
 
         self.button_missing.Show(self.list_db.GetItemCount() > 1)
         self.button_clear.Show(self.list_db.GetItemCount() > 1)
@@ -910,8 +939,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             "Are you sure you want to clear the list of all databases?",
             conf.Title, wx.OK | wx.CANCEL | wx.ICON_QUESTION
         ):
-            while self.list_db.GetItemCount() > 1:
-                self.list_db.DeleteItem(1)
+            self.list_db.Populate([])
             del conf.DBFiles[:]
             del conf.LastSelectedFiles[:]
             del conf.RecentFiles[:]
@@ -1219,13 +1247,15 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.panel_db_main.Show()
             self.panel_db_detail.Hide()
             self.panel_db_main.Parent.Layout()
+
         # Save last selected files in db lists, to reselect them on rerun
-        del conf.LastSelectedFiles[:]
-        selected = self.list_db.GetFirstSelected()
-        while selected > 0:
-            filename = self.list_db.GetItemText(selected)
-            conf.LastSelectedFiles.append(filename)
-            selected = self.list_db.GetNextSelected(selected)
+        if self.list_db.GetItemCount() > 1:
+            del conf.LastSelectedFiles[:]
+            selected = self.list_db.GetFirstSelected()
+            while selected > 0:
+                filename = self.list_db.GetItemText(selected)
+                conf.LastSelectedFiles.append(filename)
+                selected = self.list_db.GetNextSelected(selected)
 
 
     def on_exit(self, event):
