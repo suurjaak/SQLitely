@@ -25,14 +25,14 @@ Stand-alone GUI components for wx:
 - ScrollingHtmlWindow(wx.html.HtmlWindow):
   HtmlWindow that remembers its scroll position on resize and append.
     
+- SearchCtrl(wx.TextCtrl):
+  Simple search control, with search icon and description.
+    
 - SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                            wx.lib.mixins.listctrl.ColumnSorterMixin):
   A sortable list view that can be batch-populated, autosizes its columns,
   supports clipboard copy.
 
-- SearchCtrl(wx.TextCtrl):
-  Simple search control, with search icon and description.
-    
 - SQLiteTextCtrl(wx.stc.StyledTextCtrl):
   A StyledTextCtrl configured for SQLite syntax highlighting.
 
@@ -742,8 +742,7 @@ class PropertyDialog(wx.Dialog):
     def _GetValueForType(self, value, typeclass):
         """Returns value in type expected, or None on failure."""
         try:
-            result = typeclass(value) if "wx" not in typeclass.__module__ \
-                     else tuple(typeclass(*ast.literal_eval(value)))
+            result = typeclass(value)
             isinstance(result, basestring) and result.strip()[0] # Reject empty
             return result 
         except Exception:
@@ -753,8 +752,8 @@ class PropertyDialog(wx.Dialog):
     def _GetValueForCtrl(self, value, typeclass):
         """Returns the value in type suitable for appropriate wx control."""
         value = tuple(value) if isinstance(value, list) else value
-        return str(value) if typeclass in [int, long]  or "wx" in typeclass.__module__ \
-               else "" if value is None else value
+        return "" if value is None else value \
+               if isinstance(value, (basestring, bool)) else unicode(value)
 
 
 

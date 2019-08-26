@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.08.2019
+@modified    26.08.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -454,7 +454,7 @@ class Database(object):
 
 def is_sqlite_file(filename, path=None):
     """Returns whether the file looks to be an SQLite database file."""
-    result = ".db" == filename[-3:].lower()
+    result = os.path.splitext(filename)[1].lower() in conf.DBExtensions
     if result:
         try:
             fullpath = os.path.join(path, filename) if path else filename
@@ -475,7 +475,8 @@ def detect_databases():
 
     @yield   each value is a list of detected database paths
     """
-    # First, search system directories for *.db files.
+
+    # First, search system directories for database files.
     if "nt" == os.name:
         search_paths = [os.getenv("APPDATA")]
         c = os.getenv("SystemDrive") or "C:"
@@ -487,7 +488,6 @@ def detect_databases():
         search_paths = [os.getenv("HOME"),
                         "/Users" if "mac" == os.name else "/home"]
     search_paths = map(util.to_unicode, search_paths)
-
     for search_path in filter(os.path.exists, search_paths):
         main.log("Looking for SQLite databases under %s.", search_path)
         for root, dirs, files in os.walk(search_path):
@@ -497,7 +497,7 @@ def detect_databases():
                     results.append(os.path.realpath(os.path.join(root, f)))
             if results: yield results
 
-    # Then search current working directory for *.db files.
+    # Then search current working directory for database files.
     search_path = util.to_unicode(os.getcwd())
     main.log("Looking for SQLite databases under %s.", search_path)
     for root, dirs, files in os.walk(search_path):

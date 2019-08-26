@@ -1041,12 +1041,25 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                         return prev.value.s.strip()
             return ""
 
+        def typelist(mytype):
+            def convert(v):
+                v = ast.literal_eval(v) if isinstance(v, basestring) else v
+                if not isinstance(v, (list, tuple)): v = tuple([v])
+                if not v: raise ValueError("Empty collection")
+                return tuple(map(mytype, v))
+            convert.__name__ = "tuple(%s)" % mytype.__name__
+            return convert
+
         for name in sorted(conf.OptionalFileDirectives):
             value, help = getattr(conf, name, None), get_field_doc(name)
             default = conf.OptionalFileDirectiveDefaults.get(name)
             if value is None and default is None:
                 continue # continue for name
-            kind = wx.Size if isinstance(value, (tuple, list)) else type(value)
+
+            kind = type(value)
+            if isinstance(value, (tuple, list)):
+                kind = typelist(type(value[0]))
+                default = kind(default)
             dialog.AddProperty(name, value, help, default, kind)
         dialog.Realize()
 
@@ -1064,9 +1077,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for open database menu or button, displays a file dialog and
         loads the chosen database.
         """
+        exts = ";".join("*" + x for x in conf.DBExtensions)
+        wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
         dialog = wx.FileDialog(
-            parent=self, message="Open", defaultFile="",
-            wildcard="SQLite database (*.db)|*.db|All files|*.*",
+            parent=self, message="Open", defaultFile="", wildcard=wildcard,
             style=wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE | wx.FD_OPEN | wx.RESIZE_BORDER
         )
         if wx.ID_OK == dialog.ShowModal():
@@ -1082,7 +1096,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         self.dialog_savefile.Filename = "database"
         self.dialog_savefile.Message = "Save new database as"
-        self.dialog_savefile.Wildcard = "SQLite database (*.db)|*.db"
+        exts = ";".join("*" + x for x in conf.DBExtensions)
+        self.dialog_savefile.Wildcard = "SQLite database (%s)|%s" % (exts, exts)
         self.dialog_savefile.WindowStyle |= wx.FD_OVERWRITE_PROMPT
         if wx.ID_OK != self.dialog_savefile.ShowModal():
             return

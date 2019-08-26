@@ -23,7 +23,7 @@ from lib import util
 
 """Program title, version number and version date."""
 Title = "SQLiteMate"
-Version = "1.0.dev10"
+Version = "1.0.dev11"
 VersionDate = "26.08.2019"
 
 if getattr(sys, "frozen", False):
@@ -45,12 +45,12 @@ FileDirectives = ["ConsoleHistoryCommands", "DBDoBackup",  "DBFiles", "DBSort",
     "SQLWindowTexts", "TrayIconEnabled",
     "UpdateCheckAutomatic", "WindowIconized", "WindowPosition", "WindowSize",
 ]
-"""List of attributes saved if changed from default."""
+"""List of attributes saved if changed from default, user-modifiable."""
 OptionalFileDirectives = [
-    "ExportDbTemplate", "LogSQL", "MinWindowSize", "MaxConsoleHistory",
-    "MaxHistoryInitialMessages", "MaxRecentFiles", "MaxSearchHistory",
-    "MaxSearchMessages", "MaxSearchTableRows", "SearchResultsChunk",
-    "StatusFlashLength", "UpdateCheckInterval",
+    "DBExtensions", "ExportDbTemplate", "LogSQL", "MinWindowSize",
+    "MaxConsoleHistory", "MaxHistoryInitialMessages", "MaxRecentFiles",
+    "MaxSearchHistory", "MaxSearchMessages", "MaxSearchTableRows",
+    "SearchResultsChunk", "StatusFlashLength", "UpdateCheckInterval",
 ]
 OptionalFileDirectiveDefaults = {}
 
@@ -61,6 +61,9 @@ DBDoBackup = False
 
 """All detected/added databases."""
 DBFiles = []
+
+"""Database filename extensions, as ('.extension', )."""
+DBExtensions = [".db", ".sqlite", ".sqlite3"]
 
 """Database list sort state, [col, ascending]."""
 DBSort = []
