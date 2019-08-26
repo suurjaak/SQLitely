@@ -145,10 +145,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         tint_factor = [((4 * x) % 256) / 255. for x in tint_colour]
         # Images shown on the default search content page
         for name in ["Search", "Tables", "SQL", "Info"]:
-            bmp = getattr(images, "Help" + name, None)
-            if not bmp: continue # Continue for name in [..]
-            bmp = bmp.Image.AdjustChannels(*tint_factor)
-            raw = util.img_wx_to_raw(bmp)
+            embedded = getattr(images, "Help" + name, None)
+            if not embedded: continue # for name
+            img = embedded.Image.AdjustChannels(*tint_factor)
+            raw = util.img_wx_to_raw(img)
             filename = "Help%s.png" % name
             self.memoryfs["handler"].AddFile(filename, raw, wx.BITMAP_TYPE_PNG)
             self.memoryfs["files"][filename] = 1

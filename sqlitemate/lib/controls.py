@@ -927,13 +927,13 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
     """
     COL_PADDING = 30
 
-    SmallUpArrow = wx.lib.embeddedimage.PyEmbeddedImage(
+    SORT_ARROW_UP = wx.lib.embeddedimage.PyEmbeddedImage(
         "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAADxJ"
         "REFUOI1jZGRiZqAEMFGke2gY8P/f3/9kGwDTjM8QnAaga8JlCG3CAJdt2MQxDCAUaOjyjKMp"
         "cRAYAABS2CPsss3BWQAAAABJRU5ErkJggg==")
 
     #----------------------------------------------------------------------
-    SmallDownArrow = wx.lib.embeddedimage.PyEmbeddedImage(
+    SORT_ARROW_DOWN = wx.lib.embeddedimage.PyEmbeddedImage(
         "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAEhJ"
         "REFUOI1jZGRiZqAEMFGke9QABgYGBgYWdIH///7+J6SJkYmZEacLkCUJacZqAD5DsInTLhDR"
         "bcPlKrwugGnCFy6Mo3mBAQChDgRlP4RC7wAAAABJRU5ErkJggg==")
@@ -957,12 +957,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         self._top_row = None    # List top row data dictionary, if any
         self._drag_start = None # Item index currently dragged
         self.counter = lambda x={"c": 0}: x.update(c=1+x["c"]) or x["c"]
-
-        il = wx.lib.agw.ultimatelistctrl.PyImageList(*self.SmallUpArrow.Bitmap.Size)
-        il.Add(self.SmallUpArrow.Bitmap)
-        il.Add(self.SmallDownArrow.Bitmap)
-        self.AssignImageList(il, wx.IMAGE_LIST_SMALL)
-        self._imagelist = il
+        self.AssignImageList(self._CreateImageList(), wx.IMAGE_LIST_SMALL)
 
         # Default row column formatter function
         frmt = lambda: lambda r, c: "" if r.get(c) is None else unicode(r[c])
@@ -990,7 +985,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
         @param   images  list of wx.Bitmap objects
         """
-        for x in images: self._imagelist.Add(x)
+        for x in images: self.GetImageList(wx.IMAGE_LIST_SMALL).Add(x)
         if hasattr(self, "SetUserLineHeight"):
             h = images[0].Size[1]
             self.SetUserLineHeight(int(h * 1.5))
@@ -1004,9 +999,8 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         @param   imageIds  list of indexes for the images associated to top row
         """
         self._top_row = data
-        if imageIds:
-            imageIds = [x + 2 for x in imageIds] # Shift for sort arrows
-            self._id_images[-1] = imageIds
+        if imageIds: self._id_images[-1] = self._ConvertImageIds(imageIds)
+        else: self._id_images.pop(-1, None)
         self._PopulateTopRow()
 
 
@@ -1030,7 +1024,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         """
         self._col_widths.clear()
         self._id_rows[:] = []
-        if imageIds: imageIds = [x + 2 for x in imageIds] # Shift for sort arrows
+        if imageIds: imageIds = self._ConvertImageIds(imageIds)
         for r in rows:
             item_id = self.counter()
             self._id_rows += [(item_id, r)]
@@ -1057,8 +1051,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         """
         item_id = self.counter()
         if imageIds:
-            imageIds = [x + 2 for x in imageIds] # Shift for sort arrows
-            self._id_images[item_id] = imageIds
+            imageIds = self._id_images[item_id] = self._ConvertImageIds(imageIds)
 
         if self._RowMatchesFilter(data):
             columns = [c[0] for c in self._columns]
@@ -1320,11 +1313,10 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         if start and start != stop:
             item_id, data = self.GetItemData(start), self.GetItemMappedData(start)
             imageIds = self._id_images.get(item_id) or ()
-            imageIds = [x - 2 for x in imageIds] # Shift for sort arrows
             idx = stop if start > stop or stop == self.GetItemCount() - 1 \
                   else stop - 1
             self.DeleteItem(start)
-            self.InsertRow(idx, data, imageIds)
+            self.InsertRow(idx, data, self._ConvertImageIds(imageIds, False))
             self.Select(idx)
         self._drag_start = None
 
@@ -1347,6 +1339,35 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         try:
             wx.CallAfter(self.Children[0].DragFinish, HackEvent())
         except: raise
+
+
+    def _CreateImageList(self):
+        """
+        Creates image list for the control, populated with sort arrow images.
+        Arrow colours are adjusted for system foreground colours if necessary.
+        """
+        il = wx.lib.agw.ultimatelistctrl.PyImageList(*self.SORT_ARROW_UP.Bitmap.Size)
+        fgcolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOWTEXT)
+        defrgb, myrgb = "\x00" * 3, "".join(map(chr, fgcolour.Get()))
+
+        for embedded in self.SORT_ARROW_UP, self.SORT_ARROW_DOWN:
+            if myrgb != defrgb:
+                img = embedded.Image.Copy()
+                if not img.HasAlpha(): img.InitAlpha()
+                data = img.GetDataBuffer()
+                for i in range(embedded.Image.Width * embedded.Image.Height):
+                    rgb = data[i*3:i*3 + 3]
+                    if rgb == defrgb: data[i*3:i*3 + 3] = myrgb
+                il.Add(img.ConvertToBitmap())
+            else:
+                il.Add(embedded.Bitmap)
+        return il
+
+
+    def _ConvertImageIds(self, imageIds, reverse=False):
+        """Returns user image indexes adjusted by internal image count."""
+        shift = (-1 if reverse else 1) * len(self.GetSortImages() or [])
+        return [x + shift for x in imageIds]
 
 
     def _PopulateTopRow(self):
