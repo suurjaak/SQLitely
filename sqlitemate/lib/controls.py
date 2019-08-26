@@ -427,6 +427,7 @@ class NoteButton(wx.PyPanel, wx.Button):
         text_label = self._text_label
         if "&" in self._label:
             text_label, h = "", y - 1
+            dc.Pen = wx.Pen(self.ForegroundColour)
             for line in self._text_label.split("\n"):
                 i, chars = 0, ""
                 while i < len(line):
