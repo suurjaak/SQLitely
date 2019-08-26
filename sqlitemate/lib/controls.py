@@ -1461,10 +1461,10 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         "NULL", "OF", "OFFSET", "ON", "OR", "ORDER", "OUTER", "PLAN",
         "PRAGMA", "PRIMARY", "QUERY", "RAISE", "REFERENCES", "REGEXP",
         "REINDEX", "RELEASE", "RENAME", "REPLACE", "RESTRICT", "RIGHT",
-        "ROLLBACK", "ROW", "RTRIM", "SAVEPOINT", "SELECT", "SET", "TABLE",
-        "TEMP", "TEMPORARY", "THEN", "TO", "TRANSACTION", "TRIGGER",
+        "ROLLBACK", "ROW", "ROWID", "RTRIM", "SAVEPOINT", "SELECT", "SET",
+        "TABLE", "TEMP", "TEMPORARY", "THEN", "TO", "TRANSACTION", "TRIGGER",
         "UNION", "UNIQUE", "UPDATE", "USING", "VACUUM", "VALUES", "VIEW",
-        "VIRTUAL", "WHEN", "WHERE"
+        "VIRTUAL", "WHEN", "WHERE", "WITHOUT",
     ]))
     """SQLite data types."""
     TYPEWORDS = map(unicode, sorted([
