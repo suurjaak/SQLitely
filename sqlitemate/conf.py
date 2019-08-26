@@ -22,7 +22,7 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLiteMate"
-Version = "1.0.dev12"
+Version = "1.0.dev13"
 VersionDate = "26.08.2019"
 
 if getattr(sys, "frozen", False):
@@ -39,9 +39,8 @@ ConfigFile = "%s.ini" % os.path.join(ApplicationDirectory, "etc", Title.lower())
 """List of attribute names that can be saved to and loaded from ConfigFile."""
 FileDirectives = ["ConsoleHistoryCommands", "DBDoBackup",  "DBFiles", "DBSort",
     "LastActivePage", "LastSearchResults", "LastSelectedFiles",
-    "LastUpdateCheck", "RecentFiles", "SearchHistory",
-    "SearchInNames", "SearchInTables", "SearchUseNewTab",
-    "SQLWindowTexts", "TrayIconEnabled",
+    "LastUpdateCheck", "RecentFiles", "SearchHistory", "SearchInNames",
+    "SearchInTables", "SearchUseNewTab", "SQLWindowTexts", "TrayIconEnabled",
     "UpdateCheckAutomatic", "WindowIconized", "WindowPosition", "WindowSize",
 ]
 """List of attributes saved if changed from default, user-modifiable."""
@@ -126,7 +125,7 @@ LogSQL = False
 """URLs for download list, changelog, submitting feedback and homepage."""
 DownloadURL  = "https://erki.lap.ee/downloads/SQLiteMate/"
 ChangelogURL = "https://suurjaak.github.com/SQLiteMate/changelog.html"
-HomeUrl = "https://suurjaak.github.com/SQLiteMate/"
+HomeUrl      = "https://suurjaak.github.com/SQLiteMate/"
 
 """Minimum allowed size for the main window, as (width, height)."""
 MinWindowSize = (600, 400)
@@ -193,6 +192,9 @@ LinkColour = "#0000FF"
 
 """Colour for links in export."""
 ExportLinkColour = "#3399FF"
+
+"""Background colour of exported HTML."""
+ExportBackgroundColour = "#8CBEFF"
 
 """Colours for main screen database list."""
 DBListBackgroundColour = "#ECF4FC"

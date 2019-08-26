@@ -33,12 +33,15 @@ import string
 import warnings
 
 try:
-    from pyparsing import CaselessLiteral, Combine, FollowedBy, Forward, Group, Literal, NotAny, OneOrMore, Optional, ParseResults, ParserElement, Suppress, Word, ZeroOrMore
+    from pyparsing import CaselessLiteral, Combine, FollowedBy, Forward, Group, \
+                          Literal, NotAny, OneOrMore, Optional, ParseResults, \
+                          ParserElement, Suppress, Word, ZeroOrMore
     ParserElement.enablePackrat() # Speeds up recursive grammar significantly
 except ImportError:
     ParserElement = None
 
-from lib import util
+from . lib import util
+
 
 UNPRINTABLES = "".join(set(unichr(i) for i in range(128))
                        .difference(string.printable))

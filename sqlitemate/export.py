@@ -25,11 +25,10 @@ try:
 except ImportError:
     xlsxwriter = None
 
-from lib import util
-from lib.vendor import step
-
-import conf
-import templates
+from . lib import util
+from . lib.vendor import step
+from . import conf
+from . import templates
 
 
 try: # Used in measuring text extent for Excel column auto-width

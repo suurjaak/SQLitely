@@ -35,6 +35,7 @@ Released under the MIT License.
 """
 import functools
 import re
+
 import wx
 
 DEBUG = False

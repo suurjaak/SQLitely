@@ -65,6 +65,7 @@ import copy
 import locale
 import os
 import re
+
 import wx
 import wx.html
 import wx.lib.agw.flatnotebook

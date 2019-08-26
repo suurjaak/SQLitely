@@ -21,10 +21,9 @@ import shutil
 import time
 import traceback
 
-from lib import util
-
-import conf
-import main
+from . lib import util
+from . import conf
+from . import guibase
 
 
 class Database(object):
@@ -60,8 +59,8 @@ class Database(object):
             ).fetchall():
                 self.schema[row["type"]][row["name"].lower()] = row
         except Exception:
-            if log_error: main.log("Error opening database %s.\n\n%s",
-                                   filename, traceback.format_exc())
+            if log_error: guibase.log("Error opening database %s.\n\n%s",
+                                      filename, traceback.format_exc())
             self.close()
             raise
 
@@ -101,9 +100,9 @@ class Database(object):
                 self.execute(sql)
             except Exception as e:
                 result.append(repr(e))
-                main.log("Error copying table %s from %s to %s.\n\n%s",
-                         name, self.filename, filename,
-                         traceback.format_exc())
+                guibase.log("Error copying table %s from %s to %s.\n\n%s",
+                            name, self.filename, filename,
+                            traceback.format_exc())
 
         # Create indexes
         for name, opts in self.schema["index"].items():
@@ -112,8 +111,8 @@ class Database(object):
                 self.execute(sql)
             except Exception as e:
                 result.append(repr(e))
-                main.log("Error creating index %s for %s.\n\n%s",
-                         name, filename, traceback.format_exc())
+                guibase.log("Error creating index %s for %s.\n\n%s",
+                            name, filename, traceback.format_exc())
         self.execute("DETACH DATABASE new")
         return result
 
@@ -161,13 +160,13 @@ class Database(object):
         self.schema.clear(), self.table_rows.clear(), self.table_objects.clear()
 
 
-    def execute(self, sql, params=[], log=True):
+    def execute(self, sql, params=(), log=True):
         """Shorthand for self.connection.execute()."""
         result = None
         if self.connection:
             if log and conf.LogSQL:
-                main.log("SQL: %s%s", sql,
-                         ("\nParameters: %s" % params) if params else "")
+                guibase.log("SQL: %s%s", sql,
+                            ("\nParameters: %s" % params) if params else "")
             result = self.connection.execute(sql, params)
         return result
 
@@ -280,8 +279,8 @@ class Database(object):
                         row["type"] = row["type"].upper()
                         table_columns.append(row)
                 except sqlite3.DatabaseError:
-                    main.log("Error getting %s column data for %s.\n\n%s",
-                             table, self.filename, traceback.format_exc())
+                    guibase.log("Error getting %s column data for %s.\n\n%s",
+                                table, self.filename, traceback.format_exc())
                 self.schema["table"][table]["columns"] = table_columns
         return copy.deepcopy(table_columns)
 
@@ -308,8 +307,8 @@ class Database(object):
                     # LF before last brace
                     sql = re.sub(r"\)(\s*WITHOUT\s+ROWID)$", r"\n)\1", sql, re.I)
                     sql = re.sub(r"\)$", r"\n)", sql)
-                result += sql + ";\n\n";
-            result += "\n\n";
+                result += sql + ";\n\n"
+            result += "\n\n"
 
         return result
 
@@ -378,8 +377,8 @@ class Database(object):
         if not self.is_open():
             return
         table, where = table.lower(), ""
-        main.log("Updating 1 row in table %s, %s.",
-                 self.schema["table"][table]["name"], self.filename)
+        guibase.log("Updating 1 row in table %s, %s.",
+                    self.schema["table"][table]["name"], self.filename)
         self.ensure_backup()
         col_data = self.get_table_columns(table)
         values, where = row.copy(), ""
@@ -409,8 +408,8 @@ class Database(object):
         if not self.is_open():
             return
         table = table.lower()
-        main.log("Inserting 1 row into table %s, %s.",
-                 self.schema["table"][table]["name"], self.filename)
+        guibase.log("Inserting 1 row into table %s, %s.",
+                    self.schema["table"][table]["name"], self.filename)
         self.ensure_backup()
         col_data = self.get_table_columns(table)
         fields = [col["name"] for col in col_data]
@@ -434,8 +433,8 @@ class Database(object):
         if not self.is_open():
             return
         table, where = table.lower(), ""
-        main.log("Deleting 1 row from table %s, %s.",
-                 self.schema["table"][table]["name"], self.filename)
+        guibase.log("Deleting 1 row from table %s, %s.",
+                    self.schema["table"][table]["name"], self.filename)
         self.ensure_backup()
         col_data = self.get_table_columns(table)
         values, where = row.copy(), ""
@@ -445,7 +444,7 @@ class Database(object):
         else:
             for pk in [c["name"] for c in col_data if c["pk"]]:
                 pk_key = "PK%s" % int(time.time())
-                values[pk_key] = original_row[pk]
+                values[pk_key] = row[pk]
                 where += (" AND " if where else "") + "%s IS :%s" % (pk, pk_key)
         if not where:
             return False # Sanity check: no primary key and no rowid
@@ -493,7 +492,7 @@ def detect_databases():
                         "/Users" if "mac" == os.name else "/home"]
     search_paths = map(util.to_unicode, search_paths)
     for search_path in filter(os.path.exists, search_paths):
-        main.log("Looking for SQLite databases under %s.", search_path)
+        guibase.log("Looking for SQLite databases under %s.", search_path)
         for root, dirs, files in os.walk(search_path):
             results = []
             for f in files:
@@ -503,7 +502,7 @@ def detect_databases():
 
     # Then search current working directory for database files.
     search_path = util.to_unicode(os.getcwd())
-    main.log("Looking for SQLite databases under %s.", search_path)
+    guibase.log("Looking for SQLite databases under %s.", search_path)
     for root, dirs, files in os.walk(search_path):
         results = []
         for f in (x for x in files if is_sqlite_file(x, root)):
