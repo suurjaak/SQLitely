@@ -299,11 +299,15 @@ class Database(object):
             if not self.schema.get(category): continue # for category
 
             for opts in self.schema[category].values():
-                sql = opts["sql"]
+                sql = opts["sql"].strip()
                 if "table" == category:
-                    sql = re.sub(r"^([^)]+)\(", r"\1(\n  ", sql) # LF after first brace
-                    sql = re.sub("\s*,\s*", ",\n  ", sql) # LF after each col
-                    sql = re.sub(r"\)\s*$", r"\n)", sql)  # LF before last brace
+                    # LF after first brace
+                    sql = re.sub(r"^([^(]+)\(\s*", lambda m: m.group(1).strip() + " (\n  ", sql)
+                    # LF after each col
+                    sql = re.sub("\s*,\s*", ",\n  ", sql)
+                    # LF before last brace
+                    sql = re.sub(r"\)(\s*WITHOUT\s+ROWID)$", r"\n)\1", sql, re.I)
+                    sql = re.sub(r"\)$", r"\n)", sql)
                 result += sql + ";\n\n";
             result += "\n\n";
 

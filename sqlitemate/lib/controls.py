@@ -1481,7 +1481,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
     def __init__(self, *args, **kwargs):
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
-        self.autocomps_added = set()
+        self.autocomps_added = set(["sqlite_master"])
         # All autocomps: added + KEYWORDS
         self.autocomps_total = self.KEYWORDS[:]
         # {word.upper(): set(words filled in after word+dot), }
