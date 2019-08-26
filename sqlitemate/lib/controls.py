@@ -361,35 +361,34 @@ class NoteButton(wx.PyPanel, wx.Button):
 
         is_focused = (self.FindFocus() == self)
 
-        if is_focused or not self.IsThisEnabled():
+        if is_focused:
             # Draw simple border around button
             dc.Brush = wx.TRANSPARENT_BRUSH
             dc.DrawRectangle(0, 0, width, height)
 
-            # Button is focused: draw focus marquee.
-            if is_focused:
-                if not NoteButton.BMP_MARQUEE:
-                    NoteButton.BMP_MARQUEE = wx.EmptyBitmap(2, 2)
-                    dc_bmp = wx.MemoryDC()
-                    dc_bmp.SelectObject(NoteButton.BMP_MARQUEE)
-                    dc_bmp.Background = wx.Brush(self.BackgroundColour)
-                    dc_bmp.Clear()
-                    dc_bmp.Pen = wx.Pen(self.ForegroundColour)
-                    dc_bmp.DrawPointList([(0, 1), (1, 0)])
-                    dc_bmp.SelectObject(wx.NullBitmap)
-                if hasattr(wx.Pen, "Stipple"):
-                    pen = PEN(dc.TextForeground, 1, wx.STIPPLE)
-                    pen.Stipple, dc.Pen = NoteButton.BMP_MARQUEE, pen
-                    dc.DrawRectangle(4, 4, width - 8, height - 8)
-                else:
-                    brush = BRUSH(dc.TextForeground)
-                    brush.SetStipple(NoteButton.BMP_MARQUEE)
-                    dc.Brush = brush
-                    dc.Pen = wx.TRANSPARENT_PEN
-                    dc.DrawRectangle(4, 4, width - 8, height - 8)
-                    dc.Brush = BRUSH(self.BackgroundColour)
-                    dc.DrawRectangle(5, 5, width - 10, height - 10)
-                dc.Pen = PEN(dc.TextForeground)
+            # Draw focus marquee.
+            if not NoteButton.BMP_MARQUEE:
+                NoteButton.BMP_MARQUEE = wx.EmptyBitmap(2, 2)
+                dc_bmp = wx.MemoryDC()
+                dc_bmp.SelectObject(NoteButton.BMP_MARQUEE)
+                dc_bmp.Background = wx.Brush(self.BackgroundColour)
+                dc_bmp.Clear()
+                dc_bmp.Pen = wx.Pen(self.ForegroundColour)
+                dc_bmp.DrawPointList([(0, 1), (1, 0)])
+                dc_bmp.SelectObject(wx.NullBitmap)
+            if hasattr(wx.Pen, "Stipple"):
+                pen = PEN(dc.TextForeground, 1, wx.STIPPLE)
+                pen.Stipple, dc.Pen = NoteButton.BMP_MARQUEE, pen
+                dc.DrawRectangle(4, 4, width - 8, height - 8)
+            else:
+                brush = BRUSH(dc.TextForeground)
+                brush.SetStipple(NoteButton.BMP_MARQUEE)
+                dc.Brush = brush
+                dc.Pen = wx.TRANSPARENT_PEN
+                dc.DrawRectangle(4, 4, width - 8, height - 8)
+                dc.Brush = BRUSH(self.BackgroundColour)
+                dc.DrawRectangle(5, 5, width - 10, height - 10)
+            dc.Pen = PEN(dc.TextForeground)
 
         if self._press or (is_focused and wx.GetKeyState(wx.WXK_SPACE)):
             # Button is being clicked with mouse: create sunken effect.
