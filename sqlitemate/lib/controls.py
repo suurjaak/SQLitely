@@ -1385,7 +1385,10 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
         def resize():
             w = sum((self.GetColumnWidth(i) for i in range(1, len(self._columns))), 0)
-            self.SetColumnWidth(0, self.Size[0] - w - 5)
+            width = self.Size[0] - w - 5 # Space for padding
+            if self.GetScrollRange(wx.VERTICAL) > 1:
+                width -= 16 # Space for scrollbar
+            self.SetColumnWidth(0, width)
         if self.GetItemCount() == 1: wx.CallAfter(resize)
 
 
