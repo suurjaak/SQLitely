@@ -14,14 +14,11 @@ Released under the MIT License.
 import ast
 import base64
 import collections
-import copy
 import datetime
 import functools
 import hashlib
 import inspect
-import math
 import os
-import re
 import shutil
 import sys
 import textwrap
@@ -233,8 +230,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         else:
             self.Show(True)
         wx.CallLater(20000, self.update_check)
-        wx.CallLater(1, self.populate_database_list)
-        wx.Yield()
+        wx.CallLater(0, self.populate_database_list)
 
 
     def init_colours(self):
@@ -722,7 +718,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_filter_list_db(self, event):
         """Handler for filtering dblist, applies search filter."""
-        main.log("search event %r", event.String)
         self.list_db.SetFilter(event.String.strip())
         event.Skip()
 

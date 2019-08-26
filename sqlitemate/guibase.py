@@ -27,7 +27,7 @@ import conf
 
 
 """Custom application event for adding to log."""
-LogEvent,    EVT_LOG =    wx.lib.newevent.NewEvent()
+LogEvent,    EVT_LOG    = wx.lib.newevent.NewEvent()
 """Custom application event for setting main window status."""
 StatusEvent, EVT_STATUS = wx.lib.newevent.NewEvent()
 

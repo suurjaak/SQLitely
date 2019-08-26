@@ -628,8 +628,7 @@ class ProgressWindow(wx.Dialog):
         sizer.Add(label, border=2*8, flag=wx.LEFT | wx.TOP)
         gauge = self._gauge = wx.Gauge(panel, range=maximum, size=(300,-1),
                               style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
-        sizer.Add(gauge, border=2*8,
-                  flag=wx.LEFT | wx.RIGHT | wx.TOP | wx.GROW)
+        sizer.Add(gauge, border=2*8, flag=wx.LEFT | wx.RIGHT | wx.TOP | wx.GROW)
         gauge.Value = 0
         if cancel:
             self._button_cancel = wx.Button(self._panel, id=wx.ID_CANCEL)

@@ -19,7 +19,6 @@ import json
 import os
 import sys
 
-from lib import util
 
 """Program title, version number and version date."""
 Title = "SQLiteMate"
@@ -177,6 +176,9 @@ MainBgColour = "#FFFFFF"
 """Widget (button etc) background colour."""
 WidgetColour = "#D4D0C8"
 
+"""Foreground colour for gauges."""
+GaugeColour = "#008000"
+
 """Disabled text colour."""
 DisabledColour = "#808080"
 
@@ -265,7 +267,7 @@ def save():
     parser.optionxform = str # Force case-sensitivity on names
     parser.add_section(section)
     try:
-        f, fname = open(ConfigFile, "wb"), util.longpath(ConfigFile)
+        f = open(ConfigFile, "wb")
         f.write("# %s %s configuration written on %s.\n" % (Title, Version,
                 datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         for name in FileDirectives:

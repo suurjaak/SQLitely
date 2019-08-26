@@ -8,10 +8,9 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.08.2019
+@modified    26.08.2019
 ------------------------------------------------------------------------------
 """
-import datetime
 import Queue
 import re
 import threading
@@ -138,7 +137,7 @@ class SearchThread(WorkerThread):
                 pattern_replace = re.compile(patt, re.IGNORECASE)
                 infotext = search["table"]
 
-                # Find from table and column names and types
+                # Find from table and column namesnb and types
                 if not self._stop_work and "names" == search["table"] \
                 and match_words:
                     infotext = "table and column names and types"

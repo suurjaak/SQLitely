@@ -8,13 +8,12 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.08.2019
+@modified    26.08.2019
 ------------------------------------------------------------------------------
 """
 import collections
 import csv
 import datetime
-import os
 import re
 
 try: # ImageFont for calculating column widths in Excel export, not required.
@@ -30,7 +29,6 @@ from lib import util
 from lib.vendor import step
 
 import conf
-import main
 import templates
 
 
@@ -157,7 +155,7 @@ class xlsx_writer(object):
                                           "align": "left",
                                           "num_format": "yyyy-mm-dd HH:MM", })
 
-    def __init__(self, filename, sheetname=None, autowrap=[]):
+    def __init__(self, filename, sheetname=None, autowrap=()):
         """
         @param   sheetname  title of the first sheet to create, if any
         @param   autowrap   a list of column indices that will get their width
@@ -234,7 +232,7 @@ class xlsx_writer(object):
             self._sheet.freeze_panes(self._row, 0)
 
 
-    def writerow(self, values, style={}, merge_cols=0, autowidth=True):
+    def writerow(self, values, style="", merge_cols=0, autowidth=True):
         """
         Writes to the current row from first column, steps to next row.
         If current sheet is full, starts a new one.
