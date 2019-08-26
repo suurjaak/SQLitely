@@ -684,9 +684,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         removes from list on Delete, refreshes columns on F5.
         """
         if event.KeyCode in [wx.WXK_F5]:
-
             items = []
-            selected = self.list_db.GetItemText(self.list_db.GetFirstSelected())
+            selected_filename, selected = "", self.list_db.GetFirstSelected()
+            if selected > 0: selected_filename = self.list_db.GetItemText(selected)
             for filename in conf.DBFiles:
                 data = collections.defaultdict(lambda: None, name=filename)
                 if os.path.exists(filename):
@@ -696,11 +696,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.db_filenames[filename].update(data)
                 items.append(data)
             self.list_db.Populate(items, [1])
-            if selected in self.db_filenames:
+            if selected_filename in self.db_filenames:
                 for i in range(1, self.list_db.GetItemCount()):
-                    if self.list_db.GetItemText(i) == selected:
+                    if self.list_db.GetItemText(i) == selected_filename:
                         self.list_db.Select(i)
                         break # for i
+                self.update_database_detail()
 
         elif self.list_db.GetFirstSelected() > 0 and not event.AltDown() \
         and event.KeyCode in [wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]:
@@ -868,6 +869,37 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.button_missing.Show(self.list_db.GetItemCount() > 1)
         self.button_clear.Show(self.list_db.GetItemCount() > 1)
         return result
+
+
+    def update_database_detail(self):
+        """Updates database detail panel with current database information."""
+        filename = self.db_filename
+        path, tail = os.path.split(filename)
+        self.label_db.Value = tail
+        self.label_path.Value = path
+        self.label_size.Value = self.label_modified.Value = ""
+        self.label_tables.Value = ""
+        self.label_tables.ForegroundColour = self.ForegroundColour
+        self.label_size.ForegroundColour = self.ForegroundColour
+        if not self.panel_db_detail.Shown:
+            self.panel_db_main.Hide()
+            self.panel_db_detail.Show()
+            self.panel_db_detail.Parent.Layout()
+        if os.path.exists(filename):
+            sz = os.path.getsize(filename)
+            dt = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
+            self.label_size.Value = util.format_bytes(sz)
+            self.label_modified.Value = dt.strftime("%Y-%m-%d %H:%M:%S")
+            data = self.db_filenames[filename]
+            if data["size"] == sz and data["last_modified"] == dt \
+            and data.get("tables") is not None:
+                # File does not seem changed: use cached values
+                self.label_tables.Value = data["tables"]
+            else:
+                wx.CallLater(10, self.update_database_stats, filename)
+        else:
+            self.label_size.Value = "File does not exist."
+            self.label_size.ForegroundColour = conf.LabelErrorColour
 
 
     def on_clear_databases(self, event):
@@ -1163,33 +1195,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for selecting an item in main list, updates info panel."""
         if event.GetIndex() > 0 \
         and event.GetText() != self.db_filename:
-            filename = self.db_filename = event.GetText()
-            path, tail = os.path.split(filename)
-            self.label_db.Value = tail
-            self.label_path.Value = path
-            self.label_size.Value = self.label_modified.Value = ""
-            self.label_tables.Value = ""
-            self.label_tables.ForegroundColour = self.ForegroundColour
-            self.label_size.ForegroundColour = self.ForegroundColour
-            if not self.panel_db_detail.Shown:
-                self.panel_db_main.Hide()
-                self.panel_db_detail.Show()
-                self.panel_db_detail.Parent.Layout()
-            if os.path.exists(filename):
-                sz = os.path.getsize(filename)
-                dt = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
-                self.label_size.Value = util.format_bytes(sz)
-                self.label_modified.Value = dt.strftime("%Y-%m-%d %H:%M:%S")
-                data = self.db_filenames[filename]
-                if data["size"] == sz and data["last_modified"] == dt \
-                and data.get("tables") is not None:
-                    # File does not seem changed: use cached values
-                    self.label_tables.Value = data["tables"]
-                else:
-                    wx.CallLater(10, self.update_database_stats, filename)
-            else:
-                self.label_size.Value = "File does not exist."
-                self.label_size.ForegroundColour = conf.LabelErrorColour
+            self.db_filename = event.GetText()
+            self.update_database_detail()
         elif event.GetIndex() == 0 and not self.panel_db_main.Shown:
             self.db_filename = None
             self.panel_db_main.Show()
