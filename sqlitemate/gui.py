@@ -681,7 +681,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def on_list_db_key(self, event):
         """
         Handler for pressing a key in dblist, loads selected database on Enter,
-        removes from list on Delete, refreshes columns on F5.
+        removes from list on Delete, refreshes columns on F5,
+        focuses filter on Ctrl-F.
         """
         if event.KeyCode in [wx.WXK_F5]:
             items = []
@@ -702,7 +703,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                         self.list_db.Select(i)
                         break # for i
                 self.update_database_detail()
-
+        elif event.KeyCode in [ord('F')] and event.ControlDown():
+            self.edit_filter.SetFocus()
         elif self.list_db.GetFirstSelected() > 0 and not event.AltDown() \
         and event.KeyCode in [wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]:
             self.load_database_page(self.db_filename)
