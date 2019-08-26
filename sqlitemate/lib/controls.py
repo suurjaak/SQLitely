@@ -1225,7 +1225,13 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         if selected_ids: # Re-select the previously selected items
             idindx = dict((self.GetItemData(i), i)
                           for i in range(self.GetItemCount()))
-            [self.Select(idindx[i]) for i in selected_ids if i in idindx]
+            for item_id in selected_ids:
+                if item_id not in idindx: continue # for item_id
+                self.Select(idindx[item_id])
+                if idindx[item_id] >= self.GetCountPerPage():
+                    lh = self.GetUserLineHeight()
+                    dy = (idindx[item_id] - self.GetCountPerPage() / 2) * lh
+                    self.ScrollList(0, dy)
 
         self.Thaw()
 

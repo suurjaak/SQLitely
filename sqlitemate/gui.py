@@ -853,16 +853,15 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     self.list_db.SetFocus()
                     break # for i
 
-            def scroll_to_selected():
-                if idx < self.list_db.GetCountPerPage(): return
+            if idx >= self.list_db.GetCountPerPage():
                 lh = self.list_db.GetUserLineHeight()
                 dy = (idx - self.list_db.GetCountPerPage() / 2) * lh
                 self.list_db.ScrollList(0, dy)
                 self.list_db.Update()
-            wx.CallAfter(lambda: self and scroll_to_selected())
 
         self.button_missing.Show(bool(items))
         self.button_clear.Show(bool(items))
+        self.panel_db_main.Layout()
 
 
     def update_database_list(self, filename=""):
