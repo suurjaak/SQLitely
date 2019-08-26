@@ -18,6 +18,9 @@ Stand-alone GUI components for wx:
   Inspired by wx.CommandLinkButton, which does not support custom icons
   (at least not of wx 2.9.4).
 
+- ProgressWindow(wx.Dialog):
+  A simple non-modal ProgressDialog, stays on top of parent frame.
+
 - PropertyDialog(wx.Dialog):
   Dialog for displaying an editable property grid. Supports strings,
   integers, booleans, and tuples interpreted as wx.Size.
@@ -57,16 +60,11 @@ Released under the MIT License.
 @modified    26.08.2019
 ------------------------------------------------------------------------------
 """
-import ast
 import collections
 import copy
-import datetime
-import functools
 import locale
-import operator
 import os
 import re
-import sys
 import wx
 import wx.html
 import wx.lib.agw.flatnotebook
@@ -609,6 +607,69 @@ class NoteButton(wx.PyPanel, wx.Button):
     def GetNote(self):
         return self._note
     Note = property(GetNote, SetNote)
+
+
+
+class ProgressWindow(wx.Dialog):
+    """
+    A simple non-modal ProgressDialog, stays on top of parent frame.
+    """
+
+    def __init__(self, parent, title, message="", maximum=100, cancel=True,
+                 style=wx.CAPTION | wx.CLOSE_BOX | wx.FRAME_FLOAT_ON_PARENT):
+        wx.Dialog.__init__(self, parent=parent, title=title, style=style)
+        self._is_cancelled = False
+
+        self.Sizer = wx.BoxSizer(wx.VERTICAL)
+        panel = self._panel = wx.Panel(self)
+        sizer = self._panel.Sizer = wx.BoxSizer(wx.VERTICAL)
+
+        label = self._label_message = wx.StaticText(panel, label=message)
+        sizer.Add(label, border=2*8, flag=wx.LEFT | wx.TOP)
+        gauge = self._gauge = wx.Gauge(panel, range=maximum, size=(300,-1),
+                              style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
+        sizer.Add(gauge, border=2*8,
+                  flag=wx.LEFT | wx.RIGHT | wx.TOP | wx.GROW)
+        gauge.Value = 0
+        if cancel:
+            self._button_cancel = wx.Button(self._panel, id=wx.ID_CANCEL)
+            sizer.Add(self._button_cancel, border=8,
+                      flag=wx.TOP | wx.BOTTOM | wx.ALIGN_CENTER_HORIZONTAL)
+            self.Bind(wx.EVT_BUTTON, self.OnCancel, self._button_cancel)
+            self.Bind(wx.EVT_CLOSE, self.OnCancel)
+        else:
+            sizer.Add((8, 8))
+
+        self.Sizer.Add(panel, flag=wx.GROW)
+        self.Fit()
+        self.Layout()
+        self.Refresh()
+        self.Show()
+
+
+    def Update(self, value, message=None):
+        """
+        Updates the progressbar value, and message if given.
+
+        @return  False if dialog was cancelled by user, True otherwise
+        """
+        if message is not None:
+            self._label_message.Label = message
+        self._gauge.Value = value
+        self.Refresh()
+        return not self._is_cancelled
+
+
+    def OnCancel(self, event):
+        """
+        Handler for cancelling the dialog, hides the window.
+        """
+        self._is_cancelled = True
+        self.Hide()
+
+
+    def SetGaugeForegroundColour(self, colour):
+        self._gauge.ForegroundColour = colour
 
 
 
@@ -2171,12 +2232,12 @@ class TextCtrlAutoComplete(wx.TextCtrl):
                     if not self._skip_autocomplete:
                         # Use a callback function to change value - changing
                         # value inside handler causes multiple events in Linux.
-                        def autocomplete_callback():
+                        def autocomplete_callback(choice):
                             if self and self.Value == text: # Can have changed
                                 self._ignore_textchange = True # To skip OnText
                                 self.Value = choice # Auto-complete text
                                 self.SetSelection(len(text), -1) # Select added
-                        wx.CallAfter(autocomplete_callback)
+                        wx.CallAfter(autocomplete_callback, choice)
                     break
             if not found: # Deselect currently selected item
                 self._listbox.Select(self._listbox.GetFirstSelected(), False)
