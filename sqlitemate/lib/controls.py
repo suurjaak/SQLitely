@@ -54,7 +54,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    25.08.2019
+@modified    26.08.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1423,28 +1423,37 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     """A StyledTextCtrl configured for SQLite syntax highlighting."""
 
     """SQLite reserved keywords."""
-    KEYWORDS = [
-        u"ABORT", u"ACTION", u"ADD", u"AFTER", u"ALL", u"ALTER", u"ANALYZE",
-        u"AND", u"AS", u"ASC", u"ATTACH", u"AUTOINCREMENT", u"BEFORE",
-        u"BEGIN", u"BETWEEN", u"BY", u"CASCADE", u"CASE", u"CAST", u"CHECK",
-        u"COLLATE", u"COLUMN", u"COMMIT", u"CONFLICT", u"CONSTRAINT",
-        u"CREATE", u"CROSS", u"CURRENT_DATE", u"CURRENT_TIME",
-        u"CURRENT_TIMESTAMP", u"DATABASE", u"DEFAULT", u"DEFERRABLE",
-        u"DEFERRED", u"DELETE", u"DESC", u"DETACH", u"DISTINCT", u"DROP",
-        u"EACH", u"ELSE", u"END", u"ESCAPE", u"EXCEPT", u"EXCLUSIVE",
-        u"EXISTS", u"EXPLAIN", u"FAIL", u"FOR", u"FOREIGN", u"FROM", u"FULL",
-        u"GLOB", u"GROUP", u"HAVING", u"IF", u"IGNORE", u"IMMEDIATE", u"IN",
-        u"INDEX", u"INDEXED", u"INITIALLY", u"INNER", u"INSERT", u"INSTEAD",
-        u"INTERSECT", u"INTO", u"IS", u"ISNULL", u"JOIN", u"KEY", u"LEFT",
-        u"LIKE", u"LIMIT", u"MATCH", u"NATURAL", u"NO", u"NOT", u"NOTNULL",
-        u"NULL", u"OF", u"OFFSET", u"ON", u"OR", u"ORDER", u"OUTER", u"PLAN",
-        u"PRAGMA", u"PRIMARY", u"QUERY", u"RAISE", u"REFERENCES", u"REGEXP",
-        u"REINDEX", u"RELEASE", u"RENAME", u"REPLACE", u"RESTRICT", u"RIGHT",
-        u"ROLLBACK", u"ROW", u"SAVEPOINT", u"SELECT", u"SET", u"TABLE",
-        u"TEMP", u"TEMPORARY", u"THEN", u"TO", u"TRANSACTION", u"TRIGGER",
-        u"UNION", u"UNIQUE", u"UPDATE", u"USING", u"VACUUM", u"VALUES", u"VIEW",
-        u"VIRTUAL", u"WHEN", u"WHERE"
-    ]
+    KEYWORDS = map(unicode, sorted([
+        "ABORT", "ACTION", "ADD", "AFTER", "ALL", "ALTER", "ANALYZE",
+        "AND", "AS", "ASC", "ATTACH", "AUTOINCREMENT", "BEFORE",
+        "BEGIN", "BETWEEN", "BINARY", "BY", "CASCADE", "CASE", "CAST",
+        "CHECK", "COLLATE", "COLUMN", "COMMIT", "CONFLICT", "CONSTRAINT",
+        "CREATE", "CROSS", "CURRENT_DATE", "CURRENT_TIME",
+        "CURRENT_TIMESTAMP", "DATABASE", "DEFAULT", "DEFERRABLE",
+        "DEFERRED", "DELETE", "DESC", "DETACH", "DISTINCT", "DROP",
+        "EACH", "ELSE", "END", "ESCAPE", "EXCEPT", "EXCLUSIVE",
+        "EXISTS", "EXPLAIN", "FAIL", "FOR", "FOREIGN", "FROM", "FULL",
+        "GLOB", "GROUP", "HAVING", "IF", "IGNORE", "IMMEDIATE", "IN",
+        "INDEX", "INDEXED", "INITIALLY", "INNER", "INSERT", "INSTEAD",
+        "INTERSECT", "INTO", "IS", "ISNULL", "JOIN", "KEY", "LEFT", "LIKE",
+        "LIMIT", "MATCH", "NATURAL", "NO", "NOCASE", "NOT", "NOTNULL",
+        "NULL", "OF", "OFFSET", "ON", "OR", "ORDER", "OUTER", "PLAN",
+        "PRAGMA", "PRIMARY", "QUERY", "RAISE", "REFERENCES", "REGEXP",
+        "REINDEX", "RELEASE", "RENAME", "REPLACE", "RESTRICT", "RIGHT",
+        "ROLLBACK", "ROW", "RTRIM", "SAVEPOINT", "SELECT", "SET", "TABLE",
+        "TEMP", "TEMPORARY", "THEN", "TO", "TRANSACTION", "TRIGGER",
+        "UNION", "UNIQUE", "UPDATE", "USING", "VACUUM", "VALUES", "VIEW",
+        "VIRTUAL", "WHEN", "WHERE"
+    ]))
+    """SQLite data types."""
+    TYPEWORDS = map(unicode, sorted([
+        "BLOB",
+        "INTEGER", "BIGINT", "INT", "INT2", "INT8", "MEDIUMINT", "SMALLINT",
+                   "TINYINT", "UNSIGNED",
+        "NUMERIC", "BOOLEAN", "DATE", "DATETIME", "DECIMAL",
+        "TEXT", "CHARACTER", "CLOB", "NCHAR", "NVARCHAR", "VARCHAR", "VARYING",
+        "REAL", "DOUBLE", "FLOAT", "PRECISION",
+    ]))
     AUTOCOMP_STOPS = " .,;:([)]}'\"\\<>%^&+-=*/|`"
     FONT_FACE = "Courier New" if os.name == "nt" else "Courier"
     """String length from which autocomplete starts."""
@@ -1454,7 +1463,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
         self.autocomps_added = set()
         # All autocomps: added + KEYWORDS
-        self.autocomps_total = self.KEYWORDS
+        self.autocomps_total = self.KEYWORDS[:]
         # {word.upper(): set(words filled in after word+dot), }
         self.autocomps_subwords = {}
 
@@ -1462,38 +1471,43 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.SetMarginWidth(1, 0) # Get rid of left margin
         self.SetTabWidth(4)
         # Keywords must be lowercase, required by StyledTextCtrl
-        self.SetKeyWords(0, u" ".join(self.KEYWORDS).lower())
+        self.SetKeyWords(0, u" ".join(self.KEYWORDS + self.TYPEWORDS).lower())
         self.AutoCompStops(self.AUTOCOMP_STOPS)
         self.SetWrapMode(wx.stc.STC_WRAP_WORD)
-        self.SetCaretLineBackground("#00FFFF")
         self.SetCaretLineBackAlpha(20)
         self.SetCaretLineVisible(True)
         self.AutoCompSetIgnoreCase(True)
         self.Bind(wx.EVT_KEY_DOWN, self.OnKeyDown)
         self.Bind(wx.EVT_KILL_FOCUS, self.OnKillFocus)
 
-        bgcolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOW)
+        fgcolour, bgcolour, highcolour = (
+            wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
+            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW,
+                      wx.SYS_COLOUR_HOTLIGHT)
+        )
+
+        self.SetCaretForeground(fgcolour)
+        self.SetCaretLineBackground("#00FFFF")
         self.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT, 
-                          "face:%s,back:%s" % (self.FONT_FACE,
-                          bgcolour.GetAsString(wx.C2S_HTML_SYNTAX)))
+                          "face:%s,back:%s,fore:%s" % (self.FONT_FACE, bgcolour, fgcolour))
         self.StyleClearAll() # Apply the new default style to all styles
-        self.StyleSetSpec(wx.stc.STC_SQL_DEFAULT, "face:%s" % self.FONT_FACE)
-        self.StyleSetSpec(wx.stc.STC_SQL_STRING, "fore:#FF007F") # "
+        self.StyleSetSpec(wx.stc.STC_SQL_DEFAULT,   "face:%s" % self.FONT_FACE)
+        self.StyleSetSpec(wx.stc.STC_SQL_STRING,    "fore:#FF007F") # "
         self.StyleSetSpec(wx.stc.STC_SQL_CHARACTER, "fore:#FF007F") # "
-        self.StyleSetSpec(wx.stc.STC_SQL_QUOTEDIDENTIFIER, "fore:#0000FF")
-        self.StyleSetSpec(wx.stc.STC_SQL_WORD, "fore:#0000FF,bold")
-        self.StyleSetSpec(wx.stc.STC_SQL_WORD2, "fore:#0000FF,bold")
-        self.StyleSetSpec(wx.stc.STC_SQL_USER1, "fore:#0000FF,bold")
-        self.StyleSetSpec(wx.stc.STC_SQL_USER2, "fore:#0000FF,bold")
-        self.StyleSetSpec(wx.stc.STC_SQL_USER3, "fore:#0000FF,bold")
-        self.StyleSetSpec(wx.stc.STC_SQL_USER4, "fore:#0000FF,bold")
+        self.StyleSetSpec(wx.stc.STC_SQL_QUOTEDIDENTIFIER, "fore:%s" % highcolour)
+        self.StyleSetSpec(wx.stc.STC_SQL_WORD,  "fore:%s,bold" % highcolour)
+        self.StyleSetSpec(wx.stc.STC_SQL_WORD2, "fore:%s,bold" % highcolour)
+        self.StyleSetSpec(wx.stc.STC_SQL_USER1, "fore:%s,bold" % highcolour)
+        self.StyleSetSpec(wx.stc.STC_SQL_USER2, "fore:%s,bold" % highcolour)
+        self.StyleSetSpec(wx.stc.STC_SQL_USER3, "fore:%s,bold" % highcolour)
+        self.StyleSetSpec(wx.stc.STC_SQL_USER4, "fore:%s,bold" % highcolour)
         self.StyleSetSpec(wx.stc.STC_SQL_SQLPLUS, "fore:#ff0000,bold")
         self.StyleSetSpec(wx.stc.STC_SQL_SQLPLUS_COMMENT, "back:#ffff00")
-        self.StyleSetSpec(wx.stc.STC_SQL_SQLPLUS_PROMPT, "back:#00ff00")
+        self.StyleSetSpec(wx.stc.STC_SQL_SQLPLUS_PROMPT,  "back:#00ff00")
         # 01234567890.+-e
         self.StyleSetSpec(wx.stc.STC_SQL_NUMBER, "fore:#FF00FF")
         # + - * / % = ! ^ & . , ; <> () [] {}
-        self.StyleSetSpec(wx.stc.STC_SQL_OPERATOR, "fore:#0000FF")
+        self.StyleSetSpec(wx.stc.STC_SQL_OPERATOR, "fore:%s" % highcolour)
         # --...
         self.StyleSetSpec(wx.stc.STC_SQL_COMMENTLINE, "fore:#008000")
         # #...
@@ -1504,7 +1518,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.StyleSetSpec(wx.stc.STC_SQL_COMMENTDOCKEYWORD, "back:#AAFFAA")
         self.StyleSetSpec(wx.stc.STC_SQL_COMMENTDOCKEYWORDERROR, "back:#AAFFAA")
 
-        self.StyleSetSpec(wx.stc.STC_STYLE_BRACELIGHT, "fore:#0000FF")
+        self.StyleSetSpec(wx.stc.STC_STYLE_BRACELIGHT, "fore:%s" % highcolour)
         self.StyleSetSpec(wx.stc.STC_STYLE_BRACEBAD, "fore:#FF0000")
 
         """
@@ -1526,11 +1540,11 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
     def AutoCompAddWords(self, words):
         """Adds more words used in autocompletion."""
-        self.autocomps_added.update(words)
+        self.autocomps_added.update(map(unicode, words))
         # A case-insensitive autocomp has to be sorted, will not work
         # properly otherwise. UserList would support arbitrarily sorting.
         self.autocomps_total = sorted(
-            list(self.autocomps_added) + self.KEYWORDS, cmp=self.stricmp
+            list(self.autocomps_added) + map(unicode, self.KEYWORDS), cmp=self.stricmp
         )
 
 
@@ -1539,6 +1553,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         Adds more subwords used in autocompletion, will be shown after the word
         and a dot.
         """
+        word, subwords = unicode(word), map(unicode, subwords)
         if word not in self.autocomps_added:
             self.AutoCompAddWords([word])
         if subwords:
