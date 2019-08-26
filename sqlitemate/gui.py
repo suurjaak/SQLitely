@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.08.2019
+@modified    26.08.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1759,16 +1759,14 @@ class DatabasePage(wx.Panel):
         label_stc = wx.StaticText(parent=panel1, label="SQ&L:")
         tb = self.tb_sql = wx.ToolBar(parent=panel1,
                                       style=wx.TB_FLAT | wx.TB_NODIVIDER)
-        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN, wx.ART_TOOLBAR,
-                                       (16, 16))
-        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR,
-                                       (16, 16))
+        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN, wx.ART_TOOLBAR, (16, 16))
+        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
         tb.SetToolBitmapSize(bmp1.Size)
         tb.AddLabelTool(wx.ID_OPEN, "", bitmap=bmp1, shortHelp="Load SQL file")
         tb.AddLabelTool(wx.ID_SAVE, "", bitmap=bmp2, shortHelp="Save SQL file")
         tb.Realize()
-        tb.Bind(wx.EVT_TOOL, self.on_open_sql, id=wx.ID_OPEN)
-        tb.Bind(wx.EVT_TOOL, self.on_save_sql, id=wx.ID_SAVE)
+        tb.Bind(wx.EVT_TOOL, lambda e: self.on_open_sql(self.stc_sql, e), id=wx.ID_OPEN)
+        tb.Bind(wx.EVT_TOOL, lambda e: self.on_save_sql(self.stc_sql, e), id=wx.ID_SAVE)
 
         stc = self.stc_sql = controls.SQLiteTextCtrl(parent=panel1,
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
@@ -1910,15 +1908,30 @@ class DatabasePage(wx.Panel):
         sizer1.Add(sizer_file, border=20, proportion=1, flag=wx.TOP | wx.GROW)
         sizer1.Add(sizer_buttons, proportion=1, border=10, flag=wx.LEFT | wx.GROW)
 
+        sizer_schematop = wx.BoxSizer(wx.HORIZONTAL)
         label_schema = wx.StaticText(parent=panel2, label="Database schema")
         label_schema.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                   wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
+
+        tb = self.tb_sql = wx.ToolBar(parent=panel2,
+                                      style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        bmp = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR,
+                                       (16, 16))
+        tb.SetToolBitmapSize(bmp.Size)
+        tb.AddLabelTool(wx.ID_SAVE, "", bitmap=bmp, shortHelp="Save schema SQL to file")
+        tb.Realize()
+        tb.Bind(wx.EVT_TOOL, lambda e: self.on_save_sql(self.stc_schema, e), id=wx.ID_SAVE)
+
         stc = self.stc_schema = controls.SQLiteTextCtrl(parent=panel2,
             style=wx.BORDER_STATIC)
         stc.SetText(self.db.get_sql())
         stc.SetReadOnly(True)
-        sizer2.Add(label_schema, border=5, flag=wx.ALL | wx.GROW)
-        sizer2.Add(stc, proportion=1, border=10, flag=wx.TOP | wx.GROW)
+
+        sizer_schematop.Add(label_schema)
+        sizer_schematop.AddStretchSpacer()
+        sizer_schematop.Add(tb, flag=wx.ALIGN_RIGHT)
+        sizer2.Add(sizer_schematop, border=5, flag=wx.TOP | wx.RIGHT | wx.GROW)
+        sizer2.Add(stc, proportion=1, border=5, flag=wx.TOP | wx.GROW)
 
         sizer.Add(panel1, proportion=1, border=5,
                   flag=wx.LEFT  | wx.TOP | wx.BOTTOM | wx.GROW)
@@ -2639,7 +2652,7 @@ class DatabasePage(wx.Panel):
             self.button_close_grid_sql.Enabled = False
 
 
-    def on_open_sql(self, event):
+    def on_open_sql(self, stc, event):
         """
         Handler for loading SQL from file, opens file dialog and loads content.
         """
@@ -2652,21 +2665,21 @@ class DatabasePage(wx.Panel):
 
         filename = dialog.GetPath()
         try:
-            with open(filename, "r") as f:
-                self.stc_sql.SetText(f.read())
+            stc.LoadFile(filename)
         except Exception as e:
             msg = util.format_exc(e)
             main.logstatus_flash(msg)
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
             
 
-    def on_save_sql(self, event):
+    def on_save_sql(self, stc, event):
         """
         Handler for saving SQL to file, opens file dialog and saves content.
         """
+        filename = os.path.splitext(os.path.basename(self.db.filename))[0]
+        if stc is self.stc_sql: filename += " SQL"
         dialog = wx.FileDialog(
-            parent=self, message="Save as",
-            defaultFile=os.path.splitext(os.path.basename(self.db.filename))[0] + " SQL",
+            parent=self, message="Save as", defaultFile=filename,
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
             style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
         )
@@ -2674,8 +2687,7 @@ class DatabasePage(wx.Panel):
 
         filename = dialog.GetPath()
         try:
-            with open(filename, "w") as f:
-                f.write(self.stc_sql.Text)
+            stc.SaveFile(filename)
         except Exception as e:
             msg = util.format_exc(e)
             main.logstatus_flash(msg)
