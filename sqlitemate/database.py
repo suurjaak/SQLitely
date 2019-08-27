@@ -134,7 +134,7 @@ class Database(object):
         "col": "compile_option",
         "write": False,
         "short": "SQLite compile-time options",
-        "description": "Compile-time options used when building SQLite.",
+        "description": "Compile-time options used when building current SQLite library.",
       },
       "count_changes": {
         "name": "count_changes",
