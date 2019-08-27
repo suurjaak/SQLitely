@@ -2036,15 +2036,17 @@ class DatabasePage(wx.Panel):
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
         panel1, panel2 = wx.Panel(parent=page), wx.Panel(parent=page)
-        panel1.BackgroundColour = panel2.BackgroundColour = conf.BgColour
+        panel1c, panel2c = wx.Panel(parent=panel1), wx.Panel(parent=panel2)
+        panel1c.BackgroundColour = panel2c.BackgroundColour = conf.BgColour
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
-        sizer_file = wx.FlexGridSizer(cols=2, vgap=3, hgap=10)
+        sizer_file = panel1c.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_info = wx.FlexGridSizer(cols=2, vgap=3, hgap=10)
         label_file = wx.StaticText(parent=panel1, label="Database information")
         label_file.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                   wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
-        sizer1.Add(label_file, border=5, flag=wx.ALL)
+        label_file.BackgroundColour = self.BackgroundColour
 
         names = ["edit_info_path", "edit_info_size", "edit_info_modified",
                  "edit_info_sha1", "edit_info_md5", ]
@@ -2052,26 +2054,26 @@ class DatabasePage(wx.Panel):
                   "SHA-1 checksum", "MD5 checksum",  ]
         for name, label in zip(names, labels):
             if not name and not label:
-                sizer_file.AddSpacer(20), sizer_file.AddSpacer(20)
+                sizer_info.AddSpacer(20), sizer_info.AddSpacer(20)
                 continue # continue for i, (name, label) in enumerate(..
-            labeltext = wx.StaticText(parent=panel1, label="%s:" % label)
+            labeltext = wx.StaticText(parent=panel1c, label="%s:" % label)
             labeltext.ForegroundColour = wx.Colour(102, 102, 102)
-            valuetext = wx.TextCtrl(parent=panel1, value="Analyzing..",
+            valuetext = wx.TextCtrl(parent=panel1c, value="Analyzing..",
                 style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH)
             valuetext.MinSize = (-1, 35)
-            valuetext.BackgroundColour = panel1.BackgroundColour
+            valuetext.BackgroundColour = panel1c.BackgroundColour
             valuetext.SetEditable(False)
-            sizer_file.Add(labeltext, border=5, flag=wx.LEFT)
-            sizer_file.Add(valuetext, proportion=1, flag=wx.GROW)
+            sizer_info.Add(labeltext, border=5, flag=wx.LEFT | wx.TOP)
+            sizer_info.Add(valuetext, border=5, proportion=1, flag=wx.TOP | wx.GROW)
             setattr(self, name, valuetext)
         self.edit_info_path.Value = self.db.filename
 
         button_vacuum = self.button_vacuum = \
-            wx.Button(parent=panel1, label="Vacuum")
+            wx.Button(parent=panel1c, label="Vacuum")
         button_check = self.button_check_integrity = \
-            wx.Button(parent=panel1, label="Check for corruption")
+            wx.Button(parent=panel1c, label="Check for corruption")
         button_refresh = self.button_refresh_fileinfo = \
-            wx.Button(parent=panel1, label="Refresh")
+            wx.Button(parent=panel1c, label="Refresh")
         button_vacuum.Enabled = button_check.Enabled = button_refresh.Enabled = False
         button_vacuum.SetToolTipString("Rebuild the database file, repacking "
                                        "it into a minimal amount of disk space.")
@@ -2090,9 +2092,11 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_BUTTON, lambda e: self.update_info_page(),
                   button_refresh)
 
-        sizer_file.AddGrowableCol(1, 1)
-        sizer1.Add(sizer_file, border=20, proportion=1, flag=wx.TOP | wx.GROW)
-        sizer1.Add(sizer_buttons, proportion=1, border=10, flag=wx.LEFT | wx.GROW)
+        sizer_info.AddGrowableCol(1, 1)
+        sizer_file.Add(sizer_info, proportion=1, border=10, flag=wx.LEFT | wx.GROW)
+        sizer_file.Add(sizer_buttons, border=10, flag=wx.LEFT | wx.BOTTOM | wx.GROW)
+        sizer1.Add(label_file, border=5, flag=wx.ALL)
+        sizer1.Add(panel1c, border=6, proportion=1, flag=wx.TOP | wx.GROW)
 
         sizer_schematop = wx.BoxSizer(wx.HORIZONTAL)
         label_schema = wx.StaticText(parent=panel2, label="Database schema")
@@ -2101,14 +2105,19 @@ class DatabasePage(wx.Panel):
 
         tb = self.tb_sql = wx.ToolBar(parent=panel2,
                                       style=wx.TB_FLAT | wx.TB_NODIVIDER)
-        bmp = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR,
-                                       (16, 16))
-        tb.SetToolBitmapSize(bmp.Size)
-        tb.AddLabelTool(wx.ID_SAVE, "", bitmap=bmp, shortHelp="Save schema SQL to file")
+        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR,
+                                        (16, 16))
+        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR,
+                                        (16, 16))
+        tb.SetToolBitmapSize(bmp1.Size)
+        tb.AddLabelTool(wx.ID_COPY, "", bitmap=bmp1, shortHelp="Copy schema SQL to clipboard")
+        tb.AddLabelTool(wx.ID_SAVE, "", bitmap=bmp2, shortHelp="Save schema SQL to file")
         tb.Realize()
+        tb.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_schema, e), id=wx.ID_COPY)
         tb.Bind(wx.EVT_TOOL, lambda e: self.on_save_sql(self.stc_schema, e), id=wx.ID_SAVE)
 
-        stc = self.stc_schema = controls.SQLiteTextCtrl(parent=panel2,
+        sizer_stc = panel2c.Sizer = wx.BoxSizer(wx.VERTICAL)
+        stc = self.stc_schema = controls.SQLiteTextCtrl(parent=panel2c,
             style=wx.BORDER_STATIC)
         stc.SetText(self.db.get_sql())
         stc.SetReadOnly(True)
@@ -2116,8 +2125,9 @@ class DatabasePage(wx.Panel):
         sizer_schematop.Add(label_schema)
         sizer_schematop.AddStretchSpacer()
         sizer_schematop.Add(tb, flag=wx.ALIGN_RIGHT)
+        sizer_stc.Add(stc, proportion=1, flag=wx.GROW)
         sizer2.Add(sizer_schematop, border=5, flag=wx.TOP | wx.RIGHT | wx.GROW)
-        sizer2.Add(stc, proportion=1, border=5, flag=wx.TOP | wx.GROW)
+        sizer2.Add(panel2c, proportion=1, border=5, flag=wx.TOP | wx.GROW)
 
         sizer.Add(panel1, proportion=1, border=5,
                   flag=wx.LEFT  | wx.TOP | wx.BOTTOM | wx.GROW)
@@ -2946,6 +2956,13 @@ class DatabasePage(wx.Panel):
             guibase.logstatus_flash(msg)
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
             
+
+    def on_copy_sql(self, stc, event):
+        """Handler for copying SQL to clipboard."""
+        if wx.TheClipboard.Open():
+            d = wx.TextDataObject(stc.Text)
+            wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+
 
     def on_save_sql(self, stc, event):
         """
