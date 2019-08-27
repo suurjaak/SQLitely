@@ -8,10 +8,9 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.08.2019
+@modified    26.08.2019
 ------------------------------------------------------------------------------
 """
-import datetime
 import Queue
 import re
 import threading
@@ -22,14 +21,13 @@ try:
 except ImportError:
     pass # Most functionality works without wx
 
-from lib import util
-from lib.vendor import step
-
-import conf
-import database
-import main
-import searchparser
-import templates
+from . lib import util
+from . lib.vendor import step
+from . import conf
+from . import database
+from . import guibase
+from . import searchparser
+from . import templates
 
 
 class WorkerThread(threading.Thread):
@@ -119,7 +117,7 @@ class SearchThread(WorkerThread):
                              "row":       templates.SEARCH_ROW_TABLE_HTML}
                 wrap_b = lambda x: "<b>%s</b>" % x.group(0)
                 FACTORY = lambda x: step.Template(TEMPLATES[x], escape=True)
-                main.log('Searching "%(text)s" in %(table)s (%(db)s).' % search)
+                guibase.log('Searching "%(text)s" in %(table)s (%(db)s).' % search)
                 self._stop_work = False
                 self._drop_results = False
 
@@ -138,7 +136,7 @@ class SearchThread(WorkerThread):
                 pattern_replace = re.compile(patt, re.IGNORECASE)
                 infotext = search["table"]
 
-                # Find from table and column names and types
+                # Find from table and column namesnb and types
                 if not self._stop_work and "names" == search["table"] \
                 and match_words:
                     infotext = "table and column names and types"
@@ -253,7 +251,7 @@ class SearchThread(WorkerThread):
                 result["done"] = True
                 result["count"] = result_count
                 self.postback(result)
-                main.log("Search found %(count)s results." % result)
+                guibase.log("Search found %(count)s results." % result)
             except Exception as e:
                 if not result:
                     result = {}

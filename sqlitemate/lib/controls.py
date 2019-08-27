@@ -18,6 +18,9 @@ Stand-alone GUI components for wx:
   Inspired by wx.CommandLinkButton, which does not support custom icons
   (at least not of wx 2.9.4).
 
+- ProgressWindow(wx.Dialog):
+  A simple non-modal ProgressDialog, stays on top of parent frame.
+
 - PropertyDialog(wx.Dialog):
   Dialog for displaying an editable property grid. Supports strings,
   integers, booleans, and tuples interpreted as wx.Size.
@@ -25,7 +28,11 @@ Stand-alone GUI components for wx:
 - ScrollingHtmlWindow(wx.html.HtmlWindow):
   HtmlWindow that remembers its scroll position on resize and append.
     
-- SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
+- SearchCtrl(wx.TextCtrl):
+  Simple search control, with search icon and description.
+    
+- SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
+                           wx.lib.mixins.listctrl.ColumnSorterMixin):
   A sortable list view that can be batch-populated, autosizes its columns,
   supports clipboard copy.
 
@@ -44,27 +51,21 @@ Stand-alone GUI components for wx:
   on 09.02.2006 in wxPython-users thread "TextCtrlAutoComplete",
   http://wxpython-users.1045709.n5.nabble.com/TextCtrlAutoComplete-td2348906.html
 
-- def BuildHistogram(data, barsize=(3, 30), colour="#2d8b57", maxval=None):
-  Paints and returns (wx.Bitmap, rects) with histogram plot from data.
-
 ------------------------------------------------------------------------------
 This file is part of SQLiteMate - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    28.06.2016
+@modified    26.08.2019
 ------------------------------------------------------------------------------
 """
-import ast
 import collections
-import datetime
-import functools
+import copy
 import locale
-import operator
 import os
 import re
-import sys
+
 import wx
 import wx.html
 import wx.lib.agw.flatnotebook
@@ -72,6 +73,7 @@ import wx.lib.agw.gradientbutton
 try: # ShapedButton requires PIL, might not be installed
     import wx.lib.agw.shapedbutton
 except Exception: pass 
+import wx.lib.agw.ultimatelistctrl
 import wx.lib.embeddedimage
 import wx.lib.mixins.listctrl
 import wx.lib.newevent
@@ -359,35 +361,34 @@ class NoteButton(wx.PyPanel, wx.Button):
 
         is_focused = (self.FindFocus() == self)
 
-        if is_focused or not self.IsThisEnabled():
+        if is_focused:
             # Draw simple border around button
             dc.Brush = wx.TRANSPARENT_BRUSH
             dc.DrawRectangle(0, 0, width, height)
 
-            # Button is focused: draw focus marquee.
-            if is_focused:
-                if not NoteButton.BMP_MARQUEE:
-                    NoteButton.BMP_MARQUEE = wx.EmptyBitmap(2, 2)
-                    dc_bmp = wx.MemoryDC()
-                    dc_bmp.SelectObject(NoteButton.BMP_MARQUEE)
-                    dc_bmp.Background = wx.Brush(self.BackgroundColour)
-                    dc_bmp.Clear()
-                    dc_bmp.Pen = wx.Pen(self.ForegroundColour)
-                    dc_bmp.DrawPointList([(0, 1), (1, 0)])
-                    dc_bmp.SelectObject(wx.NullBitmap)
-                if hasattr(wx.Pen, "Stipple"):
-                    pen = PEN(dc.TextForeground, 1, wx.STIPPLE)
-                    pen.Stipple, dc.Pen = NoteButton.BMP_MARQUEE, pen
-                    dc.DrawRectangle(4, 4, width - 8, height - 8)
-                else:
-                    brush = BRUSH(dc.TextForeground)
-                    brush.SetStipple(NoteButton.BMP_MARQUEE)
-                    dc.Brush = brush
-                    dc.Pen = wx.TRANSPARENT_PEN
-                    dc.DrawRectangle(4, 4, width - 8, height - 8)
-                    dc.Brush = BRUSH(self.BackgroundColour)
-                    dc.DrawRectangle(5, 5, width - 10, height - 10)
-                dc.Pen = PEN(dc.TextForeground)
+            # Draw focus marquee.
+            if not NoteButton.BMP_MARQUEE:
+                NoteButton.BMP_MARQUEE = wx.EmptyBitmap(2, 2)
+                dc_bmp = wx.MemoryDC()
+                dc_bmp.SelectObject(NoteButton.BMP_MARQUEE)
+                dc_bmp.Background = wx.Brush(self.BackgroundColour)
+                dc_bmp.Clear()
+                dc_bmp.Pen = wx.Pen(self.ForegroundColour)
+                dc_bmp.DrawPointList([(0, 1), (1, 0)])
+                dc_bmp.SelectObject(wx.NullBitmap)
+            if hasattr(wx.Pen, "Stipple"):
+                pen = PEN(dc.TextForeground, 1, wx.STIPPLE)
+                pen.Stipple, dc.Pen = NoteButton.BMP_MARQUEE, pen
+                dc.DrawRectangle(4, 4, width - 8, height - 8)
+            else:
+                brush = BRUSH(dc.TextForeground)
+                brush.SetStipple(NoteButton.BMP_MARQUEE)
+                dc.Brush = brush
+                dc.Pen = wx.TRANSPARENT_PEN
+                dc.DrawRectangle(4, 4, width - 8, height - 8)
+                dc.Brush = BRUSH(self.BackgroundColour)
+                dc.DrawRectangle(5, 5, width - 10, height - 10)
+            dc.Pen = PEN(dc.TextForeground)
 
         if self._press or (is_focused and wx.GetKeyState(wx.WXK_SPACE)):
             # Button is being clicked with mouse: create sunken effect.
@@ -424,6 +425,7 @@ class NoteButton(wx.PyPanel, wx.Button):
         text_label = self._text_label
         if "&" in self._label:
             text_label, h = "", y - 1
+            dc.Pen = wx.Pen(self.ForegroundColour)
             for line in self._text_label.split("\n"):
                 i, chars = 0, ""
                 while i < len(line):
@@ -608,6 +610,68 @@ class NoteButton(wx.PyPanel, wx.Button):
 
 
 
+class ProgressWindow(wx.Dialog):
+    """
+    A simple non-modal ProgressDialog, stays on top of parent frame.
+    """
+
+    def __init__(self, parent, title, message="", maximum=100, cancel=True,
+                 style=wx.CAPTION | wx.CLOSE_BOX | wx.FRAME_FLOAT_ON_PARENT):
+        wx.Dialog.__init__(self, parent=parent, title=title, style=style)
+        self._is_cancelled = False
+
+        self.Sizer = wx.BoxSizer(wx.VERTICAL)
+        panel = self._panel = wx.Panel(self)
+        sizer = self._panel.Sizer = wx.BoxSizer(wx.VERTICAL)
+
+        label = self._label_message = wx.StaticText(panel, label=message)
+        sizer.Add(label, border=2*8, flag=wx.LEFT | wx.TOP)
+        gauge = self._gauge = wx.Gauge(panel, range=maximum, size=(300,-1),
+                              style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
+        sizer.Add(gauge, border=2*8, flag=wx.LEFT | wx.RIGHT | wx.TOP | wx.GROW)
+        gauge.Value = 0
+        if cancel:
+            self._button_cancel = wx.Button(self._panel, id=wx.ID_CANCEL)
+            sizer.Add(self._button_cancel, border=8,
+                      flag=wx.TOP | wx.BOTTOM | wx.ALIGN_CENTER_HORIZONTAL)
+            self.Bind(wx.EVT_BUTTON, self.OnCancel, self._button_cancel)
+            self.Bind(wx.EVT_CLOSE, self.OnCancel)
+        else:
+            sizer.Add((8, 8))
+
+        self.Sizer.Add(panel, flag=wx.GROW)
+        self.Fit()
+        self.Layout()
+        self.Refresh()
+        self.Show()
+
+
+    def Update(self, value, message=None):
+        """
+        Updates the progressbar value, and message if given.
+
+        @return  False if dialog was cancelled by user, True otherwise
+        """
+        if message is not None:
+            self._label_message.Label = message
+        self._gauge.Value = value
+        self.Refresh()
+        return not self._is_cancelled
+
+
+    def OnCancel(self, event):
+        """
+        Handler for cancelling the dialog, hides the window.
+        """
+        self._is_cancelled = True
+        self.Hide()
+
+
+    def SetGaugeForegroundColour(self, colour):
+        self._gauge.ForegroundColour = colour
+
+
+
 class PropertyDialog(wx.Dialog):
     """
     Dialog for displaying an editable property grid. Supports strings,
@@ -738,8 +802,7 @@ class PropertyDialog(wx.Dialog):
     def _GetValueForType(self, value, typeclass):
         """Returns value in type expected, or None on failure."""
         try:
-            result = typeclass(value) if "wx" not in typeclass.__module__ \
-                     else tuple(typeclass(*ast.literal_eval(value)))
+            result = typeclass(value)
             isinstance(result, basestring) and result.strip()[0] # Reject empty
             return result 
         except Exception:
@@ -749,8 +812,8 @@ class PropertyDialog(wx.Dialog):
     def _GetValueForCtrl(self, value, typeclass):
         """Returns the value in type suitable for appropriate wx control."""
         value = tuple(value) if isinstance(value, list) else value
-        return str(value) if typeclass in [int, long]  or "wx" in typeclass.__module__ \
-               else "" if value is None else value
+        return "" if value is None else value \
+               if isinstance(value, (basestring, bool)) else unicode(value)
 
 
 
@@ -828,38 +891,178 @@ class ScrollingHtmlWindow(wx.html.HtmlWindow):
 
 
 
-class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
+class SearchCtrl(wx.TextCtrl):
     """
-    A sortable list view that can be batch-populated, autosizes its columns,
+    A text control with search icon and description.
+    Fires EVT_TEXT_ENTER event on text change.
+    """
+    DESCRIPTION_COLOUR = None # Postpone to after wx.App creation
+
+
+    def __init__(self, parent, description="", **kwargs):
+        """
+        @param   description  description text shown if nothing entered yet
+        """
+        wx.TextCtrl.__init__(self, parent, **kwargs)
+        self._text_colour = self.GetForegroundColour()
+
+        if not SearchCtrl.DESCRIPTION_COLOUR:
+            graycolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)
+            SearchCtrl.DESCRIPTION_COLOUR = graycolour
+
+        self._description = description
+        self._description_on = False # Is textbox filled with description?
+        self._ignore_change  = False # Ignore text change in event handlers
+        if not self.Value:
+            self.Value = self._description
+            self.SetForegroundColour(self.DESCRIPTION_COLOUR)
+            self._description_on = True
+
+        self.Bind(wx.EVT_SET_FOCUS,  self.OnFocus,   self)
+        self.Bind(wx.EVT_KILL_FOCUS, self.OnFocus,   self)
+        self.Bind(wx.EVT_KEY_DOWN,   self.OnKeyDown, self)
+        self.Bind(wx.EVT_TEXT,       self.OnText,    self)
+
+
+    def OnFocus(self, event):
+        """
+        Handler for focusing/unfocusing the control, shows/hides description.
+        """
+        self._ignore_change = True
+        if self and self.FindFocus() == self:
+            if self._description_on:
+                self.Value = ""
+            self.SelectAll()
+        elif self:
+            if self._description and not self.Value:
+                # Control has been unfocused, set and colour description
+                wx.TextCtrl.SetValue(self, self._description)
+                self.SetForegroundColour(self.DESCRIPTION_COLOUR)
+                self._description_on = True
+        self._ignore_change = False
+        event.Skip() # Allow to propagate to parent, to show having focus
+
+
+    def OnKeyDown(self, event):
+        """Handler for keypress, empties text on escape."""
+        if event.KeyCode in [wx.WXK_ESCAPE] and self.Value:
+            self.Value = ""
+            wx.PostEvent(self, wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER))
+        event.Skip()
+
+
+    def OnText(self, event):
+        """Handler for text change, fires TEXT_ENTER event."""
+        if self._ignore_change: return
+        evt = wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER)
+        evt.String = self.Value
+        wx.PostEvent(self, evt)
+
+
+    def GetValue(self):
+        """
+        Returns the current value in the text field, or empty string if filled
+        with description.
+        """
+        value = wx.TextCtrl.GetValue(self)
+        if self._description_on:
+            value = ""
+        return value
+    def SetValue(self, value):
+        """Sets the value in the text entry field."""
+        self.SetForegroundColour(self._text_colour)
+        self._description_on = False
+        return wx.TextCtrl.SetValue(self, value)
+    Value = property(GetValue, SetValue)
+
+
+
+class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
+                               wx.lib.mixins.listctrl.ColumnSorterMixin):
+    """
+    A sortable list control that can be batch-populated, autosizes its columns,
     can be filtered by string value matched on any row column,
     supports clipboard copy.
     """
     COL_PADDING = 30
 
+    SORT_ARROW_UP = wx.lib.embeddedimage.PyEmbeddedImage(
+        "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAADxJ"
+        "REFUOI1jZGRiZqAEMFGke2gY8P/f3/9kGwDTjM8QnAaga8JlCG3CAJdt2MQxDCAUaOjyjKMp"
+        "cRAYAABS2CPsss3BWQAAAABJRU5ErkJggg==")
+
+    #----------------------------------------------------------------------
+    SORT_ARROW_DOWN = wx.lib.embeddedimage.PyEmbeddedImage(
+        "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAEhJ"
+        "REFUOI1jZGRiZqAEMFGke9QABgYGBgYWdIH///7+J6SJkYmZEacLkCUJacZqAD5DsInTLhDR"
+        "bcPlKrwugGnCFy6Mo3mBAQChDgRlP4RC7wAAAABJRU5ErkJggg==")
+
+
     def __init__(self, *args, **kwargs):
-        wx.ListView.__init__(self, *args, **kwargs)
+        kwargs.setdefault("agwStyle", 0)
+        if hasattr(wx.lib.agw.ultimatelistctrl, "ULC_USER_ROW_HEIGHT"):
+            kwargs["agwStyle"] |= wx.lib.agw.ultimatelistctrl.ULC_USER_ROW_HEIGHT
+        if hasattr(wx.lib.agw.ultimatelistctrl, "ULC_SHOW_TOOLTIPS"):
+            kwargs["agwStyle"] |= wx.lib.agw.ultimatelistctrl.ULC_SHOW_TOOLTIPS
+
+        wx.lib.agw.ultimatelistctrl.UltimateListCtrl.__init__(self, *args, **kwargs)
         wx.lib.mixins.listctrl.ColumnSorterMixin.__init__(self, 0)
-        self.itemDataMap = {} # {item_id: [values], } for ColumnSorterMixin
-        self._data_map = {} # {item_id: row dict, } currently visible data
-        self._id_rows = [] # [(item_id, {row dict}), ] all data items
-        self._columns = [] # [(name, label), ]
-        self._filter = "" # Filter string
-        self._col_widths = {} # {col_index: width in pixels, }
+        self.itemDataMap = {}   # {item_id: [values], } for ColumnSorterMixin
+        self._data_map = {}     # {item_id: row dict, } currently visible data
+        self._id_rows = []      # [(item_id, {row dict}), ] all data items
+        self._id_images = {}    # {item_id: imageIds}
+        self._columns = []      # [(name, label), ]
+        self._filter = ""       # Filter string
+        self._col_widths = {}   # {col_index: width in pixels, }
         self._col_maxwidth = -1 # Maximum width for auto-sized columns
-        # Remember row colour attributes { item_id: {SetItemTextColour: x,
-        # SetItemBackgroundColour: y, }, }
-        self._row_colours = collections.defaultdict(dict)
+        self._top_row = None    # List top row data dictionary, if any
+        self._drag_start = None # Item index currently dragged
+        self.counter = lambda x={"c": 0}: x.update(c=1+x["c"]) or x["c"]
+        self.AssignImageList(self._CreateImageList(), wx.IMAGE_LIST_SMALL)
+
         # Default row column formatter function
         frmt = lambda: lambda r, c: "" if r.get(c) is None else unicode(r[c])
         self._formatters = collections.defaultdict(frmt)
-        id_copy, id_selectall = wx.NewId(), wx.NewId()
+        id_copy = wx.NewId()
         entries = [(wx.ACCEL_CTRL, x, id_copy)
                    for x in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT)]
-        entries += [(wx.ACCEL_CTRL, ord("A"), id_selectall)]
         self.SetAcceleratorTable(wx.AcceleratorTable(entries))
         self.Bind(wx.EVT_MENU, self.OnCopy, id=id_copy)
-        self.Bind(wx.EVT_MENU, self.OnSelectAll, id=id_selectall)
-        self.counter = lambda x={"c": 0}: x.update(c=1+x["c"]) or x["c"]
+        self.Bind(wx.EVT_LIST_COL_CLICK, self.OnSort)
+        self.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_BEGIN_DRAG,  self.OnDragStart)
+        self.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_END_DRAG,    self.OnDragStop)
+        self.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_BEGIN_RDRAG, self.OnDragCancel)
+
+
+    def GetSortImages(self):
+        """For ColumnSorterMixin."""
+        return (0, 1)
+
+
+    def AssignImages(self, images):
+        """
+        Assigns images associated with the control.
+        SetTopRow/AppendRow/InsertRow/Populate use imageIds from this list.
+
+        @param   images  list of wx.Bitmap objects
+        """
+        for x in images: self.GetImageList(wx.IMAGE_LIST_SMALL).Add(x)
+        if hasattr(self, "SetUserLineHeight"):
+            h = images[0].Size[1]
+            self.SetUserLineHeight(int(h * 1.5))
+
+
+    def SetTopRow(self, data, imageIds=()):
+        """
+        Adds special top row to list, not subject to sorting or filtering.
+
+        @param   data      item data dictionary
+        @param   imageIds  list of indexes for the images associated to top row
+        """
+        self._top_row = data
+        if imageIds: self._id_images[-1] = self._ConvertImageIds(imageIds)
+        else: self._id_images.pop(-1, None)
+        self._PopulateTopRow()
 
 
     def SetColumnFormatters(self, formatters):
@@ -869,38 +1072,56 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
         @param   formatters  {col_name: function(rowdict, col_name), }
         """
         self._formatters.clear()
-        if formatters:
-            self._formatters.update(formatters)
+        if formatters: self._formatters.update(formatters)
 
 
-    def Populate(self, rows):
+    def Populate(self, rows, imageIds=()):
         """
         Populates the control with rows, clearing previous data, if any.
         Re-selects the previously selected row, if any.
 
-        @param   rows        a list of data dicts
+        @param   rows      a list of data dicts
+        @param   imageIds  list of indexes for the images associated to rows
         """
         self._col_widths.clear()
-        self._row_colours.clear()
-        self._id_rows = [(self.counter(), r) for r in rows]
+        self._id_rows[:] = []
+        if imageIds: imageIds = self._ConvertImageIds(imageIds)
+        for r in rows:
+            item_id = self.counter()
+            self._id_rows += [(item_id, r)]
+            if imageIds: self._id_images[item_id] = imageIds
         self.RefreshRows()
 
 
-    def AppendRow(self, data):
+    def AppendRow(self, data, imageIds=()):
         """
         Appends the specified data to the control as a new row.
 
-        @param   data     item data dictionary
+        @param   data      item data dictionary
+        @param   imageIds  list of indexes for the images associated to this row
+        """
+        self.InsertRow(self.GetItemCount(), data, imageIds)
+
+
+    def InsertRow(self, index, data, imageIds=()):
+        """
+        Inserts the specified data to the control at specified index as a new row.
+
+        @param   data      item data dictionary
+        @param   imageIds  list of indexes for the images associated to this row
         """
         item_id = self.counter()
+        if imageIds:
+            imageIds = self._id_images[item_id] = self._ConvertImageIds(imageIds)
+
         if self._RowMatchesFilter(data):
             columns = [c[0] for c in self._columns]
-            index = self.ItemCount
-            col_value = self._formatters[columns[0]](data, columns[0])
-            self.InsertStringItem(index, col_value)
-            for i, col_name in [(i, x) for i, x in enumerate(columns) if i]:
+            for i, col_name in enumerate(columns):
                 col_value = self._formatters[col_name](data, col_name)
-                self.SetStringItem(index, i, col_value)
+
+                if imageIds and not i: self.InsertImageStringItem(index, col_value, imageIds)
+                elif not i: self.InsertStringItem(index, col_value)
+                else: self.SetStringItem(index, i, col_value)
                 col_width = self.GetTextExtent(col_value)[0] + self.COL_PADDING
                 if col_width > self._col_widths.get(i, 0):
                     self._col_widths[i] = col_width
@@ -908,9 +1129,11 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
             self.SetItemData(index, item_id)
             self.itemDataMap[item_id] = [data[c] for c in columns]
             self._data_map[item_id] = data
-            self.SetItemImage(index, -1)
-            self.SetItemColumnImage(index, 0, -1)
+            self.SetItemBackgroundColour(index, self.BackgroundColour)
+            self.SetItemTextColour(index, self.TextColour)
         self._id_rows.append((item_id, data))
+        if self.GetSortState()[0] >= 0:
+            self.SortListItems(*self.GetSortState())
 
 
     def GetFilter(self):
@@ -941,22 +1164,11 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
             selected_ids.append(self.GetItemData(selected))
             selected = self.GetNextSelected(selected)
 
-        # Store row colour attributes
-        for i in range(self.ItemCount):
-            t, b = self.GetItemTextColour(i), self.GetItemBackgroundColour(i)
-            id = self.GetItemData(i)
-            for func, value in [(self.SetItemTextColour, t),
-                                (self.SetItemBackgroundColour, b)]:
-                if wx.NullColour != value:
-                    self._row_colours[id][func] = value
-                elif func in self._row_colours[id]:
-                    del self._row_colours[id][func]
-            if id in self._row_colours and not self._row_colours[id]:
-                del self._row_colours[id]
-
         self.Freeze()
-        wx.ListView.DeleteAllItems(self)
-        # To map list item data ID to row, ListView allows only integer per row
+        wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
+        self._PopulateTopRow()
+            
+        # To map list item data ID to row, ListCtrl allows only integer per row
         row_data_map = {} # {item_id: {row dict}, }
         item_data_map = {} # {item_id: [row values], }
         # For measuring by which to set column width: header or value
@@ -967,7 +1179,7 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
             # Keep space for sorting arrows.
             width = self.GetTextExtent(col_label + "  ")[0] + self.COL_PADDING
             header_lengths[col_name] = width
-        index = 0
+        index = self.GetItemCount()
         for item_id, row in self._id_rows:
             if not self._RowMatchesFilter(row):
                 continue # continue for index, (item_id, row) in enumerate(..)
@@ -975,10 +1187,12 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
             col_value = self._formatters[col_name](row, col_name)
             col_lengths[col_name] = max(col_lengths[col_name],
                                         self.GetTextExtent(col_value)[0] + self.COL_PADDING)
-            self.InsertStringItem(index, col_value)
+
+            if item_id in self._id_images:
+                self.InsertImageStringItem(index, col_value, self._id_images[item_id])
+            else: self.InsertStringItem(index, col_value)
+
             self.SetItemData(index, item_id)
-            self.SetItemImage(index, -1)
-            self.SetItemColumnImage(index, 0, -1)
             item_data_map[item_id] = {0: row[col_name]}
             row_data_map[item_id] = row
             col_index = 1 # First was already inserted
@@ -992,6 +1206,7 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
             index += 1
         self._data_map = row_data_map
         self.itemDataMap = item_data_map
+
         if self._id_rows and not self._col_widths:
             if self._col_maxwidth > 0:
                 for col_name, width in col_lengths.items():
@@ -1002,21 +1217,22 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
                 col_width = max(col_lengths[col_name], header_lengths[col_name])
                 self.SetColumnWidth(i, col_width)
                 self._col_widths[i] = col_width
-                #wx.LIST_AUTOSIZE, wx.LIST_AUTOSIZE_USEHEADER
         elif self._col_widths:
             for col, width in self._col_widths.items():
                 self.SetColumnWidth(col, width)
         if self.GetSortState()[0] >= 0:
             self.SortListItems(*self.GetSortState())
 
-        if selected_ids or self._row_colours:
-            idindx = dict((self.GetItemData(i), i)
-                          for i in range(self.ItemCount))
-        for item_id, attrs in self._row_colours.items(): # Re-colour rows
-            if item_id not in idindx: continue
-            [func(idindx[item_id], value) for func, value in attrs.items()]
         if selected_ids: # Re-select the previously selected items
-            [self.Select(idindx[i]) for i in selected_ids if i in idindx]
+            idindx = dict((self.GetItemData(i), i)
+                          for i in range(self.GetItemCount()))
+            for item_id in selected_ids:
+                if item_id not in idindx: continue # for item_id
+                self.Select(idindx[item_id])
+                if idindx[item_id] >= self.GetCountPerPage():
+                    lh = self.GetUserLineHeight()
+                    dy = (idindx[item_id] - self.GetCountPerPage() / 2) * lh
+                    self.ScrollList(0, dy)
 
         self.Thaw()
 
@@ -1029,11 +1245,12 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
 
     def DeleteItem(self, index):
         """Deletes the row at the specified index."""
-        data_id = self.GetItemData(index)
-        data = self._data_map.get(data_id)
-        del self._data_map[data_id]
-        self._id_rows.remove((data_id, data))
-        return wx.ListView.DeleteItem(self, index)
+        item_id = self.GetItemData(index)
+        data = self._data_map.get(item_id)
+        del self._data_map[item_id]
+        self._id_rows.remove((item_id, data))
+        self._id_images.pop(item_id, None)
+        return wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteItem(self, index)
 
 
     def DeleteAllItems(self):
@@ -1041,9 +1258,11 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
         self.itemDataMap = {}
         self._data_map = {}
         self._id_rows = []
-        self._row_colours.clear()
+        for item_id in self._id_images:
+            if item_id >= 0: self._id_images.pop(item_id)
         self.Freeze()
-        result = wx.ListView.DeleteAllItems(self)
+        result = wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
+        self._PopulateTopRow()
         self.Thaw()
         return result
 
@@ -1068,11 +1287,22 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
         self.SetColumnCount(len(columns))
         for i, (name, label) in enumerate(columns):
             col_label = label + "  " # Keep space for sorting arrows.
-            self.InsertColumn(i + 1, col_label)
+            self.InsertColumn(i, col_label)
             self._col_widths[i] = max(self._col_widths.get(i, 0),
                 self.GetTextExtent(col_label)[0] + self.COL_PADDING)
             self.SetColumnWidth(i, self._col_widths[i])
-        self._columns = columns
+        self._columns = copy.deepcopy(columns)
+
+
+    def SetColumnAlignment(self, column, align):
+        """
+        Sets alignment for column at specified index.
+
+        @param   align  one of ULC_FORMAT_LEFT, ULC_FORMAT_RIGHT, ULC_FORMAT_CENTER
+        """
+        item = self.GetColumn(column)
+        item.SetAlign(align)
+        self.SetColumn(column, item)
 
 
     def GetItemMappedData(self, index):
@@ -1089,9 +1319,18 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
 
     def SortListItems(self, col=-1, ascending=1):
         """Sorts the list items on demand."""
+        selected_ids, selected = [], self.GetFirstSelected()
+        while selected >= 0:
+            selected_ids.append(self.GetItemData(selected))
+            selected = self.GetNextSelected(selected)
+
         wx.lib.mixins.listctrl.ColumnSorterMixin.SortListItems(
             self, col, ascending)
-        self.OnSortOrderChanged()
+
+        if selected_ids: # Re-select the previously selected items
+            idindx = dict((self.GetItemData(i), i)
+                          for i in range(self.GetItemCount()))
+            [self.Select(idindx[i]) for i in selected_ids if i in idindx]
 
 
     def GetColumnSorter(self):
@@ -1102,29 +1341,6 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
         sorter = self.__ColumnSorter if hasattr(self, "itemDataMap") \
             else wx.lib.mixins.listctrl.ColumnSorterMixin.GetColumnSorter(self)
         return sorter
-
-
-    def OnSortOrderChanged(self):
-        """
-        Callback called by ColumnSorterMixin after sort order has changed
-        (whenever user clicked column header), refreshes column header sort
-        direction info.
-        """
-        ARROWS = {True: u" ↓", False: u" ↑"}
-        col_sorted, ascending = self.GetSortState()
-        for i in range(self.ColumnCount):
-            col_item = self.GetColumn(i)
-            if i == col_sorted:
-                new_item = wx.ListItem()
-                t = col_item.Text.replace(ARROWS[0], "").replace(ARROWS[1], "")
-                new_item.Text = u"%s%s" % (t, ARROWS[ascending])
-                self.SetColumn(i, new_item)
-            elif any(i for i in ARROWS.values() if i in col_item.Text):
-                # Remove the previous sort arrow, if any
-                new_item = wx.ListItem()
-                t = col_item.Text.replace(ARROWS[0], "").replace(ARROWS[1], "")
-                new_item.Text = t
-                self.SetColumn(i, new_item)
 
 
     def OnCopy(self, event):
@@ -1143,9 +1359,105 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
             wx.TheClipboard.Close()
 
 
-    def OnSelectAll(self, event):
-        """Selects all rows."""
-        for i in range(self.ItemCount): self.Select(i)
+    def OnSort(self, event):
+        """Handler on clicking column, sorts list."""
+        sortstate = self.GetSortState()
+
+        col, ascending = self.GetSortState()
+        if col == event.GetColumn() and not ascending: # Clear sort 
+            self._col = -1
+            self._colSortFlag = [0] * self.GetColumnCount()
+            self.ClearColumnImage(col)
+            self.RefreshRows()
+        else:
+            ascending = 1 if col != event.GetColumn() else 1 - ascending
+            self.SortListItems(event.GetColumn(), ascending)
+
+
+    def OnDragStop(self, event):
+        """Handler for stopping drag in the list, rearranges list."""
+        start, stop = self._drag_start, max(1, event.GetIndex())
+        if start and start != stop:
+            item_id, data = self.GetItemData(start), self.GetItemMappedData(start)
+            imageIds = self._id_images.get(item_id) or ()
+            idx = stop if start > stop or stop == self.GetItemCount() - 1 \
+                  else stop - 1
+            self.DeleteItem(start)
+            self.InsertRow(idx, data, self._ConvertImageIds(imageIds, False))
+            self.Select(idx)
+        self._drag_start = None
+
+
+    def OnDragStart(self, event):
+        """Handler for dragging items in the list, cancels dragging."""
+        if self.GetSortState()[0] < 0 \
+        and (not self._top_row or event.GetIndex()):
+            self._drag_start = event.GetIndex()
+        else:
+            self._drag_start = None
+            self.OnDragCancel(event)
+
+
+    def OnDragCancel(self, event):
+        """Handler for cancelling item drag in the list, cancels dragging."""
+        class HackEvent(object): # UltimateListCtrl hack to cancel drag.
+            def __init__(self, pos=wx.Point()): self._position = pos
+            def GetPosition(self): return self._position
+        try:
+            wx.CallAfter(self.Children[0].DragFinish, HackEvent())
+        except: raise
+
+
+    def _CreateImageList(self):
+        """
+        Creates image list for the control, populated with sort arrow images.
+        Arrow colours are adjusted for system foreground colours if necessary.
+        """
+        il = wx.lib.agw.ultimatelistctrl.PyImageList(*self.SORT_ARROW_UP.Bitmap.Size)
+        fgcolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOWTEXT)
+        defrgb, myrgb = "\x00" * 3, "".join(map(chr, fgcolour.Get()))
+
+        for embedded in self.SORT_ARROW_UP, self.SORT_ARROW_DOWN:
+            if myrgb != defrgb:
+                img = embedded.Image.Copy()
+                if not img.HasAlpha(): img.InitAlpha()
+                data = img.GetDataBuffer()
+                for i in range(embedded.Image.Width * embedded.Image.Height):
+                    rgb = data[i*3:i*3 + 3]
+                    if rgb == defrgb: data[i*3:i*3 + 3] = myrgb
+                il.Add(img.ConvertToBitmap())
+            else:
+                il.Add(embedded.Bitmap)
+        return il
+
+
+    def _ConvertImageIds(self, imageIds, reverse=False):
+        """Returns user image indexes adjusted by internal image count."""
+        shift = (-1 if reverse else 1) * len(self.GetSortImages() or [])
+        return [x + shift for x in imageIds]
+
+
+    def _PopulateTopRow(self):
+        """Populates top row state, if any."""
+        if not self._top_row: return
+            
+        columns = [c[0] for c in self._columns]
+        col_value = self._formatters[columns[0]](self._top_row, columns[0])
+        if -1 in self._id_images:
+            self.InsertImageStringItem(0, col_value, self._id_images[-1])
+        else: self.InsertStringItem(0, col_value)
+        for i, col_name in enumerate(columns[1:], 1):
+            col_value = self._formatters[col_name](self._top_row, col_name)
+            self.SetStringItem(0, i, col_value)
+        self.SetItemBackgroundColour(0, self.BackgroundColour)
+
+        def resize():
+            w = sum((self.GetColumnWidth(i) for i in range(1, len(self._columns))), 0)
+            width = self.Size[0] - w - 5 # Space for padding
+            if self.GetScrollRange(wx.VERTICAL) > 1:
+                width -= 16 # Space for scrollbar
+            self.SetColumnWidth(0, width)
+        if self.GetItemCount() == 1: wx.CallAfter(resize)
 
 
     def _RowMatchesFilter(self, row):
@@ -1153,10 +1465,10 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
         result = True
         if self._filter:
             result = False
-            pattern = re.escape(self._filter)
+            patterns = map(re.escape, self._filter.split())
             for col_name, col_label in self._columns:
                 col_value = self._formatters[col_name](row, col_name)
-                if re.search(pattern, col_value, re.I):
+                if all(re.search(p, col_value, re.I) for p in patterns):
                     result = True
                     break
         return result
@@ -1165,8 +1477,11 @@ class SortableListView(wx.ListView, wx.lib.mixins.listctrl.ColumnSorterMixin):
     def __ColumnSorter(self, key1, key2):
         """
         Sort function fed to ColumnSorterMixin, is given two integers which we
-        have mapped on our own.
+        have mapped on our own. Returns -1, 0 or 1.
         """
+        if key1 not in self.itemDataMap or key2 not in self.itemDataMap:
+            return 0
+            
         col = self._col
         ascending = self._colSortFlag[col]
         item1 = self.itemDataMap[key1][col]
@@ -1199,28 +1514,37 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     """A StyledTextCtrl configured for SQLite syntax highlighting."""
 
     """SQLite reserved keywords."""
-    KEYWORDS = [
-        u"ABORT", u"ACTION", u"ADD", u"AFTER", u"ALL", u"ALTER", u"ANALYZE",
-        u"AND", u"AS", u"ASC", u"ATTACH", u"AUTOINCREMENT", u"BEFORE",
-        u"BEGIN", u"BETWEEN", u"BY", u"CASCADE", u"CASE", u"CAST", u"CHECK",
-        u"COLLATE", u"COLUMN", u"COMMIT", u"CONFLICT", u"CONSTRAINT",
-        u"CREATE", u"CROSS", u"CURRENT_DATE", u"CURRENT_TIME",
-        u"CURRENT_TIMESTAMP", u"DATABASE", u"DEFAULT", u"DEFERRABLE",
-        u"DEFERRED", u"DELETE", u"DESC", u"DETACH", u"DISTINCT", u"DROP",
-        u"EACH", u"ELSE", u"END", u"ESCAPE", u"EXCEPT", u"EXCLUSIVE",
-        u"EXISTS", u"EXPLAIN", u"FAIL", u"FOR", u"FOREIGN", u"FROM", u"FULL",
-        u"GLOB", u"GROUP", u"HAVING", u"IF", u"IGNORE", u"IMMEDIATE", u"IN",
-        u"INDEX", u"INDEXED", u"INITIALLY", u"INNER", u"INSERT", u"INSTEAD",
-        u"INTERSECT", u"INTO", u"IS", u"ISNULL", u"JOIN", u"KEY", u"LEFT",
-        u"LIKE", u"LIMIT", u"MATCH", u"NATURAL", u"NO", u"NOT", u"NOTNULL",
-        u"NULL", u"OF", u"OFFSET", u"ON", u"OR", u"ORDER", u"OUTER", u"PLAN",
-        u"PRAGMA", u"PRIMARY", u"QUERY", u"RAISE", u"REFERENCES", u"REGEXP",
-        u"REINDEX", u"RELEASE", u"RENAME", u"REPLACE", u"RESTRICT", u"RIGHT",
-        u"ROLLBACK", u"ROW", u"SAVEPOINT", u"SELECT", u"SET", u"TABLE",
-        u"TEMP", u"TEMPORARY", u"THEN", u"TO", u"TRANSACTION", u"TRIGGER",
-        u"UNION", u"UNIQUE", u"UPDATE", u"USING", u"VACUUM", u"VALUES", u"VIEW",
-        u"VIRTUAL", u"WHEN", u"WHERE"
-    ]
+    KEYWORDS = map(unicode, sorted([
+        "ABORT", "ACTION", "ADD", "AFTER", "ALL", "ALTER", "ANALYZE",
+        "AND", "AS", "ASC", "ATTACH", "AUTOINCREMENT", "BEFORE",
+        "BEGIN", "BETWEEN", "BINARY", "BY", "CASCADE", "CASE", "CAST",
+        "CHECK", "COLLATE", "COLUMN", "COMMIT", "CONFLICT", "CONSTRAINT",
+        "CREATE", "CROSS", "CURRENT_DATE", "CURRENT_TIME",
+        "CURRENT_TIMESTAMP", "DATABASE", "DEFAULT", "DEFERRABLE",
+        "DEFERRED", "DELETE", "DESC", "DETACH", "DISTINCT", "DROP",
+        "EACH", "ELSE", "END", "ESCAPE", "EXCEPT", "EXCLUSIVE",
+        "EXISTS", "EXPLAIN", "FAIL", "FOR", "FOREIGN", "FROM", "FULL",
+        "GLOB", "GROUP", "HAVING", "IF", "IGNORE", "IMMEDIATE", "IN",
+        "INDEX", "INDEXED", "INITIALLY", "INNER", "INSERT", "INSTEAD",
+        "INTERSECT", "INTO", "IS", "ISNULL", "JOIN", "KEY", "LEFT", "LIKE",
+        "LIMIT", "MATCH", "NATURAL", "NO", "NOCASE", "NOT", "NOTNULL",
+        "NULL", "OF", "OFFSET", "ON", "OR", "ORDER", "OUTER", "PLAN",
+        "PRAGMA", "PRIMARY", "QUERY", "RAISE", "REFERENCES", "REGEXP",
+        "REINDEX", "RELEASE", "RENAME", "REPLACE", "RESTRICT", "RIGHT",
+        "ROLLBACK", "ROW", "ROWID", "RTRIM", "SAVEPOINT", "SELECT", "SET",
+        "TABLE", "TEMP", "TEMPORARY", "THEN", "TO", "TRANSACTION", "TRIGGER",
+        "UNION", "UNIQUE", "UPDATE", "USING", "VACUUM", "VALUES", "VIEW",
+        "VIRTUAL", "WHEN", "WHERE", "WITHOUT",
+    ]))
+    """SQLite data types."""
+    TYPEWORDS = map(unicode, sorted([
+        "BLOB",
+        "INTEGER", "BIGINT", "INT", "INT2", "INT8", "MEDIUMINT", "SMALLINT",
+                   "TINYINT", "UNSIGNED",
+        "NUMERIC", "BOOLEAN", "DATE", "DATETIME", "DECIMAL",
+        "TEXT", "CHARACTER", "CLOB", "NCHAR", "NVARCHAR", "VARCHAR", "VARYING",
+        "REAL", "DOUBLE", "FLOAT", "PRECISION",
+    ]))
     AUTOCOMP_STOPS = " .,;:([)]}'\"\\<>%^&+-=*/|`"
     FONT_FACE = "Courier New" if os.name == "nt" else "Courier"
     """String length from which autocomplete starts."""
@@ -1228,9 +1552,9 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
     def __init__(self, *args, **kwargs):
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
-        self.autocomps_added = set()
+        self.autocomps_added = set(["sqlite_master"])
         # All autocomps: added + KEYWORDS
-        self.autocomps_total = self.KEYWORDS
+        self.autocomps_total = self.KEYWORDS[:]
         # {word.upper(): set(words filled in after word+dot), }
         self.autocomps_subwords = {}
 
@@ -1238,38 +1562,43 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.SetMarginWidth(1, 0) # Get rid of left margin
         self.SetTabWidth(4)
         # Keywords must be lowercase, required by StyledTextCtrl
-        self.SetKeyWords(0, u" ".join(self.KEYWORDS).lower())
+        self.SetKeyWords(0, u" ".join(self.KEYWORDS + self.TYPEWORDS).lower())
         self.AutoCompStops(self.AUTOCOMP_STOPS)
         self.SetWrapMode(wx.stc.STC_WRAP_WORD)
-        self.SetCaretLineBackground("#00FFFF")
         self.SetCaretLineBackAlpha(20)
         self.SetCaretLineVisible(True)
         self.AutoCompSetIgnoreCase(True)
         self.Bind(wx.EVT_KEY_DOWN, self.OnKeyDown)
         self.Bind(wx.EVT_KILL_FOCUS, self.OnKillFocus)
 
-        bgcolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOW)
+        fgcolour, bgcolour, highcolour = (
+            wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
+            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW,
+                      wx.SYS_COLOUR_HOTLIGHT)
+        )
+
+        self.SetCaretForeground(fgcolour)
+        self.SetCaretLineBackground("#00FFFF")
         self.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT, 
-                          "face:%s,back:%s" % (self.FONT_FACE,
-                          bgcolour.GetAsString(wx.C2S_HTML_SYNTAX)))
+                          "face:%s,back:%s,fore:%s" % (self.FONT_FACE, bgcolour, fgcolour))
         self.StyleClearAll() # Apply the new default style to all styles
-        self.StyleSetSpec(wx.stc.STC_SQL_DEFAULT, "face:%s" % self.FONT_FACE)
-        self.StyleSetSpec(wx.stc.STC_SQL_STRING, "fore:#FF007F") # "
+        self.StyleSetSpec(wx.stc.STC_SQL_DEFAULT,   "face:%s" % self.FONT_FACE)
+        self.StyleSetSpec(wx.stc.STC_SQL_STRING,    "fore:#FF007F") # "
         self.StyleSetSpec(wx.stc.STC_SQL_CHARACTER, "fore:#FF007F") # "
-        self.StyleSetSpec(wx.stc.STC_SQL_QUOTEDIDENTIFIER, "fore:#0000FF")
-        self.StyleSetSpec(wx.stc.STC_SQL_WORD, "fore:#0000FF,bold")
-        self.StyleSetSpec(wx.stc.STC_SQL_WORD2, "fore:#0000FF,bold")
-        self.StyleSetSpec(wx.stc.STC_SQL_USER1, "fore:#0000FF,bold")
-        self.StyleSetSpec(wx.stc.STC_SQL_USER2, "fore:#0000FF,bold")
-        self.StyleSetSpec(wx.stc.STC_SQL_USER3, "fore:#0000FF,bold")
-        self.StyleSetSpec(wx.stc.STC_SQL_USER4, "fore:#0000FF,bold")
+        self.StyleSetSpec(wx.stc.STC_SQL_QUOTEDIDENTIFIER, "fore:%s" % highcolour)
+        self.StyleSetSpec(wx.stc.STC_SQL_WORD,  "fore:%s,bold" % highcolour)
+        self.StyleSetSpec(wx.stc.STC_SQL_WORD2, "fore:%s,bold" % highcolour)
+        self.StyleSetSpec(wx.stc.STC_SQL_USER1, "fore:%s,bold" % highcolour)
+        self.StyleSetSpec(wx.stc.STC_SQL_USER2, "fore:%s,bold" % highcolour)
+        self.StyleSetSpec(wx.stc.STC_SQL_USER3, "fore:%s,bold" % highcolour)
+        self.StyleSetSpec(wx.stc.STC_SQL_USER4, "fore:%s,bold" % highcolour)
         self.StyleSetSpec(wx.stc.STC_SQL_SQLPLUS, "fore:#ff0000,bold")
         self.StyleSetSpec(wx.stc.STC_SQL_SQLPLUS_COMMENT, "back:#ffff00")
-        self.StyleSetSpec(wx.stc.STC_SQL_SQLPLUS_PROMPT, "back:#00ff00")
+        self.StyleSetSpec(wx.stc.STC_SQL_SQLPLUS_PROMPT,  "back:#00ff00")
         # 01234567890.+-e
         self.StyleSetSpec(wx.stc.STC_SQL_NUMBER, "fore:#FF00FF")
         # + - * / % = ! ^ & . , ; <> () [] {}
-        self.StyleSetSpec(wx.stc.STC_SQL_OPERATOR, "fore:#0000FF")
+        self.StyleSetSpec(wx.stc.STC_SQL_OPERATOR, "fore:%s" % highcolour)
         # --...
         self.StyleSetSpec(wx.stc.STC_SQL_COMMENTLINE, "fore:#008000")
         # #...
@@ -1280,7 +1609,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.StyleSetSpec(wx.stc.STC_SQL_COMMENTDOCKEYWORD, "back:#AAFFAA")
         self.StyleSetSpec(wx.stc.STC_SQL_COMMENTDOCKEYWORDERROR, "back:#AAFFAA")
 
-        self.StyleSetSpec(wx.stc.STC_STYLE_BRACELIGHT, "fore:#0000FF")
+        self.StyleSetSpec(wx.stc.STC_STYLE_BRACELIGHT, "fore:%s" % highcolour)
         self.StyleSetSpec(wx.stc.STC_STYLE_BRACEBAD, "fore:#FF0000")
 
         """
@@ -1302,11 +1631,11 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
     def AutoCompAddWords(self, words):
         """Adds more words used in autocompletion."""
-        self.autocomps_added.update(words)
+        self.autocomps_added.update(map(unicode, words))
         # A case-insensitive autocomp has to be sorted, will not work
         # properly otherwise. UserList would support arbitrarily sorting.
         self.autocomps_total = sorted(
-            list(self.autocomps_added) + self.KEYWORDS, cmp=self.stricmp
+            list(self.autocomps_added) + map(unicode, self.KEYWORDS), cmp=self.stricmp
         )
 
 
@@ -1315,6 +1644,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         Adds more subwords used in autocompletion, will be shown after the word
         and a dot.
         """
+        word, subwords = unicode(word), map(unicode, subwords)
         if word not in self.autocomps_added:
             self.AutoCompAddWords([word])
         if subwords:
@@ -1909,12 +2239,12 @@ class TextCtrlAutoComplete(wx.TextCtrl):
                     if not self._skip_autocomplete:
                         # Use a callback function to change value - changing
                         # value inside handler causes multiple events in Linux.
-                        def autocomplete_callback():
+                        def autocomplete_callback(choice):
                             if self and self.Value == text: # Can have changed
                                 self._ignore_textchange = True # To skip OnText
                                 self.Value = choice # Auto-complete text
                                 self.SetSelection(len(text), -1) # Select added
-                        wx.CallAfter(autocomplete_callback)
+                        wx.CallAfter(autocomplete_callback, choice)
                     break
             if not found: # Deselect currently selected item
                 self._listbox.Select(self._listbox.GetFirstSelected(), False)
@@ -2006,39 +2336,3 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         self._ignore_textchange = True
         return wx.TextCtrl.SetValue(self, value)
     Value = property(GetValue, SetValue)
-
-
-
-def BuildHistogram(data, barsize=(3, 30), colour="#2d8b57", maxval=None):
-    """
-    Paints and returns (wx.Bitmap, rects) with histogram bar plot from data.
-
-    @return   (wx.Bitmap, [(x1, y1, x2, y2), ])
-    """
-    global BRUSH, PEN
-    bgcolour, border = "white", 1
-    rect_step = barsize[0] + (1 if barsize[0] < 10 else 2)
-    w, h = len(data) * rect_step + border + 1, barsize[1] + 2 * border
-    bmp = wx.EmptyBitmap(w, h)
-    dc = wx.MemoryDC()
-    dc.SelectObject(bmp)
-    dc.Brush = BRUSH(bgcolour)
-    dc.Pen = PEN(colour)
-    dc.Clear()
-    dc.DrawRectangle(0, 0, w, h)
-
-    bars = []
-    safediv = lambda a, b: a / float(b) if b else 0.0
-    maxval = maxval if maxval is not None else max(zip(*data)[1])
-    for i, (interval, val) in enumerate(data):
-        h = barsize[1] * safediv(val, maxval) + 1
-        if val and h < 1.5: h = 1.5 # Very low values produce no visual bar
-        x = i * rect_step + border + 1
-        y = bmp.Height - h
-        bars.append((x, y, barsize[0], h))
-    dc.Brush = BRUSH(colour)
-    dc.DrawRectangleList(bars)
-
-    dc.SelectObject(wx.NullBitmap)
-    rects = [(x, border, x+w, bmp.Height - 2*border) for x, y, w, h in bars]
-    return bmp, rects

@@ -8,15 +8,15 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.08.2019
+@modified    24.08.2019
 ------------------------------------------------------------------------------
 """
 import re
 
 # Modules imported inside templates:
-#import base64, datetime, imghdr, os, pyparsing, re, string, sys, urllib, wx
-#import conf, images, templates, util
-#from lib import util
+#import datetime, os, pyparsing, re, string, sys
+#from sqlitemate import conf, images, templates
+#from sqlitemate.lib import util
 
 """Regex for replacing low bytes unusable in wx.HtmlWindow (\x00 etc)."""
 SAFEBYTE_RGX = re.compile("[\x00-\x08,\x0B-\x0C,\x0E-x1F,\x7F]")
@@ -24,11 +24,12 @@ SAFEBYTE_RGX = re.compile("[\x00-\x08,\x0B-\x0C,\x0E-x1F,\x7F]")
 """Replacer callback for low bytes unusable in wx.HtmlWindow (\x00 etc)."""
 SAFEBYTE_REPL = lambda m: m.group(0).encode("unicode-escape")
 
+
 """HTML data grid export template."""
 GRID_HTML = """<%
 import datetime
-import conf, images
-from lib import util
+from sqlitemate import conf, images
+from sqlitemate.lib import util
 %><!DOCTYPE HTML><html>
 <head>
     <meta http-equiv='Content-Type' content='text/html;charset=utf-8' />
@@ -38,7 +39,7 @@ from lib import util
     <style>
         * { font-family: {{conf.HtmlFontName}}; font-size: 11px; }
         body {
-            background: {{conf.HistoryBackgroundColour}};
+            background: {{conf.ExportBackgroundColour}};
             margin: 0px 10px 0px 10px;
         }
         .header { font-size: 1.1em; font-weight: bold; color: {{conf.ExportLinkColour}}; }
@@ -121,7 +122,7 @@ from lib import util
 """TXT SQL insert statements export template."""
 SQL_TXT = """<%
 import datetime, re, string
-import conf
+from sqlitemate import conf
 
 UNPRINTABLES = "".join(set(unichr(i) for i in range(128)).difference(string.printable))
 RE_UNPRINTABLE = re.compile("[%s]" % "".join(map(re.escape, UNPRINTABLES)))
@@ -170,7 +171,7 @@ INSERT INTO {{table}} ({{str_cols}}) VALUES ({{", ".join(values)}});
 
 """HTML template for search results header."""
 SEARCH_HEADER_HTML = """<%
-import conf
+from sqlitemate import conf
 %>
 <font size="2" face="{{conf.HtmlFontName}}" color="{{conf.FgColour}}">
 Results for "{{text}}" from {{fromtext}}:
@@ -180,7 +181,7 @@ Results for "{{text}}" from {{fromtext}}:
 
 """HTML template for names search results header, stand-alone table."""
 SEARCH_ROW_TABLE_META_HTML = """<%
-import conf
+from sqlitemate import conf
 %>
 Table <a href="table:{{table["name"]}}">
     <font color="{{conf.LinkColour}}">{{!pattern_replace.sub(wrap_b, escape(table["name"]))}}</font></a>:
@@ -198,7 +199,7 @@ Table <a href="table:{{table["name"]}}">
 
 """HTML template for table search results header, start of HTML table."""
 SEARCH_ROW_TABLE_HEADER_HTML = """<%
-import conf
+from sqlitemate import conf
 %>
 <font color="{{conf.FgColour}}">
 <br /><br /><b><a name="{{table["name"]}}">Table {{table["name"]}}:</a></b><br />
@@ -215,7 +216,7 @@ import conf
 """HTML template for search result of DB table row, HTML table row."""
 SEARCH_ROW_TABLE_HTML = """<%
 import re
-import conf, templates
+from sqlitemate import conf, templates
 
 match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
 %>
@@ -245,7 +246,7 @@ and not (keywords.get("-column") and match_kw("-column", col)):
 """Text shown in Help -> About dialog (HTML content)."""
 ABOUT_HTML = """<%
 import sys
-import conf
+from sqlitemate import conf
 %>
 <font size="2" face="{{conf.HtmlFontName}}" color="{{conf.FgColour}}">
 <table cellpadding="0" cellspacing="0"><tr><td valign="top">
@@ -302,7 +303,7 @@ Installer created with Nullsoft Scriptable Install System 3.0b1,
 
 """Contents of the default page on search page."""
 SEARCH_WELCOME_HTML = """<%
-import conf
+from sqlitemate import conf
 %>
 <font face="{{conf.HtmlFontName}}" size="2" color="{{conf.FgColour}}">
 <center>
@@ -313,10 +314,10 @@ import conf
     <table cellpadding="0" cellspacing="2"><tr><td>
         <a href="page:tables"><img src="memory:HelpTables.png" /></a>
       </td><td width="10"></td><td valign="center">
-        Browse, filter and change database tables,<br />
+        Browse, filter and change table data,<br />
         export as HTML, SQL INSERT-statements or spreadsheet.
       </td></tr><tr><td nowrap align="center">
-        <a href="page:tables"><b><font color="{{conf.FgColour}}">Tables</font></b></a><br />
+        <a href="page:tables"><b><font color="{{conf.FgColour}}">Data</font></b></a><br />
     </td></tr></table>
   </td>
   <td>
@@ -326,7 +327,7 @@ import conf
         Make direct SQL queries in the database,<br />
         export results as HTML or spreadsheet.
       </td></tr><tr><td nowrap align="center">
-        <a href="page:sql"><b><font color="{{conf.FgColour}}">SQL window</font></b></a><br />
+        <a href="page:sql"><b><font color="{{conf.FgColour}}">SQL</font></b></a><br />
     </td></tr></table>
   </td>
 </tr>
@@ -360,7 +361,7 @@ import conf
 
 """Long help text shown in a separate tab on search page."""
 SEARCH_HELP_LONG = """<%
-import conf
+from sqlitemate import conf
 try:
     import pyparsing
 except ImportError:
@@ -489,7 +490,7 @@ except ImportError:
     </td>
     <td bgcolor="{{conf.BgColour}}">
       <br /><br />
-      To find rows from specific time periods (where row has timestamp columns), use the keyword
+      To find rows from specific time periods (where row has DATE/DATETIME columns), use the keyword
       <font color="{{conf.HelpCodeColour}}"><code>date:period</code></font> or
       <font color="{{conf.HelpCodeColour}}"><code>date:periodstart..periodend</code></font>.
       For the latter, either start or end can be omitted.<br /><br />
@@ -542,7 +543,7 @@ except ImportError:
   <br /><br />
   All search text is case-insensitive. <br />
   Keywords are case-sensitive
-  (<code>OR</code>, <code>table:</code>, <code>column:<(code>, <code>date:</code>).
+  (<code>OR</code>, <code>table:</code>, <code>column:</code>, <code>date:</code>).
 
 </td></tr></table>
 </font>
@@ -552,7 +553,7 @@ except ImportError:
 """Short help text shown on search page."""
 SEARCH_HELP_SHORT = """<%
 import os
-import conf
+from sqlitemate import conf
 helplink = "Search help"
 if "nt" == os.name: # In Windows, wx.HtmlWindow shows link whitespace quirkily
     helplink = helplink.replace(" ", "_")

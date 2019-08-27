@@ -8,20 +8,17 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.08.2019
+@modified    26.08.2019
 ------------------------------------------------------------------------------
 """
 import ast
 import base64
 import collections
-import copy
 import datetime
 import functools
 import hashlib
 import inspect
-import math
 import os
-import re
 import shutil
 import sys
 import textwrap
@@ -45,19 +42,18 @@ import wx.lib.newevent
 import wx.lib.scrolledpanel
 import wx.stc
 
-from lib import controls
-from lib import util
-from lib.vendor import step
+from . lib import controls
+from . lib import util
+from . lib.vendor import step
 
-import conf
-import database
-import export
-import guibase
-import images
-import main
-import support
-import templates
-import workers
+from . import conf
+from . import database
+from . import export
+from . import guibase
+from . import images
+from . import support
+from . import templates
+from . import workers
 
 
 """Custom application events for worker results."""
@@ -75,6 +71,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def __init__(self):
         wx.Frame.__init__(self, parent=None, title=conf.Title, size=conf.WindowSize)
         guibase.TemplateFrameMixIn.__init__(self)
+        guibase.window = self
 
         self.init_colours()
         self.db_filename = None # Current selected file in main list
@@ -144,11 +141,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         tint_colour = wx.NamedColour(conf.BgColour)
         tint_factor = [((4 * x) % 256) / 255. for x in tint_colour]
         # Images shown on the default search content page
-        for name in ["Search", "Info", "Tables", "SQL"]:
-            bmp = getattr(images, "Help" + name, None)
-            if not bmp: continue # Continue for name in [..]
-            bmp = bmp.Image.AdjustChannels(*tint_factor)
-            raw = util.img_wx_to_raw(bmp)
+        for name in ["Search", "Tables", "SQL", "Info"]:
+            embedded = getattr(images, "Help" + name, None)
+            if not embedded: continue # for name
+            img = embedded.Image.AdjustChannels(*tint_factor)
+            raw = util.img_wx_to_raw(img)
             filename = "Help%s.png" % name
             self.memoryfs["handler"].AddFile(filename, raw, wx.BITMAP_TYPE_PNG)
             self.memoryfs["files"][filename] = 1
@@ -218,7 +215,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if self.list_db.GetItemCount() > 1:
             self.list_db.SetFocus()
         else:
-            self.button_detect.SetFocus()
+            self.button_new.SetFocus()
 
         self.trayicon = wx.TaskBarIcon()
         if conf.TrayIconEnabled:
@@ -233,6 +230,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         else:
             self.Show(True)
         wx.CallLater(20000, self.update_check)
+        wx.CallLater(0, self.populate_database_list)
+        guibase.log("Started application.")
 
 
     def init_colours(self):
@@ -410,9 +409,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         conf.WindowSize = [-1, -1] if self.IsMaximized() else self.Size[:]
         conf.save()
         event.Skip()
-        l, p = self.list_db, self.panel_db_main.Parent # Right panel scroll
-        fn = lambda: self and (p.Layout(), l.SetColumnWidth(0, l.Size[1] - 5))
-        wx.CallAfter(fn)
+        # Right panel scroll
+        wx.CallAfter(lambda: self and (self.list_db.RefreshRows(),
+                                       self.panel_db_main.Parent.Layout()))
 
 
     def on_move(self, event):
@@ -446,41 +445,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.notebook.SetAGWWindowStyleFlag(style)
 
 
-    def on_dragstop_list_db(self, event):
-        """Handler for stopping drag in the database list, rearranges list."""
-        start, stop = self.db_drag_start, max(1, event.GetIndex())
-        if start and start != stop:
-            filename = self.list_db.GetItemText(start)
-            self.list_db.DeleteItem(start)
-            idx = stop if start > stop else stop - 1
-            self.list_db.InsertImageStringItem(idx, filename, [1])
-            fgcolour = wx.NamedColour(conf.DBListForegroundColour)
-            bgcolour = wx.NamedColour(conf.DBListBackgroundColour)
-            self.list_db.SetItemBackgroundColour(idx, bgcolour)
-            self.list_db.SetItemTextColour(idx, fgcolour)
-            self.list_db.Select(idx)
-        self.db_drag_start = None
-
-
-    def on_dragstart_list_db(self, event):
-        """Handler for dragging items in the database list, cancels dragging."""
-        if event.GetIndex():
-            self.db_drag_start = event.GetIndex()
-        else:
-            self.db_drag_start = None
-            self.on_cancel_drag_list_db(event)
-
-
-    def on_cancel_drag_list_db(self, event):
-        """Handler for dragging items in the database list, cancels dragging."""
-        class HackEvent(object): # UltimateListCtrl hack to cancel drag.
-            def __init__(self, pos=wx.Point()): self._position = pos
-            def GetPosition(self): return self._position
-        try:
-            wx.CallAfter(self.list_db.Children[0].DragFinish, HackEvent())
-        except: raise
-
-
     def create_page_main(self, notebook):
         """Creates the main page with database list and buttons."""
         page = self.page_main = wx.Panel(notebook)
@@ -488,34 +452,36 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         notebook.AddPage(page, "Databases")
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        agw_style = (wx.LC_REPORT | wx.LC_NO_HEADER |
-                     wx.LC_SINGLE_SEL | wx.BORDER_NONE)
-        if hasattr(wx.lib.agw.ultimatelistctrl, "ULC_USER_ROW_HEIGHT"):
-            agw_style |= wx.lib.agw.ultimatelistctrl.ULC_USER_ROW_HEIGHT
-        list_db = self.list_db = wx.lib.agw.ultimatelistctrl. \
-            UltimateListCtrl(parent=page, agwStyle=agw_style)
+        sizer_list = wx.BoxSizer(wx.VERTICAL)
+
+        edit_filter = self.edit_filter = controls.SearchCtrl(page, "Filter list")
+        list_db = self.list_db = controls.SortableUltimateListCtrl(parent=page,
+            agwStyle=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.BORDER_NONE)
         list_db.MinSize = 400, -1 # Maximize-restore would resize width to 100
-        list_db.InsertColumn(0, "")
-        il = wx.ImageList(*images.ButtonHome.Bitmap.Size)
-        il.Add(images.ButtonHome.Bitmap)
-        il.Add(images.ButtonListDatabase.Bitmap)
-        list_db.AssignImageList(il, wx.IMAGE_LIST_SMALL)
-        list_db.InsertImageStringItem(0, "Home", [0])
+
+        columns = [("name", "Name"), ("last_modified", "Modified"), ("size", "Size")]
+        frmt_dt = lambda r, c: r[c].strftime("%Y-%m-%d %H:%M:%S") if r.get(c) else ""
+        frmt_sz = lambda r, c: util.format_bytes(r[c]) if r.get(c) is not None else ""
+        formatters = {"last_modified": frmt_dt, "size": frmt_sz}
+        list_db.SetColumns(columns)
+        list_db.SetColumnFormatters(formatters)
+        list_db.SetColumnAlignment(2, wx.lib.agw.ultimatelistctrl.ULC_FORMAT_RIGHT)
+
+        list_db.AssignImages([images.ButtonHome.Bitmap, images.ButtonListDatabase.Bitmap])
         list_db.TextColour = wx.NamedColour(conf.DBListForegroundColour)
-        list_bgcolour = wx.NamedColour(conf.DBListBackgroundColour)
-        list_db.BackgroundColour = list_bgcolour
-        list_db.SetItemBackgroundColour(0, list_bgcolour)
-        if hasattr(list_db, "SetUserLineHeight"):
-            h = images.ButtonListDatabase.Bitmap.Size[1]
-            list_db.SetUserLineHeight(int(h * 1.5))
+        list_db.BackgroundColour = wx.NamedColour(conf.DBListBackgroundColour)
+        topdata = collections.defaultdict(lambda: None, name="Home")
+        list_db.SetTopRow(topdata, [0])
         list_db.Select(0)
 
         panel_right = wx.lib.scrolledpanel.ScrolledPanel(page)
         panel_right.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        panel_main = self.panel_db_main = wx.Panel(panel_right)
+        panel_main   = self.panel_db_main   = wx.Panel(panel_right)
         panel_detail = self.panel_db_detail = wx.Panel(panel_right)
-        panel_main.Sizer = wx.BoxSizer(wx.VERTICAL)
+        panel_main.MinSize   = 400, -1
+        panel_detail.MinSize = 400, -1
+        panel_main.Sizer   = wx.BoxSizer(wx.VERTICAL)
         panel_detail.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         # Create main page label and buttons
@@ -529,10 +495,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
              "Create a new SQLite database."),
             ("opena", "&Open a database..", images.ButtonOpenA, 
              "Choose a database from your computer to open."),
+            ("folder", "&Import from folder.", images.ButtonFolder,
+             "Select a folder where to look for databases."),
             ("detect", "Detect databases", images.ButtonDetect,
              "Auto-detect databases from user folders."),
-            ("folder", "&Import from folder.", images.ButtonFolder,
-             "Select a folder where to look for databases "),
             ("missing", "Remove missing", images.ButtonRemoveMissing,
              "Remove non-existing files from the database list."),
             ("clear", "C&lear list", images.ButtonClear,
@@ -540,8 +506,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         for name, label, img, note in BUTTONS_MAIN:
             button = controls.NoteButton(panel_main, label, note, img.Bitmap)
             setattr(self, "button_" + name, button)
-            exec("button_%s = self.button_%s" % (name, name)) in {}, locals()
-        button_missing.Hide(); button_clear.Hide()
+        self.button_missing.Hide(); self.button_clear.Hide()
 
         # Create detail page labels, values and buttons
         label_db = self.label_db = wx.TextCtrl(parent=panel_detail, value="",
@@ -575,7 +540,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         for name, label, img, note in BUTTONS_DETAIL:
             button = controls.NoteButton(panel_detail, label, note, img.Bitmap)
             setattr(self, "button_" + name, button)
-            exec("button_%s = self.button_%s" % (name, name)) # Hack local name
 
         children = list(panel_main.Children) + list(panel_detail.Children)
         for c in [panel_main, panel_detail] + children:
@@ -586,43 +550,39 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         list_db.Bind(wx.EVT_LIST_ITEM_SELECTED,  self.on_select_list_db)
         list_db.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_open_from_list_db)
         list_db.Bind(wx.EVT_CHAR_HOOK,           self.on_list_db_key)
-        list_db.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_BEGIN_DRAG,
-                     self.on_dragstart_list_db)
-        list_db.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_END_DRAG,
-                     self.on_dragstop_list_db)
-        list_db.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_BEGIN_RDRAG,
-                     self.on_cancel_drag_list_db)
-        button_new.Bind(wx.EVT_BUTTON,           self.on_new_database)
-        button_opena.Bind(wx.EVT_BUTTON,         self.on_open_database)
-        button_detect.Bind(wx.EVT_BUTTON,        self.on_detect_databases)
-        button_folder.Bind(wx.EVT_BUTTON,        self.on_add_from_folder)
-        button_missing.Bind(wx.EVT_BUTTON,       self.on_remove_missing)
-        button_clear.Bind(wx.EVT_BUTTON,         self.on_clear_databases)
-        button_open.Bind(wx.EVT_BUTTON,          self.on_open_current_database)
-        button_saveas.Bind(wx.EVT_BUTTON,        self.on_save_database_as)
-        button_remove.Bind(wx.EVT_BUTTON,        self.on_remove_database)
+        list_db.Bind(wx.EVT_LIST_COL_CLICK,      self.on_sort_list_db)
+        edit_filter.Bind(wx.EVT_TEXT_ENTER,      self.on_filter_list_db)
+        self.button_new.Bind(wx.EVT_BUTTON,      self.on_new_database)
+        self.button_opena.Bind(wx.EVT_BUTTON,    self.on_open_database)
+        self.button_detect.Bind(wx.EVT_BUTTON,   self.on_detect_databases)
+        self.button_folder.Bind(wx.EVT_BUTTON,   self.on_add_from_folder)
+        self.button_missing.Bind(wx.EVT_BUTTON,  self.on_remove_missing)
+        self.button_clear.Bind(wx.EVT_BUTTON,    self.on_clear_databases)
+        self.button_open.Bind(wx.EVT_BUTTON,     self.on_open_current_database)
+        self.button_saveas.Bind(wx.EVT_BUTTON,   self.on_save_database_as)
+        self.button_remove.Bind(wx.EVT_BUTTON,   self.on_remove_database)
 
         panel_main.Sizer.Add(label_main, border=10, flag=wx.ALL)
         panel_main.Sizer.Add((0, 10))
-        panel_main.Sizer.Add(button_new, flag=wx.GROW)
-        panel_main.Sizer.Add(button_opena, flag=wx.GROW)
-        panel_main.Sizer.Add(button_detect, flag=wx.GROW)
-        panel_main.Sizer.Add(button_folder, flag=wx.GROW)
+        panel_main.Sizer.Add(self.button_new,    flag=wx.GROW)
+        panel_main.Sizer.Add(self.button_opena,  flag=wx.GROW)
+        panel_main.Sizer.Add(self.button_folder, flag=wx.GROW)
+        panel_main.Sizer.Add(self.button_detect, flag=wx.GROW)
         panel_main.Sizer.AddStretchSpacer()
-        panel_main.Sizer.Add(button_missing, flag=wx.GROW)
-        panel_main.Sizer.Add(button_clear, flag=wx.GROW)
-        panel_detail.Sizer.Add(label_db, border=10, flag=wx.ALL | wx.GROW)
+        panel_main.Sizer.Add(self.button_missing, flag=wx.GROW)
+        panel_main.Sizer.Add(self.button_clear,   flag=wx.GROW)
+        panel_detail.Sizer.Add(label_db,     border=10, flag=wx.ALL | wx.GROW)
         panel_detail.Sizer.Add(sizer_labels, border=10, flag=wx.ALL | wx.GROW)
         panel_detail.Sizer.AddStretchSpacer()
-        panel_detail.Sizer.Add(button_open, flag=wx.GROW)
-        panel_detail.Sizer.Add(button_saveas, flag=wx.GROW)
-        panel_detail.Sizer.Add(button_remove, flag=wx.GROW)
-        panel_right.Sizer.Add(panel_main, proportion=1, flag=wx.GROW)
+        panel_detail.Sizer.Add(self.button_open,   flag=wx.GROW)
+        panel_detail.Sizer.Add(self.button_saveas, flag=wx.GROW)
+        panel_detail.Sizer.Add(self.button_remove, flag=wx.GROW)
+        panel_right.Sizer.Add(panel_main,   proportion=1, flag=wx.GROW)
         panel_right.Sizer.Add(panel_detail, proportion=1, flag=wx.GROW)
-        sizer.Add(list_db, border=10, proportion=6, flag=wx.ALL | wx.GROW)
+        sizer_list.Add(edit_filter, border=5, flag=wx.ALIGN_RIGHT | wx.BOTTOM)
+        sizer_list.Add(list_db, proportion=1, flag=wx.GROW)
+        sizer.Add(sizer_list,  border=10, proportion=6, flag=wx.ALL | wx.GROW)
         sizer.Add(panel_right, border=10, proportion=4, flag=wx.ALL | wx.GROW)
-        for filename in conf.DBFiles:
-            self.update_database_list(filename)
 
 
     def create_menu(self):
@@ -715,14 +675,51 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_list_db_key(self, event):
         """
-        Handler for pressing a key in dblist, loads selected database on Enter
-        and removes from list on Delete.
+        Handler for pressing a key in dblist, loads selected database on Enter,
+        removes from list on Delete, refreshes columns on F5,
+        focuses filter on Ctrl-F.
         """
-        if self.list_db.GetFirstSelected() > 0 and not event.AltDown() \
+        if event.KeyCode in [wx.WXK_F5]:
+            items = []
+            selected_filename, selected = "", self.list_db.GetFirstSelected()
+            if selected > 0: selected_filename = self.list_db.GetItemText(selected)
+            for filename in conf.DBFiles:
+                data = collections.defaultdict(lambda: None, name=filename)
+                if os.path.exists(filename):
+                    data["size"] = os.path.getsize(filename)
+                    data["last_modified"] = datetime.datetime.fromtimestamp(
+                                            os.path.getmtime(filename))
+                self.db_filenames[filename].update(data)
+                items.append(data)
+            self.list_db.Populate(items, [1])
+            if selected_filename in self.db_filenames:
+                for i in range(1, self.list_db.GetItemCount()):
+                    if self.list_db.GetItemText(i) == selected_filename:
+                        self.list_db.Select(i)
+                        break # for i
+                self.update_database_detail()
+        elif event.KeyCode in [ord('F')] and event.ControlDown():
+            self.edit_filter.SetFocus()
+        elif self.list_db.GetFirstSelected() > 0 and not event.AltDown() \
         and event.KeyCode in [wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]:
             self.load_database_page(self.db_filename)
         elif event.KeyCode in [wx.WXK_DELETE] and self.db_filename:
             self.on_remove_database(None)
+        event.Skip()
+
+
+    def on_sort_list_db(self, event):
+        """Handler for sorting dblist, saves sort state."""
+        event.Skip()
+        def save_sort_state():
+            conf.DBSort = self.list_db.GetSortState()
+            conf.save()
+        wx.CallAfter(save_sort_state)
+
+
+    def on_filter_list_db(self, event):
+        """Handler for filtering dblist, applies search filter."""
+        self.list_db.SetFilter(event.String.strip())
         event.Skip()
 
 
@@ -745,7 +742,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         checking for and downloading the newest version.
         """
         if not support.update_window:
-            main.status("Checking for new version of %s.", conf.Title)
+            guibase.status("Checking for new version of %s.", conf.Title)
             wx.CallAfter(support.check_newest_version,
                          self.on_check_update_callback)
         elif hasattr(support.update_window, "Raise"):
@@ -762,12 +759,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if not self:
             return
         support.update_window = True
-        main.status("")
+        guibase.status("")
         if check_result:
             version, url, changes = check_result
             MAX = 1000
             changes = changes[:MAX] + ".." if len(changes) > MAX else changes
-            main.status_flash("New %s version %s available.",
+            guibase.status_flash("New %s version %s available.",
                               conf.Title, version)
             if wx.OK == wx.MessageBox(
                 "Newer version (%s) available. You are currently on "
@@ -797,7 +794,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         if self.button_detect.FindFocus() == self.button_detect:
             self.list_db.SetFocus()
-        main.logstatus("Searching local computer for databases..")
+        guibase.logstatus("Searching local computer for databases..")
         self.button_detect.Enabled = False
         self.worker_detection.work(True)
 
@@ -817,14 +814,54 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if "filenames" in result:
             for f in result["filenames"]:
                 if self.update_database_list(f):
-                    main.log("Detected database %s.", f)
+                    guibase.log("Detected database %s.", f)
         if "count" in result:
             name = ("" if result["count"] else "additional ") + "database"
-            main.logstatus_flash("Detected %s.", 
+            guibase.logstatus_flash("Detected %s.", 
                                   util.plural(name, result["count"]))
         if result.get("done", False):
             self.button_detect.Enabled = True
             wx.Bell()
+
+
+    def populate_database_list(self):
+        """
+        Inserts all databases into the list, updates UI buttons.
+        """
+        items, selected_filename = [], None
+        for filename in conf.DBFiles:
+            filename = util.to_unicode(filename)
+            data = collections.defaultdict(lambda: None, name=filename)
+            if os.path.exists(filename):
+                data["size"] = os.path.getsize(filename)
+                data["last_modified"] = datetime.datetime.fromtimestamp(
+                                        os.path.getmtime(filename))
+            self.db_filenames[filename] = data
+            items.append(data)
+            if filename in conf.LastSelectedFiles: selected_filename = filename
+
+        self.list_db.Populate(items, [1])
+        if conf.DBSort and conf.DBSort[0] >= 0:
+            self.list_db.SortListItems(*conf.DBSort)
+
+        if selected_filename:
+            idx = -1
+            for i in range(1, self.list_db.GetItemCount()):
+                if self.list_db.GetItemText(i) == selected_filename:
+                    idx = i
+                    self.list_db.Select(i)
+                    self.list_db.SetFocus()
+                    break # for i
+
+            if idx >= self.list_db.GetCountPerPage():
+                lh = self.list_db.GetUserLineHeight()
+                dy = (idx - self.list_db.GetCountPerPage() / 2) * lh
+                self.list_db.ScrollList(0, dy)
+                self.list_db.Update()
+
+        self.button_missing.Show(bool(items))
+        self.button_clear.Show(bool(items))
+        self.panel_db_main.Layout()
 
 
     def update_database_list(self, filename=""):
@@ -842,7 +879,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if filename not in conf.DBFiles:
                 conf.DBFiles.append(filename)
                 conf.save()
-            data = collections.defaultdict(lambda: None)
+            data = collections.defaultdict(lambda: None, name=filename)
             if os.path.exists(filename):
                 data["size"] = os.path.getsize(filename)
                 data["last_modified"] = datetime.datetime.fromtimestamp(
@@ -850,30 +887,46 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             data_old = self.db_filenames.get(filename)
             if not data_old or data_old["size"] != data["size"] \
             or data_old["last_modified"] != data["last_modified"]:
-                if filename not in self.db_filenames:
-                    self.db_filenames[filename] = data
+                self.db_filenames[filename] = data
+                if not data_old:
                     idx = self.list_db.GetItemCount()
-                    self.list_db.InsertImageStringItem(idx, filename, [1])
-                    fgcolour = wx.NamedColour(conf.DBListForegroundColour)
-                    bgcolour = wx.NamedColour(conf.DBListBackgroundColour)
-                    self.list_db.SetItemBackgroundColour(idx, bgcolour)
-                    self.list_db.SetItemTextColour(idx, fgcolour)
-                    # self is not shown: form creation time, reselect last file
-                    if not self.Shown and filename in conf.LastSelectedFiles:
-                        self.list_db.Select(idx)
-                        def scroll_to_selected():
-                            if idx < self.list_db.GetCountPerPage(): return
-                            lh = self.list_db.GetUserLineHeight()
-                            dy = (idx - self.list_db.GetCountPerPage() / 2) * lh
-                            self.list_db.ScrollList(0, dy)
-                        wx.CallAfter(lambda: self and scroll_to_selected())
-                    result = True
+                    self.list_db.AppendRow(data, [1])
+                result = True
 
-        self.button_missing.Shown = (self.list_db.GetItemCount() > 1)
-        self.button_clear.Shown = (self.list_db.GetItemCount() > 1)
-        if self.Shown:
-            self.list_db.SetColumnWidth(0, self.list_db.Size.width - 5)
+        self.button_missing.Show(self.list_db.GetItemCount() > 1)
+        self.button_clear.Show(self.list_db.GetItemCount() > 1)
         return result
+
+
+    def update_database_detail(self):
+        """Updates database detail panel with current database information."""
+        filename = self.db_filename
+        path, tail = os.path.split(filename)
+        self.label_db.Value = tail
+        self.label_path.Value = path
+        self.label_size.Value = self.label_modified.Value = ""
+        self.label_tables.Value = ""
+        self.label_tables.ForegroundColour = self.ForegroundColour
+        self.label_size.ForegroundColour = self.ForegroundColour
+        if not self.panel_db_detail.Shown:
+            self.panel_db_main.Hide()
+            self.panel_db_detail.Show()
+            self.panel_db_detail.Parent.Layout()
+        if os.path.exists(filename):
+            sz = os.path.getsize(filename)
+            dt = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
+            self.label_size.Value = util.format_bytes(sz)
+            self.label_modified.Value = dt.strftime("%Y-%m-%d %H:%M:%S")
+            data = self.db_filenames[filename]
+            if data["size"] == sz and data["last_modified"] == dt \
+            and data.get("tables") is not None:
+                # File does not seem changed: use cached values
+                self.label_tables.Value = data["tables"]
+            else:
+                wx.CallLater(10, self.update_database_stats, filename)
+        else:
+            self.label_size.Value = "File does not exist."
+            self.label_size.ForegroundColour = conf.LabelErrorColour
 
 
     def on_clear_databases(self, event):
@@ -882,8 +935,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             "Are you sure you want to clear the list of all databases?",
             conf.Title, wx.OK | wx.CANCEL | wx.ICON_QUESTION
         ):
-            while self.list_db.GetItemCount() > 1:
-                self.list_db.DeleteItem(1)
+            self.list_db.Populate([])
             del conf.DBFiles[:]
             del conf.LastSelectedFiles[:]
             del conf.RecentFiles[:]
@@ -918,13 +970,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 shutil.copyfile(original, newpath)
                 success = True
             except Exception as e:
-                main.log("%r when trying to copy %s to %s.",
+                guibase.log("%r when trying to copy %s to %s.",
                          e, original, newpath)
                 wx.MessageBox("Failed to copy \"%s\" to \"%s\"." %
                               (original, newpath), conf.Title,
                               wx.OK | wx.ICON_WARNING)
             if success:
-                main.logstatus_flash("Saved a copy of %s as %s.",
+                guibase.logstatus_flash("Saved a copy of %s as %s.",
                                      original, newpath)
                 self.update_database_list(newpath)
 
@@ -1015,12 +1067,25 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                         return prev.value.s.strip()
             return ""
 
+        def typelist(mytype):
+            def convert(v):
+                v = ast.literal_eval(v) if isinstance(v, basestring) else v
+                if not isinstance(v, (list, tuple)): v = tuple([v])
+                if not v: raise ValueError("Empty collection")
+                return tuple(map(mytype, v))
+            convert.__name__ = "tuple(%s)" % mytype.__name__
+            return convert
+
         for name in sorted(conf.OptionalFileDirectives):
             value, help = getattr(conf, name, None), get_field_doc(name)
             default = conf.OptionalFileDirectiveDefaults.get(name)
             if value is None and default is None:
                 continue # continue for name
-            kind = wx.Size if isinstance(value, (tuple, list)) else type(value)
+
+            kind = type(value)
+            if isinstance(value, (tuple, list)):
+                kind = typelist(type(value[0]))
+                default = kind(default)
             dialog.AddProperty(name, value, help, default, kind)
         dialog.Realize()
 
@@ -1038,14 +1103,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for open database menu or button, displays a file dialog and
         loads the chosen database.
         """
+        exts = ";".join("*" + x for x in conf.DBExtensions)
+        wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
         dialog = wx.FileDialog(
-            parent=self, message="Open", defaultFile="",
-            wildcard="SQLite database (*.db)|*.db|All files|*.*",
-            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
+            parent=self, message="Open", defaultFile="", wildcard=wildcard,
+            style=wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE | wx.FD_OPEN | wx.RESIZE_BORDER
         )
         if wx.ID_OK == dialog.ShowModal():
-            filename = dialog.GetPath()
-            if filename:
+            for filename in dialog.GetPaths():
                 self.update_database_list(filename)
                 self.load_database_page(filename)
 
@@ -1057,7 +1122,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         self.dialog_savefile.Filename = "database"
         self.dialog_savefile.Message = "Save new database as"
-        self.dialog_savefile.Wildcard = "SQLite database (*.db)|*.db"
+        exts = ";".join("*" + x for x in conf.DBExtensions)
+        self.dialog_savefile.Wildcard = "SQLite database (%s)|%s" % (exts, exts)
         self.dialog_savefile.WindowStyle |= wx.FD_OVERWRITE_PROMPT
         if wx.ID_OK != self.dialog_savefile.ShowModal():
             return
@@ -1066,7 +1132,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         try:
             with open(filename, "w"): pass
         except Exception:
-            main.log("Error creating %s.\n\n%s", filename,
+            guibase.log("Error creating %s.\n\n%s", filename,
                      traceback.format_exc())
             wx.MessageBox(
                 "Could not create %s.\n\n"
@@ -1104,16 +1170,17 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.list_db.SetFocus()
             self.button_folder.Enabled = False
             folder = self.dialog_selectfolder.GetPath()
-            main.logstatus("Detecting databases under %s.", folder)
+            guibase.logstatus("Detecting databases under %s.", folder)
             wx.YieldIfNeeded()
             count = 0
             for filename in database.find_databases(folder):
                 if filename not in self.db_filenames:
-                    main.log("Detected database %s.", filename)
+                    guibase.log("Detected database %s.", filename)
                     self.update_database_list(filename)
                     count += 1
             self.button_folder.Enabled = True
-            main.logstatus_flash("Detected %s under %s.",
+            self.list_db.RefreshRows()
+            guibase.logstatus_flash("Detected %s under %s.",
                 util.plural("new database", count), folder)
 
 
@@ -1137,7 +1204,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         except Exception as e:
             self.label_tables.Value = util.format_exc(e)
             self.label_tables.ForegroundColour = conf.LabelErrorColour
-            main.log("Error opening %s.\n\n%s", filename,
+            guibase.log("Error opening %s.\n\n%s", filename,
                      traceback.format_exc())
             return
         try:
@@ -1157,7 +1224,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         except Exception as e:
             self.label_tables.Value = util.format_exc(e)
             self.label_tables.ForegroundColour = conf.LabelErrorColour
-            main.log("Error loading data from %s.\n\n%s", filename,
+            guibase.log("Error loading data from %s.\n\n%s", filename,
                      traceback.format_exc())
         if db and not db.has_consumers():
             db.close()
@@ -1169,45 +1236,22 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for selecting an item in main list, updates info panel."""
         if event.GetIndex() > 0 \
         and event.GetText() != self.db_filename:
-            filename = self.db_filename = event.GetText()
-            path, tail = os.path.split(filename)
-            self.label_db.Value = tail
-            self.label_path.Value = path
-            self.label_size.Value = self.label_modified.Value = ""
-            self.label_tables.Value = ""
-            self.label_tables.ForegroundColour = self.ForegroundColour
-            self.label_size.ForegroundColour = self.ForegroundColour
-            if not self.panel_db_detail.Shown:
-                self.panel_db_main.Hide()
-                self.panel_db_detail.Show()
-                self.panel_db_detail.Parent.Layout()
-            if os.path.exists(filename):
-                sz = os.path.getsize(filename)
-                dt = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
-                self.label_size.Value = util.format_bytes(sz)
-                self.label_modified.Value = dt.strftime("%Y-%m-%d %H:%M:%S")
-                data = self.db_filenames[filename]
-                if data["size"] == sz and data["last_modified"] == dt \
-                and data.get("tables") is not None:
-                    # File does not seem changed: use cached values
-                    self.label_tables.Value = data["tables"]
-                else:
-                    wx.CallLater(10, self.update_database_stats, filename)
-            else:
-                self.label_size.Value = "File does not exist."
-                self.label_size.ForegroundColour = conf.LabelErrorColour
+            self.db_filename = event.GetText()
+            self.update_database_detail()
         elif event.GetIndex() == 0 and not self.panel_db_main.Shown:
             self.db_filename = None
             self.panel_db_main.Show()
             self.panel_db_detail.Hide()
             self.panel_db_main.Parent.Layout()
+
         # Save last selected files in db lists, to reselect them on rerun
-        del conf.LastSelectedFiles[:]
-        selected = self.list_db.GetFirstSelected()
-        while selected > 0:
-            filename = self.list_db.GetItemText(selected)
-            conf.LastSelectedFiles.append(filename)
-            selected = self.list_db.GetNextSelected(selected)
+        if self.list_db.GetItemCount() > 1:
+            del conf.LastSelectedFiles[:]
+            selected = self.list_db.GetFirstSelected()
+            while selected > 0:
+                filename = self.list_db.GetItemText(selected)
+                conf.LastSelectedFiles.append(filename)
+                selected = self.list_db.GetNextSelected(selected)
 
 
     def on_exit(self, event):
@@ -1242,8 +1286,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.worker_detection.stop()
 
             # Save last selected files in db lists, to reselect them on rerun
-            conf.DBFiles = [self.list_db.GetItemText(i)
-                            for i in range(1, self.list_db.GetItemCount())]
             del conf.LastSelectedFiles[:]
             selected = self.list_db.GetFirstSelected()
             while selected > 0:
@@ -1306,7 +1348,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         if page in self.db_pages:
             del self.db_pages[page]
-        main.log("Closed database tab for %s." % page.db)
+        guibase.log("Closed database tab for %s." % page.db)
         conf.save()
 
         # Close databases, if not used in any other page
@@ -1315,7 +1357,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if page.db.filename in self.dbs:
                 del self.dbs[page.db.filename]
             page.db.close()
-            main.log("Closed database %s." % page.db)
+            guibase.log("Closed database %s." % page.db)
         # Remove any dangling references
         if self.page_db_latest == page:
             self.page_db_latest = next((i for i in self.pages_visited[::-1]
@@ -1399,9 +1441,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                             "Not a valid SQLITE database?" % filename,
                             conf.Title, wx.OK | wx.ICON_WARNING)
                 if db:
-                    main.log("Opened %s (%s).", db, util.format_bytes(
+                    guibase.log("Opened %s (%s).", db, util.format_bytes(
                              db.filesize))
-                    main.status_flash("Reading database file %s.", db)
+                    guibase.status_flash("Reading database file %s.", db)
                     self.dbs[filename] = db
                     # Add filename to Recent Files menu and conf, if needed
                     if filename in conf.RecentFiles: # Remove earlier position
@@ -1435,7 +1477,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if not db:
                 db = self.load_database(filename)
             if db:
-                main.status_flash("Opening database file %s." % db)
+                guibase.status_flash("Opening database file %s." % db)
                 tab_title = self.get_unique_tab_title(db.filename)
                 page = DatabasePage(self.notebook, tab_title, db, self.memoryfs)
                 self.db_pages[page] = db
@@ -1523,15 +1565,15 @@ class DatabasePage(wx.Panel):
             parent=self, agwStyle=bookstyle, style=wx.BORDER_STATIC)
 
         il = wx.ImageList(32, 32)
-        idx1 = il.Add(images.PageTables.Bitmap)
-        idx2 = il.Add(images.PageSQL.Bitmap)
-        idx3 = il.Add(images.PageSearch.Bitmap)
+        idx1 = il.Add(images.PageSearch.Bitmap)
+        idx2 = il.Add(images.PageTables.Bitmap)
+        idx3 = il.Add(images.PageSQL.Bitmap)
         idx4 = il.Add(images.PageInfo.Bitmap)
         notebook.AssignImageList(il)
 
+        self.create_page_search(notebook)
         self.create_page_tables(notebook)
         self.create_page_sql(notebook)
-        self.create_page_search(notebook)
         self.create_page_info(notebook)
 
         notebook.SetPageImage(0, idx1)
@@ -1555,7 +1597,7 @@ class DatabasePage(wx.Panel):
         self.Layout()
         # Hack to get info-page multiline TextCtrls to layout without quirks.
         self.notebook.SetSelection(self.pageorder[self.page_info])
-        self.notebook.SetSelection(self.pageorder[self.page_tables])
+        self.notebook.SetSelection(self.pageorder[self.page_search])
         # Restore last active page
         if db.filename in conf.LastActivePage \
         and conf.LastActivePage[db.filename] != self.notebook.Selection:
@@ -1639,7 +1681,7 @@ class DatabasePage(wx.Panel):
         """Creates a page for listing and browsing tables."""
         page = self.page_tables = wx.Panel(parent=notebook)
         self.pageorder[page] = len(self.pageorder)
-        notebook.AddPage(page, "Tables")
+        notebook.AddPage(page, "Data")
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
         splitter = self.splitter_tables = wx.SplitterWindow(
             parent=page, style=wx.BORDER_NONE
@@ -1754,7 +1796,7 @@ class DatabasePage(wx.Panel):
         """Creates a page for executing arbitrary SQL."""
         page = self.page_sql = wx.Panel(parent=notebook)
         self.pageorder[page] = len(self.pageorder)
-        notebook.AddPage(page, "SQL window")
+        notebook.AddPage(page, "SQL")
         sizer = page.Sizer = wx.BoxSizer(wx.VERTICAL)
         splitter = self.splitter_sql = \
             wx.SplitterWindow(parent=page, style=wx.BORDER_NONE)
@@ -1762,20 +1804,36 @@ class DatabasePage(wx.Panel):
 
         panel1 = self.panel_sql1 = wx.Panel(parent=splitter)
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
+
+        sizer_top = wx.BoxSizer(wx.HORIZONTAL)
         label_stc = wx.StaticText(parent=panel1, label="SQ&L:")
+        tb = self.tb_sql = wx.ToolBar(parent=panel1,
+                                      style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN, wx.ART_TOOLBAR, (16, 16))
+        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
+        tb.SetToolBitmapSize(bmp1.Size)
+        tb.AddLabelTool(wx.ID_OPEN, "", bitmap=bmp1, shortHelp="Load SQL file")
+        tb.AddLabelTool(wx.ID_SAVE, "", bitmap=bmp2, shortHelp="Save SQL file")
+        tb.Realize()
+        tb.Bind(wx.EVT_TOOL, lambda e: self.on_open_sql(self.stc_sql, e), id=wx.ID_OPEN)
+        tb.Bind(wx.EVT_TOOL, lambda e: self.on_save_sql(self.stc_sql, e), id=wx.ID_SAVE)
+
         stc = self.stc_sql = controls.SQLiteTextCtrl(parent=panel1,
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
         stc.Bind(wx.EVT_KEY_DOWN, self.on_keydown_sql)
         stc.SetText(conf.SQLWindowTexts.get(self.db.filename, ""))
         stc.EmptyUndoBuffer() # So that undo does not clear the STC
-        sizer1.Add(label_stc, border=5, flag=wx.ALL)
+        sizer_top.Add(label_stc, border=5, flag=wx.ALL)
+        sizer_top.AddStretchSpacer()
+        sizer_top.Add(tb, flag=wx.ALIGN_RIGHT)
+        sizer1.Add(sizer_top, border=5, flag=wx.RIGHT | wx.GROW)
         sizer1.Add(stc, border=5, proportion=1, flag=wx.GROW | wx.LEFT)
 
         panel2 = self.panel_sql2 = wx.Panel(parent=splitter)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
         label_help = wx.StaticText(panel2, label=
-            "Alt-Enter runs the query contained in currently selected text or "
-            "on the current line. Ctrl-Space shows autocompletion list.")
+            "Alt-Enter/Ctrl-Enter runs the query contained in currently selected "
+            "text or on the current line. Ctrl-Space shows autocompletion list.")
         label_help.ForegroundColour = "grey"
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
         button_sql = self.button_sql = wx.Button(panel2, label="Execute S&QL")
@@ -1841,31 +1899,16 @@ class DatabasePage(wx.Panel):
         notebook.AddPage(page, "Information")
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        panel1 = self.panel_accountinfo = wx.Panel(parent=page)
-        panel2 = wx.Panel(parent=page)
+        panel1, panel2 = wx.Panel(parent=page), wx.Panel(parent=page)
         panel1.BackgroundColour = panel2.BackgroundColour = conf.BgColour
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_account = wx.BoxSizer(wx.HORIZONTAL)
-        label_account = wx.StaticText(parent=panel1,
-                                      label="Main account information")
-        label_account.Font = wx.Font(10, wx.FONTFAMILY_SWISS,
-            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
-        sizer1.Add(label_account, border=5, flag=wx.ALL)
-
-        sizer_accountinfo = wx.FlexGridSizer(cols=2, vgap=3, hgap=10)
-        self.sizer_accountinfo = sizer_accountinfo
-        sizer_accountinfo.AddGrowableCol(1, 1)
-
-        sizer_account.Add(sizer_accountinfo, proportion=1, flag=wx.GROW)
-        sizer1.Add(sizer_account, border=20, proportion=1,
-                   flag=wx.TOP | wx.GROW)
-
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
+
         sizer_file = wx.FlexGridSizer(cols=2, vgap=3, hgap=10)
-        label_file = wx.StaticText(parent=panel2, label="Database information")
+        label_file = wx.StaticText(parent=panel1, label="Database information")
         label_file.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                   wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
-        sizer2.Add(label_file, border=5, flag=wx.ALL)
+        sizer1.Add(label_file, border=5, flag=wx.ALL)
 
         names = ["edit_info_path", "edit_info_size", "edit_info_modified",
                  "edit_info_sha1", "edit_info_md5", ]
@@ -1875,12 +1918,12 @@ class DatabasePage(wx.Panel):
             if not name and not label:
                 sizer_file.AddSpacer(20), sizer_file.AddSpacer(20)
                 continue # continue for i, (name, label) in enumerate(..
-            labeltext = wx.StaticText(parent=panel2, label="%s:" % label)
+            labeltext = wx.StaticText(parent=panel1, label="%s:" % label)
             labeltext.ForegroundColour = wx.Colour(102, 102, 102)
-            valuetext = wx.TextCtrl(parent=panel2, value="Analyzing..",
+            valuetext = wx.TextCtrl(parent=panel1, value="Analyzing..",
                 style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH)
             valuetext.MinSize = (-1, 35)
-            valuetext.BackgroundColour = panel2.BackgroundColour
+            valuetext.BackgroundColour = panel1.BackgroundColour
             valuetext.SetEditable(False)
             sizer_file.Add(labeltext, border=5, flag=wx.LEFT)
             sizer_file.Add(valuetext, proportion=1, flag=wx.GROW)
@@ -1888,11 +1931,11 @@ class DatabasePage(wx.Panel):
         self.edit_info_path.Value = self.db.filename
 
         button_vacuum = self.button_vacuum = \
-            wx.Button(parent=panel2, label="Vacuum")
+            wx.Button(parent=panel1, label="Vacuum")
         button_check = self.button_check_integrity = \
-            wx.Button(parent=panel2, label="Check for corruption")
+            wx.Button(parent=panel1, label="Check for corruption")
         button_refresh = self.button_refresh_fileinfo = \
-            wx.Button(parent=panel2, label="Refresh")
+            wx.Button(parent=panel1, label="Refresh")
         button_vacuum.Enabled = button_check.Enabled = button_refresh.Enabled = False
         button_vacuum.SetToolTipString("Rebuild the database file, repacking "
                                        "it into a minimal amount of disk space.")
@@ -1912,8 +1955,33 @@ class DatabasePage(wx.Panel):
                   button_refresh)
 
         sizer_file.AddGrowableCol(1, 1)
-        sizer2.Add(sizer_file, border=20, proportion=1, flag=wx.TOP | wx.GROW)
-        sizer2.Add(sizer_buttons, proportion=2, flag=wx.GROW)
+        sizer1.Add(sizer_file, border=20, proportion=1, flag=wx.TOP | wx.GROW)
+        sizer1.Add(sizer_buttons, proportion=1, border=10, flag=wx.LEFT | wx.GROW)
+
+        sizer_schematop = wx.BoxSizer(wx.HORIZONTAL)
+        label_schema = wx.StaticText(parent=panel2, label="Database schema")
+        label_schema.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
+                                  wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
+
+        tb = self.tb_sql = wx.ToolBar(parent=panel2,
+                                      style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        bmp = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR,
+                                       (16, 16))
+        tb.SetToolBitmapSize(bmp.Size)
+        tb.AddLabelTool(wx.ID_SAVE, "", bitmap=bmp, shortHelp="Save schema SQL to file")
+        tb.Realize()
+        tb.Bind(wx.EVT_TOOL, lambda e: self.on_save_sql(self.stc_schema, e), id=wx.ID_SAVE)
+
+        stc = self.stc_schema = controls.SQLiteTextCtrl(parent=panel2,
+            style=wx.BORDER_STATIC)
+        stc.SetText(self.db.get_sql())
+        stc.SetReadOnly(True)
+
+        sizer_schematop.Add(label_schema)
+        sizer_schematop.AddStretchSpacer()
+        sizer_schematop.Add(tb, flag=wx.ALIGN_RIGHT)
+        sizer2.Add(sizer_schematop, border=5, flag=wx.TOP | wx.RIGHT | wx.GROW)
+        sizer2.Add(stc, proportion=1, border=5, flag=wx.TOP | wx.GROW)
 
         sizer.Add(panel1, proportion=1, border=5,
                   flag=wx.LEFT  | wx.TOP | wx.BOTTOM | wx.GROW)
@@ -1928,7 +1996,7 @@ class DatabasePage(wx.Panel):
         database if corruption detected.
         """
         msg = "Checking integrity of %s." % self.db.filename
-        main.logstatus_flash(msg)
+        guibase.logstatus_flash(msg)
         busy = controls.BusyPanel(self, msg)
         wx.YieldIfNeeded()
         try:
@@ -1936,13 +2004,13 @@ class DatabasePage(wx.Panel):
         except Exception as e:
             errors = e.args[:]
         busy.Close()
-        main.status_flash("")
+        guibase.status_flash("")
         if not errors:
             wx.MessageBox("No database errors detected.",
                           conf.Title, wx.ICON_INFORMATION)
         else:
             err = "\n- ".join(errors)
-            main.log("Errors found in %s: %s", self.db, err)
+            guibase.log("Errors found in %s: %s", self.db, err)
             err = err[:500] + ".." if len(err) > 500 else err
             msg = "A number of errors were found in %s:\n\n- %s\n\n" \
                   "Recover as much as possible to a new database?" % \
@@ -1960,7 +2028,7 @@ class DatabasePage(wx.Panel):
                     newfile = self.dialog_savefile.GetPath()
                     if not newfile.lower().endswith(".db"): newfile += ".db"
                     if newfile != self.db.filename:
-                        main.status_flash("Recovering data from %s to %s.",
+                        guibase.status_flash("Recovering data from %s to %s.",
                                           self.db.filename, newfile)
                         m = "Recovering data from %s\nto %s."
                         busy = controls.BusyPanel(self, m % (self.db, newfile))
@@ -1973,7 +2041,7 @@ class DatabasePage(wx.Panel):
                               "more details in log window:\n\n- "
                               + "\n- ".join(copyerrors)) if copyerrors else ""
                         err = err[:500] + ".." if len(err) > 500 else err
-                        main.status_flash("Recovery to %s complete." % newfile)
+                        guibase.status_flash("Recovery to %s complete." % newfile)
                         wx.MessageBox("Recovery to %s complete.%s" %
                                       (newfile, err), conf.Title,
                                       wx.ICON_INFORMATION)
@@ -1988,7 +2056,7 @@ class DatabasePage(wx.Panel):
         Handler for vacuuming the database.
         """
         msg = "Vacuuming %s." % self.db.filename
-        main.logstatus_flash(msg)
+        guibase.logstatus_flash(msg)
         busy = controls.BusyPanel(self, msg)
         wx.YieldIfNeeded()
         errors = []
@@ -1997,10 +2065,10 @@ class DatabasePage(wx.Panel):
         except Exception as e:
             errors = e.args[:]
         busy.Close()
-        main.status_flash("")
+        guibase.status_flash("")
         if errors:
             err = "\n- ".join(errors)
-            main.log("Error running vacuum on %s: %s", self.db, err)
+            guibase.log("Error running vacuum on %s: %s", self.db, err)
             err = err[:500] + ".." if len(err) > 500 else err
             wx.MessageBox(err, conf.Title, wx.ICON_WARNING | wx.OK)
         else:
@@ -2083,6 +2151,7 @@ class DatabasePage(wx.Panel):
             self.edit_info_md5.Value = md5.hexdigest()
         except Exception as e:
             self.edit_info_sha1.Value = self.edit_info_md5.Value = util.format_exc(e)
+        self.stc_schema.SetText(self.db.get_sql())
         self.button_vacuum.Enabled = True
         self.button_check_integrity.Enabled = True
         self.button_refresh_fileinfo.Enabled = True
@@ -2118,14 +2187,12 @@ class DatabasePage(wx.Panel):
 
                 tableitem = None
                 table_name = table_name.lower()
-                table = next((t for t in self.db.get_tables()
-                              if t["name"].lower() == table_name), None)
                 item = self.tree_tables.GetNext(self.tree_tables.RootItem)
-                while table and item and item.IsOk():
+                while table_name in self.db.schema["table"] and item and item.IsOk():
                     table2 = self.tree_tables.GetItemPyData(item)
-                    if table2 and table2.lower() == table["name"].lower():
+                    if table2 and table2.lower() == table_name:
                         tableitem = item
-                        break # break while table and item and itek.IsOk()
+                        break # while table_name
                     item = self.tree_tables.GetNextSibling(item)
                 if tableitem:
                     # Only way to create state change in wx.gizmos.TreeListCtrl
@@ -2268,14 +2335,12 @@ class DatabasePage(wx.Panel):
             elif table_name:
                 tableitem = None
                 table_name = table_name.lower()
-                table = next((t for t in self.db.get_tables()
-                              if t["name"].lower() == table_name), None)
                 item = self.tree_tables.GetNext(self.tree_tables.RootItem)
-                while table and item and item.IsOk():
+                while table_name in self.db.schema["table"] and item and item.IsOk():
                     table2 = self.tree_tables.GetItemPyData(item)
-                    if table2 and table2.lower() == table["name"].lower():
+                    if table2 and table2.lower() == table_name:
                         tableitem = item
-                        break # while table
+                        break # while table_name
                     item = self.tree_tables.GetNextSibling(item)
                 if tableitem:
                     self.notebook.SetSelection(self.pageorder[self.page_tables])
@@ -2295,11 +2360,10 @@ class DatabasePage(wx.Panel):
                         if grid.Table.filters:
                             grid.Table.ClearSort(refresh=False)
                             grid.Table.ClearFilter()
-                        table["columns"] = self.db.get_table_columns(table_name)
-                        id_fields = [c["name"] for c in table["columns"]
-                                     if c.get("pk_id")]
+                        columns = self.db.get_table_columns(table_name)
+                        id_fields = [c["name"] for c in columns if c.get("pk_id")]
                         if not id_fields: # No primary key fields: take all
-                            id_fields = [c["name"] for c in table["columns"]]
+                            id_fields = [c["name"] for c in columns]
                         row_id = [row[c] for c in id_fields]
                         for i in range(grid.Table.GetNumberRows()):
                             row2 = grid.Table.GetRow(i)
@@ -2413,7 +2477,7 @@ class DatabasePage(wx.Panel):
             self.html_searchall.SetTabDataByID(search_id, title, html,
                                                tab_data["info"])
         if search_done:
-            main.status_flash("Finished searching for \"%s\" in %s.",
+            guibase.status_flash("Finished searching for \"%s\" in %s.",
                 result["search"]["text"], self.db.filename
             )
             self.tb_search_settings.SetToolNormalBitmap(
@@ -2422,7 +2486,7 @@ class DatabasePage(wx.Panel):
                 self.workers_search[search_id].stop()
                 del self.workers_search[search_id]
         if "error" in result:
-            main.log("Error searching %s:\n\n%s", self.db, result["error"])
+            guibase.log("Error searching %s:\n\n%s", self.db, result["error"])
             errormsg = "Error searching %s:\n\n%s" % \
                        (self.db, result.get("error_short", result["error"]))
             wx.MessageBox(errormsg, conf.Title, wx.OK | wx.ICON_WARNING)
@@ -2440,7 +2504,7 @@ class DatabasePage(wx.Panel):
         """
         text = self.edit_searchall.Value
         if text.strip():
-            main.status_flash("Searching for \"%s\" in %s.",
+            guibase.status_flash("Searching for \"%s\" in %s.",
                               text, self.db.filename)
             html = self.html_searchall
             data = {"id": self.counter(), "db": self.db, "text": text, "map": {},
@@ -2550,7 +2614,7 @@ class DatabasePage(wx.Panel):
             sql = getattr(self, "last_sql", "")
         if grid_source.Table:
             if grid_source is self.grid_table:
-                table = self.db.tables[grid_source.Table.table.lower()]["name"]
+                table = self.db.schema["table"][grid_source.Table.table.lower()]["name"]
                 title = "Table - \"%s\"" % table
                 self.dialog_savefile.Wildcard = export.TABLE_WILDCARD
             else:
@@ -2568,16 +2632,16 @@ class DatabasePage(wx.Panel):
                 if not filename.lower().endswith(".%s" % extname):
                     filename += ".%s" % extname
                 busy = controls.BusyPanel(self, "Exporting \"%s\"." % filename)
-                main.status("Exporting \"%s\".", filename)
+                guibase.status("Exporting \"%s\".", filename)
                 try:
                     export.export_grid(grid_source, filename, title,
                                        self.db, sql, table)
-                    main.logstatus_flash("Exported %s.", filename)
+                    guibase.logstatus_flash("Exported %s.", filename)
                     util.start_file(filename)
                 except Exception:
                     msg = "Error saving %s:\n\n%s" % \
                           (filename, traceback.format_exc())
-                    main.logstatus_flash(msg)
+                    guibase.logstatus_flash(msg)
                     wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
                 finally:
                     busy.Close()
@@ -2608,7 +2672,7 @@ class DatabasePage(wx.Panel):
                         template = "Error saving table %s in \"%s\".\n\n%%r" % (
                                    grid.Table.table, self.db)
                         msg, msgfull = template % e, template % traceback.format_exc()
-                        main.status_flash(msg), main.log(msgfull)
+                        guibase.status_flash(msg), guibase.log(msgfull)
                         wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
                         return
                 else: grid.Table.UndoChanges()
@@ -2637,13 +2701,55 @@ class DatabasePage(wx.Panel):
             self.button_close_grid_sql.Enabled = False
 
 
+    def on_open_sql(self, stc, event):
+        """
+        Handler for loading SQL from file, opens file dialog and loads content.
+        """
+        dialog = wx.FileDialog(
+            parent=self, message="Open", defaultFile="",
+            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
+            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        filename = dialog.GetPath()
+        try:
+            stc.LoadFile(filename)
+        except Exception as e:
+            msg = util.format_exc(e)
+            guibase.logstatus_flash(msg)
+            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+            
+
+    def on_save_sql(self, stc, event):
+        """
+        Handler for saving SQL to file, opens file dialog and saves content.
+        """
+        filename = os.path.splitext(os.path.basename(self.db.filename))[0]
+        if stc is self.stc_sql: filename += " SQL"
+        dialog = wx.FileDialog(
+            parent=self, message="Save as", defaultFile=filename,
+            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        filename = dialog.GetPath()
+        try:
+            stc.SaveFile(filename)
+        except Exception as e:
+            msg = util.format_exc(e)
+            guibase.logstatus_flash(msg)
+            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+
+
     def on_keydown_sql(self, event):
         """
         Handler for pressing a key in SQL editor, listens for Alt-Enter and
         executes the currently selected line, or currently active line.
         """
         stc = event.GetEventObject()
-        if event.AltDown() and wx.WXK_RETURN == event.KeyCode:
+        if (event.AltDown() or event.ControlDown()) and wx.WXK_RETURN == event.KeyCode:
             sql = (stc.SelectedText or stc.CurLine[0]).strip()
             if sql:
                 self.execute_sql(sql)
@@ -2669,7 +2775,7 @@ class DatabasePage(wx.Panel):
         sql = self.stc_sql.SelectedText.strip() or self.stc_sql.Text.strip()
         try:
             if sql:
-                main.log("Executing SQL script \"%s\".", sql)
+                guibase.log("Executing SQL script \"%s\".", sql)
                 self.db.connection.executescript(sql)
                 self.grid_sql.SetTable(None)
                 self.grid_sql.CreateGrid(1, 1)
@@ -2684,7 +2790,7 @@ class DatabasePage(wx.Panel):
                 self.grid_sql.Size = size[0], size[1]
         except Exception as e:
             msg = util.format_exc(e)
-            main.logstatus_flash(msg)
+            guibase.logstatus_flash(msg)
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
 
 
@@ -2708,7 +2814,7 @@ class DatabasePage(wx.Panel):
                 self.button_reset_grid_sql.Enabled = False
                 self.button_export_sql.Enabled = False
             self.button_close_grid_sql.Enabled = True
-            main.logstatus_flash("Executed SQL \"%s\" (%s).", sql, self.db)
+            guibase.logstatus_flash("Executed SQL \"%s\" (%s).", sql, self.db)
             size = self.grid_sql.Size
             self.grid_sql.Fit()
             # Jiggle size by 1 pixel to refresh scrollbars
@@ -2721,7 +2827,7 @@ class DatabasePage(wx.Panel):
                 [self.grid_sql.AutoSizeColLabelSize(x) for x in col_range]
         except Exception as e:
             msg = util.format_exc(e)
-            main.logstatus_flash(msg)
+            guibase.logstatus_flash(msg)
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
 
 
@@ -2744,7 +2850,7 @@ class DatabasePage(wx.Panel):
                 template = "Error saving table %s in \"%s\".\n\n%%r" % (
                            grid.table, self.db)
                 msg, msgfull = template % e, template % traceback.format_exc()
-                main.status_flash(msg), main.log(msgfull)
+                guibase.status_flash(msg), guibase.log(msgfull)
                 wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
                 break # break for grid
         return result
@@ -2788,19 +2894,19 @@ class DatabasePage(wx.Panel):
             "Are you sure you want to commit these changes (%s)?" %
             info, conf.Title, wx.OK | wx.CANCEL | wx.ICON_QUESTION
         ):
-            main.log("Committing %s in table %s (%s).", info,
+            guibase.log("Committing %s in table %s (%s).", info,
                      self.grid_table.Table.table, self.db)
             self.grid_table.Table.SaveChanges()
             self.on_change_table(None)
             # Refresh tables list with updated row counts
-            tablemap = dict((t["name"], t) for t in self.db.get_tables(True))
+            tablemap = dict((t["name"], t)
+                            for t in self.db.get_tables(refresh=True, full=True))
             item = self.tree_tables.GetNext(self.tree_tables.RootItem)
             while item and item.IsOk():
                 table = self.tree_tables.GetItemPyData(item)
                 if table:
-                    self.tree_tables.SetItemText(item, "%d row%s" % (
-                        tablemap[table]["rows"],
-                        "s" if tablemap[table]["rows"] != 1 else " "
+                    self.tree_tables.SetItemText(item, util.plural(
+                        "row", tablemap[table]["rows"]
                     ), 1)
                     if table == self.grid_table.Table.table:
                         self.tree_tables.SetItemBold(item,
@@ -2871,7 +2977,7 @@ class DatabasePage(wx.Panel):
                 text = self.tree_tables.GetItemText(i).lower()
                 self.tree_tables.SetItemBold(i, text == lower)
                 i = self.tree_tables.GetNextSibling(i)
-            main.log("Loading table %s (%s).", table, self.db)
+            guibase.log("Loading table %s (%s).", table, self.db)
             busy = controls.BusyPanel(self, "Loading table \"%s\"." % table)
             try:
                 grid_data = self.db_grids.get(lower)
@@ -2896,7 +3002,7 @@ class DatabasePage(wx.Panel):
                 busy.Close()
                 errormsg = "Could not load table %s.\n\n%s" % \
                            (table, traceback.format_exc())
-                main.logstatus_flash(errormsg)
+                guibase.logstatus_flash(errormsg)
                 wx.MessageBox(errormsg, conf.Title, wx.OK | wx.ICON_WARNING)
 
 
@@ -2982,15 +3088,15 @@ class DatabasePage(wx.Panel):
     def load_tables_data(self):
         """Loads table data into table tree and SQL editor."""
         try:
-            tables = self.db.get_tables()
+            tables = self.db.get_tables(full=True)
             # Fill table tree with information on row counts and columns
             self.tree_tables.DeleteAllItems()
             root = self.tree_tables.AddRoot("SQLITE")
             child = None
             for table in tables:
                 child = self.tree_tables.AppendItem(root, table["name"])
-                self.tree_tables.SetItemText(child, "%d row%s" % (
-                    table["rows"], "s" if table["rows"] != 1 else " "
+                self.tree_tables.SetItemText(child, util.plural(
+                    "row", table["rows"]
                 ), 1)
                 self.tree_tables.SetItemPyData(child, table["name"])
 
@@ -3008,15 +3114,15 @@ class DatabasePage(wx.Panel):
                 self.tree_tables.Collapse(child)
 
             # Add table and column names to SQL editor autocomplete
-            for t in tables:
-                coldata = self.db.get_table_columns(t["name"])
+            for table in tables:
+                coldata = self.db.get_table_columns(table["name"])
                 fields = [c["name"] for c in coldata]
-                self.stc_sql.AutoCompAddSubWords(t["name"], fields)
+                self.stc_sql.AutoCompAddSubWords(table["name"], fields)
         except Exception:
             if self:
                 errormsg = "Error loading table data from %s.\n\n%s" % \
                            (self.db, traceback.format_exc())
-                main.log(errormsg)
+                guibase.log(errormsg)
 
 
     def update_tabheader(self):
@@ -3466,7 +3572,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
                 del self.rows_all[idx]
                 self.idx_all.remove(idx)
         except Exception as e:
-            main.logstatus("Error saving changes in %s.\n\n%s",
+            guibase.logstatus("Error saving changes in %s.\n\n%s",
                            self.table, traceback.format_exc())
             wx.MessageBox(util.format_exc(e), conf.Title,
                           wx.OK | wx.ICON_WARNING)

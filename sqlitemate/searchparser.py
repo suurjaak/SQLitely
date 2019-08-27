@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.08.2019
+@modified    26.08.2019
 """
 import calendar
 import collections
@@ -33,12 +33,15 @@ import string
 import warnings
 
 try:
-    from pyparsing import CaselessLiteral, Combine, FollowedBy, Forward, Group, Literal, NotAny, OneOrMore, Optional, ParseResults, ParserElement, Suppress, Word, ZeroOrMore
+    from pyparsing import CaselessLiteral, Combine, FollowedBy, Forward, Group, \
+                          Literal, NotAny, OneOrMore, Optional, ParseResults, \
+                          ParserElement, Suppress, Word, ZeroOrMore
     ParserElement.enablePackrat() # Speeds up recursive grammar significantly
 except ImportError:
     ParserElement = None
 
-from lib import util
+from . lib import util
+
 
 UNPRINTABLES = "".join(set(unichr(i) for i in range(128))
                        .difference(string.printable))
@@ -117,7 +120,7 @@ class SearchQueryParser(object):
 
         try:
             parse_results = self._grammar.parseString(query, parseAll=True)
-        except Exception as e:
+        except Exception:
             # Grammar parsing failed: do a naive parsing into keywords and words
             split_words = query.split()
 
@@ -137,7 +140,7 @@ class SearchQueryParser(object):
         match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
         if table:
             skip_table = False
-            for kw, values in keywords.items():
+            for kw in keywords:
                 if ("table"  == kw and not match_kw("table", table)) \
                 or ("-table" == kw and match_kw("-table", table)):
                     skip_table = True
@@ -234,10 +237,7 @@ class SearchQueryParser(object):
         for keyword, words in keywords.items():
             kw_sql = ""
             for word in words:
-                param = add_escape = sql = ""
-                escaped = self._escape(word)
-                if len(escaped) > len(word):
-                    add_escape = " ESCAPE '%s'" % ESCAPE_CHAR
+                sql = ""
                 if keyword.endswith("date"): # date:2002..2003-11-21
                     datecols = [c for c in (table or {}).get("columns", [])
                                 if c["type"] in ("DATE", "DATETIME")]
@@ -343,7 +343,7 @@ class SearchQueryParser(object):
 
 
 
-if "__main__" == __name__:
+def test():
     DO_TRACE = True
     TEST_QUERIES = [
         'WORDTEST word "quoted words"',
@@ -399,7 +399,7 @@ if "__main__" == __name__:
             print("PARSE TREE: %s" % parsetree)
         except Exception as e:
             print("PARSE TREE: FAILED: %s" % e)
-        sql, params, words = r
+        sql, params, words, keywords = r
         for name, value in params.items():
             sql = sql.replace(":%s " % name, '"%s" ' % value)
             sql = sql.replace(":%s)" % name, '"%s")' % value)
@@ -410,3 +410,8 @@ if "__main__" == __name__:
         print("PARAMS: %s" % "\n".join(wrapper.wrap(repr(params))))
         print("WORDS: %s" % repr(words))
         print("QUERY: %s" % item)
+
+
+
+if "__main__" == __name__:
+    test()

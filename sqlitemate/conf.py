@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.08.2019
+@modified    26.08.2019
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -19,12 +19,11 @@ import json
 import os
 import sys
 
-from lib import util
 
 """Program title, version number and version date."""
 Title = "SQLiteMate"
-Version = "1.0.dev3"
-VersionDate = "23.08.2019"
+Version = "1.0.dev13"
+VersionDate = "26.08.2019"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -38,19 +37,18 @@ else:
 ConfigFile = "%s.ini" % os.path.join(ApplicationDirectory, "etc", Title.lower())
 
 """List of attribute names that can be saved to and loaded from ConfigFile."""
-FileDirectives = ["ConsoleHistoryCommands", "DBDoBackup",  "DBFiles",
+FileDirectives = ["ConsoleHistoryCommands", "DBDoBackup",  "DBFiles", "DBSort",
     "LastActivePage", "LastSearchResults", "LastSelectedFiles",
-    "LastUpdateCheck", "RecentFiles", "SearchHistory",
-    "SearchInNames", "SearchInTables", "SearchUseNewTab",
-    "SQLWindowTexts", "TrayIconEnabled",
+    "LastUpdateCheck", "RecentFiles", "SearchHistory", "SearchInNames",
+    "SearchInTables", "SearchUseNewTab", "SQLWindowTexts", "TrayIconEnabled",
     "UpdateCheckAutomatic", "WindowIconized", "WindowPosition", "WindowSize",
 ]
-"""List of attributes saved if changed from default."""
+"""List of attributes saved if changed from default, user-modifiable."""
 OptionalFileDirectives = [
-    "ExportDbTemplate", "LogSQL", "MinWindowSize", "MaxConsoleHistory",
-    "MaxHistoryInitialMessages", "MaxRecentFiles", "MaxSearchHistory",
-    "MaxSearchMessages", "MaxSearchTableRows", "SearchResultsChunk",
-    "StatusFlashLength", "UpdateCheckInterval",
+    "DBExtensions", "ExportDbTemplate", "LogSQL", "MinWindowSize",
+    "MaxConsoleHistory", "MaxHistoryInitialMessages", "MaxRecentFiles",
+    "MaxSearchHistory", "MaxSearchMessages", "MaxSearchTableRows",
+    "SearchResultsChunk", "StatusFlashLength", "UpdateCheckInterval",
 ]
 OptionalFileDirectiveDefaults = {}
 
@@ -61,6 +59,12 @@ DBDoBackup = False
 
 """All detected/added databases."""
 DBFiles = []
+
+"""Database filename extensions, as ('.extension', )."""
+DBExtensions = [".db", ".sqlite", ".sqlite3"]
+
+"""Database list sort state, [col, ascending]."""
+DBSort = []
 
 """History of commands entered in console."""
 ConsoleHistoryCommands = []
@@ -121,7 +125,7 @@ LogSQL = False
 """URLs for download list, changelog, submitting feedback and homepage."""
 DownloadURL  = "https://erki.lap.ee/downloads/SQLiteMate/"
 ChangelogURL = "https://suurjaak.github.com/SQLiteMate/changelog.html"
-HomeUrl = "https://suurjaak.github.com/SQLiteMate/"
+HomeUrl      = "https://suurjaak.github.com/SQLiteMate/"
 
 """Minimum allowed size for the main window, as (width, height)."""
 MinWindowSize = (600, 400)
@@ -171,6 +175,9 @@ MainBgColour = "#FFFFFF"
 """Widget (button etc) background colour."""
 WidgetColour = "#D4D0C8"
 
+"""Foreground colour for gauges."""
+GaugeColour = "#008000"
+
 """Disabled text colour."""
 DisabledColour = "#808080"
 
@@ -185,6 +192,9 @@ LinkColour = "#0000FF"
 
 """Colour for links in export."""
 ExportLinkColour = "#3399FF"
+
+"""Background colour of exported HTML."""
+ExportBackgroundColour = "#8CBEFF"
 
 """Colours for main screen database list."""
 DBListBackgroundColour = "#ECF4FC"
@@ -259,7 +269,7 @@ def save():
     parser.optionxform = str # Force case-sensitivity on names
     parser.add_section(section)
     try:
-        f, fname = open(ConfigFile, "wb"), util.longpath(ConfigFile)
+        f = open(ConfigFile, "wb")
         f.write("# %s %s configuration written on %s.\n" % (Title, Version,
                 datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         for name in FileDirectives:

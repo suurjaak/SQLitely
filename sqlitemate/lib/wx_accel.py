@@ -30,11 +30,12 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     19.11.2011
-@modified    23.08.2019
+@modified    26.08.2019
 ------------------------------------------------------------------------------
 """
 import functools
 import re
+
 import wx
 
 DEBUG = False
@@ -282,7 +283,7 @@ def accelerate(window, use_heuristics=True, skipclicklabels=set()):
         if DEBUG:
             print("Handling target %s" %
                   [(type(t), t.Id, t.Label) for t in targets])
-        event = None
+        event, target = None, None
         for target in targets:
             if (isinstance(target, wx.Control) # has not been destroyed
             and target.IsShownOnScreen()       # visible on current panel

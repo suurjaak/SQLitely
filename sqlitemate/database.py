@@ -8,21 +8,22 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.08.2019
+@modified    26.08.2019
 ------------------------------------------------------------------------------
 """
+from collections import defaultdict, OrderedDict
 import copy
 import datetime
 import os
+import re
 import sqlite3
 import shutil
 import time
 import traceback
 
-from lib import util
-
-import conf
-import main
+from . lib import util
+from . import conf
+from . import guibase
 
 
 class Database(object):
@@ -40,23 +41,26 @@ class Database(object):
         self.basefilename = os.path.basename(self.filename)
         self.backup_created = False
         self.consumers = set() # Registered objects using this database
-        self.tables = {} # {"name": {"Name":str, "rows": 0, "columns": []}, }
-        self.tables_list = None # Ordered list of table items
-        self.table_rows = {}    # {"tablename1": [..], }
-        self.table_objects = {} # {"tablename1": {id1: {rowdata1}, }, }
+        # {"table|index|view|trigger":
+        #   {name.lower():
+        #     {"name": str, "sql": str, "table": str, "columns": [], "rows": int}}}
+        self.schema = defaultdict(lambda: OrderedDict())
+        self.table_rows    = {} # {tablename1: [..], }
+        self.table_objects = {} # {tablename1: {id1: {rowdata1}, }, }
         self.update_fileinfo()
         try:
             self.connection = sqlite3.connect(self.filename,
                                               check_same_thread=False)
             self.connection.row_factory = self.row_factory
             self.connection.text_factory = str
-            rows = self.execute("SELECT name, sql FROM sqlite_master "
-                                "WHERE type = 'table'").fetchall()
-            for row in rows:
-                self.tables[row["name"].lower()] = row
+            for row in self.execute(
+                "SELECT * FROM sqlite_master "
+                "WHERE sql != '' ORDER BY type, name COLLATE NOCASE"
+            ).fetchall():
+                self.schema[row["type"]][row["name"].lower()] = row
         except Exception:
-            if log_error: main.log("Error opening database %s.\n\n%s",
-                                   filename, traceback.format_exc())
+            if log_error: guibase.log("Error opening database %s.\n\n%s",
+                                      filename, traceback.format_exc())
             self.close()
             raise
 
@@ -84,39 +88,31 @@ class Database(object):
         result = []
         with open(filename, "w") as _: pass # Truncate file
         self.execute("ATTACH DATABASE ? AS new", (filename, ))
+
         # Create structure for all tables
-        for t in (x for x in self.tables_list or [] if x.get("sql")):
-            if t["name"].lower().startswith("sqlite_"): continue # Internal use
-            sql  = t["sql"].replace("CREATE TABLE ", "CREATE TABLE new.")
-            self.execute(sql)
+        for name, opts in self.schema["table"].items():
+            self.execute(opts["sql"].replace("CREATE TABLE ", "CREATE TABLE new."))
+
         # Copy data from all tables
-        for t in (x for x in self.tables_list or [] if x.get("sql")):
-            if t["name"].lower().startswith("sqlite_"): continue # Internal use
-            sql = "INSERT INTO new.%(name)s SELECT * FROM main.%(name)s" % t
+        for name in self.schema["table"]:
+            sql = "INSERT INTO new.%(name)s SELECT * FROM main.%(name)s" % name
             try:
                 self.execute(sql)
             except Exception as e:
                 result.append(repr(e))
-                main.log("Error copying table %s from %s to %s.\n\n%s",
-                         t["name"], self.filename, filename,
-                         traceback.format_exc())
+                guibase.log("Error copying table %s from %s to %s.\n\n%s",
+                            name, self.filename, filename,
+                            traceback.format_exc())
+
         # Create indexes
-        indexes = []
-        try:
-            sql = "SELECT * FROM sqlite_master WHERE TYPE = ?"
-            indexes = self.execute(sql, ("index", )).fetchall()
-        except Exception as e:
-            result.append(repr(e))
-            main.log("Error getting indexes from %s.\n\n%s",
-                     self.filename, traceback.format_exc())
-        for i in (x for x in indexes if x.get("sql")):
-            sql  = i["sql"].replace("CREATE INDEX ", "CREATE INDEX new.")
+        for name, opts in self.schema["index"].items():
+            sql  = opts["sql"].replace("CREATE INDEX ", "CREATE INDEX new.")
             try:
                 self.execute(sql)
             except Exception as e:
                 result.append(repr(e))
-                main.log("Error creating index %s for %s.\n\n%s",
-                         i["name"], filename, traceback.format_exc())
+                guibase.log("Error creating index %s for %s.\n\n%s",
+                            name, filename, traceback.format_exc())
         self.execute("DETACH DATABASE new")
         return result
 
@@ -125,7 +121,7 @@ class Database(object):
         """Clears all the currently cached rows."""
         self.table_rows.clear()
         self.table_objects.clear()
-        self.get_tables(True)
+        self.get_tables(refresh=True)
 
 
     def stamp_to_date(self, timestamp):
@@ -161,19 +157,16 @@ class Database(object):
                 pass
             del self.connection
             self.connection = None
-        for attr in ["tables", "tables_list", "table_rows", "table_objects"]:
-            if hasattr(self, attr):
-                delattr(self, attr)
-                setattr(self, attr, None if ("tables_list" == attr) else {})
+        self.schema.clear(), self.table_rows.clear(), self.table_objects.clear()
 
 
-    def execute(self, sql, params=[], log=True):
+    def execute(self, sql, params=(), log=True):
         """Shorthand for self.connection.execute()."""
         result = None
         if self.connection:
             if log and conf.LogSQL:
-                main.log("SQL: %s%s", sql,
-                         ("\nParameters: %s" % params) if params else "")
+                guibase.log("SQL: %s%s", sql,
+                            ("\nParameters: %s" % params) if params else "")
             result = self.connection.execute(sql, params)
         return result
 
@@ -195,53 +188,33 @@ class Database(object):
         return (self.connection is not None)
 
 
-    def get_tables(self, refresh=False, this_table=None):
+    def get_tables(self, refresh=False, full=False):
         """
-        Returns the names and rowcounts of all tables in the database, as
-        [{"name": "tablename", "rows": 0, "sql": CREATE SQL}, ].
+        Returns the names and rowcounts of all tables in the database,
+        as [{"name": "tablename", "sql": CREATE SQL}, ].
         Uses already retrieved cached values if possible, unless refreshing.
 
-        @param   refresh     if True, information including rowcounts is
-                             refreshed
-        @param   this_table  if set, only information for this table is
-                             refreshed
+        @param   refresh  if True, schema is re-queried
+        @param   full     if True, result is guaranteed to include {"rows": int}
         """
-        if self.is_open() and (refresh or self.tables_list is None):
-            sql = "SELECT name, sql FROM sqlite_master WHERE type = 'table' " \
-                  "%sORDER BY name COLLATE NOCASE" % \
-                  ("AND name = ? " if this_table else "")
-            params = [this_table] if this_table else []
-            rows = self.execute(sql, params).fetchall()
-            tables = {}
-            tables_list = []
-            for row in rows:
-                table = row
-                try:
-                    res = self.execute("SELECT COUNT(*) AS count FROM %s" %
-                                       table["name"], log=False)
-                    table["rows"] = res.fetchone()["count"]
-                except sqlite3.DatabaseError:
-                    table["rows"] = 0
-                    main.log("Error getting %s row count for %s.\n\n%s",
-                             table, self.filename, traceback.format_exc())
-                # Here and elsewhere in this module - table names are turned to
-                # lowercase when used as keys.
-                tables[table["name"].lower()] = table
-                tables_list.append(table)
-            if this_table:
-                self.tables.update(tables)
-                for t in self.tables_list or []:
-                    if t["name"] == this_table:
-                        self.tables_list.remove(t)
-                if self.tables_list is None:
-                    self.tables_list = []
-                self.tables_list += tables_list
-                self.tables_list.sort(key=lambda x: x["name"])
-            else:
-                self.tables = tables
-                self.tables_list = tables_list
+        result = []
 
-        return self.tables_list
+        if refresh and self.is_open():
+            self.schema.clear()
+            for row in self.execute(
+                "SELECT * FROM sqlite_master "
+                "WHERE sql != '' ORDER BY type, name COLLATE NOCASE"
+            ).fetchall():
+                self.schema[row["type"]][row["name"].lower()] = row
+
+        for opts in self.schema["table"].values():
+            if full and (refresh or "rows" not in opts):
+                res = self.execute("SELECT COUNT(*) AS count FROM %s" %
+                                   opts["name"], log=False)
+                opts["rows"] = res.fetchone()["count"]
+            result += [copy.deepcopy(opts)]
+
+        return result
 
 
     def row_factory(self, cursor, row):
@@ -272,7 +245,7 @@ class Database(object):
         """
         rows = []
         table = table.lower()
-        if table in self.tables:
+        if table in self.schema["table"]:
             if table not in self.table_rows:
                 col_data = self.get_table_columns(table)
                 pks = [c["name"] for c in col_data if c["pk"]]
@@ -295,22 +268,49 @@ class Database(object):
         """
         table = table.lower()
         table_columns = []
-        if self.is_open() and self.tables_list is None:
-            self.get_tables()
-        if self.is_open() and table in self.tables:
-            if "columns" in self.tables[table]:
-                table_columns = self.tables[table]["columns"]
+        if self.is_open() and table in self.schema["table"]:
+            if "columns" in self.schema["table"][table]:
+                table_columns = self.schema["table"][table]["columns"]
             else:
                 table_columns = []
                 try:
                     res = self.execute("PRAGMA table_info(%s)" % table, log=False)
                     for row in res.fetchall():
+                        row["type"] = row["type"].upper()
                         table_columns.append(row)
                 except sqlite3.DatabaseError:
-                    main.log("Error getting %s column data for %s.\n\n%s",
-                             table, self.filename, traceback.format_exc())
-                self.tables[table]["columns"] = table_columns
+                    guibase.log("Error getting %s column data for %s.\n\n%s",
+                                table, self.filename, traceback.format_exc())
+                self.schema["table"][table]["columns"] = table_columns
         return copy.deepcopy(table_columns)
+
+
+    def get_sql(self, refresh=False):
+        """
+        Returns full CREATE SQL statement for database.
+
+        @param   refresh  if True, schema is re-queried
+        """
+        result = ""
+
+        if refresh and self.is_open(): self.get_tables(refresh=True)
+        for category in "table", "view", "index", "trigger":
+            if not self.schema.get(category): continue # for category
+
+            for opts in self.schema[category].values():
+                sql = opts["sql"].strip()
+                if "table" == category:
+                    # LF after first brace
+                    sql = re.sub(r"^([^(]+)\(\s*", lambda m: m.group(1).strip() + " (\n  ", sql)
+                    # LF after each col
+                    sql = re.sub("\s*,\s*", ",\n  ", sql)
+                    # LF before last brace
+                    sql = re.sub(r"\)(\s*WITHOUT\s+ROWID)$", r"\n)\1", sql, re.I)
+                    sql = re.sub(r"\)$", r"\n)", sql)
+                result += sql + ";\n\n"
+            result += "\n\n"
+
+        return result
 
 
     def update_fileinfo(self):
@@ -358,7 +358,7 @@ class Database(object):
         return filled
 
 
-    def create_table(self, table):
+    def create_table(self, table, create_sql):
         """Creates the specified table and updates our column data."""
         table = table.lower()
         self.execute(create_sql)
@@ -366,7 +366,7 @@ class Database(object):
         row = self.execute("SELECT name, sql FROM sqlite_master "
                             "WHERE type = 'table' "
                             "AND LOWER(name) = ?", [table]).fetchone()
-        self.tables[table] = row
+        self.schema["table"][table] = row
 
 
     def update_row(self, table, row, original_row, rowid=None):
@@ -377,8 +377,8 @@ class Database(object):
         if not self.is_open():
             return
         table, where = table.lower(), ""
-        main.log("Updating 1 row in table %s, %s.",
-                 self.tables[table]["name"], self.filename)
+        guibase.log("Updating 1 row in table %s, %s.",
+                    self.schema["table"][table]["name"], self.filename)
         self.ensure_backup()
         col_data = self.get_table_columns(table)
         values, where = row.copy(), ""
@@ -408,8 +408,8 @@ class Database(object):
         if not self.is_open():
             return
         table = table.lower()
-        main.log("Inserting 1 row into table %s, %s.",
-                 self.tables[table]["name"], self.filename)
+        guibase.log("Inserting 1 row into table %s, %s.",
+                    self.schema["table"][table]["name"], self.filename)
         self.ensure_backup()
         col_data = self.get_table_columns(table)
         fields = [col["name"] for col in col_data]
@@ -433,8 +433,8 @@ class Database(object):
         if not self.is_open():
             return
         table, where = table.lower(), ""
-        main.log("Deleting 1 row from table %s, %s.",
-                 self.tables[table]["name"], self.filename)
+        guibase.log("Deleting 1 row from table %s, %s.",
+                    self.schema["table"][table]["name"], self.filename)
         self.ensure_backup()
         col_data = self.get_table_columns(table)
         values, where = row.copy(), ""
@@ -444,7 +444,7 @@ class Database(object):
         else:
             for pk in [c["name"] for c in col_data if c["pk"]]:
                 pk_key = "PK%s" % int(time.time())
-                values[pk_key] = original_row[pk]
+                values[pk_key] = row[pk]
                 where += (" AND " if where else "") + "%s IS :%s" % (pk, pk_key)
         if not where:
             return False # Sanity check: no primary key and no rowid
@@ -457,7 +457,7 @@ class Database(object):
 
 def is_sqlite_file(filename, path=None):
     """Returns whether the file looks to be an SQLite database file."""
-    result = ".db" == filename[-3:].lower()
+    result = os.path.splitext(filename)[1].lower() in conf.DBExtensions
     if result:
         try:
             fullpath = os.path.join(path, filename) if path else filename
@@ -478,7 +478,8 @@ def detect_databases():
 
     @yield   each value is a list of detected database paths
     """
-    # First, search system directories for *.db files.
+
+    # First, search system directories for database files.
     if "nt" == os.name:
         search_paths = [os.getenv("APPDATA")]
         c = os.getenv("SystemDrive") or "C:"
@@ -490,9 +491,8 @@ def detect_databases():
         search_paths = [os.getenv("HOME"),
                         "/Users" if "mac" == os.name else "/home"]
     search_paths = map(util.to_unicode, search_paths)
-
     for search_path in filter(os.path.exists, search_paths):
-        main.log("Looking for SQLite databases under %s.", search_path)
+        guibase.log("Looking for SQLite databases under %s.", search_path)
         for root, dirs, files in os.walk(search_path):
             results = []
             for f in files:
@@ -500,9 +500,9 @@ def detect_databases():
                     results.append(os.path.realpath(os.path.join(root, f)))
             if results: yield results
 
-    # Then search current working directory for *.db files.
+    # Then search current working directory for database files.
     search_path = util.to_unicode(os.getcwd())
-    main.log("Looking for SQLite databases under %s.", search_path)
+    guibase.log("Looking for SQLite databases under %s.", search_path)
     for root, dirs, files in os.walk(search_path):
         results = []
         for f in (x for x in files if is_sqlite_file(x, root)):
