@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.08.2019
+@modified    27.08.2019
 ------------------------------------------------------------------------------
 """
 try:
@@ -1136,6 +1136,49 @@ PageInfo = PyEmbeddedImage(
     "4/fT3+P95/bg5Sf2ju/MDz49FT+kEf3Odixtuxkhz2mAqXJ+asG6LSKTb0eZrVIp0N06rq5c"
     "oeuu4bXn78Urj98zc1fh46/PxBPfXsC5i9cIHwENGWS807jRgF5Mrox5GUqY1FOa4SVU2Vjq"
     "8CB8bS3vyvH0vj149rE9o33/AZd4Hw2lBI2bAAAAAElFTkSuQmCC"
+)
+
+
+"""Icon for the Pragma page in a database tab."""
+PagePragma = PyEmbeddedImage(
+    "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"
+    "n/Uqw9R5AAAAAElFTkSuQmCC"
 )
 
 
