@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2019
+@modified    27.08.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1515,6 +1515,10 @@ class DatabasePage(wx.Panel):
         self.db = db
         self.db.register_consumer(self)
         self.db_grids = {} # {"tablename": SqliteGridBase, }
+        self.pragma         = db.get_pragma_values() # {pragma_name: value}
+        self.pragma_changes = {} # {pragma_name: value}
+        self.pragma_ctrls   = {} # {pragma_name: wx component}
+        self.pragma_edit = False # Whether in PRAGMA edit mode
         self.memoryfs = memoryfs
         parent_notebook.InsertPage(1, self, title)
         busy = controls.BusyPanel(self, "Loading \"%s\"." % db.filename)
@@ -1568,18 +1572,21 @@ class DatabasePage(wx.Panel):
         idx1 = il.Add(images.PageSearch.Bitmap)
         idx2 = il.Add(images.PageTables.Bitmap)
         idx3 = il.Add(images.PageSQL.Bitmap)
-        idx4 = il.Add(images.PageInfo.Bitmap)
+        idx4 = il.Add(images.PagePragma.Bitmap)
+        idx5 = il.Add(images.PageInfo.Bitmap)
         notebook.AssignImageList(il)
 
         self.create_page_search(notebook)
         self.create_page_tables(notebook)
         self.create_page_sql(notebook)
+        self.create_page_pragma(notebook)
         self.create_page_info(notebook)
 
         notebook.SetPageImage(0, idx1)
         notebook.SetPageImage(1, idx2)
         notebook.SetPageImage(2, idx3)
         notebook.SetPageImage(3, idx4)
+        notebook.SetPageImage(4, idx5)
 
         sizer.Add(notebook, proportion=1, border=5, flag=wx.GROW | wx.ALL)
 
@@ -1892,6 +1899,135 @@ class DatabasePage(wx.Panel):
         splitter.SplitHorizontally(panel1, panel2, sashPosition=sash_pos)
 
 
+    def create_page_pragma(self, notebook):
+        """Creates a page for database PRAGMA settings."""
+        page = self.page_pragma = wx.Panel(parent=notebook)
+        self.pageorder[page] = len(self.pageorder)
+        notebook.AddPage(page, "Pragma")
+        sizer = page.Sizer = wx.BoxSizer(wx.VERTICAL)
+
+        panel = self.panel_pragma = wx.lib.scrolledpanel.ScrolledPanel(page)
+        sizer_header = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_panel = panel.Sizer = wx.FlexGridSizer(cols=4, vgap=4, hgap=10)
+        sizer_footer = wx.BoxSizer(wx.HORIZONTAL)
+
+        label_header = wx.StaticText(parent=page, label="Database PRAGMA settings")
+        label_header.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
+                                    wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
+
+        def on_help(ctrl, text, event):
+            """Handler for clicking help bitmap, shows text popup."""
+            wx.TipWindow(ctrl, text, maxLength=300)
+            
+        bmp = wx.ArtProvider.GetBitmap(wx.ART_HELP_BOOK, wx.ART_TOOLBAR, (16, 16))
+        cursor_pointer = wx.StockCursor(wx.CURSOR_HAND)
+        lastopts = {}
+        for name, opts in sorted(database.Database.PRAGMA.items(),
+                                 key=lambda x: (bool(x[1].get("deprecated")), x[1]["label"])):
+            value = self.pragma.get(name)
+            description = "%s:\n\n%s%s" % (name,
+                "DEPRECATED.\n\n" if opts.get("deprecated") else "", opts["description"]
+            )
+            ctrl_name, label_name = "pragma_%s" % name, "pragma_%s_label" % name
+
+            label = wx.StaticText(parent=panel, label=opts["label"], name=label_name)
+            if "table" == opts["type"]:
+                ctrl = wx.TextCtrl(panel, name=ctrl_name, style=wx.TE_MULTILINE,
+                                   value="\n".join(str(x) for x in value or ()))
+                ctrl.SetEditable(False)
+                ctrl.SetInitialSize((200, -1)) # Size to fit vertical content
+            elif bool == opts["type"]:
+                style = 0
+                if opts.get("read") == False:
+                    style = wx.CHK_3STATE | wx.CHK_ALLOW_3RD_STATE_FOR_USER
+                ctrl = wx.CheckBox(panel, name=ctrl_name, style=style)
+                if value is not None: ctrl.Value = value
+                elif ctrl.Is3State(): ctrl.Set3StateValue(wx.CHK_UNDETERMINED)
+                ctrl.Bind(wx.EVT_CHECKBOX, self.on_pragma_change)
+            elif opts.get("values"):
+                choices = map(str, sorted(opts["values"].values()))
+                ctrl = wx.Choice(panel, name=ctrl_name, choices=choices)
+                ctrl.Selection = list(opts["values"]).index(value)
+                ctrl.Bind(wx.EVT_CHOICE, self.on_pragma_change)
+            elif int == opts["type"]:
+                ctrl = wx.SpinCtrl(panel, name=ctrl_name)
+                ctrl.SetRange(opts.get("min", -sys.maxint), opts.get("max", sys.maxint))
+                ctrl.Value = value
+                ctrl.Bind(wx.EVT_SPINCTRL, self.on_pragma_change)
+            else:
+                ctrl = wx.TextCtrl(panel, name=ctrl_name)
+                ctrl.Value = "" if value is None else value
+                ctrl.Bind(wx.EVT_TEXT, self.on_pragma_change)
+            label_text = wx.StaticText(parent=panel, label=opts["short"])
+            help_bmp = wx.StaticBitmap(panel, bitmap=bmp)
+
+            if opts.get("deprecated"):
+                label.ForegroundColour = label_text.ForegroundColour = conf.DisabledColour
+            label.SetToolTipString(description)
+            ctrl.SetToolTipString(description)
+            label_text.SetToolTipString(description)
+            help_bmp.SetCursor(cursor_pointer)
+            help_bmp.Bind(wx.EVT_LEFT_UP, functools.partial(on_help, help_bmp, description))
+
+            if "table" != opts["type"]: ctrl.Disable()
+            self.pragma_ctrls[name] = ctrl
+
+            if opts.get("deprecated") \
+            and bool(lastopts.get("deprecated")) != bool(opts.get("deprecated")):
+                #for i in range(4): sizer_panel.AddSpacer(20)
+                label_deprecated = wx.StaticText(panel, label="DEPRECATED:")
+                label_deprecated.ForegroundColour = conf.DisabledColour
+                sizer_panel.Add(label_deprecated, border=25, flag=wx.TOP)
+                for i in range(3): sizer_panel.AddSpacer(20)
+
+            sizer_panel.Add(label, border=5, flag=wx.LEFT)
+            sizer_panel.Add(ctrl)
+            sizer_panel.Add(label_text)
+            sizer_panel.Add(help_bmp)
+            lastopts = opts
+
+        button_edit = self.button_pragma_edit = \
+            wx.Button(parent=page, label="&Edit")
+        button_refresh = self.button_pragma_refresh = \
+            wx.Button(parent=page, label="&Refresh")
+        button_save = self.button_pragma_save = \
+            wx.Button(parent=page, label="&Save")
+        button_cancel = self.button_pragma_cancel = \
+            wx.Button(parent=page, label="&Cancel")
+
+        button_edit.SetToolTipString("Edit PRAGMA values")
+        button_save.SetToolTipString("Save changed PRAGMAs")
+        button_refresh.SetToolTipString("Reload PRAGMA values from database")
+        button_cancel.SetToolTipString("Cancel PRAGMA changes")
+        button_save.Enabled = button_cancel.Enabled = False
+
+        self.Bind(wx.EVT_BUTTON, self.on_pragma_save,    button_save)
+        self.Bind(wx.EVT_BUTTON, self.on_pragma_edit,    button_edit)
+        self.Bind(wx.EVT_BUTTON, self.on_pragma_refresh, button_refresh)
+        self.Bind(wx.EVT_BUTTON, self.on_pragma_cancel,  button_cancel)
+
+        sizer_header.AddStretchSpacer()
+        sizer_header.Add(label_header, border=5, flag=wx.ALL)
+        sizer_header.AddStretchSpacer()
+
+        sizer_footer.AddStretchSpacer()
+        sizer_footer.Add(button_edit)
+        sizer_footer.AddStretchSpacer()
+        sizer_footer.Add(button_refresh)
+        sizer_footer.AddStretchSpacer()
+        sizer_footer.Add(button_save)
+        sizer_footer.AddStretchSpacer()
+        sizer_footer.Add(button_cancel)
+        sizer_footer.AddStretchSpacer()
+
+        #sizer_panel.AddGrowableCol(2, 1)
+
+        sizer.Add(sizer_header, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
+        sizer.Add(panel, proportion=1, border=20, flag=wx.LEFT | wx.GROW)
+        sizer.Add(sizer_footer, border=10, flag=wx.BOTTOM | wx.TOP | wx.GROW)
+        panel.SetupScrolling(scroll_x=False)
+
+
     def create_page_info(self, notebook):
         """Creates a page for seeing general database information."""
         page = self.page_info = wx.lib.scrolledpanel.ScrolledPanel(notebook)
@@ -1988,6 +2124,96 @@ class DatabasePage(wx.Panel):
         sizer.Add(panel2, proportion=1, border=5,
                   flag=wx.RIGHT | wx.TOP | wx.BOTTOM | wx.GROW)
         page.SetupScrolling()
+
+
+    def on_pragma_change(self, event):
+        """Handler for changing a PRAGMA value."""
+        if not self.pragma_edit: return
+        ctrl = event.EventObject
+            
+        name = ctrl.Name.replace("pragma_", "", 1)
+        if isinstance(ctrl, wx.Choice):
+            vals = database.Database.PRAGMA[name]["values"]
+            value = ctrl.GetString(ctrl.Selection)
+            value = next(k for k, v in vals.items() if str(v) == value)
+        else:
+            value = ctrl.Value
+            if isinstance(ctrl, wx.CheckBox) and ctrl.Is3State():
+                FLAGS = {wx.CHK_CHECKED: True, wx.CHK_UNCHECKED: False,
+                         wx.CHK_UNDETERMINED: None}
+                value = FLAGS[ctrl.Get3StateValue()]
+        self.pragma_changes[name] = value
+
+
+    def on_pragma_save(self, event):
+        """Handler for clicking to save PRAGMA changes."""
+
+        changes = {} # {pragma_name: value}
+        for name, value in self.pragma_changes.items():
+            if value == self.pragma.get(name): continue # for name, value
+            changes[name] = value
+
+        try:
+            for name, value in changes.items():
+                if isinstance(value, basestring):
+                    value = '"%s"' % value.replace('"', '""')
+                sql = "PRAGMA %s = %s" % (name, value)
+                guibase.log("Executing %s.", sql)
+                self.db.execute(sql)
+        except Exception:
+            msg = "Error setting %s:\n\n%s" % \
+                  (sql, traceback.format_exc())
+            guibase.logstatus_flash(msg)
+            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+        else:
+            self.pragma.update(changes)
+            self.on_pragma_cancel(None)
+
+
+    def on_pragma_edit(self, event):
+        """Handler for clicking to edit PRAGMA settings."""
+        self.pragma_edit = True
+        self.button_pragma_save.Enable()
+        self.button_pragma_cancel.Enable()
+        self.button_pragma_edit.Disable()
+        for name, opts in database.Database.PRAGMA.items():
+            ctrl = self.pragma_ctrls[name]
+            if opts.get("write") != False and "table" != opts["type"]:
+                ctrl.Enable()
+
+
+    def on_pragma_refresh(self, event):
+        """Handler for clicking to refresh PRAGMA settings."""
+        flag = self.pragma_edit
+        self.pragma.update(self.db.get_pragma_values())
+        self.pragma_edit = False
+        for name, opts in database.Database.PRAGMA.items():
+            ctrl = self.pragma_ctrls[name]
+            value = self.pragma.get(name)
+            if "table" == opts["type"]:
+                ctrl.Value = "\n".join(str(x) for x in value or ())
+            elif bool == opts["type"]:
+                if value is not None: ctrl.Value = value
+                elif ctrl.Is3State(): ctrl.Set3StateValue(wx.CHK_UNDETERMINED)
+            elif opts.get("values"):
+                ctrl.Selection = list(opts["values"]).index(value)
+            elif int == opts["type"]:
+                ctrl.Value = value
+            else:
+                ctrl.Value = "" if value is None else value
+        self.pragma_changes.clear()
+        self.pragma_edit = flag
+
+
+    def on_pragma_cancel(self, event):
+        """Handler for clicking to cancel PRAGMA changes."""
+        self.pragma_edit = False
+        self.button_pragma_edit.Enable()
+        self.button_pragma_save.Disable()
+        self.button_pragma_cancel.Disable()
+        self.on_pragma_refresh(None)
+        for name, opts in database.Database.PRAGMA.items():
+            if "table" != opts["type"]: self.pragma_ctrls[name].Disable()
 
 
     def on_check_integrity(self, event):
