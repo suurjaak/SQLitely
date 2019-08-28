@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   07.02.2012
-@modified  27.08.2019
+@modified  28.08.2019
 ------------------------------------------------------------------------------
 """
 import base64
@@ -67,6 +67,8 @@ IMAGES = {
         "Icon for the Info page in a database tab.",
     "PagePragma.png":
         "Icon for the Pragma page in a database tab.",
+    "PageSchema.png":
+        "Icon for the Schema page in a database tab.",
     "PageSearch.png":
         "Icon for the Search page in a database tab.",
     "PageSQL.png":

@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.08.2019
+@modified    28.08.2019
 ------------------------------------------------------------------------------
 """
 try:
@@ -1219,6 +1219,44 @@ PageSQL = PyEmbeddedImage(
     "z1iAWOTl59LqFfz37Od485eHcOzHhydn5tu/OxPeoRGj/i1Y2ncrfJ7TABOvXlsf6doiMn13"
     "7F7lOgaYah3XVq4ydNfxwpP34Fc/untyOW2fD/90Lpz6y0VcuHSd7nMRfCYNmqA1V/M5aA+v"
     "Umk1TOwpzfgwa84iSTLLa9nygRw/f+AQfvHDQ+N1/w/jDD9W5IqYSwAAAABJRU5ErkJggg=="
+)
+
+
+"""Icon for the Schema page in a database tab."""
+PageSchema = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAGnElEQVRYw62XW4heVxXHf2vv"
+    "890mM5OkSZtGk9COxKlRI9aKNQ1VQfDCWPBOoU/ii1VUUNAHQfBBxIcilT55KRipUAP2JUUf"
+    "FG0bDcaKRNPUGFtNCDWThJC5ft85e6+/D+fMN99kZlLBbjicvc/+r7XXWXut/9rbGGlHz1zR"
+    "8TOznL84R7W0SGFOihGxtkkgBBgA1rwxsFGwrXbanTb7d49z+C27mJneZesgXz96Wn+aG+Pw"
+    "m9vcvXcbXYNOFBWGYJ0R3gibDKwxyEYUNoautPkycPalS5w4fY279m7luzNTNjTgK0+9rLNX"
+    "4cP37mK822dxMdC3AiucTuVojVpAhimiUOEhIQmImCLciAWEkVuR8QhzOXDs2asc2pv51of2"
+    "mf367FV941eXefv0Pm4fS8yP9YjRaeXEgBbRfFQTBriJFIxCiehCRJK1kAVantcZgIlMRccL"
+    "qkFmdilz6u8XeWRmD+F3Z2bp3HI7eazN4pYuFgLmIpnwCE4gW6tRlChjQESCWpgK3IwyFljj"
+    "J5kjKykjZIMUIkIEYKkIlL0uE4WzZXwXvz0zS/HiZWdyR4vYArdIzKIsAi0JU6yNKTKiRcwF"
+    "t3UzD7y+oGVCtDG1cYPs4ukLzmyqyIxRJFEVTktLqNmVbkosx4Ki3WZ8fMD52UxxvSzY7omo"
+    "NiEL8wguBtajnX04Dl73D+2A6YnABn7m2k548j9r5QbWGyIyoQ5MgXmX5QoKkyEinmAQAkio"
+    "CsiMgTQc5yasAxst3rRg5GqtnGw1KF0OGeQBzEkOhVxkjOSGKpDySoJhZsOxWUDKuG8c6VBv"
+    "QzXQGrlRbCTjgBQRFe6iyJ6RRM6GOyNCNkIVq31329QB7pDSjXK2ZgswgQckA4kCieyQUsNs"
+    "CjewychYoTFyMwOMqtJ6uSF9REy5TuUMcqdwiZxFlWpKHWUvs1U2W+lfmncgbmjApQVRVbZG"
+    "7kZCwiBI5CRwKCSRkpOSgwxkDe0KqxO7Zn0TyHjqH8bFeWdL23joQP2LP31BLFXOyVeMpLVy"
+    "oyQeSOQAQTTrQRGzU+ZAVcWmwDQyo1VldCx49gJgziena0/88p8acfcmck3dcCvJ9MjJIFcU"
+    "ZJESVJmG01ffKxmklb8amRttZfL/CWuKlLFDlwWkEleLwuVkiZTqWLBG+q23is/fE5nsbp73"
+    "2zr1+ycfKTbFzA2cx05m/nq5DoxWNUcwJyexSEHwnIdBWKXAoISyDHzhnsi+bWFYijd6Rj29"
+    "2bNva62rLGGQM/0cGOQJYpUx+hTuwh2qJNwD8oABk124sgQf/1mzvcGHc7U/nV88WHvno0+M"
+    "zJvX2dxgjz4Ik91AykByogrKdmYxtNg+SBRCaGULkjcEUROJRJ3XAgujc6vBJaAstTqPMNMQ"
+    "q6YSlaUoXAyCoIiUaqM6DSHIUA6QjfdOZcbbgU40igAz02KuL555OVJ5JprxvimY6AQ6zdbP"
+    "TIuFMvCblzI5B1oxcP+dmclOoNcyCoOZNwb6fXHs3z16OdDWPJmMvfubJ6QdB7A4zkMHnYcP"
+    "b0wy33tG/PjPFZ99Z+SL922MefR44od/jHzmHfDl+zem7MeOZ574m9GvrrBr4XwdhJLI7uze"
+    "GjeN5t2TNc3unti8FuyeaDCTm2NetzWQU7017iK4hEyk7K/C81BVvAaYOuiNUDOh6jM2KXtD"
+    "HLapYJVerRoaVQq430xPXbYFyCGoMTdLN7dcUKX6/f9i3Ju7hZxgOIGEEIO8uWSZhdOiTNwE"
+    "YxiivJmeJCyIFOt0LSZ7gfl+SaezhR+dXGbv9i7tEGoeCBlkVBU8/vwyZoEjJ9rcsUO0Y6gv"
+    "JQ2uTHDkD2AeePz5ZaZ2duk0eoaLu/ODk5lucAYDMdlZxr525ISePBW54663ce58H8sdgkpK"
+    "i2S6tOPCa/utWOLgHvjLi+f50rsGhE/fN8Vg7hUWlhbZc1uHEJx+MCxUFAxIeYyKyMB6yNoE"
+    "c5JvobRIP9Tfojmex8hEBmEVV/lYjYs9UmjTiwtM3Rq5MjePli7wwXvfUPvn28de0CNHz3Hn"
+    "wUNMbJukv2CULnJwsGLkoqd1987Rk58At7DuHmk4HZyJsTaX5i7zr9Mn+c4n9vO5D0yvnpkf"
+    "ffqUvn/0HIPuDiZv2Ym3WuQQiBuEtI3aYrb27mi+wY3BCdUS165cpe3X+eqnDvDw+99k3Jis"
+    "P3/ujI79/iLnLl2ved8LbHWl1YMGjlTVAWgriIBhhJGCpeGhJhCLwNSeFg/cvZ+PvWf/cN3/"
+    "AkIbGBDqj/1MAAAAAElFTkSuQmCC"
 )
 
 
