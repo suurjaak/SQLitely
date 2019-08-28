@@ -1787,6 +1787,8 @@ class DatabasePage(wx.Panel):
         grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,
                   self.on_filter_grid_column)
         grid.Bind(wx.grid.EVT_GRID_CELL_CHANGE, self.on_change_table)
+        grid.GridWindow.Bind(wx.EVT_CHAR_HOOK, functools.partial(self.on_grid_key, grid))
+
         label_help = wx.StaticText(panel2, label="Double-click on column "
                                    "header to sort, right click to filter.")
         label_help.ForegroundColour = "grey"
@@ -1884,6 +1886,8 @@ class DatabasePage(wx.Panel):
         grid.Bind(wx.EVT_SCROLL_CHANGED, self.on_scroll_grid_sql)
         grid.Bind(wx.EVT_KEY_DOWN, self.on_scroll_grid_sql)
         grid.GridWindow.Bind(wx.EVT_MOTION, self.on_mouse_over_grid)
+        grid.GridWindow.Bind(wx.EVT_CHAR_HOOK, functools.partial(self.on_grid_key, grid))
+
         label_help_grid = wx.StaticText(panel2, label="Double-click on column "
                                         "header to sort, right click to filter.")
         label_help_grid.ForegroundColour = "grey"
@@ -2860,6 +2864,43 @@ class DatabasePage(wx.Panel):
         if tab["id"] in self.workers_search:
             self.workers_search[tab["id"]].stop()
             del self.workers_search[tab["id"]]
+
+
+    def on_grid_key(self, grid, event):
+        """
+        Handler for keypress in data grid,
+        copies selection to clipboard on Ctrl-C.
+        """
+        if not (event.KeyCode in [ord('C')] and event.ControlDown()):
+            return event.Skip()
+
+        rows, cols = [], []
+        if grid.GetSelectedCols():
+            cols += sorted(grid.GetSelectedCols())
+            rows += range(grid.GetNumberRows())
+        if grid.GetSelectedRows():
+            rows += sorted(grid.GetSelectedRows())
+            cols += range(grid.GetNumberCols())
+        if grid.GetSelectionBlockTopLeft():
+            end = grid.GetSelectionBlockBottomRight()
+            for i, (r, c) in enumerate(grid.GetSelectionBlockTopLeft()):
+                r2, c2 = end[i]
+                rows += range(r, r2 + 1)
+                cols += range(c, c2 + 1)
+        if grid.GetSelectedCells():
+            rows += [r for r, c in grid.GetSelectedCells()]
+            cols += [c for r, c in grid.GetSelectedCells()]
+        if not rows and not cols:
+            if grid.GetGridCursorRow() >= 0 and grid.GetGridCursorCol() >= 0:
+                rows, cols = [grid.GetGridCursorRow()], [grid.GetGridCursorCol()]
+        rows, cols = (sorted(set(y for y in x if y >= 0)) for x in (rows, cols))
+        if not rows or not cols: return
+
+        if wx.TheClipboard.Open():
+            data = [[grid.GetCellValue(r, c) for c in cols] for r in rows]
+            text = "\n".join("\t".join(c for c in r) for r in data)
+            d = wx.TextDataObject(text)
+            wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
 
 
     def on_mouse_over_grid(self, event):
