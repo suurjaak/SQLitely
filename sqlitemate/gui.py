@@ -1990,7 +1990,7 @@ class DatabasePage(wx.Panel):
                 ctrl.Value = value
                 ctrl.Bind(wx.EVT_SPINCTRL, self.on_pragma_change)
             else:
-                ctrl = wx.TextCtrl(panel_pragma, name=ctrl_name)
+                ctrl = wx.TextCtrl(panel_pragma, name=ctrl_name, size=(200, -1))
                 ctrl.Value = "" if value is None else value
                 ctrl.Bind(wx.EVT_TEXT, self.on_pragma_change)
             label_text = wx.StaticText(parent=panel_pragma, label=opts["short"])
