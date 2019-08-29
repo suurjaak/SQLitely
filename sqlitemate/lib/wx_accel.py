@@ -30,7 +30,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     19.11.2011
-@modified    26.08.2019
+@modified    27.08.2019
 ------------------------------------------------------------------------------
 """
 import functools
@@ -229,10 +229,9 @@ def collect_shortcuts(control, use_heuristics=True):
     strip_rgx = re.compile(r"(^label[_ \/.]*)|([_ \/.]*label$)", re.I)
     nameds_lc = dict((k.lower(), v) for k, v in nameds.items())
     for name, ctrl in nameds.items():
-        basename = strip_rgx.sub(name, "").lower()
-        if len(basename) < len(name) or not isinstance(ctrl, wx.StaticText):
+        basename = strip_rgx.sub("", name).lower()
+        if basename == name or not isinstance(ctrl, wx.StaticText):
             continue # for name, ctrl
-        print name, basename
         target = nameds_lc.get(basename)
         if not target:
             continue # for name, ctrl
@@ -241,8 +240,8 @@ def collect_shortcuts(control, use_heuristics=True):
         if DEBUG:
             print("Name %s matches potential %s, key=%s." % (
                   name, basename, key))
-        if key and target not in result_values:
-            if target not in result[key]:
+        if target not in result_values:
+            if target not in result.get(key, []):
                 result.setdefault(key, []).append((target, ctrl))
             result_values.add(target)
             if DEBUG:
@@ -269,6 +268,9 @@ def accelerate(window, use_heuristics=True, skipclicklabels=set()):
     @return                  a map of detected shortcut chars and their target
                              controls
     """
+    CHK_3STATE_NEXT = {wx.CHK_CHECKED:      wx.CHK_UNDETERMINED,
+                       wx.CHK_UNCHECKED:    wx.CHK_CHECKED,
+                       wx.CHK_UNDETERMINED: wx.CHK_UNCHECKED}
 
     def eventhandler(targets, key, shortcut_event):
         """
@@ -301,8 +303,11 @@ def accelerate(window, use_heuristics=True, skipclicklabels=set()):
                     target.Value = not target.Value
                 elif isinstance(target, wx.CheckBox):
                     event = wx.CommandEvent(wx.EVT_CHECKBOX.typeId, target.Id)
+                    event.SetEventObject(target)
                     # Need to change value, as event goes directly to handler
-                    target.Value = not target.Value
+                    if target.Is3State():
+                        target.Set3StateValue(CHK_3STATE_NEXT[target.Get3StateValue()])
+                    else: target.Value = not target.Value
                     target.SetFocus()
                 elif isinstance(target, wx.ToolBar):
                     # Toolbar shortcuts are defined in their shorthelp texts

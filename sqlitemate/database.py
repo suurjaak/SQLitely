@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2019
+@modified    27.08.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -28,6 +28,382 @@ from . import guibase
 
 class Database(object):
     """Access to an SQLite database file."""
+
+    """
+    SQLite PRAGMA settings, as {
+        name:         directive name,
+        label:        directive label,
+        type:         type function or special like "table",
+        short:        "short text",
+        description:  "long text",
+        ?values:      {primitive: label},
+        ?deprecated:  whether directive is deprecated,
+        ?min:         minimum integer value,
+        ?max:         maximum integer value,
+        ?read:        false if setting is write-only,
+        ?write:       false if setting is read-only,
+        ?col:         result column to select if type "table"
+    }.
+    """
+    PRAGMA = {
+      "application_id": {
+        "name": "application_id",
+        "label": "Application ID",
+        "type": int,
+        "short": "Application-specified unique integer",
+        "description": "Applications can set a unique integer so that utilities can determine the specific file type.",
+      },
+      "auto_vacuum": {
+        "name": "auto_vacuum",
+        "label": "Auto-vacuum",
+        "type": int,
+        "values": {0: "NONE", 1: "FULL", 2: "INCREMENTAL"},
+        "short": "Auto-vacuum settings",
+        "description": """  FULL: truncate deleted rows on every commit.
+  INCREMENTAL: truncate on PRAGMA incremental_vacuum.
+
+  Must be turned on before any tables are created, not possible to change afterwards.""",
+      },
+      "automatic_index": {
+        "name": "automatic_index",
+        "label": "Automatic index",
+        "type": bool,
+        "short": "Use an automatic index if table has none of its own",
+        "description": "When no indices are available to aid the evaluation of a query, SQLite might create an automatic index that lasts only for the duration of a single SQL statement.",
+      },
+      "busy_timeout": {
+        "name": "busy_timeout",
+        "label": "Busy timeout",
+        "type": int,
+        "min": 0,
+        "short": "Locked table access timeout",
+        "description": "Timeout in milliseconds for busy handler when table is locked.",
+      },
+      "cache_size": {
+        "name": "cache_size",
+        "label": "Cache size",
+        "type": int,
+        "short": "Suggested number of disk pages in nemory",
+        "description": """  Suggested maximum number of database disk pages that SQLite will hold in memory at once per open database file. Endures only for the length of the current session.
+  If positive, the suggested cache size is set to N. If negative, the number of cache pages is adjusted to use approximately abs(N*1024) bytes.""",
+      },
+      "cache_spill": {
+        "name": "cache_spill",
+        "label": "Cache spill",
+        "type": bool,
+        "short": "Spill dirty cache pages to file during transaction",
+        "description": "Enables or disables the ability of the pager to spill dirty cache pages to the database file in the middle of a transaction.",
+      },
+      "case_sensitive_like": {
+        "name": "case_sensitive_like",
+        "label": "Case-sensitive LIKE",
+        "type": bool,
+        "read": False,
+        "short": "Case sensitivity on LIKE operator",
+        "description": "Toggles case sensitivity on LIKE operator.",
+      },
+      "cell_size_check": {
+        "name": "cell_size_check",
+        "label": "Cell-size check",
+        "type": bool,
+        "read": False,
+        "short": "Additional sanity checking on b-tree pages",
+        "description": "Enables or disables additional sanity checking on database b-tree pages as they are initially read from disk. If enabled, database corruption is detected earlier and is less likely to 'spread', with the price of a small performance hit.",
+      },
+      "checkpoint_fullfsync": {
+        "name": "checkpoint_fullfsync",
+        "label": "Full FSYNC on checkpoint",
+        "type": bool,
+        "read": False,
+        "short": "Full FSYNC during checkpoint operations",
+        "description": "If enabled, then the F_FULLFSYNC syncing method is used during checkpoint operations on systems that support F_FULLFSYNC (Mac OS-X only).",
+      },
+      "collation_list": {
+        "name": "collation_list",
+        "label": "Collation list",
+        "type": "table",
+        "col": "name",
+        "write": False,
+        "short": "Collating sequences for current session",
+        "description": "A list of the collating sequences defined for the current database connection.",
+      },
+      "compile_options": {
+        "name": "compile_options",
+        "label": "Compile options",
+        "type": "table",
+        "col": "compile_option",
+        "write": False,
+        "short": "SQLite compile-time options",
+        "description": "Compile-time options used when building current SQLite library.",
+      },
+      "count_changes": {
+        "name": "count_changes",
+        "label": "Count changes",
+        "type": bool,
+        "deprecated": True,
+        "short": "Return number of affected rows on action queries",
+        "description": "If enabled, INSERT, UPDATE and DELETE statements return a single data row, with the number of rows inserted, modified or deleted (not including trigger or foreign key actions).",
+      },
+      "data_store_directory": {
+        "name": "data_store_directory",
+        "label": "Data-store directory",
+        "type": unicode,
+        "deprecated": True,
+        "short": "Windows-specific directory for relative pathnames",
+        "description": "Global variable, used by interface backends on Windows to determine where to store database files specified using a relative pathname.",
+      },
+      "data_version": {
+        "name": "data_version",
+        "label": "Data version",
+        "type": int,
+        "write": False,
+        "short": "Data change indicator",
+        "description": "Indication that the database file has been modified by another connection during the current session.",
+      },
+      "default_cache_size": {
+        "name": "default_cache_size",
+        "label": "Default cache size",
+        "type": int,
+        "deprecated": True,
+        "short": "Suggested number of disk cache pages",
+        "description": "The suggested maximum number of pages of disk cache that will be allocated per open database file; persists across database connections.",
+      },
+      "defer_foreign_keys": {
+        "name": "defer_foreign_keys",
+        "label": "Defer foreign keys",
+        "type": bool,
+        "short": "Delay foreign key enforcement",
+        "description": "If enabled, enforcement of all foreign key constraints is delayed until the outermost transaction is committed. By default, foreign key constraints are only deferred if they are created as 'DEFERRABLE INITIALLY DEFERRED'. Is automatically switched off at each COMMIT or ROLLBACK, and must be separately enabled for each transaction.",
+      },
+      "empty_result_callbacks": {
+        "name": "empty_result_callbacks",
+        "label": "Empty-result-callbacks",
+        "type": bool,
+        "deprecated": True,
+        "short": "sqlite3_exec() returns column names even on no data",
+        "description": "Affects the sqlite3_exec() API only. Normally, the callback function supplied to sqlite3_exec() is not invoked for commands that return zero rows of data. If enabled, the callback function is invoked exactly once, with the third parameter set to 0 (NULL), to enable programs that use the sqlite3_exec() API to retrieve column-names even when a query returns no data.",
+      },
+      "encoding": {
+        "name": "encoding",
+        "label": "Encoding",
+        "type": str,
+        "short": "Database text encoding",
+        "values": {"UTF-8": "UTF-8", "UTF-16": "UTF-16 native byte-ordering", "UTF-16le": "UTF-16 little endian", "UTF-16be": "UTF-16 big endian"},
+        "description": "The text encoding used by the database. It is not possible to change the encoding after the database has been created.",
+      },
+      "foreign_keys": {
+        "name": "foreign_keys",
+        "label": "Foreign key constraints",
+        "type": bool,
+        "short": "Foreign key enforcement",
+        "description": "If enabled, foreign key constraints are enforced for the duration of the current session.",
+      },
+      "freelist_count": {
+        "name": "freelist_count",
+        "label": "Freelist count",
+        "type": int,
+        "write": False,
+        "short": "Unused pages",
+        "description": "The number of unused pages in the database file.",
+      },
+      "full_column_names": {
+        "name": "full_column_names",
+        "label": "Full column names",
+        "type": bool,
+        "deprecated": True,
+        "short": "Result columns as TABLE.COLUMN",
+        "description": "If enabled and short_column_names is disabled, specifying TABLE.COLUMN in SELECT will yield result columns as TABLE.COLUMN.",
+      },
+      "fullfsync": {
+        "name": "fullfsync",
+        "label": "Full FSYNC",
+        "type": bool,
+        "short": "Use Full FSYNC",
+        "description": "Determines whether or not the F_FULLFSYNC syncing method is used on systems that support it (Mac OS-X only).",
+      },
+      "ignore_check_constraints": {
+        "name": "ignore_check_constraints",
+        "label": "Ignore check constraints",
+        "type": bool,
+        "short": "CHECK constraint enforcement",
+        "description": "Enables or disables the enforcement of CHECK constraints.",
+      },
+      "journal_mode": {
+        "name": "journal_mode",
+        "label": "Journal mode",
+        "type": str,
+        "values": {"delete": "DELETE", "truncate": "TRUNCATE", "persist": "PERSIST", "memory": "MEMORY", "wal": "WAL", "off": "OFF"},
+        "short": "Database journaling mode",
+        "description": """  DELETE: the rollback journal is deleted at the conclusion of each transaction."
+  TRUNCATE: commits transactions by truncating the rollback journal to zero-length instead of deleting it (faster on many systems).
+  PERSIST: prevents the rollback journal from being deleted at the end of each transaction. Instead, the header of the journal is overwritten with zeros. This will prevent other database connections from rolling the journal back.
+  MEMORY: stores the rollback journal in volatile RAM. This saves disk I/O but at the expense of database safety and integrity. If the application using SQLite crashes in the middle of a transaction, the database file will very likely go corrupt.
+  WAL: uses a write-ahead log instead of a rollback journal to implement transactions. The WAL journaling mode is persistent; after being set it stays in effect across multiple database connections and after closing and reopening the database.
+  OFF: disables the rollback journal completely. Disables the atomic commit and rollback capabilities of SQLite. The ROLLBACK command no longer works and its behavior is undefined. If the application crashes in the middle of a transaction, the database file will very likely go corrupt.""",
+      },
+      "journal_size_limit": {
+        "name": "journal_size_limit",
+        "label": "Journal size limit",
+        "type": int,
+        "short": "Journal size byte limit",
+        "description": """  Byte limit on the size of rollback-journal and WAL files left in the file-system after transactions or checkpoints. Each time a transaction is committed or a WAL file resets, SQLite compares the size of the rollback journal file or WAL file left in the file-system to the size limit set by this pragma, and if the journal or WAL file is larger, it is truncated to the limit.
+  A negative number implies no limit. To always truncate rollback journals and WAL files to their minimum size, set to zero.""",
+      },
+      "legacy_file_format": {
+        "name": "legacy_file_format",
+        "label": "Legacy file format",
+        "type": bool,
+        "short": "Backwards-compatible database file format",
+        "description": "If enabled, new SQLite databases are created in a file format that is readable and writable by all versions of SQLite going back to 3.0.0. If disabled, new databases are created using the latest file format, which might not be readable or writable by versions of SQLite prior to 3.3.0. Does not tell which file format the current database is using; it tells what format will be used by any newly created databases.",
+      },
+      "locking_mode": {
+        "name": "locking_mode",
+        "label": "Locking mode",
+        "type": str,
+        "values": {"normal": "NORMAL", "exclusive": "EXCLUSIVE"},
+        "short": "Transaction locking mode",
+        "description": """  NORMAL: a database connection unlocks the database file at the conclusion of each read or write transaction.
+  EXCLUSIVE: the database connection never releases file-locks. The first time the database is read in EXCLUSIVE mode, a shared lock is obtained and held. The first time the database is written, an exclusive lock is obtained and held. Database locks obtained by a connection in EXCLUSIVE mode may be released either by closing the database connection, or by setting the locking-mode back to NORMAL using this pragma and then accessing the database file (for read or write). Simply setting the locking-mode to NORMAL is not enough - locks are not released until the next time the database file is accessed.""",
+      },
+      "max_page_count": {
+        "name": "max_page_count",
+        "label": "Max page count",
+        "type": int,
+        "min": 0,
+        "short": "Maximum number of database pages",
+        "description": "The maximum number of pages in the database file. Cannot be reduced below the current database size.",
+      },
+      "mmap_size": {
+        "name": "mmap_size",
+        "label": "Memory-map size",
+        "type": int,
+        "short": "Maximum byte number for memory-mapped I/O",
+        "description": """  The maximum number of bytes that are set aside for memory-mapped I/O on a single database. If zero, memory mapped I/O is disabled.
+  If negative, the limit reverts to the default value determined by the most recent sqlite3_config(SQLITE_CONFIG_MMAP_SIZE), or to the compile time default determined by SQLITE_DEFAULT_MMAP_SIZE if no start-time limit has been set.""",
+      },
+      "page_count": {
+        "name": "page_count",
+        "label": "Page count",
+        "type": int,
+        "write": False,
+        "short": "Total number of pages",
+        "description": "The total number of pages in the database file.",
+      },
+      "page_size": {
+        "name": "page_size",
+        "label": "Page size",
+        "type": int,
+        "values": {512: 512, 1024: 1024, 2048: 2048, 4096: 4096, 8192: 8192, 16384: 16384, 32767: 32768, 65536: 65536},
+        "short": "Database page byte size",
+        "description": "The page size of the database. Specifying a new size does not change the page size immediately. Instead, the new page size is remembered and is used to set the page size when the database is first created, if it does not already exist when the page_size pragma is issued, or at the next VACUUM command that is run on the same database connection while not in WAL mode.",
+      },
+      "query_only": {
+        "name": "query_only",
+        "label": "Query only",
+        "type": bool,
+        "short": "Prevent database changes",
+        "description": "If enabled, prevents all changes to the database file for the duration of the current session.",
+      },
+      "recursive_triggers": {
+        "name": "recursive_triggers",
+        "label": "Recursive triggers",
+        "type": bool,
+        "short": "Enable recursive trigger capability",
+        "description": "Affects the execution of all statements prepared using the database connection, including those prepared before the setting was changed.",
+      },
+      "reverse_unordered_selects": {
+        "name": "reverse_unordered_selects",
+        "label": "Reverse unordered selects",
+        "type": bool,
+        "short": "Unordered SELECT queries return results in reverse order",
+        "description": "If enabled, this PRAGMA causes many SELECT statements without an ORDER BY clause to emit their results in the reverse order from what they normally would, for the duration of the current session.",
+      },
+      "schema_version": {
+        "name": "schema_version",
+        "label": "Schema version",
+        "type": int,
+        "min": 0,
+        "short": "Database schema-version",
+        "description": "SQLite automatically increments the schema-version whenever the schema changes or VACUUM is performed. As each SQL statement runs, the schema version is checked to ensure that the schema has not changed since the SQL statement was prepared. Subverting this mechanism by changing schema_version may cause SQL statement to run using an obsolete schema, which can lead to incorrect answers and/or database corruption.",
+      },
+      "secure_delete": {
+        "name": "secure_delete",
+        "label": "Secure delete",
+        "type": bool,
+        "short": "Zero-fill deleted content",
+        "description": "If enabled, SQLite overwrites deleted content with zeros. If disabled, improves performance by reducing the number of CPU cycles and the amount of disk I/O.",
+      },
+      "short_column_names": {
+        "name": "short_column_names",
+        "label": "Short column names",
+        "type": bool,
+        "deprecated": True,
+        "short": "Result columns omit table name prefix",
+        "description": "Affects the way SQLite names columns of data returned by SELECT statements.",
+      },
+      "synchronous": {
+        "name": "synchronous",
+        "label": "Synchronous",
+        "type": int,
+        "values": {0: "OFF", 1: "NORMAL", 2: "FULL", 3: "EXTRA"},
+        "short": "File synchronization mode",
+        "description": """  OFF: SQLite continues without syncing as soon as it has handed data off to the operating system. If the application running SQLite crashes, the data will be safe, but the database might become corrupted if the operating system crashes or the computer loses power before that data has been written to the disk surface. On the other hand, commits can be orders of magnitude faster with synchronous OFF.
+  NORMAL: the SQLite database engine will still sync at the most critical moments, but less often than in FULL mode. There is a very small (though non-zero) chance that a power failure at just the wrong time could corrupt the database in NORMAL mode. But in practice, you are more likely to suffer a catastrophic disk failure or some other unrecoverable hardware fault. Many applications choose NORMAL when in WAL mode.
+  FULL: the SQLite database engine will use the xSync method of the VFS to ensure that all content is safely written to the disk surface prior to continuing. This ensures that an operating system crash or power failure will not corrupt the database. FULL synchronous is very safe, but it is also slower. FULL is the most commonly used synchronous setting when not in WAL mode.
+  EXTRA: like FULL but with the addition that the directory containing a rollback journal is synced after that journal is unlinked to commit a transaction in DELETE mode. EXTRA provides additional durability if the commit is followed closely by a power loss.""",
+      },
+      "temp_store": {
+        "name": "temp_store",
+        "label": "Temporary store",
+        "type": int,
+        "values": {0: "DEFAULT", 1: "FILE", 2: "MEMORY"},
+        "short": "Location of temporary tables and indices",
+        "description": """  DEFAULT: the compile-time C preprocessor macro SQLITE_TEMP_STORE is used to determine where temporary tables and indices are stored.
+  FILE: temporary tables and indices are stored in a file. The temp_store_directory pragma can be used to specify the directory containing temporary files when FILE is specified. 
+  MEMORY: temporary tables and indices are kept in as if they were pure in-memory databases memory. 
+
+  When the temp_store setting is changed, all existing temporary tables, indices, triggers, and views are immediately deleted.""",
+      },
+      "temp_store_directory": {
+        "name": "temp_store_directory",
+        "label": "Temporary store directory",
+        "type": unicode,
+        "deprecated": True,
+        "short": "Location of temporary storage",
+        "description": "Value of the sqlite3_temp_directory global variable, which some operating-system interface backends use to determine where to store temporary tables and indices.",
+      },
+      "threads": {
+        "name": "threads",
+        "label": "Threads",
+        "type": int,
+        "min": 0,
+        "short": "Number of auxiliary threads for prepared statements",
+        "description": "The upper bound on the number of auxiliary threads that a prepared statement is allowed to launch to assist with a query.",
+      },
+      "user_version": {
+        "name": "user_version",
+        "label": "User version",
+        "type": int,
+        "min": 0,
+        "short": "User-defined database version number",
+        "description": "User-defined version number for the database.",
+      },
+      "wal_autocheckpoint": {
+        "name": "wal_autocheckpoint",
+        "label": "WAL auto-checkpoint interval",
+        "type": int,
+        "short": "Auto-checkpoint interval for WAL",
+        "description": "Auto-checkpoint interval for WAL. When the write-ahead log is enabled (via PRAGMA journal_mode), a checkpoint will be run automatically whenever the write-ahead log equals or exceeds N pages in length. Zero or a negative value turns auto-checkpointing off.",
+      },
+      "writable_schema": {
+        "name": "writable_schema",
+        "label": "Writable schema",
+        "type": bool,
+        "short": "Writable sqlite_master",
+        "description": "If enabled, the sqlite_master table can be changed using ordinary UPDATE, INSERT, and DELETE statements, for the duration of the current session. WARNING: misuse can easily result in a corrupt database file.",
+      },
+    }
+
 
 
     def __init__(self, filename, log_error=True):
@@ -452,6 +828,28 @@ class Database(object):
         self.connection.commit()
         self.last_modified = datetime.datetime.now()
         return True
+
+
+    def get_pragma_values(self):
+        """
+        Returns values for all defined and available PRAGMA settings, as
+        {pragma_name: scalar value or [{row}, ]}.
+        """
+        result = {}
+        for name, opts in self.PRAGMA.items():
+            if opts.get("read") == False: continue # for name, opts
+
+            rows = self.execute("PRAGMA %s" % name).fetchall()
+            if not rows: continue # for name, opts
+                
+            if "table" == opts["type"]:
+                result[name] = [x[opts["col"]] for x in rows]
+            else:
+                result[name] = rows[0].values()[0]
+                if callable(opts["type"]):
+                    result[name] = opts["type"](result[name])
+                    
+        return result
 
 
 

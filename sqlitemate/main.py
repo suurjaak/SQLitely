@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2019
+@modified    29.08.2019
 ------------------------------------------------------------------------------
 """
 import argparse
@@ -61,6 +61,7 @@ def run_gui(filenames):
 
 def run():
     """Parses command-line arguments and runs GUI."""
+    conf.load()
     argparser = argparse.ArgumentParser(description=ARGUMENTS["description"])
     for arg in ARGUMENTS["arguments"]:
         argparser.add_argument(*arg.pop("args"), **arg)
