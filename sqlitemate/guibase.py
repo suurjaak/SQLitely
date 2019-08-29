@@ -148,8 +148,6 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
     def __init__(self):
         wx_accel.AutoAcceleratorMixIn.__init__(self)
 
-        conf.load()
-
         self.Bind(EVT_LOG,      self.on_log_message)
         self.Bind(EVT_STATUS,   self.on_set_status)
         self.Bind(wx.EVT_CLOSE, self.on_exit)
