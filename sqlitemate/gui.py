@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.08.2019
+@modified    29.08.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -43,6 +43,7 @@ import wx.lib.scrolledpanel
 import wx.stc
 
 from . lib import controls
+from . lib.controls import ColourManager
 from . lib import util
 from . lib.vendor import step
 
@@ -73,7 +74,21 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         guibase.TemplateFrameMixIn.__init__(self)
         guibase.window = self
 
-        self.init_colours()
+        ColourManager.Init(self, conf, {
+            "FgColour":                wx.SYS_COLOUR_BTNTEXT,
+            "BgColour":                wx.SYS_COLOUR_WINDOW,
+            "DisabledColour":          wx.SYS_COLOUR_GRAYTEXT,
+            "MainBgColour":            wx.SYS_COLOUR_WINDOW,
+            "WidgetColour":            wx.SYS_COLOUR_BTNFACE,
+        }, {
+            "DBListForegroundColour":  wx.SYS_COLOUR_BTNTEXT,
+            "DBListBackgroundColour":  wx.SYS_COLOUR_WINDOW,
+            "LinkColour":              wx.SYS_COLOUR_HOTLIGHT,
+            "TitleColour":             wx.SYS_COLOUR_HOTLIGHT,
+            "MainBgColour":            wx.SYS_COLOUR_BTNFACE,
+            "HelpCodeColour":          wx.SYS_COLOUR_HIGHLIGHT,
+            "HelpBorderColour":        wx.SYS_COLOUR_ACTIVEBORDER,
+        })
         self.db_filename = None # Current selected file in main list
         self.db_filenames = {}  # added DBs {filename: {size, last_modified,
                                 #            tables, error},}
@@ -100,6 +115,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                      wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
                      wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
                      wx.lib.agw.flatnotebook.FNB_FF2)
+        ColourManager.Manage(notebook, "ActiveTabColour",        wx.SYS_COLOUR_WINDOW)
+        ColourManager.Manage(notebook, "ActiveTabTextColour",    wx.SYS_COLOUR_BTNTEXT)
+        ColourManager.Manage(notebook, "NonActiveTabTextColour", wx.SYS_COLOUR_BTNTEXT)
+        ColourManager.Manage(notebook, "TabAreaColour",          wx.SYS_COLOUR_BTNFACE)
+        ColourManager.Manage(notebook, "GradientColourBorder",   wx.SYS_COLOUR_BTNSHADOW)
+        ColourManager.Manage(notebook, "GradientColourTo",       wx.SYS_COLOUR_ACTIVECAPTION)
+        ColourManager.Manage(notebook, "ForegroundColour",       wx.SYS_COLOUR_BTNTEXT)
+        ColourManager.Manage(notebook, "BackgroundColour",       wx.SYS_COLOUR_WINDOW)
 
         self.create_page_main(notebook)
         self.page_log = self.create_log_panel(notebook)
@@ -133,28 +156,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         # Memory file system for showing images in wx.HtmlWindow
         self.memoryfs = {"files": {}, "handler": wx.MemoryFSHandler()}
         wx.FileSystem_AddHandler(self.memoryfs["handler"])
-        abouticon = "%s.png" % conf.Title.lower() # Program icon shown in About window
-        raw = base64.b64decode(images.Icon48x48_32bit.data)
-        self.memoryfs["handler"].AddFile(abouticon, raw, wx.BITMAP_TYPE_PNG)
-        self.memoryfs["files"][abouticon] = 1
-        # Screenshots look better with colouring if system has off-white colour
-        tint_colour = wx.NamedColour(conf.BgColour)
-        tint_factor = [((4 * x) % 256) / 255. for x in tint_colour]
-        # Images shown on the default search content page
-        for name in ["Search", "Tables", "SQL", "Info"]:
-            embedded = getattr(images, "Help" + name, None)
-            if not embedded: continue # for name
-            img = embedded.Image.AdjustChannels(*tint_factor)
-            raw = util.img_wx_to_raw(img)
-            filename = "Help%s.png" % name
-            self.memoryfs["handler"].AddFile(filename, raw, wx.BITMAP_TYPE_PNG)
-            self.memoryfs["files"][filename] = 1
+        self.load_fs_images()
 
         self.worker_detection = \
             workers.DetectDatabaseThread(self.on_detect_databases_callback)
         self.Bind(EVT_DETECTION_WORKER, self.on_detect_databases_result)
         self.Bind(EVT_OPEN_DATABASE, self.on_open_database_event)
 
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.on_sys_colour_change)
         self.Bind(wx.EVT_CLOSE, self.on_exit)
         self.Bind(wx.EVT_SIZE, self.on_size)
         self.Bind(wx.EVT_MOVE, self.on_move)
@@ -232,34 +241,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         wx.CallLater(20000, self.update_check)
         wx.CallLater(0, self.populate_database_list)
         guibase.log("Started application.")
-
-
-    def init_colours(self):
-        """Update configuration colours with current system theme values."""
-        colourhex = lambda index: (wx.SystemSettings.GetColour(index)
-                                   .GetAsString(wx.C2S_HTML_SYNTAX))
-        conf.FgColour = colourhex(wx.SYS_COLOUR_BTNTEXT)
-        conf.BgColour = colourhex(wx.SYS_COLOUR_WINDOW)
-        conf.DisabledColour = colourhex(wx.SYS_COLOUR_GRAYTEXT)
-        conf.WidgetColour = colourhex(wx.SYS_COLOUR_BTNFACE)
-        if "#FFFFFF" != conf.BgColour: # Potential default colour mismatch
-            conf.DBListForegroundColour = conf.FgColour
-            conf.DBListBackgroundColour = conf.BgColour
-            conf.LinkColour = colourhex(wx.SYS_COLOUR_HOTLIGHT)
-            conf.TitleColour = colourhex(wx.SYS_COLOUR_HOTLIGHT)
-            conf.MainBgColour = conf.WidgetColour
-            conf.HelpCodeColour = colourhex(wx.SYS_COLOUR_HIGHLIGHT)
-            conf.HelpBorderColour = colourhex(wx.SYS_COLOUR_ACTIVEBORDER)
-
-            # Hack: monkey-patch FlatImageBook with non-hardcoded background
-            class HackContainer(wx.lib.agw.labelbook.ImageContainer):
-                BRUSH1, BRUSH2 = wx.WHITE_BRUSH, wx.Brush(conf.BgColour)
-                def OnPaint(self, event):
-                    wx.WHITE_BRUSH = HackContainer.BRUSH2
-                    try: result = HackContainer.__base__.OnPaint(self, event)
-                    finally: wx.WHITE_BRUSH = HackContainer.BRUSH1
-                    return result
-            wx.lib.agw.labelbook.ImageContainer = HackContainer
 
 
     def update_check(self):
@@ -421,6 +402,37 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         event.Skip()
 
 
+    def on_sys_colour_change(self, event):
+        """Handler for system colour change, updates filesystem images."""
+        event.Skip()
+        wx.CallAfter(self.load_fs_images) # Postpone to allow conf update
+
+
+    def load_fs_images(self):
+        """Loads content to MemoryFS."""
+        abouticon = "%s.png" % conf.Title.lower() # Program icon shown in About window
+        raw = base64.b64decode(images.Icon48x48_32bit.data)
+        if abouticon in self.memoryfs["files"]:
+            self.memoryfs["handler"].RemoveFile(abouticon)
+        self.memoryfs["handler"].AddFile(abouticon, raw, wx.BITMAP_TYPE_PNG)
+        self.memoryfs["files"][abouticon] = 1
+
+        # Screenshots look better with colouring if system has off-white colour
+        tint_colour = wx.NamedColour(conf.BgColour)
+        tint_factor = [((4 * x) % 256) / 255. for x in tint_colour]
+        # Images shown on the default search content page
+        for name in ["Search", "Tables", "SQL", "Info"]:
+            embedded = getattr(images, "Help" + name, None)
+            if not embedded: continue # for name
+            img = embedded.Image.AdjustChannels(*tint_factor)
+            raw = util.img_wx_to_raw(img)
+            filename = "Help%s.png" % name
+            if filename in self.memoryfs["files"]:
+                self.memoryfs["handler"].RemoveFile(filename)
+            self.memoryfs["handler"].AddFile(filename, raw, wx.BITMAP_TYPE_PNG)
+            self.memoryfs["files"][filename] = 1
+
+
     def update_notebook_header(self):
         """
         Removes or adds X to notebook tab style, depending on whether current
@@ -448,7 +460,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def create_page_main(self, notebook):
         """Creates the main page with database list and buttons."""
         page = self.page_main = wx.Panel(notebook)
-        page.BackgroundColour = conf.MainBgColour
+        ColourManager.Manage(page, "BackgroundColour", "MainBgColour")
         notebook.AddPage(page, "Databases")
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
@@ -468,8 +480,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         list_db.SetColumnAlignment(2, wx.lib.agw.ultimatelistctrl.ULC_FORMAT_RIGHT)
 
         list_db.AssignImages([images.ButtonHome.Bitmap, images.ButtonListDatabase.Bitmap])
-        list_db.TextColour = wx.NamedColour(conf.DBListForegroundColour)
-        list_db.BackgroundColour = wx.NamedColour(conf.DBListBackgroundColour)
+        ColourManager.Manage(list_db, "ForegroundColour", "DBListForegroundColour")
+        ColourManager.Manage(list_db, "BackgroundColour", "DBListBackgroundColour")
         topdata = collections.defaultdict(lambda: None, name="Home")
         list_db.SetTopRow(topdata, [0])
         list_db.Select(0)
@@ -487,7 +499,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         # Create main page label and buttons
         label_main = wx.StaticText(panel_main,
                                    label="Welcome to %s" % conf.Title)
-        label_main.SetForegroundColour(conf.TitleColour)
+        ColourManager.Manage(label_main, "ForegroundColour", "TitleColour")
         label_main.Font = wx.Font(14, wx.FONTFAMILY_SWISS,
             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
         BUTTONS_MAIN = [
@@ -513,7 +525,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH)
         label_db.Font = wx.Font(12, wx.FONTFAMILY_SWISS,
             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
-        label_db.BackgroundColour = panel_detail.BackgroundColour
+        ColourManager.Manage(label_db, "BackgroundColour", "WidgetColour")
         label_db.SetEditable(False)
 
         sizer_labels = wx.FlexGridSizer(cols=2, vgap=3, hgap=10)
@@ -523,9 +535,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             lbltext = wx.StaticText(parent=panel_detail, label="%s:" % title)
             valtext = wx.TextCtrl(parent=panel_detail, value="",
                                   size=(300, -1), style=wx.NO_BORDER)
-            valtext.BackgroundColour = panel_detail.BackgroundColour
+            ColourManager.Manage(valtext, "BackgroundColour", "WidgetColour")
+            ColourManager.Manage(valtext, "ForegroundColour", wx.SYS_COLOUR_WINDOWTEXT)
             valtext.SetEditable(False)
-            lbltext.ForegroundColour = conf.DisabledColour
+            ColourManager.Manage(lbltext, "ForegroundColour", "DisabledColour")
             sizer_labels.Add(lbltext, border=5, flag=wx.LEFT)
             sizer_labels.Add(valtext, proportion=1, flag=wx.GROW)
             setattr(self, "label_" + field, valtext)
@@ -543,7 +556,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         children = list(panel_main.Children) + list(panel_detail.Children)
         for c in [panel_main, panel_detail] + children:
-            c.BackgroundColour = page.BackgroundColour 
+            ColourManager.Manage(c, "BackgroundColour", "MainBgColour")
         panel_right.SetupScrolling(scroll_x=False)
         panel_detail.Hide()
 
@@ -732,8 +745,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         Handler for clicking "About SQLiteMate" menu, opens a small info frame.
         """
-        text = step.Template(templates.ABOUT_HTML).expand()
-        AboutDialog(self, text).ShowModal()
+        maketext = lambda: step.Template(templates.ABOUT_HTML).expand()
+        AboutDialog(self, maketext).ShowModal()
 
 
     def on_check_update(self, event):
@@ -1523,6 +1536,8 @@ class DatabasePage(wx.Panel):
         parent_notebook.InsertPage(1, self, title)
         busy = controls.BusyPanel(self, "Loading \"%s\"." % db.filename)
         self.counter = lambda x={"c": 0}: x.update(c=1+x["c"]) or x["c"]
+        ColourManager.Manage(self, "BackgroundColour", "WidgetColour")
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.on_sys_colour_change)
 
         # Create search structures and threads
         self.Bind(EVT_WORKER, self.on_searchall_result)
@@ -1670,11 +1685,9 @@ class DatabasePage(wx.Panel):
         html._html.Bind(wx.EVT_RIGHT_UP, self.on_rightclick_searchall)
         html.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_searchall_tab)
         html.Bind(controls.EVT_TAB_LEFT_DCLICK, self.on_dclick_searchall_tab)
-        html.SetTabAreaColour(tb.BackgroundColour)
+        ColourManager.Manage(html, "TabAreaColour", "WidgetColour")
         html.Font.PixelSize = (0, 8)
 
-        label_html.BackgroundColour = tb.BackgroundColour
-        
         sizer_top.Add(label_html, proportion=1, flag=wx.GROW)
         sizer_top.Add(tb, border=5, flag=wx.TOP | wx.RIGHT |
                       wx.ALIGN_CENTER_VERTICAL | wx.ALIGN_RIGHT)
@@ -1714,6 +1727,9 @@ class DatabasePage(wx.Panel):
             #| wx.TR_NO_LINES
             | wx.TR_FULL_ROW_HIGHLIGHT
         )
+        ColourManager.Manage(tree, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
+        ColourManager.Manage(tree, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
+
         tree.AddColumn("Table")
         tree.AddColumn("Info")
         tree.AddRoot("Loading data..")
@@ -1782,6 +1798,11 @@ class DatabasePage(wx.Panel):
         grid = self.grid_table = wx.grid.Grid(parent=panel2)
         grid.SetToolTipString("Double click on column header to sort, "
                               "right click to filter.")
+        ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
+        ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
+        ColourManager.Manage(grid, "LabelBackgroundColour",       wx.SYS_COLOUR_BTNFACE)
+        ColourManager.Manage(grid, "LabelTextColour",             wx.SYS_COLOUR_WINDOWTEXT)
+
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK, self.on_sort_grid_column)
         grid.GridWindow.Bind(wx.EVT_MOTION, self.on_mouse_over_grid)
         grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,
@@ -1791,7 +1812,7 @@ class DatabasePage(wx.Panel):
 
         label_help = wx.StaticText(panel2, label="Double-click on column "
                                    "header to sort, right click to filter.")
-        label_help.ForegroundColour = "grey"
+        ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
         sizer2.Add(sizer_tb, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
         sizer2.Add(grid, border=5, proportion=2,
                    flag=wx.GROW | wx.LEFT | wx.RIGHT)
@@ -1843,7 +1864,7 @@ class DatabasePage(wx.Panel):
         label_help = wx.StaticText(panel2, label=
             "Alt-Enter/Ctrl-Enter runs the query contained in currently selected "
             "text or on the current line. Ctrl-Space shows autocompletion list.")
-        label_help.ForegroundColour = "grey"
+        ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
         button_sql = self.button_sql = wx.Button(panel2, label="Execute S&QL")
         button_script = self.button_script = wx.Button(panel2, 
@@ -1877,6 +1898,11 @@ class DatabasePage(wx.Panel):
         sizer_buttons.Add(button_export, border=5, flag=wx.RIGHT | wx.ALIGN_RIGHT)
         sizer_buttons.Add(button_close, flag=wx.ALIGN_RIGHT)
         grid = self.grid_sql = wx.grid.Grid(parent=panel2)
+        ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
+        ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
+        ColourManager.Manage(grid, "LabelBackgroundColour",       wx.SYS_COLOUR_BTNFACE)
+        ColourManager.Manage(grid, "LabelTextColour",             wx.SYS_COLOUR_WINDOWTEXT)
+
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,
                   self.on_sort_grid_column)
         grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,
@@ -1890,7 +1916,7 @@ class DatabasePage(wx.Panel):
 
         label_help_grid = wx.StaticText(panel2, label="Double-click on column "
                                         "header to sort, right click to filter.")
-        label_help_grid.ForegroundColour = "grey"
+        ColourManager.Manage(label_help_grid, "ForegroundColour", "DisabledColour")
 
         sizer2.Add(label_help, border=5, flag=wx.GROW | wx.LEFT | wx.BOTTOM)
         sizer2.Add(sizer_buttons, border=5, flag=wx.GROW | wx.ALL)
@@ -1920,7 +1946,6 @@ class DatabasePage(wx.Panel):
         label_header = wx.StaticText(parent=page, label="Database PRAGMA settings")
         label_header.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                     wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
-        label_header.BackgroundColour = self.BackgroundColour
 
         def on_help(ctrl, text, event):
             """Handler for clicking help bitmap, shows text popup."""
@@ -1970,7 +1995,8 @@ class DatabasePage(wx.Panel):
             help_bmp = wx.StaticBitmap(panel_pragma, bitmap=bmp)
 
             if opts.get("deprecated"):
-                label.ForegroundColour = label_text.ForegroundColour = conf.DisabledColour
+                ColourManager.Manage(label, "ForegroundColour", "DisabledColour")
+                ColourManager.Manage(label_text, "ForegroundColour", "DisabledColour")
             label.SetToolTipString(description)
             ctrl.SetToolTipString(description)
             label_text.SetToolTipString(description)
@@ -1983,7 +2009,7 @@ class DatabasePage(wx.Panel):
             if opts.get("deprecated") \
             and bool(lastopts.get("deprecated")) != bool(opts.get("deprecated")):
                 label_deprecated = wx.StaticText(panel_pragma, label="DEPRECATED:")
-                label_deprecated.ForegroundColour = conf.DisabledColour
+                ColourManager.Manage(label_deprecated, "ForegroundColour", "DisabledColour")
                 sizer_pragma.Add(label_deprecated, border=25, flag=wx.TOP)
                 for i in range(3): sizer_pragma.AddSpacer(20)
 
@@ -2073,7 +2099,8 @@ class DatabasePage(wx.Panel):
 
         panel1, panel2 = wx.Panel(parent=page), wx.Panel(parent=page)
         panel1c, panel2c = wx.Panel(parent=panel1), wx.Panel(parent=panel2)
-        panel1c.BackgroundColour = panel2c.BackgroundColour = conf.BgColour
+        ColourManager.Manage(panel1c, "BackgroundColour", "BgColour")
+        ColourManager.Manage(panel2c, "BackgroundColour", "BgColour")
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -2082,7 +2109,6 @@ class DatabasePage(wx.Panel):
         label_file = wx.StaticText(parent=panel1, label="Database information")
         label_file.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                   wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
-        label_file.BackgroundColour = self.BackgroundColour
 
         names = ["edit_info_path", "edit_info_size", "edit_info_modified",
                  "edit_info_sha1", "edit_info_md5", ]
@@ -2097,7 +2123,7 @@ class DatabasePage(wx.Panel):
             valuetext = wx.TextCtrl(parent=panel1c, value="Analyzing..",
                 style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH)
             valuetext.MinSize = (-1, 35)
-            valuetext.BackgroundColour = panel1c.BackgroundColour
+            ColourManager.Manage(valuetext, "BackgroundColour", "BgColour")
             valuetext.SetEditable(False)
             sizer_info.Add(labeltext, border=5, flag=wx.LEFT | wx.TOP)
             sizer_info.Add(valuetext, border=5, proportion=1, flag=wx.TOP | wx.GROW)
@@ -2138,7 +2164,6 @@ class DatabasePage(wx.Panel):
         label_schema = wx.StaticText(parent=panel2, label="Database schema")
         label_schema.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                   wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
-        label_schema.BackgroundColour = self.BackgroundColour
 
         tb = self.tb_sql = wx.ToolBar(parent=panel2,
                                       style=wx.TB_FLAT | wx.TB_NODIVIDER)
@@ -2171,6 +2196,18 @@ class DatabasePage(wx.Panel):
         sizer.Add(panel2, proportion=1, border=5,
                   flag=wx.RIGHT | wx.TOP | wx.BOTTOM | wx.GROW)
         page.SetupScrolling()
+
+
+    def on_sys_colour_change(self, event):
+        """Handler for system colour change, refreshes content."""
+        event.Skip()
+        def dorefresh():
+            self.label_html.SetPage(step.Template(templates.SEARCH_HELP_SHORT).expand())
+            self.label_html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNFACE)
+            self.label_html.ForegroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
+            default = step.Template(templates.SEARCH_WELCOME_HTML).expand()
+            self.html_searchall.SetDefaultPage(default)
+        wx.CallAfter(dorefresh) # Postpone to allow conf update
 
 
     def on_pragma_change(self, event):
@@ -2638,7 +2675,7 @@ class DatabasePage(wx.Panel):
                 else:
                     e = "The file \"%s\" cannot be found on this computer." % \
                         filename
-                    messageBox(e, conf.Title, wx.OK | wx.ICON_INFORMATION)
+                    wx.MessageBox(e, conf.Title, wx.OK | wx.ICON_INFORMATION)
             elif table_name:
                 tableitem = None
                 table_name = table_name.lower()
@@ -3982,10 +4019,11 @@ class AboutDialog(wx.Dialog):
         wx.Dialog.__init__(self, parent, title="About %s" % conf.Title,
                            style=wx.CAPTION | wx.CLOSE_BOX)
         html = self.html = wx.html.HtmlWindow(self)
+        self.content = content
         button_update = wx.Button(self, label="Check for &updates")
 
-        html.SetPage(content)
-        html.BackgroundColour = conf.BgColour
+        html.SetPage(content() if callable(content) else content)
+        html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
         html.Bind(wx.html.EVT_HTML_LINK_CLICKED,
                   lambda e: webbrowser.open(e.GetLinkInfo().Href))
         button_update.Bind(wx.EVT_BUTTON, parent.on_check_update)
@@ -3995,19 +4033,18 @@ class AboutDialog(wx.Dialog):
         sizer_buttons = self.CreateButtonSizer(wx.OK)
         sizer_buttons.Insert(0, button_update, border=50, flag=wx.RIGHT)
         self.Sizer.Add(sizer_buttons, border=8, flag=wx.ALIGN_CENTER | wx.ALL)
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
+
         self.Layout()
         self.Size = (self.Size[0], html.VirtualSize[1] + 60)
         self.CenterOnParent()
 
 
-
-def messageBox(message, title, style):
-    """
-    Shows a non-native message box, with no bell sound for any style, returning
-    the message box result code."""
-    dlg = wx.lib.agw.genericmessagedialog.GenericMessageDialog(
-        None, message, title, style
-    )
-    result = dlg.ShowModal()
-    dlg.Destroy()
-    return result
+    def OnSysColourChange(self, event):
+        """Handler for system colour change, refreshes content."""
+        event.Skip()
+        def dorefresh():
+            self.html.SetPage(self.content() if callable(self.content) else self.content)
+            self.html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
+            self.html.ForegroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
+        wx.CallAfter(dorefresh) # Postpone to allow conf update

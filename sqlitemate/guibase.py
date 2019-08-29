@@ -12,8 +12,8 @@ This file is part of SQLiteMate - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
-@created     03.04.2012
-@modified    26.08.2019
+@created     21.08.2019
+@modified    29.08.2019
 """
 import datetime
 import os
@@ -23,6 +23,7 @@ import wx.lib.inspection
 import wx.lib.newevent
 import wx.py
 
+from . lib.controls import ColourManager
 from . lib import util, wx_accel
 from . import conf
 
@@ -173,6 +174,7 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
         """Creates and returns the log output panel."""
         panel = wx.Panel(parent)
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
+        ColourManager.Manage(panel, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
 
         button_clear = wx.Button(parent=panel, label="C&lear log",
                                  size=(100, -1))
@@ -180,9 +182,8 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
         edit_log = self.log = wx.TextCtrl(panel, style=wx.TE_MULTILINE)
         edit_log.SetEditable(False)
         # Read-only controls tend to be made grey by default
-        getcolour = wx.SystemSettings.GetColour
-        edit_log.BackgroundColour = getcolour(wx.SYS_COLOUR_WINDOW)
-        edit_log.ForegroundColour = getcolour(wx.SYS_COLOUR_GRAYTEXT)
+        ColourManager.Manage(edit_log, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
+        ColourManager.Manage(edit_log, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
 
         sizer.Add(button_clear, border=5, flag=wx.ALIGN_RIGHT | wx.TOP | 
                   wx.RIGHT)

@@ -6,6 +6,9 @@ Stand-alone GUI components for wx:
   Primitive hover panel with a message that stays in the center of parent
   window.
 
+- ColourManager(object):
+  Updates managed component colours on Windows system colour change.
+
 - EntryDialog(wx.Dialog):
   Non-modal text entry dialog with auto-complete dropdown, appears in lower
   right corner.
@@ -29,7 +32,7 @@ Stand-alone GUI components for wx:
   HtmlWindow that remembers its scroll position on resize and append.
     
 - SearchCtrl(wx.TextCtrl):
-  Simple search control, with search icon and description.
+  Simple search control, with search description.
     
 - SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                            wx.lib.mixins.listctrl.ColumnSorterMixin):
@@ -57,7 +60,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    26.08.2019
+@modified    29.08.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -116,7 +119,131 @@ class BusyPanel(wx.Window):
             self.Parent.Refresh()
             self.Destroy()
         except Exception: pass
-        
+
+
+
+class ColourManager(object):
+    """
+    Updates managed component colours on Windows system colour change.
+    """
+    colourcontainer   = None
+    colourmap         = {} # {colour name in container: wx.SYS_COLOUR_XYZ}
+    darkcolourmap     = {} # {colour name in container: wx.SYS_COLOUR_XYZ}
+    darkoriginals     = {} # {colour name in container: original value}
+    # {ctrl: (prop name: colour name in container)}
+    ctrls             = collections.defaultdict(dict)
+
+
+    @classmethod
+    def Init(cls, window, colourcontainer, colourmap, darkcolourmap):
+        """
+        Hooks WM_SYSCOLORCHANGE on Windows, updates colours in container
+        according to map.
+
+        @param   window           application main window
+        @param   colourcontainer  object with colour attributes
+        @param   colourmap        {"attribute": wx.SYS_COLOUR_XYZ}
+        @param   darkcolourmap    colours changed if dark background
+        """
+        if "nt" != os.name: return
+
+        cls.colourcontainer = colourcontainer
+        cls.colourmap.update(colourmap)
+        cls.darkcolourmap.update(darkcolourmap)
+        for name in darkcolourmap:
+            if not hasattr(colourcontainer, name): continue # for name
+            cls.darkoriginals[name] = getattr(colourcontainer, name)
+
+        cls.UpdateContainer()
+
+        # Hack: monkey-patch FlatImageBook with non-hardcoded background
+        class HackContainer(wx.lib.agw.labelbook.ImageContainer):
+            WHITE_BRUSH = wx.WHITE_BRUSH
+            def OnPaint(self, event):
+                bgcolour = cls.ColourHex(wx.SYS_COLOUR_WINDOW)
+                if "#FFFFFF" != bgcolour: wx.WHITE_BRUSH = BRUSH(bgcolour)
+                try: result = HackContainer.__base__.OnPaint(self, event)
+                finally: wx.WHITE_BRUSH = HackContainer.WHITE_BRUSH
+                return result
+        wx.lib.agw.labelbook.ImageContainer = HackContainer
+
+        window.Bind(wx.EVT_SYS_COLOUR_CHANGED, cls.OnSysColourChange)
+
+
+    @classmethod
+    def Manage(cls, ctrl, prop, colour):
+        """
+        Starts managing a control colour property.
+
+        @param   ctrl    wx component
+        @param   prop    property name like "BackgroundColour",
+                         tries using ("Set" + prop)() if no such property
+        @param   colour  colour name in colour container like "BgColour",
+                         or system colour ID like wx.SYS_COLOUR_WINDOW
+        """
+        cls.ctrls[ctrl][prop] = colour
+        cls.UpdateControlColour(ctrl, prop, colour)
+
+
+    @classmethod
+    def OnSysColourChange(cls, event):
+        """
+        Handler for system colour change, refreshes configured colours
+        and updates managed controls.
+        """
+        event.Skip()
+        cls.UpdateContainer()
+        cls.UpdateControls()
+
+
+    @classmethod
+    def ColourHex(cls, idx):
+        """Returns system colour as HTML colour hex string."""
+        return wx.SystemSettings.GetColour(idx).GetAsString(wx.C2S_HTML_SYNTAX)
+
+
+    @classmethod
+    def GetColour(cls, colour):
+        return wx.NamedColour(getattr(cls.colourcontainer, colour)) \
+               if isinstance(colour, basestring) \
+               else wx.SystemSettings.GetColour(colour)
+
+
+    @classmethod
+    def UpdateContainer(cls):
+        """Updates configuration colours with current system theme values."""
+        for name, colourid in cls.colourmap.items():
+            setattr(cls.colourcontainer, name, cls.ColourHex(colourid))
+
+        if "#FFFFFF" != cls.ColourHex(wx.SYS_COLOUR_WINDOW):
+            for name, colourid in cls.darkcolourmap.items():
+                setattr(cls.colourcontainer, name, cls.ColourHex(colourid))
+        else:
+            for name, value in cls.darkoriginals.items():
+                setattr(cls.colourcontainer, name, value)
+
+
+    @classmethod
+    def UpdateControls(cls):
+        """Updates all managed controls."""
+        for ctrl, props in cls.ctrls.items():
+            if not ctrl: # Component destroyed
+                cls.ctrls.pop(ctrl)
+                continue # for ctrl, props
+                
+            for prop, colour in props.items():
+                cls.UpdateControlColour(ctrl, prop, colour)
+
+
+    @classmethod
+    def UpdateControlColour(cls, ctrl, prop, colour):
+        """Sets control property or invokes "Set" + prop."""
+        mycolour = cls.GetColour(colour)
+        if hasattr(ctrl, prop):
+            setattr(ctrl, prop, mycolour)
+        elif hasattr(ctrl, "Set" + prop):
+            getattr(ctrl, "Set" + prop)(mycolour)
+
 
 
 class NonModalOKDialog(wx.Dialog):
@@ -312,9 +439,8 @@ class NoteButton(wx.PyPanel, wx.Button):
         self.Bind(wx.EVT_KEY_UP, self.OnKeyUp)
 
         self.SetCursor(self._cursor_hover)
-        fgcolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNTEXT)
-        bgcolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNFACE)
-        self.ForegroundColour, self.BackgroundColour = fgcolour, bgcolour
+        ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
+        ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
         self.WrapTexts()
 
 
@@ -713,7 +839,7 @@ class PropertyDialog(wx.Dialog):
         self.Sizer.Add(panelwrap, proportion=1, flag=wx.GROW)
 
         self.MinSize, self.Size = (320, 180), (420, 420)
-        self.BackgroundColour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOW)
+        ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
 
 
     def AddProperty(self, name, value, help="", default=None, typeclass=unicode):
@@ -893,10 +1019,9 @@ class ScrollingHtmlWindow(wx.html.HtmlWindow):
 
 class SearchCtrl(wx.TextCtrl):
     """
-    A text control with search icon and description.
+    A text control with search description.
     Fires EVT_TEXT_ENTER event on text change.
     """
-    DESCRIPTION_COLOUR = None # Postpone to after wx.App creation
 
 
     def __init__(self, parent, description="", **kwargs):
@@ -904,24 +1029,23 @@ class SearchCtrl(wx.TextCtrl):
         @param   description  description text shown if nothing entered yet
         """
         wx.TextCtrl.__init__(self, parent, **kwargs)
-        self._text_colour = self.GetForegroundColour()
-
-        if not SearchCtrl.DESCRIPTION_COLOUR:
-            graycolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)
-            SearchCtrl.DESCRIPTION_COLOUR = graycolour
+        self._text_colour = self._desc_colour = None
+        ColourManager.Manage(self, "_text_colour", wx.SYS_COLOUR_BTNTEXT)
+        ColourManager.Manage(self, "_desc_colour", wx.SYS_COLOUR_GRAYTEXT)
 
         self._description = description
         self._description_on = False # Is textbox filled with description?
         self._ignore_change  = False # Ignore text change in event handlers
         if not self.Value:
             self.Value = self._description
-            self.SetForegroundColour(self.DESCRIPTION_COLOUR)
+            self.SetForegroundColour(self._desc_colour)
             self._description_on = True
 
-        self.Bind(wx.EVT_SET_FOCUS,  self.OnFocus,   self)
-        self.Bind(wx.EVT_KILL_FOCUS, self.OnFocus,   self)
-        self.Bind(wx.EVT_KEY_DOWN,   self.OnKeyDown, self)
-        self.Bind(wx.EVT_TEXT,       self.OnText,    self)
+        self.Bind(wx.EVT_SET_FOCUS,          self.OnFocus,        self)
+        self.Bind(wx.EVT_KILL_FOCUS,         self.OnFocus,        self)
+        self.Bind(wx.EVT_KEY_DOWN,           self.OnKeyDown,      self)
+        self.Bind(wx.EVT_TEXT,               self.OnText,         self)
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
 
 
     def OnFocus(self, event):
@@ -937,7 +1061,7 @@ class SearchCtrl(wx.TextCtrl):
             if self._description and not self.Value:
                 # Control has been unfocused, set and colour description
                 wx.TextCtrl.SetValue(self, self._description)
-                self.SetForegroundColour(self.DESCRIPTION_COLOUR)
+                self.SetForegroundColour(self._desc_colour)
                 self._description_on = True
         self._ignore_change = False
         event.Skip() # Allow to propagate to parent, to show having focus
@@ -957,6 +1081,13 @@ class SearchCtrl(wx.TextCtrl):
         evt = wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER)
         evt.String = self.Value
         wx.PostEvent(self, evt)
+
+
+    def OnSysColourChange(self, event):
+        """Handler for system colour change, updates text colour."""
+        event.Skip()
+        colour = self._desc_colour if self._description_on else self._text_colour
+        self.SetForegroundColour(colour)
 
 
     def GetValue(self):
@@ -1007,6 +1138,10 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
         wx.lib.agw.ultimatelistctrl.UltimateListCtrl.__init__(self, *args, **kwargs)
         wx.lib.mixins.listctrl.ColumnSorterMixin.__init__(self, 0)
+        try:
+            ColourManager.Manage(self._headerWin, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
+            ColourManager.Manage(self._mainWin,   "BackgroundColour", wx.SYS_COLOUR_WINDOW)
+        except Exception: pass
         self.itemDataMap = {}   # {item_id: [values], } for ColumnSorterMixin
         self._data_map = {}     # {item_id: row dict, } currently visible data
         self._id_rows = []      # [(item_id, {row dict}), ] all data items
@@ -1032,6 +1167,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         self.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_BEGIN_DRAG,  self.OnDragStart)
         self.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_END_DRAG,    self.OnDragStop)
         self.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_BEGIN_RDRAG, self.OnDragCancel)
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
 
 
     def GetSortImages(self):
@@ -1129,8 +1265,8 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             self.SetItemData(index, item_id)
             self.itemDataMap[item_id] = [data[c] for c in columns]
             self._data_map[item_id] = data
+            self.SetItemTextColour(index, self.ForegroundColour)
             self.SetItemBackgroundColour(index, self.BackgroundColour)
-            self.SetItemTextColour(index, self.TextColour)
         self._id_rows.append((item_id, data))
         if self.GetSortState()[0] >= 0:
             self.SortListItems(*self.GetSortState())
@@ -1203,6 +1339,8 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                 self.SetStringItem(index, col_index, col_value)
                 item_data_map[item_id][col_index] = row.get(col_name)
                 col_index += 1
+            self.SetItemTextColour(index, self.ForegroundColour)
+            self.SetItemBackgroundColour(index, self.BackgroundColour)
             index += 1
         self._data_map = row_data_map
         self.itemDataMap = item_data_map
@@ -1343,6 +1481,16 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         return sorter
 
 
+    def OnSysColourChange(self, event):
+        """
+        Handler for system colour change, updates sort arrow and item colours.
+        """
+        event.Skip()
+        il, il2  = self.GetImageList(wx.IMAGE_LIST_SMALL), self._CreateImageList()
+        for i in range(il2.GetImageCount()): il.Replace(i, il2.GetBitmap(i))
+        self.RefreshRows()
+
+
     def OnCopy(self, event):
         """Copies selected rows to clipboard."""
         rows, i = [], self.GetFirstSelected()
@@ -1414,7 +1562,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         Arrow colours are adjusted for system foreground colours if necessary.
         """
         il = wx.lib.agw.ultimatelistctrl.PyImageList(*self.SORT_ARROW_UP.Bitmap.Size)
-        fgcolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOWTEXT)
+        fgcolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNTEXT)
         defrgb, myrgb = "\x00" * 3, "".join(map(chr, fgcolour.Get()))
 
         for embedded in self.SORT_ARROW_UP, self.SORT_ARROW_DOWN:
@@ -1450,6 +1598,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             col_value = self._formatters[col_name](self._top_row, col_name)
             self.SetStringItem(0, i, col_value)
         self.SetItemBackgroundColour(0, self.BackgroundColour)
+        self.SetItemTextColour(0, self.ForegroundColour)
 
         def resize():
             w = sum((self.GetColumnWidth(i) for i in range(1, len(self._columns))), 0)
@@ -1568,9 +1717,15 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.SetCaretLineBackAlpha(20)
         self.SetCaretLineVisible(True)
         self.AutoCompSetIgnoreCase(True)
-        self.Bind(wx.EVT_KEY_DOWN, self.OnKeyDown)
-        self.Bind(wx.EVT_KILL_FOCUS, self.OnKillFocus)
 
+        self.SetStyleSpecs()
+        self.Bind(wx.EVT_KEY_DOWN,           self.OnKeyDown)
+        self.Bind(wx.EVT_KILL_FOCUS,         self.OnKillFocus)
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
+
+
+    def SetStyleSpecs(self):
+        """Sets STC style colours."""
         fgcolour, bgcolour, highcolour = (
             wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
             for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW,
@@ -1612,22 +1767,6 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.StyleSetSpec(wx.stc.STC_STYLE_BRACELIGHT, "fore:%s" % highcolour)
         self.StyleSetSpec(wx.stc.STC_STYLE_BRACEBAD, "fore:#FF0000")
 
-        """
-        This is how a non-sorted case-insensitive list can be used.
-        self.Bind(wx.stc.EVT_STC_USERLISTSELECTION, self.OnUserListSelected)
-        # listType must be > 0, value is not important for STC.
-        self.UserListShow(listType=1, itemList=u" ".join(self.autocomps_total))
-        def OnUserListSelected(self, event):
-            text = event.GetText()
-            if text:
-                pos = 1#self._posBeforeCompList
-                self.SetTargetStart(pos)
-                self.SetTargetEnd(self.GetCurrentPos())
-                self.ReplaceTarget("")
-                self.InsertText(pos, text)
-                self.GotoPos(pos + len(text))
-        """
-
 
     def AutoCompAddWords(self, words):
         """Adds more words used in autocompletion."""
@@ -1657,6 +1796,13 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     def OnKillFocus(self, event):
         """Handler for control losing focus, hides autocomplete."""
         self.AutoCompCancel()
+
+
+
+    def OnSysColourChange(self, event):
+        """Handler for system colour change, updates STC styling."""
+        event.Skip()
+        self.SetStyleSpecs()
 
 
     def OnKeyDown(self, event):
@@ -1740,9 +1886,7 @@ class TabbedHtmlWindow(wx.PyPanel):
         self._tabs = []
         self._default_page = ""      # Content shown on the blank page
         self._delete_callback = None # Function called after deleting a tab
-        bgcolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOW)
-        tabcolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNFACE)
-        self.BackgroundColour = bgcolour
+        ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
 
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
         notebook = self._notebook = wx.lib.agw.flatnotebook.FlatNotebook(
@@ -1765,8 +1909,8 @@ class TabbedHtmlWindow(wx.PyPanel):
                       self._OnDropTab)
         self._html.Bind(wx.EVT_SCROLLWIN, self._OnScroll)
 
-        notebook.SetActiveTabColour(bgcolour)
-        notebook.SetTabAreaColour(tabcolour)
+        ColourManager.Manage(notebook, "ActiveTabColour", wx.SYS_COLOUR_WINDOW)
+        ColourManager.Manage(notebook, "TabAreaColour", wx.SYS_COLOUR_BTNFACE)
         try: notebook._pages.GetSingleLineBorderColour = notebook.GetActiveTabColour
         except Exception: pass # Hack to get uniform background colour
 
@@ -1882,8 +2026,7 @@ class TabbedHtmlWindow(wx.PyPanel):
     def _SetPage(self, content):
         """Sets current HTML page content."""
         self._html.SetPage(content)
-        bgcolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOW)
-        self._html.SetBackgroundColour(bgcolour)
+        ColourManager.Manage(self._html, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
 
 
     def SetDeleteCallback(self, callback):
@@ -1995,9 +2138,6 @@ class TextCtrlAutoComplete(wx.TextCtrl):
     """
     DROPDOWN_COUNT_PER_PAGE = 8
     DROPDOWN_CLEAR_TEXT = "Clear search history"
-    DROPDOWN_CLEAR_COLOUR = "blue"
-    DROPDOWN_TEXT_COLOUR = None # Postpone to after wx.App creation
-    DESCRIPTION_COLOUR = None # Postpone to after wx.App creation
 
 
     def __init__(self, parent, choices=None, description="",
@@ -2011,12 +2151,10 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         else:
             kwargs["style"] = wx.TE_PROCESS_ENTER
         wx.TextCtrl.__init__(self, parent, **kwargs)
-        self._text_colour = self.GetForegroundColour()
-
-        if not TextCtrlAutoComplete.DROPDOWN_TEXT_COLOUR:
-            graycolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)
-            TextCtrlAutoComplete.DROPDOWN_TEXT_COLOUR = graycolour
-            TextCtrlAutoComplete.DESCRIPTION_COLOUR = graycolour
+        self._text_colour = self._desc_colour = self._clear_colour = None
+        ColourManager.Manage(self, "_text_colour",  wx.SYS_COLOUR_BTNTEXT)
+        ColourManager.Manage(self, "_desc_colour",  wx.SYS_COLOUR_GRAYTEXT)
+        ColourManager.Manage(self, "_clear_colour", wx.SYS_COLOUR_HOTLIGHT)
 
         self._choices = [] # Ordered case-insensitively
         self._choices_lower = [] # Cached lower-case choices
@@ -2028,7 +2166,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         self._description_on = False # Is textbox filled with description?
         if not self.Value:
             self.Value = self._description
-            self.SetForegroundColour(self.DESCRIPTION_COLOUR)
+            self.SetForegroundColour(self._desc_colour)
             self._description_on = True
         try:
             self._listwindow = wx.PopupWindow(self)
@@ -2040,7 +2178,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
             self._listbox = self._listwindow = None
 
         if self._listbox:
-            self._listbox.TextColour = self.DROPDOWN_TEXT_COLOUR
+            ColourManager.Manage(self._listbox, "TextColour", wx.SYS_COLOUR_GRAYTEXT)
             self.SetChoices(choices or [])
             self._cursor = None
             # For changing cursor when hovering over final "Clear" item.
@@ -2064,6 +2202,17 @@ class TextCtrlAutoComplete(wx.TextCtrl):
                                   self._listbox)
         self.Bind(wx.EVT_SET_FOCUS,                 self.OnFocus, self)
         self.Bind(wx.EVT_KILL_FOCUS,                self.OnFocus, self)
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED,        self.OnSysColourChange)
+
+
+    def OnSysColourChange(self, event):
+        """
+        Handler for system colour change, updates text colours.
+        """
+        event.Skip()
+        colour = self._desc_colour if self._description_on else self._text_colour
+        self.SetForegroundColour(colour)
+        self.SetChoices(self._choices)
 
 
     def OnListClick(self, event):
@@ -2137,7 +2286,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
             if self._description and not self.Value:
                 # Control has been unfocused, set and colour description
                 self.Value = self._description
-                self.SetForegroundColour(self.DESCRIPTION_COLOUR)
+                self.SetForegroundColour(self._desc_colour)
                 self._description_on = True
             if self._listbox:
                 self.ShowDropDown(False)
@@ -2271,7 +2420,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
             for i, text in enumerate(choices):
                 self._listbox.InsertStringItem(i, text)
             if choices: # Colour "Clear" item
-                self._listbox.SetItemTextColour(i, self.DROPDOWN_CLEAR_COLOUR)
+                self._listbox.SetItemTextColour(i, self._clear_colour)
 
             itemheight = self._listbox.GetItemRect(0)[-1] if choices else 0
             itemcount = min(len(choices), self.DROPDOWN_COUNT_PER_PAGE)
