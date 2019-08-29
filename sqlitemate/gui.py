@@ -421,7 +421,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         tint_colour = wx.NamedColour(conf.BgColour)
         tint_factor = [((4 * x) % 256) / 255. for x in tint_colour]
         # Images shown on the default search content page
-        for name in ["Search", "Tables", "SQL", "Info"]:
+        for name in ["Search", "Tables", "SQL", "Pragma", "Info"]:
             embedded = getattr(images, "Help" + name, None)
             if not embedded: continue # for name
             img = embedded.Image.AdjustChannels(*tint_factor)

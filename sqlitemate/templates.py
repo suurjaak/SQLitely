@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.08.2019
+@modified    29.08.2019
 ------------------------------------------------------------------------------
 """
 import re
@@ -312,6 +312,17 @@ from sqlitemate import conf
 <tr>
   <td>
     <table cellpadding="0" cellspacing="2"><tr><td>
+        <a href="page:#search"><img src="memory:HelpSearch.png" /></a>
+      </td><td width="10"></td><td valign="center">
+        Search from table data over entire database,<br />
+        using a simple Google-like <a href="page:#help"><font color="{{conf.LinkColour}}">syntax</font></a>.<br /><br />
+        Or search in table and column names and types.<br />
+      </td></tr><tr><td nowrap align="center">
+        <a href="page:#search"><b><font color="{{conf.FgColour}}">Search</font></b></a><br />
+    </td></tr></table>
+  </td>
+  <td>
+    <table cellpadding="0" cellspacing="2"><tr><td>
         <a href="page:tables"><img src="memory:HelpTables.png" /></a>
       </td><td width="10"></td><td valign="center">
         Browse, filter and change table data,<br />
@@ -320,6 +331,8 @@ from sqlitemate import conf
         <a href="page:tables"><b><font color="{{conf.FgColour}}">Data</font></b></a><br />
     </td></tr></table>
   </td>
+</tr>
+<tr>
   <td>
     <table cellpadding="0" cellspacing="2"><tr><td>
         <a href="page:sql"><img src="memory:HelpSQL.png" /></a>
@@ -330,17 +343,17 @@ from sqlitemate import conf
         <a href="page:sql"><b><font color="{{conf.FgColour}}">SQL</font></b></a><br />
     </td></tr></table>
   </td>
-</tr>
-<tr>
   <td>
     <table cellpadding="0" cellspacing="2"><tr><td>
-        <a href="page:#search"><img src="memory:HelpSearch.png" /></a>
+        <a href="page:pragma"><img src="memory:HelpPragma.png" /></a>
       </td><td width="10"></td><td valign="center">
-        Search over database using a simple Google-like <a href="page:#help"><font color="{{conf.LinkColour}}">syntax</font></a>.<br />
+        See and modify database PRAGMA settings.
       </td></tr><tr><td nowrap align="center">
-        <a href="page:#search"><b><font color="{{conf.FgColour}}">Search</font></b></a><br />
+        <a href="page:pragma"><b><font color="{{conf.FgColour}}">Pragma</font></b></a><br />
     </td></tr></table>
   </td>
+</tr>
+<tr>
   <td>
     <table cellpadding="0" cellspacing="2"><tr><td>
         <a href="page:info"><img src="memory:HelpInfo.png" /></a>
