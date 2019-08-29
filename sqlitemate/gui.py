@@ -1648,6 +1648,8 @@ class DatabasePage(wx.Panel):
         label_html.SetFonts(normal_face=self.Font.FaceName,
                             fixed_face=self.Font.FaceName, sizes=[8] * 7)
         label_html.SetPage(step.Template(templates.SEARCH_HELP_SHORT).expand())
+        label_html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNFACE)
+        label_html.ForegroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
 
         tb = self.tb_search_settings = \
             wx.ToolBar(parent=page, style=wx.TB_FLAT | wx.TB_NODIVIDER)
