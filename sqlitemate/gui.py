@@ -89,16 +89,15 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             "HelpCodeColour":          wx.SYS_COLOUR_HIGHLIGHT,
             "HelpBorderColour":        wx.SYS_COLOUR_ACTIVEBORDER,
         })
-        self.db_filename = None # Current selected file in main list
-        self.db_filenames = {}  # added DBs {filename: {size, last_modified,
-                                #            tables, error},}
-        self.dbs = {}           # Open databases {filename: Database, }
-        self.db_pages = {}      # {DatabasePage: Database, }
-        self.page_db_latest = None    # Last opened database page
+        self.dbs_selected = []  # Current selected files in main list
+        self.db_datas = {}  # added DBs {filename: {size, last_modified,
+                            #            tables, error},}
+        self.dbs = {}       # Open databases {filename: Database, }
+        self.db_pages = {}  # {DatabasePage: Database, }
+        self.page_db_latest = None  # Last opened database page
         # List of Notebook pages user has visited, used for choosing page to
         # show when closing one.
         self.pages_visited = []
-        self.db_drag_start = None
 
         icons = images.get_appicons()
         self.SetIcons(icons)
@@ -221,10 +220,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         else:
             self.Center(wx.HORIZONTAL)
             self.Position.top = 50
-        if self.list_db.GetItemCount() > 1:
-            self.list_db.SetFocus()
-        else:
-            self.button_new.SetFocus()
+        self.list_db.SetFocus()
 
         self.trayicon = wx.TaskBarIcon()
         if conf.TrayIconEnabled:
@@ -241,6 +237,232 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         wx.CallLater(20000, self.update_check)
         wx.CallLater(0, self.populate_database_list)
         guibase.log("Started application.")
+
+
+    def create_page_main(self, notebook):
+        """Creates the main page with database list and buttons."""
+        page = self.page_main = wx.Panel(notebook)
+        ColourManager.Manage(page, "BackgroundColour", "MainBgColour")
+        notebook.AddPage(page, "Databases")
+        sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        sizer_list = wx.BoxSizer(wx.VERTICAL)
+
+        edit_filter = self.edit_filter = controls.SearchCtrl(page, "Filter list")
+        list_db = self.list_db = controls.SortableUltimateListCtrl(parent=page,
+            agwStyle=wx.LC_REPORT | wx.BORDER_NONE)
+        list_db.MinSize = 400, -1 # Maximize-restore would resize width to 100
+
+        columns = [("name", "Name"), ("last_modified", "Modified"), ("size", "Size")]
+        frmt_dt = lambda r, c: r[c].strftime("%Y-%m-%d %H:%M:%S") if r.get(c) else ""
+        frmt_sz = lambda r, c: util.format_bytes(r[c]) if r.get(c) is not None else ""
+        formatters = {"last_modified": frmt_dt, "size": frmt_sz}
+        list_db.SetColumns(columns)
+        list_db.SetColumnFormatters(formatters)
+        list_db.SetColumnAlignment(2, wx.lib.agw.ultimatelistctrl.ULC_FORMAT_RIGHT)
+
+        list_db.AssignImages([images.ButtonHome.Bitmap, images.ButtonListDatabase.Bitmap])
+        ColourManager.Manage(list_db, "ForegroundColour", "DBListForegroundColour")
+        ColourManager.Manage(list_db, "BackgroundColour", "DBListBackgroundColour")
+        topdata = collections.defaultdict(lambda: None, name="Home")
+        list_db.SetTopRow(topdata, [0])
+        list_db.Select(0)
+
+        panel_right = wx.lib.scrolledpanel.ScrolledPanel(page)
+        panel_right.Sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        panel_main   = self.panel_db_main   = wx.Panel(panel_right)
+        panel_detail = self.panel_db_detail = wx.Panel(panel_right)
+        panel_main.MinSize   = 400, -1
+        panel_detail.MinSize = 400, -1
+        panel_main.Sizer   = wx.BoxSizer(wx.VERTICAL)
+        panel_detail.Sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # Create main page label and buttons
+        label_main = wx.StaticText(panel_main,
+                                   label="Welcome to %s" % conf.Title)
+        ColourManager.Manage(label_main, "ForegroundColour", "TitleColour")
+        label_main.Font = wx.Font(14, wx.FONTFAMILY_SWISS,
+            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
+        BUTTONS_MAIN = [
+            ("new", "&New database", images.ButtonNew, 
+             "Create a new SQLite database."),
+            ("opena", "&Open a database..", images.ButtonOpenA, 
+             "Choose a database from your computer to open."),
+            ("folder", "&Import from folder.", images.ButtonFolder,
+             "Select a folder where to look for databases."),
+            ("detect", "Detect databases", images.ButtonDetect,
+             "Auto-detect databases from user folders."),
+            ("missing", "Remove missing", images.ButtonRemoveMissing,
+             "Remove non-existing files from the database list."),
+            ("clear", "C&lear list", images.ButtonClear,
+             "Clear the current database list."), ]
+        for name, label, img, note in BUTTONS_MAIN:
+            button = controls.NoteButton(panel_main, label, note, img.Bitmap)
+            setattr(self, "button_" + name, button)
+        self.button_missing.Hide(); self.button_clear.Hide()
+
+        # Create detail page labels, values and buttons
+        label_db = self.label_db = wx.TextCtrl(parent=panel_detail, value="",
+            style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH)
+        label_db.Font = wx.Font(12, wx.FONTFAMILY_SWISS,
+            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
+        ColourManager.Manage(label_db, "BackgroundColour", "WidgetColour")
+        label_db.SetEditable(False)
+
+        sizer_labels = wx.FlexGridSizer(cols=2, vgap=3, hgap=10)
+        LABELS = [("path", "Location"), ("size", "Size"),
+                  ("modified", "Last modified"), ("tables", "Tables")]
+        for field, title in LABELS:
+            lbltext = wx.StaticText(parent=panel_detail, label="%s:" % title)
+            valtext = wx.TextCtrl(parent=panel_detail, value="",
+                                  size=(300, -1), style=wx.NO_BORDER)
+            ColourManager.Manage(valtext, "BackgroundColour", "WidgetColour")
+            ColourManager.Manage(valtext, "ForegroundColour", wx.SYS_COLOUR_WINDOWTEXT)
+            valtext.SetEditable(False)
+            ColourManager.Manage(lbltext, "ForegroundColour", "DisabledColour")
+            sizer_labels.Add(lbltext, border=5, flag=wx.LEFT)
+            sizer_labels.Add(valtext, proportion=1, flag=wx.GROW)
+            setattr(self, "label_" + field, valtext)
+
+        BUTTONS_DETAIL = [
+            ("open", "&Open", images.ButtonOpen, 
+             "Open the database."),
+            ("saveas", "Save &as..", images.ButtonSaveAs,
+             "Save a copy of the database under another name."),
+            ("remove", "Remove", images.ButtonRemove,
+             "Remove this database from the list."), ]
+        for name, label, img, note in BUTTONS_DETAIL:
+            button = controls.NoteButton(panel_detail, label, note, img.Bitmap)
+            setattr(self, "button_" + name, button)
+
+        children = list(panel_main.Children) + list(panel_detail.Children)
+        for c in [panel_main, panel_detail] + children:
+            ColourManager.Manage(c, "BackgroundColour", "MainBgColour")
+        panel_right.SetupScrolling(scroll_x=False)
+        panel_detail.Hide()
+
+        list_db.Bind(wx.EVT_LIST_ITEM_SELECTED,   self.on_select_list_db)
+        list_db.Bind(wx.EVT_LIST_ITEM_DESELECTED, self.on_deselect_list_db)
+        list_db.Bind(wx.EVT_LIST_ITEM_ACTIVATED,  self.on_open_from_list_db)
+        list_db.Bind(wx.EVT_CHAR_HOOK,            self.on_list_db_key)
+        list_db.Bind(wx.EVT_LIST_COL_CLICK,       self.on_sort_list_db)
+        list_db.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_END_DRAG, self.on_drag_list_db)
+
+        edit_filter.Bind(wx.EVT_TEXT_ENTER,       self.on_filter_list_db)
+        self.button_new.Bind(wx.EVT_BUTTON,       self.on_new_database)
+        self.button_opena.Bind(wx.EVT_BUTTON,     self.on_open_database)
+        self.button_detect.Bind(wx.EVT_BUTTON,    self.on_detect_databases)
+        self.button_folder.Bind(wx.EVT_BUTTON,    self.on_add_from_folder)
+        self.button_missing.Bind(wx.EVT_BUTTON,   self.on_remove_missing)
+        self.button_clear.Bind(wx.EVT_BUTTON,     self.on_clear_databases)
+        self.button_open.Bind(wx.EVT_BUTTON,      self.on_open_current_database)
+        self.button_saveas.Bind(wx.EVT_BUTTON,    self.on_save_database_as)
+        self.button_remove.Bind(wx.EVT_BUTTON,    self.on_remove_database)
+
+        panel_main.Sizer.Add(label_main, border=10, flag=wx.ALL)
+        panel_main.Sizer.Add((0, 10))
+        panel_main.Sizer.Add(self.button_new,    flag=wx.GROW)
+        panel_main.Sizer.Add(self.button_opena,  flag=wx.GROW)
+        panel_main.Sizer.Add(self.button_folder, flag=wx.GROW)
+        panel_main.Sizer.Add(self.button_detect, flag=wx.GROW)
+        panel_main.Sizer.AddStretchSpacer()
+        panel_main.Sizer.Add(self.button_missing, flag=wx.GROW)
+        panel_main.Sizer.Add(self.button_clear,   flag=wx.GROW)
+        panel_detail.Sizer.Add(label_db,     border=10, flag=wx.ALL | wx.GROW)
+        panel_detail.Sizer.Add(sizer_labels, border=10, flag=wx.ALL | wx.GROW)
+        panel_detail.Sizer.AddStretchSpacer()
+        panel_detail.Sizer.Add(self.button_open,   flag=wx.GROW)
+        panel_detail.Sizer.Add(self.button_saveas, flag=wx.GROW)
+        panel_detail.Sizer.Add(self.button_remove, flag=wx.GROW)
+        panel_right.Sizer.Add(panel_main,   proportion=1, flag=wx.GROW)
+        panel_right.Sizer.Add(panel_detail, proportion=1, flag=wx.GROW)
+        sizer_list.Add(edit_filter, border=5, flag=wx.ALIGN_RIGHT | wx.BOTTOM)
+        sizer_list.Add(list_db, proportion=1, flag=wx.GROW)
+        sizer.Add(sizer_list,  border=10, proportion=6, flag=wx.ALL | wx.GROW)
+        sizer.Add(panel_right, border=10, proportion=4, flag=wx.ALL | wx.GROW)
+
+
+    def create_menu(self):
+        """Creates the program menu."""
+        menu = wx.MenuBar()
+        self.SetMenuBar(menu)
+
+        menu_file = wx.Menu()
+        menu.Append(menu_file, "&File")
+
+        menu_new_database = self.menu_new_database = menu_file.Append(
+            id=wx.ID_ANY, text="&New database\tCtrl-N",
+            help="Create a new SQLite database."
+        )
+        menu_open_database = self.menu_open_database = menu_file.Append(
+            id=wx.ID_ANY, text="&Open database...\tCtrl-O",
+            help="Choose a database file to open."
+        )
+        menu_recent = self.menu_recent = wx.Menu()
+        menu_file.AppendMenu(id=wx.ID_ANY, text="&Recent databases",
+            submenu=menu_recent, help="Recently opened databases.")
+        menu_file.AppendSeparator()
+        menu_options = self.menu_options = \
+            menu_file.Append(id=wx.ID_ANY, text="&Advanced options",
+                help="Edit advanced program options")
+        menu_iconize = self.menu_iconize = \
+            menu_file.Append(id=wx.ID_ANY, text="Minimize to &tray",
+                help="Minimize %s window to notification area" % conf.Title)
+        menu_exit = self.menu_exit = \
+            menu_file.Append(id=wx.ID_ANY, text="E&xit\tAlt-X", help="Exit")
+
+        menu_help = wx.Menu()
+        menu.Append(menu_help, "&Help")
+
+        menu_update = self.menu_update = menu_help.Append(id=wx.ID_ANY,
+            text="Check for &updates",
+            help="Check whether a new version of %s is available" % conf.Title)
+        menu_homepage = self.menu_homepage = menu_help.Append(id=wx.ID_ANY,
+            text="Go to &homepage",
+            help="Open the %s homepage, %s" % (conf.Title, conf.HomeUrl))
+        menu_help.AppendSeparator()
+        menu_log = self.menu_log = menu_help.Append(id=wx.ID_ANY,
+            kind=wx.ITEM_CHECK, text="Show &log window",
+            help="Show/hide the log messages window")
+        menu_console = self.menu_console = menu_help.Append(id=wx.ID_ANY,
+            kind=wx.ITEM_CHECK, text="Show Python &console\tCtrl-E",
+            help="Show/hide a Python shell environment window")
+        menu_help.AppendSeparator()
+        menu_tray = self.menu_tray = menu_help.Append(id=wx.ID_ANY,
+            kind=wx.ITEM_CHECK, text="Display &icon in notification area",
+            help="Show/hide %s icon in system tray" % conf.Title)
+        menu_autoupdate_check = self.menu_autoupdate_check = menu_help.Append(
+            id=wx.ID_ANY, kind=wx.ITEM_CHECK,
+            text="Automatic up&date check",
+            help="Automatically check for program updates periodically")
+        menu_help.AppendSeparator()
+        menu_about = self.menu_about = menu_help.Append(
+            id=wx.ID_ANY, text="&About %s" % conf.Title,
+            help="Show program information and copyright")
+
+        self.history_file = wx.FileHistory(conf.MaxRecentFiles)
+        self.history_file.UseMenu(menu_recent)
+        # Reverse list, as FileHistory works like a stack
+        [self.history_file.AddFileToHistory(f) for f in conf.RecentFiles[::-1]]
+        wx.EVT_MENU_RANGE(self, wx.ID_FILE1, wx.ID_FILE1 + conf.MaxRecentFiles,
+                          self.on_recent_file)
+        menu_tray.Check(conf.TrayIconEnabled)
+        menu_autoupdate_check.Check(conf.UpdateCheckAutomatic)
+
+        self.Bind(wx.EVT_MENU, self.on_new_database, menu_new_database)
+        self.Bind(wx.EVT_MENU, self.on_open_database, menu_open_database)
+        self.Bind(wx.EVT_MENU, self.on_open_options, menu_options)
+        self.Bind(wx.EVT_MENU, self.on_exit, menu_exit)
+        self.Bind(wx.EVT_MENU, self.on_toggle_iconize, menu_iconize)
+        self.Bind(wx.EVT_MENU, self.on_check_update, menu_update)
+        self.Bind(wx.EVT_MENU, self.on_menu_homepage, menu_homepage)
+        self.Bind(wx.EVT_MENU, self.on_showhide_log, menu_log)
+        self.Bind(wx.EVT_MENU, self.on_showhide_console, menu_console)
+        self.Bind(wx.EVT_MENU, self.on_toggle_trayicon, menu_tray)
+        self.Bind(wx.EVT_MENU, self.on_toggle_autoupdate_check,
+                  menu_autoupdate_check)
+        self.Bind(wx.EVT_MENU, self.on_about, menu_about)
 
 
     def update_check(self):
@@ -278,8 +500,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.Iconize(False), self.Show(), self.Raise()
             page = self.page_db_latest
             if not page:
-                if self.db_filename: # Load database focused in dblist
-                    page = self.load_database_page(self.db_filename)
+                if self.dbs_selected: # Load database focused in dblist
+                    page = self.load_database_page(self.dbs_selected[-1])
                 elif self.dbs: # Load an open database
                     page = self.load_database_page(list(self.dbs)[0])
                 elif conf.RecentFiles:
@@ -457,229 +679,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.notebook.SetAGWWindowStyleFlag(style)
 
 
-    def create_page_main(self, notebook):
-        """Creates the main page with database list and buttons."""
-        page = self.page_main = wx.Panel(notebook)
-        ColourManager.Manage(page, "BackgroundColour", "MainBgColour")
-        notebook.AddPage(page, "Databases")
-        sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
-
-        sizer_list = wx.BoxSizer(wx.VERTICAL)
-
-        edit_filter = self.edit_filter = controls.SearchCtrl(page, "Filter list")
-        list_db = self.list_db = controls.SortableUltimateListCtrl(parent=page,
-            agwStyle=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.BORDER_NONE)
-        list_db.MinSize = 400, -1 # Maximize-restore would resize width to 100
-
-        columns = [("name", "Name"), ("last_modified", "Modified"), ("size", "Size")]
-        frmt_dt = lambda r, c: r[c].strftime("%Y-%m-%d %H:%M:%S") if r.get(c) else ""
-        frmt_sz = lambda r, c: util.format_bytes(r[c]) if r.get(c) is not None else ""
-        formatters = {"last_modified": frmt_dt, "size": frmt_sz}
-        list_db.SetColumns(columns)
-        list_db.SetColumnFormatters(formatters)
-        list_db.SetColumnAlignment(2, wx.lib.agw.ultimatelistctrl.ULC_FORMAT_RIGHT)
-
-        list_db.AssignImages([images.ButtonHome.Bitmap, images.ButtonListDatabase.Bitmap])
-        ColourManager.Manage(list_db, "ForegroundColour", "DBListForegroundColour")
-        ColourManager.Manage(list_db, "BackgroundColour", "DBListBackgroundColour")
-        topdata = collections.defaultdict(lambda: None, name="Home")
-        list_db.SetTopRow(topdata, [0])
-        list_db.Select(0)
-
-        panel_right = wx.lib.scrolledpanel.ScrolledPanel(page)
-        panel_right.Sizer = wx.BoxSizer(wx.HORIZONTAL)
-
-        panel_main   = self.panel_db_main   = wx.Panel(panel_right)
-        panel_detail = self.panel_db_detail = wx.Panel(panel_right)
-        panel_main.MinSize   = 400, -1
-        panel_detail.MinSize = 400, -1
-        panel_main.Sizer   = wx.BoxSizer(wx.VERTICAL)
-        panel_detail.Sizer = wx.BoxSizer(wx.VERTICAL)
-
-        # Create main page label and buttons
-        label_main = wx.StaticText(panel_main,
-                                   label="Welcome to %s" % conf.Title)
-        ColourManager.Manage(label_main, "ForegroundColour", "TitleColour")
-        label_main.Font = wx.Font(14, wx.FONTFAMILY_SWISS,
-            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
-        BUTTONS_MAIN = [
-            ("new", "&New database", images.ButtonNew, 
-             "Create a new SQLite database."),
-            ("opena", "&Open a database..", images.ButtonOpenA, 
-             "Choose a database from your computer to open."),
-            ("folder", "&Import from folder.", images.ButtonFolder,
-             "Select a folder where to look for databases."),
-            ("detect", "Detect databases", images.ButtonDetect,
-             "Auto-detect databases from user folders."),
-            ("missing", "Remove missing", images.ButtonRemoveMissing,
-             "Remove non-existing files from the database list."),
-            ("clear", "C&lear list", images.ButtonClear,
-             "Clear the current database list."), ]
-        for name, label, img, note in BUTTONS_MAIN:
-            button = controls.NoteButton(panel_main, label, note, img.Bitmap)
-            setattr(self, "button_" + name, button)
-        self.button_missing.Hide(); self.button_clear.Hide()
-
-        # Create detail page labels, values and buttons
-        label_db = self.label_db = wx.TextCtrl(parent=panel_detail, value="",
-            style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH)
-        label_db.Font = wx.Font(12, wx.FONTFAMILY_SWISS,
-            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
-        ColourManager.Manage(label_db, "BackgroundColour", "WidgetColour")
-        label_db.SetEditable(False)
-
-        sizer_labels = wx.FlexGridSizer(cols=2, vgap=3, hgap=10)
-        LABELS = [("path", "Location"), ("size", "Size"),
-                  ("modified", "Last modified"), ("tables", "Tables")]
-        for field, title in LABELS:
-            lbltext = wx.StaticText(parent=panel_detail, label="%s:" % title)
-            valtext = wx.TextCtrl(parent=panel_detail, value="",
-                                  size=(300, -1), style=wx.NO_BORDER)
-            ColourManager.Manage(valtext, "BackgroundColour", "WidgetColour")
-            ColourManager.Manage(valtext, "ForegroundColour", wx.SYS_COLOUR_WINDOWTEXT)
-            valtext.SetEditable(False)
-            ColourManager.Manage(lbltext, "ForegroundColour", "DisabledColour")
-            sizer_labels.Add(lbltext, border=5, flag=wx.LEFT)
-            sizer_labels.Add(valtext, proportion=1, flag=wx.GROW)
-            setattr(self, "label_" + field, valtext)
-
-        BUTTONS_DETAIL = [
-            ("open", "&Open", images.ButtonOpen, 
-             "Open the database."),
-            ("saveas", "Save &as..", images.ButtonSaveAs,
-             "Save a copy of the database under another name."),
-            ("remove", "Remove", images.ButtonRemove,
-             "Remove this database from the list."), ]
-        for name, label, img, note in BUTTONS_DETAIL:
-            button = controls.NoteButton(panel_detail, label, note, img.Bitmap)
-            setattr(self, "button_" + name, button)
-
-        children = list(panel_main.Children) + list(panel_detail.Children)
-        for c in [panel_main, panel_detail] + children:
-            ColourManager.Manage(c, "BackgroundColour", "MainBgColour")
-        panel_right.SetupScrolling(scroll_x=False)
-        panel_detail.Hide()
-
-        list_db.Bind(wx.EVT_LIST_ITEM_SELECTED,  self.on_select_list_db)
-        list_db.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_open_from_list_db)
-        list_db.Bind(wx.EVT_CHAR_HOOK,           self.on_list_db_key)
-        list_db.Bind(wx.EVT_LIST_COL_CLICK,      self.on_sort_list_db)
-        edit_filter.Bind(wx.EVT_TEXT_ENTER,      self.on_filter_list_db)
-        self.button_new.Bind(wx.EVT_BUTTON,      self.on_new_database)
-        self.button_opena.Bind(wx.EVT_BUTTON,    self.on_open_database)
-        self.button_detect.Bind(wx.EVT_BUTTON,   self.on_detect_databases)
-        self.button_folder.Bind(wx.EVT_BUTTON,   self.on_add_from_folder)
-        self.button_missing.Bind(wx.EVT_BUTTON,  self.on_remove_missing)
-        self.button_clear.Bind(wx.EVT_BUTTON,    self.on_clear_databases)
-        self.button_open.Bind(wx.EVT_BUTTON,     self.on_open_current_database)
-        self.button_saveas.Bind(wx.EVT_BUTTON,   self.on_save_database_as)
-        self.button_remove.Bind(wx.EVT_BUTTON,   self.on_remove_database)
-
-        panel_main.Sizer.Add(label_main, border=10, flag=wx.ALL)
-        panel_main.Sizer.Add((0, 10))
-        panel_main.Sizer.Add(self.button_new,    flag=wx.GROW)
-        panel_main.Sizer.Add(self.button_opena,  flag=wx.GROW)
-        panel_main.Sizer.Add(self.button_folder, flag=wx.GROW)
-        panel_main.Sizer.Add(self.button_detect, flag=wx.GROW)
-        panel_main.Sizer.AddStretchSpacer()
-        panel_main.Sizer.Add(self.button_missing, flag=wx.GROW)
-        panel_main.Sizer.Add(self.button_clear,   flag=wx.GROW)
-        panel_detail.Sizer.Add(label_db,     border=10, flag=wx.ALL | wx.GROW)
-        panel_detail.Sizer.Add(sizer_labels, border=10, flag=wx.ALL | wx.GROW)
-        panel_detail.Sizer.AddStretchSpacer()
-        panel_detail.Sizer.Add(self.button_open,   flag=wx.GROW)
-        panel_detail.Sizer.Add(self.button_saveas, flag=wx.GROW)
-        panel_detail.Sizer.Add(self.button_remove, flag=wx.GROW)
-        panel_right.Sizer.Add(panel_main,   proportion=1, flag=wx.GROW)
-        panel_right.Sizer.Add(panel_detail, proportion=1, flag=wx.GROW)
-        sizer_list.Add(edit_filter, border=5, flag=wx.ALIGN_RIGHT | wx.BOTTOM)
-        sizer_list.Add(list_db, proportion=1, flag=wx.GROW)
-        sizer.Add(sizer_list,  border=10, proportion=6, flag=wx.ALL | wx.GROW)
-        sizer.Add(panel_right, border=10, proportion=4, flag=wx.ALL | wx.GROW)
-
-
-    def create_menu(self):
-        """Creates the program menu."""
-        menu = wx.MenuBar()
-        self.SetMenuBar(menu)
-
-        menu_file = wx.Menu()
-        menu.Append(menu_file, "&File")
-
-        menu_new_database = self.menu_new_database = menu_file.Append(
-            id=wx.ID_ANY, text="&New database\tCtrl-N",
-            help="Create a new SQLite database."
-        )
-        menu_open_database = self.menu_open_database = menu_file.Append(
-            id=wx.ID_ANY, text="&Open database...\tCtrl-O",
-            help="Choose a database file to open."
-        )
-        menu_recent = self.menu_recent = wx.Menu()
-        menu_file.AppendMenu(id=wx.ID_ANY, text="&Recent databases",
-            submenu=menu_recent, help="Recently opened databases.")
-        menu_file.AppendSeparator()
-        menu_options = self.menu_options = \
-            menu_file.Append(id=wx.ID_ANY, text="&Advanced options",
-                help="Edit advanced program options")
-        menu_iconize = self.menu_iconize = \
-            menu_file.Append(id=wx.ID_ANY, text="Minimize to &tray",
-                help="Minimize %s window to notification area" % conf.Title)
-        menu_exit = self.menu_exit = \
-            menu_file.Append(id=wx.ID_ANY, text="E&xit\tAlt-X", help="Exit")
-
-        menu_help = wx.Menu()
-        menu.Append(menu_help, "&Help")
-
-        menu_update = self.menu_update = menu_help.Append(id=wx.ID_ANY,
-            text="Check for &updates",
-            help="Check whether a new version of %s is available" % conf.Title)
-        menu_homepage = self.menu_homepage = menu_help.Append(id=wx.ID_ANY,
-            text="Go to &homepage",
-            help="Open the %s homepage, %s" % (conf.Title, conf.HomeUrl))
-        menu_help.AppendSeparator()
-        menu_log = self.menu_log = menu_help.Append(id=wx.ID_ANY,
-            kind=wx.ITEM_CHECK, text="Show &log window",
-            help="Show/hide the log messages window")
-        menu_console = self.menu_console = menu_help.Append(id=wx.ID_ANY,
-            kind=wx.ITEM_CHECK, text="Show Python &console\tCtrl-E",
-            help="Show/hide a Python shell environment window")
-        menu_help.AppendSeparator()
-        menu_tray = self.menu_tray = menu_help.Append(id=wx.ID_ANY,
-            kind=wx.ITEM_CHECK, text="Display &icon in notification area",
-            help="Show/hide %s icon in system tray" % conf.Title)
-        menu_autoupdate_check = self.menu_autoupdate_check = menu_help.Append(
-            id=wx.ID_ANY, kind=wx.ITEM_CHECK,
-            text="Automatic up&date check",
-            help="Automatically check for program updates periodically")
-        menu_help.AppendSeparator()
-        menu_about = self.menu_about = menu_help.Append(
-            id=wx.ID_ANY, text="&About %s" % conf.Title,
-            help="Show program information and copyright")
-
-        self.history_file = wx.FileHistory(conf.MaxRecentFiles)
-        self.history_file.UseMenu(menu_recent)
-        # Reverse list, as FileHistory works like a stack
-        [self.history_file.AddFileToHistory(f) for f in conf.RecentFiles[::-1]]
-        wx.EVT_MENU_RANGE(self, wx.ID_FILE1, wx.ID_FILE1 + conf.MaxRecentFiles,
-                          self.on_recent_file)
-        menu_tray.Check(conf.TrayIconEnabled)
-        menu_autoupdate_check.Check(conf.UpdateCheckAutomatic)
-
-        self.Bind(wx.EVT_MENU, self.on_new_database, menu_new_database)
-        self.Bind(wx.EVT_MENU, self.on_open_database, menu_open_database)
-        self.Bind(wx.EVT_MENU, self.on_open_options, menu_options)
-        self.Bind(wx.EVT_MENU, self.on_exit, menu_exit)
-        self.Bind(wx.EVT_MENU, self.on_toggle_iconize, menu_iconize)
-        self.Bind(wx.EVT_MENU, self.on_check_update, menu_update)
-        self.Bind(wx.EVT_MENU, self.on_menu_homepage, menu_homepage)
-        self.Bind(wx.EVT_MENU, self.on_showhide_log, menu_log)
-        self.Bind(wx.EVT_MENU, self.on_showhide_console, menu_console)
-        self.Bind(wx.EVT_MENU, self.on_toggle_trayicon, menu_tray)
-        self.Bind(wx.EVT_MENU, self.on_toggle_autoupdate_check,
-                  menu_autoupdate_check)
-        self.Bind(wx.EVT_MENU, self.on_about, menu_about)
-
-
     def on_toggle_autoupdate_check(self, event):
         """Handler for toggling automatic update checking, changes conf."""
         conf.UpdateCheckAutomatic = event.IsChecked()
@@ -693,30 +692,36 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         focuses filter on Ctrl-F.
         """
         if event.KeyCode in [wx.WXK_F5]:
-            items = []
-            selected_filename, selected = "", self.list_db.GetFirstSelected()
-            if selected > 0: selected_filename = self.list_db.GetItemText(selected)
+            items, selected_files, selected_home = [], [], False
+            selected = self.list_db.GetFirstSelected()
+            while selected >= 0:
+                if selected:
+                    selected_files.append(self.list_db.GetItemText(selected))
+                else: selected_home = True
+                selected = self.list_db.GetNextSelected(selected)
+
             for filename in conf.DBFiles:
                 data = collections.defaultdict(lambda: None, name=filename)
                 if os.path.exists(filename):
                     data["size"] = os.path.getsize(filename)
                     data["last_modified"] = datetime.datetime.fromtimestamp(
                                             os.path.getmtime(filename))
-                self.db_filenames[filename].update(data)
+                self.db_datas[filename].update(data)
                 items.append(data)
             self.list_db.Populate(items, [1])
-            if selected_filename in self.db_filenames:
+            if selected_home: self.list_db.Select(0)                
+            if selected_files:
                 for i in range(1, self.list_db.GetItemCount()):
-                    if self.list_db.GetItemText(i) == selected_filename:
+                    if self.list_db.GetItemText(i) in selected_files:
                         self.list_db.Select(i)
-                        break # for i
                 self.update_database_detail()
         elif event.KeyCode in [ord('F')] and event.ControlDown():
             self.edit_filter.SetFocus()
-        elif self.list_db.GetFirstSelected() > 0 and not event.AltDown() \
+        elif self.list_db.GetFirstSelected() >= 0 and self.dbs_selected \
+        and not event.AltDown() \
         and event.KeyCode in [wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]:
-            self.load_database_page(self.db_filename)
-        elif event.KeyCode in [wx.WXK_DELETE] and self.db_filename:
+            for f in self.dbs_selected: self.load_database_page(f)
+        elif event.KeyCode in [wx.WXK_DELETE] and self.dbs_selected:
             self.on_remove_database(None)
         event.Skip()
 
@@ -727,7 +732,18 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         def save_sort_state():
             conf.DBSort = self.list_db.GetSortState()
             conf.save()
-        wx.CallAfter(save_sort_state)
+        wx.CallAfter(save_sort_state) # Allow list to update sort state
+
+
+    def on_drag_list_db(self, event):
+        """Handler for dragging items around in dblist, saves file order."""
+        event.Skip()
+        def save_list_order():
+            del conf.DBFiles[:]
+            for i in range(self.list_db.GetItemCountFull()):
+                conf.DBFiles.append(self.list_db.GetItemTextFull(i))
+            conf.save()
+        wx.CallAfter(save_list_order) # Allow list to update items
 
 
     def on_filter_list_db(self, event):
@@ -841,7 +857,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         Inserts all databases into the list, updates UI buttons.
         """
-        items, selected_filename = [], None
+        items, selected_files = [], []
         for filename in conf.DBFiles:
             filename = util.to_unicode(filename)
             data = collections.defaultdict(lambda: None, name=filename)
@@ -849,22 +865,22 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 data["size"] = os.path.getsize(filename)
                 data["last_modified"] = datetime.datetime.fromtimestamp(
                                         os.path.getmtime(filename))
-            self.db_filenames[filename] = data
+            self.db_datas[filename] = data
             items.append(data)
-            if filename in conf.LastSelectedFiles: selected_filename = filename
+            if filename in conf.LastSelectedFiles: selected_files += [filename]
 
         self.list_db.Populate(items, [1])
         if conf.DBSort and conf.DBSort[0] >= 0:
             self.list_db.SortListItems(*conf.DBSort)
 
-        if selected_filename:
+        if selected_files:
             idx = -1
+            self.list_db.Select(0, on=False) # Deselect home row
             for i in range(1, self.list_db.GetItemCount()):
-                if self.list_db.GetItemText(i) == selected_filename:
-                    idx = i
+                if self.list_db.GetItemText(i) in selected_files:
+                    if idx < 0: idx = i
                     self.list_db.Select(i)
                     self.list_db.SetFocus()
-                    break # for i
 
             if idx >= self.list_db.GetCountPerPage():
                 lh = self.list_db.GetUserLineHeight()
@@ -897,13 +913,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 data["size"] = os.path.getsize(filename)
                 data["last_modified"] = datetime.datetime.fromtimestamp(
                                         os.path.getmtime(filename))
-            data_old = self.db_filenames.get(filename)
+            data_old = self.db_datas.get(filename)
             if not data_old or data_old["size"] != data["size"] \
             or data_old["last_modified"] != data["last_modified"]:
-                self.db_filenames[filename] = data
-                if not data_old:
-                    idx = self.list_db.GetItemCount()
-                    self.list_db.AppendRow(data, [1])
+                self.db_datas[filename] = data
+                if not data_old: self.list_db.AppendRow(data, [1])
                 result = True
 
         self.button_missing.Show(self.list_db.GetItemCount() > 1)
@@ -913,10 +927,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def update_database_detail(self):
         """Updates database detail panel with current database information."""
-        filename = self.db_filename
-        path, tail = os.path.split(filename)
-        self.label_db.Value = tail
-        self.label_path.Value = path
+        self.label_db.Value = self.label_path.Value = ""
         self.label_size.Value = self.label_modified.Value = ""
         self.label_tables.Value = ""
         self.label_tables.ForegroundColour = self.ForegroundColour
@@ -925,21 +936,35 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.panel_db_main.Hide()
             self.panel_db_detail.Show()
             self.panel_db_detail.Parent.Layout()
-        if os.path.exists(filename):
-            sz = os.path.getsize(filename)
-            dt = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
-            self.label_size.Value = util.format_bytes(sz)
-            self.label_modified.Value = dt.strftime("%Y-%m-%d %H:%M:%S")
-            data = self.db_filenames[filename]
-            if data["size"] == sz and data["last_modified"] == dt \
-            and data.get("tables") is not None:
-                # File does not seem changed: use cached values
-                self.label_tables.Value = data["tables"]
+
+        size = None
+        for filename in self.dbs_selected:
+            sz = os.path.getsize(filename) if os.path.exists(filename) else None
+            if sz: size = (size or 0) + sz
+
+            if len(self.dbs_selected) > 1:
+                self.label_db.Value = "<%s files>" % len(self.dbs_selected)
             else:
-                wx.CallLater(10, self.update_database_stats, filename)
-        else:
-            self.label_size.Value = "File does not exist."
-            self.label_size.ForegroundColour = conf.LabelErrorColour
+                path, tail = os.path.split(filename)
+                self.label_db.Value = tail
+                self.label_path.Value = path
+
+                if os.path.exists(filename):
+                    dt = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
+                    self.label_modified.Value = dt.strftime("%Y-%m-%d %H:%M:%S")
+                    data = self.db_datas[filename]
+                    if data["size"] == sz and data["last_modified"] == dt \
+                    and data.get("tables") is not None:
+                        # File does not seem changed: use cached values
+                        self.label_tables.Value = data["tables"]
+                    else:
+                        wx.CallLater(10, self.update_database_stats, filename)
+                else:
+                    self.label_size.Value = "File does not exist."
+                    self.label_size.ForegroundColour = conf.LabelErrorColour
+
+        if size is not None: self.label_size.Value = util.format_bytes(size)
+
 
 
     def on_clear_databases(self, event):
@@ -955,66 +980,76 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             conf.LastSearchResults.clear()
             while self.history_file.Count:
                 self.history_file.RemoveFileFromHistory(0)
-            self.db_filenames.clear()
+            del self.dbs_selected[:]
+            self.db_datas.clear()
             conf.save()
             self.update_database_list()
 
 
     def on_save_database_as(self, event):
         """Handler for clicking to save a copy of a database in the list."""
-        original = self.db_filename
-        if not os.path.exists(original):
-            wx.MessageBox(
-                "The file \"%s\" does not exist on this computer." % original,
-                conf.Title, wx.OK | wx.ICON_INFORMATION
-            )
-            return
+        filenames = filter(os.path.exists, self.dbs_selected)
+        if not filenames:
+            m = "None of the selected files" if len(self.dbs_selected) > 1 \
+                else "The file \"%s\" does not" % self.dbs_selected[0]
+            return wx.MessageBox("%s exist on this computer." % m, conf.Title,
+                                 wx.OK | wx.ICON_INFORMATION)
 
-        dialog = wx.FileDialog(parent=self, message="Save a copy..",
-            defaultDir=os.path.split(original)[0],
-            defaultFile=os.path.basename(original),
+        dialog = wx.DirDialog(parent=self,
+            message="Choose directory where to save databases",
+            defaultPath=os.getcwd(),
+            style=wx.DD_DIR_MUST_EXIST | wx.RESIZE_BORDER
+        ) if len(filenames) > 1 else wx.FileDialog(parent=self,
+            message="Save a copy..",
+            defaultDir=os.path.split(filenames[0])[0],
+            defaultFile=os.path.basename(filenames[0]),
             style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
         )
-        if wx.ID_OK == dialog.ShowModal():
-            wx.YieldIfNeeded() # Allow UI to refresh
-            newpath = dialog.GetPath()
-            success = False
-            try:
-                shutil.copyfile(original, newpath)
-                success = True
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        path = dialog.GetPath()
+        wx.YieldIfNeeded() # Allow UI to refresh
+
+        for filename in filenames:
+            _, basename = os.path.split(filename)
+            newpath = os.path.join(path, basename) if len(filenames) > 1 else path
+            try: shutil.copyfile(filename, newpath)
             except Exception as e:
                 guibase.log("%r when trying to copy %s to %s.",
-                         e, original, newpath)
+                         e, basename, newpath)
                 wx.MessageBox("Failed to copy \"%s\" to \"%s\"." %
-                              (original, newpath), conf.Title,
+                              (basename, newpath), conf.Title,
                               wx.OK | wx.ICON_WARNING)
-            if success:
+            else:
                 guibase.logstatus_flash("Saved a copy of %s as %s.",
-                                     original, newpath)
+                                        filename, newpath)
                 self.update_database_list(newpath)
 
 
     def on_remove_database(self, event):
         """Handler for clicking to remove an item from the database list."""
-        filename = self.db_filename
-        if filename and wx.OK == wx.MessageBox(
-            "Remove %s from database list?" % filename,
+        if not self.dbs_selected: return
+
+        m = "%s files" % len(self.dbs_selected)
+        if len(self.dbs_selected) == 1: m = self.dbs_selected[0]
+        if wx.OK == wx.MessageBox(
+            "Remove %s from database list?" % m,
             conf.Title, wx.OK | wx.CANCEL | wx.ICON_QUESTION
         ):
-            for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
-                if filename in lst: lst.remove(filename)
-            for dct in conf.LastSearchResults, self.db_filenames:
-                dct.pop(filename, None)
-            for i in range(self.list_db.GetItemCount()):
-                if self.list_db.GetItemText(i) == filename:
+            for filename in self.dbs_selected:
+                for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
+                    if filename in lst: lst.remove(filename)
+                for dct in conf.LastSearchResults, self.db_datas:
+                    dct.pop(filename, None)
+            for i in range(self.list_db.GetItemCount())[::-1]:
+                if self.list_db.GetItemText(i) in self.dbs_selected:
                     self.list_db.DeleteItem(i)
-                    break # break for i in range(self.list_db..
             # Remove from recent file history
             historyfiles = [(i, self.history_file.GetHistoryFile(i))
                             for i in range(self.history_file.Count)]
-            for i in [i for i, f in historyfiles if f == filename]:
+            for i in [i for i, f in historyfiles if f in self.dbs_selected][::-1]:
                 self.history_file.RemoveFileFromHistory(i)
-            self.db_filename = None
+            del self.dbs_selected[:]
             self.list_db.Select(0)
             self.update_database_list()
             conf.save()
@@ -1030,9 +1065,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             # - i, as item count is getting smaller one by one
             selected = selecteds[i] - i
             filename = self.list_db.GetItemText(selected)
-            for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
+            for lst in (conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles,
+                        self.dbs_selected):
                 if filename in lst: lst.remove(filename)
-            for dct in conf.LastSearchResults, self.db_filenames:
+            for dct in conf.LastSearchResults, self.db_datas:
                 dct.pop(filename, None)
             self.list_db.DeleteItem(selected)
         self.update_database_list()
@@ -1187,7 +1223,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             wx.YieldIfNeeded()
             count = 0
             for filename in database.find_databases(folder):
-                if filename not in self.db_filenames:
+                if filename not in self.db_datas:
                     guibase.log("Detected database %s.", filename)
                     self.update_database_list(filename)
                     count += 1
@@ -1199,8 +1235,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_open_current_database(self, event):
         """Handler for clicking to open selected files from database list."""
-        if self.db_filename:
-            self.load_database_page(self.db_filename)
+        for f in self.dbs_selected: self.load_database_page(f)
 
 
     def on_open_from_list_db(self, event):
@@ -1232,7 +1267,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                         break # for t
                 self.label_tables.Value += " (%s)" % s
 
-            data = self.db_filenames.get(filename, {})
+            data = self.db_datas.get(filename, {})
             data["tables"] = self.label_tables.Value
         except Exception as e:
             self.label_tables.Value = util.format_exc(e)
@@ -1248,23 +1283,31 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def on_select_list_db(self, event):
         """Handler for selecting an item in main list, updates info panel."""
         if event.GetIndex() > 0 \
-        and event.GetText() != self.db_filename:
-            self.db_filename = event.GetText()
+        and event.GetText() not in self.dbs_selected:
+            self.dbs_selected.append(event.GetText())
+            conf.LastSelectedFiles[:] = self.dbs_selected[:]
             self.update_database_detail()
-        elif event.GetIndex() == 0 and not self.panel_db_main.Shown:
-            self.db_filename = None
+        elif event.GetIndex() == 0 and not self.dbs_selected \
+        and not self.panel_db_main.Shown:
             self.panel_db_main.Show()
             self.panel_db_detail.Hide()
             self.panel_db_main.Parent.Layout()
 
-        # Save last selected files in db lists, to reselect them on rerun
-        if self.list_db.GetItemCount() > 1:
-            del conf.LastSelectedFiles[:]
-            selected = self.list_db.GetFirstSelected()
-            while selected > 0:
-                filename = self.list_db.GetItemText(selected)
-                conf.LastSelectedFiles.append(filename)
-                selected = self.list_db.GetNextSelected(selected)
+
+    def on_deselect_list_db(self, event):
+        """Handler for deselecting an item in main list, updates info panel."""
+        if not self.dbs_selected or not event.GetIndex(): return
+
+        filename = event.GetText()
+        self.dbs_selected = [x for x in self.dbs_selected if x != filename]
+        conf.LastSelectedFiles[:] = self.dbs_selected[:]
+
+        if self.dbs_selected:
+            self.update_database_detail()
+        else:
+            self.panel_db_main.Show()
+            self.panel_db_detail.Hide()
+            self.panel_db_main.Parent.Layout()
 
 
     def on_exit(self, event):
@@ -1299,14 +1342,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.worker_detection.stop()
 
             # Save last selected files in db lists, to reselect them on rerun
-            del conf.LastSelectedFiles[:]
-            selected = self.list_db.GetFirstSelected()
-            while selected > 0:
-                filename = self.list_db.GetItemText(selected)
-                conf.LastSelectedFiles.append(filename)
-                selected = self.list_db.GetNextSelected(selected)
-            if not conf.WindowIconized:
-                conf.WindowPosition = self.Position[:]
+            conf.LastSelectedFiles[:] = self.dbs_selected[:]
+            if not conf.WindowIconized: conf.WindowPosition = self.Position[:]
             conf.WindowSize = [-1, -1] if self.IsMaximized() else self.Size[:]
             conf.save()
             self.trayicon.Destroy()
@@ -1499,6 +1536,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.Bind(wx.EVT_LIST_DELETE_ALL_ITEMS,
                           self.on_clear_searchall, page.edit_searchall)
         if page:
+            self.list_db.Select(0, on=False) # Deselect home row
             for i in range(1, self.list_db.GetItemCount()):
                 if self.list_db.GetItemText(i) == filename:
                     self.list_db.Select(i)

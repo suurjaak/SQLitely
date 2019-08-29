@@ -1250,6 +1250,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         if imageIds:
             imageIds = self._id_images[item_id] = self._ConvertImageIds(imageIds)
 
+        index = min(index, self.GetItemCount())
         if self._RowMatchesFilter(data):
             columns = [c[0] for c in self._columns]
             for i, col_name in enumerate(columns):
@@ -1267,7 +1268,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             self._data_map[item_id] = data
             self.SetItemTextColour(index, self.ForegroundColour)
             self.SetItemBackgroundColour(index, self.BackgroundColour)
-        self._id_rows.append((item_id, data))
+        self._id_rows.insert(index - (1 if self._top_row else 0), (item_id, data))
         if self.GetSortState()[0] >= 0:
             self.SortListItems(*self.GetSortState())
 
@@ -1410,6 +1411,12 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         return len(self._id_rows)
 
 
+    def GetItemTextFull(self, idx):
+        """Returns item text by index, including items hidden by filter."""
+        data, col_name = self._id_rows[idx][-1], self._columns[0][0]
+        return self._formatters[col_name](data, col_name)
+
+
     def SetColumnsMaxWidth(self, width):
         """Sets the maximum width for all columns, used in auto-size."""
         self._col_maxwidth = width
@@ -1525,15 +1532,28 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
     def OnDragStop(self, event):
         """Handler for stopping drag in the list, rearranges list."""
         start, stop = self._drag_start, max(1, event.GetIndex())
-        if start and start != stop:
-            item_id, data = self.GetItemData(start), self.GetItemMappedData(start)
-            imageIds = self._id_images.get(item_id) or ()
-            idx = stop if start > stop or stop == self.GetItemCount() - 1 \
-                  else stop - 1
-            self.DeleteItem(start)
-            self.InsertRow(idx, data, self._ConvertImageIds(imageIds, False))
-            self.Select(idx)
+        if not start or start == stop: return
+
+        selecteds, selected = [], self.GetFirstSelected()
+        while selected > 0:
+            selecteds.append(selected)
+            selected = self.GetNextSelected(selected)
+
+        idx = stop if start > stop else stop - len(selecteds)
+        if not selecteds: # Dragged beyond last item
+            idx, selecteds = self.GetItemCount() - 1, [start]
+
+        item_ids = map(self.GetItemData, selecteds)
+        datas    = map(self.GetItemMappedData, selecteds)
+        image_ids = map(self._id_images.get, item_ids)
+
+        self.Freeze()
+        for x in selecteds[::-1]: self.DeleteItem(x)
+        for i, (item_id, data, imageIds) in enumerate(zip(item_ids, datas, image_ids)):
+            self.InsertRow(idx + i, data, self._ConvertImageIds(imageIds, reverse=True))
+            self.Select(idx + i)
         self._drag_start = None
+        self.Thaw()
 
 
     def OnDragStart(self, event):
@@ -1551,8 +1571,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         class HackEvent(object): # UltimateListCtrl hack to cancel drag.
             def __init__(self, pos=wx.Point()): self._position = pos
             def GetPosition(self): return self._position
-        try:
-            wx.CallAfter(self.Children[0].DragFinish, HackEvent())
+        try: wx.CallAfter(self.Children[0].DragFinish, HackEvent())
         except: raise
 
 
@@ -1581,6 +1600,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
     def _ConvertImageIds(self, imageIds, reverse=False):
         """Returns user image indexes adjusted by internal image count."""
+        if not imageIds: return imageIds            
         shift = (-1 if reverse else 1) * len(self.GetSortImages() or [])
         return [x + shift for x in imageIds]
 
