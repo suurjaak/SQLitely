@@ -1953,7 +1953,7 @@ class DatabasePage(wx.Panel):
             """Handler for clicking help bitmap, shows text popup."""
             wx.TipWindow(ctrl, text, maxLength=300)
             
-        bmp = wx.ArtProvider.GetBitmap(wx.ART_HELP_BOOK, wx.ART_TOOLBAR, (16, 16))
+        bmp = wx.ArtProvider.GetBitmap(wx.ART_QUESTION, wx.ART_TOOLBAR, (16, 16))
         cursor_pointer = wx.StockCursor(wx.CURSOR_HAND)
         lastopts = {}
         for name, opts in sorted(database.Database.PRAGMA.items(),
