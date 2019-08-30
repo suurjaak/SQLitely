@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.08.2019
+@modified    30.08.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -415,12 +415,14 @@ class Database(object):
         """
         self.filename = filename
         self.basefilename = os.path.basename(self.filename)
+        self.filesize = None
+        self.last_modified = None
         self.backup_created = False
         self.consumers = set() # Registered objects using this database
         # {"table|index|view|trigger":
         #   {name.lower():
         #     {"name": str, "sql": str, "table": str, "columns": [], "rows": int}}}
-        self.schema = defaultdict(lambda: OrderedDict())
+        self.schema = defaultdict(OrderedDict)
         self.table_rows    = {} # {tablename1: [..], }
         self.table_objects = {} # {tablename1: {id1: {rowdata1}, }, }
         self.update_fileinfo()
@@ -522,6 +524,13 @@ class Database(object):
     def has_consumers(self):
         """Returns whether the database has currently registered consumers."""
         return len(self.consumers) > 0
+
+
+    def has_rowid(self, table):
+        """Returns whether the table has ROWID, or is WITHOUT ROWID."""
+        if table not in self.schema["table"]: return None
+        sql = self.schema["table"][table]["sql"]
+        return not re.search(r"WITHOUT\s+ROWID\s*$", sql, re.I)
 
 
     def close(self):
@@ -642,23 +651,23 @@ class Database(object):
         Returns the columns of the specified table, as
         [{"name": "col1", "type": "INTEGER", }, ], or [] if not retrievable.
         """
+        result = []
         table = table.lower()
-        table_columns = []
-        if self.is_open() and table in self.schema["table"]:
-            if "columns" in self.schema["table"][table]:
-                table_columns = self.schema["table"][table]["columns"]
-            else:
-                table_columns = []
-                try:
-                    res = self.execute("PRAGMA table_info(%s)" % table, log=False)
-                    for row in res.fetchall():
-                        row["type"] = row["type"].upper()
-                        table_columns.append(row)
-                except sqlite3.DatabaseError:
-                    guibase.log("Error getting %s column data for %s.\n\n%s",
-                                table, self.filename, traceback.format_exc())
-                self.schema["table"][table]["columns"] = table_columns
-        return copy.deepcopy(table_columns)
+        if table not in self.schema["table"]: return result
+
+        if "columns" in self.schema["table"][table]:
+            result = self.schema["table"][table]["columns"]
+        elif self.is_open():
+            try:
+                res = self.execute("PRAGMA table_info(%s)" % table, log=False)
+                for row in res.fetchall():
+                    row["type"] = row["type"].upper()
+                    result.append(row)
+            except sqlite3.DatabaseError:
+                guibase.log("Error getting %s column data for %s.\n\n%s",
+                            table, self.filename, traceback.format_exc())
+            self.schema["table"][table]["columns"] = result
+        return copy.deepcopy(result)
 
 
     def get_sql(self, refresh=False):
@@ -679,7 +688,7 @@ class Database(object):
                     # LF after first brace
                     sql = re.sub(r"^([^(]+)\(\s*", lambda m: m.group(1).strip() + " (\n  ", sql)
                     # LF after each col
-                    sql = re.sub("\s*,\s*", ",\n  ", sql)
+                    sql = re.sub(r"\s*,\s*", ",\n  ", sql)
                     # LF before last brace
                     sql = re.sub(r"\)(\s*WITHOUT\s+ROWID)$", r"\n)\1", sql, re.I)
                     sql = re.sub(r"\)$", r"\n)", sql)
@@ -745,36 +754,6 @@ class Database(object):
         self.schema["table"][table] = row
 
 
-    def update_row(self, table, row, original_row, rowid=None):
-        """
-        Updates the table row in the database, identified by its primary key
-        in its original values, or the given rowid if table has no primary key.
-        """
-        if not self.is_open():
-            return
-        table, where = table.lower(), ""
-        guibase.log("Updating 1 row in table %s, %s.",
-                    self.schema["table"][table]["name"], self.filename)
-        self.ensure_backup()
-        col_data = self.get_table_columns(table)
-        values, where = row.copy(), ""
-        setsql = ", ".join("%(name)s = :%(name)s" % x for x in col_data)
-        if rowid is not None:
-            pk_key = "PK%s" % int(time.time()) # Avoid existing field collision
-            where, values[pk_key] = "ROWID = :%s" % pk_key, rowid
-        else:
-            for pk in [c["name"] for c in col_data if c["pk"]]:
-                pk_key = "PK%s" % int(time.time())
-                values[pk_key] = original_row[pk]
-                where += (" AND " if where else "") + "%s IS :%s" % (pk, pk_key)
-        if not where:
-            return False # Sanity check: no primary key and no rowid
-        self.execute("UPDATE %s SET %s WHERE %s" % (table, setsql, where),
-                     values)
-        self.connection.commit()
-        self.last_modified = datetime.datetime.now()
-
-
     def insert_row(self, table, row):
         """
         Inserts the new table row in the database.
@@ -799,6 +778,35 @@ class Database(object):
         return cursor.lastrowid
 
 
+    def update_row(self, table, row, original_row, rowid=None):
+        """
+        Updates the table row in the database, identified by the given ROWID,
+        or by the primary keys in its original values, or by all columns in its
+        original values if table has no primary key.
+        """
+        if not self.is_open():
+            return
+        table, where = table.lower(), ""
+        guibase.log("Updating 1 row in table %s, %s.",
+                    self.schema["table"][table]["name"], self.filename)
+        self.ensure_backup()
+        col_data = self.get_table_columns(table)
+        values, where = row.copy(), ""
+        setsql = ", ".join("%(name)s = :%(name)s" % x for x in col_data)
+        if rowid is not None:
+            key = "ROWID%s" % int(time.time()) # Avoid existing field collision
+            where, values[key] = "ROWID = :%s" % key, rowid
+        else:
+            # If no ROWID and no primary key, use all columns to identify row
+            for col in [c for c in col_data if c["pk"]] or col_data:
+                key = "%s%s" % (col["name"], int(time.time()))
+                values[key] = original_row[col["name"]]
+                where += (" AND " if where else "") + "%s IS :%s" % (col["name"], key)
+        self.execute("UPDATE %s SET %s WHERE %s" % (table, setsql, where), values)
+        self.connection.commit()
+        self.last_modified = datetime.datetime.now()
+
+
     def delete_row(self, table, row, rowid=None):
         """
         Deletes the table row from the database. Row is identified by its
@@ -815,15 +823,14 @@ class Database(object):
         col_data = self.get_table_columns(table)
         values, where = row.copy(), ""
         if rowid is not None:
-            pk_key = "PK%s" % int(time.time()) # Avoid existing field collision
-            where, values[pk_key] = "ROWID = :%s" % pk_key, rowid
+            key = "ROWID%s" % int(time.time()) # Avoid existing field collision
+            where, values[key] = "ROWID = :%s" % key, rowid
         else:
-            for pk in [c["name"] for c in col_data if c["pk"]]:
-                pk_key = "PK%s" % int(time.time())
-                values[pk_key] = row[pk]
-                where += (" AND " if where else "") + "%s IS :%s" % (pk, pk_key)
-        if not where:
-            return False # Sanity check: no primary key and no rowid
+            # If no ROWID and no primary key, use all columns to identify row
+            for col in [c for c in col_data if c["pk"]] or col_data:
+                key = "%s%s" % (col["name"], int(time.time()))
+                values[key] = row[col["name"]]
+                where += (" AND " if where else "") + "%s IS :%s" % (col["name"], key)
         self.execute("DELETE FROM %s WHERE %s" % (table, where), values)
         self.connection.commit()
         self.last_modified = datetime.datetime.now()
@@ -891,7 +898,7 @@ def detect_databases():
     search_paths = map(util.to_unicode, search_paths)
     for search_path in filter(os.path.exists, search_paths):
         guibase.log("Looking for SQLite databases under %s.", search_path)
-        for root, dirs, files in os.walk(search_path):
+        for root, _, files in os.walk(search_path):
             results = []
             for f in files:
                 if is_sqlite_file(f, root):
@@ -901,7 +908,7 @@ def detect_databases():
     # Then search current working directory for database files.
     search_path = util.to_unicode(os.getcwd())
     guibase.log("Looking for SQLite databases under %s.", search_path)
-    for root, dirs, files in os.walk(search_path):
+    for root, _, files in os.walk(search_path):
         results = []
         for f in (x for x in files if is_sqlite_file(x, root)):
             results.append(os.path.realpath(os.path.join(root, f)))
@@ -910,6 +917,6 @@ def detect_databases():
 
 def find_databases(folder):
     """Yields a list of all SQLite databases under the specified folder."""
-    for root, dirs, files in os.walk(folder):
+    for root, _, files in os.walk(folder):
         for f in (x for x in files if is_sqlite_file(x, root)):
             yield os.path.join(root, f)

@@ -703,9 +703,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             for filename in conf.DBFiles:
                 data = collections.defaultdict(lambda: None, name=filename)
                 if os.path.exists(filename):
-                    data["size"] = os.path.getsize(filename)
-                    data["last_modified"] = datetime.datetime.fromtimestamp(
-                                            os.path.getmtime(filename))
+                    if filename in self.dbs:
+                        self.dbs[filename].update_fileinfo()
+                        data["size"] = self.dbs[filename].filesize
+                        data["last_modified"] = self.dbs[filename].last_modified
+                    else:
+                        data["size"] = os.path.getsize(filename)
+                        data["last_modified"] = datetime.datetime.fromtimestamp(
+                                                os.path.getmtime(filename))
                 self.db_datas[filename].update(data)
                 items.append(data)
             self.list_db.Populate(items, [1])
@@ -910,13 +915,18 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 conf.save()
             data = collections.defaultdict(lambda: None, name=filename)
             if os.path.exists(filename):
-                data["size"] = os.path.getsize(filename)
-                data["last_modified"] = datetime.datetime.fromtimestamp(
-                                        os.path.getmtime(filename))
+                if filename in self.dbs:
+                    self.dbs[filename].update_fileinfo()
+                    data["size"] = self.dbs[filename].filesize
+                    data["last_modified"] = self.dbs[filename].last_modified
+                else:
+                    data["size"] = os.path.getsize(filename)
+                    data["last_modified"] = datetime.datetime.fromtimestamp(
+                                            os.path.getmtime(filename))
             data_old = self.db_datas.get(filename)
             if not data_old or data_old["size"] != data["size"] \
             or data_old["last_modified"] != data["last_modified"]:
-                self.db_datas[filename] = data
+                self.db_datas.setdefault(filename, {}).update(data)
                 if not data_old: self.list_db.AppendRow(data, [1])
                 result = True
 
@@ -2745,7 +2755,7 @@ class DatabasePage(wx.Panel):
                             grid.Table.ClearSort(refresh=False)
                             grid.Table.ClearFilter()
                         columns = self.db.get_table_columns(table_name)
-                        id_fields = [c["name"] for c in columns if c.get("pk_id")]
+                        id_fields = [c["name"] for c in columns if c.get("pk")]
                         if not id_fields: # No primary key fields: take all
                             id_fields = [c["name"] for c in columns]
                         row_id = [row[c] for c in id_fields]
@@ -3597,7 +3607,8 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         self.attrs = {} # {"new": wx.grid.GridCellAttr, }
 
         if not self.is_query:
-            self.sql = "SELECT rowid AS %s, * FROM %s" % (self.rowid_name, table)
+            cols = "rowid AS %s, *" % self.rowid_name if db.has_rowid(table) else "*"
+            self.sql = "SELECT %s FROM %s" % (cols, table)
         self.row_iterator = db.execute(self.sql)
         if self.is_query:
             self.columns = [{"name": c[0], "type": "TEXT"}
@@ -3668,7 +3679,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
                 pass
             if rowdata:
                 idx = id(rowdata)
-                if not self.is_query:
+                if not self.is_query and self.rowid_name in rowdata:
                     self.rowids[idx] = rowdata[self.rowid_name]
                     del rowdata[self.rowid_name]
                 rowdata["__id__"] = idx
@@ -3990,11 +4001,11 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
                     if "INTEGER" == col_map[pks[0]]["type"]:
                         # Autoincremented row: update with new value
                         row[pks[0]] = insert_id
-                    else: # For non-integers, insert returns ROWID
+                    elif insert_id: # For non-integers, insert returns ROWID
                         self.rowids[idx] = insert_id
                 row["__new__"] = False
                 self.idx_new.remove(idx)
-            # Deleted all newly deleted rows
+            # Delete all newly deleted rows
             for idx, row in self.rows_deleted.copy().items():
                 self.db.delete_row(self.table, row, self.rowids.get(idx))
                 del self.rows_deleted[idx]
