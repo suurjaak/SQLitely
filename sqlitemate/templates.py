@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.08.2019
+@modified    30.08.2019
 ------------------------------------------------------------------------------
 """
 import re
@@ -25,12 +25,12 @@ SAFEBYTE_RGX = re.compile("[\x00-\x08,\x0B-\x0C,\x0E-x1F,\x7F]")
 SAFEBYTE_REPL = lambda m: m.group(0).encode("unicode-escape")
 
 
-"""HTML data grid export template."""
-GRID_HTML = """<%
+"""HTML data export template."""
+DATA_HTML = """<%
 import datetime
 from sqlitemate import conf, images
 from sqlitemate.lib import util
-%><!DOCTYPE HTML><html>
+%><!DOCTYPE HTML><html lang="en">
 <head>
     <meta http-equiv='Content-Type' content='text/html;charset=utf-8' />
     <meta name="Author" content="{{conf.Title}}">
@@ -72,14 +72,14 @@ from sqlitemate.lib import util
             padding: 5px;
             border: 1px solid #C0C0C0;
         }
-        a, a.visited { color: conf.ExportLinkColour; text-decoration: none; }
+        a, a.visited { color: {{conf.ExportLinkColour}}; text-decoration: none; }
         a:hover, a.visited:hover { text-decoration: underline; }
         .footer {
           text-align: center;
           padding-bottom: 10px;
           color: #666;
         }
-        .header { font-size: 1.1em; font-weight: bold; color: conf.ExportLinkColour; }
+        .header { font-size: 1.1em; font-weight: bold; color: {{conf.ExportLinkColour}}; }
         td { text-align: left; vertical-align: top; }
     </style>
 </head>
@@ -90,11 +90,9 @@ from sqlitemate.lib import util
         <td class="header_left"></td>
         <td>
             <div class="header">{{title}}</div><br />
+            <b>SQL:</b> {{sql or create_sql}}<br />
             Source: <b>{{db_filename}}</b>.<br />
-            <b>{{row_count}}</b> {{util.plural("row", row_count, with_items=False)}} in results.<br />
-%if sql:
-            <b>SQL:</b> {{sql}}
-%endif
+            <b>{{row_count}}</b> {{util.plural("row", row_count, with_items=False)}}{{" in results" if sql else ""}}.<br />
         </td>
     </tr></table>
 </td></tr><tr><td><table class="content_table">
@@ -103,14 +101,10 @@ from sqlitemate.lib import util
 <th>{{col}}</th>
 %endfor
 </tr>
-%for i, row in enumerate(rows):
-<tr>
-<td>{{i + 1}}</td>
-%for col in columns:
-<td>{{"" if row[col] is None else row[col]}}</td>
-%endfor
-</tr>
-%endfor
+<%
+for chunk in data_buffer:
+    echo(chunk)
+%>
 </table>
 </td></tr></table>
 <div class="footer">Exported with {{conf.Title}} on {{datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}}.</div>
@@ -119,15 +113,30 @@ from sqlitemate.lib import util
 """
 
 
+
+"""HTML data export template for the rows part."""
+DATA_ROWS_HTML = """
+%for i, row in enumerate(rows):
+<%
+namespace["row_count"] += 1
+%><tr>
+<td>{{i + 1}}</td>
+%for col in columns:
+<td>{{"" if row[col] is None else row[col]}}</td>
+%endfor
+</tr>
+%endfor
+"""
+
+
 """TXT SQL insert statements export template."""
 SQL_TXT = """<%
-import datetime, re, string
+import datetime
+from sqlitemate.lib import util
 from sqlitemate import conf
 
-UNPRINTABLES = "".join(set(unichr(i) for i in range(128)).difference(string.printable))
-RE_UNPRINTABLE = re.compile("[%s]" % "".join(map(re.escape, UNPRINTABLES)))
-str_cols = ", ".join(columns)
 %>-- {{title}}.
+-- {{row_count}} {{util.plural("row", row_count, with_items=False)}}.
 -- Source: {{db_filename}}.
 -- Exported with {{conf.Title}} on {{datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}}.
 %if sql:
@@ -137,9 +146,26 @@ str_cols = ", ".join(columns)
 {{create_sql}}
 %endif
 
+<%
+for chunk in data_buffer:
+    echo(chunk)
+%>
+"""
+
+
+
+"""TXT SQL insert statements export template for the rows part."""
+SQL_ROWS_TXT = """<%
+import re, string
+
+UNPRINTABLES = "".join(set(unichr(i) for i in range(128)).difference(string.printable))
+RE_UNPRINTABLE = re.compile("[%s]" % "".join(map(re.escape, UNPRINTABLES)))
+str_cols = ", ".join(columns)
+%>
 %for row in rows:
 <%
 values = []
+namespace["row_count"] += 1
 %>
 %for col in columns:
 <%

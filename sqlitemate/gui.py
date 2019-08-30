@@ -1790,6 +1790,7 @@ class DatabasePage(wx.Panel):
         tree.SetColumnAlignment(1, wx.ALIGN_RIGHT)
         self.Bind(wx.EVT_BUTTON, self.on_refresh_tables, button_refresh)
         self.Bind(wx.EVT_TREE_ITEM_ACTIVATED, self.on_change_tree_tables, tree)
+        self.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_tables, tree)
 
         sizer1.Add(sizer_topleft, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
         sizer1.Add(tree, proportion=1,
@@ -3046,39 +3047,42 @@ class DatabasePage(wx.Panel):
         if event.EventObject is self.button_export_sql:
             grid_source = self.grid_sql
             sql = getattr(self, "last_sql", "")
-        if grid_source.Table:
-            if grid_source is self.grid_table:
-                table = self.db.schema["table"][grid_source.Table.table.lower()]["name"]
-                title = "Table - \"%s\"" % table
-                self.dialog_savefile.Wildcard = export.TABLE_WILDCARD
-            else:
-                title = "SQL query"
-                self.dialog_savefile.Wildcard = export.QUERY_WILDCARD
-                grid_source.Table.SeekAhead(True)
-            self.dialog_savefile.Filename = util.safe_filename(title)
-            self.dialog_savefile.Message = "Save table as"
-            self.dialog_savefile.WindowStyle |= wx.FD_OVERWRITE_PROMPT
-            if wx.ID_OK == self.dialog_savefile.ShowModal():
-                filename = self.dialog_savefile.GetPath()
-                exts = export.TABLE_EXTS if grid_source is self.grid_table \
-                       else export.QUERY_EXTS
-                extname = exts[self.dialog_savefile.FilterIndex]
-                if not filename.lower().endswith(".%s" % extname):
-                    filename += ".%s" % extname
-                busy = controls.BusyPanel(self, "Exporting \"%s\"." % filename)
-                guibase.status("Exporting \"%s\".", filename)
-                try:
-                    export.export_grid(grid_source, filename, title,
-                                       self.db, sql, table)
-                    guibase.logstatus_flash("Exported %s.", filename)
-                    util.start_file(filename)
-                except Exception:
-                    msg = "Error saving %s:\n\n%s" % \
-                          (filename, traceback.format_exc())
-                    guibase.logstatus_flash(msg)
-                    wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
-                finally:
-                    busy.Close()
+        if not grid_source.Table: return
+
+        if grid_source is self.grid_table:
+            table = self.db.schema["table"][grid_source.Table.table.lower()]["name"]
+            title = 'Table "%s"' % table
+            self.dialog_savefile.Wildcard = export.TABLE_WILDCARD
+        else:
+            title = "SQL query"
+            self.dialog_savefile.Wildcard = export.QUERY_WILDCARD
+            grid_source.Table.SeekAhead(True)
+        self.dialog_savefile.Filename = util.safe_filename(title)
+        self.dialog_savefile.Message = "Save table as"
+        self.dialog_savefile.WindowStyle |= wx.FD_OVERWRITE_PROMPT
+        if wx.ID_OK != self.dialog_savefile.ShowModal(): return
+
+        filename = self.dialog_savefile.GetPath()
+        exts = export.TABLE_EXTS if grid_source is self.grid_table \
+               else export.QUERY_EXTS
+        extname = exts[self.dialog_savefile.FilterIndex]
+        if not filename.lower().endswith(".%s" % extname):
+            filename += ".%s" % extname
+        busy = controls.BusyPanel(self, "Exporting \"%s\"." % filename)
+        guibase.status("Exporting \"%s\".", filename)
+        try:
+            iterable = grid_source.Table.GetRowIterator()
+            export.export_data(iterable, filename, title, self.db,
+                               grid_source.Table.columns, sql, table)
+            guibase.logstatus_flash("Exported %s.", filename)
+            util.start_file(filename)
+        except Exception:
+            msg = "Error saving %s:\n\n%s" % \
+                  (filename, traceback.format_exc())
+            guibase.logstatus_flash(msg)
+            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+        finally:
+            busy.Close()
 
 
     def on_button_close_grid(self, event):
@@ -3448,6 +3452,80 @@ class DatabasePage(wx.Panel):
                 wx.MessageBox(errormsg, conf.Title, wx.OK | wx.ICON_WARNING)
 
 
+    def on_rclick_tree_tables(self, event):
+        """
+        Handler for right-clicking an item in the tables list,
+        opens popup menu for choices to export data.
+        """
+        item = event.GetItem()
+        if not item or not item.IsOk(): return
+        data = self.tree_tables.GetItemPyData(item)
+        if not data: return
+
+        menu = wx.Menu()
+        if isinstance(data, basestring): # Single table
+            item_file     = wx.MenuItem(menu, -1, 'Export table "%s" to &file' % data)
+        else: # Tables list
+            item_file     = wx.MenuItem(menu, -1, "Export all tables to &file")
+        menu.AppendItem(item_file)
+        tables = [data] if isinstance(data, basestring) else data
+        menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, tables),
+                 id=item_file.GetId())
+        self.tree_tables.PopupMenu(menu)
+
+
+    def on_export_data_file(self, tables, event):
+        """
+        Handler for exporting one or more tables to file, opens file dialog
+        and performs export.
+        """
+        if len(tables) == 1:
+            title = "Table %s" % tables[0]
+            self.dialog_savefile.Filename = util.safe_filename(title)
+            self.dialog_savefile.Message = "Save table as"
+            self.dialog_savefile.WindowStyle |= wx.FD_OVERWRITE_PROMPT
+        else:
+            self.dialog_savefile.Filename = "Filename will be ignored"
+            self.dialog_savefile.Message = "Choose directory where to save files"
+            self.dialog_savefile.WindowStyle ^= wx.FD_OVERWRITE_PROMPT
+        self.dialog_savefile.Wildcard = export.TABLE_WILDCARD
+        if wx.ID_OK != self.dialog_savefile.ShowModal(): return
+
+        wx.YieldIfNeeded() # Allow UI to refresh
+        extname = export.TABLE_EXTS[self.dialog_savefile.FilterIndex]
+        path = self.dialog_savefile.GetPath()
+        filenames = [path]
+        if len(tables) > 1:
+            path, _ = os.path.split(path)
+            filenames = [os.path.join(path, "Table %s.%s" % (x, extname))
+                         for x in tables]
+            existing = next((x for x in filenames if os.path.exists(x)), None)
+            if existing and wx.YES != wx.MessageBox(
+                "Some files already exist, like %s.\n"
+                "Do you want to replace them?" % os.path.basename(existing),
+                conf.Title, wx.YES | wx.NO | wx.ICON_WARNING
+            ): return
+
+        for table, filename in zip(tables, filenames):
+            if not filename.lower().endswith(".%s" % extname):
+                filename += ".%s" % extname
+            busy = controls.BusyPanel(self, "Exporting \"%s\"." % filename)
+            guibase.status("Exporting \"%s\".", filename)
+            try:
+                cursor = self.db.execute("SELECT * FROM %s" % table)
+                export.export_data(cursor, filename, 'Table "%s"' % table, self.db,
+                                   self.db.get_table_columns(table), table=table)
+                guibase.logstatus_flash("Exported %s.", filename)
+                util.start_file(filename)
+            except Exception:
+                msg = "Error saving %s:\n\n%s" % \
+                      (filename, traceback.format_exc())
+                guibase.logstatus_flash(msg)
+                return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+            finally:
+                busy.Close()
+
+
     def on_sort_grid_column(self, event):
         """
         Handler for clicking a table grid column, sorts table by the column.
@@ -3534,6 +3612,7 @@ class DatabasePage(wx.Panel):
             # Fill table tree with information on row counts and columns
             self.tree_tables.DeleteAllItems()
             root = self.tree_tables.AddRoot("SQLITE")
+            self.tree_tables.SetItemPyData(root, [x["name"] for x in tables])
             child = None
             for table in tables:
                 child = self.tree_tables.AppendItem(root, table["name"])

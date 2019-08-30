@@ -8,12 +8,13 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2019
+@modified    30.08.2019
 ------------------------------------------------------------------------------
 """
 import collections
 import csv
 import datetime
+import os
 import re
 
 try: # ImageFont for calculating column widths in Excel export, not required.
@@ -60,17 +61,18 @@ QUERY_WILDCARD = ("HTML document (*.html)|*.html|"
 QUERY_EXTS = ["html", "xlsx", "csv"] if xlsxwriter else ["html", "csv"]
 
 
-def export_grid(grid, filename, title, db, sql_query="", table=""):
+def export_data(iterable, filename, title, db, columns, sql_query="", table=""):
     """
-    Exports the current contents of the specified wx.Grid to file.
+    Exports database data to file.
 
-    @param   grid       a wx.Grid object
+    @param   iterable   iterable sequence yielding rows
     @param   filename   full path and filename of resulting file, file extension
                         .html|.csv|.sql|.xslx determines file format
     @param   title      title used in HTML
     @param   db         Database instance
-    @param   sql_query  the SQL query producing the grid contents, if any
-    @param   table      name of the table producing the grid contents, if any
+    @param   columns    iterable columns, as [name, ] or [{"name": name}, ]
+    @param   sql_query  the SQL query producing the data, if any
+    @param   table      name of the table producing the data, if any
     """
     result = False
     f = None
@@ -78,9 +80,10 @@ def export_grid(grid, filename, title, db, sql_query="", table=""):
     is_csv  = filename.lower().endswith(".csv")
     is_sql  = filename.lower().endswith(".sql")
     is_xlsx = filename.lower().endswith(".xlsx")
+    columns = [c if isinstance(c, basestring) else c["name"] for c in columns]
+    tmpfile, tmpname = None, None # Temporary file for exported rows
     try:
         with open(filename, "w") as f:
-            columns = [c["name"] for c in grid.Table.columns]
 
             if is_csv or is_xlsx:
                 if is_csv:
@@ -100,7 +103,7 @@ def export_grid(grid, filename, title, db, sql_query="", table=""):
                     writer.writerow(*a)
                 writer.writerow(*([header, "bold"] if is_xlsx else [header]))
                 writer.set_header(False) if is_xlsx else 0
-                for row in grid.Table.GetRowIterator():
+                for row in iterable:
                     values = []
                     for col in columns:
                         val = "" if row[col] is None else row[col]
@@ -115,26 +118,40 @@ def export_grid(grid, filename, title, db, sql_query="", table=""):
                     "db_filename": db.filename,
                     "title":       title,
                     "columns":     columns,
-                    "row_count":   grid.NumberRows,
-                    "rows":        grid.Table.GetRowIterator(),
+                    "rows":        iterable,
+                    "row_count":   0,
                     "sql":         sql_query,
                     "table":       table,
                     "app":         conf.Title,
                 }
-                if is_sql and table:
-                    # Add CREATE TABLE statement.
-                    create_sql = db.tables[table.lower()]["sql"] + ";"
-                    re_sql = re.compile("^(CREATE\\s+TABLE\\s+)", re.IGNORECASE)
-                    replacer = lambda m: ("%sIF NOT EXISTS " % m.group(1))
-                    namespace["create_sql"] = re_sql.sub(replacer, create_sql)
+                namespace["namespace"] = namespace # To update row_count
 
-                template = step.Template(templates.GRID_HTML if is_html else 
+                # Write out data to temporary file first, to populate row count.
+                tmpname = util.unique_path("%s.rows" % filename)
+                tmpfile = open(tmpname, "w+")
+                template = step.Template(templates.DATA_ROWS_HTML if is_html else
+                           templates.SQL_ROWS_TXT, strip=False, escape=is_html)
+                template.stream(tmpfile, namespace)
+
+                if table:
+                    # Add CREATE TABLE statement.
+                    create_sql = db.get_sql(table).strip()
+                    if is_sql:
+                        re_sql = re.compile(r"^(CREATE\s+TABLE\s+)", re.IGNORECASE)
+                        replacer = lambda m: ("%sIF NOT EXISTS " % m.group(1))
+                        create_sql = re_sql.sub(replacer, create_sql)
+                    namespace["create_sql"] = create_sql
+
+                tmpfile.flush(), tmpfile.seek(0)
+                namespace["data_buffer"] = iter(lambda: tmpfile.read(65536), "")
+                template = step.Template(templates.DATA_HTML if is_html else 
                            templates.SQL_TXT, strip=False, escape=is_html)
                 template.stream(f, namespace)
 
             result = True
     finally:
-        if f: util.try_until(f.close)
+        if tmpfile: util.try_until(tmpfile.close)
+        if tmpname: util.try_until(lambda: os.unlink(tmpname))
     return result
 
 

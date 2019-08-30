@@ -670,19 +670,24 @@ class Database(object):
         return copy.deepcopy(result)
 
 
-    def get_sql(self, refresh=False):
+    def get_sql(self, table=None, refresh=False):
         """
-        Returns full CREATE SQL statement for database.
+        Returns full CREATE SQL statement for database, or for specific table only.
 
+        @param   table    table to return CREATE SQL for if not everything
         @param   refresh  if True, schema is re-queried
         """
         result = ""
 
+        table = table.lower() if table else table
         if refresh and self.is_open(): self.get_tables(refresh=True)
         for category in "table", "view", "index", "trigger":
-            if not self.schema.get(category): continue # for category
+            if table and "table" != category \
+            or not self.schema.get(category): continue # for category
 
-            for opts in self.schema[category].values():
+            for name, opts in self.schema[category].items():
+                if table and table != name: continue # for name, opts
+                    
                 sql = opts["sql"].strip()
                 if "table" == category:
                     # LF after first brace
@@ -692,8 +697,8 @@ class Database(object):
                     # LF before last brace
                     sql = re.sub(r"\)(\s*WITHOUT\s+ROWID)$", r"\n)\1", sql, re.I)
                     sql = re.sub(r"\)$", r"\n)", sql)
-                result += sql + ";\n\n"
-            result += "\n\n"
+                result += sql + (";\n\n" if not table else "")
+            if not table: result += "\n\n"
 
         return result
 
