@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.08.2019
+@modified    30.08.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -83,6 +83,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         }, {
             "DBListForegroundColour":  wx.SYS_COLOUR_BTNTEXT,
             "DBListBackgroundColour":  wx.SYS_COLOUR_WINDOW,
+            "GridRowInsertedColour":   wx.SYS_COLOUR_HIGHLIGHTTEXT,
+            "GridRowChangedColour":    wx.SYS_COLOUR_GRAYTEXT,
+            "GridCellChangedColour":   wx.RED,
             "LinkColour":              wx.SYS_COLOUR_HOTLIGHT,
             "TitleColour":             wx.SYS_COLOUR_HOTLIGHT,
             "MainBgColour":            wx.SYS_COLOUR_BTNFACE,

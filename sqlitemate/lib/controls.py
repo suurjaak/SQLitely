@@ -60,7 +60,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    29.08.2019
+@modified    30.08.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -143,7 +143,8 @@ class ColourManager(object):
         @param   window           application main window
         @param   colourcontainer  object with colour attributes
         @param   colourmap        {"attribute": wx.SYS_COLOUR_XYZ}
-        @param   darkcolourmap    colours changed if dark background
+        @param   darkcolourmap    colours changed if dark background,
+                                  {"attribute": wx.SYS_COLOUR_XYZ or wx.Colour}
         """
         if "nt" != os.name: return
 
@@ -198,8 +199,10 @@ class ColourManager(object):
 
     @classmethod
     def ColourHex(cls, idx):
-        """Returns system colour as HTML colour hex string."""
-        return wx.SystemSettings.GetColour(idx).GetAsString(wx.C2S_HTML_SYNTAX)
+        """Returns wx.Colour or system colour as HTML colour hex string."""
+        colour = idx if isinstance(idx, wx.Colour) \
+                 else wx.SystemSettings.GetColour(idx)
+        return colour.GetAsString(wx.C2S_HTML_SYNTAX)
 
 
     @classmethod
