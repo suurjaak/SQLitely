@@ -771,7 +771,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for clicking "About SQLiteMate" menu, opens a small info frame.
         """
         maketext = lambda: step.Template(templates.ABOUT_HTML).expand()
-        AboutDialog(self, maketext).ShowModal()
+        AboutDialog(self, "About %s" % conf.Title, maketext).ShowModal()
 
 
     def on_check_update(self, event):
@@ -4310,8 +4310,8 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
 
 class AboutDialog(wx.Dialog):
  
-    def __init__(self, parent, content):
-        wx.Dialog.__init__(self, parent, title="About %s" % conf.Title,
+    def __init__(self, parent, title, content):
+        wx.Dialog.__init__(self, parent, title=title,
                            style=wx.CAPTION | wx.CLOSE_BOX)
         html = self.html = wx.html.HtmlWindow(self)
         self.content = content
@@ -4342,4 +4342,4 @@ class AboutDialog(wx.Dialog):
             self.html.SetPage(self.content() if callable(self.content) else self.content)
             self.html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
             self.html.ForegroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
-        wx.CallAfter(dorefresh) # Postpone to allow conf update
+        wx.CallAfter(dorefresh) # Postpone to allow conf to update
