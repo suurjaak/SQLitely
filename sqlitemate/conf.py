@@ -22,7 +22,7 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLiteMate"
-Version = "1.0.dev23"
+Version = "1.0.dev24"
 VersionDate = "30.08.2019"
 
 if getattr(sys, "frozen", False):

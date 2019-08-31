@@ -703,6 +703,22 @@ class Database(object):
         return result
 
 
+    def transform_sql(self, sql, category, rename):
+        """
+        Returns transformed SQL with renamed table.
+
+        @param   sql        SQL statement like "CREATE TABLE .."
+        @param   category   SQL statement type like "create"
+        @param   rename     new table name
+        """
+        result = sql
+        category = category.lower()
+        if "create" == category:
+            result = re.sub(r"^(CREATE\s+TABLE\s+)([.\w]+)([^\w])",
+                            r"\1%s\3" % rename, sql, count=1, flags=re.I | re.U)
+        return result
+
+
     def update_fileinfo(self):
         """Updates database file size and modification information."""
         self.filesize = os.path.getsize(self.filename)

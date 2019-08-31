@@ -19,6 +19,7 @@ import functools
 import hashlib
 import inspect
 import os
+import re
 import shutil
 import sys
 import textwrap
@@ -3465,12 +3466,17 @@ class DatabasePage(wx.Panel):
         menu = wx.Menu()
         if isinstance(data, basestring): # Single table
             item_file     = wx.MenuItem(menu, -1, 'Export table "%s" to &file' % data)
+            item_database = wx.MenuItem(menu, -1, 'Export table "%s" to another &database' % data)
         else: # Tables list
             item_file     = wx.MenuItem(menu, -1, "Export all tables to &file")
+            item_database = wx.MenuItem(menu, -1, "Export all tables to another &database")
         menu.AppendItem(item_file)
+        menu.AppendItem(item_database)
         tables = [data] if isinstance(data, basestring) else data
         menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, tables),
                  id=item_file.GetId())
+        menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, tables),
+                 id=item_database.GetId())
         self.tree_tables.PopupMenu(menu)
 
 
@@ -3524,6 +3530,136 @@ class DatabasePage(wx.Panel):
                 return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
             finally:
                 busy.Close()
+
+
+    def on_export_data_base(self, tables, event):
+        """
+        Handler for exporting one or more tables to another database,
+        opens file dialog and performs direct copy.
+        """
+        exts = ";".join("*" + x for x in conf.DBExtensions)
+        wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
+        dialog = wx.FileDialog(
+            parent=self, message="Select database to export tables to",
+            defaultFile="", wildcard=wildcard,
+            style=wx.FD_OPEN | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        wx.YieldIfNeeded() # Allow UI to refresh
+        filename2 = dialog.GetPath()
+
+        try:
+            self.db.execute("ATTACH DATABASE ? AS main2", [filename2])
+        except Exception as e:
+            errormsg = "Could not load database %s.\n\n%s" % \
+                       (filename2, traceback.format_exc())
+            guibase.log(errormsg)
+            errormsg = "Could not load database %s.\n\n%s" % \
+                       (filename2, e)
+            guibase.status_flash(errormsg)
+            return wx.MessageBox(errormsg, conf.Title, wx.OK | wx.ICON_WARNING)
+
+        entrymsg = ('Name conflict on exporting table "%(table)s" as "%(table2)s".\n'
+                    'Database %(filename2)s %(entryheader)s '
+                    'table named "%(table2)s".\n\nYou can:\n'
+                    '- enter another name to export table "%(table)s" as,\n'
+                    '- keep same name to overwrite table "%(table2)s",\n'
+                    '- or set blank to skip table "%(table)s".')
+        insert_sql, success = "INSERT INTO main2.%s SELECT * FROM main.%s", False
+        db1_tables = set(x["name"].lower() for x in self.db.get_tables())
+        try:
+            db2_tables_lower = set(x["name"].lower() for x in self.db.execute(
+                "SELECT name FROM main2.sqlite_master WHERE type = 'table'"
+            ).fetchall())
+            tables1, tables2, tables2_lower = [], [], []
+
+            # Check for name conflicts with existing tables and ask user choice
+            for table in tables:
+                t1_lower = table.lower()
+                if t1_lower not in db2_tables_lower and t1_lower not in tables2_lower:
+                    tables1.append(table); tables2.append(table)
+                    tables2_lower.append(table.lower())
+                    continue # for table
+
+                table2 = t2_lower_prev = table
+                entryheader = "already contains a"
+                while table2:
+                    entrydialog = wx.TextEntryDialog(self, entrymsg % locals(),
+                                                     conf.Title, table2)
+                    if wx.ID_OK != entrydialog.ShowModal(): return
+
+                    t2_lower_prev, table2 = table2, re.sub("\s", "", entrydialog.GetValue())
+                        
+                    t2_lower = table2.lower()
+                    if not table2 or t1_lower == t2_lower: break # while table2
+
+                    if t2_lower in tables2_lower:
+                        # User entered a duplicate rename
+                        entryheader = "will contain another"
+                        continue # while table2
+                    if t2_lower in db2_tables_lower and t2_lower_prev != t2_lower:
+                        # User entered another table existing in db2
+                        entryheader = "already contains a"
+                        continue # while table2
+                    break
+
+                if filename2.lower() == self.db.filename.lower() \
+                and t2_lower in db1_tables: # Needs rename if same file
+                    continue # for table
+                if table2:
+                    tables1.append(table); tables2.append(table2)
+                    tables2_lower.append(t2_lower)
+
+            for table, table2 in zip(tables1, tables2):
+                t1_lower, t2_lower = table.lower(), table2.lower()
+                extra = "" if t1_lower == t2_lower else ' as "%s"' % table2
+
+                create_sql = self.db.transform_sql(
+                    self.db.get_sql(table), "create", rename="main2." + table2
+                )
+                try:
+                    if t2_lower in db2_tables_lower:
+                        guibase.log('Dropping table "%s" in %s.', table2, filename2)
+                        self.db.execute("DROP TABLE main2.%s" % table2)
+                    guibase.log('Creating table "%s" in %s, using %s.',
+                                table2, filename2, create_sql)
+                    self.db.execute(create_sql)
+                    self.db.execute(insert_sql % (table2, table))
+                    guibase.status_flash('Exported table "%s" to %s%s.',
+                                         extra, table, filename2)
+                    db2_tables_lower.add(t2_lower)
+                except Exception as e:
+                    errormsg = 'Could not export table "%s"%s.\n\n%s' % \
+                               (filename2, extra, traceback.format_exc())
+                    guibase.log(errormsg)
+                    errormsg = 'Could not export table "%s"%s.\n\n%s' % \
+                               (filename2, extra, e)
+                    guibase.status_flash(errormsg)
+                    wx.MessageBox(errormsg, conf.Title, wx.OK | wx.ICON_WARNING)
+                    break # for table
+            else: # nobreak
+                success = True
+        except Exception as e:
+            errormsg = 'Failed to read database %s.\n\n%s' % \
+                       (filename2, traceback.format_exc())
+            guibase.log(errormsg)
+            errormsg = 'Failed to read database %s.\n\n%s' % \
+                       (filename2, e)
+            guibase.status_flash(errormsg)
+            wx.MessageBox(errormsg, conf.Title, wx.OK | wx.ICON_WARNING)
+        finally:
+            try: self.db.execute("DETACH DATABASE main2")
+            except Exception: pass
+
+        if success and tables1:
+            same_name = (tables1[0].lower() == tables2_lower[0])
+            t = "%s tables" % len(tables1) if len(tables1) > 1 \
+                else 'table "%s"' % tables1[0]
+            extra = "" if len(tables1) > 1 or same_name \
+                    else ' as "%s"' % tables2[0]
+            guibase.status_flash("Exported %s to %s%s.", t, filename2, extra)
+            wx.PostEvent(self.TopLevelParent, OpenDatabaseEvent(file=filename2))
 
 
     def on_sort_grid_column(self, event):
