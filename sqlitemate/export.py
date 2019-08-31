@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.08.2019
+@modified    31.08.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -43,12 +43,6 @@ except Exception: # Fall back to a simple mono-spaced calculation if no PIL
 
 """FileDialog wildcard strings, matching extensions lists and default names."""
 XLSX_WILDCARD = "Excel workbook (*.xlsx)|*.xlsx|" if xlsxwriter else ""
-CHAT_WILDCARD = ("HTML document (*.html)|*.html|Text document (*.txt)|*.txt|"
-                 "%sCSV spreadsheet (*.csv)|*.csv" % XLSX_WILDCARD)
-CHAT_EXTS = ["html", "txt", "xlsx", "csv"] if xlsxwriter \
-            else ["html", "txt", "csv"]
-CHAT_WILDCARD_SINGLEFILE = "Excel workbook (*.xlsx)|*.xlsx" # Cannot end with |
-CHAT_EXTS_SINGLEFILE = ["xlsx"]
 
 TABLE_WILDCARD = ("HTML document (*.html)|*.html|"
                   "SQL INSERT statements (*.sql)|*.sql|"
