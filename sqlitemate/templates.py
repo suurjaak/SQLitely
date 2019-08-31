@@ -81,6 +81,11 @@ from sqlitemate.lib import util
         }
         .header { font-size: 1.1em; font-weight: bold; color: {{conf.ExportLinkColour}}; }
         td { text-align: left; vertical-align: top; }
+        span#sql { white-space: pre-wrap; display: inline; overflow: visible; }
+        span#sql.clip { display: inline-block; height: 1em; overflow: hidden; }
+        a.toggle:hover { cursor: pointer; text-decoration: none; }
+        span#sql + a.toggle { padding-left: 3px; }
+        span#sql.clip + a.toggle { background: white; position: relative; left: -8px; }
     </style>
 </head>
 <body>
@@ -90,11 +95,14 @@ from sqlitemate.lib import util
         <td class="header_left"></td>
         <td>
             <div class="header">{{title}}</div><br />
-            <b>SQL:</b> {{sql or create_sql}}<br />
+            <b>SQL:</b> <span id="sql">{{sql or create_sql}}</span>
+            <a class="toggle" title="Toggle full SQL" onclick="document.getElementById('sql').classList.toggle('clip')">...</a>
+            <br />
             Source: <b>{{db_filename}}</b>.<br />
             <b>{{row_count}}</b> {{util.plural("row", row_count, with_items=False)}}{{" in results" if sql else ""}}.<br />
         </td>
     </tr></table>
+    <script> document.getElementById('sql').classList.add('clip'); </script>
 </td></tr><tr><td><table class="content_table">
 <tr><th>#</th>
 %for col in columns:
