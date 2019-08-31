@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.08.2019
+@modified    31.08.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3828,7 +3828,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         self.rows_deleted = {} # Uncommitted deleted rows {id: deleted_row, }
         self.rowid_name = "ROWID%s" % int(time.time()) # Avoid collisions
         self.iterator_index = -1
-        self.sort_ascending = False
+        self.sort_ascending = True
         self.sort_column = None # Index of column currently sorted by
         self.filters = {} # {col: value, }
         self.attrs = {} # {"new": wx.grid.GridCellAttr, }
@@ -3863,7 +3863,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
     def GetColLabelValue(self, col):
         label = self.columns[col]["name"]
         if col == self.sort_column:
-            label += u" ↑" if self.sort_ascending else u" ↓"
+            label += u" ↓" if self.sort_ascending else u" ↑"
         if col in self.filters:
             if "TEXT" == self.columns[col]["type"]:
                 label += "\nlike \"%s\"" % self.filters[col]
@@ -3951,8 +3951,25 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
 
 
     def GetRowIterator(self):
-        """Returns a separate iterator producing all grid rows."""
-        return self.db.execute(self.sql)
+        """
+        Returns a separate iterator producing all grid rows,
+        in current sort order and matching current filter.
+        """
+        def generator(cursor):
+            row = next(cursor)
+            while row:
+                while row and self._is_row_filtered(row): row = next(cursor)
+                if row: yield row
+                row = next(cursor)
+
+        sql = self.sql
+        if self.sort_column is not None:
+            sql = "SELECT * FROM (%s) ORDER BY %s%s" % (
+                sql, self.columns[self.sort_column]["name"],
+                "" if self.sort_ascending else " DESC"
+            )
+        cursor = self.db.execute(sql)
+        return generator(cursor) if self.filters else cursor
 
 
     def SetValue(self, row, col, val):
@@ -4175,10 +4192,10 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         del self.rows_current[:]
         for idx in self.idx_all:
             row = self.rows_all[idx]
-            if not row["__deleted__"] and self._is_row_unfiltered(row):
+            if not row["__deleted__"] and not self._is_row_filtered(row):
                 self.rows_current.append(row)
         if self.sort_column is not None:
-            pass#if self.View: self.View.Fit()
+            pass #if self.View: self.View.Fit()
         else:
             self.sort_ascending = not self.sort_ascending
             self.SortColumn(self.sort_column)
@@ -4201,7 +4218,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
                 aval = aval.lower() if hasattr(aval, "lower") else aval
                 bval = bval.lower() if hasattr(bval, "lower") else bval
                 return cmp(aval, bval)
-        self.rows_current.sort(cmp=compare, reverse=self.sort_ascending)
+        self.rows_current.sort(cmp=compare, reverse=not self.sort_ascending)
         if self.View:
             self.View.ForceRefresh()
 
@@ -4267,16 +4284,16 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         for idx, row in self.rows_deleted.items():
             row["__deleted__"] = False
             del self.rows_deleted[idx]
-            if self._is_row_unfiltered(row):
+            if not self._is_row_filtered(row):
                 self.rows_current.append(row)
             self.row_count += 1
         self.NotifyViewChange(rows_before)
         if self.View: self.View.Refresh()
 
 
-    def _is_row_unfiltered(self, rowdata):
+    def _is_row_filtered(self, rowdata):
         """
-        Returns whether the row is not filtered out by the current filtering
+        Returns whether the row is filtered out by the current filtering
         criteria, if any.
         """
         is_unfiltered = True
@@ -4287,7 +4304,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
             elif "TEXT" == column_data["type"]:
                 str_value = (rowdata[column_data["name"]] or "").lower()
                 is_unfiltered &= str_value.find(filter_value.lower()) >= 0
-        return is_unfiltered
+        return not is_unfiltered
 
 
 
