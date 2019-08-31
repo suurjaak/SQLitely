@@ -2222,14 +2222,17 @@ class DatabasePage(wx.Panel):
 
         tb = self.tb_sql = wx.ToolBar(parent=panel2,
                                       style=wx.TB_FLAT | wx.TB_NODIVIDER)
-        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR,
+        bmp1 = images.ToolbarRefresh.Bitmap
+        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR,
                                         (16, 16))
-        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR,
+        bmp3 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR,
                                         (16, 16))
         tb.SetToolBitmapSize(bmp1.Size)
-        tb.AddLabelTool(wx.ID_COPY, "", bitmap=bmp1, shortHelp="Copy schema SQL to clipboard")
-        tb.AddLabelTool(wx.ID_SAVE, "", bitmap=bmp2, shortHelp="Save schema SQL to file")
+        tb.AddLabelTool(wx.ID_REFRESH, "", bitmap=bmp1, shortHelp="Refresh schema SQL")
+        tb.AddLabelTool(wx.ID_COPY,    "", bitmap=bmp2, shortHelp="Copy schema SQL to clipboard")
+        tb.AddLabelTool(wx.ID_SAVE,    "", bitmap=bmp3, shortHelp="Save schema SQL to file")
         tb.Realize()
+        tb.Bind(wx.EVT_TOOL, self.on_update_stc_schema, id=wx.ID_REFRESH)
         tb.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_schema, e), id=wx.ID_COPY)
         tb.Bind(wx.EVT_TOOL, lambda e: self.on_save_sql(self.stc_schema, e), id=wx.ID_SAVE)
 
@@ -2263,6 +2266,13 @@ class DatabasePage(wx.Panel):
             default = step.Template(templates.SEARCH_WELCOME_HTML).expand()
             self.html_searchall.SetDefaultPage(default)
         wx.CallAfter(dorefresh) # Postpone to allow conf update
+
+
+    def on_update_stc_schema(self, event):
+        """Handler for clicking to refresh database schema SQL."""
+        self.stc_schema.SetReadOnly(False)
+        self.stc_schema.SetText(self.db.get_sql(refresh=True))
+        self.stc_schema.SetReadOnly(True)
 
 
     def on_pragma_change(self, event):
@@ -2550,7 +2560,6 @@ class DatabasePage(wx.Panel):
             self.edit_info_md5.Value = md5.hexdigest()
         except Exception as e:
             self.edit_info_sha1.Value = self.edit_info_md5.Value = util.format_exc(e)
-        self.stc_schema.SetText(self.db.get_sql())
         self.button_vacuum.Enabled = True
         self.button_check_integrity.Enabled = True
         self.button_refresh_fileinfo.Enabled = True
