@@ -3081,8 +3081,8 @@ class DatabasePage(wx.Panel):
         busy = controls.BusyPanel(self, "Exporting \"%s\"." % filename)
         guibase.status("Exporting \"%s\".", filename)
         try:
-            iterable = grid_source.Table.GetRowIterator()
-            export.export_data(iterable, filename, title, self.db,
+            make_iterable = grid_source.Table.GetRowIterator
+            export.export_data(make_iterable, filename, title, self.db,
                                grid_source.Table.columns, sql, table)
             guibase.logstatus_flash("Exported %s.", filename)
             util.start_file(filename)
@@ -3527,8 +3527,8 @@ class DatabasePage(wx.Panel):
             busy = controls.BusyPanel(self, "Exporting \"%s\"." % filename)
             guibase.status("Exporting \"%s\".", filename)
             try:
-                cursor = self.db.execute("SELECT * FROM %s" % table)
-                export.export_data(cursor, filename, 'Table "%s"' % table, self.db,
+                make_iterable = lambda: self.db.execute("SELECT * FROM %s" % table)
+                export.export_data(make_iterable, filename, 'Table "%s"' % table, self.db,
                                    self.db.get_table_columns(table), table=table)
                 guibase.logstatus_flash("Exported %s.", filename)
                 util.start_file(filename)

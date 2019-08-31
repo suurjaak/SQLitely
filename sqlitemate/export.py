@@ -45,34 +45,36 @@ except Exception: # Fall back to a simple mono-spaced calculation if no PIL
 XLSX_WILDCARD = "Excel workbook (*.xlsx)|*.xlsx|" if xlsxwriter else ""
 
 TABLE_WILDCARD = ("HTML document (*.html)|*.html|"
+                  "Text document (*.txt)|*.txt|"
                   "SQL INSERT statements (*.sql)|*.sql|"
                   "%sCSV spreadsheet (*.csv)|*.csv" % XLSX_WILDCARD)
-TABLE_EXTS = ["html", "sql", "xlsx", "csv"] if xlsxwriter \
-             else ["html", "sql", "csv"]
+TABLE_EXTS = ["html", "txt", "sql", "xlsx", "csv"] if xlsxwriter \
+             else ["html", "txt", "sql", "csv"]
 
-QUERY_WILDCARD = ("HTML document (*.html)|*.html|"
+QUERY_WILDCARD = ("HTML document (*.html)|*.html|Text document (*.txt)|*.txt|"
                   "%sCSV spreadsheet (*.csv)|*.csv" % XLSX_WILDCARD)
-QUERY_EXTS = ["html", "xlsx", "csv"] if xlsxwriter else ["html", "csv"]
+QUERY_EXTS = ["html", "txt", "xlsx", "csv"] if xlsxwriter else ["html", "txt", "csv"]
 
 
-def export_data(iterable, filename, title, db, columns, sql_query="", table=""):
+def export_data(make_iterable, filename, title, db, columns, sql_query="", table=""):
     """
     Exports database data to file.
 
-    @param   iterable   iterable sequence yielding rows
-    @param   filename   full path and filename of resulting file, file extension
-                        .html|.csv|.sql|.xslx determines file format
-    @param   title      title used in HTML
-    @param   db         Database instance
-    @param   columns    iterable columns, as [name, ] or [{"name": name}, ]
-    @param   sql_query  the SQL query producing the data, if any
-    @param   table      name of the table producing the data, if any
+    @param   make_iterable   function returning iterable sequence yielding rows
+    @param   filename        full path and filename of resulting file, file extension
+                             .html|.csv|.sql|.xslx determines file format
+    @param   title           title used in HTML
+    @param   db              Database instance
+    @param   columns         iterable columns, as [name, ] or [{"name": name}, ]
+    @param   sql_query       the SQL query producing the data, if any
+    @param   table           name of the table producing the data, if any
     """
     result = False
     f = None
     is_html = filename.lower().endswith(".html")
     is_csv  = filename.lower().endswith(".csv")
     is_sql  = filename.lower().endswith(".sql")
+    is_txt  = filename.lower().endswith(".txt")
     is_xlsx = filename.lower().endswith(".xlsx")
     columns = [c if isinstance(c, basestring) else c["name"] for c in columns]
     tmpfile, tmpname = None, None # Temporary file for exported rows
@@ -97,7 +99,7 @@ def export_data(iterable, filename, title, db, columns, sql_query="", table=""):
                     writer.writerow(*a)
                 writer.writerow(*([header, "bold"] if is_xlsx else [header]))
                 writer.set_header(False) if is_xlsx else 0
-                for row in iterable:
+                for row in make_iterable():
                     values = []
                     for col in columns:
                         val = "" if row[col] is None else row[col]
@@ -112,7 +114,7 @@ def export_data(iterable, filename, title, db, columns, sql_query="", table=""):
                     "db_filename": db.filename,
                     "title":       title,
                     "columns":     columns,
-                    "rows":        iterable,
+                    "rows":        make_iterable(),
                     "row_count":   0,
                     "sql":         sql_query,
                     "table":       table,
@@ -120,11 +122,26 @@ def export_data(iterable, filename, title, db, columns, sql_query="", table=""):
                 }
                 namespace["namespace"] = namespace # To update row_count
 
+                if is_txt: # Run through rows once, to populate text-justify options
+                    widths = {c: len(c) for c in columns}
+                    justs  = {c: True   for c in columns}
+                    for row in make_iterable():
+                        for col in columns:
+                            v = row[col]
+                            if isinstance(v, (int, long, float)): justs[col] = False
+                            v = "" if v is None \
+                                else v if isinstance(v, basestring) else str(v)
+                            v = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(v))
+                            widths[col] = max(widths[col], len(v))
+                    namespace["columnwidths"] = widths # {col: char length}
+                    namespace["columnjusts"]  = justs  # {col: True if ljust}
+
                 # Write out data to temporary file first, to populate row count.
                 tmpname = util.unique_path("%s.rows" % filename)
                 tmpfile = open(tmpname, "w+")
                 template = step.Template(templates.DATA_ROWS_HTML if is_html else
-                           templates.SQL_ROWS_TXT, strip=False, escape=is_html)
+                           templates.SQL_ROWS_TXT if is_sql else templates.DATA_ROWS_TXT,
+                           strip=False, escape=is_html)
                 template.stream(tmpfile, namespace)
 
                 if table:
@@ -139,7 +156,8 @@ def export_data(iterable, filename, title, db, columns, sql_query="", table=""):
                 tmpfile.flush(), tmpfile.seek(0)
                 namespace["data_buffer"] = iter(lambda: tmpfile.read(65536), "")
                 template = step.Template(templates.DATA_HTML if is_html else 
-                           templates.SQL_TXT, strip=False, escape=is_html)
+                           templates.SQL_TXT if is_sql else templates.DATA_TXT,
+                           strip=False, escape=is_html)
                 template.stream(f, namespace)
 
             result = True

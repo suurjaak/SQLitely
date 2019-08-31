@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.08.2019
+@modified    31.08.2019
 """
 import calendar
 import collections
@@ -43,11 +43,9 @@ except ImportError:
 from . lib import util
 
 
-UNPRINTABLES = "".join(set(unichr(i) for i in range(128))
-                       .difference(string.printable))
-ALLWORDCHARS = u"".join(set(unichr(c) for c in range(65536)
-                        if not unichr(c).isspace())
-                        .difference(UNPRINTABLES))
+ALLWORDCHARS = re.sub("[\x00-\x1f,\x7f-\xa0]", "", u"".join(
+    unichr(c) for c in range(65536) if not unichr(c).isspace()
+))
 ALLCHARS = ALLWORDCHARS + string.whitespace
 WORDCHARS = ALLWORDCHARS.replace("(", "").replace(")", "").replace("\"", "")
 ESCAPE_CHAR = "\\" # Character used to escape SQLite special characters like _%
@@ -152,7 +150,7 @@ class SearchQueryParser(object):
                 result = "SELECT * FROM %s WHERE %s %s%s" % (
                          table["name"], result, " AND " if result and kw_sql else "", kw_sql)
 
-                pk_cols = [c for c in table["columns"] if col.get("pk")]
+                pk_cols = [c for c in table["columns"] if c.get("pk")]
                 if pk_cols: result += " ORDER BY " + ", ".join("%(name)s ASC" % c
                     for c in sorted(pk_cols, key=lambda x: x["pk"])
                 )

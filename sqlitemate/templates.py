@@ -14,12 +14,12 @@ Released under the MIT License.
 import re
 
 # Modules imported inside templates:
-#import datetime, os, pyparsing, re, string, sys
+#import datetime, os, pyparsing, sys
 #from sqlitemate import conf, images, templates
 #from sqlitemate.lib import util
 
 """Regex for replacing low bytes unusable in wx.HtmlWindow (\x00 etc)."""
-SAFEBYTE_RGX = re.compile("[\x00-\x08,\x0B-\x0C,\x0E-x1F,\x7F]")
+SAFEBYTE_RGX = re.compile(r"[\x00-\x1f,\x7f-\xa0]")
 
 """Replacer callback for low bytes unusable in wx.HtmlWindow (\x00 etc)."""
 SAFEBYTE_REPL = lambda m: m.group(0).encode("unicode-escape")
@@ -144,15 +144,18 @@ from sqlitemate.lib import util
 from sqlitemate import conf
 
 %>-- {{title}}.
--- {{row_count}} {{util.plural("row", row_count, with_items=False)}}.
 -- Source: {{db_filename}}.
 -- Exported with {{conf.Title}} on {{datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}}.
+-- {{row_count}} {{util.plural("row", row_count, with_items=False)}}.
 %if sql:
+--
 -- SQL: {{sql}}
 %endif
 %if table:
-{{create_sql}}
+
+{{create_sql}};
 %endif
+
 
 <%
 for chunk in data_buffer:
@@ -164,10 +167,8 @@ for chunk in data_buffer:
 
 """TXT SQL insert statements export template for the rows part."""
 SQL_ROWS_TXT = """<%
-import re, string
+from sqlitemate import templates
 
-UNPRINTABLES = "".join(set(unichr(i) for i in range(128)).difference(string.printable))
-RE_UNPRINTABLE = re.compile("[%s]" % "".join(map(re.escape, UNPRINTABLES)))
 str_cols = ", ".join(columns)
 %>
 %for row in rows:
@@ -179,7 +180,7 @@ namespace["row_count"] += 1
 <%
 value = row[col]
 if isinstance(value, basestring):
-    if RE_UNPRINTABLE.search(value):
+    if templates.SAFEBYTE_RGX.search(value):
         if isinstance(value, unicode):
             try:
                 value = value.encode("latin1")
@@ -198,6 +199,71 @@ values.append(value)
 %>
 %endfor
 INSERT INTO {{table}} ({{str_cols}}) VALUES ({{", ".join(values)}});
+%endfor
+"""
+
+
+
+"""TXT data export template."""
+DATA_TXT = """<%
+import datetime
+from sqlitemate.lib import util
+from sqlitemate import conf
+
+%>{{title}}.
+Source: {{db_filename}}.
+Exported with {{conf.Title}} on {{datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}}.
+{{row_count}} {{util.plural("row", row_count, with_items=False)}}.
+%if sql:
+
+SQL: {{sql}}
+%endif
+%if table:
+
+{{create_sql}};
+%endif
+
+<%
+headers = []
+for c in columns:
+    headers.append((c.ljust if columnjusts[c] else c.rjust)(columnwidths[c]))
+hr = "|-" + "-|-".join("".ljust(columnwidths[c], "-") for c in columns) + "-|"
+header = "| " + " | ".join(headers) + " |"
+%>
+
+
+{{hr}}
+{{header}}
+{{hr}}
+<%
+for chunk in data_buffer:
+    echo(chunk)
+%>
+{{hr}}
+"""
+
+
+
+"""TXT data export template for the rows part."""
+DATA_ROWS_TXT = """<%
+from sqlitemate import templates
+
+%>
+%for row in rows:
+<%
+values = []
+namespace["row_count"] += 1
+%>
+%for col in columns:
+<%
+raw = row[col]
+value = "" if raw is None \
+        else raw if isinstance(raw, basestring) else str(raw)
+value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
+values.append((value.ljust if columnjusts[col] else value.rjust)(columnwidths[col]))
+%>
+%endfor
+| {{" | ".join(values)}} |
 %endfor
 """
 
@@ -249,7 +315,6 @@ from sqlitemate import conf
 
 """HTML template for search result of DB table row, HTML table row."""
 SEARCH_ROW_TABLE_HTML = """<%
-import re
 from sqlitemate import conf, templates
 
 match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
