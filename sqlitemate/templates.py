@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.08.2019
+@modified    31.08.2019
 ------------------------------------------------------------------------------
 """
 import re
@@ -306,7 +306,7 @@ under the MIT License.
   <li>step, Simple Template Engine for Python,
       <a href="https://github.com/dotpy/step"><font color="{{conf.LinkColour}}">github.com/dotpy/step</font></a></li>
   <li>pyparsing{{" 2.0.3" if getattr(sys, 'frozen', False) else ""}}, 
-      <a href="http://pyparsing.wikispaces.com/"><font color="{{conf.LinkColour}}">pyparsing.wikispaces.com</font></a></li>
+      <a href="https://pypi.org/project/pyparsing/"><font color="{{conf.LinkColour}}">pypi.org/project/pyparsing</font></a></li>
   <li>XlsxWriter{{" 0.7.3" if getattr(sys, 'frozen', False) else ""}},
       <a href="https://github.com/jmcnamara/XlsxWriter"><font color="{{conf.LinkColour}}">
           github.com/jmcnamara/XlsxWriter</font></a></li>

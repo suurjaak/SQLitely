@@ -66,7 +66,7 @@ If running from source code, SQLiteMate needs Python 2.7,
 and the following 3rd-party Python packages:
 * wxPython 2.9+ (http://wxpython.org/)
 The following are also listed in `requirements.txt` for pip:
-* pyparsing (http://pyparsing.wikispaces.com/)
+* pyparsing (https://pypi.org/project/pyparsing/)
 * XlsxWriter (https://pypi.python.org/pypi/XlsxWriter)
 
 If other Python libraries are not available, the program will function 
