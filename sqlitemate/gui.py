@@ -1865,8 +1865,8 @@ class DatabasePage(wx.Panel):
         grid.Bind(wx.grid.EVT_GRID_CELL_CHANGE, self.on_change_table)
         grid.GridWindow.Bind(wx.EVT_CHAR_HOOK, functools.partial(self.on_grid_key, grid))
 
-        label_help = wx.StaticText(panel2, label="Double-click on column "
-                                   "header to sort, right click to filter.")
+        label_help = self.label_help_table = wx.StaticText(panel2,
+            label="Double-click on column header to sort, right click to filter.")
         ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
         sizer2.Add(sizer_tb, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
         sizer2.Add(grid, border=5, proportion=2,
@@ -1875,6 +1875,7 @@ class DatabasePage(wx.Panel):
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
         splitter.SplitVertically(panel1, panel2, 270)
+        label_help.Hide()
 
 
     def create_page_sql(self, notebook):
@@ -1969,19 +1970,20 @@ class DatabasePage(wx.Panel):
         grid.GridWindow.Bind(wx.EVT_MOTION, self.on_mouse_over_grid)
         grid.GridWindow.Bind(wx.EVT_CHAR_HOOK, functools.partial(self.on_grid_key, grid))
 
-        label_help_grid = wx.StaticText(panel2, label="Double-click on column "
-                                        "header to sort, right click to filter.")
-        ColourManager.Manage(label_help_grid, "ForegroundColour", "DisabledColour")
+        label_help_sql = self.label_help_sql = wx.StaticText(panel2,
+            label="Double-click on column header to sort, right click to filter.")
+        ColourManager.Manage(label_help_sql, "ForegroundColour", "DisabledColour")
 
         sizer2.Add(label_help, border=5, flag=wx.GROW | wx.LEFT | wx.BOTTOM)
         sizer2.Add(sizer_buttons, border=5, flag=wx.GROW | wx.ALL)
         sizer2.Add(grid, border=5, proportion=2,
                    flag=wx.GROW | wx.LEFT | wx.RIGHT)
-        sizer2.Add(label_help_grid, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
+        sizer2.Add(label_help_sql, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
         sash_pos = self.Size[1] / 3
         splitter.SplitHorizontally(panel1, panel2, sashPosition=sash_pos)
+        label_help_sql.Hide()
 
 
     def create_page_pragma(self, notebook):
@@ -3143,10 +3145,14 @@ class DatabasePage(wx.Panel):
             self.button_export_table.Enabled = False
             self.button_reset_grid_table.Enabled = False
             self.button_close_grid_table.Enabled = False
+            self.label_help_table.Hide()
+            self.label_help_table.ContainingSizer.Layout()
         else:
             self.button_export_sql.Enabled = False
             self.button_reset_grid_sql.Enabled = False
             self.button_close_grid_sql.Enabled = False
+            self.label_help_sql.Hide()
+            self.label_help_sql.ContainingSizer.Layout()
 
 
     def on_open_sql(self, stc, event):
@@ -3239,6 +3245,8 @@ class DatabasePage(wx.Panel):
                 self.grid_sql.SetCellValue(0, 0, "-1")
                 self.button_reset_grid_sql.Enabled = False
                 self.button_export_sql.Enabled = False
+                self.label_help_sql.Show()
+                self.label_help_sql.ContainingSizer.Layout()
                 size = self.grid_sql.Size
                 self.grid_sql.Fit()
                 # Jiggle size by 1 pixel to refresh scrollbars
@@ -3270,6 +3278,8 @@ class DatabasePage(wx.Panel):
                 self.button_reset_grid_sql.Enabled = False
                 self.button_export_sql.Enabled = False
             self.button_close_grid_sql.Enabled = True
+            self.label_help_sql.Show()
+            self.label_help_sql.ContainingSizer.Layout()
             guibase.logstatus_flash("Executed SQL \"%s\" (%s).", sql, self.db)
             size = self.grid_sql.Size
             self.grid_sql.Fit()
@@ -3454,6 +3464,8 @@ class DatabasePage(wx.Panel):
                 self.button_export_table.Enabled = True
                 self.button_reset_grid_table.Enabled = True
                 self.button_close_grid_table.Enabled = True
+                self.label_help_table.Show()
+                self.label_help_table.ContainingSizer.Layout()
                 busy.Close()
             except Exception:
                 busy.Close()
