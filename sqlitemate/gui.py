@@ -346,11 +346,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         panel_right.SetupScrolling(scroll_x=False)
         panel_detail.Hide()
 
-        list_db.Bind(wx.EVT_LIST_ITEM_SELECTED,   self.on_select_list_db)
-        list_db.Bind(wx.EVT_LIST_ITEM_DESELECTED, self.on_deselect_list_db)
-        list_db.Bind(wx.EVT_LIST_ITEM_ACTIVATED,  self.on_open_from_list_db)
-        list_db.Bind(wx.EVT_CHAR_HOOK,            self.on_list_db_key)
-        list_db.Bind(wx.EVT_LIST_COL_CLICK,       self.on_sort_list_db)
+        list_db.Bind(wx.EVT_LIST_ITEM_SELECTED,    self.on_select_list_db)
+        list_db.Bind(wx.EVT_LIST_ITEM_DESELECTED,  self.on_deselect_list_db)
+        list_db.Bind(wx.EVT_LIST_ITEM_ACTIVATED,   self.on_open_from_list_db)
+        list_db.Bind(wx.EVT_CHAR_HOOK,             self.on_list_db_key)
+        list_db.Bind(wx.EVT_LIST_COL_CLICK,        self.on_sort_list_db)
+        list_db.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self.on_rclick_list_db)
         list_db.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_END_DRAG, self.on_drag_list_db)
 
         edit_filter.Bind(wx.EVT_TEXT_ENTER,       self.on_filter_list_db)
@@ -744,6 +745,61 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         wx.CallAfter(save_sort_state) # Allow list to update sort state
 
 
+    def on_rclick_list_db(self, event):
+        """Handler for right-clicking dblist, opens popup menu."""
+        files, selecteds = [], []
+        selected = self.list_db.GetFirstSelected()
+        while selected >= 0:
+            if selected:
+                selecteds.append(selected)
+                files.append(self.list_db.GetItemText(selected))
+            selected = self.list_db.GetNextSelected(selected)
+        if event.GetIndex() not in selecteds:
+            if not event.GetIndex(): return # Home row
+            files, selecteds = [event.GetText()], [event.GetIndex()]
+
+        def clipboard_copy(*a, **kw):
+            if wx.TheClipboard.Open():
+                d = wx.TextDataObject("\n".join(files))
+                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+        def open_folder(*a, **kw):
+            for f in files: util.start_file(os.path.split(f)[0])
+
+        name = os.path.split(files[0])[-1] if len(files) == 1 \
+               else util.plural("file", files)
+
+        menu = wx.Menu()
+        item_name    = wx.MenuItem(menu, -1, name)
+        item_name.SetHelp("odasgdsagads")
+        item_copy    = wx.MenuItem(menu, -1, "&Copy file path")
+        item_folder  = wx.MenuItem(menu, -1, "Open file &directory")
+
+        item_open    = wx.MenuItem(menu, -1, "&Open")
+        item_save    = wx.MenuItem(menu, -1, "&Save as")
+        item_remove  = wx.MenuItem(menu, -1, "&Remove from list")
+        item_missing = wx.MenuItem(menu, -1, "Remove &missing from list")
+
+        menu.Bind(wx.EVT_MENU, clipboard_copy,                id=item_copy.GetId())
+        menu.Bind(wx.EVT_MENU, open_folder,                   id=item_folder.GetId())
+        menu.Bind(wx.EVT_MENU, self.on_open_current_database, id=item_open.GetId())
+        menu.Bind(wx.EVT_MENU, self.on_save_database_as,      id=item_save.GetId())
+        menu.Bind(wx.EVT_MENU, self.on_remove_database,       id=item_remove.GetId())
+        menu.Bind(wx.EVT_MENU, lambda e: self.on_remove_missing(event, selecteds),
+                 id=item_missing.GetId())
+
+        menu.AppendItem(item_name)
+        menu.AppendSeparator()
+        menu.AppendItem(item_copy)
+        menu.AppendItem(item_folder)
+        menu.AppendSeparator()
+        menu.AppendItem(item_open)
+        menu.AppendItem(item_save)
+        menu.AppendItem(item_remove)
+        menu.AppendItem(item_missing)
+
+        wx.CallAfter(self.list_db.PopupMenu, menu)
+
+
     def on_drag_list_db(self, event):
         """Handler for dragging items around in dblist, saves file order."""
         event.Skip()
@@ -1069,9 +1125,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             conf.save()
 
 
-    def on_remove_missing(self, event):
+    def on_remove_missing(self, event, selecteds=None):
         """Handler to remove nonexistent files from the database list."""
-        selecteds = range(1, self.list_db.GetItemCount())
+        selecteds = selecteds or range(1, self.list_db.GetItemCount())
         filter_func = lambda i: not os.path.exists(self.list_db.GetItemText(i))
         selecteds = list(filter(filter_func, selecteds))
         filenames = list(map(self.list_db.GetItemText, selecteds))
@@ -1086,6 +1142,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 dct.pop(filename, None)
             self.list_db.DeleteItem(selected)
         self.update_database_list()
+        if self.dbs_selected: self.update_database_detail()
+        else: self.list_db.Select(0)
 
         if not selecteds: return
         # Remove from recent file history
@@ -3546,13 +3604,13 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, toggle_items, id=item_expand.GetId())
 
             menu.AppendItem(item_copy)
-            menu.AppendSeparator()
             menu.AppendItem(item_expand)
 
             item_file     = wx.MenuItem(menu, -1, "&Export all tables to file")
             item_database = wx.MenuItem(menu, -1, "Export all tables to another &database")
 
         if item_file and item_database:
+            menu.AppendSeparator()
             menu.AppendItem(item_file)
             menu.AppendItem(item_database)
             tables = [data] if isinstance(data, basestring) else data
