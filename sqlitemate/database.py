@@ -717,19 +717,33 @@ class Database(object):
         return result
 
 
-    def transform_sql(self, sql, category, rename):
+    def transform_sql(self, sql, category, **kwargs):
         """
         Returns transformed SQL with renamed table.
 
         @param   sql        SQL statement like "CREATE TABLE .."
         @param   category   SQL statement type like "create"
+
         @param   rename     new table name
+        @param   notexists  True/False to add or drop "IF NOT EXISTS"
         """
         result = sql
         category = category.lower()
         if "create" == category:
-            result = re.sub(r"^(CREATE\s+TABLE\s+)([.\w]+)([^\w])",
-                            r"\1%s\3" % rename, sql, count=1, flags=re.I | re.U)
+            if kwargs.get("rename"):
+                result = re.sub(r"^(CREATE\s+TABLE\s+)([.\w]+)([^\w])",
+                                r"\1%s\3" % kwargs["rename"],
+                                result, count=1, flags=re.I | re.U)
+
+            if kwargs.get("notexists") is True:
+                replacer = lambda m: ("%s IF NOT EXISTS " % m.group(1).rstrip())
+                result = re.sub(r"^(CREATE\s+TABLE(?!\s+IF\s+NOT\s+EXISTS)\s*)",
+                                replacer, result, count=1, flags=re.I)
+            elif kwargs.get("notexists") is False:
+                replacer = lambda m: m.group(1) + " "
+                result = re.sub(r"^(CREATE\s+TABLE)(\s+IF\s+NOT\s+EXISTS\s*)",
+                                replacer, result, count=1, flags=re.I)
+
         return result
 
 
