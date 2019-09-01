@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.08.2019
+@modified    01.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -670,9 +670,10 @@ class Database(object):
         return copy.deepcopy(result)
 
 
-    def get_sql(self, table=None, refresh=False):
+    def get_sql(self, table=None, column=None, refresh=False):
         """
-        Returns full CREATE SQL statement for database, or for specific table only.
+        Returns full CREATE SQL statement for database, or for specific table only,
+        or SQL line for specific column only.
 
         @param   table    table to return CREATE SQL for if not everything
         @param   refresh  if True, schema is re-queried
@@ -686,8 +687,21 @@ class Database(object):
             or not self.schema.get(category): continue # for category
 
             for name, opts in self.schema[category].items():
-                if table and table != name: continue # for name, opts
-                    
+                if table and ("table" != category or table != name):
+                    continue # for name, opts
+
+                if table and column:
+                    col = next((c for c in opts["columns"]
+                                if c["name"].lower() == column.lower()), None)
+                    if not col: continue # for name, opts
+
+                    result = "%s %s" % (col["name"], col["type"])
+                    if col["notnull"]: result += " NOT NULL"
+                    if col["pk"]: result += " PRIMARY KEY"
+                    if col["dflt_value"] is not None:
+                        result += " DEFAULT %s" % col["dflt_value"]
+                    continue # for name, opts
+
                 sql = opts["sql"].strip()
                 if "table" == category:
                     # LF after first brace

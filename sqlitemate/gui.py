@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.08.2019
+@modified    01.09.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2598,7 +2598,7 @@ class DatabasePage(wx.Panel):
                 item = self.tree_tables.GetNext(self.tree_tables.RootItem)
                 while table_name in self.db.schema["table"] and item and item.IsOk():
                     table2 = self.tree_tables.GetItemPyData(item)
-                    if table2 and table2.lower() == table_name:
+                    if isinstance(table2, basestring) and table2.lower() == table_name:
                         tableitem = item
                         break # while table_name
                     item = self.tree_tables.GetNextSibling(item)
@@ -2746,7 +2746,7 @@ class DatabasePage(wx.Panel):
                 item = self.tree_tables.GetNext(self.tree_tables.RootItem)
                 while table_name in self.db.schema["table"] and item and item.IsOk():
                     table2 = self.tree_tables.GetItemPyData(item)
-                    if table2 and table2.lower() == table_name:
+                    if isinstance(table2, basestring) and table2.lower() == table_name:
                         tableitem = item
                         break # while table_name
                     item = self.tree_tables.GetNextSibling(item)
@@ -3308,7 +3308,7 @@ class DatabasePage(wx.Panel):
                 msg, msgfull = template % e, template % traceback.format_exc()
                 guibase.status_flash(msg), guibase.log(msgfull)
                 wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
-                break # break for grid
+                break # for grid
         return result
 
 
@@ -3327,10 +3327,10 @@ class DatabasePage(wx.Panel):
         item = self.tree_tables.GetNext(self.tree_tables.RootItem)
         while item and item.IsOk():
             list_table = self.tree_tables.GetItemPyData(item)
-            if list_table:
+            if isinstance(list_table, basestring):
                 if list_table.lower() == grid_data.table.lower():
                     self.tree_tables.SetItemTextColour(item, colour)
-                    break # break while item and item.IsOk()
+                    break # while item and item.IsOk()
             item = self.tree_tables.GetNextSibling(item)
 
         # Mark database as changed/pristine in the parent notebook tabs
@@ -3340,7 +3340,7 @@ class DatabasePage(wx.Panel):
                 title = self.title + suffix
                 if self.parent_notebook.GetPageText(i) != title:
                     self.parent_notebook.SetPageText(i, title)
-                break # break for i in range(self.parent_notebook..
+                break # for i
 
 
     def on_commit_table(self, event):
@@ -3360,7 +3360,7 @@ class DatabasePage(wx.Panel):
             item = self.tree_tables.GetNext(self.tree_tables.RootItem)
             while item and item.IsOk():
                 table = self.tree_tables.GetItemPyData(item)
-                if table:
+                if isinstance(table, basestring):
                     self.tree_tables.SetItemText(item, util.plural(
                         "row", tablemap[table]["rows"]
                     ), 1)
@@ -3420,14 +3420,15 @@ class DatabasePage(wx.Panel):
         Handler for selecting an item in the tables list, loads the table data
         into the table grid.
         """
-        table = None
         item = event.GetItem()
-        if item and item.IsOk():
-            table = self.tree_tables.GetItemPyData(item)
-            lower = table.lower() if table else None
-        if table and \
-        (not self.grid_table.Table
-         or self.grid_table.Table.table.lower() != lower):
+        if not item or not item.IsOk(): return
+
+        table = self.tree_tables.GetItemPyData(item)
+        if not isinstance(table, basestring): return            
+
+        lower = table.lower()
+        if not self.grid_table.Table \
+        or self.grid_table.Table.table.lower() != lower:
             i = self.tree_tables.GetNext(self.tree_tables.RootItem)
             while i:
                 text = self.tree_tables.GetItemText(i).lower()
@@ -3467,26 +3468,91 @@ class DatabasePage(wx.Panel):
         Handler for right-clicking an item in the tables list,
         opens popup menu for choices to export data.
         """
-        item = event.GetItem()
+        item, tree = event.GetItem(), self.tree_tables
         if not item or not item.IsOk(): return
-        data = self.tree_tables.GetItemPyData(item)
+        data = tree.GetItemPyData(item)
         if not data: return
 
+        def select_item(item, *a, **kw):
+            tree.SelectItem(item)
+        def clipboard_copy(text, *a, **kw):
+            if wx.TheClipboard.Open():
+                d = wx.TextDataObject(text)
+                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+        def toggle_items(*a, **kw):
+            if not tree.IsExpanded(tree.RootItem): tree.Expand(tree.RootItem)
+            items, item = [], tree.GetNext(tree.RootItem)
+            while item and item.IsOk():
+                items.append(item)
+                item = tree.GetNextSibling(item)
+            if any(map(tree.IsExpanded, items)):
+                for item in items: tree.Collapse(item)
+            else: tree.ExpandAll(tree.RootItem)
+
         menu = wx.Menu()
+        item_file = item_database = None
         if isinstance(data, basestring): # Single table
-            item_file     = wx.MenuItem(menu, -1, 'Export table "%s" to &file' % data)
-            item_database = wx.MenuItem(menu, -1, 'Export table "%s" to another &database' % data)
+            item_name     = wx.MenuItem(menu, -1, 'Table "%s"' % data)
+            item_copy     = wx.MenuItem(menu, -1, "&Copy name")
+            item_copy_sql = wx.MenuItem(menu, -1, "Copy CREATE &SQL")
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
+                      id=item_name.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data),
+                      id=item_copy.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, self.db.get_sql(table=data)),
+                      id=item_copy_sql.GetId())
+
+            menu.AppendItem(item_name)
+            menu.AppendSeparator()
+            menu.AppendItem(item_copy)
+            menu.AppendItem(item_copy_sql)
+
+            item_file     = wx.MenuItem(menu, -1, '&Export table to file')
+            item_database = wx.MenuItem(menu, -1, 'Export table to another &database')
+        elif isinstance(data, dict): # Column
+            item_name     = wx.MenuItem(menu, -1, 'Column "%(table)s.%(name)s"' % data)
+            item_copy     = wx.MenuItem(menu, -1, "&Copy name")
+            item_copy_sql = wx.MenuItem(menu, -1, "Copy column &SQL")
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
+                      id=item_name.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
+                      id=item_copy.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
+                self.db.get_sql(table=data["table"], column=data["name"])
+            ), id=item_copy_sql.GetId())
+
+            menu.AppendItem(item_name)
+            menu.AppendSeparator()
+            menu.AppendItem(item_copy)
+            menu.AppendItem(item_copy_sql)
+
         else: # Tables list
-            item_file     = wx.MenuItem(menu, -1, "Export all tables to &file")
+            item_copy     = wx.MenuItem(menu, -1, "&Copy table names")
+            item_expand   = wx.MenuItem(menu, -1, "&Toggle tables expanded/collapsed")
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, ", ".join(data)),
+                      id=item_copy.GetId())
+            menu.Bind(wx.EVT_MENU, toggle_items, id=item_expand.GetId())
+
+            menu.AppendItem(item_copy)
+            menu.AppendSeparator()
+            menu.AppendItem(item_expand)
+
+            item_file     = wx.MenuItem(menu, -1, "&Export all tables to file")
             item_database = wx.MenuItem(menu, -1, "Export all tables to another &database")
-        menu.AppendItem(item_file)
-        menu.AppendItem(item_database)
-        tables = [data] if isinstance(data, basestring) else data
-        menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, tables),
-                 id=item_file.GetId())
-        menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, tables),
-                 id=item_database.GetId())
-        self.tree_tables.PopupMenu(menu)
+
+        if item_file and item_database:
+            menu.AppendItem(item_file)
+            menu.AppendItem(item_database)
+            tables = [data] if isinstance(data, basestring) else data
+            menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, tables),
+                     id=item_file.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, tables),
+                     id=item_database.GetId())
+
+        item0 = tree.GetSelection()
+        if item != item0: select_item(item)
+        tree.PopupMenu(menu)
+        if item0 and item != item0: select_item(item0)
 
 
     def on_export_data_file(self, tables, event):
@@ -3625,7 +3691,7 @@ class DatabasePage(wx.Panel):
                 extra = "" if t1_lower == t2_lower else ' as "%s"' % table2
 
                 create_sql = self.db.transform_sql(
-                    self.db.get_sql(table), "create", rename="main2." + table2
+                    self.db.get_sql(table=table), "create", rename="main2." + table2
                 )
                 try:
                     if t2_lower in db2_tables_lower:
@@ -3769,6 +3835,8 @@ class DatabasePage(wx.Panel):
                 for col in self.db.get_table_columns(table["name"]):
                     subchild = self.tree_tables.AppendItem(child, col["name"])
                     self.tree_tables.SetItemText(subchild, col["type"], 1)
+                    self.tree_tables.SetItemPyData(subchild, dict(col, table=table["name"]))
+
             self.tree_tables.Expand(root)
             if child:
                 # Nudge columns to fit and fill the header exactly.
