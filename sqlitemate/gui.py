@@ -3439,7 +3439,8 @@ class DatabasePage(wx.Panel):
         ):
             guibase.log("Committing %s in table %s (%s).", info,
                      self.db.quote(self.grid_table.Table.table), self.db)
-            self.grid_table.Table.SaveChanges()
+            if not self.grid_table.Table.SaveChanges(): return
+
             self.on_change_table(None)
             # Refresh tables list with updated row counts
             tablemap = dict((t["name"], t)
@@ -4433,7 +4434,9 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
     def SaveChanges(self):
         """
         Saves the rows that have been changed in this table. Drops undo-cache.
+        Returns success.
         """
+        result = False
         try:
             for idx in self.idx_changed.copy():
                 row = self.rows_all[idx]
@@ -4462,12 +4465,14 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
                 del self.rows_deleted[idx]
                 del self.rows_all[idx]
                 self.idx_all.remove(idx)
+            result = True
         except Exception as e:
             guibase.logstatus("Error saving changes in %s.\n\n%s",
                               self.db.quote(self.table), traceback.format_exc())
             wx.MessageBox(util.format_exc(e), conf.Title,
                           wx.OK | wx.ICON_WARNING)
         if self.View: self.View.Refresh()
+        return result
 
 
     def UndoChanges(self):
