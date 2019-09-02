@@ -47,7 +47,7 @@ class WorkerThread(threading.Thread):
 
     def work(self, data):
         """
-        Registers new work to process. Stops current work, if any. Starts 
+        Registers new work to process. Stops current work, if any. Starts
         thread if not running.
 
         @param   data  a dict with work data
@@ -148,7 +148,7 @@ class SearchThread(WorkerThread):
                         matching_columns = [c for c in columns
                                             if self.match_all(c["name"], match_words)
                                             or self.match_all(c["type"], match_words)]
-                            
+
                         if table_matches or matching_columns:
                             count += 1
                             result_count += 1
@@ -185,7 +185,7 @@ class SearchThread(WorkerThread):
                         cursor = search["db"].execute(sql, params)
                         row = cursor.fetchone()
                         namepre, namesuf = ("<b>", "</b>") if row else ("", "")
-                        countpre, countsuf = (("<a href='#%s'><font color='%s'>" % 
+                        countpre, countsuf = (("<a href='#%s'><font color='%s'>" %
                             (step.escape_html(table["name"]), conf.LinkColour),
                             "</font></a>")) if row else ("", "")
                         infotext += (", " if infotext else "") \
@@ -217,7 +217,7 @@ class SearchThread(WorkerThread):
                             self.postback(result)
                             result = {"output": "", "map": {},
                                       "search": search, "count": 0}
-                        infotext += " (%s%s%s)" % (countpre, 
+                        infotext += " (%s%s%s)" % (countpre,
                                     util.plural("result", count), countsuf)
                         if self._stop_work \
                         or result_count >= conf.MaxSearchTableRows:

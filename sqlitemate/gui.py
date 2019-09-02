@@ -67,7 +67,7 @@ OpenDatabaseEvent, EVT_OPEN_DATABASE = wx.lib.newevent.NewEvent()
 class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     """SQLiteMate main window."""
 
-    TRAY_ICON = (images.Icon16x16_32bit if "linux2" != sys.platform 
+    TRAY_ICON = (images.Icon16x16_32bit if "linux2" != sys.platform
                  else images.Icon24x24_32bit)
 
     def __init__(self):
@@ -291,9 +291,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         label_main.Font = wx.Font(14, wx.FONTFAMILY_SWISS,
             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
         BUTTONS_MAIN = [
-            ("new", "&New database", images.ButtonNew, 
+            ("new", "&New database", images.ButtonNew,
              "Create a new SQLite database."),
-            ("opena", "&Open a database..", images.ButtonOpenA, 
+            ("opena", "&Open a database..", images.ButtonOpenA,
              "Choose a database from your computer to open."),
             ("folder", "&Import from folder.", images.ButtonFolder,
              "Select a folder where to look for databases."),
@@ -332,7 +332,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             setattr(self, "label_" + field, valtext)
 
         BUTTONS_DETAIL = [
-            ("open", "&Open", images.ButtonOpen, 
+            ("open", "&Open", images.ButtonOpen,
              "Open the database."),
             ("saveas", "Save &as..", images.ButtonSaveAs,
              "Save a copy of the database under another name."),
@@ -481,7 +481,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         from last check has passed, and opens a dialog for upgrading
         if new version available. Schedules a new check on due date.
         """
-        if not conf.UpdateCheckAutomatic: 
+        if not conf.UpdateCheckAutomatic:
             return
         interval = datetime.timedelta(days=conf.UpdateCheckInterval)
         due_date = datetime.datetime.now() - interval
@@ -724,7 +724,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.db_datas[filename].update(data)
                 items.append(data)
             self.list_db.Populate(items, [1])
-            if selected_home: self.list_db.Select(0)                
+            if selected_home: self.list_db.Select(0)
             if selected_files:
                 for i in range(1, self.list_db.GetItemCount()):
                     if self.list_db.GetItemText(i) in selected_files:
@@ -917,7 +917,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     guibase.log("Detected database %s.", f)
         if "count" in result:
             name = ("" if result["count"] else "additional ") + "database"
-            guibase.logstatus_flash("Detected %s.", 
+            guibase.logstatus_flash("Detected %s.",
                                   util.plural(name, result["count"]))
         if result.get("done", False):
             self.button_detect.Enabled = True
@@ -1998,7 +1998,7 @@ class DatabasePage(wx.Panel):
         ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
         button_sql = self.button_sql = wx.Button(panel2, label="Execute S&QL")
-        button_script = self.button_script = wx.Button(panel2, 
+        button_script = self.button_script = wx.Button(panel2,
                                                        label="Execute scrip&t")
         button_sql.SetToolTipString("Execute a single statement "
                                     "from the SQL window")
@@ -2082,7 +2082,7 @@ class DatabasePage(wx.Panel):
         def on_help(ctrl, text, event):
             """Handler for clicking help bitmap, shows text popup."""
             wx.TipWindow(ctrl, text, maxLength=300)
-            
+
         bmp = wx.ArtProvider.GetBitmap(wx.ART_QUESTION, wx.ART_TOOLBAR, (16, 16))
         cursor_pointer = wx.StockCursor(wx.CURSOR_HAND)
         lastopts = {}
@@ -2356,7 +2356,7 @@ class DatabasePage(wx.Panel):
         """Handler for changing a PRAGMA value."""
         if not self.pragma_edit: return
         ctrl = event.EventObject
-            
+
         name = ctrl.Name.replace("pragma_", "", 1)
         if isinstance(ctrl, wx.Choice):
             vals = database.Database.PRAGMA[name]["values"]
@@ -2607,7 +2607,7 @@ class DatabasePage(wx.Panel):
         panel1, panel2 = self.splitter_sql.Children
         self.splitter_sql.Unsplit()
         self.splitter_sql.SplitHorizontally(panel1, panel2, sash_pos)
-        wx.CallLater(1000, lambda: self and 
+        wx.CallLater(1000, lambda: self and
                      (self.tree_tables.SetColumnWidth(0, -1),
                       self.tree_tables.SetColumnWidth(1, -1)))
 
@@ -3251,7 +3251,7 @@ class DatabasePage(wx.Panel):
             msg = util.format_exc(e)
             guibase.logstatus_flash(msg)
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
-            
+
 
     def on_copy_sql(self, stc, event):
         """Handler for copying SQL to clipboard."""
@@ -3299,7 +3299,7 @@ class DatabasePage(wx.Panel):
     def on_button_sql(self, event):
         """
         Handler for clicking to run an SQL query, runs the selected text or
-        whole contents, displays its results, if any, and commits changes 
+        whole contents, displays its results, if any, and commits changes
         done, if any.
         """
         sql = (self.stc_sql.SelectedText or self.stc_sql.Text).strip()
@@ -3512,7 +3512,7 @@ class DatabasePage(wx.Panel):
         if not item or not item.IsOk(): return
 
         table = self.tree_tables.GetItemPyData(item)
-        if not isinstance(table, basestring): return            
+        if not isinstance(table, basestring): return
 
         lower = table.lower()
         if not self.grid_table.Table \
@@ -3759,7 +3759,7 @@ class DatabasePage(wx.Panel):
                     if wx.ID_OK != entrydialog.ShowModal(): return
 
                     t2_lower_prev, table2 = table2, entrydialog.GetValue().strip()
-                        
+
                     t2_lower = table2.lower()
                     if not table2 \
                     or t1_lower == t2_lower == t2_lower_prev: break # while table2
@@ -4476,7 +4476,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
 
 
 class AboutDialog(wx.Dialog):
- 
+
     def __init__(self, parent, title, content):
         wx.Dialog.__init__(self, parent, title=title,
                            style=wx.CAPTION | wx.CLOSE_BOX)

@@ -153,7 +153,7 @@ def export_data(make_iterable, filename, title, db, columns, sql_query="", table
 
                 tmpfile.flush(), tmpfile.seek(0)
                 namespace["data_buffer"] = iter(lambda: tmpfile.read(65536), "")
-                template = step.Template(templates.DATA_HTML if is_html else 
+                template = step.Template(templates.DATA_HTML if is_html else
                            templates.SQL_TXT if is_sql else templates.DATA_TXT,
                            strip=False, escape=is_html)
                 template.stream(f, namespace)
@@ -291,9 +291,9 @@ class xlsx_writer(object):
                 continue # continue for c, v in enumerate(Values)
 
             # Calculate and update maximum written column width
-            strval = (v.encode("latin1", "replace") if isinstance(v, unicode) 
+            strval = (v.encode("latin1", "replace") if isinstance(v, unicode)
                       else v.strftime("%Y-%m-%d %H:%M") \
-                      if isinstance(v, datetime.datetime) else 
+                      if isinstance(v, datetime.datetime) else
                       v if isinstance(v, basestring) else str(v))
             pixels = max(self._fonts[fmt_name].getsize(x)[0]
                          for x in strval.split("\n"))

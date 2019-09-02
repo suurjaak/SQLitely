@@ -30,10 +30,10 @@ Stand-alone GUI components for wx:
 
 - ScrollingHtmlWindow(wx.html.HtmlWindow):
   HtmlWindow that remembers its scroll position on resize and append.
-    
+
 - SearchCtrl(wx.TextCtrl):
   Simple search control, with search description.
-    
+
 - SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                            wx.lib.mixins.listctrl.ColumnSorterMixin):
   A sortable list view that can be batch-populated, autosizes its columns,
@@ -44,7 +44,7 @@ Stand-alone GUI components for wx:
 
 - TabbedHtmlWindow(wx.PyPanel):
   wx.html.HtmlWindow with tabs for different content pages.
-    
+
 - TextCtrlAutoComplete(wx.TextCtrl):
   A text control with autocomplete using a dropdown list of choices. During
   typing, the first matching choice is appended to textbox value, with the
@@ -75,7 +75,7 @@ import wx.lib.agw.flatnotebook
 import wx.lib.agw.gradientbutton
 try: # ShapedButton requires PIL, might not be installed
     import wx.lib.agw.shapedbutton
-except Exception: pass 
+except Exception: pass
 import wx.lib.agw.ultimatelistctrl
 import wx.lib.embeddedimage
 import wx.lib.mixins.listctrl
@@ -233,7 +233,7 @@ class ColourManager(object):
             if not ctrl: # Component destroyed
                 cls.ctrls.pop(ctrl)
                 continue # for ctrl, props
-                
+
             for prop, colour in props.items():
                 cls.UpdateControlColour(ctrl, prop, colour)
 
@@ -254,7 +254,7 @@ class NonModalOKDialog(wx.Dialog):
 
     def __init__(self, parent, title, message):
         wx.Dialog.__init__(self, parent=parent, title=title,
-                           style=wx.CAPTION | wx.CLOSE_BOX | 
+                           style=wx.CAPTION | wx.CLOSE_BOX |
                                  wx.FRAME_FLOAT_ON_PARENT)
 
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -403,9 +403,6 @@ class NoteButton(wx.PyPanel, wx.Button):
     def __init__(self, parent, label=wx.EmptyString, note=wx.EmptyString,
                  bmp=wx.NullBitmap, id=-1, pos=wx.DefaultPosition,
                  size=wx.DefaultSize, style=0, name=wx.PanelNameStr):
-        """
-        @param   
-        """
         wx.PyPanel.__init__(self, parent, id, pos, size,
                             style | wx.FULL_REPAINT_ON_RESIZE, name)
         self._label = label
@@ -454,7 +451,7 @@ class NoteButton(wx.PyPanel, wx.Button):
     def DoGetBestSize(self):
         w = 100 if self.Size.width < 100 else self.Size.width
         h = 40 if self.Size.height < 40 else self.Size.height
-        if self._extent_label:    
+        if self._extent_label:
             h1 = 10 + self._bmp.Size.height + 10
             h2 = 10 + self._extent_label[1] + 10 + self._extent_note[1] + 10
             h  = max(h1, h2)
@@ -622,7 +619,7 @@ class NoteButton(wx.PyPanel, wx.Button):
         """Handler for receiving/losing focus, repaints control."""
         if self: # Might get called when control already destroyed
             self.Refresh()
-            
+
 
     def OnEraseBackground(self, event):
         """Handles the wx.EVT_ERASE_BACKGROUND event."""
@@ -895,7 +892,7 @@ class PropertyDialog(wx.Dialog):
 
     def _OnSave(self, event):
         """
-        Handler for clicking save, checks values and hides the dialog if all 
+        Handler for clicking save, checks values and hides the dialog if all
         ok, highlights errors otherwise.
         """
         all_ok = True
@@ -903,7 +900,7 @@ class PropertyDialog(wx.Dialog):
             if self._GetValueForType(ctrl.Value, typeclass) is None:
                 all_ok = False
                 label.ForegroundColour = ctrl.ForegroundColour = self.COLOUR_ERROR
-            else:                
+            else:
                 label.ForegroundColour = ctrl.ForegroundColour = self.ForegroundColour
         if all_ok:
             self.Hide()
@@ -933,7 +930,7 @@ class PropertyDialog(wx.Dialog):
         try:
             result = typeclass(value)
             isinstance(result, basestring) and result.strip()[0] # Reject empty
-            return result 
+            return result
         except Exception:
             return None
 
@@ -1296,7 +1293,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
     def RefreshRows(self):
         """
-        Clears the list and inserts all unfiltered rows, auto-sizing the 
+        Clears the list and inserts all unfiltered rows, auto-sizing the
         columns.
         """
         selected_ids, selected = [], self.GetFirstSelected()
@@ -1307,7 +1304,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         self.Freeze()
         wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
         self._PopulateTopRow()
-            
+
         # To map list item data ID to row, ListCtrl allows only integer per row
         row_data_map = {} # {item_id: {row dict}, }
         item_data_map = {} # {item_id: [row values], }
@@ -1522,7 +1519,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         sortstate = self.GetSortState()
 
         col, ascending = self.GetSortState()
-        if col == event.GetColumn() and not ascending: # Clear sort 
+        if col == event.GetColumn() and not ascending: # Clear sort
             self._col = -1
             self._colSortFlag = [0] * self.GetColumnCount()
             self.ClearColumnImage(col)
@@ -1603,7 +1600,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
     def _ConvertImageIds(self, imageIds, reverse=False):
         """Returns user image indexes adjusted by internal image count."""
-        if not imageIds: return imageIds            
+        if not imageIds: return imageIds
         shift = (-1 if reverse else 1) * len(self.GetSortImages() or [])
         return [x + shift for x in imageIds]
 
@@ -1611,7 +1608,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
     def _PopulateTopRow(self):
         """Populates top row state, if any."""
         if not self._top_row: return
-            
+
         columns = [c[0] for c in self._columns]
         col_value = self._formatters[columns[0]](self._top_row, columns[0])
         if -1 in self._id_images:
@@ -1653,7 +1650,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         """
         if key1 not in self.itemDataMap or key2 not in self.itemDataMap:
             return 0
-            
+
         col = self._col
         ascending = self._colSortFlag[col]
         item1 = self.itemDataMap[key1][col]
@@ -1760,7 +1757,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
         self.SetCaretForeground(fgcolour)
         self.SetCaretLineBackground("#00FFFF")
-        self.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT, 
+        self.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT,
                           "face:%s,back:%s,fore:%s" % (self.FONT_FACE, bgcolour, fgcolour))
         self.StyleClearAll() # Apply the new default style to all styles
         self.StyleSetSpec(wx.stc.STC_SQL_DEFAULT,   "face:%s" % self.FONT_FACE)
@@ -2012,7 +2009,7 @@ class TabbedHtmlWindow(wx.PyPanel):
                                   self.GetScrollPos(wx.VERTICAL)]
             tab["scrollrange"] = [self.GetScrollRange(wx.HORIZONTAL),
                                   self.GetScrollRange(wx.VERTICAL)]
-        
+
 
     def _OnChangeTab(self, event):
         """Handler for selecting another tab in notebook, loads tab content."""
@@ -2055,7 +2052,7 @@ class TabbedHtmlWindow(wx.PyPanel):
 
     def _CreateTab(self, index, title):
         """Creates a new tab in the tab container at specified index."""
-        p = wx.Panel(parent=self, size=(0,0)) 
+        p = wx.Panel(parent=self, size=(0,0))
         p.Hide() # Dummy empty window as notebook needs something to hold
         self._notebook.InsertPage(index, page=p, text=title, select=True)
 

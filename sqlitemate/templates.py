@@ -370,7 +370,7 @@ under the MIT License.
       <a href="https://pypi.python.org/pypi/Pillow/"><font color="{{conf.LinkColour}}">pypi.python.org/pypi/Pillow</font></a></li>
   <li>step, Simple Template Engine for Python,
       <a href="https://github.com/dotpy/step"><font color="{{conf.LinkColour}}">github.com/dotpy/step</font></a></li>
-  <li>pyparsing{{" 2.0.3" if getattr(sys, 'frozen', False) else ""}}, 
+  <li>pyparsing{{" 2.0.3" if getattr(sys, 'frozen', False) else ""}},
       <a href="https://pypi.org/project/pyparsing/"><font color="{{conf.LinkColour}}">pypi.org/project/pyparsing</font></a></li>
   <li>XlsxWriter{{" 0.7.3" if getattr(sys, 'frozen', False) else ""}},
       <a href="https://github.com/jmcnamara/XlsxWriter"><font color="{{conf.LinkColour}}">

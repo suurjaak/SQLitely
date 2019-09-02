@@ -159,7 +159,7 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
         self.frame_console_shown = False # Init flag
         console = self.console = self.frame_console.shell
         if not isinstance(conf.ConsoleHistoryCommands, list):
-            conf.ConsoleHistoryCommands = [] 
+            conf.ConsoleHistoryCommands = []
         for cmd in conf.ConsoleHistoryCommands:
             console.addHistory(cmd)
         console.Bind(wx.EVT_KEY_DOWN, self.on_keydown_console)
@@ -183,7 +183,7 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
         ColourManager.Manage(edit_log, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
         ColourManager.Manage(edit_log, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
 
-        sizer.Add(button_clear, border=5, flag=wx.ALIGN_RIGHT | wx.TOP | 
+        sizer.Add(button_clear, border=5, flag=wx.ALIGN_RIGHT | wx.TOP |
                   wx.RIGHT)
         sizer.Add(edit_log, border=5, proportion=1, flag=wx.GROW | wx.ALL)
         return panel

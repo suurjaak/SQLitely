@@ -213,7 +213,7 @@ def start_file(filepath):
 
 def is_os_64bit():
     """Returns whether the operating system is 64-bit (Windows-only)."""
-    return ('PROCESSOR_ARCHITEW6432' in os.environ 
+    return ('PROCESSOR_ARCHITEW6432' in os.environ
             or os.environ['PROCESSOR_ARCHITECTURE'].endswith('64'))
 
 
@@ -307,7 +307,7 @@ def path_to_url(path, encoding="utf-8"):
 
 def to_unicode(value, encoding=None):
     """
-    Returns the value as a Unicode string. Tries decoding as UTF-8 if 
+    Returns the value as a Unicode string. Tries decoding as UTF-8 if
     locale encoading fails.
     """
     result = value
@@ -354,11 +354,11 @@ def win32_unicode_argv():
     GetCommandLineW = cdll.kernel32.GetCommandLineW
     GetCommandLineW.argtypes = []
     GetCommandLineW.restype = LPCWSTR
- 
+
     CommandLineToArgvW = windll.shell32.CommandLineToArgvW
     CommandLineToArgvW.argtypes = [LPCWSTR, POINTER(c_int)]
     CommandLineToArgvW.restype = POINTER(LPWSTR)
- 
+
     argc = c_int(0)
     argv = CommandLineToArgvW(GetCommandLineW(), byref(argc))
     if argc.value:

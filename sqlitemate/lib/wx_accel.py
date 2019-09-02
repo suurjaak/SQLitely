@@ -3,7 +3,7 @@
 Binds wx control label shortcut keys and label clicks to control click events.
 
 In wx, a button with a label "E&xit" is displayed as having the label "Exit"
-with "x" underlined, indicating a keyboard shortcut, but wx does not bind 
+with "x" underlined, indicating a keyboard shortcut, but wx does not bind
 these shortcuts automatically.
 
 Supported controls:
@@ -172,7 +172,7 @@ def collect_shortcuts(control, use_heuristics=True):
 
     collect_recurse(control, result, nameds, statics)
     if not use_heuristics: return result
-        
+
     result_values = set(j for i in result.values() for j in i)
     for ctrl, key in statics.items():
         # For wx.StaticTexts, see if the next sibling, or control with the

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.09.2019
+@modified    02.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -460,7 +460,7 @@ class Database(object):
     def recover_data(self, filename):
         """
         Recovers as much data from this database to a new database as possible.
-        
+
         @return  a list of encountered errors, if any
         """
         result = []
@@ -721,7 +721,7 @@ class Database(object):
         return result
 
 
-    def transform_sql(self, sql, category, **kwargs):
+    def transform_sql(sql, category, **kwargs):
         """
         Returns SQL transformed according to given keywords.
 
@@ -817,7 +817,7 @@ class Database(object):
         @param   cols      ["col", ] or [{"name": "col"}, ]
         @param   data      {"col": val}
         @param   existing  already existing params dictionary,
-                           for unique 
+                           for unique
         """
         result = OrderedDict()
         for c in cols:
@@ -944,14 +944,14 @@ class Database(object):
 
             rows = self.execute("PRAGMA %s" % name).fetchall()
             if not rows: continue # for name, opts
-                
+
             if "table" == opts["type"]:
                 result[name] = [x[opts["col"]] for x in rows]
             else:
                 result[name] = rows[0].values()[0]
                 if callable(opts["type"]):
                     result[name] = opts["type"](result[name])
-                    
+
         return result
 
 

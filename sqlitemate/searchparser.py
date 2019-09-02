@@ -3,7 +3,7 @@
 Parses a Google-like search grammar into SQL for querying a database.
 
 - words can consist of any non-whitespace characters including all Unicode,
-  excluding round brackets and quotes ()" 
+  excluding round brackets and quotes ()"
 - asterisk (*) can be used as a wildcard, matching any character or whitespace
 - quoted text is a literal phrase: "one two  three   ."
 - can use operator "OR" to make an either-or search: one OR two
@@ -103,7 +103,7 @@ class SearchQueryParser(object):
                         ).setResultsName("GRAMMAR")
             self._grammar = grammar
 
-    
+
     def Parse(self, query, table=None):
         """
         Parses the query string and returns (sql, sql params, words).
@@ -129,7 +129,7 @@ class SearchQueryParser(object):
                     key = negation + key
                     keywords[key.lower()].append(value)
                     split_words.remove(word)
-            try:                
+            try:
                 parse_results = ParseResults(split_words)
             except NameError: # pyparsing.ParseResults not available
                 parse_results = split_words
@@ -258,7 +258,7 @@ class SearchQueryParser(object):
                             if val is None: continue # continue for j, (forma..
                             format += ("-" if format else "") + "%" + frm
                             value += ("-" if value else "")
-                            value += "%02d" % val if j else "%04d" % val 
+                            value += "%02d" % val if j else "%04d" % val
                         param = "timestamp_%s" % len(sql_params)
                         sql_params[param] = value
                         for j, col in enumerate(datecols):
@@ -266,7 +266,7 @@ class SearchQueryParser(object):
                             x = temp % (format, Database.quote(col["name"]), param)
                             sql += (" OR " if j else "") + x
                         if len(datecols) > 1: sql = "(%s)" % sql
-                            
+
                     else:
                         # Date range given: use timestamp matching
                         date_words = word.split("..", 1)
@@ -338,7 +338,7 @@ class SearchQueryParser(object):
         """
         Returns the non-empty strings joined together with the specified glue.
 
-        @param   glue  separator used as glue between strings 
+        @param   glue  separator used as glue between strings
         @return        (joined string, number of strings actually used)
         """
         strings = list(filter(None, strings))
