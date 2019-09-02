@@ -674,7 +674,7 @@ class Database(object):
     def get_sql(self, table=None, column=None, refresh=False, format=True):
         """
         Returns full CREATE SQL statement for database, or for specific table only,
-        or SQL line for specific column only.
+        or SQL line for specific table column only.
 
         @param   table    table to return CREATE SQL for if not everything
         @param   column   table column to return SQL for if not full CREATE TABLE
@@ -726,27 +726,55 @@ class Database(object):
         Returns SQL transformed according to given keywords.
 
         @param   sql        SQL statement like "CREATE TABLE .."
-        @param   category   SQL statement type like "create" for "CREATE TABLE"
+        @param   category   SQL statement type, supported values:
+                            "table" for "CREATE TABLE",
+                            "index" for "CREATE INDEX"
 
-        @param   rename     new table name for "create" category
+        @param   rename     {"table": new table name, "index": new index name}
         @param   notexists  True/False to add or drop "IF NOT EXISTS"
                             for "create" category
         """
         result = sql
         category = category.lower()
-        if "create" == category:
-            if kwargs.get("rename"):
+        kwargs.setdefault("rename", {})
+        if "table" == category:
+            if "table" in kwargs["rename"]:
                 result = re.sub(r"^(CREATE\s+TABLE\s*)([\w\s$+.'\"-]+)(\()",
-                                r"\1%s \3" % kwargs["rename"],
+                                r"\1%s \3" % kwargs["rename"]["table"],
                                 result, count=1, flags=re.I | re.U)
 
             if kwargs.get("notexists") is True:
-                replacer = lambda m: ("%s IF NOT EXISTS " % m.group(1).rstrip())
+                replacer = lambda m: "%s IF NOT EXISTS " % m.group(1).rstrip()
                 result = re.sub(r"^(CREATE\s+TABLE(?!\s+IF\s+NOT\s+EXISTS)\s*)",
                                 replacer, result, count=1, flags=re.I)
             elif kwargs.get("notexists") is False:
                 replacer = lambda m: m.group(1) + " "
                 result = re.sub(r"^(CREATE\s+TABLE)(\s+IF\s+NOT\s+EXISTS\s*)",
+                                replacer, result, count=1, flags=re.I)
+
+        if "index" == category:
+            if kwargs["rename"]:
+                pattern = (r"^(CREATE\s+(UNIQUE\s+)?INDEX"
+                           r"(\s+IF\s+NOT\s+EXISTS)?)\s*([\w\s$+.'\"-]+)"
+                           r"\s+ON\s+([\w\s$+.'\"-]+)(\s*\()")
+                if "index" in kwargs["rename"]:
+                    replacer = lambda m: "%s %s ON %s %s" % (m.group(1).strip(),
+                                         kwargs["rename"]["index"],
+                                         m.group(5).strip(), m.group(6).strip())
+                    result = re.sub(pattern, replacer, result, 1, re.I | re.U)
+                if "table" in kwargs["rename"]:
+                    replacer = lambda m: "%s %s ON %s %s" % (m.group(1).strip(),
+                                         m.group(4).strip(), kwargs["rename"]["table"],
+                                         m.group(6).strip())
+                    result = re.sub(pattern, replacer, result, 1, re.I | re.U)
+
+            if kwargs.get("notexists") is True:
+                replacer = lambda m: ("%s IF NOT EXISTS " % m.group(1).rstrip())
+                result = re.sub(r"^(CREATE\s+(UNIQUE\s+)?INDEX(?!\s+IF\s+NOT\s+EXISTS)\s*)",
+                                replacer, result, count=1, flags=re.I)
+            elif kwargs.get("notexists") is False:
+                replacer = lambda m: m.group(1) + " "
+                result = re.sub(r"^(CREATE\s+(UNIQUE\s+)INDEX)(\s+IF\s+NOT\s+EXISTS\s*)",
                                 replacer, result, count=1, flags=re.I)
 
         return result

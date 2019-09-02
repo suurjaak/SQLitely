@@ -19,6 +19,7 @@ import functools
 import hashlib
 import inspect
 import os
+import re
 import shutil
 import sys
 import textwrap
@@ -3769,7 +3770,7 @@ class DatabasePage(wx.Panel):
                         wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
                         continue # while table2
 
-                    t2_lower_prev, table2 = table2, value
+                    t2_lower_prev, table2 = table2.lower(), value
                     t2_lower = table2.lower()
 
                     if not table2 \
@@ -3798,8 +3799,8 @@ class DatabasePage(wx.Panel):
                         else " as %s" % self.db.quote(table2, force=True)
 
                 create_sql = self.db.transform_sql(
-                    self.db.get_sql(table=table, format=False), "create",
-                    rename="main2." + self.db.quote(table2)
+                    self.db.get_sql(table=table, format=False), "table",
+                    rename={"table": "main2." + self.db.quote(table2)}
                 )
                 try:
                     if t2_lower in db2_tables_lower:
@@ -3808,6 +3809,33 @@ class DatabasePage(wx.Panel):
                     guibase.log("Creating table %s in %s, using %s.",
                                 self.db.quote(table2, force=True), filename2, create_sql)
                     self.db.execute(create_sql)
+
+                    # Assemble table indices to copy
+                    indices = [dict(x) for x in self.db.schema["index"].values()
+                               if t1_lower == x["tbl_name"].lower()]
+                    indices2 = [x["name"] for x in self.db.execute(
+                        "SELECT name FROM main2.sqlite_master "
+                        "WHERE type = 'index' AND sql != ''"
+                    ).fetchall()]
+                    for index in indices:
+                        name = base = index["name"]; counter = 2
+                        if t1_lower != t2_lower:
+                            name = base = re.sub(re.escape(table), re.sub(r"\W", "", table2),
+                                                 name, count=1, flags=re.I | re.U)
+                        while name in indices2:
+                            name, counter = "%s_%s" % (base, counter), counter + 1
+                        indices2.append(name)
+                        index_sql = self.db.transform_sql(
+                            index["sql"], "index",
+                            rename={"table": self.db.quote(table2),
+                                    "index": "main2." + self.db.quote(name)}
+                        )
+                        guibase.log("Creating index %s on table %s in %s, using %s.",
+                                    self.db.quote(name, force=True),
+                                    self.db.quote(table2, force=True),
+                                    filename2, index_sql)
+                        self.db.execute(index_sql)
+
                     self.db.execute(insert_sql % (self.db.quote(table2), self.db.quote(table)))
                     guibase.status_flash("Exported table %s to %s%s.",
                                          self.db.quote(table), filename2, extra)

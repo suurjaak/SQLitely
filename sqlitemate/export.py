@@ -148,7 +148,7 @@ def export_data(make_iterable, filename, title, db, columns, sql_query="", table
                     # Add CREATE TABLE statement.
                     create_sql = db.get_sql(table).strip()
                     if is_sql:
-                        create_sql = db.transform_sql(create_sql, "create", notexists=True)
+                        create_sql = db.transform_sql(create_sql, "table", notexists=True)
                     namespace["create_sql"] = create_sql
 
                 tmpfile.flush(), tmpfile.seek(0)
