@@ -417,6 +417,7 @@ class Database(object):
         self.filesize = None
         self.last_modified = None
         self.backup_created = False
+        self.compile_options = []
         self.consumers = set() # Registered objects using this database
         # {"table|index|view|trigger":
         #   {name.lower():
@@ -430,11 +431,9 @@ class Database(object):
                                               check_same_thread=False)
             self.connection.row_factory = self.row_factory
             self.connection.text_factory = str
-            for row in self.execute(
-                "SELECT * FROM sqlite_master "
-                "WHERE sql != '' ORDER BY type, name COLLATE NOCASE"
-            ).fetchall():
-                self.schema[row["type"]][row["name"].lower()] = row
+            self.compile_options = [x["compile_option"] for x in 
+                                    self.execute("PRAGMA compile_options").fetchall()]
+            self.get_tables(refresh=True)
         except Exception:
             if log_error: guibase.log("Error opening database %s.\n\n%s",
                                       filename, traceback.format_exc())
@@ -590,6 +589,12 @@ class Database(object):
                 "SELECT * FROM sqlite_master "
                 "WHERE sql != '' ORDER BY type, name COLLATE NOCASE"
             ).fetchall():
+                if "table" == row["type"] \
+                and "ENABLE_ICU" not in self.compile_options: # Unsupported tokenizer
+                    if  re.match("CREATE\s+VIRTUAL\s+TABLE", row["sql"], re.I) \
+                    and re.search("TOKENIZE\s*[\W]*icu[\W]", row["sql"], re.I):
+                        continue # for row
+
                 self.schema[row["type"]][row["name"].lower()] = row
 
         for opts in self.schema["table"].values():
