@@ -204,8 +204,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 wx.CallAfter(self.ProcessFiles, filenames)
 
             def ProcessFiles(self, filenames):
-                for filename in filenames:
-                    self.window.update_database_list(filename)
+                self.window.update_database_list(filenames)
                 for filename in filenames:
                     self.window.load_database_page(filename)
 
@@ -911,9 +910,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         result = event.result
         if "filenames" in result:
-            for f in result["filenames"]:
-                if self.update_database_list(f):
-                    guibase.log("Detected database %s.", f)
+            filenames = [f for f in result["filenames"] if f not in conf.DBFiles]
+            if filenames:
+                self.update_database_list(filenames)
+                for f in filenames: guibase.log("Detected database %s.", f)
         if "count" in result:
             name = ("" if result["count"] else "additional ") + "database"
             guibase.logstatus_flash("Detected %s.",
@@ -964,17 +964,18 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.panel_db_main.Layout()
 
 
-    def update_database_list(self, filename=""):
+    def update_database_list(self, filenames=""):
         """
         Inserts the database into the list, if not there already, and updates
         UI buttons.
 
-        @param   filename  possibly new filename, if any
+        @param   filename  possibly new filename, if any (single string or list)
         @return            True if was file was new or changed, False otherwise
         """
         result = False
         # Insert into database lists, if not already there
-        if filename:
+        if isinstance(filenames, basestring): filenames = [filenames]
+        for filename in filenames:
             filename = util.to_unicode(filename)
             if filename not in conf.DBFiles:
                 conf.DBFiles.append(filename)
