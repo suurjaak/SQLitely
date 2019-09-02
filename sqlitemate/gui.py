@@ -179,7 +179,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if notebook and notebook.GetSelection() != number \
             and number < notebook.GetPageCount():
                 notebook.SetSelection(number)
-                self.update_notebook_header()
+                self.on_change_page(None)
 
         id_close = wx.NewId()
         accelerators = [(wx.ACCEL_CTRL, k, id_close) for k in (ord('W'), wx.WXK_F4)]
