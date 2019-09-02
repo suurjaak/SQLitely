@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.09.2019
+@modified    02.09.2019
 ------------------------------------------------------------------------------
 """
 import re
@@ -81,8 +81,8 @@ from sqlitemate.lib import util
         }
         .header { font-size: 1.1em; font-weight: bold; color: {{conf.ExportLinkColour}}; }
         td { text-align: left; vertical-align: top; }
-        span#sql { white-space: pre-wrap; display: inline; overflow: visible; }
-        span#sql.clip { display: inline-block; height: 1em; overflow: hidden; }
+        span#sql { display: inline; font-family: monospace; overflow: visible; white-space: pre-wrap; }
+        span#sql.clip { display: inline-block; font-family: inherit; height: 1em; overflow: hidden; }
         a.toggle:hover { cursor: pointer; text-decoration: none; }
         span#sql + a.toggle { padding-left: 3px; }
         span#sql.clip + a.toggle { background: white; position: relative; left: -8px; }
