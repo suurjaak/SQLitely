@@ -759,9 +759,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 selecteds.append(selected)
                 files.append(self.list_db.GetItemText(selected))
             selected = self.list_db.GetNextSelected(selected)
-        if event.GetIndex() not in selecteds:
+        if event.GetIndex() >= 0 and event.GetIndex() not in selecteds:
             if not event.GetIndex(): return # Home row
             files, selecteds = [event.GetText()], [event.GetIndex()]
+        if not files: return
 
         def clipboard_copy(*a, **kw):
             if wx.TheClipboard.Open():
@@ -775,7 +776,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         menu = wx.Menu()
         item_name    = wx.MenuItem(menu, -1, name)
-        item_name.SetHelp("odasgdsagads")
         item_copy    = wx.MenuItem(menu, -1, "&Copy file path")
         item_folder  = wx.MenuItem(menu, -1, "Open file &directory")
 
