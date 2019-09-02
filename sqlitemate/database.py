@@ -18,7 +18,6 @@ import os
 import re
 import sqlite3
 import shutil
-import time
 import traceback
 
 from . lib import util
@@ -900,15 +899,15 @@ class Database(object):
         setsql = ", ".join("%s = :%s" % (self.quote(col_data[i]["name"]), x)
                                          for i, x in enumerate(args))
         if rowid is not None:
-            key = "ROWID%s" % int(time.time()) # Avoid existing field collision
-            where, args[key] = "ROWID = :%s" % key, rowid
+            key_data = ["rowid"]
+            keyargs = self.make_args(key_data, {"rowid": rowid}, args)
         else:
-            # If no ROWID and no primary key, use all columns to identify row
+            # If no primary key either, use all columns to identify row
             key_data = [c for c in col_data if c["pk"]] or col_data
             keyargs = self.make_args(key_data, original_row, args)
-            for col, key in zip(key_data, keyargs):
-                where += (" AND " if where else "") + "%s IS :%s" % (self.quote(col["name"]), key)
-            args.update(keyargs)
+        for col, key in zip(key_data, keyargs):
+            where += (" AND " if where else "") + "%s IS :%s" % (self.quote(col["name"]), key)
+        args.update(keyargs)
         self.execute("UPDATE %s SET %s WHERE %s" % (self.quote(table), setsql, where), args)
         self.connection.commit()
         self.last_modified = datetime.datetime.now()
@@ -932,16 +931,16 @@ class Database(object):
         where, args = "", {}
 
         if rowid is not None:
-            key = "ROWID%s" % int(time.time()) # Avoid existing field collision
-            where, args[key] = "ROWID = :%s" % key, rowid
+            key_data = ["rowid"]
+            keyargs = self.make_args(key_data, {"rowid": rowid}, args)
         else:
-            # If no ROWID and no primary key, use all columns to identify row
+            # If no primary key either, use all columns to identify row
             key_data = [c for c in col_data if c["pk"]] or col_data
-            keyargs = self.make_args(key_data, original_row, args)
-            for col, key in zip(key_data, keyargs):
-                where += (" AND " if where else "") + "%s IS :%s" % (self.quote(col["name"]), key)
-            args.update(keyargs)
-        self.execute("DELETE FROM %s WHERE %s" % (self.quote(table), where), values)
+            keyargs = self.make_args(key_data, row, args)
+        for col, key in zip(key_data, keyargs):
+            where += (" AND " if where else "") + "%s IS :%s" % (self.quote(col["name"]), key)
+        args.update(keyargs)
+        self.execute("DELETE FROM %s WHERE %s" % (self.quote(table), where), args)
         self.connection.commit()
         self.last_modified = datetime.datetime.now()
         return True

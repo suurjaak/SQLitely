@@ -19,11 +19,9 @@ import functools
 import hashlib
 import inspect
 import os
-import re
 import shutil
 import sys
 import textwrap
-import time
 import traceback
 import urllib
 import webbrowser
@@ -3999,7 +3997,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         self.rows_backup = {} # For changed rows {id: original_row, }
         self.idx_new = [] # Unsaved added row indices
         self.rows_deleted = {} # Uncommitted deleted rows {id: deleted_row, }
-        self.rowid_name = "ROWID%s" % int(time.time()) # Avoid collisions
+        self.rowid_name = None
         self.iterator_index = -1
         self.sort_ascending = True
         self.sort_column = None # Index of column currently sorted by
@@ -4007,7 +4005,8 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         self.attrs = {} # {"new": wx.grid.GridCellAttr, }
 
         if not self.is_query:
-            cols = "rowid AS %s, *" % self.rowid_name if db.has_rowid(table) else "*"
+            if db.has_rowid(table): self.rowid_name = "rowid"
+            cols = ("%s, *" % self.rowid_name) if self.rowid_name else "*"
             self.sql = "SELECT %s FROM %s" % (cols, db.quote(table))
         self.row_iterator = db.execute(self.sql)
         if self.is_query:
