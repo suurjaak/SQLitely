@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.09.2019
+@modified    02.09.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -251,7 +251,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
         sizer_list = wx.BoxSizer(wx.VERTICAL)
+        sizer_header = wx.BoxSizer(wx.HORIZONTAL)
 
+        label_count = self.label_count = wx.StaticText(page)
         edit_filter = self.edit_filter = controls.SearchCtrl(page, "Filter list")
         list_db = self.list_db = controls.SortableUltimateListCtrl(parent=page,
             agwStyle=wx.LC_REPORT | wx.BORDER_NONE)
@@ -382,7 +384,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         panel_detail.Sizer.Add(self.button_remove, flag=wx.GROW)
         panel_right.Sizer.Add(panel_main,   proportion=1, flag=wx.GROW)
         panel_right.Sizer.Add(panel_detail, proportion=1, flag=wx.GROW)
-        sizer_list.Add(edit_filter, border=5, flag=wx.ALIGN_RIGHT | wx.BOTTOM)
+        sizer_header.Add(label_count, flag=wx.ALIGN_BOTTOM)
+        sizer_header.AddStretchSpacer()
+        sizer_header.Add(edit_filter)
+        sizer_list.Add(sizer_header, border=5, flag=wx.BOTTOM | wx.GROW)
         sizer_list.Add(list_db, proportion=1, flag=wx.GROW)
         sizer.Add(sizer_list,  border=10, proportion=6, flag=wx.ALL | wx.GROW)
         sizer.Add(panel_right, border=10, proportion=4, flag=wx.ALL | wx.GROW)
@@ -815,6 +820,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for filtering dblist, applies search filter."""
         self.list_db.SetFilter(event.String.strip())
         event.Skip()
+        self.update_database_count()
 
 
     def on_menu_homepage(self, event):
@@ -955,6 +961,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         self.button_missing.Show(bool(items))
         self.button_clear.Show(bool(items))
+        self.update_database_count()
         self.panel_db_main.Layout()
 
 
@@ -992,7 +999,17 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         self.button_missing.Show(self.list_db.GetItemCount() > 1)
         self.button_clear.Show(self.list_db.GetItemCount() > 1)
+        self.update_database_count()
         return result
+
+
+    def update_database_count(self):
+        """Updates database count label."""
+        count, total = self.list_db.GetItemCount() - 1, len(self.db_datas)
+        text = ""
+        if total: text = util.plural("file", count)
+        if count != total: text += " visible (%s in total)" % total
+        self.label_count.Label = text
 
 
     def update_database_detail(self):
