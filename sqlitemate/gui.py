@@ -1405,18 +1405,18 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         do_exit = True
         unsaved_pages = {} # {DatabasePage: filename, }
         for page, db in self.db_pages.items():
-            if page and page.get_unsaved_grids():
+            if page and page.get_unsaved():
                 unsaved_pages[page] = db.filename
         if unsaved_pages:
             response = wx.MessageBox(
-                "There are unsaved changes in data grids\n(%s).\n\n"
+                "There are unsaved changes in files\n(%s).\n\n"
                 "Save changes before closing?" %
-                "\n".join(textwrap.wrap(", ".join(unsaved_pages.values()))),
+                "\n".join(textwrap.wrap(", ".join(sorted(unsaved_pages.values())))),
                 conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION
             )
             do_exit = (wx.CANCEL != response)
             if wx.YES == response:
-                do_exit = all(p.save_unsaved_grids() for p in unsaved_pages)
+                do_exit = all(p.save_unsaved() for p in unsaved_pages)
         if do_exit:
             for page in self.db_pages:
                 if not page: continue # continue for page, if dead object
@@ -1460,17 +1460,24 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         # Remove page from MainWindow data structures
         do_close = True
-        unsaved = page.get_unsaved_grids()
+        unsaved = page.get_unsaved()
         if unsaved:
+            info = ""
+            if unsaved.get("pragma"): info = "PRAGMA settings"
+            if unsaved.get("table"):
+                info += (", and " if info else "")
+                info += util.plural("table", unsaved["table"], with_items=False)
+                info += " " + ", ".join(map(page.db.quote, sorted(unsaved["table"])))
+
             response = wx.MessageBox(
-                "Some tables in %s have unsaved data (%s).\n\n"
+                "There is unsaved data in %s:\n%s.\n\n"
                 "Save changes before closing?" % (
-                    page.db, ", ".join(sorted(x.table for x in unsaved))
+                    page.db, info
                 ), conf.Title,
                 wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION
             )
             if wx.YES == response:
-                do_close = page.save_unsaved_grids()
+                do_close = page.save_unsaved()
             elif wx.CANCEL == response:
                 do_close = False
         if not do_close:
@@ -2387,6 +2394,7 @@ class DatabasePage(wx.Panel):
             self.stc_pragma.Text += "PRAGMA %s = %s;\n\n" % (name, value)
         self.stc_pragma.SetReadOnly(True)
         self.stc_pragma.Thaw()
+        self.update_page_header()
 
 
     def on_pragma_sql(self, event):
@@ -2397,6 +2405,7 @@ class DatabasePage(wx.Panel):
 
     def on_pragma_save(self, event):
         """Handler for clicking to save PRAGMA changes."""
+        result = True
 
         changes = {} # {pragma_name: value}
         for name, value in sorted(self.pragma_changes.items()):
@@ -2411,6 +2420,7 @@ class DatabasePage(wx.Panel):
                 guibase.log("Executing %s.", sql)
                 self.db.execute(sql)
         except Exception:
+            result = False
             msg = "Error setting %s:\n\n%s" % \
                   (sql, traceback.format_exc())
             guibase.logstatus_flash(msg)
@@ -2418,6 +2428,7 @@ class DatabasePage(wx.Panel):
         else:
             self.pragma.update(changes)
             self.on_pragma_cancel(None)
+        return result
 
 
     def on_pragma_edit(self, event):
@@ -2462,6 +2473,7 @@ class DatabasePage(wx.Panel):
         self.stc_pragma.SetText("")
         self.stc_pragma.SetReadOnly(True)
         self.pragma_edit = flag
+        self.update_page_header()
 
 
     def on_pragma_cancel(self, event):
@@ -2477,6 +2489,7 @@ class DatabasePage(wx.Panel):
         for name, opts in database.Database.PRAGMA.items():
             if "table" != opts["type"]: self.pragma_ctrls[name].Disable()
         self.page_pragma.Layout()
+        self.update_page_header()
 
 
     def on_check_integrity(self, event):
@@ -3383,6 +3396,28 @@ class DatabasePage(wx.Panel):
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
 
 
+    def get_unsaved(self):
+        """
+        Returns whether page has unsaved changes,
+        as {?"pragma": [pragma_name, ], ?"table": [table, ]}.
+        """
+        result = {}
+        if self.pragma_changes: result["pragma"] = list(self.pragma_changes)
+        grids = self.get_unsaved_grids()
+        if grids: result["table"] = [x.table for x in grids]
+        return result
+
+
+    def save_unsaved(self):
+        """
+        Saves unsaved grids and PRAGMA settings, returns success.
+        """
+        result = True
+        if self.pragma_changes: result = self.on_pragma_save(None)
+        result = result and self.save_unsaved_grids()
+        return result
+
+
     def get_unsaved_grids(self):
         """
         Returns a list of SqliteGridBase grids where changes have not been
@@ -3428,11 +3463,14 @@ class DatabasePage(wx.Panel):
                     self.tree_tables.SetItemTextColour(item, colour)
                     break # while item and item.IsOk()
             item = self.tree_tables.GetNextSibling(item)
+        self.update_page_header()
 
-        # Mark database as changed/pristine in the parent notebook tabs
+
+    def update_page_header(self):
+        """Mark database as changed/pristine in the parent notebook tabs."""
         for i in range(self.parent_notebook.GetPageCount()):
             if self.parent_notebook.GetPage(i) == self:
-                suffix = "*" if self.get_unsaved_grids() else ""
+                suffix = "*" if self.get_unsaved() else ""
                 title = self.title + suffix
                 if self.parent_notebook.GetPageText(i) != title:
                     self.parent_notebook.SetPageText(i, title)
