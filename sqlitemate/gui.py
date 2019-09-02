@@ -1673,14 +1673,18 @@ class DatabasePage(wx.Panel):
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
-        label_title = self.label_title = wx.StaticText(parent=self, label="")
-        sizer_header.Add(label_title, flag=wx.ALIGN_CENTER_VERTICAL)
-        sizer_header.AddStretchSpacer()
+        label_title = wx.StaticText(parent=self, label="Database")
+        edit_title = self.edit_title = wx.TextCtrl(parent=self,
+            style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH | wx.TE_NO_VSCROLL)
+        edit_title.SetEditable(False)
+        ColourManager.Manage(edit_title, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
+        sizer_header.Add(label_title, border=5, flag=wx.RIGHT | wx.TOP)
+        sizer_header.Add(edit_title, proportion=1, border=5, flag=wx.TOP | wx.GROW)
 
 
         self.label_search = wx.StaticText(self, -1, "&Search in messages:")
         sizer_header.Add(self.label_search, border=5,
-                         flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
+                         flag=wx.RIGHT | wx.TOP )
         edit_search = self.edit_searchall = controls.TextCtrlAutoComplete(
             self, description=conf.SearchDescription,
             size=(300, -1), style=wx.TE_PROCESS_ENTER)
@@ -1695,8 +1699,8 @@ class DatabasePage(wx.Panel):
         tb.Realize()
         self.Bind(wx.EVT_TOOL, self.on_searchall, id=wx.ID_FIND)
         sizer_header.Add(edit_search, border=5,
-                     flag=wx.RIGHT | wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
-        sizer_header.Add(tb, flag=wx.ALIGN_RIGHT | wx.GROW)
+                     flag=wx.RIGHT | wx.ALIGN_RIGHT)
+        sizer_header.Add(tb, border=5, flag=wx.ALIGN_RIGHT | wx.GROW)
         sizer.Add(sizer_header,
                   border=5, flag=wx.LEFT | wx.RIGHT | wx.TOP | wx.GROW)
         sizer.Layout() # To avoid searchbox moving around during page creation
@@ -2252,12 +2256,12 @@ class DatabasePage(wx.Panel):
             labeltext = wx.StaticText(parent=panel1c, label="%s:" % label)
             labeltext.ForegroundColour = wx.Colour(102, 102, 102)
             valuetext = wx.TextCtrl(parent=panel1c, value="Analyzing..",
-                style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH)
+                style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH | wx.TE_NO_VSCROLL)
             valuetext.MinSize = (-1, 35)
             ColourManager.Manage(valuetext, "BackgroundColour", "BgColour")
             valuetext.SetEditable(False)
             sizer_info.Add(labeltext, border=5, flag=wx.LEFT | wx.TOP)
-            sizer_info.Add(valuetext, border=5, proportion=1, flag=wx.TOP | wx.GROW)
+            sizer_info.Add(valuetext, border=5, flag=wx.TOP | wx.GROW)
             setattr(self, name, valuetext)
         self.edit_info_path.Value = self.db.filename
 
@@ -2636,6 +2640,11 @@ class DatabasePage(wx.Panel):
             self.edit_info_md5.Value = md5.hexdigest()
         except Exception as e:
             self.edit_info_sha1.Value = self.edit_info_md5.Value = util.format_exc(e)
+
+        for name in ["size", "modified", "sha1", "md5", "path"]:
+            getattr(self, "edit_info_%s" % name).MinSize = (-1, -1)
+        self.edit_info_path.ContainingSizer.Layout()
+
         self.button_vacuum.Enabled = True
         self.button_check_integrity.Enabled = True
         self.button_refresh_fileinfo.Enabled = True
@@ -3923,7 +3932,8 @@ class DatabasePage(wx.Panel):
 
     def load_data(self):
         """Loads data from our Database."""
-        self.label_title.Label = 'Database "%s":' % self.db
+        self.edit_title.Value = self.db.filename
+        self.edit_title.ContainingSizer.Layout()
 
         # Restore last search text, if any
         if conf.SearchHistory and conf.SearchHistory[-1] != "":
