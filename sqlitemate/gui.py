@@ -1686,6 +1686,7 @@ class DatabasePage(wx.Panel):
             style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH | wx.TE_NO_VSCROLL)
         edit_title.SetEditable(False)
         ColourManager.Manage(edit_title, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
+        ColourManager.Manage(edit_title, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
         sizer_header.Add(label_title, border=5, flag=wx.RIGHT | wx.TOP)
         sizer_header.Add(edit_title, proportion=1, border=5, flag=wx.TOP | wx.GROW)
 
