@@ -2338,7 +2338,7 @@ class DatabasePage(wx.Panel):
         sizer2.Add(panel2c, proportion=1, border=5, flag=wx.TOP | wx.GROW)
 
         sizer.Add(panel1, proportion=1, border=5,
-                  flag=wx.LEFT  | wx.TOP | wx.BOTTOM | wx.GROW)
+                  flag=wx.LEFT  | wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer.Add(panel2, proportion=1, border=5,
                   flag=wx.RIGHT | wx.TOP | wx.BOTTOM | wx.GROW)
         page.SetupScrolling()
