@@ -927,7 +927,7 @@ class Database(object):
         setsql = ", ".join("%s = :%s" % (self.quote(col_data[i]["name"]), x)
                                          for i, x in enumerate(args))
         if rowid is not None:
-            key_data = ["rowid"]
+            key_data = [{"name": "rowid"}]
             keyargs = self.make_args(key_data, {"rowid": rowid}, args)
         else:
             # If no primary key either, use all columns to identify row
@@ -959,7 +959,7 @@ class Database(object):
         where, args = "", {}
 
         if rowid is not None:
-            key_data = ["rowid"]
+            key_data = [{"name": "rowid"}]
             keyargs = self.make_args(key_data, {"rowid": rowid}, args)
         else:
             # If no primary key either, use all columns to identify row
