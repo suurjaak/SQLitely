@@ -721,6 +721,7 @@ class Database(object):
         return result
 
 
+    @staticmethod
     def transform_sql(sql, category, **kwargs):
         """
         Returns SQL transformed according to given keywords.
@@ -761,6 +762,19 @@ class Database(object):
         result = name
         if force or re.search(r"\W", name, re.I):
             result = '"%s"' % result.replace('"', '""')
+        return result
+
+
+    @staticmethod
+    def is_valid_name(table=None, column=None):
+        """
+        Returns whether table or column name is a valid identifier.
+
+        Tables must not start with "sqlite_", no limitations otherwise.
+        """
+        result = False
+        if table:    result = not table[:7].lower().startswith("sqlite_")
+        elif column: result = True
         return result
 
 

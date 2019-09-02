@@ -3758,9 +3758,15 @@ class DatabasePage(wx.Panel):
                     }, conf.Title, table2)
                     if wx.ID_OK != entrydialog.ShowModal(): return
 
-                    t2_lower_prev, table2 = table2, entrydialog.GetValue().strip()
+                    value = entrydialog.GetValue().strip()
+                    if not self.db.is_valid_name(table=value):
+                        msg = "%s is not a valid table name." % self.db.quote(value, force=True)
+                        wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+                        continue # while table2
 
+                    t2_lower_prev, table2 = table2, value
                     t2_lower = table2.lower()
+
                     if not table2 \
                     or t1_lower == t2_lower == t2_lower_prev: break # while table2
 
