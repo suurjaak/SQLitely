@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.08.2019
+@modified    02.09.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -138,7 +138,7 @@ def export_data(make_iterable, filename, title, db, columns, sql_query="", table
 
                 # Write out data to temporary file first, to populate row count.
                 tmpname = util.unique_path("%s.rows" % filename)
-                tmpfile = open(tmpname, "w+")
+                tmpfile = open(tmpname, "wb+")
                 template = step.Template(templates.DATA_ROWS_HTML if is_html else
                            templates.SQL_ROWS_TXT if is_sql else templates.DATA_ROWS_TXT,
                            strip=False, escape=is_html)
