@@ -136,7 +136,7 @@ class SearchThread(WorkerThread):
                 pattern_replace = re.compile(patt, re.IGNORECASE)
                 infotext = search["table"]
 
-                # Find from table and column namesnb and types
+                # Find from table and column names and types
                 if not self._stop_work and "names" == search["table"] \
                 and match_words:
                     infotext = "table and column names and types"

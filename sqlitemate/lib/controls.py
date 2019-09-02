@@ -60,7 +60,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    30.08.2019
+@modified    01.09.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -1718,9 +1718,12 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         "REAL", "DOUBLE", "FLOAT", "PRECISION",
     ]))
     AUTOCOMP_STOPS = " .,;:([)]}'\"\\<>%^&+-=*/|`"
-    FONT_FACE = "Courier New" if os.name == "nt" else "Courier"
     """String length from which autocomplete starts."""
     AUTOCOMP_LEN = 2
+    FONT_FACE = "Courier New" if os.name == "nt" else "Courier"
+    """Regex for matching unprintable characters (\x00 etc)."""
+    SAFEBYTE_RGX = re.compile(r"[\x00-\x20,\x7f-\xa0]")
+
 
     def __init__(self, *args, **kwargs):
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
@@ -1793,6 +1796,9 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
     def AutoCompAddWords(self, words):
         """Adds more words used in autocompletion."""
+        words = [x for x in words if not self.SAFEBYTE_RGX.search(x)]
+        if not words: return
+
         self.autocomps_added.update(map(unicode, words))
         # A case-insensitive autocomp has to be sorted, will not work
         # properly otherwise. UserList would support arbitrarily sorting.
@@ -1806,20 +1812,28 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         Adds more subwords used in autocompletion, will be shown after the word
         and a dot.
         """
+        subwords = [x for x in subwords if not self.SAFEBYTE_RGX.search(x)]
+        if not subwords or self.SAFEBYTE_RGX.search(word): return
+
         word, subwords = unicode(word), map(unicode, subwords)
         if word not in self.autocomps_added:
             self.AutoCompAddWords([word])
         if subwords:
             word_key = word.upper()
-            if word_key not in self.autocomps_subwords:
-                self.autocomps_subwords[word_key] = set()
+            self.autocomps_subwords.setdefault(word_key, set())
             self.autocomps_subwords[word_key].update(subwords)
+
+
+    def AutoCompClearAdded(self):
+        """Clears words added in AutoCompAddWords and AutoCompAddSubWords."""
+        self.autocomps_added &= set(["sqlite_master"])
+        del self.autocomps_total[:]
+        self.autocomps_subwords.clear()
 
 
     def OnKillFocus(self, event):
         """Handler for control losing focus, hides autocomplete."""
         self.AutoCompCancel()
-
 
 
     def OnSysColourChange(self, event):
@@ -1859,7 +1873,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
                         self.GetCurrentPos()
                     )
                     text = u""
-                    for last_word in re.findall("(\\w+)$", line_text):
+                    for last_word in re.findall(r"(\w+)$", line_text, re.I):
                         text += last_word
                     text = text.upper()
                     if "." == char:

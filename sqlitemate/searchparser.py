@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.08.2019
+@modified    01.08.2019
 """
 import calendar
 import collections
@@ -41,6 +41,7 @@ except ImportError:
     ParserElement = None
 
 from . lib import util
+from . database import Database
 
 
 ALLWORDCHARS = re.sub("[\x00-\x1f,\x7f-\xa0]", "", u"".join(
@@ -148,10 +149,12 @@ class SearchQueryParser(object):
             else:
                 kw_sql = self._makeKeywordsSQL(keywords, sql_params, table)
                 result = "SELECT * FROM %s WHERE %s %s%s" % (
-                         table["name"], result, " AND " if result and kw_sql else "", kw_sql)
+                         Database.quote(table["name"]), result,
+                         " AND " if result and kw_sql else "", kw_sql)
 
                 pk_cols = [c for c in table["columns"] if c.get("pk")]
-                if pk_cols: result += " ORDER BY " + ", ".join("%(name)s ASC" % c
+                if pk_cols: result += " ORDER BY " + ", ".join(
+                    "%s ASC" % Database.quote(c["name"])
                     for c in sorted(pk_cols, key=lambda x: x["pk"])
                 )
         else:
@@ -185,7 +188,7 @@ class SearchQueryParser(object):
                     continue # for col
 
                 result_col = "%s.%s LIKE :column_like%s" % \
-                             (table["name"], col["name"], i)
+                             (Database.quote(table["name"]), Database.quote(col["name"]), i)
                 if len(safe) > len(item):
                     result_col += " ESCAPE '%s'" % ESCAPE_CHAR
                 result += (" OR " if result else "") + result_col
@@ -260,7 +263,8 @@ class SearchQueryParser(object):
                         sql_params[param] = value
                         for j, col in enumerate(datecols):
                             temp = "STRFTIME('%s', %s) = :%s"
-                            sql += (" OR " if j else "") + temp % (format, col["name"], param)
+                            x = temp % (format, Database.quote(col["name"]), param)
+                            sql += (" OR " if j else "") + x
                         if len(datecols) > 1: sql = "(%s)" % sql
                             
                     else:
@@ -292,7 +296,8 @@ class SearchQueryParser(object):
                         colsql = ""
                         for j, col in enumerate(datecols):
                             colsql += (" OR " if j else "")
-                            colsql += "%s %s :%s" % (col["name"], [">=", "<="][i], param)
+                            colsql += "%s %s :%s" % (
+                                      Database.quote(col["name"]), [">=", "<="][i], param)
                         sql += (" AND " if sql else "")
                         sql += "(%s)" % (colsql) if len(datecols) > 1 else colsql
 

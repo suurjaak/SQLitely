@@ -468,29 +468,29 @@ class Database(object):
         self.execute("ATTACH DATABASE ? AS new", (filename, ))
 
         # Create structure for all tables
-        for name, opts in self.schema["table"].items():
+        for name, opts in sorted(self.schema["table"].items()):
             self.execute(opts["sql"].replace("CREATE TABLE ", "CREATE TABLE new."))
 
         # Copy data from all tables
-        for name in self.schema["table"]:
-            sql = "INSERT INTO new.%(name)s SELECT * FROM main.%(name)s" % name
+        for name, opts in sorted(self.schema["table"].items()):
+            sql = "INSERT INTO new.%(name)s SELECT * FROM main.%(name)s" % opts
             try:
                 self.execute(sql)
             except Exception as e:
                 result.append(repr(e))
                 guibase.log("Error copying table %s from %s to %s.\n\n%s",
-                            name, self.filename, filename,
+                            self.quote(name), self.filename, filename,
                             traceback.format_exc())
 
         # Create indexes
-        for name, opts in self.schema["index"].items():
+        for name, opts in sorted(self.schema["table"].items()):
             sql  = opts["sql"].replace("CREATE INDEX ", "CREATE INDEX new.")
             try:
                 self.execute(sql)
             except Exception as e:
                 result.append(repr(e))
                 guibase.log("Error creating index %s for %s.\n\n%s",
-                            name, filename, traceback.format_exc())
+                            self.quote(name), filename, traceback.format_exc())
         self.execute("DETACH DATABASE new")
         return result
 
@@ -528,6 +528,7 @@ class Database(object):
 
     def has_rowid(self, table):
         """Returns whether the table has ROWID, or is WITHOUT ROWID."""
+        table = table.lower()
         if table not in self.schema["table"]: return None
         sql = self.schema["table"][table]["sql"]
         return not re.search(r"WITHOUT\s+ROWID\s*$", sql, re.I)
@@ -595,7 +596,7 @@ class Database(object):
         for opts in self.schema["table"].values():
             if full and (refresh or "rows" not in opts):
                 res = self.execute("SELECT COUNT(*) AS count FROM %s" %
-                                   opts["name"], log=False)
+                                   self.quote(opts["name"]), log=False)
                 opts["rows"] = res.fetchone()["count"]
             result += [copy.deepcopy(opts)]
 
@@ -635,7 +636,7 @@ class Database(object):
                 col_data = self.get_table_columns(table)
                 pks = [c["name"] for c in col_data if c["pk"]]
                 pk = pks[0] if len(pks) == 1 else None
-                rows = self.execute("SELECT * FROM %s" % table).fetchall()
+                rows = self.execute("SELECT * FROM %s" % self.quote(table)).fetchall()
                 self.table_rows[table] = rows
                 self.table_objects[table] = {}
                 if pk:
@@ -659,7 +660,8 @@ class Database(object):
             result = self.schema["table"][table]["columns"]
         elif self.is_open():
             try:
-                res = self.execute("PRAGMA table_info(%s)" % table, log=False)
+                res = self.execute("PRAGMA table_info(%s)" % self.quote(table),
+                                   log=False)
                 for row in res.fetchall():
                     row["type"] = row["type"].upper()
                     result.append(row)
@@ -670,13 +672,15 @@ class Database(object):
         return copy.deepcopy(result)
 
 
-    def get_sql(self, table=None, column=None, refresh=False):
+    def get_sql(self, table=None, column=None, refresh=False, format=True):
         """
         Returns full CREATE SQL statement for database, or for specific table only,
         or SQL line for specific column only.
 
         @param   table    table to return CREATE SQL for if not everything
+        @param   column   table column to return SQL for if not full CREATE TABLE
         @param   refresh  if True, schema is re-queried
+        @param   format   whether to format SQL with linefeeds and indentation
         """
         result = ""
 
@@ -695,7 +699,7 @@ class Database(object):
                                 if c["name"].lower() == column.lower()), None)
                     if not col: continue # for name, opts
 
-                    result = "%s %s" % (col["name"], col["type"])
+                    result = "%s %s" % (self.quote(col["name"]), col["type"])
                     if col["notnull"]: result += " NOT NULL"
                     if col["pk"]: result += " PRIMARY KEY"
                     if col["dflt_value"] is not None:
@@ -703,7 +707,7 @@ class Database(object):
                     continue # for name, opts
 
                 sql = opts["sql"].strip()
-                if "table" == category:
+                if "table" == category and format:
                     # LF after first brace
                     sql = re.sub(r"^([^(]+)\(\s*", lambda m: m.group(1).strip() + " (\n  ", sql)
                     # LF after each col
@@ -719,20 +723,21 @@ class Database(object):
 
     def transform_sql(self, sql, category, **kwargs):
         """
-        Returns transformed SQL with renamed table.
+        Returns SQL transformed according to given keywords.
 
         @param   sql        SQL statement like "CREATE TABLE .."
-        @param   category   SQL statement type like "create"
+        @param   category   SQL statement type like "create" for "CREATE TABLE"
 
-        @param   rename     new table name
+        @param   rename     new table name for "create" category
         @param   notexists  True/False to add or drop "IF NOT EXISTS"
+                            for "create" category
         """
         result = sql
         category = category.lower()
         if "create" == category:
             if kwargs.get("rename"):
-                result = re.sub(r"^(CREATE\s+TABLE\s+)([.\w]+)([^\w])",
-                                r"\1%s\3" % kwargs["rename"],
+                result = re.sub(r"^(CREATE\s+TABLE\s*)([\w\s$+.'\"-]+)(\()",
+                                r"\1%s \3" % kwargs["rename"],
                                 result, count=1, flags=re.I | re.U)
 
             if kwargs.get("notexists") is True:
@@ -744,6 +749,18 @@ class Database(object):
                 result = re.sub(r"^(CREATE\s+TABLE)(\s+IF\s+NOT\s+EXISTS\s*)",
                                 replacer, result, count=1, flags=re.I)
 
+        return result
+
+
+    @staticmethod
+    def quote(name, force=False):
+        """
+        Returns table or column name in quotes and proper-escaped for queries,
+        if name needs quoting (whitespace etc) or if force set.
+        """
+        result = name
+        if force or re.search(r"\W", name, re.I):
+            result = '"%s"' % result.replace('"', '""')
         return result
 
 
@@ -792,6 +809,27 @@ class Database(object):
         return filled
 
 
+    def make_args(self, cols, data, existing=None):
+        """
+        Returns ordered params dictionary, with column names made safe to use
+        as ":name" parameters.
+
+        @param   cols      ["col", ] or [{"name": "col"}, ]
+        @param   data      {"col": val}
+        @param   existing  already existing params dictionary,
+                           for unique 
+        """
+        result = OrderedDict()
+        for c in cols:
+            if isinstance(c, dict): c = c["name"]
+            name = base = re.sub(r"\W", "", c, flags=re.I)
+            count = 1
+            while name in result or existing and name in existing:
+                name, count = "%s_%s" % (base, count), count + 1
+            result[name] = data[c]
+        return result
+
+
     def create_table(self, table, create_sql):
         """Creates the specified table and updates our column data."""
         table = table.lower()
@@ -813,15 +851,17 @@ class Database(object):
             return
         table = table.lower()
         guibase.log("Inserting 1 row into table %s, %s.",
-                    self.schema["table"][table]["name"], self.filename)
+                    self.quote(self.schema["table"][table]["name"]), self.filename)
         self.ensure_backup()
         col_data = self.get_table_columns(table)
         fields = [col["name"] for col in col_data]
-        str_cols = ", ".join(fields)
-        str_vals = ":" + ", :".join(fields)
         row = self.blobs_to_binary(row, fields, col_data)
+        args = self.make_args(fields, row)
+        str_cols = ", ".join(map(self.quote, fields))
+        str_vals = ":" + ", :".join(args)
+
         cursor = self.execute("INSERT INTO %s (%s) VALUES (%s)" %
-                              (table, str_cols, str_vals), row)
+                              (self.quote(table), str_cols, str_vals), args)
         self.connection.commit()
         self.last_modified = datetime.datetime.now()
         return cursor.lastrowid
@@ -837,21 +877,25 @@ class Database(object):
             return
         table, where = table.lower(), ""
         guibase.log("Updating 1 row in table %s, %s.",
-                    self.schema["table"][table]["name"], self.filename)
+                    self.quote(self.schema["table"][table]["name"]), self.filename)
         self.ensure_backup()
         col_data = self.get_table_columns(table)
-        values, where = row.copy(), ""
-        setsql = ", ".join("%(name)s = :%(name)s" % x for x in col_data)
+
+
+        where, args = "", self.make_args(col_data, row)
+        setsql = ", ".join("%s = :%s" % (self.quote(col_data[i]["name"]), x)
+                                         for i, x in enumerate(args))
         if rowid is not None:
             key = "ROWID%s" % int(time.time()) # Avoid existing field collision
-            where, values[key] = "ROWID = :%s" % key, rowid
+            where, args[key] = "ROWID = :%s" % key, rowid
         else:
             # If no ROWID and no primary key, use all columns to identify row
-            for col in [c for c in col_data if c["pk"]] or col_data:
-                key = "%s%s" % (col["name"], int(time.time()))
-                values[key] = original_row[col["name"]]
-                where += (" AND " if where else "") + "%s IS :%s" % (col["name"], key)
-        self.execute("UPDATE %s SET %s WHERE %s" % (table, setsql, where), values)
+            key_data = [c for c in col_data if c["pk"]] or col_data
+            keyargs = self.make_args(key_data, original_row, args)
+            for col, key in zip(key_data, keyargs):
+                where += (" AND " if where else "") + "%s IS :%s" % (self.quote(col["name"]), key)
+            args.update(keyargs)
+        self.execute("UPDATE %s SET %s WHERE %s" % (self.quote(table), setsql, where), args)
         self.connection.commit()
         self.last_modified = datetime.datetime.now()
 
@@ -867,20 +911,23 @@ class Database(object):
             return
         table, where = table.lower(), ""
         guibase.log("Deleting 1 row from table %s, %s.",
-                    self.schema["table"][table]["name"], self.filename)
+                    self.quote(self.schema["table"][table]["name"]), self.filename)
         self.ensure_backup()
         col_data = self.get_table_columns(table)
-        values, where = row.copy(), ""
+
+        where, args = "", {}
+
         if rowid is not None:
             key = "ROWID%s" % int(time.time()) # Avoid existing field collision
-            where, values[key] = "ROWID = :%s" % key, rowid
+            where, args[key] = "ROWID = :%s" % key, rowid
         else:
             # If no ROWID and no primary key, use all columns to identify row
-            for col in [c for c in col_data if c["pk"]] or col_data:
-                key = "%s%s" % (col["name"], int(time.time()))
-                values[key] = row[col["name"]]
-                where += (" AND " if where else "") + "%s IS :%s" % (col["name"], key)
-        self.execute("DELETE FROM %s WHERE %s" % (table, where), values)
+            key_data = [c for c in col_data if c["pk"]] or col_data
+            keyargs = self.make_args(key_data, original_row, args)
+            for col, key in zip(key_data, keyargs):
+                where += (" AND " if where else "") + "%s IS :%s" % (self.quote(col["name"]), key)
+            args.update(keyargs)
+        self.execute("DELETE FROM %s WHERE %s" % (self.quote(table), where), values)
         self.connection.commit()
         self.last_modified = datetime.datetime.now()
         return True

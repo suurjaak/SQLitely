@@ -8,20 +8,20 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.08.2019
+@modified    01.09.2019
 ------------------------------------------------------------------------------
 """
 import re
 
 # Modules imported inside templates:
 #import datetime, os, pyparsing, sys
-#from sqlitemate import conf, images, templates
+#from sqlitemate import conf, database, images, templates
 #from sqlitemate.lib import util
 
-"""Regex for replacing low bytes unusable in wx.HtmlWindow (\x00 etc)."""
+"""Regex for matching unprintable characters (\x00 etc)."""
 SAFEBYTE_RGX = re.compile(r"[\x00-\x1f,\x7f-\xa0]")
 
-"""Replacer callback for low bytes unusable in wx.HtmlWindow (\x00 etc)."""
+"""Replacer callback for unprintable characters (\x00 etc)."""
 SAFEBYTE_REPL = lambda m: m.group(0).encode("unicode-escape")
 
 
@@ -167,9 +167,9 @@ for chunk in data_buffer:
 
 """TXT SQL insert statements export template for the rows part."""
 SQL_ROWS_TXT = """<%
-from sqlitemate import templates
+from sqlitemate import database, templates
 
-str_cols = ", ".join(columns)
+str_cols = ", ".join(map(database.Database.quote, columns))
 %>
 %for row in rows:
 <%
@@ -281,10 +281,10 @@ Results for "{{text}}" from {{fromtext}}:
 
 """HTML template for names search results header, stand-alone table."""
 SEARCH_ROW_TABLE_META_HTML = """<%
-from sqlitemate import conf
+from sqlitemate import conf, database
 %>
 Table <a href="table:{{table["name"]}}">
-    <font color="{{conf.LinkColour}}">{{!pattern_replace.sub(wrap_b, escape(table["name"]))}}</font></a>:
+    <font color="{{conf.LinkColour}}">{{!pattern_replace.sub(wrap_b, escape(database.Database.quote(table["name"])))}}</font></a>:
 <table>
 %for col in columns:
   <tr>
@@ -299,10 +299,10 @@ Table <a href="table:{{table["name"]}}">
 
 """HTML template for table search results header, start of HTML table."""
 SEARCH_ROW_TABLE_HEADER_HTML = """<%
-from sqlitemate import conf
+from sqlitemate import conf, database
 %>
 <font color="{{conf.FgColour}}">
-<br /><br /><b><a name="{{table["name"]}}">Table {{table["name"]}}:</a></b><br />
+<br /><br /><b><a name="{{table["name"]}}">Table {{database.Database.quote(table["name"])}}:</a></b><br />
 <table border="1" cellpadding="4" cellspacing="0" width="1000">
 <tr>
 <th>#</th>
