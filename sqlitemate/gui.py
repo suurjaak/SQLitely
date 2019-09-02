@@ -3668,8 +3668,15 @@ class DatabasePage(wx.Panel):
         filenames = [path]
         if len(tables) > 1:
             path, _ = os.path.split(path)
-            filenames = [os.path.join(path, "Table %s.%s" % (x, extname))
-                         for x in tables]
+            filenames, names_unique = [], []
+            for t in tables:
+                name = base = util.safe_filename("Table %s" % t)
+                counter = 2
+                while name in names_unique:
+                    name, counter = "%s (%s)" % (base, counter), counter + 1
+                filenames.append(os.path.join(path, name + "." + extname))
+                names_unique.append(name)
+
             existing = next((x for x in filenames if os.path.exists(x)), None)
             if existing and wx.YES != wx.MessageBox(
                 "Some files already exist, like %s.\n"
