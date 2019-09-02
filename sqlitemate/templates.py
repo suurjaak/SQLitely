@@ -28,85 +28,162 @@ SAFEBYTE_REPL = lambda m: m.group(0).encode("unicode-escape")
 """HTML data export template."""
 DATA_HTML = """<%
 import datetime
-from sqlitemate import conf, images
+from sqlitemate import conf, database, images
 from sqlitemate.lib import util
 %><!DOCTYPE HTML><html lang="en">
 <head>
-    <meta http-equiv='Content-Type' content='text/html;charset=utf-8' />
-    <meta name="Author" content="{{conf.Title}}">
-    <title>{{title}}</title>
-    <link rel="shortcut icon" type="image/png" href="data:image/ico;base64,{{!images.Icon16x16_8bit.data}}"/>
-    <style>
-        * { font-family: {{conf.HtmlFontName}}; font-size: 11px; }
-        body {
-            background: {{conf.ExportBackgroundColour}};
-            margin: 0px 10px 0px 10px;
-        }
-        .header { font-size: 1.1em; font-weight: bold; color: {{conf.ExportLinkColour}}; }
-        .header_table {
-            width: 100%;
-        }
-        .header_left {
-            width: 145px;
-            text-align: left;
-        }
-        table.body_table {
-            margin-left: auto;
-            margin-right: auto;
-            border-spacing: 0px 10px;
-        }
-        table.body_table > tbody > tr > td {
-            background: white;
-            width: 800px;
-            font-family: {{conf.HtmlFontName}};
-            font-size: 11px;
-            border-radius: 10px;
-            padding: 10px;
-        }
-        table.content_table {
-            empty-cells: show;
-            border-spacing: 2px;
-        }
-        table.content_table td {
-            line-height: 1.5em;
-            padding: 5px;
-            border: 1px solid #C0C0C0;
-        }
-        a, a.visited { color: {{conf.ExportLinkColour}}; text-decoration: none; }
-        a:hover, a.visited:hover { text-decoration: underline; }
-        .footer {
-          text-align: center;
-          padding-bottom: 10px;
-          color: #666;
-        }
-        .header { font-size: 1.1em; font-weight: bold; color: {{conf.ExportLinkColour}}; }
-        td { text-align: left; vertical-align: top; }
-        span#sql { display: inline; font-family: monospace; overflow: visible; white-space: pre-wrap; }
-        span#sql.clip { display: inline-block; font-family: inherit; height: 1em; overflow: hidden; }
-        a.toggle:hover { cursor: pointer; text-decoration: none; }
-        span#sql + a.toggle { padding-left: 3px; }
-        span#sql.clip + a.toggle { background: white; position: relative; left: -8px; }
-    </style>
+  <meta http-equiv='Content-Type' content='text/html;charset=utf-8' />
+  <meta name="Author" content="{{conf.Title}}">
+  <title>{{title}}</title>
+  <link rel="shortcut icon" type="image/png" href="data:image/ico;base64,{{!images.Icon16x16_8bit.data}}"/>
+  <style>
+    * { font-family: Tahoma; font-size: 11px; }
+    body {
+      background: #8CBEFF;
+      margin: 0px 10px 0px 10px;
+    }
+    .title { font-size: 1.1em; font-weight: bold; color: #3399FF; }
+    table#header_table {
+      width: 100%;
+    }
+    table#body_table {
+      margin-left: auto;
+      margin-right: auto;
+      border-spacing: 0px 10px;
+    }
+    table#body_table > tbody > tr > td {
+      background: white;
+      width: 800px;
+      font-family: Tahoma;
+      font-size: 11px;
+      border-radius: 10px;
+      padding: 10px;
+    }
+    table#content_table {
+      empty-cells: show;
+      border-spacing: 2px;
+    }
+    table#content_table td {
+      line-height: 1.5em;
+      padding: 5px;
+      border: 1px solid #C0C0C0;
+    }
+    a, a.visited { color: #3399FF; text-decoration: none; }
+    a:hover, a.visited:hover { text-decoration: underline; }
+    #footer {
+      text-align: center;
+      padding-bottom: 10px;
+      color: #666;
+    }
+    td { text-align: left; vertical-align: top; }
+    td.index, th.index { color: gray; }
+    td.index { color: gray; text-align: right; }
+    th { padding-left: 5px; padding-right: 5px; text-align: center; white-space: nowrap; }
+    span#sql { display: inline; font-family: monospace; overflow: visible; white-space: pre-wrap; }
+    span#sql.clip { display: inline-block; font-family: inherit; height: 1em; overflow: hidden; }
+    a.toggle:hover { cursor: pointer; text-decoration: none; }
+    span#sql + a.toggle { padding-left: 3px; }
+    span#sql.clip + a.toggle { background: white; position: relative; left: -8px; }
+    a.sort { display: block; }
+    a.sort:hover { cursor: pointer; text-decoration: none; }
+    a.sort::after      { content: ""; display: inline-block; min-width: 6px; position: relative; left: 3px; top: -1px; }
+    a.sort.asc::after  { content: "↓"; }
+    a.sort.desc::after { content: "↑"; }
+    .hidden { display: none; }
+  </style>
+  <script>
+    var sort_col = 0;
+    var sort_direction = true;
+    var search = "";        // Current search value
+    var searchtimer = null; // Search callback timer
+
+    function onSort(col) {
+      if (col == sort_col && !sort_direction)
+        sort_col = 0, sort_direction = true;
+      else if (col == sort_col)
+        sort_direction = !sort_direction;
+      else
+        sort_col = col, sort_direction = true;
+      var table = document.getElementById("content_table");
+      var rowlist = table.getElementsByTagName("tr");
+      var rows = [];
+      for (var i = 1, ll = rowlist.length; i != ll; rows.push(rowlist[i++]));
+      rows.sort(sortfn);
+      for (var i = 0; i < rows.length; i++) table.tBodies[0].appendChild(rows[i]);
+      var linklist = document.getElementsByClassName("sort");
+      for (var i = 0; i < linklist.length; i++) {
+        linklist[i].classList.remove("asc");
+        linklist[i].classList.remove("desc");
+        if (i == sort_col) linklist[i].classList.add(sort_direction ? "asc" : "desc")
+      }
+      return false;
+    };
+
+    var onSearch = function(evt) {
+      window.clearTimeout(searchtimer); // Avoid reacting to rapid changes
+
+      var mysearch = evt.target.value.trim();
+      if (27 == evt.keyCode) mysearch = evt.target.value = "";
+      var mytimer = searchtimer = window.setTimeout(function() {
+        if (mytimer == searchtimer && mysearch != search) {
+          search = mysearch;
+          doSearch();
+        };
+        searchtimer = null;
+      }, 200);
+    };
+
+    var doSearch = function() {
+      var words = String(search).split(/\s/g).filter(Boolean);
+      var regexes = words.map(function(word) { return new RegExp(escapeRegExp(word), "i"); });
+      var table = document.getElementById("content_table");
+      var rowlist = table.getElementsByTagName("tr");
+      for (var i = 1, ll = rowlist.length; i < ll; i++) {
+        var tr = rowlist[i];
+        var show = false;
+        for (var j = 0, cc = tr.childElementCount; j < cc; j++) {
+          var text = tr.children[j].innerText;
+          if (regexes.every(function(rgx) { return text.match(rgx); })) { show = true; break; };
+        };
+        tr.classList[show ? "remove" : "add"]("hidden");
+      };
+    };
+
+    /** Escapes special characters in a string for RegExp. */
+    var escapeRegExp = function(string) {
+      return string.replace(/[-[\]{}()*+!<=:?.\/\\^$|#\s,]/g, "\\$&");
+    };
+
+    var sortfn = function(a, b) {
+      var v1 = a.children[sort_col].innerText.toLowerCase();
+      var v2 = b.children[sort_col].innerText.toLowerCase();
+      var result = String(v1).localeCompare(String(v2), undefined, {numeric: true});
+      return sort_direction ? result : -result;
+    };
+  </script>
 </head>
 <body>
-<table class="body_table">
-<tr><td><table class="header_table">
-    <tr>
-        <td class="header_left"></td>
-        <td>
-            <div class="header">{{title}}</div><br />
-            <b>SQL:</b> <span id="sql">{{sql or create_sql}}</span>
-            <a class="toggle" title="Toggle full SQL" onclick="document.getElementById('sql').classList.toggle('clip')">...</a>
-            <br />
-            Source: <b>{{db_filename}}</b>.<br />
-            <b>{{row_count}}</b> {{util.plural("row", row_count, with_items=False)}}{{" in results" if sql else ""}}.<br />
-        </td>
-    </tr></table>
-    <script> document.getElementById('sql').classList.add('clip'); </script>
-</td></tr><tr><td><table class="content_table">
-<tr><th>#</th>
-%for col in columns:
-<th>{{col}}</th>
+<table id="body_table">
+<tr><td><table id="header_table">
+  <tr>
+    <td>
+      <div class="title">{{title}}</div><br />
+      <b>SQL:</b> <span id="sql">{{sql or create_sql}}</span>
+      <a class="toggle" title="Toggle full SQL" onclick="document.getElementById('sql').classList.toggle('clip')">...</a>
+      <br />
+      Source: <b>{{db_filename}}</b>.<br />
+      <b>{{row_count}}</b> {{util.plural("row", row_count, with_items=False)}}{{" in results" if sql else ""}}.<br />
+    </td>
+  </tr></table>
+  <script> document.getElementById('sql').classList.add('clip'); </script>
+</td></tr><tr><td>
+
+<input type="search" placeholder="Filter rows" onkeyup="onSearch(event)" onsearch="onSearch(event)">
+<table id="content_table">
+<tr>
+  <th class="index asc"><a class="sort asc" title="Sort by index" onclick="onSort(0)">#</a></th>
+%for i, col in enumerate(columns):
+  <th><a class="sort" title="Sort by {{database.Database.quote(col)}}" onclick="onSort({{i + 1}})">{{col}}</a></th>
 %endfor
 </tr>
 <%
@@ -115,7 +192,7 @@ for chunk in data_buffer:
 %>
 </table>
 </td></tr></table>
-<div class="footer">Exported with {{conf.Title}} on {{datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}}.</div>
+<div id="footer">Exported with {{conf.Title}} on {{datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}}.</div>
 </body>
 </html>
 """
@@ -128,9 +205,9 @@ DATA_ROWS_HTML = """
 <%
 namespace["row_count"] += 1
 %><tr>
-<td>{{i + 1}}</td>
+  <td class="index">{{i + 1}}</td>
 %for col in columns:
-<td>{{"" if row[col] is None else row[col]}}</td>
+  <td>{{"" if row[col] is None else row[col]}}</td>
 %endfor
 </tr>
 %endfor
