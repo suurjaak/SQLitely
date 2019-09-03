@@ -4037,6 +4037,8 @@ class DatabasePage(wx.Panel):
 
             # Add table and column names to SQL editor autocomplete
             self.stc_sql.AutoCompClearAdded()
+            pragmas = list(database.Database.PRAGMA) + database.Database.EXTRA_PRAGMAS
+            self.stc_sql.AutoCompAddWords(pragmas)
             for table in tables:
                 coldata = self.db.get_table_columns(table["name"])
                 fields = [self.db.quote(c["name"]) for c in coldata]

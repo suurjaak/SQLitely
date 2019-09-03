@@ -86,13 +86,6 @@ class Database(object):
         "description": """  Suggested maximum number of database disk pages that SQLite will hold in memory at once per open database file. Endures only for the length of the current session.
   If positive, the suggested cache size is set to N. If negative, the number of cache pages is adjusted to use approximately abs(N*1024) bytes.""",
       },
-      "cache_spill": {
-        "name": "cache_spill",
-        "label": "Cache spill",
-        "type": bool,
-        "short": "Spill dirty cache pages to file during transaction",
-        "description": "Enables or disables the ability of the pager to spill dirty cache pages to the database file in the middle of a transaction.",
-      },
       "case_sensitive_like": {
         "name": "case_sensitive_like",
         "label": "Case-sensitive LIKE",
@@ -100,6 +93,13 @@ class Database(object):
         "read": False,
         "short": "Case sensitivity on LIKE operator",
         "description": "Toggles case sensitivity on LIKE operator.",
+      },
+      "cache_spill": {
+        "name": "cache_spill",
+        "label": "Cache spill",
+        "type": bool,
+        "short": "Spill dirty cache pages to file during transaction",
+        "description": "Enables or disables the ability of the pager to spill dirty cache pages to the database file in the middle of a transaction.",
       },
       "cell_size_check": {
         "name": "cell_size_check",
@@ -402,6 +402,13 @@ class Database(object):
         "description": "If enabled, the sqlite_master table can be changed using ordinary UPDATE, INSERT, and DELETE statements, for the duration of the current session. WARNING: misuse can easily result in a corrupt database file.",
       },
     }
+    """Additional PRAGMA directives not usable as settings."""
+    EXTRA_PRAGMAS = [
+        "database_list", "foreign_key_check", "foreign_key_list",
+        "incremental_vacuum", "index_info", "index_list", "index_xinfo",
+        "integrity_check", "optimize", "quick_check", "read_uncommitted",
+        "shrink_memory", "soft_heap_limit", "table_info", "wal_checkpoint"
+    ]
 
 
 
