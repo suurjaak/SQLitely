@@ -964,7 +964,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.panel_db_main.Layout()
 
 
-    def update_database_list(self, filenames=""):
+    def update_database_list(self, filenames=()):
         """
         Inserts the database into the list, if not there already, and updates
         UI buttons.
@@ -1069,6 +1069,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.history_file.RemoveFileFromHistory(0)
             del self.dbs_selected[:]
             self.db_datas.clear()
+            self.dbs.clear()
             conf.save()
             self.update_database_list()
 
@@ -1128,16 +1129,16 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for clicking to remove an item from the database list."""
         if not self.dbs_selected: return
 
-        m = "%s files" % len(self.dbs_selected)
-        if len(self.dbs_selected) == 1: m = self.dbs_selected[0]
+        msg = "%s files" % len(self.dbs_selected)
+        if len(self.dbs_selected) == 1: msg = self.dbs_selected[0]
         if wx.OK == wx.MessageBox(
-            "Remove %s from database list?" % m,
+            "Remove %s from database list?" % msg,
             conf.Title, wx.OK | wx.CANCEL | wx.ICON_QUESTION
         ):
             for filename in self.dbs_selected:
                 for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
                     if filename in lst: lst.remove(filename)
-                for dct in conf.LastSearchResults, self.db_datas:
+                for dct in conf.LastSearchResults, self.db_datas, self.dbs:
                     dct.pop(filename, None)
             for i in range(self.list_db.GetItemCount())[::-1]:
                 if self.list_db.GetItemText(i) in self.dbs_selected:
