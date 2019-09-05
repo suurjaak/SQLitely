@@ -3,20 +3,20 @@
 HTML and TXT templates for exports and statistics.
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.09.2019
+@modified    05.09.2019
 ------------------------------------------------------------------------------
 """
 import re
 
 # Modules imported inside templates:
 #import datetime, os, pyparsing, sys
-#from sqlitemate import conf, database, images, templates
-#from sqlitemate.lib import util
+#from sqlitely import conf, database, images, templates
+#from sqlitely.lib import util
 
 """Regex for matching unprintable characters (\x00 etc)."""
 SAFEBYTE_RGX = re.compile(r"[\x00-\x1f,\x7f-\xa0]")
@@ -28,8 +28,8 @@ SAFEBYTE_REPL = lambda m: m.group(0).encode("unicode-escape")
 """HTML data export template."""
 DATA_HTML = """<%
 import datetime
-from sqlitemate import conf, database, images
-from sqlitemate.lib import util
+from sqlitely import conf, database, images
+from sqlitely.lib import util
 %><!DOCTYPE HTML><html lang="en">
 <head>
   <meta http-equiv='Content-Type' content='text/html;charset=utf-8' />
@@ -217,8 +217,8 @@ namespace["row_count"] += 1
 """TXT SQL insert statements export template."""
 SQL_TXT = """<%
 import datetime
-from sqlitemate.lib import util
-from sqlitemate import conf
+from sqlitely.lib import util
+from sqlitely import conf
 
 %>-- {{title}}.
 -- Source: {{db_filename}}.
@@ -244,7 +244,7 @@ for chunk in data_buffer:
 
 """TXT SQL insert statements export template for the rows part."""
 SQL_ROWS_TXT = """<%
-from sqlitemate import database, templates
+from sqlitely import database, templates
 
 str_cols = ", ".join(map(database.Database.quote, columns))
 %>
@@ -284,8 +284,8 @@ INSERT INTO {{table}} ({{str_cols}}) VALUES ({{", ".join(values)}});
 """TXT data export template."""
 DATA_TXT = """<%
 import datetime
-from sqlitemate.lib import util
-from sqlitemate import conf
+from sqlitely.lib import util
+from sqlitely import conf
 
 %>{{title}}.
 Source: {{db_filename}}.
@@ -323,7 +323,7 @@ for chunk in data_buffer:
 
 """TXT data export template for the rows part."""
 DATA_ROWS_TXT = """<%
-from sqlitemate import templates
+from sqlitely import templates
 
 %>
 %for row in rows:
@@ -348,7 +348,7 @@ values.append((value.ljust if columnjusts[col] else value.rjust)(columnwidths[co
 
 """HTML template for search results header."""
 SEARCH_HEADER_HTML = """<%
-from sqlitemate import conf
+from sqlitely import conf
 %>
 <font size="2" face="{{conf.HtmlFontName}}" color="{{conf.FgColour}}">
 Results for "{{text}}" from {{fromtext}}:
@@ -358,7 +358,7 @@ Results for "{{text}}" from {{fromtext}}:
 
 """HTML template for names search results header, stand-alone table."""
 SEARCH_ROW_TABLE_META_HTML = """<%
-from sqlitemate import conf, database
+from sqlitely import conf, database
 %>
 Table <a href="table:{{table["name"]}}">
     <font color="{{conf.LinkColour}}">{{!pattern_replace.sub(wrap_b, escape(database.Database.quote(table["name"])))}}</font></a>:
@@ -376,7 +376,7 @@ Table <a href="table:{{table["name"]}}">
 
 """HTML template for table search results header, start of HTML table."""
 SEARCH_ROW_TABLE_HEADER_HTML = """<%
-from sqlitemate import conf, database
+from sqlitely import conf, database
 %>
 <font color="{{conf.FgColour}}">
 <br /><br /><b><a name="{{table["name"]}}">Table {{database.Database.quote(table["name"])}}:</a></b><br />
@@ -392,7 +392,7 @@ from sqlitemate import conf, database
 
 """HTML template for search result of DB table row, HTML table row."""
 SEARCH_ROW_TABLE_HTML = """<%
-from sqlitemate import conf, templates
+from sqlitely import conf, templates
 
 match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
 %>
@@ -422,7 +422,7 @@ and not (keywords.get("-column") and match_kw("-column", col)):
 """Text shown in Help -> About dialog (HTML content)."""
 ABOUT_HTML = """<%
 import sys
-from sqlitemate import conf
+from sqlitely import conf
 %>
 <font size="2" face="{{conf.HtmlFontName}}" color="{{conf.FgColour}}">
 <table cellpadding="0" cellspacing="0"><tr><td valign="top">
@@ -479,7 +479,7 @@ Installer created with Nullsoft Scriptable Install System 3.0b1,
 
 """Contents of the default page on search page."""
 SEARCH_WELCOME_HTML = """<%
-from sqlitemate import conf
+from sqlitely import conf
 %>
 <font face="{{conf.HtmlFontName}}" size="2" color="{{conf.FgColour}}">
 <center>
@@ -550,7 +550,7 @@ from sqlitemate import conf
 
 """Long help text shown in a separate tab on search page."""
 SEARCH_HELP_LONG = """<%
-from sqlitemate import conf
+from sqlitely import conf
 try:
     import pyparsing
 except ImportError:
@@ -742,7 +742,7 @@ except ImportError:
 """Short help text shown on search page."""
 SEARCH_HELP_SHORT = """<%
 import os
-from sqlitemate import conf
+from sqlitely import conf
 helplink = "Search help"
 if "nt" == os.name: # In Windows, wx.HtmlWindow shows link whitespace quirkily
     helplink = helplink.replace(" ", "_")

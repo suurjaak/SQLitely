@@ -25,12 +25,12 @@ Uses primitive heuristic analysis to detect connected label-control pairs:
   e.g. "iptext" and "iptext_label"|"iptext.label"|"iptext label"|"labeliptext"
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     19.11.2011
-@modified    27.08.2019
+@modified    05.09.2019
 ------------------------------------------------------------------------------
 """
 import functools

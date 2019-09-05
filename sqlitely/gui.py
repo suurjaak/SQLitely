@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-SQLiteMate UI application main window class and project-specific UI classes.
+SQLitely UI application main window class and project-specific UI classes.
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.09.2019
+@modified    05.09.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -64,7 +64,7 @@ OpenDatabaseEvent, EVT_OPEN_DATABASE = wx.lib.newevent.NewEvent()
 
 
 class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
-    """SQLiteMate main window."""
+    """Program main window."""
 
     TRAY_ICON = (images.Icon16x16_32bit if "linux2" != sys.platform
                  else images.Icon24x24_32bit)
@@ -475,7 +475,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def update_check(self):
         """
-        Checks for an updated SQLiteMate version if sufficient time
+        Checks for an updated program version if sufficient time
         from last check has passed, and opens a dialog for upgrading
         if new version available. Schedules a new check on due date.
         """
@@ -822,13 +822,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
 
     def on_menu_homepage(self, event):
-        """Handler for opening SQLiteMate webpage from menu,"""
+        """Handler for opening program webpage from menu,"""
         webbrowser.open(conf.HomeUrl)
 
 
     def on_about(self, event):
         """
-        Handler for clicking "About SQLiteMate" menu, opens a small info frame.
+        Handler for clicking "About program" menu, opens a small info frame.
         """
         maketext = lambda: step.Template(templates.ABOUT_HTML).expand()
         AboutDialog(self, "About %s" % conf.Title, maketext).ShowModal()

@@ -1,1 +1,1 @@
-@start pythonw -m "sqlitemate.main" %*
+@start pythonw -m "sqlitely.main" %*

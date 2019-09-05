@@ -8,12 +8,12 @@ GUI frame template:
 - option for log panel, handles logging messages via wx events
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.08.2019
+@modified    05.09.2019
 """
 import datetime
 import os

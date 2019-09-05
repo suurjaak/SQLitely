@@ -18,12 +18,12 @@ Parses a Google-like search grammar into SQL for querying a database.
 If pyparsing is unavailable, falls back to naive split into words and keywords.
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.08.2019
+@modified    05.09.2019
 """
 import calendar
 import collections

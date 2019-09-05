@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-SQLiteMate main program entrance: launches GUI application,
+SQLitely main program entrance: launches GUI application,
 handles logging and status calls.
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.08.2019
+@modified    05.09.2019
 ------------------------------------------------------------------------------
 """
 import argparse

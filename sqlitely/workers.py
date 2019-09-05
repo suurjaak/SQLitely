@@ -3,12 +3,12 @@
 Background workers for potentially long-running tasks like searching.
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool
+This file is part of SQLitely - SQLite database tool
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2019
+@modified    05.09.2019
 ------------------------------------------------------------------------------
 """
 import Queue

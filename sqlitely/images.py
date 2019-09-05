@@ -1,13 +1,13 @@
 """
-Contains embedded image and icon resources for SQLiteMate. Auto-generated.
+Contains embedded image and icon resources for SQLitely. Auto-generated.
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.08.2019
+@modified    05.09.2019
 ------------------------------------------------------------------------------
 """
 try:
@@ -31,7 +31,7 @@ def get_appicons():
     return icons
 
 
-"""SQLiteMate application 16x16 icon, 32-bit colour."""
+"""SQLitely application 16x16 icon, 32-bit colour."""
 Icon16x16_32bit = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAl0lEQVQ4y82SOw4CMQwFJ9mU"
     "CGoKCjqqlTjXFpwECZC4GAUX4AawBfnYoSAcIEnDSC79NH6yGa/347hZHoxhoIKckdvjeXa7"
@@ -40,7 +40,7 @@ Icon16x16_32bit = PyEmbeddedImage(
 )
 
 
-"""SQLiteMate application 16x16 icon, 8-bit colour."""
+"""SQLitely application 16x16 icon, 8-bit colour."""
 Icon16x16_8bit = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAfUlEQVQ4y82SOw7CQAwF3yKX"
     "EdQpKOioVsphczEKLsANkhTsrj8pIOmxCzIHGI2fnPL4tHw9IyX8hBnweE2ge99huF3gobKC"
@@ -49,7 +49,7 @@ Icon16x16_8bit = PyEmbeddedImage(
 )
 
 
-"""SQLiteMate application 24x24 icon, 32-bit colour."""
+"""SQLitely application 24x24 icon, 32-bit colour."""
 Icon24x24_32bit = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAzUlEQVRIx92WMWoCYRCFv13/"
     "DYgEI5IyIIsWniGlJxHFc3gFawmeJDdIGRQSC8FSUqVY2WVmUog32NfkO8B8vMcrJuuvP15f"
@@ -59,7 +59,7 @@ Icon24x24_32bit = PyEmbeddedImage(
 )
 
 
-"""SQLiteMate application 24x24 icon, 8-bit colour."""
+"""SQLitely application 24x24 icon, 8-bit colour."""
 Icon24x24_8bit = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAsElEQVRIx+2SMQ4BURRFz+eP"
     "RgSFXiuUdmAvOnuwBVFaix0oR69XiWJkJu9dxUStmdeIs4B3c8+7CWB1vGo2GkCiGwT3Z025"
@@ -69,7 +69,7 @@ Icon24x24_8bit = PyEmbeddedImage(
 )
 
 
-"""SQLiteMate application 32x32 icon, 32-bit colour."""
+"""SQLitely application 32x32 icon, 32-bit colour."""
 Icon32x32_32bit = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA8ElEQVRYw+2WsW3CYBBGn83J"
     "ckSsFJAZKFAmoKLIDEhRelo6twxAkSECS1DQpEyHKJgBFCmCwjG2PwqQ2MCHFH/dX93T0/13"
@@ -80,7 +80,7 @@ Icon32x32_32bit = PyEmbeddedImage(
 )
 
 
-"""SQLiteMate application 32x32 icon, 8-bit colour."""
+"""SQLitely application 32x32 icon, 8-bit colour."""
 Icon32x32_8bit = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAzElEQVRYw+2XIQ7CQBBF37aT"
     "BgRBAGdAEFxdFYJ79V4IDLKOIDgDhIRggLZ8REN6gw5i/wX25eXvzG4AmJaVJiNjlKUMkee7"
@@ -90,7 +90,7 @@ Icon32x32_8bit = PyEmbeddedImage(
 )
 
 
-"""SQLiteMate application 40x40 icon, 32-bit colour."""
+"""SQLitely application 40x40 icon, 32-bit colour."""
 Icon40x40_32bit = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAYAAACM/rhtAAABe0lEQVRYw+2XvW6TQRBFz6w3"
     "VhSkuIkQVO4oLX5S00QpQsETgfxJyfsgUdDQ0WKg5wVCmwLJyu7MpMkXxYaOwjcS9wmO7t07"
@@ -104,7 +104,7 @@ Icon40x40_32bit = PyEmbeddedImage(
 )
 
 
-"""SQLiteMate application 40x40 icon, 8-bit colour."""
+"""SQLitely application 40x40 icon, 8-bit colour."""
 Icon40x40_8bit = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAYAAACM/rhtAAABSklEQVRYw+2ZsU4CQRRFzxu3"
     "wgILEqUisbA34G+Y+D022/g9Jv6GEHsLW7STwmpm3rOARRbtuSbccquT8/bOy+wamwzbeZiB"
@@ -117,7 +117,7 @@ Icon40x40_8bit = PyEmbeddedImage(
 )
 
 
-"""SQLiteMate application 48x48 icon, 32-bit colour."""
+"""SQLitely application 48x48 icon, 32-bit colour."""
 Icon48x48_32bit = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABm0lEQVRo3u2asUpDURBEz4sv"
     "IZiYmCAEUbBII9g+sLLSbxDEH7AXG6tX2WnpH0i+QcRK0qWysrQRQUQixiZ5d9ciEUJiZ5MJ"
@@ -131,7 +131,7 @@ Icon48x48_32bit = PyEmbeddedImage(
 )
 
 
-"""SQLiteMate application 48x48 icon, 8-bit colour."""
+"""SQLitely application 48x48 icon, 8-bit colour."""
 Icon48x48_8bit = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAABV0lEQVRo3u2asU4CQRRFz8gu"
     "2SCCED/AhMYPIKGy9Gf8iv0K/8VY2lJRWVobQyRiYtiZ9yxgFYHOxkv2llPNfe/e+94kE9ig"
@@ -144,7 +144,7 @@ Icon48x48_8bit = PyEmbeddedImage(
 )
 
 
-"""SQLiteMate application 64x64 icon, 32-bit colour."""
+"""SQLitely application 64x64 icon, 32-bit colour."""
 Icon64x64_32bit = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAB4UlEQVR42u2bvUoccRTFf/fv"
     "uIsIKwwsFunCrk4REOI2gnYWgq2FeYBgmVeYPIK19olvIKSTlIuwGIgfYKWFSBamEHeXmbkp"
@@ -159,7 +159,7 @@ Icon64x64_32bit = PyEmbeddedImage(
 )
 
 
-"""SQLiteMate application 64x64 icon, 8-bit colour."""
+"""SQLitely application 64x64 icon, 8-bit colour."""
 Icon64x64_8bit = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABe0lEQVR42u2bvUoDURCFv3uz"
     "GkQwsBAsrMUUgk1K01lY+Tq22/o6VgFbyzRiJbZaiBBIIRrc3bG43JjNI+ycU+1PNWfPnPlh"
@@ -173,7 +173,7 @@ Icon64x64_8bit = PyEmbeddedImage(
 )
 
 
-"""SQLiteMate application 256x256 icon, 32-bit colour."""
+"""SQLitely application 256x256 icon, 32-bit colour."""
 Icon256x256_32bit = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAAMEUlEQVR42u3dW4xdVR3H8e/a"
     "58yZ6UzndErbMQ0t0Mq1gkCZSlQuiZoQEhJjYrwFExIf6oOE8CCIBufUqqA+GY1RE33RqKm+"
@@ -237,7 +237,7 @@ Icon256x256_32bit = PyEmbeddedImage(
 )
 
 
-"""SQLiteMate application 256x256 icon, 8-bit colour."""
+"""SQLitely application 256x256 icon, 8-bit colour."""
 Icon256x256_8bit = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAAIhklEQVR42u3dzW8eVxUH4DPz"
     "ftixHcdNYkuhSZtEFUUgqgpFKotmC0t2rMr/4v+FHTu2rBDtgkXEAsRHWQAqHxFpUyUGOXIc"

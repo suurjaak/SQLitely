@@ -55,12 +55,12 @@ Stand-alone GUI components for wx:
   http://wxpython-users.1045709.n5.nabble.com/TextCtrlAutoComplete-td2348906.html
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    01.09.2019
+@modified    05.09.2019
 ------------------------------------------------------------------------------
 """
 import collections

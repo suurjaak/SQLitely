@@ -3,12 +3,12 @@
 Update functionality.
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2019
+@modified    05.09.2019
 ------------------------------------------------------------------------------
 """
 import HTMLParser
@@ -32,13 +32,13 @@ from . import guibase
 """Current update dialog window, if any, for avoiding concurrent updates."""
 update_window = None
 
-"""URL-opener with SQLiteMate useragent."""
+"""URL-opener with program useragent."""
 url_opener = urllib2.build_opener()
 
 
 def check_newest_version(callback=None):
     """
-    Queries the SQLiteMate download page for available newer releases.
+    Queries the program download page for available newer releases.
 
     @param   callback  function to call with check result, if any
              @result   (version, url, changes) if new version up,
@@ -65,7 +65,7 @@ def check_newest_version(callback=None):
 
             install_type = get_install_type()
             link = linkmap.get(install_type) or ''
-            # Extract version number like 1.3.2a from sqlitemate_1.3.2a_x64.exe
+            # Extract version number like 1.3.2a from myprogram_1.3.2a_x64.exe
             version = (re.findall(r"(\d[\da-z.]+)", link) + [None])[0]
             if version:
                 guibase.log("Newest %s version is %s.", install_type, version)
@@ -163,7 +163,7 @@ def download_and_install(url):
 
 
 def get_install_type():
-    """Returns the current SQLiteMate installation type (src|x64|x86)."""
+    """Returns the current program installation type (src|x64|x86)."""
     prog_text = sys.argv[0].lower()
     if not prog_text.endswith(".exe"):
         result = "src"
