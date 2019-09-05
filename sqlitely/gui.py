@@ -2418,9 +2418,11 @@ class DatabasePage(wx.Panel):
 
     def on_update_stc_schema(self, event):
         """Handler for clicking to refresh database schema SQL."""
+        scrollpos = self.stc_schema.GetScrollPos(wx.VERTICAL)
         self.stc_schema.SetReadOnly(False)
         self.stc_schema.SetText(self.db.get_sql(refresh=True))
         self.stc_schema.SetReadOnly(True)
+        self.stc_schema.ScrollToLine(scrollpos)
 
 
     def on_pragma_change(self, event):
