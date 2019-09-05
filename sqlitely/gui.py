@@ -4211,7 +4211,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         self.iterator_index = -1
         self.sort_ascending = True
         self.sort_column = None # Index of column currently sorted by
-        self.filters = {} # {col: value, }
+        self.filters = {} # {col index: value, }
         self.attrs = {} # {"new": wx.grid.GridCellAttr, }
 
         if not self.is_query:
@@ -4247,10 +4247,10 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         if col == self.sort_column:
             label += u" ↓" if self.sort_ascending else u" ↑"
         if col in self.filters:
-            if "TEXT" == self.columns[col]["type"]:
-                label += "\nlike \"%s\"" % self.filters[col]
-            else:
+            if "INTEGER" == self.columns[col]["type"]:
                 label += "\n= %s" % self.filters[col]
+            else:
+                label += "\nlike \"%s\"" % self.filters[col]
         return label
 
 
@@ -4346,13 +4346,15 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
 
         where, order = "", ""
         if self.filters:
-            col_data = [self.columns[i] for i in self.filters]
-            vv = {c["name"]: self.filters[i] for i, c in enumerate(col_data)}
-            args = self.make_args(col_data, vv)
+            col_data, col_vals = [], {}
+            for i, v in self.filters.items():
+                col_data.append(self.columns[i])
+                col_vals[self.columns[i]["name"]] = v
+            args = self.db.make_args(col_data, col_vals)
 
             for col, key in zip(col_data, args):
                 op = "="
-                if "TEXT" == column_data["type"]:
+                if "INTEGER" != col["type"]:
                     op, args[key] = "LIKE", "%" + args[key] + "%"
                 part = "%s %s :%s" % (self.db.quote(col["name"]), op, key)
                 where += (" AND " if where else "WHERE ") + part
@@ -4360,9 +4362,8 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
             self.db.quote(self.columns[self.sort_column]["name"]),
             "" if self.sort_ascending else " DESC"
         )
-        if where or order:
-            if where: result += " " + where
-            if order: result += " " + order
+        if where: sql += " " + where
+        if order: sql += " " + order
 
         return self.db.execute(sql, args)
 
@@ -4555,27 +4556,22 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
 
     def RemoveFilter(self, col):
         """Removes filter on the specified column, if any."""
-        if col in self.filters:
-            del self.filters[col]
+        self.filters.pop(col, None)
         self.Filter()
 
 
     def ClearFilter(self, refresh=True):
         """Clears all added filters."""
         self.filters.clear()
-        if refresh:
-            self.Filter()
+        if refresh: self.Filter()
 
 
     def ClearSort(self, refresh=True):
         """Clears current sort."""
         self.sort_column = None
-        if refresh:
-            self.rows_current[:].sort(
-                key=lambda x: self.idx_all.index(x["__id__"])
-            )
-            if self.View:
-                self.View.ForceRefresh()
+        if not refresh: return
+        self.rows_current.sort(key=lambda x: self.idx_all.index(x["__id__"]))
+        if self.View: self.View.ForceRefresh()
 
 
     def Filter(self):
@@ -4698,11 +4694,13 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         is_unfiltered = True
         for col, filter_value in self.filters.items():
             column_data = self.columns[col]
+            value = rowdata[column_data["name"]]
             if "INTEGER" == column_data["type"]:
-                is_unfiltered &= (filter_value == rowdata[column_data["name"]])
-            elif "TEXT" == column_data["type"]:
-                str_value = (rowdata[column_data["name"]] or "").lower()
-                is_unfiltered &= str_value.find(filter_value.lower()) >= 0
+                is_unfiltered &= (filter_value == value)
+            else:
+                if not isinstance(value, basestring):
+                    value = "" if value is None else str(v)
+                is_unfiltered &= value.find(filter_value.lower()) >= 0
         return not is_unfiltered
 
 
