@@ -1,7 +1,7 @@
-SQLiteMate 1.0
-==============
+SQLitely 1.0
+============
 
-SQLiteMate is an SQLite database tool, written in Python.
+SQLitely is an SQLite database tool, written in Python.
 
 You can open SQLite databases and look at their contents:
 
@@ -11,22 +11,22 @@ You can open SQLite databases and look at their contents:
 - execute direct SQL queries
 
 Downloads, help texts, and more screenshots at
-http://suurjaak.github.io/SQLiteMate.
+http://suurjaak.github.io/SQLitely.
 
-[![Screenshots](https://raw.github.com/suurjaak/SQLiteMate/gh-pages/img/th_collage.png)](https://raw.github.com/suurjaak/SQLiteMate/gh-pages/img/collage.png)
+[![Screenshots](https://raw.github.com/suurjaak/SQLitely/gh-pages/img/th_collage.png)](https://raw.github.com/suurjaak/SQLitely/gh-pages/img/collage.png)
 
 
 Using The Program
 -----------------
 
 Searching an opened database supports a simple Google-like
-[query syntax](http://suurjaak.github.io/SQLiteMate/help.html).
+[query syntax](http://suurjaak.github.io/SQLitely/help.html).
 You can use keywords to search from specific tables and columns only
 (`table:foo`, `column:bar`), or from certain dates only 
 (`date:2012`, `date:2010..2013-06`). Search supports 
 wildcards, exact phrases, grouping, excluding, and either-or queries.
 
-SQLiteMate can be minimized to tray, clicking the tray icon opens 
+SQLitely can be minimized to tray, clicking the tray icon opens 
 a search popup.
 
 The program itself is stand-alone, can work from any directory, and does not 
@@ -35,34 +35,34 @@ convenience. The installed program can be copied to a USB stick and used
 elsewhere, same goes for the source code. The command line interface only needs
 Python to run.
 
-SQLiteMate has been tested under Windows 7, Windows Vista, Windows XP and
+SQLitely has been tested under Windows 7, Windows Vista, Windows XP and
 Ubuntu Linux, and reported to work under OS X and Windows 8. In source code
 form, it should run wherever Python and the required Python packages are
 installed.
 
-If running from pip installation, run `sqlitemate` from the command-line. 
-If running from straight source code, launch `sqlitemate.sh` where shell 
-scripts are supported, or launch `sqlitemate.bat` under Windows, or open 
-a terminal and run `python sqlitemate/main.py` in SQLiteMate directory.
+If running from pip installation, run `sqlitely` from the command-line. 
+If running from straight source code, launch `sqlitely.sh` where shell 
+scripts are supported, or launch `sqlitely.bat` under Windows, or open 
+a terminal and run `python -m sqlitely.main` in SQLitely directory.
 
 
 Installation
 ------------
 
 Windows: download and launch the latest setup from
-https://suurjaak.github.io/SQLiteMate/downloads.html.
+https://suurjaak.github.io/SQLitely/downloads.html.
 
 Mac/Linux/other: install Python, wxPython, pip, and run
-`pip install sqlitemate`
+`pip install sqlitely`
 
-The pip installation will add the `sqlitemate` command to path.
+The pip installation will add the `sqlitely` command to path.
 For more thorough instructions, see [INSTALL.md](INSTALL.md).
 
 
 Source Dependencies
 -------------------
 
-If running from source code, SQLiteMate needs Python 2.7,
+If running from source code, SQLitely needs Python 2.7,
 and the following 3rd-party Python packages:
 * wxPython 2.9+ (http://wxpython.org/)
 The following are also listed in `requirements.txt` for pip:
@@ -73,14 +73,14 @@ If other Python libraries are not available, the program will function
 regardless, only with lesser service - like lacking Excel export or full 
 search syntax.
 
-SQLiteMate can also run under wxPython 2.8.12+, with some layout quirks.
+SQLitely can also run under wxPython 2.8.12+, with some layout quirks.
 Python 2.6 will need the argparse library. Python 3 is yet unsupported.
 
 
 Attribution
 -----------
 
-SQLiteMate includes step, Simple Template Engine for Python,
+SQLitely includes step, Simple Template Engine for Python,
 (c) 2012, Daniele Mazzocchio (https://github.com/dotpy/step).
 
 Several icons from:

@@ -1,27 +1,27 @@
 # -*- coding: utf-8 -*-
 """
-Setup.py for SQLiteMate. 
+Setup.py for SQLitely. 
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - an SQLite database tool.
+This file is part of SQLitely - an SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.08.2019
+@modified    05.09.2019
 ------------------------------------------------------------------------------
 """
 import glob
 import os
 import setuptools
 
-from sqlitemate import conf
+from sqlitely import conf
 
 setuptools.setup(
     name=conf.Title,
     version=conf.Version,
     description="SQLite database tool",
-    url="https://github.com/suurjaak/SQLiteMate",
+    url="https://github.com/suurjaak/SQLitely",
 
     author="Erki Suurjaak",
     author_email="erki@lap.ee",
@@ -30,7 +30,7 @@ setuptools.setup(
     keywords="sqlite database",
 
     install_requires=["pyparsing", "step-template", "XlsxWriter"],
-    entry_points={"gui_scripts": ["sqlitemate = sqlitemate.main:run"]},
+    entry_points={"gui_scripts": ["sqlitely = sqlitely.main:run"]},
 
     packages=setuptools.find_packages(),
     include_package_data=True, # Use MANIFEST.in for data files
