@@ -43,7 +43,7 @@ def safedivf(a, b):
 
 def safe_filename(filename):
     """Returns the filename with characters like \:*?"<>| removed."""
-    return re.sub(r"[\/\\\:\*\?\"\<\>\|]", "", filename)
+    return re.sub(r"[\/\\\:\*\?\"\<\>\|\x00-\x1f]", "", filename)
 
 
 def format_bytes(size, precision=2, max_units=True):
