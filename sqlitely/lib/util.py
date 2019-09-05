@@ -46,6 +46,13 @@ def safe_filename(filename):
     return re.sub(r"[\/\\\:\*\?\"\<\>\|\x00-\x1f]", "", filename)
 
 
+def unprint(s, escape=True):
+    """Returns string with unprintable characters escaped or stripped."""
+    enc = "unicode-escape" if isinstance(s, unicode) else "string-escape"
+    repl = (lambda m: m.group(0).encode(enc)) if escape else ""
+    return re.sub(r"[\x00-\x1f]", repl, s)
+
+
 def format_bytes(size, precision=2, max_units=True):
     """
     Returns a formatted byte size (e.g. "421.45 MB" or "421,451,273 bytes").
