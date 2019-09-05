@@ -319,8 +319,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                   ("modified", "Last modified"), ("tables", "Tables")]
         for field, title in LABELS:
             lbltext = wx.StaticText(parent=panel_detail, label="%s:" % title)
-            valtext = wx.TextCtrl(parent=panel_detail, value="",
-                                  size=(300, -1), style=wx.NO_BORDER)
+            valtext = wx.TextCtrl(parent=panel_detail, value="", size=(300, 35),
+                style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH | wx.TE_NO_VSCROLL)
             ColourManager.Manage(valtext, "BackgroundColour", "WidgetColour")
             ColourManager.Manage(valtext, "ForegroundColour", wx.SYS_COLOUR_WINDOWTEXT)
             valtext.SetEditable(False)
@@ -328,6 +328,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             sizer_labels.Add(lbltext, border=5, flag=wx.LEFT)
             sizer_labels.Add(valtext, proportion=1, flag=wx.GROW)
             setattr(self, "label_" + field, valtext)
+        sizer_labels.AddGrowableCol(1, proportion=1)
+        sizer_labels.AddGrowableRow(0, proportion=1)
+        sizer_labels.AddGrowableRow(3, proportion=1)
 
         BUTTONS_DETAIL = [
             ("open", "&Open", images.ButtonOpen,
@@ -522,7 +525,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                         if self.notebook.GetSelection() != i:
                             self.notebook.SetSelection(i)
                             self.update_notebook_header()
-                        break # break for i in range(self.notebook.GetPage..
+                        break # for i
             else:
                 wx.MessageBox("No database to search from.", conf.Title)
 
@@ -962,6 +965,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.button_clear.Show(bool(items))
         self.update_database_count()
         self.panel_db_main.Layout()
+        if selected_files: wx.CallLater(100, self.update_database_detail)
 
 
     def update_database_list(self, filenames=()):
@@ -1051,6 +1055,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     self.label_size.ForegroundColour = conf.LabelErrorColour
 
         if size is not None: self.label_size.Value = util.format_bytes(size)
+
+        for name in ["path", "size", "modified", "tables"]:
+            getattr(self, "label_%s" % name).MinSize = (-1, -1)
+        wx.CallLater(100, self.panel_db_detail.Layout)
 
 
 
@@ -1363,7 +1371,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 s = ""
                 for t in tables:
                     s += (", " if s else "") + database.Database.quote(t["name"])
-                    if len(s) > 40:
+                    if len(s) > 400:
                         s += ", .."
                         break # for t
                 self.label_tables.Value += " (%s)" % s
@@ -2313,7 +2321,7 @@ class DatabasePage(wx.Panel):
         for name, label in zip(names, labels):
             if not name and not label:
                 sizer_info.AddSpacer(20), sizer_info.AddSpacer(20)
-                continue # continue for i, (name, label) in enumerate(..
+                continue # for name, label
             labeltext = wx.StaticText(parent=panel1c, label="%s:" % label)
             labeltext.ForegroundColour = wx.Colour(102, 102, 102)
             valuetext = wx.TextCtrl(parent=panel1c, value="Analyzing..",
@@ -2350,7 +2358,7 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_BUTTON, lambda e: self.update_info_page(),
                   button_refresh)
 
-        sizer_info.AddGrowableCol(1, 1)
+        sizer_info.AddGrowableCol(1, proportion=1)
         sizer_file.Add(sizer_info, proportion=1, border=10, flag=wx.LEFT | wx.GROW)
         sizer_file.Add(sizer_buttons, border=10, flag=wx.LEFT | wx.BOTTOM | wx.GROW)
         sizer1.Add(label_file, border=5, flag=wx.ALL)
