@@ -3409,6 +3409,7 @@ class DatabasePage(wx.Panel):
         filename = dialog.GetPath()
         try:
             stc.SaveFile(filename)
+            util.start_file(filename)
         except Exception as e:
             msg = util.format_exc(e)
             guibase.logstatus_flash(msg)
