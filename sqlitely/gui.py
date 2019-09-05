@@ -4334,24 +4334,37 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
 
     def GetRowIterator(self):
         """
-        Returns a separate iterator producing all grid rows,
-        in current sort order and matching current filter.
+        Returns an iterator producing all current grid rows if query grid,
+        or a cursor producing all table rows from database if table grid,
+        both in current sort order and matching current filter.
         """
-        def generator(cursor):
-            row = next(cursor)
-            while row:
-                while row and self._is_row_filtered(row): row = next(cursor)
-                if row: yield row
-                row = next(cursor)
+        if self.is_query:
+            self.SeekAhead(True)
+            return iter(self.rows_current)
 
-        sql = self.sql
-        if self.sort_column is not None:
-            sql = "SELECT * FROM (%s) ORDER BY %s%s" % (
-                sql, self.db.quote(self.columns[self.sort_column]["name"]),
-                "" if self.sort_ascending else " DESC"
-            )
-        cursor = self.db.execute(sql)
-        return generator(cursor) if self.filters else cursor
+        sql, args = "SELECT * FROM %s" % self.db.quote(self.table), {}
+
+        where, order = "", ""
+        if self.filters:
+            col_data = [self.columns[i] for i in self.filters]
+            vv = {c["name"]: self.filters[i] for i, c in enumerate(col_data)}
+            args = self.make_args(col_data, vv)
+
+            for col, key in zip(col_data, args):
+                op = "="
+                if "TEXT" == column_data["type"]:
+                    op, args[key] = "LIKE", "%" + args[key] + "%"
+                part = "%s %s :%s" % (self.db.quote(col["name"]), op, key)
+                where += (" AND " if where else "WHERE ") + part
+        if self.sort_column is not None: order = "ORDER BY %s%s" % (
+            self.db.quote(self.columns[self.sort_column]["name"]),
+            "" if self.sort_ascending else " DESC"
+        )
+        if where or order:
+            if where: result += " " + where
+            if order: result += " " + order
+
+        return self.db.execute(sql, args)
 
 
     def SetValue(self, row, col, val):
