@@ -1095,11 +1095,16 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if wx.ID_OK != dialog.ShowModal(): return
 
         path = dialog.GetPath()
-        wx.YieldIfNeeded() # Allow UI to refresh
+        wx.YieldIfNeeded() # Allow dialog to disappear
 
+        new_filenames = []
         for filename in filenames:
             _, basename = os.path.split(filename)
             newpath = os.path.join(path, basename) if len(filenames) > 1 else path
+            if filename == newpath:
+                wx.MessageBox("Cannot overwrite %s with itself." % filename,
+                              conf.Title, wx.OK | wx.ICON_WARNING)
+                continue # for filename
             try: shutil.copyfile(filename, newpath)
             except Exception as e:
                 guibase.log("%r when trying to copy %s to %s.",
@@ -1111,6 +1116,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 guibase.logstatus_flash("Saved a copy of %s as %s.",
                                         filename, newpath)
                 self.update_database_list(newpath)
+                new_filenames.append(newpath)
+
+        if not new_filenames: return
+        for i in range(1, self.list_db.GetItemCount()):
+            self.list_db.Select(i, on=self.list_db.GetItemText(i) in new_filenames)
+
 
 
     def on_remove_database(self, event):
@@ -3823,7 +3834,7 @@ class DatabasePage(wx.Panel):
         self.dialog_savefile.Wildcard = export.TABLE_WILDCARD
         if wx.ID_OK != self.dialog_savefile.ShowModal(): return
 
-        wx.YieldIfNeeded() # Allow UI to refresh
+        wx.YieldIfNeeded() # Allow dialog to disappear
         extname = export.TABLE_EXTS[self.dialog_savefile.FilterIndex]
         path = self.dialog_savefile.GetPath()
         filenames = [path]
@@ -3879,7 +3890,7 @@ class DatabasePage(wx.Panel):
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
-        wx.YieldIfNeeded() # Allow UI to refresh
+        wx.YieldIfNeeded() # Allow dialog to disappear
         filename2 = dialog.GetPath()
 
         try:
