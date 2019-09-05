@@ -28,6 +28,17 @@ from . import guibase
 class Database(object):
     """Access to an SQLite database file."""
 
+
+    """Column type affinity map."""
+    AFFINITY = {
+        "INTEGER": ["INT", "INTEGER", "TINYINT", "SMALLINT", "MEDIUMINT", "BIGINT", "UNSIGNED BIG INT", "INT2", "INT8"],
+        "TEXT":    ["CHARACTER", "VARCHAR", "VARYING CHARACTER", "NCHAR", "NATIVE CHARACTER", "NVARCHAR", "TEXT", "CLOB"],
+        "BLOB":    ["BLOB"],
+        "REAL":    ["DOUBLE", "DOUBLE PRECISION", "FLOAT", "REAL"],
+        "NUMERIC": ["DECIMAL", "BOOLEAN", "DATE", "DATETIME", "NUMERIC"],
+    }
+
+
     """
     SQLite PRAGMA settings, as {
         name:         directive name,
@@ -598,8 +609,8 @@ class Database(object):
             ).fetchall():
                 if "table" == row["type"] \
                 and "ENABLE_ICU" not in self.compile_options: # Unsupported tokenizer
-                    if  re.match("CREATE\s+VIRTUAL\s+TABLE", row["sql"], re.I) \
-                    and re.search("TOKENIZE\s*[\W]*icu[\W]", row["sql"], re.I):
+                    if  re.match(r"CREATE\s+VIRTUAL\s+TABLE", row["sql"], re.I) \
+                    and re.search(r"TOKENIZE\s*[\W]*icu[\W]", row["sql"], re.I):
                         continue # for row
 
                 self.schema[row["type"]][row["name"].lower()] = row
@@ -730,6 +741,28 @@ class Database(object):
             if not table: result += "\n\n"
 
         return result
+
+
+    @staticmethod
+    def get_affinity(col):
+        """
+        Returns column type affinity, e.g. "REAL" for "FLOAT".
+
+        @param   col  column type string or {"type": column type}
+        @return       matched affinity, or "BLOB" if unknown or unspecified type
+        """
+        mytype = col.get("type") if isinstance(col, dict) else col
+        if not mytype or not isinstance(mytype, basestring): return "BLOB"
+
+        mytype = mytype.upper()            
+        for aff, types in Database.AFFINITY.items(): # Exact match
+            if mytype in types:
+                return aff
+        for aff, types in Database.AFFINITY.items(): # Partial match
+            for afftype in types:
+                if afftype.startswith(mytype) or mytype.startswith(afftype):
+                    return aff
+        return "BLOB"    
 
 
     @staticmethod

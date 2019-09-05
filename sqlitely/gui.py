@@ -4227,6 +4227,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
             # since there is no telling how much time it can take. Instead, we
             # update the row count chunk by chunk.
             self.row_count = self.SEEK_CHUNK_LENGTH
+
             TYPES = dict((v, k) for k, vv in {"INTEGER": (int, long, bool),
                          "REAL": (float,)}.items() for v in vv)
             # Seek ahead on rows and get column information from first values
@@ -4247,10 +4248,11 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         if col == self.sort_column:
             label += u" ↓" if self.sort_ascending else u" ↑"
         if col in self.filters:
-            if "INTEGER" == self.columns[col]["type"]:
+
+            if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
                 label += "\n= %s" % self.filters[col]
             else:
-                label += "\nlike \"%s\"" % self.filters[col]
+                label += '\nlike "%s"' % self.filters[col]
         return label
 
 
@@ -4354,7 +4356,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
 
             for col, key in zip(col_data, args):
                 op = "="
-                if "INTEGER" != col["type"]:
+                if self.db.get_affinity(col) not in ("INTEGER", "REAL"):
                     op, args[key] = "LIKE", "%" + args[key] + "%"
                 part = "%s %s :%s" % (self.db.quote(col["name"]), op, key)
                 where += (" AND " if where else "WHERE ") + part
@@ -4372,7 +4374,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         if not (self.is_query) and (row < self.row_count):
             accepted = False
             col_value = None
-            if "INTEGER" == self.columns[col]["type"]:
+            if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
                 if not val: # Set column to NULL
                     accepted = True
                 else:
@@ -4539,7 +4541,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
                        matched by substring.
         """
         accepted_value = None
-        if "INTEGER" == self.columns[col]["type"]:
+        if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
             try:
                 # Allow user to enter a comma for decimal separator.
                 accepted_value = float(val.replace(",", ".")) \
@@ -4635,7 +4637,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
                 row = self.rows_all[idx]
                 insert_id = self.db.insert_row(self.table, row)
                 if len(pks) == 1 and row[pks[0]] in (None, ""):
-                    if "INTEGER" == col_map[pks[0]]["type"]:
+                    if "INTEGER" == self.db.get_affinity(col_map[pks[0]]):
                         # Autoincremented row: update with new value
                         row[pks[0]] = insert_id
                     elif insert_id: # For non-integers, insert returns ROWID
@@ -4695,7 +4697,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         for col, filter_value in self.filters.items():
             column_data = self.columns[col]
             value = rowdata[column_data["name"]]
-            if "INTEGER" == column_data["type"]:
+            if self.db.get_affinity(column_data) in ("INTEGER", "REAL"):
                 is_unfiltered &= (filter_value == value)
             else:
                 if not isinstance(value, basestring):
