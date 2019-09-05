@@ -2323,11 +2323,10 @@ class DatabasePage(wx.Panel):
                 sizer_info.AddSpacer(20), sizer_info.AddSpacer(20)
                 continue # for name, label
             labeltext = wx.StaticText(parent=panel1c, label="%s:" % label)
-            labeltext.ForegroundColour = wx.Colour(102, 102, 102)
+            ColourManager.Manage(labeltext, "ForegroundColour", "DisabledColour")
             valuetext = wx.TextCtrl(parent=panel1c, value="Analyzing..",
                 style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH | wx.TE_NO_VSCROLL)
             valuetext.MinSize = (-1, 35)
-            ColourManager.Manage(valuetext, "BackgroundColour", "BgColour")
             valuetext.SetEditable(False)
             sizer_info.Add(labeltext, border=5, flag=wx.LEFT | wx.TOP)
             sizer_info.Add(valuetext, border=5, flag=wx.TOP | wx.GROW)
