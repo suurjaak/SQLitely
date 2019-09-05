@@ -1664,8 +1664,10 @@ class DatabasePage(wx.Panel):
         self.db_grids = {} # {"tablename": SqliteGridBase, }
         self.pragma         = db.get_pragma_values() # {pragma_name: value}
         self.pragma_changes = {} # {pragma_name: value}
-        self.pragma_ctrls   = {} # {pragma_name: wx component}
+        self.pragma_ctrls   = {} # {pragma_name: wx control}
+        self.pragma_items   = {} # {pragma_name: [all wx components for directive]}
         self.pragma_edit = False # Whether in PRAGMA edit mode
+        self.pragma_filter = ""  # Current PRAGMA filter
         self.memoryfs = memoryfs
         parent_notebook.InsertPage(1, self, title)
         busy = controls.BusyPanel(self, "Loading \"%s\"." % db.filename)
@@ -2080,16 +2082,20 @@ class DatabasePage(wx.Panel):
         notebook.AddPage(page, "Pragma")
         sizer = page.Sizer = wx.BoxSizer(wx.VERTICAL)
 
-        panel_pragma = self.panel_pragma = wx.lib.scrolledpanel.ScrolledPanel(page)
+        panel_wrapper = wx.lib.scrolledpanel.ScrolledPanel(page)
+        panel_pragma = wx.Panel(panel_wrapper)
+        ColourManager.Manage(panel_wrapper, "BackgroundColour", "BgColour")
         panel_sql = wx.Panel(page)
+        sizer_wrapper = panel_wrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
         sizer_pragma = panel_pragma.Sizer = wx.FlexGridSizer(cols=4, vgap=4, hgap=10)
         sizer_sql = panel_sql.Sizer = wx.BoxSizer(wx.HORIZONTAL)
         sizer_footer = wx.BoxSizer(wx.HORIZONTAL)
 
-        label_header = wx.StaticText(parent=page, label="Database PRAGMA settings")
+        label_header = wx.StaticText(page, label="Database PRAGMA settings")
         label_header.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                     wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
+        edit_filter = self.edit_pragma_filter = controls.SearchCtrl(page, "Filter settings")
 
         def on_help(ctrl, text, event):
             """Handler for clicking help bitmap, shows text popup."""
@@ -2106,7 +2112,7 @@ class DatabasePage(wx.Panel):
             )
             ctrl_name, label_name = "pragma_%s" % name, "pragma_%s_label" % name
 
-            label = wx.StaticText(parent=panel_pragma, label=opts["label"], name=label_name)
+            label = wx.StaticText(panel_pragma, label=opts["label"], name=label_name)
             if "table" == opts["type"]:
                 ctrl = wx.TextCtrl(panel_pragma, name=ctrl_name, style=wx.TE_MULTILINE,
                                    value="\n".join(str(x) for x in value or ()))
@@ -2132,10 +2138,10 @@ class DatabasePage(wx.Panel):
                 ctrl.Value = value
                 ctrl.Bind(wx.EVT_SPINCTRL, self.on_pragma_change)
             else:
-                ctrl = wx.TextCtrl(panel_pragma, name=ctrl_name, size=(200, -1))
+                ctrl = wx.TextCtrl(panel_pragma, name=ctrl_name)
                 ctrl.Value = "" if value is None else value
                 ctrl.Bind(wx.EVT_TEXT, self.on_pragma_change)
-            label_text = wx.StaticText(parent=panel_pragma, label=opts["short"])
+            label_text = wx.StaticText(panel_pragma, label=opts["short"])
             help_bmp = wx.StaticBitmap(panel_pragma, bitmap=bmp)
 
             if opts.get("deprecated"):
@@ -2152,27 +2158,36 @@ class DatabasePage(wx.Panel):
 
             if opts.get("deprecated") \
             and bool(lastopts.get("deprecated")) != bool(opts.get("deprecated")):
-                label_deprecated = wx.StaticText(panel_pragma, label="DEPRECATED:")
+                for i in range(4): sizer_pragma.AddSpacer(20)
+                label_deprecated = self.label_deprecated = wx.StaticText(panel_pragma, label="DEPRECATED:")
                 ColourManager.Manage(label_deprecated, "ForegroundColour", "DisabledColour")
-                sizer_pragma.Add(label_deprecated, border=25, flag=wx.TOP)
+                sizer_pragma.Add(label_deprecated, border=10, flag=wx.LEFT)
                 for i in range(3): sizer_pragma.AddSpacer(20)
 
-            sizer_pragma.Add(label, border=5, flag=wx.LEFT)
+            sizer_pragma.Add(label, border=10, flag=wx.LEFT)
             sizer_pragma.Add(ctrl)
             sizer_pragma.Add(label_text)
             sizer_pragma.Add(help_bmp)
+            self.pragma_items[name] = [label, ctrl, label_text, help_bmp]
             lastopts = opts
 
+        widths = {i: 0 for i in range(4)}
+        for xx in self.pragma_items.values():
+            for i, x in enumerate(xx): widths[i] = max(widths[i], x.Size[0])
+        for xx in self.pragma_items.values(): # Set uniform widths
+            for i, x in enumerate(xx):
+                sizer_pragma.SetItemMinSize(x, (widths[i], -1))
+
         check_sql = self.check_pragma_sql = \
-            wx.CheckBox(parent=page, label="See change S&QL")
+            wx.CheckBox(page, label="See change S&QL")
         check_sql.SetToolTipString("See SQL statements for PRAGMA changes")
         check_sql.Value = True
         check_sql.Hide()
 
         stc = self.stc_pragma = controls.SQLiteTextCtrl(
-            parent=panel_sql, style=wx.BORDER_STATIC)
+            panel_sql, style=wx.BORDER_STATIC)
         stc.SetReadOnly(True)
-        tb = self.tb_pragma = wx.ToolBar(parent=panel_sql,
+        tb = self.tb_pragma = wx.ToolBar(panel_sql,
                                          style=wx.VERTICAL | wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR,
                                         (16, 16))
@@ -2187,13 +2202,13 @@ class DatabasePage(wx.Panel):
         panel_sql.Hide()
 
         button_edit = self.button_pragma_edit = \
-            wx.Button(parent=page, label="&Edit")
+            wx.Button(page, label="&Edit")
         button_refresh = self.button_pragma_refresh = \
-            wx.Button(parent=page, label="&Refresh")
+            wx.Button(page, label="&Refresh")
         button_save = self.button_pragma_save = \
-            wx.Button(parent=page, label="&Save")
+            wx.Button(page, label="&Save")
         button_cancel = self.button_pragma_cancel = \
-            wx.Button(parent=page, label="&Cancel")
+            wx.Button(page, label="&Cancel")
 
         button_edit.SetToolTipString("Edit PRAGMA values")
         button_refresh.SetToolTipString("Reload PRAGMA values from database")
@@ -2201,15 +2216,21 @@ class DatabasePage(wx.Panel):
         button_cancel.SetToolTipString("Cancel PRAGMA changes")
         button_save.Enabled = button_cancel.Enabled = False
 
-        self.Bind(wx.EVT_BUTTON,   self.on_pragma_save,    button_save)
-        self.Bind(wx.EVT_BUTTON,   self.on_pragma_edit,    button_edit)
-        self.Bind(wx.EVT_BUTTON,   self.on_pragma_refresh, button_refresh)
-        self.Bind(wx.EVT_BUTTON,   self.on_pragma_cancel,  button_cancel)
-        self.Bind(wx.EVT_CHECKBOX, self.on_pragma_sql,     check_sql)
+        self.Bind(wx.EVT_BUTTON,     self.on_pragma_save,    button_save)
+        self.Bind(wx.EVT_BUTTON,     self.on_pragma_edit,    button_edit)
+        self.Bind(wx.EVT_BUTTON,     self.on_pragma_refresh, button_refresh)
+        self.Bind(wx.EVT_BUTTON,     self.on_pragma_cancel,  button_cancel)
+        self.Bind(wx.EVT_CHECKBOX,   self.on_pragma_sql,     check_sql)
+        page.Bind(wx.EVT_CHAR_HOOK,  self.on_pragma_key)
+        edit_filter.Bind(wx.EVT_TEXT_ENTER, self.on_pragma_filter)
 
+        sizer_header.AddSpacer((edit_filter.Size[0], -1))
         sizer_header.AddStretchSpacer()
-        sizer_header.Add(label_header, border=5, flag=wx.ALL)
+        sizer_header.Add(label_header)
         sizer_header.AddStretchSpacer()
+        sizer_header.Add(edit_filter, border=16, flag=wx.RIGHT)
+
+        sizer_wrapper.Add(panel_pragma, proportion=1, border=20, flag=wx.TOP | wx.GROW)
 
         sizer_sql.Add(stc, proportion=1, flag=wx.GROW)
         sizer_sql.Add(tb)
@@ -2224,14 +2245,12 @@ class DatabasePage(wx.Panel):
         sizer_footer.Add(button_cancel)
         sizer_footer.AddStretchSpacer()
 
-        #sizer_panel.AddGrowableCol(2, 1)
-
-        sizer.Add(sizer_header, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
-        sizer.Add(panel_pragma, proportion=1, border=20, flag=wx.LEFT | wx.GROW)
-        sizer.Add(check_sql, border=10, flag=wx.LEFT | wx.TOP)
-        sizer.Add(panel_sql, border=10, flag=wx.LEFT | wx.TOP | wx.GROW)
+        sizer.Add(sizer_header, border=10, flag=wx.TOP | wx.BOTTOM | wx.GROW)
+        sizer.Add(panel_wrapper, proportion=1, border=5, flag=wx.LEFT | wx.GROW)
+        sizer.Add(check_sql, border=5, flag=wx.LEFT | wx.TOP)
+        sizer.Add(panel_sql, border=5, flag=wx.LEFT | wx.TOP | wx.GROW)
         sizer.Add(sizer_footer, border=10, flag=wx.BOTTOM | wx.TOP | wx.GROW)
-        panel_pragma.SetupScrolling(scroll_x=False)
+        panel_wrapper.SetupScrolling(scroll_x=False)
 
 
     def create_page_info(self, notebook):
@@ -2403,6 +2422,40 @@ class DatabasePage(wx.Panel):
         """Handler for toggling PRAGMA change SQL visible."""
         self.stc_pragma.Parent.Shown = self.check_pragma_sql.Value
         self.page_pragma.Layout()
+
+
+    def on_pragma_filter(self, event):
+        """Handler for filtering PRAGMA list, shows/hides controls."""
+        search = event.String.strip()
+        if search == self.pragma_filter: return
+            
+        patterns = map(re.escape, search.split())
+        values = dict(self.pragma, **self.pragma_changes)
+        show_deprecated = False
+        self.page_pragma.Freeze()
+        for name, opts in database.Database.PRAGMA.items():
+            texts = [name, opts["label"], opts["short"], opts["description"]]
+            for kv in opts.get("values", {}).items(): texts.extend(map(str, kv))
+            if name in values: texts.append(str(values[name]))
+            show = all(any(re.search(p, x, re.I | re.U) for x in texts)
+                       for p in patterns)
+            if opts.get("deprecated"): show_deprecated |= show
+            if self.pragma_ctrls[name].Shown == show: continue # for name
+            [x.Show(show) for x in self.pragma_items[name]]
+        if show_deprecated != self.label_deprecated.Shown:
+            self.label_deprecated.Show(show_deprecated)
+        self.pragma_filter = search
+        self.page_pragma.Layout()
+        self.page_pragma.Thaw()
+
+
+    def on_pragma_key(self, event):
+        """
+        Handler for pressing a key in pragma page, focuses filter on Ctrl-F.
+        """
+        event.Skip()
+        if event.KeyCode in [ord('F')] and event.ControlDown():
+            self.edit_pragma_filter.SetFocus()
 
 
     def on_pragma_save(self, event):

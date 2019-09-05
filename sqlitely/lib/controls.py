@@ -1637,7 +1637,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             patterns = map(re.escape, self._filter.split())
             for col_name, col_label in self._columns:
                 col_value = self._formatters[col_name](row, col_name)
-                if all(re.search(p, col_value, re.I) for p in patterns):
+                if all(re.search(p, col_value, re.I | re.U) for p in patterns):
                     result = True
                     break
         return result
