@@ -996,7 +996,9 @@ class Database(object):
             if opts.get("read") == False: continue # for name, opts
 
             rows = self.execute("PRAGMA %s" % name).fetchall()
-            if not rows: continue # for name, opts
+            if not rows:
+                if callable(opts["type"]): result[name] = opts["type"]()
+                continue # for name, opts
 
             if "table" == opts["type"]:
                 result[name] = [x[opts["col"]] for x in rows]
