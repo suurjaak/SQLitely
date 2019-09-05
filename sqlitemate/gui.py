@@ -3849,7 +3849,7 @@ class DatabasePage(wx.Panel):
                         else " as %s" % self.db.quote(table2, force=True)
 
                 create_sql = self.db.transform_sql(
-                    self.db.get_sql(table=table, format=False), "table",
+                    self.db.get_sql(table=table, indent=False), "table",
                     rename={"table": "main2." + self.db.quote(table2)}
                 )
                 try:

@@ -683,7 +683,7 @@ class Database(object):
         return copy.deepcopy(result)
 
 
-    def get_sql(self, table=None, column=None, refresh=False, format=True):
+    def get_sql(self, table=None, column=None, refresh=False, indent=True):
         """
         Returns full CREATE SQL statement for database, or for specific table only,
         or SQL line for specific table column only.
@@ -691,7 +691,7 @@ class Database(object):
         @param   table    table to return CREATE SQL for if not everything
         @param   column   table column to return SQL for if not full CREATE TABLE
         @param   refresh  if True, schema is re-queried
-        @param   format   whether to format SQL with linefeeds and indentation
+        @param   indent   whether to format SQL with linefeeds and indentation
         """
         result = ""
 
@@ -718,7 +718,7 @@ class Database(object):
                     continue # for name, opts
 
                 sql = opts["sql"].strip()
-                if "table" == category and format:
+                if "table" == category and indent:
                     # LF after first brace
                     sql = re.sub(r"^([^(]+)\(\s*", lambda m: m.group(1).strip() + " (\n  ", sql)
                     # LF after each col
