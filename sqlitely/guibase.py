@@ -13,7 +13,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.09.2019
+@modified    06.09.2019
 """
 import datetime
 import os
@@ -35,7 +35,8 @@ StatusEvent, EVT_STATUS = wx.lib.newevent.NewEvent()
 
 
 deferred_logs   = []   # Log messages cached before main window is available
-deferred_status = []   # Last status cached before main window is available
+deferred_status = []   # Last status cached before main window is available,
+                       # as [(msg, flash)]
 window          = None # Application main window instance
 
 
@@ -56,37 +57,20 @@ def log(text, *args):
         finaltext = finaltext.replace("\n", "\n\t\t")
     msg = "%s.%03d\t%s" % (now.strftime("%H:%M:%S"), now.microsecond / 1000,
                            finaltext)
-    if window:
-        process_deferreds()
-        wx.PostEvent(window, LogEvent(text=msg))
-    else:
-        deferred_logs.append(msg)
+    if not window: return deferred_logs.append(msg)
+
+    process_deferreds()
+    wx.PostEvent(window, LogEvent(text=msg))
 
 
-def status(text, *args):
+def status(text, *args, **kwargs):
     """
-    Sets main window status text.
+    Sets main window status text, optionally logs the message.
 
-    @param   args  string format arguments, if any, to substitute in text
-    """
-    global deferred_status, window
-    try:
-        msg = text % args if args else text
-    except UnicodeError:
-        args = tuple(map(util.to_unicode, args))
-        msg = text % args if args else text
-    if window:
-        process_deferreds()
-        wx.PostEvent(window, StatusEvent(text=msg))
-    else:
-        deferred_status[:] = [msg]
-
-
-def status_flash(text, *args):
-    """
-    Sets main window status text that will be cleared after a timeout.
-
-    @param   args  string format arguments, if any, to substitute in text
+    @param   args   string format arguments, if any, to substitute in text
+    @param   flash  whether to clear the status after timeout,
+                    by default after conf.StatusFlashLength if not given seconds
+    @param   log    whether to log the message to main window
     """
     global deferred_status, window
     try:
@@ -94,36 +78,14 @@ def status_flash(text, *args):
     except UnicodeError:
         args = tuple(map(util.to_unicode, args))
         msg = text % args if args else text
-    if window:
-        process_deferreds()
-        wx.PostEvent(window, StatusEvent(text=msg))
-        def clear_status():
-            if window.StatusBar and window.StatusBar.StatusText == msg:
-                window.SetStatusText("")
-        wx.CallLater(conf.StatusFlashLength, clear_status)
-    else:
-        deferred_status[:] = [msg]
+    do_log, flash = (kwargs.get(x) for x in ("log", "flash"))
+    if do_log: log(msg)
+    if not window:
+        deferred_status[:] = [(msg, flash)]
+        return
 
-
-def logstatus(text, *args):
-    """
-    Logs a timestamped message to main window and sets main window status text.
-
-    @param   args  string format arguments, if any, to substitute in text
-    """
-    log(text, *args)
-    status(text, *args)
-
-
-def logstatus_flash(text, *args):
-    """
-    Logs a timestamped message to main window and sets main window status text
-    that will be cleared after a timeout.
-
-    @param   args  string format arguments, if any, to substitute in text
-    """
-    log(text, *args)
-    status_flash(text, *args)
+    process_deferreds()
+    wx.PostEvent(window, StatusEvent(text=msg, timeout=flash))
 
 
 def process_deferreds():
@@ -131,14 +93,16 @@ def process_deferreds():
     Forwards log messages and status, cached before main window was available.
     """
     global deferred_logs, deferred_status, window
-    if window:
-        if deferred_logs:
-            for msg in deferred_logs:
-                wx.PostEvent(window, LogEvent(text=msg))
-            del deferred_logs[:]
-        if deferred_status:
-            wx.PostEvent(window, StatusEvent(text=deferred_status[0]))
-            del deferred_status[:]
+    if not window: return
+
+    if deferred_logs:
+        for msg in deferred_logs:
+            wx.PostEvent(window, LogEvent(text=msg))
+        del deferred_logs[:]
+    if deferred_status:
+        msg, flash = deferred_status[0]
+        wx.PostEvent(window, StatusEvent(text=msg, timeout=flash))
+        del deferred_status[:]
 
 
 
@@ -155,7 +119,7 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
         self.console_commands = set() # Commands from run_console()
         self.frame_console = wx.py.shell.ShellFrame(parent=self,
             title=u"%s Console" % conf.Title, size=conf.ConsoleSize)
-        self.frame_console.Bind(wx.EVT_CLOSE, self.on_showhide_console)
+        self.frame_console.Bind(wx.EVT_CLOSE, self.on_toggle_console)
         self.frame_console_shown = False # Init flag
         console = self.console = self.frame_console.shell
         if not isinstance(conf.ConsoleHistoryCommands, list):
@@ -213,13 +177,13 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
         menu_file.AppendSeparator()
         m_exit = menu_file.Append(-1, "E&xit\tAlt-X", "Exit")
 
-        self.Bind(wx.EVT_MENU, self.on_showhide_console, menu_console)
+        self.Bind(wx.EVT_MENU, self.on_toggle_console, menu_console)
         self.Bind(wx.EVT_MENU, self.on_open_widget_inspector, menu_inspect)
         self.Bind(wx.EVT_MENU, self.on_exit, m_exit)
         self.SetMenuBar(menu)
 
 
-    def on_exit(self, event):
+    def on_exit(self, *_):
         """Handler on application exit, saves configuration."""
         do_exit = True
         if do_exit:
@@ -258,8 +222,14 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
 
 
     def on_set_status(self, event):
-        """Event handler for adding a message to the log control."""
+        """Event handler for setting main window status bar text."""
         self.SetStatusText(event.text)
+        if not event.timeout: return
+            
+        timeout = event.timeout
+        if isinstance(timeout, bool): timeout = conf.StatusFlashLength
+        clear = lambda sb: sb and sb.StatusText == event.text and window.SetStatusText("")
+        wx.CallLater(timeout * 1000, clear, window.StatusBar)
 
 
     def on_log_message(self, event):
@@ -276,7 +246,7 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
                           (e.__class__.__name__, e))
 
 
-    def on_showhide_console(self, event):
+    def on_toggle_console(self, *_):
         """Toggles the console shown/hidden."""
         show = not self.frame_console.IsShown()
         if show:
@@ -306,7 +276,7 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
             self.menu_console.Check(show)
 
 
-    def on_open_widget_inspector(self, event):
+    def on_open_widget_inspector(self, *_):
         """Toggles the widget inspection tool shown/hidden."""
         visible = not (self.widget_inspector.initialized
                        and self.widget_inspector._frame)

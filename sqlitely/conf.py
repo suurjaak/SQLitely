@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.09.2019
+@modified    06.09.2019
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -22,8 +22,8 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev42"
-VersionDate = "05.09.2019"
+Version = "1.0.dev46"
+VersionDate = "06.09.2019"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -221,8 +221,8 @@ GridRowInsertedColour = "#88DDFF"
 """Colour set to table/list cells that have been changed."""
 GridCellChangedColour = "#FF7777"
 
-"""Duration of "flashed" status message on StatusBar, in milliseconds."""
-StatusFlashLength = 30000
+"""Duration of "flashed" status message on StatusBar, in seconds."""
+StatusFlashLength = 20
 
 """How many items in the Recent Files menu."""
 MaxRecentFiles = 20
