@@ -16,7 +16,10 @@ Released under the MIT License.
 @modified    06.09.2019
 """
 import datetime
+import logging
 import os
+import re
+import traceback
 
 import wx
 import wx.lib.inspection
@@ -28,40 +31,6 @@ from . lib import util, wx_accel
 from . import conf
 
 
-"""Custom application event for adding to log."""
-LogEvent,    EVT_LOG    = wx.lib.newevent.NewEvent()
-"""Custom application event for setting main window status."""
-StatusEvent, EVT_STATUS = wx.lib.newevent.NewEvent()
-
-
-deferred_logs   = []   # Log messages cached before main window is available
-deferred_status = []   # Last status cached before main window is available,
-                       # as [(msg, flash)]
-window          = None # Application main window instance
-
-
-def log(text, *args):
-    """
-    Logs a timestamped message to main window.
-
-    @param   args  string format arguments, if any, to substitute in text
-    """
-    global deferred_logs, window
-    now = datetime.datetime.now()
-    try:
-        finaltext = text % args if args else text
-    except UnicodeError:
-        args = tuple(map(util.to_unicode, args))
-        finaltext = text % args if args else text
-    if "\n" in finaltext: # Indent all linebreaks
-        finaltext = finaltext.replace("\n", "\n\t\t")
-    msg = "%s.%03d\t%s" % (now.strftime("%H:%M:%S"), now.microsecond / 1000,
-                           finaltext)
-    if not window: return deferred_logs.append(msg)
-
-    process_deferreds()
-    wx.PostEvent(window, LogEvent(text=msg))
-
 
 def status(text, *args, **kwargs):
     """
@@ -72,37 +41,46 @@ def status(text, *args, **kwargs):
                     by default after conf.StatusFlashLength if not given seconds
     @param   log    whether to log the message to main window
     """
-    global deferred_status, window
-    try:
-        msg = text % args if args else text
+    window = wx.GetApp() and wx.GetApp().GetTopWindow()
+    if not window: return
+
+    try: msg = text % args if args else text
     except UnicodeError:
         args = tuple(map(util.to_unicode, args))
         msg = text % args if args else text
-    do_log, flash = (kwargs.get(x) for x in ("log", "flash"))
-    if do_log: log(msg)
-    if not window:
-        deferred_status[:] = [(msg, flash)]
-        return
-
-    process_deferreds()
-    wx.PostEvent(window, StatusEvent(text=msg, timeout=flash))
+    msg = re.sub("[\n\r\t]+", " ", msg)
+    log, flash = (kwargs.get(x) for x in ("log", "flash"))
+    if log: logging.info(msg)
+    window.set_status(msg, timeout=flash)
 
 
-def process_deferreds():
-    """
-    Forwards log messages and status, cached before main window was available.
-    """
-    global deferred_logs, deferred_status, window
-    if not window: return
 
-    if deferred_logs:
-        for msg in deferred_logs:
-            wx.PostEvent(window, LogEvent(text=msg))
-        del deferred_logs[:]
-    if deferred_status:
-        msg, flash = deferred_status[0]
-        wx.PostEvent(window, StatusEvent(text=msg, timeout=flash))
-        del deferred_status[:]
+class GUILogHandler(logging.Handler):
+    """Logging handler that forwards logging messages to GUI log window."""
+
+    def __init__(self):
+        self.deferred = [] # Messages logged before main window available
+        super(self.__class__, self).__init__()
+
+
+    def emit(self, record):
+        """Adds message to GUI log window, or postpones if window unavailable."""
+        now = datetime.datetime.now()
+        try: text = record.msg % record.args if record.args else record.msg
+        except UnicodeError:
+            args = tuple(map(util.to_unicode, record.args or ()))
+            text = record.msg % args if args else record.msg
+        if record.exc_info:
+            text += "\n\n" + "".join(traceback.format_exception(*record.exc_info))
+        if "\n" in text: text = text.replace("\n", "\n\t\t") # Indent linebreaks
+        msg = "%s.%03d\t%s" % (now.strftime("%H:%M:%S"), now.microsecond / 1000, text)
+
+        window = wx.GetApp() and wx.GetApp().GetTopWindow()
+        if window:
+            msgs = self.deferred + [msg]
+            for m in msgs: window.log_message(m)
+            del self.deferred[:]
+        else: self.deferred.append(msg)
 
 
 
@@ -112,8 +90,6 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
     def __init__(self):
         wx_accel.AutoAcceleratorMixIn.__init__(self)
 
-        self.Bind(EVT_LOG,      self.on_log_message)
-        self.Bind(EVT_STATUS,   self.on_set_status)
         self.Bind(wx.EVT_CLOSE, self.on_exit)
 
         self.console_commands = set() # Commands from run_console()
@@ -138,8 +114,7 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         ColourManager.Manage(panel, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
 
-        button_clear = wx.Button(parent=panel, label="C&lear log",
-                                 size=(100, -1))
+        button_clear = wx.Button(parent=panel, label="C&lear log", size=(100, -1))
         button_clear.Bind(wx.EVT_BUTTON, lambda event: self.log.Clear())
         edit_log = self.log = wx.TextCtrl(panel, style=wx.TE_MULTILINE)
         edit_log.SetEditable(False)
@@ -183,12 +158,10 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
         self.SetMenuBar(menu)
 
 
-    def on_exit(self, *_):
+    def on_exit(self, event):
         """Handler on application exit, saves configuration."""
-        do_exit = True
-        if do_exit:
-            conf.save()
-            self.Destroy()
+        conf.save()
+        self.Destroy()
 
 
     def on_keydown_console(self, event):
@@ -221,59 +194,53 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
             conf.save()
 
 
-    def on_set_status(self, event):
-        """Event handler for setting main window status bar text."""
-        self.SetStatusText(event.text)
-        if not event.timeout: return
-            
-        timeout = event.timeout
-        if isinstance(timeout, bool): timeout = conf.StatusFlashLength
-        clear = lambda sb: sb and sb.StatusText == event.text and window.SetStatusText("")
-        wx.CallLater(timeout * 1000, clear, window.StatusBar)
+    def set_status(self, text, timeout=False):
+        """Sets main window status bar text, optionally clears after timeout."""
+        self.SetStatusText(text)
+        if not timeout or not text: return
+
+        if timeout is True: timeout = conf.StatusFlashLength
+        clear = lambda sb: sb and sb.StatusText == text and self.SetStatusText("")
+        wx.CallLater(timeout * 1000, clear, self.StatusBar)
 
 
-    def on_log_message(self, event):
-        """Event handler for adding a message to the log control."""
-        if hasattr(self, "log") and getattr(conf, "LogEnabled", False):
-            text = event.text
-            try:
-                self.log.AppendText(text + "\n")
-            except Exception:
-                try:
-                    self.log.AppendText(text.decode("utf-8", "replace") + "\n")
-                except Exception as e:
-                    print("Exception %s: %s in on_log_message" %
-                          (e.__class__.__name__, e))
+    def log_message(self, text):
+        """Adds a message to the log control."""
+        if not hasattr(self, "log") \
+        or hasattr(conf, "LogEnabled") and not conf.LogEnabled: return
+
+        try: self.log.AppendText(text + "\n")
+        except Exception:
+            try: self.log.AppendText(text.decode("utf-8", "replace") + "\n")
+            except Exception as e: print("Exception %s: %s in log_message" %
+                                         (e.__class__.__name__, e))
 
 
     def on_toggle_console(self, *_):
         """Toggles the console shown/hidden."""
         show = not self.frame_console.IsShown()
-        if show:
-            if not self.frame_console_shown:
-                # First showing of console, set height to a fraction of main
-                # form, and position it immediately under the main form, or
-                # covering its bottom if no room.
-                self.frame_console_shown = True
-                size = wx.Size(self.Size.width, max(200, self.Size.height / 3))
-                self.frame_console.Size = size
-                display = wx.GetDisplaySize()
-                y = 0
-                min_bottom_space = 130 # Leave space for autocomplete dropdown
-                if size.height > display.height - self.Size.height \
-                - self.Position.y - min_bottom_space:
-                    y = display.height - self.Size.height - self.Position.y \
-                        - size.height - min_bottom_space
-                self.frame_console.Position = (
-                    self.Position.x, self.Position.y + self.Size.height + y
-                )
-            # Scroll to the last line
-            self.console.ScrollToLine(self.console.LineCount + 3 - (
-                self.console.Size.height / self.console.GetTextExtent(" ")[1]
-            ))
+        if show and not self.frame_console_shown:
+            # First showing of console, set height to a fraction of main
+            # form, and position it immediately under the main form, or
+            # covering its bottom if no room.
+            self.frame_console_shown = True
+            size = wx.Size(self.Size.width, max(200, self.Size.height / 3))
+            self.frame_console.Size = size
+            display = wx.GetDisplaySize()
+            y = 0
+            min_bottom_space = 130 # Leave space for autocomplete dropdown
+            if size.height > display.height - self.Size.height \
+            - self.Position.y - min_bottom_space:
+                y = display.height - self.Size.height - self.Position.y \
+                    - size.height - min_bottom_space
+            self.frame_console.Position = (
+                self.Position.x, self.Position.y + self.Size.height + y
+            )
+        if show: self.console.ScrollToLine(self.console.LineCount + 3 - (
+            self.console.Size.height / self.console.GetTextExtent(" ")[1]
+        )) # Scroll to the last line
         self.frame_console.Show(show)
-        if hasattr(self, "menu_console"):
-            self.menu_console.Check(show)
+        if hasattr(self, "menu_console"): self.menu_console.Check(show)
 
 
     def on_open_widget_inspector(self, *_):

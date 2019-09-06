@@ -8,21 +8,22 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.09.2019
+@modified    06.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
 import copy
 import datetime
+import logging
 import os
 import re
 import sqlite3
 import shutil
-import traceback
 
 from . lib import util
 from . import conf
-from . import guibase
+
+logger = logging.getLogger(__name__)
 
 
 class Database(object):
@@ -453,8 +454,7 @@ class Database(object):
                                     self.execute("PRAGMA compile_options").fetchall()]
             self.get_tables(refresh=True)
         except Exception:
-            if log_error: guibase.log("Error opening database %s.\n\n%s",
-                                      filename, traceback.format_exc())
+            if log_error: logger.exception("Error opening database %s.", filename)
             self.close()
             raise
 
@@ -494,9 +494,8 @@ class Database(object):
                 self.execute(sql)
             except Exception as e:
                 result.append(repr(e))
-                guibase.log("Error copying table %s from %s to %s.\n\n%s",
-                            self.quote(name), self.filename, filename,
-                            traceback.format_exc())
+                logger.exception("Error copying table %s from %s to %s.",
+                                 self.quote(name), self.filename, filename)
 
         # Create indexes
         for name, opts in sorted(self.schema["table"].items()):
@@ -505,8 +504,8 @@ class Database(object):
                 self.execute(sql)
             except Exception as e:
                 result.append(repr(e))
-                guibase.log("Error creating index %s for %s.\n\n%s",
-                            self.quote(name), filename, traceback.format_exc())
+                logger.exception("Error creating index %s for %s.",
+                                 self.quote(name), filename)
         self.execute("DETACH DATABASE new")
         return result
 
@@ -567,7 +566,7 @@ class Database(object):
         result = None
         if self.connection:
             if log and conf.LogSQL:
-                guibase.log("SQL: %s%s", sql,
+                logger.info("SQL: %s%s", sql,
                             ("\nParameters: %s" % params) if params else "")
             result = self.connection.execute(sql, params)
         return result
@@ -688,8 +687,8 @@ class Database(object):
                     row["type"] = row["type"].upper()
                     result.append(row)
             except sqlite3.DatabaseError:
-                guibase.log("Error getting %s column data for %s.\n\n%s",
-                            table, self.filename, traceback.format_exc())
+                logger.exception("Error getting %s column data for %s.",
+                                 table, self.filename,)
             self.schema["table"][table]["columns"] = result
         return copy.deepcopy(result)
 
@@ -936,7 +935,7 @@ class Database(object):
         if not self.is_open():
             return
         table = table.lower()
-        guibase.log("Inserting 1 row into table %s, %s.",
+        logger.info("Inserting 1 row into table %s, %s.",
                     self.quote(self.schema["table"][table]["name"]), self.filename)
         self.ensure_backup()
         col_data = self.get_table_columns(table)
@@ -962,7 +961,7 @@ class Database(object):
         if not self.is_open():
             return
         table, where = table.lower(), ""
-        guibase.log("Updating 1 row in table %s, %s.",
+        logger.info("Updating 1 row in table %s, %s.",
                     self.quote(self.schema["table"][table]["name"]), self.filename)
         self.ensure_backup()
         col_data = self.get_table_columns(table)
@@ -996,7 +995,7 @@ class Database(object):
         if not self.is_open():
             return
         table, where = table.lower(), ""
-        guibase.log("Deleting 1 row from table %s, %s.",
+        logger.info("Deleting 1 row from table %s, %s.",
                     self.quote(self.schema["table"][table]["name"]), self.filename)
         self.ensure_backup()
         col_data = self.get_table_columns(table)
@@ -1081,7 +1080,7 @@ def detect_databases():
                         "/Users" if "mac" == os.name else "/home"]
     search_paths = map(util.to_unicode, search_paths)
     for search_path in filter(os.path.exists, search_paths):
-        guibase.log("Looking for SQLite databases under %s.", search_path)
+        logger.info("Looking for SQLite databases under %s.", search_path)
         for root, _, files in os.walk(search_path):
             results = []
             for f in files:
@@ -1091,7 +1090,7 @@ def detect_databases():
 
     # Then search current working directory for database files.
     search_path = util.to_unicode(os.getcwd())
-    guibase.log("Looking for SQLite databases under %s.", search_path)
+    logger.info("Looking for SQLite databases under %s.", search_path)
     for root, _, files in os.walk(search_path):
         results = []
         for f in (x for x in files if is_sqlite_file(x, root)):

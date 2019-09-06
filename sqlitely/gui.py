@@ -18,12 +18,12 @@ import datetime
 import functools
 import hashlib
 import inspect
+import logging
 import os
 import re
 import shutil
 import sys
 import textwrap
-import traceback
 import urllib
 import webbrowser
 
@@ -56,6 +56,8 @@ from . import support
 from . import templates
 from . import workers
 
+logger = logging.getLogger(__name__)
+
 
 """Custom application events for worker results."""
 WorkerEvent, EVT_WORKER = wx.lib.newevent.NewEvent()
@@ -72,7 +74,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def __init__(self):
         wx.Frame.__init__(self, parent=None, title=conf.Title, size=conf.WindowSize)
         guibase.TemplateFrameMixIn.__init__(self)
-        guibase.window = self
 
         ColourManager.Init(self, conf, {
             "FgColour":                wx.SYS_COLOUR_BTNTEXT,
@@ -196,7 +197,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         class FileDrop(wx.FileDropTarget):
             """A simple file drag-and-drop handler for application window."""
             def __init__(self, window):
-                wx.FileDropTarget.__init__(self)
+                super(self.__class__, self).__init__()
                 self.window = window
 
             def OnDropFiles(self, x, y, filenames):
@@ -238,7 +239,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.Show(True)
         wx.CallLater(20000, self.update_check)
         wx.CallLater(0, self.populate_database_list)
-        guibase.log("Started application.")
+        logger.info("Started application.")
 
 
     def create_page_main(self, notebook):
@@ -604,6 +605,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         Handler for changing a page in the main Notebook, remembers the visit.
         """
+        if event: event.Skip() # Pass event along to next handler
         p = self.notebook.GetPage(self.notebook.GetSelection())
         if not self.pages_visited or self.pages_visited[-1] != p:
             self.pages_visited.append(p)
@@ -615,14 +617,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 subtitle = os.path.join(os.path.split(path)[-1] or path, file)
             self.Title += " - " + subtitle
         self.update_notebook_header()
-        if event: event.Skip() # Pass event along to next handler
 
 
     def on_size(self, event):
         """Handler for window size event, tweaks controls and saves size."""
+        event.Skip()
         conf.WindowSize = [-1, -1] if self.IsMaximized() else self.Size[:]
         conf.save()
-        event.Skip()
         # Right panel scroll
         wx.CallAfter(lambda: self and (self.list_db.RefreshRows(),
                                        self.panel_db_main.Parent.Layout()))
@@ -630,9 +631,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_move(self, event):
         """Handler for window move event, saves position."""
+        event.Skip()
         conf.WindowPosition = event.Position[:]
         conf.save()
-        event.Skip()
 
 
     def on_sys_colour_change(self, event):
@@ -702,6 +703,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         removes from list on Delete, refreshes columns on F5,
         focuses filter on Ctrl-F.
         """
+        event.Skip()
         if event.KeyCode in [wx.WXK_F5]:
             items, selected_files, selected_home = [], [], False
             selected = self.list_db.GetFirstSelected()
@@ -739,7 +741,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             for f in self.dbs_selected: self.load_database_page(f)
         elif event.KeyCode in [wx.WXK_DELETE] and self.dbs_selected:
             self.on_remove_database(None)
-        event.Skip()
 
 
     def on_sort_list_db(self, event):
@@ -819,8 +820,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_filter_list_db(self, event):
         """Handler for filtering dblist, applies search filter."""
-        self.list_db.SetFilter(event.String.strip())
         event.Skip()
+        self.list_db.SetFilter(event.String.strip())
         self.update_database_count()
 
 
@@ -916,7 +917,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             filenames = [f for f in result["filenames"] if f not in conf.DBFiles]
             if filenames:
                 self.update_database_list(filenames)
-                for f in filenames: guibase.log("Detected database %s.", f)
+                for f in filenames: logger.info("Detected database %s.", f)
         if "count" in result:
             name = ("" if result["count"] else "additional ") + "database"
             guibase.status("Detected %s.", util.plural(name, result["count"]),
@@ -1111,16 +1112,17 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             _, basename = os.path.split(filename)
             newpath = os.path.join(path, basename) if len(filenames) > 1 else path
             if filename == newpath:
+                logger.error("Attempted to save %s as itself.", filename)
                 wx.MessageBox("Cannot overwrite %s with itself." % filename,
                               conf.Title, wx.OK | wx.ICON_WARNING)
                 continue # for filename
             try: shutil.copyfile(filename, newpath)
             except Exception as e:
-                guibase.log("%r when trying to copy %s to %s.",
-                         e, basename, newpath)
-                wx.MessageBox("Failed to copy \"%s\" to \"%s\"." %
-                              (basename, newpath), conf.Title,
-                              wx.OK | wx.ICON_WARNING)
+                logger.exception("%r when trying to copy %s to %s.",
+                                 e, basename, newpath)
+                wx.MessageBox('Failed to copy "%s" to "%s":\n\n%s' %
+                              (basename, newpath, util.format_exc(e)),
+                              conf.Title, wx.OK | wx.ICON_WARNING)
             else:
                 guibase.status("Saved a copy of %s as %s.", filename, newpath,
                                log=True, flash=True)
@@ -1289,13 +1291,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         filename = self.dialog_savefile.GetPath()
         try:
             with open(filename, "w"): pass
-        except Exception:
-            guibase.log("Error creating %s.\n\n%s", filename,
-                     traceback.format_exc())
-            wx.MessageBox(
-                "Could not create %s.\n\n"
-                "Some other process may be using the file."
-                % filename, conf.Title, wx.OK | wx.ICON_WARNING)
+        except Exception as e:
+            logger.exception("Error creating %s.", filename)
+            wx.MessageBox("Could not create %s.\n\n"
+                          "Some other process may be using the file:\n\n%s" % (
+                          filename, util.format_exc(e)),
+                          conf.Title, wx.OK | wx.ICON_WARNING)
         else:
             self.update_database_list(filename)
             self.load_database_page(filename)
@@ -1333,7 +1334,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             count = 0
             for filename in database.find_databases(folder):
                 if filename not in self.db_datas:
-                    guibase.log("Detected database %s.", filename)
+                    logger.info("Detected database %s.", filename)
                     self.update_database_list(filename)
                     count += 1
             self.button_folder.Enabled = True
@@ -1361,8 +1362,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         except Exception as e:
             self.label_tables.Value = util.format_exc(e)
             self.label_tables.ForegroundColour = conf.LabelErrorColour
-            guibase.log("Error opening %s.\n\n%s", filename,
-                     traceback.format_exc())
+            logger.exception("Error opening %s.", filename)
             return
         try:
             tables = db.get_tables()
@@ -1381,8 +1381,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         except Exception as e:
             self.label_tables.Value = util.format_exc(e)
             self.label_tables.ForegroundColour = conf.LabelErrorColour
-            guibase.log("Error loading data from %s.\n\n%s", filename,
-                     traceback.format_exc())
+            logger.exception("Error loading data from %s.", filename)
         if db and not db.has_consumers():
             db.close()
             if filename in self.dbs:
@@ -1514,7 +1513,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         if page in self.db_pages:
             del self.db_pages[page]
-        guibase.log("Closed database tab for %s." % page.db)
+        logger.info("Closed database tab for %s.", page.db)
         conf.save()
 
         # Close databases, if not used in any other page
@@ -1523,7 +1522,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if page.db.filename in self.dbs:
                 del self.dbs[page.db.filename]
             page.db.close()
-            guibase.log("Closed database %s." % page.db)
+            logger.info("Closed database %s.", page.db)
         # Remove any dangling references
         if self.page_db_latest == page:
             self.page_db_latest = next((i for i in self.pages_visited[::-1]
@@ -1607,8 +1606,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                             "Not a valid SQLITE database?" % filename,
                             conf.Title, wx.OK | wx.ICON_WARNING)
                 if db:
-                    guibase.log("Opened %s (%s).", db, util.format_bytes(
-                             db.filesize))
+                    logger.info("Opened %s (%s).", db, util.format_bytes(db.filesize))
                     guibase.status("Reading database file %s.", db, flash=True)
                     self.dbs[filename] = db
                     # Add filename to Recent Files menu and conf, if needed
@@ -1689,6 +1687,7 @@ class DatabasePage(wx.Panel):
         self.pragma_edit = False    # Whether in PRAGMA edit mode
         self.pragma_fullsql = False # Whether show SQL for all PRAGMAs, changed or not
         self.pragma_filter = ""     # Current PRAGMA filter
+        self.last_sql = ""          # Last executed SQL
         self.memoryfs = memoryfs
         parent_notebook.InsertPage(1, self, title)
         busy = controls.BusyPanel(self, "Loading \"%s\"." % db.filename)
@@ -2553,13 +2552,13 @@ class DatabasePage(wx.Panel):
                     value = '"%s"' % value.replace('"', '""')
                 elif isinstance(value, bool): value = str(value).upper()
                 sql = "PRAGMA %s = %s" % (name, value)
-                guibase.log("Executing %s.", sql)
+                logger.info("Executing %s.", sql)
                 self.db.execute(sql)
-        except Exception:
+        except Exception as e:
             result = False
-            msg = "Error setting %s:\n\n%s" % \
-                  (sql, traceback.format_exc())
-            guibase.status(msg, log=True, flash=True)
+            msg = "Error setting %s:\n\n%s" % (sql, util.format_exc(e))
+            logger.exception(msg)
+            guibase.status(msg, flash=True)
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
         else:
             self.on_pragma_cancel(None)
@@ -2646,7 +2645,7 @@ class DatabasePage(wx.Panel):
                           conf.Title, wx.ICON_INFORMATION)
         else:
             err = "\n- ".join(errors)
-            guibase.log("Errors found in %s: %s", self.db, err)
+            logger.info("Errors found in %s: %s", self.db, err)
             err = err[:500] + ".." if len(err) > 500 else err
             msg = "A number of errors were found in %s:\n\n- %s\n\n" \
                   "Recover as much as possible to a new database?" % \
@@ -2704,7 +2703,7 @@ class DatabasePage(wx.Panel):
         guibase.status("")
         if errors:
             err = "\n- ".join(errors)
-            guibase.log("Error running vacuum on %s: %s", self.db, err)
+            logger.info("Error running vacuum on %s: %s", self.db, err)
             err = err[:500] + ".." if len(err) > 500 else err
             wx.MessageBox(err, conf.Title, wx.ICON_WARNING | wx.OK)
         else:
@@ -2881,6 +2880,7 @@ class DatabasePage(wx.Panel):
         Handler for right-clicking in HtmlWindow, sets up a temporary flag for
         HTML link click handler to check, in order to display a context menu.
         """
+        event.Skip()
         self.html_searchall.is_rightclick = True
         def reset():
             if self.html_searchall.is_rightclick: # Flag still up: show menu
@@ -2903,7 +2903,7 @@ class DatabasePage(wx.Panel):
                 menu.Bind(wx.EVT_MENU, on_copy, id=item_selection.GetId())
                 menu.Bind(wx.EVT_MENU, on_selectall, id=item_selectall.GetId())
                 self.html_searchall.PopupMenu(menu)
-        event.Skip(), wx.CallAfter(reset)
+        wx.CallAfter(reset)
 
 
     def on_click_html_link(self, event):
@@ -3125,10 +3125,10 @@ class DatabasePage(wx.Panel):
                 self.workers_search[search_id].stop()
                 del self.workers_search[search_id]
         if "error" in result:
-            guibase.log("Error searching %s:\n\n%s", self.db, result["error"])
-            errormsg = "Error searching %s:\n\n%s" % \
-                       (self.db, result.get("error_short", result["error"]))
-            wx.MessageBox(errormsg, conf.Title, wx.OK | wx.ICON_WARNING)
+            msg = "Error searching %s:\n\n%s"
+            logger.info(msg, self.db, result["error"])
+            error = msg % (self.db, result.get("error_short", result["error"]))
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
 
 
     def on_searchall_callback(self, result):
@@ -3286,8 +3286,7 @@ class DatabasePage(wx.Panel):
         sql = ""
         table = ""
         if event.EventObject is self.button_export_sql:
-            grid_source = self.grid_sql
-            sql = getattr(self, "last_sql", "")
+            grid_source, sql = self.grid_sql, self.last_sql
         if not grid_source.Table: return
 
         if grid_source is self.grid_table:
@@ -3317,11 +3316,12 @@ class DatabasePage(wx.Panel):
                                grid_source.Table.columns, sql, table)
             guibase.status('Exported "%s".', filename, log=True, flash=True)
             util.start_file(filename)
-        except Exception:
-            msg = "Error saving %s:\n\n%s" % \
-                  (filename, traceback.format_exc())
-            guibase.status(msg, log=True, flash=True)
-            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+        except Exception as e:
+            msg = "Error saving %s."
+            logger.exception(msg, filename)
+            guibase.status(msg, flash=True)
+            error = "Error saving %s:\n\n%s" % (filename, util.format_exc(e))
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
         finally:
             busy.Close()
 
@@ -3348,11 +3348,12 @@ class DatabasePage(wx.Panel):
                     try:
                         grid.Table.SaveChanges()
                     except Exception as e:
-                        template = "Error saving table %s in \"%s\".\n\n%%r" % (
-                                   self.db.quote(grid.Table.table), self.db)
-                        msg, msgfull = template % e, template % traceback.format_exc()
-                        guibase.status(msg, flash=True), guibase.log(msgfull)
-                        wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+                        msg = 'Error saving table %s in "%s".' % (
+                               self.db.quote(grid.Table.table), self.db)
+                        logger.exception(msg)
+                        guibase.status(msg, flash=True)
+                        error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+                        wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
                         return
                 else: grid.Table.UndoChanges()
                 self.on_change_table(None)
@@ -3402,9 +3403,10 @@ class DatabasePage(wx.Panel):
         try:
             stc.LoadFile(filename)
         except Exception as e:
-            msg = util.format_exc(e)
-            guibase.status(msg, log=True, flash=True)
-            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+            msg = "Error loading SQL from %s." % filename
+            logger.exception(msg); guibase.status(msg, flash=True)
+            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
 
 
     def on_copy_sql(self, stc, event):
@@ -3433,9 +3435,10 @@ class DatabasePage(wx.Panel):
             stc.SaveFile(filename)
             util.start_file(filename)
         except Exception as e:
-            msg = util.format_exc(e)
-            guibase.status(msg, log=True, flash=True)
-            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+            msg = "Error saving SQL to %s." % filename
+            logger.exception(msg); guibase.status(msg, flash=True)
+            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
 
 
     def on_keydown_sql(self, event):
@@ -3443,12 +3446,11 @@ class DatabasePage(wx.Panel):
         Handler for pressing a key in SQL editor, listens for Alt-Enter and
         executes the currently selected line, or currently active line.
         """
+        event.Skip() # Allow to propagate to other handlers
         stc = event.GetEventObject()
         if (event.AltDown() or event.ControlDown()) and wx.WXK_RETURN == event.KeyCode:
             sql = (stc.SelectedText or stc.CurLine[0]).strip()
-            if sql:
-                self.execute_sql(sql)
-        event.Skip() # Allow to propagate to other handlers
+            if sql: self.execute_sql(sql)
 
 
     def on_button_sql(self, event):
@@ -3470,7 +3472,7 @@ class DatabasePage(wx.Panel):
         sql = self.stc_sql.SelectedText.strip() or self.stc_sql.Text.strip()
         try:
             if sql:
-                guibase.log('Executing SQL script "%s".', sql)
+                logger.info('Executing SQL script "%s".', sql)
                 self.db.connection.executescript(sql)
                 self.grid_sql.SetTable(None)
                 self.grid_sql.CreateGrid(1, 1)
@@ -3486,9 +3488,10 @@ class DatabasePage(wx.Panel):
                 self.grid_sql.Size = size[0], size[1]-1
                 self.grid_sql.Size = size[0], size[1]
         except Exception as e:
-            msg = util.format_exc(e)
-            guibase.status(msg, log=True, flash=True)
-            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+            msg = "Error running SQL script."
+            logger.exception(msg); guibase.status(msg, flash=True)
+            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
 
 
     def execute_sql(self, sql):
@@ -3526,9 +3529,10 @@ class DatabasePage(wx.Panel):
                 col_range = range(grid_data.GetNumberCols())
                 [self.grid_sql.AutoSizeColLabelSize(x) for x in col_range]
         except Exception as e:
-            msg = util.format_exc(e)
-            guibase.status(msg, log=True, flash=True)
-            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+            logger.exception("Error running SQL %s.", sql)
+            guibase.status("Error running SQL.", flash=True)
+            error = "Error running SQL:\n\n%s" % util.format_exc(e)
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
 
 
     def get_unsaved(self):
@@ -3569,11 +3573,11 @@ class DatabasePage(wx.Panel):
                 grid.SaveChanges()
             except Exception as e:
                 result = False
-                template = "Error saving table %s in \"%s\".\n\n%%r" % (
-                           self.db.quote(grid.table), self.db)
-                msg, msgfull = template % e, template % traceback.format_exc()
-                guibase.status(msg, flash=True), guibase.log(msgfull)
-                wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+                msg = 'Error saving table %s in "%s".' % (
+                      self.db.quote(grid.table), self.db)
+                logger.exception(msg); guibase.status(msg, flash=True)
+                error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+                wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
                 break # for grid
         return result
 
@@ -3619,8 +3623,8 @@ class DatabasePage(wx.Panel):
             "Are you sure you want to commit these changes (%s)?" %
             info, conf.Title, wx.OK | wx.CANCEL | wx.ICON_QUESTION
         ):
-            guibase.log("Committing %s in table %s (%s).", info,
-                     self.db.quote(self.grid_table.Table.table), self.db)
+            logger.info("Committing %s in table %s (%s).", info,
+                        self.db.quote(self.grid_table.Table.table), self.db)
             if not self.grid_table.Table.SaveChanges(): return
 
             self.on_change_table(None)
@@ -3704,7 +3708,7 @@ class DatabasePage(wx.Panel):
                 text = self.tree_tables.GetItemText(i).lower()
                 self.tree_tables.SetItemBold(i, text == lower)
                 i = self.tree_tables.GetNextSibling(i)
-            guibase.log("Loading table %s (%s).", self.db.quote(table), self.db)
+            logger.info("Loading table %s (%s).", self.db.quote(table), self.db)
             busy = controls.BusyPanel(self, "Loading table %s." %
                                       self.db.quote(table, force=True))
             try:
@@ -3729,12 +3733,12 @@ class DatabasePage(wx.Panel):
                 self.label_help_table.Show()
                 self.label_help_table.ContainingSizer.Layout()
                 busy.Close()
-            except Exception:
+            except Exception as e:
                 busy.Close()
-                errormsg = "Could not load table %s.\n\n%s" % \
-                           (self.db.quote(table), traceback.format_exc())
-                guibase.status(errormsg, log=True, flash=True)
-                wx.MessageBox(errormsg, conf.Title, wx.OK | wx.ICON_WARNING)
+                msg = "Could not load table %s." % self.db.quote(table)
+                logger.exception(msg); guibase.status(msg, flash=True)
+                error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+                wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
 
 
     def on_rclick_tree_tables(self, event):
@@ -3747,13 +3751,13 @@ class DatabasePage(wx.Panel):
         data = tree.GetItemPyData(item)
         if not data: return
 
-        def select_item(item, *a, **kw):
+        def select_item(item, *_, **__):
             tree.SelectItem(item)
-        def clipboard_copy(text, *a, **kw):
+        def clipboard_copy(text, *_, **__):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-        def toggle_items(*a, **kw):
+        def toggle_items(*_, **__):
             if not tree.IsExpanded(tree.RootItem): tree.Expand(tree.RootItem)
             items, item = [], tree.GetNext(tree.RootItem)
             while item and item.IsOk():
@@ -3885,11 +3889,12 @@ class DatabasePage(wx.Panel):
                 )
                 guibase.status("Exported %s.", filename, log=True, flash=True)
                 util.start_file(filename)
-            except Exception:
-                msg = "Error saving %s:\n\n%s" % \
-                      (filename, traceback.format_exc())
-                guibase.status(msg, log=True, flash=True)
-                return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+            except Exception as e:
+                msg = "Error saving %s." % filename
+                logger.exception(msg); guibase.status(msg, flash=True)
+                error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+                wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
+                break # for table, filename
             finally:
                 busy.Close()
 
@@ -3914,13 +3919,10 @@ class DatabasePage(wx.Panel):
         try:
             self.db.execute("ATTACH DATABASE ? AS main2", [filename2])
         except Exception as e:
-            errormsg = "Could not load database %s.\n\n%s" % \
-                       (filename2, traceback.format_exc())
-            guibase.log(errormsg)
-            errormsg = "Could not load database %s.\n\n%s" % \
-                       (filename2, e)
-            guibase.status(errormsg, flash=True)
-            return wx.MessageBox(errormsg, conf.Title, wx.OK | wx.ICON_WARNING)
+            msg = "Could not load database %s." % filename2
+            logger.exception(msg); guibase.status(msg, flash=True)
+            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+            return wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
 
         entrymsg = ('Name conflict on exporting table %(table)s as %(table2)s.\n'
                     'Database %(filename2)s %(entryheader)s '
@@ -3993,9 +3995,9 @@ class DatabasePage(wx.Panel):
                 )
                 try:
                     if t2_lower in db2_tables_lower:
-                        guibase.log("Dropping table %s in %s.", self.db.quote(table2), filename2)
+                        logger.info("Dropping table %s in %s.", self.db.quote(table2), filename2)
                         self.db.execute("DROP TABLE main2.%s" % self.db.quote(table2))
-                    guibase.log("Creating table %s in %s, using %s.",
+                    logger.info("Creating table %s in %s, using %s.",
                                 self.db.quote(table2, force=True), filename2, create_sql)
                     self.db.execute(create_sql)
 
@@ -4019,7 +4021,7 @@ class DatabasePage(wx.Panel):
                             rename={"table": self.db.quote(table2),
                                     "index": "main2." + self.db.quote(name)}
                         )
-                        guibase.log("Creating index %s on table %s in %s, using %s.",
+                        logger.info("Creating index %s on table %s in %s, using %s.",
                                     self.db.quote(name, force=True),
                                     self.db.quote(table2, force=True),
                                     filename2, index_sql)
@@ -4030,24 +4032,19 @@ class DatabasePage(wx.Panel):
                                    self.db.quote(table), filename2, extra, flash=True)
                     db2_tables_lower.add(t2_lower)
                 except Exception as e:
-                    errormsg = "Could not export table %s%s.\n\n%s" % \
-                               (self.db.quote(table), extra, traceback.format_exc())
-                    guibase.log(errormsg)
-                    errormsg = "Could not export table %s%s.\n\n%s" % \
-                               (self.db.quote(table), extra, e)
-                    guibase.status(errormsg, flash=True)
-                    wx.MessageBox(errormsg, conf.Title, wx.OK | wx.ICON_WARNING)
+                    msg = "Could not export table %s%s." % \
+                          (self.db.quote(table), extra)
+                    logger.exception(msg); guibase.status(msg, flash=True)
+                    error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+                    wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
                     break # for table
             else: # nobreak
                 success = True
         except Exception as e:
-            errormsg = 'Failed to read database %s.\n\n%s' % \
-                       (filename2, traceback.format_exc())
-            guibase.log(errormsg)
-            errormsg = 'Failed to read database %s.\n\n%s' % \
-                       (filename2, e)
-            guibase.status(errormsg, flash=True)
-            wx.MessageBox(errormsg, conf.Title, wx.OK | wx.ICON_WARNING)
+            msg = "Failed to read database %s." % filename2
+            logger.exception(msg); guibase.status(msg, flash=True)
+            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
         finally:
             try: self.db.execute("DETACH DATABASE main2")
             except Exception: pass
@@ -4175,10 +4172,7 @@ class DatabasePage(wx.Panel):
                 fields = [self.db.quote(c["name"]) for c in coldata]
                 self.stc_sql.AutoCompAddSubWords(self.db.quote(table["name"]), fields)
         except Exception:
-            if self:
-                errormsg = "Error loading table data from %s.\n\n%s" % \
-                           (self.db, traceback.format_exc())
-                guibase.log(errormsg)
+            if self: logger.exception("Error loading table data from %s.", self.db)
 
 
     def update_tabheader(self):
@@ -4475,7 +4469,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
     def InsertRows(self, row, numRows):
         """Inserts new, unsaved rows at position 0 (row is ignored)."""
         rows_before = len(self.rows_current)
-        for i in range(numRows):
+        for _ in range(numRows):
             # Construct empty dict from column names
             rowdata = dict((col["name"], None) for col in self.columns)
             idx = id(rowdata)
@@ -4498,7 +4492,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         if row + numRows - 1 < self.row_count:
             self.SeekToRow(row + numRows - 1)
             rows_before = len(self.rows_current)
-            for i in range(numRows):
+            for _ in range(numRows):
                 data = self.rows_current[row]
                 idx = data["__id__"]
                 del self.rows_current[row]
@@ -4661,10 +4655,10 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
                 self.idx_all.remove(idx)
             result = True
         except Exception as e:
-            guibase.status("Error saving changes in %s.\n\n%s",
-                           self.db.quote(self.table), traceback.format_exc(), log=True)
-            wx.MessageBox(util.format_exc(e), conf.Title,
-                          wx.OK | wx.ICON_WARNING)
+            msg = "Error saving changes in %s." % self.db.quote(self.table)
+            logger.exception(msg); guibase.status(msg, flash=True)
+            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
         if self.View: self.View.Refresh()
         return result
 

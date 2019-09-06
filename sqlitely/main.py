@@ -9,11 +9,12 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.09.2019
+@modified    06.09.2019
 ------------------------------------------------------------------------------
 """
 import argparse
 import glob
+import logging
 import os
 import sys
 
@@ -21,6 +22,7 @@ import wx
 
 from . lib import util
 from . import conf
+from . import guibase
 from . import gui
 
 
@@ -34,15 +36,17 @@ ARGUMENTS = {
     ],
 }
 
-window = None         # Application main window instance
-
 
 def run_gui(filenames):
     """Main GUI program entrance."""
-    global window
+
+    # Set up logging to GUI log window
+    logger = logging.getLogger(__package__)
+    logger.addHandler(guibase.GUILogHandler())
+    logger.setLevel(logging.DEBUG)
 
     # Create application main window
-    app = wx.App(redirect=True) # stdout and stderr redirected to wx popup
+    app = wx.App(redirect=0) # stdout and stderr redirected to wx popup
     window = gui.MainWindow()
     app.SetTopWindow(window) # stdout/stderr popup closes with MainWindow
 
@@ -53,7 +57,7 @@ def run_gui(filenames):
                        "main, searchparser, support, templates, workers")
     window.run_console("from lib import controls, util, wx_accel")
 
-    window.run_console("self = guibase.window # Application main window instance")
+    window.run_console("self = wx.GetApp().GetTopWindow() # Application main window instance")
     for f in filter(os.path.isfile, filenames):
         wx.CallAfter(wx.PostEvent, window, gui.OpenDatabaseEvent(file=f))
     app.MainLoop()

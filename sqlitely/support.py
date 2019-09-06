@@ -8,16 +8,16 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.09.2019
+@modified    06.09.2019
 ------------------------------------------------------------------------------
 """
 import HTMLParser
+import logging
 import os
 import platform
 import re
 import sys
 import tempfile
-import traceback
 import urllib2
 import urlparse
 
@@ -26,7 +26,8 @@ import wx
 from . lib import controls
 from . lib import util
 from . import conf
-from . import guibase
+
+logger = logging.getLogger(__name__)
 
 
 """Current update dialog window, if any, for avoiding concurrent updates."""
@@ -48,7 +49,7 @@ def check_newest_version(callback=None):
     result = ()
     update_window = True
     try:
-        guibase.log("Checking for new version at %s.", conf.DownloadURL)
+        logger.info("Checking for new version at %s.", conf.DownloadURL)
         html = url_opener.open(conf.DownloadURL).read()
         links = re.findall(r"<a[^>]*\shref=['\"](.+)['\"][^>]*>", html, re.I)
         if links:
@@ -68,7 +69,7 @@ def check_newest_version(callback=None):
             # Extract version number like 1.3.2a from myprogram_1.3.2a_x64.exe
             version = (re.findall(r"(\d[\da-z.]+)", link) + [None])[0]
             if version:
-                guibase.log("Newest %s version is %s.", install_type, version)
+                logger.info("Newest %s version is %s.", install_type, version)
             try:
                 if (version != conf.Version
                 and canonic_version(conf.Version) >= canonic_version(version)):
@@ -77,7 +78,7 @@ def check_newest_version(callback=None):
             if version and version != conf.Version:
                 changes = ""
                 try:
-                    guibase.log("Reading changelog from %s.", conf.ChangelogURL)
+                    logger.info("Reading changelog from %s.", conf.ChangelogURL)
                     html = url_opener.open(conf.ChangelogURL).read()
                     match = re.search(r"<h4[^>]*>(v%s,.*)</h4\s*>" % version,
                                       html, re.I)
@@ -91,13 +92,11 @@ def check_newest_version(callback=None):
                             title = match.group(1)
                             changes = "Changes in %s\n\n%s" % (title, changes)
                 except Exception:
-                    guibase.log("Failed to read changelog.\n\n%s.",
-                                traceback.format_exc())
+                    logger.exception("Failed to read changelog.")
                 url = urlparse.urljoin(conf.DownloadURL, link)
                 result = (version, url, changes)
     except Exception:
-        guibase.log("Failed to retrieve new version from %s.\n\n%s",
-                    conf.DownloadURL, traceback.format_exc())
+        logger.exception("Failed to retrieve new version from %s", conf.DownloadURL)
         result = None
     update_window = None
     if callback:
@@ -121,7 +120,7 @@ def download_and_install(url):
         update_window = dlg_progress
         urlfile = url_opener.open(url)
         filepath = os.path.join(tmp_dir, filename)
-        guibase.log("Downloading %s to %s.", url, filepath)
+        logger.info("Downloading %s to %s.", url, filepath)
         filesize = int(urlfile.headers.get("content-length", sys.maxint))
         with open(filepath, "wb") as f:
             BLOCKSIZE = 65536
@@ -140,11 +139,11 @@ def download_and_install(url):
         dlg_progress.Destroy()
         update_window = None
         if is_cancelled:
-            guibase.log("Upgrade cancelled, erasing temporary file %s.", filepath)
+            logger.info("Upgrade cancelled, erasing temporary file %s.", filepath)
             util.try_until(lambda: os.unlink(filepath))
             util.try_until(lambda: os.rmdir(tmp_dir))
         else:
-            guibase.log("Successfully downloaded %s of %s.",
+            logger.info("Successfully downloaded %s of %s.",
                      util.format_bytes(filesize), filename)
             dlg_proceed = controls.NonModalOKDialog(parent,
                 "Update information",
@@ -158,8 +157,7 @@ def download_and_install(url):
             update_window = dlg_proceed
             dlg_proceed.Bind(wx.EVT_CLOSE, proceed_handler)
     except Exception:
-        guibase.log("Failed to download new version from %s.\n\n%s", url,
-                    traceback.format_exc())
+        logger.exception("Failed to download new version from %s.", url)
 
 
 def get_install_type():

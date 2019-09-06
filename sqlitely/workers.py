@@ -8,9 +8,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.09.2019
+@modified    06.09.2019
 ------------------------------------------------------------------------------
 """
+import logging
 import Queue
 import re
 import threading
@@ -25,9 +26,10 @@ from . lib import util
 from . lib.vendor import step
 from . import conf
 from . import database
-from . import guibase
 from . import searchparser
 from . import templates
+
+logger = logging.getLogger(__name__)
 
 
 class WorkerThread(threading.Thread):
@@ -117,7 +119,7 @@ class SearchThread(WorkerThread):
                              "row":       templates.SEARCH_ROW_TABLE_HTML}
                 wrap_b = lambda x: "<b>%s</b>" % x.group(0)
                 FACTORY = lambda x: step.Template(TEMPLATES[x], escape=True)
-                guibase.log('Searching "%(text)s" in %(table)s (%(db)s).' % search)
+                logger.info('Searching "%(text)s" in %(table)s (%(db)s).' % search)
                 self._stop_work = False
                 self._drop_results = False
 
@@ -251,12 +253,12 @@ class SearchThread(WorkerThread):
                 result["done"] = True
                 result["count"] = result_count
                 self.postback(result)
-                guibase.log("Search found %(count)s results." % result)
+                logger.info("Search found %s results." % result["count"])
             except Exception as e:
                 if not result:
                     result = {}
                 result["done"], result["error"] = True, traceback.format_exc()
-                result["error_short"] = repr(e)
+                result["error_short"] = util.format_exc(e)
                 self.postback(result)
 
 
