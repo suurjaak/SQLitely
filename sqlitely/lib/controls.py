@@ -273,8 +273,8 @@ class NonModalOKDialog(wx.Dialog):
 
 
     def OnClose(self, event):
-        self.Close()
         event.Skip()
+        self.Close()
 
 
 
@@ -372,9 +372,9 @@ class EntryDialog(wx.Dialog):
 
 
     def _OnKeyDown(self, event):
+        event.Skip()
         if wx.WXK_ESCAPE == event.KeyCode and not self._text.IsDropDownShown():
             self.Hide()
-        event.Skip()
 
 
     def _OnSearch(self, event):
@@ -608,11 +608,11 @@ class NoteButton(wx.PyPanel, wx.Button):
 
     def OnSize(self, event):
         """Handler for size event, resizes texts and repaints control."""
+        event.Skip()
         if event.Size != self._size:
             self._size = event.Size
             wx.CallAfter(lambda: self and (self.WrapTexts(), self.Refresh(),
                          self.InvalidateBestSize(), self.Parent.Layout()))
-        event.Skip()
 
 
     def OnFocus(self, event):
@@ -643,8 +643,7 @@ class NoteButton(wx.PyPanel, wx.Button):
                 wx.PostEvent(self, button_event)
                 skip = False
                 self.Refresh()
-        if skip:
-            event.Skip()
+        if skip: event.Skip()
 
 
     def OnMouseEvent(self, event):
@@ -652,6 +651,7 @@ class NoteButton(wx.PyPanel, wx.Button):
         Mouse handler, creates hover/press border effects and fires button
         event on click.
         """
+        event.Skip()
         refresh = False
         if event.Entering():
             refresh = True
@@ -676,7 +676,6 @@ class NoteButton(wx.PyPanel, wx.Button):
                     wx.PostEvent(self, btnevent)
         if refresh:
             self.Refresh()
-        event.Skip()
 
 
     def OnMouseCaptureLostEvent(self, event):
@@ -961,6 +960,7 @@ class ScrollingHtmlWindow(wx.html.HtmlWindow):
         Handler for sizing the HtmlWindow, sets new scroll position based
         previously stored one (HtmlWindow loses its scroll position on resize).
         """
+        event.Skip() # Allow event to propagate wx handler
         for i in range(2):
             orient = wx.VERTICAL if i else wx.HORIZONTAL
             # Division can be > 1 on first resizings, bound it to 1.
@@ -974,7 +974,6 @@ class ScrollingHtmlWindow(wx.html.HtmlWindow):
                 self.Scroll(*self._last_scroll_pos) if self else None)
         except Exception:
             pass # CallLater fails if not called from the main thread
-        event.Skip() # Allow event to propagate wx handler
 
 
     def _OnScroll(self, event=None):
@@ -982,10 +981,10 @@ class ScrollingHtmlWindow(wx.html.HtmlWindow):
         Handler for scrolling the window, stores scroll position
         (HtmlWindow loses it on resize).
         """
+        if event: event.Skip() # Allow event to propagate wx handler
         p, r = self.GetScrollPos, self.GetScrollRange
         self._last_scroll_pos   = [p(x) for x in (wx.HORIZONTAL, wx.VERTICAL)]
         self._last_scroll_range = [r(x) for x in (wx.HORIZONTAL, wx.VERTICAL)]
-        if event: event.Skip() # Allow event to propagate wx handler
 
 
     def Scroll(self, x, y):
@@ -1052,6 +1051,7 @@ class SearchCtrl(wx.TextCtrl):
         """
         Handler for focusing/unfocusing the control, shows/hides description.
         """
+        event.Skip() # Allow to propagate to parent, to show having focus
         self._ignore_change = True
         if self and self.FindFocus() == self:
             if self._description_on:
@@ -1064,15 +1064,14 @@ class SearchCtrl(wx.TextCtrl):
                 self.SetForegroundColour(self._desc_colour)
                 self._description_on = True
         self._ignore_change = False
-        event.Skip() # Allow to propagate to parent, to show having focus
 
 
     def OnKeyDown(self, event):
         """Handler for keypress, empties text on escape."""
+        event.Skip()
         if event.KeyCode in [wx.WXK_ESCAPE] and self.Value:
             self.Value = ""
             wx.PostEvent(self, wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER))
-        event.Skip()
 
 
     def OnText(self, event):
@@ -1973,6 +1972,7 @@ class TabbedHtmlWindow(wx.PyPanel):
         Handler for sizing the HtmlWindow, sets new scroll position based
         previously stored one (HtmlWindow loses its scroll position on resize).
         """
+        event.Skip() # Allow event to propagate to wx handler
         if self._tabs:
             tab = self._tabs[self._notebook.GetSelection()]
             for i in range(2):
@@ -1988,7 +1988,6 @@ class TabbedHtmlWindow(wx.PyPanel):
                              self.Scroll(*tab["scrollpos"]) if self else None)
             except Exception:
                 pass # CallLater fails if not called from the main thread
-        event.Skip() # Allow event to propagate to wx handler
 
 
 
@@ -2274,9 +2273,8 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         """
         Handler for moving or sizing the control or any parent, hides dropdown.
         """
-        if self:
-            self.ShowDropDown(False)
         event.Skip()
+        if self: self.ShowDropDown(False)
 
 
     def OnClickDown(self, event):
@@ -2284,8 +2282,8 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         Handler for clicking and holding left mouse button, remembers click
         position.
         """
-        self._lastinsertionpoint = self.GetInsertionPoint()
         event.Skip()
+        self._lastinsertionpoint = self.GetInsertionPoint()
 
 
     def OnClickUp(self, event):
@@ -2293,9 +2291,9 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         Handler for releasing left mouse button, toggles dropdown list
         visibility on/off if clicking same spot in textbox.
         """
+        event.Skip()
         if (self.GetInsertionPoint() == self._lastinsertionpoint):
             self.ShowDropDown(not self._listwindow.Shown)
-        event.Skip()
 
 
     def OnListItemSelected(self, event):
@@ -2303,14 +2301,15 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         Handler for selecting an item in the dropdown list, sets its value to
         textbox.
         """
-        self.SetValueFromSelected()
         event.Skip()
+        self.SetValueFromSelected()
 
 
     def OnFocus(self, event):
         """
         Handler for focusing/unfocusing the control, shows/hides description.
         """
+        event.Skip() # Allow to propagate to parent, to show having focus
         if self and self.FindFocus() == self:
             if self._description_on:
                 self.Value = ""
@@ -2324,7 +2323,6 @@ class TextCtrlAutoComplete(wx.TextCtrl):
                 self._description_on = True
             if self._listbox:
                 self.ShowDropDown(False)
-        event.Skip() # Allow to propagate to parent, to show having focus
 
 
     def OnMouse(self, event):
@@ -2332,6 +2330,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         Handler for mouse events, changes cursor to pointer if hovering over
         action item like "Clear history".
         """
+        event.Skip()
         index, flag = self._listbox.HitTest(event.GetPosition())
         if index == self._listbox.ItemCount - 1:
             if self._cursor != self._cursor_action_hover:
@@ -2340,13 +2339,11 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         elif self._cursor == self._cursor_action_hover:
             self._cursor = self._cursor_default
             self._listbox.SetCursor(self._cursor_default)
-        event.Skip()
 
 
     def OnKeyDown(self, event):
         """Handler for any keypress, changes dropdown items."""
-        if not self._choices:
-            return event.Skip()
+        if not self._choices: return event.Skip()
 
         skip = True
         visible = self._listwindow.Shown
@@ -2395,8 +2392,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
                 if self._value_last != self.Value:
                     self.Value = self._value_last
                     self.SelectAll()
-        if skip:
-            event.Skip()
+        if skip: event.Skip()
 
 
     def OnText(self, event):
@@ -2404,9 +2400,9 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         Handler for changing textbox value, auto-completes the text and selects
         matching item in dropdown list, if any.
         """
+        event.Skip()
         if self._ignore_textchange:
             self._ignore_textchange = self._skip_autocomplete = False
-            event.Skip()
             return
         text = self.Value
         if text and not self._description_on:
@@ -2434,7 +2430,6 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         else:
             self.ShowDropDown(False)
         self._skip_autocomplete = False
-        event.Skip()
 
 
     def SetChoices(self, choices):
