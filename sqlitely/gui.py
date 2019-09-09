@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.09.2019
+@modified    09.09.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -50,6 +50,7 @@ from . lib.vendor import step
 from . import conf
 from . import database
 from . import export
+from . import grammar
 from . import guibase
 from . import images
 from . import support
@@ -1365,12 +1366,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             logger.exception("Error opening %s.", filename)
             return
         try:
-            tables = db.get_tables()
+            tables = db.get_category("table").values()
             self.label_tables.Value = str(len(tables))
             if tables:
                 s = ""
                 for t in tables:
-                    s += (", " if s else "") + database.Database.quote(t["name"])
+                    s += (", " if s else "") + grammar.quote(t["name"])
                     if len(s) > 400:
                         s += ", .."
                         break # for t
@@ -1384,8 +1385,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             logger.exception("Error loading data from %s.", filename)
         if db and not db.has_consumers():
             db.close()
-            if filename in self.dbs:
-                del self.dbs[filename]
+            self.dbs.pop(filename, None)
 
 
     def on_select_list_db(self, event):
@@ -1487,7 +1487,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if unsaved.get("table"):
                 info += (", and " if info else "")
                 info += util.plural("table", unsaved["table"], with_items=False)
-                info += " " + ", ".join(map(page.db.quote, sorted(unsaved["table"])))
+                info += " " + ", ".join(map(grammar.quote, sorted(unsaved["table"])))
 
             response = wx.MessageBox(
                 "There is unsaved data in %s:\n%s.\n\n"
@@ -2355,7 +2355,7 @@ class DatabasePage(wx.Panel):
                        flag=wx.ALIGN_RIGHT | wx.RIGHT)
         self.Bind(wx.EVT_BUTTON, self.on_vacuum, button_vacuum)
         self.Bind(wx.EVT_BUTTON, self.on_check_integrity, button_check)
-        self.Bind(wx.EVT_BUTTON, lambda e: self.update_info_page(),
+        self.Bind(wx.EVT_BUTTON, lambda e: self.update_info_panel(),
                   button_refresh)
 
         sizer_info.AddGrowableCol(1, proportion=1)
@@ -2388,7 +2388,7 @@ class DatabasePage(wx.Panel):
         sizer_stc = panel2c.Sizer = wx.BoxSizer(wx.VERTICAL)
         stc = self.stc_schema = controls.SQLiteTextCtrl(parent=panel2c,
             style=wx.BORDER_STATIC)
-        stc.SetText(self.db.get_sql())
+        stc.SetText("Parsing..")
         stc.SetReadOnly(True)
 
         sizer_schematop.Add(label_schema)
@@ -2707,7 +2707,7 @@ class DatabasePage(wx.Panel):
             err = err[:500] + ".." if len(err) > 500 else err
             wx.MessageBox(err, conf.Title, wx.ICON_WARNING | wx.OK)
         else:
-            self.update_info_page()
+            self.update_info_panel()
 
 
     def save_page_conf(self):
@@ -2761,8 +2761,8 @@ class DatabasePage(wx.Panel):
                       self.tree_tables.SetColumnWidth(1, -1)))
 
 
-    def update_info_page(self, reload=True):
-        """Updates the Information page with current data."""
+    def update_info_panel(self, reload=True):
+        """Updates the Information page panel with current data."""
         if reload:
             self.db.clear_cache()
             self.db.update_fileinfo()
@@ -2814,7 +2814,7 @@ class DatabasePage(wx.Panel):
         if do_refresh:
             self.db.clear_cache()
             self.db_grids.clear()
-            self.load_tables_data()
+            self.load_tables_data(full=True)
             if self.grid_table.Table:
                 grid, table_name = self.grid_table, self.grid_table.Table.table
                 scrollpos = map(grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
@@ -2826,8 +2826,9 @@ class DatabasePage(wx.Panel):
 
                 tableitem = None
                 table_name = table_name.lower()
+                opts = self.db.get_category("table", table_name)
                 item = self.tree_tables.GetNext(self.tree_tables.RootItem)
-                while table_name in self.db.schema["table"] and item and item.IsOk():
+                while opts and item and item.IsOk():
                     table2 = self.tree_tables.GetItemPyData(item)
                     if isinstance(table2, basestring) and table2.lower() == table_name:
                         tableitem = item
@@ -2976,7 +2977,8 @@ class DatabasePage(wx.Panel):
                 tableitem = None
                 table_name = table_name.lower()
                 item = self.tree_tables.GetNext(self.tree_tables.RootItem)
-                while table_name in self.db.schema["table"] and item and item.IsOk():
+                tablemap = self.db.get_category("table")
+                while table_name in tablemap and item and item.IsOk():
                     table2 = self.tree_tables.GetItemPyData(item)
                     if isinstance(table2, basestring) and table2.lower() == table_name:
                         tableitem = item
@@ -3000,7 +3002,7 @@ class DatabasePage(wx.Panel):
                         if grid.Table.filters:
                             grid.Table.ClearSort(refresh=False)
                             grid.Table.ClearFilter()
-                        columns = self.db.get_table_columns(table_name)
+                        columns = tablemap[table_name]["columns"]
                         id_fields = [c["name"] for c in columns if c.get("pk")]
                         if not id_fields: # No primary key fields: take all
                             id_fields = [c["name"] for c in columns]
@@ -3290,8 +3292,9 @@ class DatabasePage(wx.Panel):
         if not grid_source.Table: return
 
         if grid_source is self.grid_table:
-            table = self.db.schema["table"][grid_source.Table.table.lower()]["name"]
-            title = "Table %s" % self.db.quote(table, force=True)
+            table_lower = grid_source.Table.table.lower()
+            opts = self.db.get_category("table", table_lower)["name"]
+            title = "Table %s" % grammar.quote(opts["name"], force=True)
             self.dialog_savefile.Wildcard = export.TABLE_WILDCARD
         else:
             title = "SQL query"
@@ -3349,7 +3352,7 @@ class DatabasePage(wx.Panel):
                         grid.Table.SaveChanges()
                     except Exception as e:
                         msg = 'Error saving table %s in "%s".' % (
-                               self.db.quote(grid.Table.table), self.db)
+                               grammar.quote(grid.Table.table), self.db)
                         logger.exception(msg)
                         guibase.status(msg, flash=True)
                         error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
@@ -3574,7 +3577,7 @@ class DatabasePage(wx.Panel):
             except Exception as e:
                 result = False
                 msg = 'Error saving table %s in "%s".' % (
-                      self.db.quote(grid.table), self.db)
+                      grammar.quote(grid.table), self.db)
                 logger.exception(msg); guibase.status(msg, flash=True)
                 error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
                 wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
@@ -3624,20 +3627,21 @@ class DatabasePage(wx.Panel):
             info, conf.Title, wx.OK | wx.CANCEL | wx.ICON_QUESTION
         ):
             logger.info("Committing %s in table %s (%s).", info,
-                        self.db.quote(self.grid_table.Table.table), self.db)
+                        grammar.quote(self.grid_table.Table.table), self.db)
             if not self.grid_table.Table.SaveChanges(): return
 
             self.on_change_table(None)
             # Refresh tables list with updated row counts
-            tablemap = dict((t["name"], t)
-                            for t in self.db.get_tables(refresh=True, full=True))
+            self.db.populate_schema(full=True)
+            tablemap = self.db.get_category("table")
             item = self.tree_tables.GetNext(self.tree_tables.RootItem)
             while item and item.IsOk():
                 table = self.tree_tables.GetItemPyData(item)
                 if isinstance(table, basestring):
-                    self.tree_tables.SetItemText(item, util.plural(
-                        "row", tablemap[table]["rows"]
-                    ), 1)
+                    opts = tablemap.get(table.lower())
+                    if opts and "count" in opts: self.tree_tables.SetItemText(
+                        item, util.plural("row", opts["count"])
+                    , 1)
                     if table == self.grid_table.Table.table:
                         self.tree_tables.SetItemBold(item,
                         self.grid_table.Table.IsChanged())
@@ -3708,16 +3712,16 @@ class DatabasePage(wx.Panel):
                 text = self.tree_tables.GetItemText(i).lower()
                 self.tree_tables.SetItemBold(i, text == lower)
                 i = self.tree_tables.GetNextSibling(i)
-            logger.info("Loading table %s (%s).", self.db.quote(table), self.db)
+            logger.info("Loading table %s (%s).", grammar.quote(table), self.db)
             busy = controls.BusyPanel(self, "Loading table %s." %
-                                      self.db.quote(table, force=True))
+                                      grammar.quote(table, force=True))
             try:
                 grid_data = self.db_grids.get(lower)
                 if not grid_data:
                     grid_data = SqliteGridBase(self.db, table=table)
                     self.db_grids[lower] = grid_data
                 self.label_table.Label = "Table %s:" % \
-                    util.unprint(self.db.quote(table, force=True))
+                    util.unprint(grammar.quote(table, force=True))
                 self.grid_table.SetTable(grid_data)
                 self.page_tables.Layout() # React to grid size change
                 self.grid_table.Scroll(0, 0)
@@ -3735,7 +3739,7 @@ class DatabasePage(wx.Panel):
                 busy.Close()
             except Exception as e:
                 busy.Close()
-                msg = "Could not load table %s." % self.db.quote(table)
+                msg = "Could not load table %s." % grammar.quote(table)
                 logger.exception(msg); guibase.status(msg, flash=True)
                 error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
                 wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
@@ -3771,14 +3775,15 @@ class DatabasePage(wx.Panel):
         item_file = item_database = None
         if isinstance(data, basestring): # Single table
             item_name     = wx.MenuItem(menu, -1, 'Table %s' % \
-                            util.unprint(self.db.quote(data, force=True)))
+                            util.unprint(grammar.quote(data, force=True)))
             item_copy     = wx.MenuItem(menu, -1, "&Copy name")
             item_copy_sql = wx.MenuItem(menu, -1, "Copy CREATE &SQL")
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
                       id=item_name.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data),
                       id=item_copy.GetId())
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, self.db.get_sql(table=data)),
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
+                      self.db.get_sql("table", data)),
                       id=item_copy_sql.GetId())
 
             menu.AppendItem(item_name)
@@ -3790,8 +3795,8 @@ class DatabasePage(wx.Panel):
             item_database = wx.MenuItem(menu, -1, 'Export table to another &database')
         elif isinstance(data, dict): # Column
             item_name     = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
-                            util.unprint(self.db.quote(data["table"])),
-                            util.unprint(self.db.quote(data["name"]))))
+                            util.unprint(grammar.quote(data["table"])),
+                            util.unprint(grammar.quote(data["name"]))))
             item_copy     = wx.MenuItem(menu, -1, "&Copy name")
             item_copy_sql = wx.MenuItem(menu, -1, "Copy column &SQL")
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
@@ -3799,7 +3804,7 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
                       id=item_copy.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
-                self.db.get_sql(table=data["table"], column=data["name"])
+                self.db.get_sql("table", data["table"], column=data["name"])
             ), id=item_copy_sql.GetId())
 
             menu.AppendItem(item_name)
@@ -3881,11 +3886,12 @@ class DatabasePage(wx.Panel):
             busy = controls.BusyPanel(self, 'Exporting %s.' % filename)
             guibase.status('Exporting %s.', filename)
             try:
-                sql = "SELECT * FROM %s" % self.db.quote(table)
+                sql = "SELECT * FROM %s" % grammar.quote(table)
                 make_iterable = functools.partial(self.db.execute, sql)
                 export.export_data(make_iterable, filename,
-                    "Table %s" % self.db.quote(table, force=True),
-                    self.db, self.db.get_table_columns(table), table=table
+                    "Table %s" % grammar.quote(table, force=True),
+                    self.db, self.db.get_category("table", table)["columns"],
+                    table=table
                 )
                 guibase.status("Exported %s.", filename, log=True, flash=True)
                 util.start_file(filename)
@@ -3931,7 +3937,7 @@ class DatabasePage(wx.Panel):
                     '- keep same name to overwrite table %(table2)s,\n'
                     '- or set blank to skip table %(table)s.')
         insert_sql, success = "INSERT INTO main2.%s SELECT * FROM main.%s", False
-        db1_tables = set(x["name"].lower() for x in self.db.get_tables())
+        db1_tables = set(self.db.get_category("table"))
         try:
             db2_tables_lower = set(x["name"].lower() for x in self.db.execute(
                 "SELECT name FROM main2.sqlite_master WHERE type = 'table'"
@@ -3950,14 +3956,14 @@ class DatabasePage(wx.Panel):
                 entryheader = "already contains a"
                 while table2:
                     entrydialog = wx.TextEntryDialog(self, entrymsg % {
-                        "table": self.db.quote(table), "table2": self.db.quote(table2),
+                        "table": grammar.quote(table), "table2": grammar.quote(table2),
                         "filename2": filename2,        "entryheader": entryheader
                     }, conf.Title, table2)
                     if wx.ID_OK != entrydialog.ShowModal(): return
 
                     value = entrydialog.GetValue().strip()
                     if not self.db.is_valid_name(table=value):
-                        msg = "%s is not a valid table name." % self.db.quote(value, force=True)
+                        msg = "%s is not a valid table name." % grammar.quote(value, force=True)
                         wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
                         continue # while table2
 
@@ -3987,23 +3993,21 @@ class DatabasePage(wx.Panel):
             for table, table2 in zip(tables1, tables2):
                 t1_lower, t2_lower = table.lower(), table2.lower()
                 extra = "" if t1_lower == t2_lower \
-                        else " as %s" % self.db.quote(table2, force=True)
+                        else " as %s" % grammar.quote(table2, force=True)
 
-                create_sql = self.db.transform_sql(
-                    self.db.get_sql(table=table, indent=False), "table",
-                    rename={"table": "main2." + self.db.quote(table2)}
+                create_sql = self.db.get_sql("table", table, indent=False,
+                    transform={"rename": {"schema": "main2", "table": {table: table2}}},
                 )
                 try:
                     if t2_lower in db2_tables_lower:
-                        logger.info("Dropping table %s in %s.", self.db.quote(table2), filename2)
-                        self.db.execute("DROP TABLE main2.%s" % self.db.quote(table2))
+                        logger.info("Dropping table %s in %s.", grammar.quote(table2), filename2)
+                        self.db.execute("DROP TABLE main2.%s" % grammar.quote(table2))
                     logger.info("Creating table %s in %s, using %s.",
-                                self.db.quote(table2, force=True), filename2, create_sql)
+                                grammar.quote(table2, force=True), filename2, create_sql)
                     self.db.execute(create_sql)
 
                     # Assemble table indices to copy
-                    indices = [dict(x) for x in self.db.schema["index"].values()
-                               if t1_lower == x["tbl_name"].lower()]
+                    indices = self.db.get_category("index", table=table)
                     indices2 = [x["name"] for x in self.db.execute(
                         "SELECT name FROM main2.sqlite_master "
                         "WHERE type = 'index' AND sql != ''"
@@ -4016,24 +4020,22 @@ class DatabasePage(wx.Panel):
                         while name in indices2:
                             name, counter = "%s_%s" % (base, counter), counter + 1
                         indices2.append(name)
-                        index_sql = self.db.transform_sql(
-                            index["sql"], "index",
-                            rename={"table": self.db.quote(table2),
-                                    "index": "main2." + self.db.quote(name)}
-                        )
+                        index_sql = grammar.transform(index["sql"], rename={
+                            "index": name, "table": table2, "schema": "main2",
+                        }, indent=False)
                         logger.info("Creating index %s on table %s in %s, using %s.",
-                                    self.db.quote(name, force=True),
-                                    self.db.quote(table2, force=True),
+                                    grammar.quote(name, force=True),
+                                    grammar.quote(table2, force=True),
                                     filename2, index_sql)
                         self.db.execute(index_sql)
 
-                    self.db.execute(insert_sql % (self.db.quote(table2), self.db.quote(table)))
+                    self.db.execute(insert_sql % (grammar.quote(table2), grammar.quote(table)))
                     guibase.status("Exported table %s to %s%s.",
-                                   self.db.quote(table), filename2, extra, flash=True)
+                                   grammar.quote(table), filename2, extra, flash=True)
                     db2_tables_lower.add(t2_lower)
                 except Exception as e:
                     msg = "Could not export table %s%s." % \
-                          (self.db.quote(table), extra)
+                          (grammar.quote(table), extra)
                     logger.exception(msg); guibase.status(msg, flash=True)
                     error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
                     wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
@@ -4052,9 +4054,9 @@ class DatabasePage(wx.Panel):
         if success and tables1:
             same_name = (tables1[0].lower() == tables2_lower[0])
             t = "%s tables" % len(tables1) if len(tables1) > 1 \
-                else "table %s" % self.db.quote(tables1[0], force=True)
+                else "table %s" % grammar.quote(tables1[0], force=True)
             extra = "" if len(tables1) > 1 or same_name \
-                    else " as %s" % self.db.quote(tables2[0], force=True)
+                    else " as %s" % grammar.quote(tables2[0], force=True)
             guibase.status("Exported %s to %s%s.", t, filename2, extra, flash=True)
             wx.PostEvent(self.TopLevelParent, OpenDatabaseEvent(file=filename2))
 
@@ -4088,7 +4090,7 @@ class DatabasePage(wx.Panel):
                 grid_data = grid.Table
                 current_filter = unicode(grid_data.filters[col]) \
                                  if col in grid_data.filters else ""
-                name = self.db.quote(grid_data.columns[col]["name"], force=True)
+                name = grammar.quote(grid_data.columns[col]["name"], force=True)
                 dialog = wx.TextEntryDialog(self,
                     "Filter column %s by:" % name,
                     "Filter", defaultValue=current_filter,
@@ -4128,14 +4130,26 @@ class DatabasePage(wx.Panel):
             tabid = self.counter() if 0 != last_search.get("id") else 0
             self.html_searchall.InsertTab(0, title, tabid, html, info)
         wx.CallLater(100, self.update_tabheader)
-        wx.CallLater(500, self.update_info_page, False)
         wx.CallLater(200, self.load_tables_data)
+        wx.CallLater(500, self.update_info_panel, False)
+        wx.CallLater(1000, self.load_later_data)
 
 
-    def load_tables_data(self):
+    def load_later_data(self):
+        """
+        Loads later data from the databases, like full database schema SQL
+        and full row counts.
+        """
+        if not self: return
+        self.on_update_stc_schema(None)
+        self.load_tables_data(full=True)
+
+
+    def load_tables_data(self, full=False):
         """Loads table data into table tree and SQL editor."""
         try:
-            tables = self.db.get_tables(full=True)
+            self.db.populate_schema(full=True)
+            tables = self.db.get_category("table").values()
             # Fill table tree with information on row counts and columns
             self.tree_tables.DeleteAllItems()
             root = self.tree_tables.AddRoot("SQLITE")
@@ -4143,12 +4157,12 @@ class DatabasePage(wx.Panel):
             child = None
             for table in tables:
                 child = self.tree_tables.AppendItem(root, util.unprint(table["name"]))
-                self.tree_tables.SetItemText(child, util.plural(
-                    "row", table["rows"]
-                ), 1)
+                if "count" in table: t = util.plural("row", table["count"])
+                else: t = "ERROR" if full else "Counting.."
+                self.tree_tables.SetItemText(child, t, 1)
                 self.tree_tables.SetItemPyData(child, table["name"])
 
-                for col in self.db.get_table_columns(table["name"]):
+                for col in table["columns"]:
                     subchild = self.tree_tables.AppendItem(child, util.unprint(col["name"]))
                     self.tree_tables.SetItemText(subchild, col["type"], 1)
                     self.tree_tables.SetItemPyData(subchild, dict(col, table=table["name"]))
@@ -4168,9 +4182,9 @@ class DatabasePage(wx.Panel):
             pragmas = list(database.Database.PRAGMA) + database.Database.EXTRA_PRAGMAS
             self.stc_sql.AutoCompAddWords(pragmas)
             for table in tables:
-                coldata = self.db.get_table_columns(table["name"])
-                fields = [self.db.quote(c["name"]) for c in coldata]
-                self.stc_sql.AutoCompAddSubWords(self.db.quote(table["name"]), fields)
+                if not table.get("columns"): continue # for table
+                fields = [grammar.quote(c["name"]) for c in table["columns"]]
+                self.stc_sql.AutoCompAddSubWords(grammar.quote(table["name"]), fields)
         except Exception:
             if self: logger.exception("Error loading table data from %s.", self.db)
 
@@ -4220,7 +4234,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         if not self.is_query:
             if db.has_rowid(table): self.rowid_name = "rowid"
             cols = ("%s, *" % self.rowid_name) if self.rowid_name else "*"
-            self.sql = "SELECT %s FROM %s" % (cols, db.quote(table))
+            self.sql = "SELECT %s FROM %s" % (cols, grammar.quote(table))
         self.row_iterator = db.execute(self.sql)
         if self.is_query:
             self.columns = [{"name": c[0], "type": "TEXT"}
@@ -4241,9 +4255,9 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
                     value = self.rows_current[0][col["name"]]
                     col["type"] = TYPES.get(type(value), col["type"])
         else:
-            self.columns = db.get_table_columns(table)
-            self.row_count = next(db.execute("SELECT COUNT(*) AS rows FROM %s"
-                                  % db.quote(table)))["rows"]
+            self.columns = db.get_category("table", table)["columns"]
+            self.row_count = next(db.execute("SELECT COUNT(*) AS count FROM %s"
+                                  % grammar.quote(table)))["count"]
 
 
     def GetColLabelValue(self, col):
@@ -4347,7 +4361,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
             self.SeekAhead(True)
             return iter(self.rows_current)
 
-        sql, args = "SELECT * FROM %s" % self.db.quote(self.table), {}
+        sql, args = "SELECT * FROM %s" % grammar.quote(self.table), {}
 
         where, order = "", ""
         if self.filters:
@@ -4361,10 +4375,10 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
                 op = "="
                 if self.db.get_affinity(col) not in ("INTEGER", "REAL"):
                     op, args[key] = "LIKE", "%" + args[key] + "%"
-                part = "%s %s :%s" % (self.db.quote(col["name"]), op, key)
+                part = "%s %s :%s" % (grammar.quote(col["name"]), op, key)
                 where += (" AND " if where else "WHERE ") + part
         if self.sort_column is not None: order = "ORDER BY %s%s" % (
-            self.db.quote(self.columns[self.sort_column]["name"]),
+            grammar.quote(self.columns[self.sort_column]["name"]),
             "" if self.sort_ascending else " DESC"
         )
         if where: sql += " " + where
@@ -4655,7 +4669,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
                 self.idx_all.remove(idx)
             result = True
         except Exception as e:
-            msg = "Error saving changes in %s." % self.db.quote(self.table)
+            msg = "Error saving changes in %s." % grammar.quote(self.table)
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)

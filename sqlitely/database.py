@@ -8,11 +8,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.09.2019
+@modified    09.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
-import copy
 import datetime
 import logging
 import os
@@ -22,6 +21,7 @@ import shutil
 
 from . lib import util
 from . import conf
+from . import grammar
 
 logger = logging.getLogger(__name__)
 
@@ -440,7 +440,8 @@ class Database(object):
         self.consumers = set() # Registered objects using this database
         # {"table|index|view|trigger":
         #   {name.lower():
-        #     {"name": str, "sql": str, "table": str, "columns": [], "rows": int}}}
+        #     {name: str, sql: str, table: str, ?columns: [], ?count: int,
+        #      ?full: bool, ?meta: {full metadata}}}}
         self.schema = defaultdict(OrderedDict)
         self.table_rows    = {} # {tablename1: [..], }
         self.table_objects = {} # {tablename1: {id1: {rowdata1}, }, }
@@ -452,7 +453,7 @@ class Database(object):
             self.connection.text_factory = str
             self.compile_options = [x["compile_option"] for x in 
                                     self.execute("PRAGMA compile_options").fetchall()]
-            self.get_tables(refresh=True)
+            self.populate_schema()
         except Exception:
             if log_error: logger.exception("Error opening database %s.", filename)
             self.close()
@@ -495,7 +496,7 @@ class Database(object):
             except Exception as e:
                 result.append(repr(e))
                 logger.exception("Error copying table %s from %s to %s.",
-                                 self.quote(name), self.filename, filename)
+                                 grammar.quote(name), self.filename, filename)
 
         # Create indexes
         for name, opts in sorted(self.schema["table"].items()):
@@ -505,7 +506,7 @@ class Database(object):
             except Exception as e:
                 result.append(repr(e))
                 logger.exception("Error creating index %s for %s.",
-                                 self.quote(name), filename)
+                                 grammar.quote(name), filename)
         self.execute("DETACH DATABASE new")
         return result
 
@@ -514,7 +515,7 @@ class Database(object):
         """Clears all the currently cached rows."""
         self.table_rows.clear()
         self.table_objects.clear()
-        self.get_tables(refresh=True)
+        self.populate_schema()
 
 
     def stamp_to_date(self, timestamp):
@@ -543,10 +544,8 @@ class Database(object):
 
     def has_rowid(self, table):
         """Returns whether the table has ROWID, or is WITHOUT ROWID."""
-        table = table.lower()
-        if table not in self.schema["table"]: return None
-        sql = self.schema["table"][table]["sql"]
-        return not re.search(r"WITHOUT\s+ROWID\s*$", sql, re.I)
+        meta = self.schema["table"].get(table.lower(), {}).get("meta")
+        return not meta.get("without") if meta else None
 
 
     def close(self):
@@ -589,41 +588,6 @@ class Database(object):
         return (self.connection is not None)
 
 
-    def get_tables(self, refresh=False, full=False):
-        """
-        Returns the names and rowcounts of all tables in the database,
-        as [{"name": "tablename", "sql": CREATE SQL}, ].
-        Uses already retrieved cached values if possible, unless refreshing.
-
-        @param   refresh  if True, schema is re-queried
-        @param   full     if True, result is guaranteed to include {"rows": int}
-        """
-        result = []
-
-        if refresh and self.is_open():
-            self.schema.clear()
-            for row in self.execute(
-                "SELECT * FROM sqlite_master "
-                "WHERE sql != '' ORDER BY type, name COLLATE NOCASE"
-            ).fetchall():
-                if "table" == row["type"] \
-                and "ENABLE_ICU" not in self.compile_options: # Unsupported tokenizer
-                    if  re.match(r"CREATE\s+VIRTUAL\s+TABLE", row["sql"], re.I) \
-                    and re.search(r"TOKENIZE\s*[\W]*icu[\W]", row["sql"], re.I):
-                        continue # for row
-
-                self.schema[row["type"]][row["name"].lower()] = row
-
-        for opts in self.schema["table"].values():
-            if full and (refresh or "rows" not in opts):
-                res = self.execute("SELECT COUNT(*) AS count FROM %s" %
-                                   self.quote(opts["name"]), log=False)
-                opts["rows"] = res.fetchone()["count"]
-            result += [copy.deepcopy(opts)]
-
-        return result
-
-
     def row_factory(self, cursor, row):
         """
         Creates dicts from resultset rows, with BLOB fields converted to
@@ -645,99 +609,132 @@ class Database(object):
         return result
 
 
-    def get_table_rows(self, table):
+    def populate_schema(self, full=False):
         """
-        Returns all the rows of the specified table.
-        Uses already retrieved cached values if possible.
-        """
-        rows = []
-        table = table.lower()
-        if table in self.schema["table"]:
-            if table not in self.table_rows:
-                col_data = self.get_table_columns(table)
-                pks = [c["name"] for c in col_data if c["pk"]]
-                pk = pks[0] if len(pks) == 1 else None
-                rows = self.execute("SELECT * FROM %s" % self.quote(table)).fetchall()
-                self.table_rows[table] = rows
-                self.table_objects[table] = {}
-                if pk:
-                    for row in rows:
-                        self.table_objects[table][row[pk]] = row
-            else:
-                rows = self.table_rows[table]
-        return rows
+        Retrieves metadata on all database tables, triggers etc.
 
+        Returns the names and rowcounts of all tables in the database,
+        as [{"name": "tablename", "sql": CREATE SQL}, ].
+        Uses already retrieved cached values if possible, unless refreshing.
 
-    def get_table_columns(self, table):
+        @param   full     if True, parses all CREATE statements in full,
+                          populates full column metadata and table row counts
         """
-        Returns the columns of the specified table, as
-        [{"name": "col1", "type": "INTEGER", }, ], or [] if not retrievable.
-        """
-        result = []
-        table = table.lower()
-        if table not in self.schema["table"]: return result
+        if not self.is_open(): return
+            
+        self.schema.clear()
+        for row in self.execute(
+            "SELECT * FROM sqlite_master "
+            "WHERE sql != '' ORDER BY type, name COLLATE NOCASE"
+        ).fetchall():
+            if "table" == row["type"] \
+            and "ENABLE_ICU" not in self.compile_options: # Unsupported tokenizer
+                if  re.match(r"CREATE\s+VIRTUAL\s+TABLE", row["sql"], re.I) \
+                and re.search(r"TOKENIZE\s*[\W]*icu[\W]", row["sql"], re.I):
+                    continue # for row
 
-        if "columns" in self.schema["table"][table]:
-            result = self.schema["table"][table]["columns"]
-        elif self.is_open():
+            row["sql"] = row["sql"].strip()
+            self.schema[row["type"]][row["name"].lower()] = row
+            if full:
+                meta = grammar.parse(row["sql"])
+                row.update(full=True, meta=meta, sql=grammar.generate(meta))
+                if "table" == row["type"]: row["columns"] = meta["columns"]
+
+        for opts in self.schema["table"].values():
+            sql = ("SELECT COUNT(*) AS count FROM %s" if full
+                   else "PRAGMA table_info(%s)") % grammar.quote(opts["name"])
             try:
-                res = self.execute("PRAGMA table_info(%s)" % self.quote(table),
-                                   log=False)
-                for row in res.fetchall():
-                    row["type"] = row["type"].upper()
-                    result.append(row)
-            except sqlite3.DatabaseError:
-                logger.exception("Error getting %s column data for %s.",
-                                 table, self.filename,)
-            self.schema["table"][table]["columns"] = result
-        return copy.deepcopy(result)
+                rows = self.execute(sql, log=False).fetchall()
+            except Exception:
+                opts.pop("count", None) if full else opts.update(columns=[])
+                logger.exception("Error fetching %s for table %s.",
+                                 "COUNT" if full else "columns",
+                                 grammar.quote(opts["name"]))
+                continue # for opts
+
+            if not full:
+                opts["columns"] = []
+                for row in rows:
+                    col = {"name": row["name"], "type": row["type"].upper()}
+                    if row["dflt_value"] is not None: col["default"] = row["dflt_value"]
+                    if row["notnull"]: col["notnull"] = {}
+                    if row["pk"]:      col["pk"]      = {}
+                    opts["columns"].append(col)
+            else: opts["count"] = rows[0]["count"]
 
 
-    def get_sql(self, table=None, column=None, refresh=False, indent=True):
+    def get_category(self, category, name=None, table=None):
         """
-        Returns full CREATE SQL statement for database, or for specific table only,
+        Returns database objects in specified category.
+
+        @param   category  "table"|"index"|"trigger"|"view"
+        @param   name      returns only this object
+        @param   table     specific table for "trigger"|"index" category
+        @result            OrderedDict({name_lower: {opts}}),
+                           or {opts} if name or None if no object by such name
+        """
+        category, name, table = (x.lower() if x else x for x in (category, name, table))
+
+        if name:
+            result = self.schema.get(category, {}).get(name)
+            if table and "table" in result and result["table"].lower() != table:
+                result = None
+            return result
+
+        result = OrderedDict()
+        for name, opts in self.schema.get(category, {}).items():
+            if table and "table" in opts and opts["table"].lower() != table:
+                continue # for name, opts
+            result[name] = opts
+        return result
+
+
+    def get_sql(self, category=None, name=None, column=None, indent="  ",
+                transform=None, refresh=False):
+        """
+        Returns full CREATE SQL statement for database, or for specific
+        category only, or for specific category object only,
         or SQL line for specific table column only.
 
-        @param   table    table to return CREATE SQL for if not everything
-        @param   column   table column to return SQL for if not full CREATE TABLE
-        @param   refresh  if True, schema is re-queried
-        @param   indent   whether to format SQL with linefeeds and indentation
+        @param   category   "table" | "index" | "trigger" | "view" if not everything
+        @param   name       category item name if not everything in category
+        @param   column     named table column to return SQL for
+        @param   indent     whether to format SQL with linefeeds and indentation
+        @param   transform  {"flags":   flags to toggle, like {"exists": True},
+                             "renames": renames to perform in SQL statement body,
+                                        supported types "schema" (top-level rename only),
+                                        "table", "index", "trigger", "view".
+                                        Renames all items of specified category, unless
+                                        given nested value like {"table": {"old": "new"}}
+                            }
+        @param   refresh    if True, schema is re-queried
         """
         result = ""
+        category, name, column = (x.lower() if x else x for x in (category, name, column))
 
-        table = table.lower() if table else table
-        if refresh and self.is_open(): self.get_tables(refresh=True)
-        for category in "table", "view", "index", "trigger":
-            if table and "table" != category \
-            or not self.schema.get(category): continue # for category
+        if refresh and self.is_open(): self.populate_schema()
+        for mycategory in "table", "view", "index", "trigger":
+            if category and category != mycategory \
+            or not self.schema.get(mycategory): continue # for mycategory
 
-            for name, opts in self.schema[category].items():
-                if table and ("table" != category or table != name):
-                    continue # for name, opts
+            for myname, opts in self.schema[mycategory].items():
+                if category and name and name != myname:
+                    continue # for myname, opts
 
-                if table and column:
+                if name and column:
                     col = next((c for c in opts["columns"]
                                 if c["name"].lower() == column.lower()), None)
-                    if not col: continue # for name, opts
+                    if not col: continue # for myname, opts
+                    result = grammar.generate(dict(col, __type__="column"), indent=False)
+                    break # for myname, opts
 
-                    result = "%s %s" % (self.quote(col["name"]), col["type"])
-                    if col["notnull"]: result += " NOT NULL"
-                    if col["pk"]: result += " PRIMARY KEY"
-                    if col["dflt_value"] is not None:
-                        result += " DEFAULT %s" % col["dflt_value"]
-                    continue # for name, opts
-
-                sql = opts["sql"].strip()
-                if "table" == category and indent:
-                    # LF after first brace
-                    sql = re.sub(r"^([^(]+)\(\s*", lambda m: m.group(1).strip() + " (\n  ", sql)
-                    # LF after each col
-                    sql = re.sub(r"\s*,\s*", ",\n  ", sql)
-                    # LF before last brace
-                    sql = re.sub(r"\)(\s*WITHOUT\s+ROWID)$", r"\n)\1", sql, re.I)
-                    sql = re.sub(r"\)$", r"\n)", sql)
-                result += sql + (";\n\n" if not table else "")
-            if not table: result += "\n\n"
+                sql = opts["sql"]
+                kws = {x: transform[x] for x in ("flags", "renames")
+                       if transform and x in transform}
+                if not opts.get("full") or kws or indent != "  ":
+                    sql = grammar.transform(sql, indent=indent, **kws)
+                result += sql + (";\n\n" if not name else "")
+            if not name: result += "\n\n"
 
         return result
 
@@ -762,78 +759,6 @@ class Database(object):
                 if afftype.startswith(mytype) or mytype.startswith(afftype):
                     return aff
         return "BLOB"    
-
-
-    @staticmethod
-    def transform_sql(sql, category, **kwargs):
-        """
-        Returns SQL transformed according to given keywords.
-
-        @param   sql        SQL statement like "CREATE TABLE .."
-        @param   category   SQL statement type, supported values:
-                            "table" for "CREATE TABLE",
-                            "index" for "CREATE INDEX"
-
-        @param   rename     {"table": new table name, "index": new index name}
-        @param   notexists  True/False to add or drop "IF NOT EXISTS"
-                            for "create" category
-        """
-        result = sql
-        category = category.lower()
-        kwargs.setdefault("rename", {})
-        if "table" == category:
-            if "table" in kwargs["rename"]:
-                result = re.sub(r"^(CREATE\s+TABLE\s*)([\w\s$+.'\"-]+)(\()",
-                                r"\1%s \3" % kwargs["rename"]["table"],
-                                result, count=1, flags=re.I | re.U)
-
-            if kwargs.get("notexists") is True:
-                replacer = lambda m: "%s IF NOT EXISTS " % m.group(1).rstrip()
-                result = re.sub(r"^(CREATE\s+TABLE(?!\s+IF\s+NOT\s+EXISTS)\s*)",
-                                replacer, result, count=1, flags=re.I)
-            elif kwargs.get("notexists") is False:
-                replacer = lambda m: m.group(1) + " "
-                result = re.sub(r"^(CREATE\s+TABLE)(\s+IF\s+NOT\s+EXISTS\s*)",
-                                replacer, result, count=1, flags=re.I)
-
-        if "index" == category:
-            if kwargs["rename"]:
-                pattern = (r"^(CREATE\s+(UNIQUE\s+)?INDEX"
-                           r"(\s+IF\s+NOT\s+EXISTS)?)\s*([\w\s$+.'\"-]+)"
-                           r"\s+ON\s+([\w\s$+.'\"-]+)(\s*\()")
-                if "index" in kwargs["rename"]:
-                    replacer = lambda m: "%s %s ON %s %s" % (m.group(1).strip(),
-                                         kwargs["rename"]["index"],
-                                         m.group(5).strip(), m.group(6).strip())
-                    result = re.sub(pattern, replacer, result, 1, re.I | re.U)
-                if "table" in kwargs["rename"]:
-                    replacer = lambda m: "%s %s ON %s %s" % (m.group(1).strip(),
-                                         m.group(4).strip(), kwargs["rename"]["table"],
-                                         m.group(6).strip())
-                    result = re.sub(pattern, replacer, result, 1, re.I | re.U)
-
-            if kwargs.get("notexists") is True:
-                replacer = lambda m: ("%s IF NOT EXISTS " % m.group(1).rstrip())
-                result = re.sub(r"^(CREATE\s+(UNIQUE\s+)?INDEX(?!\s+IF\s+NOT\s+EXISTS)\s*)",
-                                replacer, result, count=1, flags=re.I)
-            elif kwargs.get("notexists") is False:
-                replacer = lambda m: m.group(1) + " "
-                result = re.sub(r"^(CREATE\s+(UNIQUE\s+)INDEX)(\s+IF\s+NOT\s+EXISTS\s*)",
-                                replacer, result, count=1, flags=re.I)
-
-        return result
-
-
-    @staticmethod
-    def quote(name, force=False):
-        """
-        Returns table or column name in quotes and proper-escaped for queries,
-        if name needs quoting (whitespace etc) or if force set.
-        """
-        result = name
-        if force or re.search(r"\W", name, re.I):
-            result = '"%s"' % result.replace('"', '""')
-        return result
 
 
     @staticmethod
@@ -936,17 +861,18 @@ class Database(object):
             return
         table = table.lower()
         logger.info("Inserting 1 row into table %s, %s.",
-                    self.quote(self.schema["table"][table]["name"]), self.filename)
+                    grammar.quote(self.schema["table"][table]["name"]),
+                    self.filename)
         self.ensure_backup()
-        col_data = self.get_table_columns(table)
+        col_data = self.schema["table"][table]["columns"]
         fields = [col["name"] for col in col_data]
         row = self.blobs_to_binary(row, fields, col_data)
         args = self.make_args(fields, row)
-        str_cols = ", ".join(map(self.quote, fields))
+        str_cols = ", ".join(map(grammar.quote, fields))
         str_vals = ":" + ", :".join(args)
 
         cursor = self.execute("INSERT INTO %s (%s) VALUES (%s)" %
-                              (self.quote(table), str_cols, str_vals), args)
+                              (grammar.quote(table), str_cols, str_vals), args)
         self.connection.commit()
         self.last_modified = datetime.datetime.now()
         return cursor.lastrowid
@@ -962,13 +888,12 @@ class Database(object):
             return
         table, where = table.lower(), ""
         logger.info("Updating 1 row in table %s, %s.",
-                    self.quote(self.schema["table"][table]["name"]), self.filename)
+                    grammar.quote(self.schema["table"][table]["name"]), self.filename)
         self.ensure_backup()
-        col_data = self.get_table_columns(table)
-
+        col_data = self.schema["table"][table]["columns"]
 
         where, args = "", self.make_args(col_data, row)
-        setsql = ", ".join("%s = :%s" % (self.quote(col_data[i]["name"]), x)
+        setsql = ", ".join("%s = :%s" % (grammar.quote(col_data[i]["name"]), x)
                                          for i, x in enumerate(args))
         if rowid is not None:
             key_data = [{"name": "rowid"}]
@@ -978,9 +903,11 @@ class Database(object):
             key_data = [c for c in col_data if c["pk"]] or col_data
             keyargs = self.make_args(key_data, original_row, args)
         for col, key in zip(key_data, keyargs):
-            where += (" AND " if where else "") + "%s IS :%s" % (self.quote(col["name"]), key)
+            where += (" AND " if where else "") + \
+                     "%s IS :%s" % (grammar.quote(col["name"]), key)
         args.update(keyargs)
-        self.execute("UPDATE %s SET %s WHERE %s" % (self.quote(table), setsql, where), args)
+        self.execute("UPDATE %s SET %s WHERE %s" %
+                     (grammar.quote(table), setsql, where), args)
         self.connection.commit()
         self.last_modified = datetime.datetime.now()
 
@@ -996,9 +923,10 @@ class Database(object):
             return
         table, where = table.lower(), ""
         logger.info("Deleting 1 row from table %s, %s.",
-                    self.quote(self.schema["table"][table]["name"]), self.filename)
+                    grammar.quote(self.schema["table"][table]["name"]),
+                    self.filename)
         self.ensure_backup()
-        col_data = self.get_table_columns(table)
+        col_data = self.schema["table"][table]["columns"]
 
         where, args = "", {}
 
@@ -1010,9 +938,9 @@ class Database(object):
             key_data = [c for c in col_data if c["pk"]] or col_data
             keyargs = self.make_args(key_data, row, args)
         for col, key in zip(key_data, keyargs):
-            where += (" AND " if where else "") + "%s IS :%s" % (self.quote(col["name"]), key)
+            where += (" AND " if where else "") + "%s IS :%s" % (grammar.quote(col["name"]), key)
         args.update(keyargs)
-        self.execute("DELETE FROM %s WHERE %s" % (self.quote(table), where), args)
+        self.execute("DELETE FROM %s WHERE %s" % (grammar.quote(table), where), args)
         self.connection.commit()
         self.last_modified = datetime.datetime.now()
         return True

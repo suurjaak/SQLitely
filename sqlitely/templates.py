@@ -15,7 +15,7 @@ import re
 
 # Modules imported inside templates:
 #import datetime, os, pyparsing, sys, wx
-#from sqlitely import conf, database, images, templates
+#from sqlitely import conf, grammar, images, templates
 #from sqlitely.lib import util
 
 """Regex for matching unprintable characters (\x00 etc)."""
@@ -28,7 +28,7 @@ SAFEBYTE_REPL = lambda m: m.group(0).encode("unicode-escape")
 """HTML data export template."""
 DATA_HTML = """<%
 import datetime
-from sqlitely import conf, database, images
+from sqlitely import conf, grammar, images
 from sqlitely.lib import util
 %><!DOCTYPE HTML><html lang="en">
 <head>
@@ -183,7 +183,7 @@ from sqlitely.lib import util
 <tr>
   <th class="index asc"><a class="sort asc" title="Sort by index" onclick="onSort(0)">#</a></th>
 %for i, col in enumerate(columns):
-  <th><a class="sort" title="Sort by {{database.Database.quote(col)}}" onclick="onSort({{i + 1}})">{{col}}</a></th>
+  <th><a class="sort" title="Sort by {{grammar.quote(col)}}" onclick="onSort({{i + 1}})">{{col}}</a></th>
 %endfor
 </tr>
 <%
@@ -244,9 +244,9 @@ for chunk in data_buffer:
 
 """TXT SQL insert statements export template for the rows part."""
 SQL_ROWS_TXT = """<%
-from sqlitely import database, templates
+from sqlitely import grammar, templates
 
-str_cols = ", ".join(map(database.Database.quote, columns))
+str_cols = ", ".join(map(grammar.quote, columns))
 %>
 %for row in rows:
 <%
@@ -358,10 +358,10 @@ Results for "{{text}}" from {{fromtext}}:
 
 """HTML template for names search results header, stand-alone table."""
 SEARCH_ROW_TABLE_META_HTML = """<%
-from sqlitely import conf, database
+from sqlitely import conf, grammar
 %>
 Table <a href="table:{{table["name"]}}">
-    <font color="{{conf.LinkColour}}">{{!pattern_replace.sub(wrap_b, escape(database.Database.quote(table["name"])))}}</font></a>:
+    <font color="{{conf.LinkColour}}">{{!pattern_replace.sub(wrap_b, escape(grammar.quote(table["name"])))}}</font></a>:
 <table>
 %for col in columns:
   <tr>
@@ -376,10 +376,10 @@ Table <a href="table:{{table["name"]}}">
 
 """HTML template for table search results header, start of HTML table."""
 SEARCH_ROW_TABLE_HEADER_HTML = """<%
-from sqlitely import conf, database
+from sqlitely import conf, grammar
 %>
 <font color="{{conf.FgColour}}">
-<br /><br /><b><a name="{{table["name"]}}">Table {{database.Database.quote(table["name"])}}:</a></b><br />
+<br /><br /><b><a name="{{table["name"]}}">Table {{grammar.quote(table["name"])}}:</a></b><br />
 <table border="1" cellpadding="4" cellspacing="0" width="1000">
 <tr>
 <th>#</th>

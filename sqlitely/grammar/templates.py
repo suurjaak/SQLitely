@@ -19,8 +19,73 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    08.09.2019
+@modified    09.09.2019
 ------------------------------------------------------------------------------
+"""
+
+
+COLUMN_DEFINITION = """
+  {{ Q(data["name"]) }}{{ PAD("name", data) }}
+
+    %if data.get("type") is not None:
+  {{ data["type"] }}{{ PAD("type", data) }}
+    %endif
+
+    %if data.get("pk") is not None:
+  PRIMARY KEY {{ data["pk"].get("direction", "") }}
+        %if data["pk"].get("conflict"):
+  ON CONFLICT {{ data["pk"]["conflict"] }}
+        %endif
+        %if data["pk"].get("autoincrement"):
+  AUTOINCREMENT
+        %endif
+    %endif
+
+    %if data.get("notnull") is not None:
+  NOT NULL
+        %if data["notnull"].get("conflict"):
+  ON CONFLICT {{ data["notnull"]["conflict"] }}
+        %endif
+    %endif
+
+    %if data.get("unique") is not None:
+  UNIQUE
+        %if data["unique"].get("conflict"):
+  ON CONFLICT {{ data["unique"]["conflict"] }}
+        %endif
+    %endif
+
+    %if data.get("default") is not None:
+  DEFAULT {{ WS(data["default"]) }}
+    %endif
+
+    %if data.get("collate") is not None:
+  COLLATE {{ data["collate"] }}
+    %endif
+
+    %if data.get("check") is not None:
+  CHECK ({{ WS(data["check"]) }})
+    %endif
+
+    %if data.get("fk") is not None:
+  REFERENCES {{ Q(data["fk"]["table"]) }}
+        %if data["fk"].get("key"):
+  ({{ Q(data["fk"]["key"]) }})
+        %endif
+        %if data["fk"].get("defer") is not None:
+    {{ "NOT" if data["fk"]["defer"].get("not") else "" }}
+    DEFERRABLE 
+            %if data["fk"].get("initial"):
+    INITIALLY {{ data["fk"]["defer"]["initial"] }}
+            %endif
+        %endif
+        %for action, act in data["fk"].get("action", {}).items():
+    ON {{ action }} {{ act }}
+        %endfor
+        %for match in data["fk"].get("match", []):
+    MATCH {{ match }}
+        %endfor
+    %endif
 """
 
 
@@ -78,70 +143,9 @@ TABLE
 
 %for i, c in enumerate(data["columns"]):
   {{ PRE() }}
-  {{ Q(c["name"]) }}{{ PAD("name", c) }}
-
-    %if c.get("type") is not None:
-  {{ c["type"] }}{{ PAD("type", c) }}
-    %endif
-
-    %if c.get("pk") is not None:
-  PRIMARY KEY {{ c["pk"].get("direction", "") }}
-        %if c["pk"].get("conflict"):
-  ON CONFLICT {{ c["pk"]["conflict"] }}
-        %endif
-        %if c["pk"].get("autoincrement"):
-  AUTOINCREMENT
-        %endif
-    %endif
-
-    %if c.get("notnull") is not None:
-  NOT NULL
-        %if c["notnull"].get("conflict"):
-  ON CONFLICT {{ c["notnull"]["conflict"] }}
-        %endif
-    %endif
-
-    %if c.get("unique") is not None:
-  UNIQUE
-        %if c["unique"].get("conflict"):
-  ON CONFLICT {{ c["unique"]["conflict"] }}
-        %endif
-    %endif
-
-    %if c.get("default") is not None:
-  DEFAULT {{ WS(c["default"]) }}
-    %endif
-
-    %if c.get("collate") is not None:
-  COLLATE {{ c["collate"] }}
-    %endif
-
-    %if c.get("check") is not None:
-  CHECK ({{ WS(c["check"]) }})
-    %endif
-
-    %if c.get("fk") is not None:
-  REFERENCES {{ Q(c["fk"]["table"]) }}
-        %if c["fk"].get("key"):
-  ({{ Q(c["fk"]["key"]) }})
-        %endif
-        %if c["fk"].get("defer") is not None:
-    {{ "NOT" if c["fk"]["defer"].get("not") else "" }}
-    DEFERRABLE 
-            %if c["fk"].get("initial"):
-    INITIALLY {{ c["fk"]["defer"]["initial"] }}
-            %endif
-        %endif
-        %for action, act in c["fk"].get("action", {}).items():
-    ON {{ action }} {{ act }}
-        %endfor
-        %for match in c["fk"].get("match", []):
-    MATCH {{ match }}
-        %endfor
-    %endif
-
-{{ CM("columns", i) }}
-{{ LF() }}
+  {{ step.Template(templates.COLUMN_DEFINITION, strip=True, collapse=True).expand(dict(locals(), data=c)) }}
+  {{ CM("columns", i) }}
+  {{ LF() }}
 %endfor
 
 
@@ -202,8 +206,8 @@ TABLE
     %endif
 
 
-{{ CM("constraints", i) }}
-{{ LF() }}
+  {{ CM("constraints", i) }}
+  {{ LF() }}
 %endfor
 )
 

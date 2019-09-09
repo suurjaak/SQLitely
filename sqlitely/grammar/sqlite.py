@@ -296,7 +296,7 @@ class Parser(object):
                 col["direction"] = self.t(c.K_ASC() or c.K_DESC())
             result["columns"].append(col)
 
-        result["where"] = self.r(ctx.expr())
+        if ctx.expr(): result["where"] = self.r(ctx.expr())
 
         return result
 
@@ -643,6 +643,7 @@ class Generator(object):
     """
 
     TEMPLATES = {
+        "COLUMN":                  templates.COLUMN_DEFINITION,
         SQL.CREATE_INDEX:          templates.CREATE_INDEX,
         SQL.CREATE_TABLE:          templates.CREATE_TABLE,
         SQL.CREATE_TRIGGER:        templates.CREATE_TRIGGER,
@@ -671,13 +672,14 @@ class Generator(object):
         @param   category  data category if not using data["__type__"]
         @return            SQL string, or None if unknown data category
         """
-        category = self._category = category or data["__type__"]
+        category = self._category = (category or data["__type__"]).upper()
         if category not in self.TEMPLATES: return
 
         REPLACE_ORDER = ["Q", "PAD", "LF", "CM", "GLUE", "PRE", "WS"]
         ns = {"Q":    self.quote,   "LF": self.linefeed, "PRE": self.indentation,
               "PAD":  self.padding, "CM": self.comma,    "WS":  self.token,
-              "GLUE": self.glue,    "data": data}
+              "GLUE": self.glue,
+              "data": data, "step": step, "templates": templates}
 
         # Generate SQL, using unique tokens for whitespace-sensitive parts,
         # replaced after stripping down whitespace in template result.
@@ -710,7 +712,7 @@ class Generator(object):
                 elif "CM" == tokentype:
                     # Strip leading whitespace and multiple trailing spaces from commas
                     r = r"\s*" + re.escape(token) + ("" if self._indent else " *")
-                    result = re.sub(r, val, result, re.U)
+                    result = re.sub(r, val, result, flags=re.U)
                 else: result = result.replace(token, val)
             break # while
 
@@ -856,6 +858,7 @@ def test():
         USING mymodule (myargument1, myargument2);
         ''',
     ]
+
 
     indent = "  "
     renames = {"table": "renämed tablé", "trigger": "renämed triggér",

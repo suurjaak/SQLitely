@@ -144,10 +144,9 @@ class SearchThread(WorkerThread):
                     infotext = "table and column names and types"
                     count = 0
                     template_tablemeta = FACTORY("tablemeta")
-                    for table in search["db"].get_tables():
-                        columns = search["db"].get_table_columns(table["name"])
+                    for table in search["db"].get_category("table").values():
                         table_matches = self.match_all(table["name"], match_words)
-                        matching_columns = [c for c in columns
+                        matching_columns = [c for c in table["columns"]
                                             if self.match_all(c["name"], match_words)
                                             or self.match_all(c["type"], match_words)]
 
@@ -178,8 +177,7 @@ class SearchThread(WorkerThread):
                     # Search over all fields of all tables.
                     template_table = FACTORY("table")
                     template_row = FACTORY("row")
-                    for table in search["db"].get_tables():
-                        table["columns"] = search["db"].get_table_columns(table["name"])
+                    for table in search["db"].get_category("table").values():
                         sql, params, words, keywords = \
                             query_parser.Parse(search["text"], table)
                         if not sql:
@@ -253,7 +251,7 @@ class SearchThread(WorkerThread):
                 result["done"] = True
                 result["count"] = result_count
                 self.postback(result)
-                logger.info("Search found %s results." % result["count"])
+                logger.info("Search found %s results.", result["count"])
             except Exception as e:
                 if not result:
                     result = {}

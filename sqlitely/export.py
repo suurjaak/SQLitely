@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.09.2019
+@modified    09.09.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -146,9 +146,8 @@ def export_data(make_iterable, filename, title, db, columns, sql_query="", table
 
                 if table:
                     # Add CREATE TABLE statement.
-                    create_sql = db.get_sql(table).strip()
-                    if is_sql:
-                        create_sql = db.transform_sql(create_sql, "table", notexists=True)
+                    transform = {"exists": True} if is_sql else None
+                    create_sql = db.get_sql("table", table, transform=transform)
                     namespace["create_sql"] = create_sql
 
                 tmpfile.flush(), tmpfile.seek(0)
