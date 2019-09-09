@@ -9,10 +9,6 @@ Stand-alone GUI components for wx:
 - ColourManager(object):
   Updates managed component colours on Windows system colour change.
 
-- EntryDialog(wx.Dialog):
-  Non-modal text entry dialog with auto-complete dropdown, appears in lower
-  right corner.
-
 - NonModalOKDialog(wx.Dialog):
   A simple non-modal dialog with an OK button, stays on top of parent.
 
@@ -60,7 +56,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    05.09.2019
+@modified    09.09.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -275,118 +271,6 @@ class NonModalOKDialog(wx.Dialog):
     def OnClose(self, event):
         event.Skip()
         self.Close()
-
-
-
-class EntryDialog(wx.Dialog):
-    """
-    Non-modal text entry dialog with auto-complete dropdown, appears in lower
-    right corner.
-    Fires a wx.EVT_COMMAND_ENTER event on pressing Enter or button.
-    """
-    HIDE_TIMEOUT = 1500 # Milliseconds to wait for hiding after losing focus
-
-    def __init__(self, parent, title, label="", value="", emptyvalue="", tooltip="", choices=[]):
-        """
-        @param   title       dialog window title
-        @param   label       label before text entry, if any
-        @param   value       default value of text entry
-        @param   emptyvalue  gray text shown in text box if empty and unfocused
-        @param   tooltip     tooltip shown for enter button
-        """
-        style = wx.CAPTION | wx.CLOSE_BOX | wx.STAY_ON_TOP
-        wx.Dialog.__init__(self, parent=parent, title=title, style=style)
-        self._hider = None # Hider callback wx.Timer
-
-        if label:
-            label_text = self._label = wx.StaticText(self, label=label)
-        text = self._text = TextCtrlAutoComplete(
-            self, description=emptyvalue, size=(200, -1),
-            style=wx.TE_PROCESS_ENTER)
-        tb = wx.ToolBar(parent=self, style=wx.TB_FLAT | wx.TB_NODIVIDER)
-
-        text.Value = value
-        text.SetChoices(choices)
-        bmp = wx.ArtProvider.GetBitmap(wx.ART_GO_FORWARD, wx.ART_TOOLBAR,
-                                       (16, 16))
-        tb.SetToolBitmapSize(bmp.Size)
-        tb.AddLabelTool(wx.ID_FIND, "", bitmap=bmp, shortHelp=tooltip)
-        tb.Realize()
-
-        self.Bind(wx.EVT_ACTIVATE, self._OnActivate, self)
-        text.Bind(wx.EVT_KEY_DOWN, self._OnKeyDown)
-        self.Bind(wx.EVT_TEXT_ENTER, self._OnSearch, text)
-        self.Bind(wx.EVT_TOOL, self._OnSearch, id=wx.ID_FIND)
-        self.Bind(wx.EVT_LIST_DELETE_ALL_ITEMS, self._OnClearChoices, text)
-
-        self.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_top = wx.BoxSizer(wx.HORIZONTAL)
-        if label:
-            sizer_top.Add(label_text, flag=wx.ALIGN_CENTER_VERTICAL |
-                          wx.LEFT, border=5)
-        sizer_top.Add(text, flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=5)
-        sizer_top.Add(tb, flag=wx.LEFT | wx.RIGHT |
-                      wx.ALIGN_CENTER_VERTICAL, border=5)
-        self.Sizer.Add(sizer_top, flag=wx.GROW | wx.TOP | wx.BOTTOM, border=5)
-        self.Fit()
-        x, y, w, h = wx.GetClientDisplayRect()
-        self.Position = (x + w - self.Size.width, y + h - self.Size.height)
-        self._pos_last = self.Position
-        self._displayrect_last = (x, y, w, h)
-
-
-
-    def Show(self, show=True):
-        """Shows or hides the window, and raises it if shown."""
-        if show:
-            x, y, w, h = wx.GetClientDisplayRect()
-            if (x, y, w, h) != self._displayrect_last:     # Display size has
-                self.Position = (x + w - self.Size.width,  # changed, move to
-                                 y + h - self.Size.height) # screen corner.
-                self._displayrect_last = (x, y, w, h)
-            self.Raise()
-            self._text.SetFocus()
-        wx.Dialog.Show(self, show)
-
-
-    def GetValue(self):
-        """Returns the text box value."""
-        return self._text.Value
-    def SetValue(self, value):
-        """Sets the text box value."""
-        self._text.Value = value
-    Value = property(GetValue, SetValue)
-
-
-    def SetChoices(self, choices):
-        """Sets the auto-complete choices for text box."""
-        self._text.SetChoices(choices)
-
-
-    def _OnActivate(self, event):
-        if not (event.Active or self._hider):
-            self._hider = wx.CallLater(self.HIDE_TIMEOUT, self.Hide)
-        elif event.Active and self._hider: # Kill the hiding timeout, if any
-            self._hider.Stop()
-            self._hider = None
-
-
-    def _OnKeyDown(self, event):
-        event.Skip()
-        if wx.WXK_ESCAPE == event.KeyCode and not self._text.IsDropDownShown():
-            self.Hide()
-
-
-    def _OnSearch(self, event):
-        findevent = wx.CommandEvent(wx.wxEVT_COMMAND_ENTER, self.GetId())
-        wx.PostEvent(self, findevent)
-
-
-    def _OnClearChoices(self, event):
-        choice = wx.MessageBox("Clear search history?", self.Title,
-                               wx.OK | wx.CANCEL | wx.ICON_QUESTION)
-        if wx.OK == choice:
-            self._text.SetChoices([])
 
 
 

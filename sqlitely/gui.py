@@ -147,15 +147,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.dialog_savefile = wx.FileDialog(
             parent=self, defaultDir=os.getcwd(), defaultFile="",
             style=wx.FD_SAVE | wx.RESIZE_BORDER)
-        self.dialog_search = controls.EntryDialog(
-            parent=self, title="Find in %s" % conf.Title, label="Search:",
-            emptyvalue="Find in last database..",
-            tooltip="Find in last database..")
-        self.dialog_search.Bind(wx.EVT_COMMAND_ENTER, self.on_tray_search)
-        if conf.SearchHistory and conf.SearchHistory[-1:] != [""]:
-            self.dialog_search.Value = conf.SearchHistory[-1]
-        self.dialog_search.SetChoices(list(filter(None, conf.SearchHistory)))
-        self.dialog_search.SetIcons(icons)
 
         # Memory file system for showing images in wx.HtmlWindow
         self.memoryfs = {"files": {}, "handler": wx.MemoryFSHandler()}
@@ -230,7 +221,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if conf.TrayIconEnabled:
             self.trayicon.SetIcon(self.TRAY_ICON.Icon, conf.Title)
         self.trayicon.Bind(wx.EVT_TASKBAR_LEFT_DCLICK, self.on_toggle_iconize)
-        self.trayicon.Bind(wx.EVT_TASKBAR_LEFT_DOWN, self.on_open_tray_search)
         self.trayicon.Bind(wx.EVT_TASKBAR_RIGHT_DOWN, self.on_open_tray_menu)
 
         if conf.WindowIconized:
@@ -413,7 +403,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             help="Choose a database file to open."
         )
         menu_recent = self.menu_recent = wx.Menu()
-        menu_file.AppendMenu(id=wx.ID_ANY, text="&Recent databases",
+        menu_file.AppendMenu(id=wx.ID_ANY, text="&Recent files",
             submenu=menu_recent, help="Recently opened databases.")
         menu_file.AppendSeparator()
         menu_options = self.menu_options = \
@@ -503,38 +493,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         wx.CallLater(millis, self.update_check)
 
 
-    def on_tray_search(self, event):
-        """Handler for searching from tray dialog, launches search."""
-        if self.dialog_search.Value.strip():
-            self.dialog_search.Hide()
-            if self.IsIconized() and not self.Shown:
-                self.on_toggle_iconize()
-            else:
-                self.Iconize(False), self.Show(), self.Raise()
-            page = self.page_db_latest
-            if not page:
-                if self.dbs_selected: # Load database focused in dblist
-                    page = self.load_database_page(self.dbs_selected[-1])
-                elif self.dbs: # Load an open database
-                    page = self.load_database_page(list(self.dbs)[0])
-                elif conf.RecentFiles:
-                    page = self.load_database_page(conf.RecentFiles[0])
-            if page:
-                page.edit_searchall.Value = self.dialog_search.Value
-                page.on_searchall(None)
-                for i in range(self.notebook.GetPageCount()):
-                    if self.notebook.GetPage(i) == page:
-                        if self.notebook.GetSelection() != i:
-                            self.notebook.SetSelection(i)
-                            self.update_notebook_header()
-                        break # for i
-            else:
-                wx.MessageBox("No database to search from.", conf.Title)
-
-
     def on_toggle_iconize(self, event=None):
         """Handler for toggling main window to tray and back."""
-        self.dialog_search.Hide()
         conf.WindowIconized = not conf.WindowIconized
         if conf.WindowIconized:
             self.Iconize(), self.Hide()
@@ -562,20 +522,26 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.on_toggle_iconize()
 
 
-    def on_open_tray_search(self, event):
-        """Opens the search entry dialog."""
-        self.dialog_search.Show(not self.dialog_search.Shown)
-
-
     def on_open_tray_menu(self, event):
         """Creates and opens a popup menu for the tray icon."""
         menu = wx.Menu()
-        item_search = wx.MenuItem(menu, -1, "&Search for..")
-        font = item_search.Font
-        font.SetWeight(wx.FONTWEIGHT_BOLD)
-        font.SetFaceName(self.Font.FaceName)
-        font.SetPointSize(self.Font.PointSize)
-        item_search.Font = font
+        menu_recent = wx.Menu()
+        menu_all = wx.Menu()
+
+        def on_recent_file(event):
+            if conf.WindowIconized: self.on_toggle_iconize()
+            filename = history_file.GetHistoryFile(event.Id - wx.ID_FILE1)
+            self.load_database_page(filename)
+        def open_item(filename, *_, **__):
+            if conf.WindowIconized: self.on_toggle_iconize()
+            self.load_database_page(filename)
+
+        history_file = wx.FileHistory(conf.MaxRecentFiles)
+        history_file.UseMenu(menu_recent)
+        # Reverse list, as FileHistory works like a stack
+        [history_file.AddFileToHistory(f) for f in conf.RecentFiles[::-1]]
+        history_file.UseMenu(menu_recent)
+
         label = ["Minimize to", "Restore from"][conf.WindowIconized] + " &tray"
         item_toggle = wx.MenuItem(menu, -1, label)
         item_icon = wx.MenuItem(menu, -1, kind=wx.ITEM_CHECK,
@@ -584,9 +550,42 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                                    text="Show Python &console")
         item_exit = wx.MenuItem(menu, -1, "E&xit %s" % conf.Title)
 
-        menu.AppendItem(item_search)
-        menu.AppendItem(item_toggle)
+        boldfont = item_toggle.Font
+        boldfont.SetWeight(wx.FONTWEIGHT_BOLD)
+        boldfont.SetFaceName(self.Font.FaceName)
+        boldfont.SetPointSize(self.Font.PointSize)
+
+        curpage = self.notebook.GetCurrentPage()
+        curfile = curpage.db.filename if isinstance(curpage, DatabasePage) else None
+
+        openfiles = [(os.path.split(d.filename)[-1], p)
+                     for p, d in self.db_pages.items()]
+        for filename, page in sorted(openfiles):
+            item = wx.MenuItem(menu, -1, filename)
+            if page.db.filename == curfile or len(openfiles) < 2:
+                item.Font = boldfont
+            menu.AppendItem(item)
+            menu.Bind(wx.EVT_MENU, functools.partial(open_item, page.db.filename),
+                      id=item.GetId())
+        if openfiles: menu.AppendSeparator()
+
+        allfiles = [(os.path.split(f)[-1], f) for f in self.db_datas]
+        for i, (filename, path) in enumerate(sorted(allfiles)):
+            label = "&%s %s" % ((i + 1), filename)
+            item = wx.MenuItem(menu, -1, label)
+            if len(allfiles) > 1 and (path == curfile if curfile
+            else len(openfiles) == 1 and path in self.dbs):
+                item.Font = boldfont
+            menu_all.AppendItem(item)
+            menu.Bind(wx.EVT_MENU, functools.partial(open_item, path),
+                      id=item.GetId())
+        if allfiles:
+            menu.AppendMenu(-1, "All &files", submenu=menu_all)
+
+        item_recent = menu.AppendMenu(-1, "&Recent files", submenu=menu_recent)
+        menu.Enable(item_recent.Id, bool(conf.RecentFiles))
         menu.AppendSeparator()
+        menu.AppendItem(item_toggle)
         menu.AppendItem(item_icon)
         menu.AppendItem(item_console)
         menu.AppendSeparator()
@@ -594,7 +593,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         item_icon.Check(True)
         item_console.Check(self.frame_console.Shown)
 
-        menu.Bind(wx.EVT_MENU, self.on_open_tray_search, id=item_search.GetId())
+        wx.EVT_MENU_RANGE(menu, wx.ID_FILE1, wx.ID_FILE1 + conf.MaxRecentFiles,
+                          on_recent_file)
         menu.Bind(wx.EVT_MENU, self.on_toggle_iconize, id=item_toggle.GetId())
         menu.Bind(wx.EVT_MENU, self.on_toggle_trayicon, id=item_icon.GetId())
         menu.Bind(wx.EVT_MENU, self.on_toggle_console, id=item_console.GetId())
@@ -1455,7 +1455,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             conf.WindowSize = [-1, -1] if self.IsMaximized() else self.Size[:]
             conf.save()
             self.trayicon.Destroy()
-            sys.exit()
+            wx.CallAfter(sys.exit) # Immediate exit fails if exiting from tray
 
 
     def on_close_page(self, event):
@@ -1554,7 +1554,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 page.edit_searchall.SetChoices(conf.SearchHistory)
                 page.edit_searchall.ShowDropDown(False)
                 page.edit_searchall.Value = ""
-            self.dialog_search.SetChoices(conf.SearchHistory)
             conf.save()
 
 
@@ -3179,8 +3178,6 @@ class DatabasePage(wx.Panel):
             self.notebook.SetSelection(self.pageorder[self.page_search])
             util.add_unique(conf.SearchHistory, text.strip(), 1,
                             conf.MaxSearchHistory)
-            self.TopLevelParent.dialog_search.Value = conf.SearchHistory[-1]
-            self.TopLevelParent.dialog_search.SetChoices(conf.SearchHistory)
             self.edit_searchall.SetChoices(conf.SearchHistory)
             self.edit_searchall.SetFocus()
             conf.save()
