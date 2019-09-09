@@ -8,13 +8,13 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.09.2019
+@modified    09.09.2019
 ------------------------------------------------------------------------------
 """
 import re
 
 # Modules imported inside templates:
-#import datetime, os, pyparsing, sys
+#import datetime, os, pyparsing, sys, wx
 #from sqlitely import conf, database, images, templates
 #from sqlitely.lib import util
 
@@ -421,7 +421,7 @@ and not (keywords.get("-column") and match_kw("-column", col)):
 
 """Text shown in Help -> About dialog (HTML content)."""
 ABOUT_HTML = """<%
-import sys
+import sys, wx
 from sqlitely import conf
 %>
 <font size="2" face="{{conf.HtmlFontName}}" color="{{conf.FgColour}}">
@@ -441,21 +441,21 @@ under the MIT License.
 
 {{conf.Title}} has been built using the following open source software:
 <ul>
-  <li>wxPython{{" 3.0.2.0" if getattr(sys, 'frozen', False) else ""}},
+  <li>wxPython{{" %s" % getattr(wx, "__version__", "") if getattr(sys, 'frozen', False) else ""}},
       <a href="http://wxpython.org"><font color="{{conf.LinkColour}}">wxpython.org</font></a></li>
-  <li>Pillow{{" 2.8.1" if getattr(sys, 'frozen', False) else ""}},
-      <a href="https://pypi.python.org/pypi/Pillow/"><font color="{{conf.LinkColour}}">pypi.python.org/pypi/Pillow</font></a></li>
+  <li>ANTLR4,
+      <a href="https://www.antlr.org/"><font color="{{conf.LinkColour}}">antlr.org</font></a></li>
+  <li>pyparsing,
+      <a href="https://pypi.org/project/pyparsing/"><font color="{{conf.LinkColour}}">pypi.org/project/pyparsing</font></a></li>
   <li>step, Simple Template Engine for Python,
       <a href="https://github.com/dotpy/step"><font color="{{conf.LinkColour}}">github.com/dotpy/step</font></a></li>
-  <li>pyparsing{{" 2.0.3" if getattr(sys, 'frozen', False) else ""}},
-      <a href="https://pypi.org/project/pyparsing/"><font color="{{conf.LinkColour}}">pypi.org/project/pyparsing</font></a></li>
-  <li>XlsxWriter{{" 0.7.3" if getattr(sys, 'frozen', False) else ""}},
+  <li>XlsxWriter,
       <a href="https://github.com/jmcnamara/XlsxWriter"><font color="{{conf.LinkColour}}">
           github.com/jmcnamara/XlsxWriter</font></a></li>
 %if getattr(sys, 'frozen', False):
-  <li>Python 2.7.10, <a href="http://www.python.org"><font color="{{conf.LinkColour}}">www.python.org</font></a></li>
-  <li>PyInstaller 2.1, <a href="http://www.pyinstaller.org">
-      <font color="{{conf.LinkColour}}">www.pyinstaller.org</font></a></li>
+  <li>Python 2, <a href="http://www.python.org"><font color="{{conf.LinkColour}}">python.org</font></a></li>
+  <li>PyInstaller, <a href="http://www.pyinstaller.org">
+      <font color="{{conf.LinkColour}}">pyinstaller.org</font></a></li>
 %endif
 </ul><br /><br />
 
@@ -468,7 +468,7 @@ Includes fonts Carlito Regular and Carlito bold,
 <a href="https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts"><font color="{{conf.LinkColour}}">fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts</font></a>
 %if getattr(sys, 'frozen', False):
 <br /><br />
-Installer created with Nullsoft Scriptable Install System 3.0b1,
+Installer created with Nullsoft Scriptable Install System,
 <a href="http://nsis.sourceforge.net/"><font color="{{conf.LinkColour}}">nsis.sourceforge.net</font></a>
 %endif
 

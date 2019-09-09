@@ -1,2 +1,2 @@
-recursive-include sqlitely *.py *.ttf
+recursive-include sqlitely *.g4 *.py *.ttf
 include INSTALL.md LICENSE.md README.md requirements.txt

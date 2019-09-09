@@ -36,9 +36,8 @@ elsewhere, same goes for the source code. The command line interface only needs
 Python to run.
 
 SQLitely has been tested under Windows 7, Windows Vista, Windows XP and
-Ubuntu Linux, and reported to work under OS X and Windows 8. In source code
-form, it should run wherever Python and the required Python packages are
-installed.
+Ubuntu Linux. In source code form, it should run wherever Python and the
+required Python packages are installed.
 
 If running from pip installation, run `sqlitely` from the command-line. 
 If running from straight source code, launch `sqlitely.sh` where shell 
@@ -56,7 +55,6 @@ Mac/Linux/other: install Python, wxPython, pip, and run
 `pip install sqlitely`
 
 The pip installation will add the `sqlitely` command to path.
-For more thorough instructions, see [INSTALL.md](INSTALL.md).
 
 
 Source Dependencies
@@ -66,6 +64,7 @@ If running from source code, SQLitely needs Python 2.7,
 and the following 3rd-party Python packages:
 * wxPython 2.9+ (http://wxpython.org/)
 The following are also listed in `requirements.txt` for pip:
+* antlr4-python2-runtime (https://pypi.org/project/antlr4-python2-runtime/)
 * pyparsing (https://pypi.org/project/pyparsing/)
 * XlsxWriter (https://pypi.python.org/pypi/XlsxWriter)
 
@@ -80,12 +79,18 @@ Python 2.6 will need the argparse library. Python 3 is yet unsupported.
 Attribution
 -----------
 
-SQLitely includes step, Simple Template Engine for Python,
+Includes a modified version of step, Simple Template Engine for Python,
 (c) 2012, Daniele Mazzocchio (https://github.com/dotpy/step).
 
-Several icons from:
-  Fugue Icons, (c) 2010 Yusuke Kamiyamane,
-  http://p.yusukekamiyamane.com/
+Includes a modified version of SQLite.g4 from antlr4-grammars,
+(c) 2014, Bart Kiers 
+(https://github.com/antlr/grammars-v4/blob/master/sqlite/SQLite.g4).
+
+SQL lexer and parser generated with ANTLR v4.7.2,
+(c) 2012 The ANTLR Project (https://github.com/antlr/antlr4).
+
+Includes several icons from Fugue Icons,
+(c) 2010 Yusuke Kamiyamane, http://p.yusukekamiyamane.com/
 
 Includes fonts Carlito Regular and Carlito bold,
 https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts
