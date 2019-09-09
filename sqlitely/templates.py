@@ -214,6 +214,27 @@ namespace["row_count"] += 1
 """
 
 
+"""TXT SQL create statements export template."""
+CREATE_SQL = """<%
+import datetime
+from sqlitely import conf
+
+%>--
+%if isdef("title") and title:
+-- {{title}}
+%endif
+%if isdef("db_filename") and db_filename:
+-- Source: {{db_filename}}.
+%endif
+-- Exported with {{conf.Title}} on {{datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}}.
+--
+
+
+{{sql}}
+"""
+
+
+
 """TXT SQL insert statements export template."""
 SQL_TXT = """<%
 import datetime
@@ -226,7 +247,7 @@ from sqlitely import conf
 -- {{row_count}} {{util.plural("row", row_count, with_items=False)}}.
 %if sql:
 --
--- SQL: {{sql}}
+-- SQL: {{sql}};
 %endif
 %if table:
 

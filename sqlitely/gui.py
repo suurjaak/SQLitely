@@ -3290,7 +3290,7 @@ class DatabasePage(wx.Panel):
 
         if grid_source is self.grid_table:
             table_lower = grid_source.Table.table.lower()
-            opts = self.db.get_category("table", table_lower)["name"]
+            opts = self.db.get_category("table", table_lower)
             title = "Table %s" % grammar.quote(opts["name"], force=True)
             self.dialog_savefile.Wildcard = export.TABLE_WILDCARD
         else:
@@ -3432,7 +3432,10 @@ class DatabasePage(wx.Panel):
 
         filename = dialog.GetPath()
         try:
-            stc.SaveFile(filename)
+            content = step.Template(templates.CREATE_SQL, strip=False).expand(
+                title="Database schema.", db_filename=self.db.filename, sql=stc.GetText())
+            with open(filename, "wb") as f:
+                f.write(content.encode("utf-8"))
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving SQL to %s." % filename
