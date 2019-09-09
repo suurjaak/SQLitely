@@ -24,6 +24,7 @@ from . SQLiteLexer import SQLiteLexer
 from . SQLiteParser import SQLiteParser
 
 logger = logging.getLogger(__name__)
+parser = None # Reuse Parser instance, ANTLR grammar setup is slow
 
 
 
@@ -34,7 +35,8 @@ def parse(sql, category=None):
     @param   category  expected statement category if any
     @return            {}, or None on error
     """
-    result, parser = None, Parser()
+    global parser
+    result, parser = None, parser or Parser()
     try:
         result = parser.parse(sql, category)
     except Exception:
@@ -192,7 +194,8 @@ class Parser(object):
 
 
     def __init__(self):
-        self._stream  = CommonTokenStream(SQLiteLexer())
+        self._lexer  = SQLiteLexer()
+        self._parser = SQLiteParser(CommonTokenStream(self._lexer))
 
 
     def parse(self, sql, category=None, renames=None):
@@ -208,8 +211,10 @@ class Parser(object):
                            given nested value like {"table": {"old": "new"}}
         @return            {..}, or None on error
         """
-        self._stream.tokenSource.inputStream = InputStream(sql)
-        tree = SQLiteParser(self._stream).parse()
+
+        self._lexer.inputStream = InputStream(sql)
+        self._parser.reset()
+        tree = self._parser.parse()
 
         # parse ctx -> statement list ctx -> statement ctx -> specific type ctx
         ctx = tree.children[0].children[0].children[0]
@@ -228,6 +233,7 @@ class Parser(object):
             elif renames["schema"]: result["schema"] = renames["schema"]
             else: result.pop("schema", None)
 
+        self._parser.reset()
         return result
 
 
@@ -251,7 +257,7 @@ class Parser(object):
         if ctx and ctx2:
             interval = ctx.getSourceInterval()[0], ctx2.getSourceInterval()[1]
         else: interval = ctx.getSourceInterval()
-        result = self._stream.getText(interval)
+        result = self._parser.getInputStream().getText(interval)
 
         for c, r in ((ctx, "^%s"), (ctx2, "%s$")) if ctx and ctx2 else ():
             if not isinstance(c, TerminalNode): continue # for c, r
