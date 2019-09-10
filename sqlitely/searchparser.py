@@ -3,7 +3,7 @@
 Parses a Google-like search grammar into SQL for querying a database.
 
 - words can consist of any non-whitespace characters including all Unicode,
-  excluding round brackets and quotes ()" 
+  excluding round brackets and quotes ()"
 - asterisk (*) can be used as a wildcard, matching any character or whitespace
 - quoted text is a literal phrase: "one two  three   ."
 - can use operator "OR" to make an either-or search: one OR two
@@ -18,12 +18,12 @@ Parses a Google-like search grammar into SQL for querying a database.
 If pyparsing is unavailable, falls back to naive split into words and keywords.
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2019
+@modified    09.09.2019
 """
 import calendar
 import collections
@@ -41,13 +41,12 @@ except ImportError:
     ParserElement = None
 
 from . lib import util
+from . import grammar
 
 
-UNPRINTABLES = "".join(set(unichr(i) for i in range(128))
-                       .difference(string.printable))
-ALLWORDCHARS = u"".join(set(unichr(c) for c in range(65536)
-                        if not unichr(c).isspace())
-                        .difference(UNPRINTABLES))
+ALLWORDCHARS = re.sub("[\x00-\x1f,\x7f-\xa0]", "", u"".join(
+    unichr(c) for c in range(65536) if not unichr(c).isspace()
+))
 ALLCHARS = ALLWORDCHARS + string.whitespace
 WORDCHARS = ALLWORDCHARS.replace("(", "").replace(")", "").replace("\"", "")
 ESCAPE_CHAR = "\\" # Character used to escape SQLite special characters like _%
@@ -85,7 +84,7 @@ class SearchQueryParser(object):
             word = Group(keyWord | notExpr | quotedWord | plainWord
                         ).setResultsName("WORD")
 
-            grammar = Forward()
+            query = Forward()
             parens = Forward()
 
             orOperand = Group(word | parens | notExpr | anyWord
@@ -98,20 +97,20 @@ class SearchQueryParser(object):
                            ).setResultsName("ONE EXPRESSION")
             parens <<= Group(
                 Group(Optional("-")).setResultsName("NOT_PARENTHESIS")
-                + Suppress("(") + ZeroOrMore(parens | grammar)
+                + Suppress("(") + ZeroOrMore(parens | query)
                 + Suppress(")")).setResultsName("PARENTHESIS")
-            grammar <<= ((oneExpr + grammar) | oneExpr
+            query <<= ((oneExpr + query) | oneExpr
                         ).setResultsName("GRAMMAR")
-            self._grammar = grammar
+            self._grammar = query
 
-    
+
     def Parse(self, query, table=None):
         """
         Parses the query string and returns (sql, sql params, words).
 
         @param   table  if set, search is performed on all the fields of this
                         specific table
-                        {"name": "Table name": "columns[{"name", "pk_id", }, ]}
+                        {"name": "Table name", "columns": [{"name", "pk", }, ]}
         @return         (SQL string, SQL parameter dict, word and phrase list, keyword map)
         """
         words = [] # All encountered text words and quoted phrases
@@ -130,7 +129,7 @@ class SearchQueryParser(object):
                     key = negation + key
                     keywords[key.lower()].append(value)
                     split_words.remove(word)
-            try:                
+            try:
                 parse_results = ParseResults(split_words)
             except NameError: # pyparsing.ParseResults not available
                 parse_results = split_words
@@ -150,12 +149,14 @@ class SearchQueryParser(object):
             else:
                 kw_sql = self._makeKeywordsSQL(keywords, sql_params, table)
                 result = "SELECT * FROM %s WHERE %s %s%s" % (
-                         table["name"], result, " AND " if result and kw_sql else "", kw_sql)
+                         grammar.quote(table["name"]), result,
+                         " AND " if result and kw_sql else "", kw_sql)
 
-                for col in table["columns"]:
-                    if col.get("pk"):
-                        result += " ORDER BY %s ASC" % col["name"]
-                        break # break for col in table["columns"]
+                pk_cols = [c for c in table["columns"] if c.get("pk")]
+                if pk_cols: result += " ORDER BY " + ", ".join(
+                    "%s ASC" % grammar.quote(c["name"])
+                    for c in sorted(pk_cols, key=lambda x: x["pk"])
+                )
         else:
             kw_sql = self._makeKeywordsSQL(keywords, sql_params, table)
         if not table and kw_sql:
@@ -187,7 +188,7 @@ class SearchQueryParser(object):
                     continue # for col
 
                 result_col = "%s.%s LIKE :column_like%s" % \
-                             (table["name"], col["name"], i)
+                             (grammar.quote(table["name"]), grammar.quote(col["name"]), i)
                 if len(safe) > len(item):
                     result_col += " ESCAPE '%s'" % ESCAPE_CHAR
                 result += (" OR " if result else "") + result_col
@@ -257,14 +258,15 @@ class SearchQueryParser(object):
                             if val is None: continue # continue for j, (forma..
                             format += ("-" if format else "") + "%" + frm
                             value += ("-" if value else "")
-                            value += "%02d" % val if j else "%04d" % val 
+                            value += "%02d" % val if j else "%04d" % val
                         param = "timestamp_%s" % len(sql_params)
                         sql_params[param] = value
                         for j, col in enumerate(datecols):
                             temp = "STRFTIME('%s', %s) = :%s"
-                            sql += (" OR " if j else "") + temp % (format, col["name"], param)
+                            x = temp % (format, grammar.quote(col["name"]), param)
+                            sql += (" OR " if j else "") + x
                         if len(datecols) > 1: sql = "(%s)" % sql
-                            
+
                     else:
                         # Date range given: use timestamp matching
                         date_words = word.split("..", 1)
@@ -294,7 +296,8 @@ class SearchQueryParser(object):
                         colsql = ""
                         for j, col in enumerate(datecols):
                             colsql += (" OR " if j else "")
-                            colsql += "%s %s :%s" % (col["name"], [">=", "<="][i], param)
+                            colsql += "%s %s :%s" % (
+                                      grammar.quote(col["name"]), [">=", "<="][i], param)
                         sql += (" AND " if sql else "")
                         sql += "(%s)" % (colsql) if len(datecols) > 1 else colsql
 
@@ -335,7 +338,7 @@ class SearchQueryParser(object):
         """
         Returns the non-empty strings joined together with the specified glue.
 
-        @param   glue  separator used as glue between strings 
+        @param   glue  separator used as glue between strings
         @return        (joined string, number of strings actually used)
         """
         strings = list(filter(None, strings))

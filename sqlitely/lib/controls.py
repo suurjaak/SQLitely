@@ -9,10 +9,6 @@ Stand-alone GUI components for wx:
 - ColourManager(object):
   Updates managed component colours on Windows system colour change.
 
-- EntryDialog(wx.Dialog):
-  Non-modal text entry dialog with auto-complete dropdown, appears in lower
-  right corner.
-
 - NonModalOKDialog(wx.Dialog):
   A simple non-modal dialog with an OK button, stays on top of parent.
 
@@ -30,10 +26,10 @@ Stand-alone GUI components for wx:
 
 - ScrollingHtmlWindow(wx.html.HtmlWindow):
   HtmlWindow that remembers its scroll position on resize and append.
-    
+
 - SearchCtrl(wx.TextCtrl):
   Simple search control, with search description.
-    
+
 - SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                            wx.lib.mixins.listctrl.ColumnSorterMixin):
   A sortable list view that can be batch-populated, autosizes its columns,
@@ -44,7 +40,7 @@ Stand-alone GUI components for wx:
 
 - TabbedHtmlWindow(wx.PyPanel):
   wx.html.HtmlWindow with tabs for different content pages.
-    
+
 - TextCtrlAutoComplete(wx.TextCtrl):
   A text control with autocomplete using a dropdown list of choices. During
   typing, the first matching choice is appended to textbox value, with the
@@ -55,12 +51,12 @@ Stand-alone GUI components for wx:
   http://wxpython-users.1045709.n5.nabble.com/TextCtrlAutoComplete-td2348906.html
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    29.08.2019
+@modified    09.09.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -75,7 +71,7 @@ import wx.lib.agw.flatnotebook
 import wx.lib.agw.gradientbutton
 try: # ShapedButton requires PIL, might not be installed
     import wx.lib.agw.shapedbutton
-except Exception: pass 
+except Exception: pass
 import wx.lib.agw.ultimatelistctrl
 import wx.lib.embeddedimage
 import wx.lib.mixins.listctrl
@@ -143,7 +139,8 @@ class ColourManager(object):
         @param   window           application main window
         @param   colourcontainer  object with colour attributes
         @param   colourmap        {"attribute": wx.SYS_COLOUR_XYZ}
-        @param   darkcolourmap    colours changed if dark background
+        @param   darkcolourmap    colours changed if dark background,
+                                  {"attribute": wx.SYS_COLOUR_XYZ or wx.Colour}
         """
         if "nt" != os.name: return
 
@@ -198,8 +195,10 @@ class ColourManager(object):
 
     @classmethod
     def ColourHex(cls, idx):
-        """Returns system colour as HTML colour hex string."""
-        return wx.SystemSettings.GetColour(idx).GetAsString(wx.C2S_HTML_SYNTAX)
+        """Returns wx.Colour or system colour as HTML colour hex string."""
+        colour = idx if isinstance(idx, wx.Colour) \
+                 else wx.SystemSettings.GetColour(idx)
+        return colour.GetAsString(wx.C2S_HTML_SYNTAX)
 
 
     @classmethod
@@ -230,7 +229,7 @@ class ColourManager(object):
             if not ctrl: # Component destroyed
                 cls.ctrls.pop(ctrl)
                 continue # for ctrl, props
-                
+
             for prop, colour in props.items():
                 cls.UpdateControlColour(ctrl, prop, colour)
 
@@ -251,7 +250,7 @@ class NonModalOKDialog(wx.Dialog):
 
     def __init__(self, parent, title, message):
         wx.Dialog.__init__(self, parent=parent, title=title,
-                           style=wx.CAPTION | wx.CLOSE_BOX | 
+                           style=wx.CAPTION | wx.CLOSE_BOX |
                                  wx.FRAME_FLOAT_ON_PARENT)
 
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -270,120 +269,8 @@ class NonModalOKDialog(wx.Dialog):
 
 
     def OnClose(self, event):
+        event.Skip()
         self.Close()
-        event.Skip()
-
-
-
-class EntryDialog(wx.Dialog):
-    """
-    Non-modal text entry dialog with auto-complete dropdown, appears in lower
-    right corner.
-    Fires a wx.EVT_COMMAND_ENTER event on pressing Enter or button.
-    """
-    HIDE_TIMEOUT = 1500 # Milliseconds to wait for hiding after losing focus
-
-    def __init__(self, parent, title, label="", value="", emptyvalue="", tooltip="", choices=[]):
-        """
-        @param   title       dialog window title
-        @param   label       label before text entry, if any
-        @param   value       default value of text entry
-        @param   emptyvalue  gray text shown in text box if empty and unfocused
-        @param   tooltip     tooltip shown for enter button
-        """
-        style = wx.CAPTION | wx.CLOSE_BOX | wx.STAY_ON_TOP
-        wx.Dialog.__init__(self, parent=parent, title=title, style=style)
-        self._hider = None # Hider callback wx.Timer
-
-        if label:
-            label_text = self._label = wx.StaticText(self, label=label)
-        text = self._text = TextCtrlAutoComplete(
-            self, description=emptyvalue, size=(200, -1),
-            style=wx.TE_PROCESS_ENTER)
-        tb = wx.ToolBar(parent=self, style=wx.TB_FLAT | wx.TB_NODIVIDER)
-
-        text.Value = value
-        text.SetChoices(choices)
-        bmp = wx.ArtProvider.GetBitmap(wx.ART_GO_FORWARD, wx.ART_TOOLBAR,
-                                       (16, 16))
-        tb.SetToolBitmapSize(bmp.Size)
-        tb.AddLabelTool(wx.ID_FIND, "", bitmap=bmp, shortHelp=tooltip)
-        tb.Realize()
-
-        self.Bind(wx.EVT_ACTIVATE, self._OnActivate, self)
-        text.Bind(wx.EVT_KEY_DOWN, self._OnKeyDown)
-        self.Bind(wx.EVT_TEXT_ENTER, self._OnSearch, text)
-        self.Bind(wx.EVT_TOOL, self._OnSearch, id=wx.ID_FIND)
-        self.Bind(wx.EVT_LIST_DELETE_ALL_ITEMS, self._OnClearChoices, text)
-
-        self.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_top = wx.BoxSizer(wx.HORIZONTAL)
-        if label:
-            sizer_top.Add(label_text, flag=wx.ALIGN_CENTER_VERTICAL |
-                          wx.LEFT, border=5)
-        sizer_top.Add(text, flag=wx.ALIGN_CENTER_VERTICAL | wx.LEFT, border=5)
-        sizer_top.Add(tb, flag=wx.LEFT | wx.RIGHT |
-                      wx.ALIGN_CENTER_VERTICAL, border=5)
-        self.Sizer.Add(sizer_top, flag=wx.GROW | wx.TOP | wx.BOTTOM, border=5)
-        self.Fit()
-        x, y, w, h = wx.GetClientDisplayRect()
-        self.Position = (x + w - self.Size.width, y + h - self.Size.height)
-        self._pos_last = self.Position
-        self._displayrect_last = (x, y, w, h)
-
-
-
-    def Show(self, show=True):
-        """Shows or hides the window, and raises it if shown."""
-        if show:
-            x, y, w, h = wx.GetClientDisplayRect()
-            if (x, y, w, h) != self._displayrect_last:     # Display size has
-                self.Position = (x + w - self.Size.width,  # changed, move to
-                                 y + h - self.Size.height) # screen corner.
-                self._displayrect_last = (x, y, w, h)
-            self.Raise()
-            self._text.SetFocus()
-        wx.Dialog.Show(self, show)
-
-
-    def GetValue(self):
-        """Returns the text box value."""
-        return self._text.Value
-    def SetValue(self, value):
-        """Sets the text box value."""
-        self._text.Value = value
-    Value = property(GetValue, SetValue)
-
-
-    def SetChoices(self, choices):
-        """Sets the auto-complete choices for text box."""
-        self._text.SetChoices(choices)
-
-
-    def _OnActivate(self, event):
-        if not (event.Active or self._hider):
-            self._hider = wx.CallLater(self.HIDE_TIMEOUT, self.Hide)
-        elif event.Active and self._hider: # Kill the hiding timeout, if any
-            self._hider.Stop()
-            self._hider = None
-
-
-    def _OnKeyDown(self, event):
-        if wx.WXK_ESCAPE == event.KeyCode and not self._text.IsDropDownShown():
-            self.Hide()
-        event.Skip()
-
-
-    def _OnSearch(self, event):
-        findevent = wx.CommandEvent(wx.wxEVT_COMMAND_ENTER, self.GetId())
-        wx.PostEvent(self, findevent)
-
-
-    def _OnClearChoices(self, event):
-        choice = wx.MessageBox("Clear search history?", self.Title,
-                               wx.OK | wx.CANCEL | wx.ICON_QUESTION)
-        if wx.OK == choice:
-            self._text.SetChoices([])
 
 
 
@@ -400,9 +287,6 @@ class NoteButton(wx.PyPanel, wx.Button):
     def __init__(self, parent, label=wx.EmptyString, note=wx.EmptyString,
                  bmp=wx.NullBitmap, id=-1, pos=wx.DefaultPosition,
                  size=wx.DefaultSize, style=0, name=wx.PanelNameStr):
-        """
-        @param   
-        """
         wx.PyPanel.__init__(self, parent, id, pos, size,
                             style | wx.FULL_REPAINT_ON_RESIZE, name)
         self._label = label
@@ -451,7 +335,7 @@ class NoteButton(wx.PyPanel, wx.Button):
     def DoGetBestSize(self):
         w = 100 if self.Size.width < 100 else self.Size.width
         h = 40 if self.Size.height < 40 else self.Size.height
-        if self._extent_label:    
+        if self._extent_label:
             h1 = 10 + self._bmp.Size.height + 10
             h2 = 10 + self._extent_label[1] + 10 + self._extent_note[1] + 10
             h  = max(h1, h2)
@@ -608,18 +492,18 @@ class NoteButton(wx.PyPanel, wx.Button):
 
     def OnSize(self, event):
         """Handler for size event, resizes texts and repaints control."""
+        event.Skip()
         if event.Size != self._size:
             self._size = event.Size
             wx.CallAfter(lambda: self and (self.WrapTexts(), self.Refresh(),
                          self.InvalidateBestSize(), self.Parent.Layout()))
-        event.Skip()
 
 
     def OnFocus(self, event):
         """Handler for receiving/losing focus, repaints control."""
         if self: # Might get called when control already destroyed
             self.Refresh()
-            
+
 
     def OnEraseBackground(self, event):
         """Handles the wx.EVT_ERASE_BACKGROUND event."""
@@ -643,8 +527,7 @@ class NoteButton(wx.PyPanel, wx.Button):
                 wx.PostEvent(self, button_event)
                 skip = False
                 self.Refresh()
-        if skip:
-            event.Skip()
+        if skip: event.Skip()
 
 
     def OnMouseEvent(self, event):
@@ -652,6 +535,7 @@ class NoteButton(wx.PyPanel, wx.Button):
         Mouse handler, creates hover/press border effects and fires button
         event on click.
         """
+        event.Skip()
         refresh = False
         if event.Entering():
             refresh = True
@@ -676,7 +560,6 @@ class NoteButton(wx.PyPanel, wx.Button):
                     wx.PostEvent(self, btnevent)
         if refresh:
             self.Refresh()
-        event.Skip()
 
 
     def OnMouseCaptureLostEvent(self, event):
@@ -892,7 +775,7 @@ class PropertyDialog(wx.Dialog):
 
     def _OnSave(self, event):
         """
-        Handler for clicking save, checks values and hides the dialog if all 
+        Handler for clicking save, checks values and hides the dialog if all
         ok, highlights errors otherwise.
         """
         all_ok = True
@@ -900,7 +783,7 @@ class PropertyDialog(wx.Dialog):
             if self._GetValueForType(ctrl.Value, typeclass) is None:
                 all_ok = False
                 label.ForegroundColour = ctrl.ForegroundColour = self.COLOUR_ERROR
-            else:                
+            else:
                 label.ForegroundColour = ctrl.ForegroundColour = self.ForegroundColour
         if all_ok:
             self.Hide()
@@ -930,7 +813,7 @@ class PropertyDialog(wx.Dialog):
         try:
             result = typeclass(value)
             isinstance(result, basestring) and result.strip()[0] # Reject empty
-            return result 
+            return result
         except Exception:
             return None
 
@@ -961,6 +844,7 @@ class ScrollingHtmlWindow(wx.html.HtmlWindow):
         Handler for sizing the HtmlWindow, sets new scroll position based
         previously stored one (HtmlWindow loses its scroll position on resize).
         """
+        event.Skip() # Allow event to propagate wx handler
         for i in range(2):
             orient = wx.VERTICAL if i else wx.HORIZONTAL
             # Division can be > 1 on first resizings, bound it to 1.
@@ -974,7 +858,6 @@ class ScrollingHtmlWindow(wx.html.HtmlWindow):
                 self.Scroll(*self._last_scroll_pos) if self else None)
         except Exception:
             pass # CallLater fails if not called from the main thread
-        event.Skip() # Allow event to propagate wx handler
 
 
     def _OnScroll(self, event=None):
@@ -982,10 +865,10 @@ class ScrollingHtmlWindow(wx.html.HtmlWindow):
         Handler for scrolling the window, stores scroll position
         (HtmlWindow loses it on resize).
         """
+        if event: event.Skip() # Allow event to propagate wx handler
         p, r = self.GetScrollPos, self.GetScrollRange
         self._last_scroll_pos   = [p(x) for x in (wx.HORIZONTAL, wx.VERTICAL)]
         self._last_scroll_range = [r(x) for x in (wx.HORIZONTAL, wx.VERTICAL)]
-        if event: event.Skip() # Allow event to propagate wx handler
 
 
     def Scroll(self, x, y):
@@ -1052,6 +935,7 @@ class SearchCtrl(wx.TextCtrl):
         """
         Handler for focusing/unfocusing the control, shows/hides description.
         """
+        event.Skip() # Allow to propagate to parent, to show having focus
         self._ignore_change = True
         if self and self.FindFocus() == self:
             if self._description_on:
@@ -1064,15 +948,14 @@ class SearchCtrl(wx.TextCtrl):
                 self.SetForegroundColour(self._desc_colour)
                 self._description_on = True
         self._ignore_change = False
-        event.Skip() # Allow to propagate to parent, to show having focus
 
 
     def OnKeyDown(self, event):
         """Handler for keypress, empties text on escape."""
+        event.Skip()
         if event.KeyCode in [wx.WXK_ESCAPE] and self.Value:
             self.Value = ""
             wx.PostEvent(self, wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER))
-        event.Skip()
 
 
     def OnText(self, event):
@@ -1250,6 +1133,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         if imageIds:
             imageIds = self._id_images[item_id] = self._ConvertImageIds(imageIds)
 
+        index = min(index, self.GetItemCount())
         if self._RowMatchesFilter(data):
             columns = [c[0] for c in self._columns]
             for i, col_name in enumerate(columns):
@@ -1267,7 +1151,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             self._data_map[item_id] = data
             self.SetItemTextColour(index, self.ForegroundColour)
             self.SetItemBackgroundColour(index, self.BackgroundColour)
-        self._id_rows.append((item_id, data))
+        self._id_rows.insert(index - (1 if self._top_row else 0), (item_id, data))
         if self.GetSortState()[0] >= 0:
             self.SortListItems(*self.GetSortState())
 
@@ -1292,7 +1176,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
     def RefreshRows(self):
         """
-        Clears the list and inserts all unfiltered rows, auto-sizing the 
+        Clears the list and inserts all unfiltered rows, auto-sizing the
         columns.
         """
         selected_ids, selected = [], self.GetFirstSelected()
@@ -1303,7 +1187,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         self.Freeze()
         wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
         self._PopulateTopRow()
-            
+
         # To map list item data ID to row, ListCtrl allows only integer per row
         row_data_map = {} # {item_id: {row dict}, }
         item_data_map = {} # {item_id: [row values], }
@@ -1410,6 +1294,12 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         return len(self._id_rows)
 
 
+    def GetItemTextFull(self, idx):
+        """Returns item text by index, including items hidden by filter."""
+        data, col_name = self._id_rows[idx][-1], self._columns[0][0]
+        return self._formatters[col_name](data, col_name)
+
+
     def SetColumnsMaxWidth(self, width):
         """Sets the maximum width for all columns, used in auto-size."""
         self._col_maxwidth = width
@@ -1512,7 +1402,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         sortstate = self.GetSortState()
 
         col, ascending = self.GetSortState()
-        if col == event.GetColumn() and not ascending: # Clear sort 
+        if col == event.GetColumn() and not ascending: # Clear sort
             self._col = -1
             self._colSortFlag = [0] * self.GetColumnCount()
             self.ClearColumnImage(col)
@@ -1525,15 +1415,28 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
     def OnDragStop(self, event):
         """Handler for stopping drag in the list, rearranges list."""
         start, stop = self._drag_start, max(1, event.GetIndex())
-        if start and start != stop:
-            item_id, data = self.GetItemData(start), self.GetItemMappedData(start)
-            imageIds = self._id_images.get(item_id) or ()
-            idx = stop if start > stop or stop == self.GetItemCount() - 1 \
-                  else stop - 1
-            self.DeleteItem(start)
-            self.InsertRow(idx, data, self._ConvertImageIds(imageIds, False))
-            self.Select(idx)
+        if not start or start == stop: return
+
+        selecteds, selected = [], self.GetFirstSelected()
+        while selected > 0:
+            selecteds.append(selected)
+            selected = self.GetNextSelected(selected)
+
+        idx = stop if start > stop else stop - len(selecteds)
+        if not selecteds: # Dragged beyond last item
+            idx, selecteds = self.GetItemCount() - 1, [start]
+
+        item_ids = map(self.GetItemData, selecteds)
+        datas    = map(self.GetItemMappedData, selecteds)
+        image_ids = map(self._id_images.get, item_ids)
+
+        self.Freeze()
+        for x in selecteds[::-1]: self.DeleteItem(x)
+        for i, (item_id, data, imageIds) in enumerate(zip(item_ids, datas, image_ids)):
+            self.InsertRow(idx + i, data, self._ConvertImageIds(imageIds, reverse=True))
+            self.Select(idx + i)
         self._drag_start = None
+        self.Thaw()
 
 
     def OnDragStart(self, event):
@@ -1551,8 +1454,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         class HackEvent(object): # UltimateListCtrl hack to cancel drag.
             def __init__(self, pos=wx.Point()): self._position = pos
             def GetPosition(self): return self._position
-        try:
-            wx.CallAfter(self.Children[0].DragFinish, HackEvent())
+        try: wx.CallAfter(self.Children[0].DragFinish, HackEvent())
         except: raise
 
 
@@ -1581,6 +1483,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
     def _ConvertImageIds(self, imageIds, reverse=False):
         """Returns user image indexes adjusted by internal image count."""
+        if not imageIds: return imageIds
         shift = (-1 if reverse else 1) * len(self.GetSortImages() or [])
         return [x + shift for x in imageIds]
 
@@ -1588,7 +1491,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
     def _PopulateTopRow(self):
         """Populates top row state, if any."""
         if not self._top_row: return
-            
+
         columns = [c[0] for c in self._columns]
         col_value = self._formatters[columns[0]](self._top_row, columns[0])
         if -1 in self._id_images:
@@ -1617,7 +1520,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             patterns = map(re.escape, self._filter.split())
             for col_name, col_label in self._columns:
                 col_value = self._formatters[col_name](row, col_name)
-                if all(re.search(p, col_value, re.I) for p in patterns):
+                if all(re.search(p, col_value, re.I | re.U) for p in patterns):
                     result = True
                     break
         return result
@@ -1630,7 +1533,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         """
         if key1 not in self.itemDataMap or key2 not in self.itemDataMap:
             return 0
-            
+
         col = self._col
         ascending = self._colSortFlag[col]
         item1 = self.itemDataMap[key1][col]
@@ -1695,9 +1598,12 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         "REAL", "DOUBLE", "FLOAT", "PRECISION",
     ]))
     AUTOCOMP_STOPS = " .,;:([)]}'\"\\<>%^&+-=*/|`"
-    FONT_FACE = "Courier New" if os.name == "nt" else "Courier"
     """String length from which autocomplete starts."""
     AUTOCOMP_LEN = 2
+    FONT_FACE = "Courier New" if os.name == "nt" else "Courier"
+    """Regex for matching unprintable characters (\x00 etc)."""
+    SAFEBYTE_RGX = re.compile(r"[\x00-\x20,\x7f-\xa0]")
+
 
     def __init__(self, *args, **kwargs):
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
@@ -1734,7 +1640,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
         self.SetCaretForeground(fgcolour)
         self.SetCaretLineBackground("#00FFFF")
-        self.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT, 
+        self.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT,
                           "face:%s,back:%s,fore:%s" % (self.FONT_FACE, bgcolour, fgcolour))
         self.StyleClearAll() # Apply the new default style to all styles
         self.StyleSetSpec(wx.stc.STC_SQL_DEFAULT,   "face:%s" % self.FONT_FACE)
@@ -1770,6 +1676,9 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
     def AutoCompAddWords(self, words):
         """Adds more words used in autocompletion."""
+        words = [x for x in words if not self.SAFEBYTE_RGX.search(x)]
+        if not words: return
+
         self.autocomps_added.update(map(unicode, words))
         # A case-insensitive autocomp has to be sorted, will not work
         # properly otherwise. UserList would support arbitrarily sorting.
@@ -1783,20 +1692,28 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         Adds more subwords used in autocompletion, will be shown after the word
         and a dot.
         """
+        subwords = [x for x in subwords if not self.SAFEBYTE_RGX.search(x)]
+        if not subwords or self.SAFEBYTE_RGX.search(word): return
+
         word, subwords = unicode(word), map(unicode, subwords)
         if word not in self.autocomps_added:
             self.AutoCompAddWords([word])
         if subwords:
             word_key = word.upper()
-            if word_key not in self.autocomps_subwords:
-                self.autocomps_subwords[word_key] = set()
+            self.autocomps_subwords.setdefault(word_key, set())
             self.autocomps_subwords[word_key].update(subwords)
+
+
+    def AutoCompClearAdded(self):
+        """Clears words added in AutoCompAddWords and AutoCompAddSubWords."""
+        self.autocomps_added &= set(["sqlite_master"])
+        del self.autocomps_total[:]
+        self.autocomps_subwords.clear()
 
 
     def OnKillFocus(self, event):
         """Handler for control losing focus, hides autocomplete."""
         self.AutoCompCancel()
-
 
 
     def OnSysColourChange(self, event):
@@ -1836,7 +1753,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
                         self.GetCurrentPos()
                     )
                     text = u""
-                    for last_word in re.findall("(\\w+)$", line_text):
+                    for last_word in re.findall(r"(\w+)$", line_text, re.I):
                         text += last_word
                     text = text.upper()
                     if "." == char:
@@ -1939,6 +1856,7 @@ class TabbedHtmlWindow(wx.PyPanel):
         Handler for sizing the HtmlWindow, sets new scroll position based
         previously stored one (HtmlWindow loses its scroll position on resize).
         """
+        event.Skip() # Allow event to propagate to wx handler
         if self._tabs:
             tab = self._tabs[self._notebook.GetSelection()]
             for i in range(2):
@@ -1954,7 +1872,6 @@ class TabbedHtmlWindow(wx.PyPanel):
                              self.Scroll(*tab["scrollpos"]) if self else None)
             except Exception:
                 pass # CallLater fails if not called from the main thread
-        event.Skip() # Allow event to propagate to wx handler
 
 
 
@@ -1975,7 +1892,7 @@ class TabbedHtmlWindow(wx.PyPanel):
                                   self.GetScrollPos(wx.VERTICAL)]
             tab["scrollrange"] = [self.GetScrollRange(wx.HORIZONTAL),
                                   self.GetScrollRange(wx.VERTICAL)]
-        
+
 
     def _OnChangeTab(self, event):
         """Handler for selecting another tab in notebook, loads tab content."""
@@ -2018,7 +1935,7 @@ class TabbedHtmlWindow(wx.PyPanel):
 
     def _CreateTab(self, index, title):
         """Creates a new tab in the tab container at specified index."""
-        p = wx.Panel(parent=self, size=(0,0)) 
+        p = wx.Panel(parent=self, size=(0,0))
         p.Hide() # Dummy empty window as notebook needs something to hold
         self._notebook.InsertPage(index, page=p, text=title, select=True)
 
@@ -2240,9 +2157,8 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         """
         Handler for moving or sizing the control or any parent, hides dropdown.
         """
-        if self:
-            self.ShowDropDown(False)
         event.Skip()
+        if self: self.ShowDropDown(False)
 
 
     def OnClickDown(self, event):
@@ -2250,8 +2166,8 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         Handler for clicking and holding left mouse button, remembers click
         position.
         """
-        self._lastinsertionpoint = self.GetInsertionPoint()
         event.Skip()
+        self._lastinsertionpoint = self.GetInsertionPoint()
 
 
     def OnClickUp(self, event):
@@ -2259,9 +2175,9 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         Handler for releasing left mouse button, toggles dropdown list
         visibility on/off if clicking same spot in textbox.
         """
+        event.Skip()
         if (self.GetInsertionPoint() == self._lastinsertionpoint):
             self.ShowDropDown(not self._listwindow.Shown)
-        event.Skip()
 
 
     def OnListItemSelected(self, event):
@@ -2269,14 +2185,15 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         Handler for selecting an item in the dropdown list, sets its value to
         textbox.
         """
-        self.SetValueFromSelected()
         event.Skip()
+        self.SetValueFromSelected()
 
 
     def OnFocus(self, event):
         """
         Handler for focusing/unfocusing the control, shows/hides description.
         """
+        event.Skip() # Allow to propagate to parent, to show having focus
         if self and self.FindFocus() == self:
             if self._description_on:
                 self.Value = ""
@@ -2290,7 +2207,6 @@ class TextCtrlAutoComplete(wx.TextCtrl):
                 self._description_on = True
             if self._listbox:
                 self.ShowDropDown(False)
-        event.Skip() # Allow to propagate to parent, to show having focus
 
 
     def OnMouse(self, event):
@@ -2298,6 +2214,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         Handler for mouse events, changes cursor to pointer if hovering over
         action item like "Clear history".
         """
+        event.Skip()
         index, flag = self._listbox.HitTest(event.GetPosition())
         if index == self._listbox.ItemCount - 1:
             if self._cursor != self._cursor_action_hover:
@@ -2306,13 +2223,11 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         elif self._cursor == self._cursor_action_hover:
             self._cursor = self._cursor_default
             self._listbox.SetCursor(self._cursor_default)
-        event.Skip()
 
 
     def OnKeyDown(self, event):
         """Handler for any keypress, changes dropdown items."""
-        if not self._choices:
-            return event.Skip()
+        if not self._choices: return event.Skip()
 
         skip = True
         visible = self._listwindow.Shown
@@ -2361,8 +2276,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
                 if self._value_last != self.Value:
                     self.Value = self._value_last
                     self.SelectAll()
-        if skip:
-            event.Skip()
+        if skip: event.Skip()
 
 
     def OnText(self, event):
@@ -2370,9 +2284,9 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         Handler for changing textbox value, auto-completes the text and selects
         matching item in dropdown list, if any.
         """
+        event.Skip()
         if self._ignore_textchange:
             self._ignore_textchange = self._skip_autocomplete = False
-            event.Skip()
             return
         text = self.Value
         if text and not self._description_on:
@@ -2400,7 +2314,6 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         else:
             self.ShowDropDown(False)
         self._skip_autocomplete = False
-        event.Skip()
 
 
     def SetChoices(self, choices):

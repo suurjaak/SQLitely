@@ -5,12 +5,12 @@ an external file. Configuration file has simple INI file format,
 and all values are kept in JSON.
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool
+This file is part of SQLitely - SQLite database tool
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.08.2019
+@modified    10.09.2019
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -21,9 +21,9 @@ import sys
 
 
 """Program title, version number and version date."""
-Title = "SQLiteMate"
-Version = "1.0.dev19"
-VersionDate = "29.08.2019"
+Title = "SQLitely"
+Version = "1.0.dev52"
+VersionDate = "10.09.2019"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -123,9 +123,9 @@ LogEnabled = True
 LogSQL = False
 
 """URLs for download list, changelog, submitting feedback and homepage."""
-DownloadURL  = "https://erki.lap.ee/downloads/SQLiteMate/"
-ChangelogURL = "https://suurjaak.github.com/SQLiteMate/changelog.html"
-HomeUrl      = "https://suurjaak.github.com/SQLiteMate/"
+DownloadURL  = "https://erki.lap.ee/downloads/SQLitely/"
+ChangelogURL = "https://suurjaak.github.com/SQLitely/changelog.html"
+HomeUrl      = "https://suurjaak.github.com/SQLitely/"
 
 """Minimum allowed size for the main window, as (width, height)."""
 MinWindowSize = (600, 400)
@@ -221,8 +221,8 @@ GridRowInsertedColour = "#88DDFF"
 """Colour set to table/list cells that have been changed."""
 GridCellChangedColour = "#FF7777"
 
-"""Duration of "flashed" status message on StatusBar, in milliseconds."""
-StatusFlashLength = 30000
+"""Duration of "flashed" status message on StatusBar, in seconds."""
+StatusFlashLength = 20
 
 """How many items in the Recent Files menu."""
 MaxRecentFiles = 20

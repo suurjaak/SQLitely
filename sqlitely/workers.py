@@ -3,14 +3,15 @@
 Background workers for potentially long-running tasks like searching.
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool
+This file is part of SQLitely - SQLite database tool
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2019
+@modified    10.09.2019
 ------------------------------------------------------------------------------
 """
+import logging
 import Queue
 import re
 import threading
@@ -25,9 +26,10 @@ from . lib import util
 from . lib.vendor import step
 from . import conf
 from . import database
-from . import guibase
 from . import searchparser
 from . import templates
+
+logger = logging.getLogger(__name__)
 
 
 class WorkerThread(threading.Thread):
@@ -47,7 +49,7 @@ class WorkerThread(threading.Thread):
 
     def work(self, data):
         """
-        Registers new work to process. Stops current work, if any. Starts 
+        Registers new work to process. Stops current work, if any. Starts
         thread if not running.
 
         @param   data  a dict with work data
@@ -112,12 +114,12 @@ class SearchThread(WorkerThread):
                 if not search:
                     continue # continue while self._is_running
 
-                TEMPLATES = {"tablemeta": templates.SEARCH_ROW_TABLE_META_HTML,
-                             "table":     templates.SEARCH_ROW_TABLE_HEADER_HTML,
-                             "row":       templates.SEARCH_ROW_TABLE_HTML}
+                TEMPLATES = {"meta":  templates.SEARCH_ROW_META_HTML,
+                             "table": templates.SEARCH_ROW_TABLE_HEADER_HTML,
+                             "row":   templates.SEARCH_ROW_TABLE_HTML}
                 wrap_b = lambda x: "<b>%s</b>" % x.group(0)
                 FACTORY = lambda x: step.Template(TEMPLATES[x], escape=True)
-                guibase.log('Searching "%(text)s" in %(table)s (%(db)s).' % search)
+                logger.info('Searching "%(text)s" in %(table)s (%(db)s).' % search)
                 self._stop_work = False
                 self._drop_results = False
 
@@ -136,33 +138,33 @@ class SearchThread(WorkerThread):
                 pattern_replace = re.compile(patt, re.IGNORECASE)
                 infotext = search["table"]
 
-                # Find from table and column namesnb and types
-                if not self._stop_work and "names" == search["table"] \
+                # Find from database CREATE SQL
+                if not self._stop_work and "meta" == search["table"] \
                 and match_words:
-                    infotext = "table and column names and types"
+                    infotext = "database CREATE SQL"
                     count = 0
-                    template_tablemeta = FACTORY("tablemeta")
-                    for table in search["db"].get_tables():
-                        columns = search["db"].get_table_columns(table["name"])
-                        table_matches = self.match_all(table["name"], match_words)
-                        matching_columns = [c for c in columns
-                                            if self.match_all(c["name"], match_words)
-                                            or self.match_all(c["type"], match_words)]
-                            
-                        if table_matches or matching_columns:
+                    template_meta = FACTORY("meta")
+                    for category in search["db"].schema:
+                        for item in search["db"].get_category(category).values():
+                            matches = self.match_all(item["sql"], match_words)
+                            if not matches: continue # for item
+
                             count += 1
                             result_count += 1
-                            result["output"] += template_tablemeta.expand(locals())
-                            key = "table:%s" % table["name"]
-                            result["map"][key] = {"table": table["name"]}
+                            result["output"] += template_meta.expand(locals())
+                            if "table" == category:
+                                key = "table:%s" % item["name"]
+                                result["map"][key] = {"table": item["name"]}
                             if not count % conf.SearchResultsChunk \
                             and not self._drop_results:
                                 result["count"] = result_count
                                 self.postback(result)
                                 result = {"output": "", "map": {},
                                           "search": search, "count": 0}
+                            if self._stop_work:
+                                break # for item
                         if self._stop_work:
-                            break # break for contact in contacts
+                            break # for category
                 if result["output"] and not self._drop_results:
                     result["count"] = result_count
                     self.postback(result)
@@ -176,8 +178,7 @@ class SearchThread(WorkerThread):
                     # Search over all fields of all tables.
                     template_table = FACTORY("table")
                     template_row = FACTORY("row")
-                    for table in search["db"].get_tables():
-                        table["columns"] = search["db"].get_table_columns(table["name"])
+                    for table in search["db"].get_category("table").values():
                         sql, params, words, keywords = \
                             query_parser.Parse(search["text"], table)
                         if not sql:
@@ -185,7 +186,7 @@ class SearchThread(WorkerThread):
                         cursor = search["db"].execute(sql, params)
                         row = cursor.fetchone()
                         namepre, namesuf = ("<b>", "</b>") if row else ("", "")
-                        countpre, countsuf = (("<a href='#%s'><font color='%s'>" % 
+                        countpre, countsuf = (("<a href='#%s'><font color='%s'>" %
                             (step.escape_html(table["name"]), conf.LinkColour),
                             "</font></a>")) if row else ("", "")
                         infotext += (", " if infotext else "") \
@@ -217,7 +218,7 @@ class SearchThread(WorkerThread):
                             self.postback(result)
                             result = {"output": "", "map": {},
                                       "search": search, "count": 0}
-                        infotext += " (%s%s%s)" % (countpre, 
+                        infotext += " (%s%s%s)" % (countpre,
                                     util.plural("result", count), countsuf)
                         if self._stop_work \
                         or result_count >= conf.MaxSearchTableRows:
@@ -251,12 +252,12 @@ class SearchThread(WorkerThread):
                 result["done"] = True
                 result["count"] = result_count
                 self.postback(result)
-                guibase.log("Search found %(count)s results." % result)
+                logger.info("Search found %s results.", result["count"])
             except Exception as e:
                 if not result:
                     result = {}
                 result["done"], result["error"] = True, traceback.format_exc()
-                result["error_short"] = repr(e)
+                result["error_short"] = util.format_exc(e)
                 self.postback(result)
 
 

@@ -3,31 +3,42 @@
 SQLite database access functionality.
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.08.2019
+@modified    09.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
-import copy
 import datetime
+import logging
 import os
 import re
 import sqlite3
 import shutil
-import time
-import traceback
 
 from . lib import util
 from . import conf
-from . import guibase
+from . import grammar
+
+logger = logging.getLogger(__name__)
 
 
 class Database(object):
     """Access to an SQLite database file."""
+
+
+    """Column type affinity map."""
+    AFFINITY = {
+        "INTEGER": ["INT", "INTEGER", "TINYINT", "SMALLINT", "MEDIUMINT", "BIGINT", "UNSIGNED BIG INT", "INT2", "INT8"],
+        "TEXT":    ["CHARACTER", "VARCHAR", "VARYING CHARACTER", "NCHAR", "NATIVE CHARACTER", "NVARCHAR", "TEXT", "CLOB"],
+        "BLOB":    ["BLOB"],
+        "REAL":    ["DOUBLE", "DOUBLE PRECISION", "FLOAT", "REAL"],
+        "NUMERIC": ["DECIMAL", "BOOLEAN", "DATE", "DATETIME", "NUMERIC"],
+    }
+
 
     """
     SQLite PRAGMA settings, as {
@@ -87,13 +98,6 @@ class Database(object):
         "description": """  Suggested maximum number of database disk pages that SQLite will hold in memory at once per open database file. Endures only for the length of the current session.
   If positive, the suggested cache size is set to N. If negative, the number of cache pages is adjusted to use approximately abs(N*1024) bytes.""",
       },
-      "cache_spill": {
-        "name": "cache_spill",
-        "label": "Cache spill",
-        "type": bool,
-        "short": "Spill dirty cache pages to file during transaction",
-        "description": "Enables or disables the ability of the pager to spill dirty cache pages to the database file in the middle of a transaction.",
-      },
       "case_sensitive_like": {
         "name": "case_sensitive_like",
         "label": "Case-sensitive LIKE",
@@ -101,6 +105,13 @@ class Database(object):
         "read": False,
         "short": "Case sensitivity on LIKE operator",
         "description": "Toggles case sensitivity on LIKE operator.",
+      },
+      "cache_spill": {
+        "name": "cache_spill",
+        "label": "Cache spill",
+        "type": bool,
+        "short": "Spill dirty cache pages to file during transaction",
+        "description": "Enables or disables the ability of the pager to spill dirty cache pages to the database file in the middle of a transaction.",
       },
       "cell_size_check": {
         "name": "cell_size_check",
@@ -293,7 +304,7 @@ class Database(object):
         "name": "page_size",
         "label": "Page size",
         "type": int,
-        "values": {512: 512, 1024: 1024, 2048: 2048, 4096: 4096, 8192: 8192, 16384: 16384, 32767: 32768, 65536: 65536},
+        "values": {512: 512, 1024: 1024, 2048: 2048, 4096: 4096, 8192: 8192, 16384: 16384, 32768: 32768, 65536: 65536},
         "short": "Database page byte size",
         "description": "The page size of the database. Specifying a new size does not change the page size immediately. Instead, the new page size is remembered and is used to set the page size when the database is first created, if it does not already exist when the page_size pragma is issued, or at the next VACUUM command that is run on the same database connection while not in WAL mode.",
       },
@@ -403,6 +414,13 @@ class Database(object):
         "description": "If enabled, the sqlite_master table can be changed using ordinary UPDATE, INSERT, and DELETE statements, for the duration of the current session. WARNING: misuse can easily result in a corrupt database file.",
       },
     }
+    """Additional PRAGMA directives not usable as settings."""
+    EXTRA_PRAGMAS = [
+        "database_list", "foreign_key_check", "foreign_key_list",
+        "incremental_vacuum", "index_info", "index_list", "index_xinfo",
+        "integrity_check", "optimize", "quick_check", "read_uncommitted",
+        "shrink_memory", "soft_heap_limit", "table_info", "wal_checkpoint"
+    ]
 
 
 
@@ -415,12 +433,16 @@ class Database(object):
         """
         self.filename = filename
         self.basefilename = os.path.basename(self.filename)
+        self.filesize = None
+        self.last_modified = None
         self.backup_created = False
+        self.compile_options = []
         self.consumers = set() # Registered objects using this database
         # {"table|index|view|trigger":
         #   {name.lower():
-        #     {"name": str, "sql": str, "table": str, "columns": [], "rows": int}}}
-        self.schema = defaultdict(lambda: OrderedDict())
+        #     {name: str, sql: str, table: str, ?columns: [], ?count: int,
+        #      ?full: bool, ?meta: {full metadata}}}}
+        self.schema = defaultdict(OrderedDict)
         self.table_rows    = {} # {tablename1: [..], }
         self.table_objects = {} # {tablename1: {id1: {rowdata1}, }, }
         self.update_fileinfo()
@@ -429,14 +451,11 @@ class Database(object):
                                               check_same_thread=False)
             self.connection.row_factory = self.row_factory
             self.connection.text_factory = str
-            for row in self.execute(
-                "SELECT * FROM sqlite_master "
-                "WHERE sql != '' ORDER BY type, name COLLATE NOCASE"
-            ).fetchall():
-                self.schema[row["type"]][row["name"].lower()] = row
+            self.compile_options = [x["compile_option"] for x in 
+                                    self.execute("PRAGMA compile_options").fetchall()]
+            self.populate_schema()
         except Exception:
-            if log_error: guibase.log("Error opening database %s.\n\n%s",
-                                      filename, traceback.format_exc())
+            if log_error: logger.exception("Error opening database %s.", filename)
             self.close()
             raise
 
@@ -458,7 +477,7 @@ class Database(object):
     def recover_data(self, filename):
         """
         Recovers as much data from this database to a new database as possible.
-        
+
         @return  a list of encountered errors, if any
         """
         result = []
@@ -466,29 +485,28 @@ class Database(object):
         self.execute("ATTACH DATABASE ? AS new", (filename, ))
 
         # Create structure for all tables
-        for name, opts in self.schema["table"].items():
+        for name, opts in sorted(self.schema["table"].items()):
             self.execute(opts["sql"].replace("CREATE TABLE ", "CREATE TABLE new."))
 
         # Copy data from all tables
-        for name in self.schema["table"]:
-            sql = "INSERT INTO new.%(name)s SELECT * FROM main.%(name)s" % name
+        for name, opts in sorted(self.schema["table"].items()):
+            sql = "INSERT INTO new.%(name)s SELECT * FROM main.%(name)s" % opts
             try:
                 self.execute(sql)
             except Exception as e:
                 result.append(repr(e))
-                guibase.log("Error copying table %s from %s to %s.\n\n%s",
-                            name, self.filename, filename,
-                            traceback.format_exc())
+                logger.exception("Error copying table %s from %s to %s.",
+                                 grammar.quote(name), self.filename, filename)
 
         # Create indexes
-        for name, opts in self.schema["index"].items():
+        for name, opts in sorted(self.schema["table"].items()):
             sql  = opts["sql"].replace("CREATE INDEX ", "CREATE INDEX new.")
             try:
                 self.execute(sql)
             except Exception as e:
                 result.append(repr(e))
-                guibase.log("Error creating index %s for %s.\n\n%s",
-                            name, filename, traceback.format_exc())
+                logger.exception("Error creating index %s for %s.",
+                                 grammar.quote(name), filename)
         self.execute("DETACH DATABASE new")
         return result
 
@@ -497,7 +515,7 @@ class Database(object):
         """Clears all the currently cached rows."""
         self.table_rows.clear()
         self.table_objects.clear()
-        self.get_tables(refresh=True)
+        self.populate_schema()
 
 
     def stamp_to_date(self, timestamp):
@@ -524,6 +542,12 @@ class Database(object):
         return len(self.consumers) > 0
 
 
+    def has_rowid(self, table):
+        """Returns whether the table has ROWID, or is WITHOUT ROWID."""
+        meta = self.schema["table"].get(table.lower(), {}).get("meta")
+        return not meta.get("without") if meta else None
+
+
     def close(self):
         """Closes the database and frees all allocated data."""
         if hasattr(self, "connection"):
@@ -541,7 +565,7 @@ class Database(object):
         result = None
         if self.connection:
             if log and conf.LogSQL:
-                guibase.log("SQL: %s%s", sql,
+                logger.info("SQL: %s%s", sql,
                             ("\nParameters: %s" % params) if params else "")
             result = self.connection.execute(sql, params)
         return result
@@ -562,35 +586,6 @@ class Database(object):
     def is_open(self):
         """Returns whether the database is currently open."""
         return (self.connection is not None)
-
-
-    def get_tables(self, refresh=False, full=False):
-        """
-        Returns the names and rowcounts of all tables in the database,
-        as [{"name": "tablename", "sql": CREATE SQL}, ].
-        Uses already retrieved cached values if possible, unless refreshing.
-
-        @param   refresh  if True, schema is re-queried
-        @param   full     if True, result is guaranteed to include {"rows": int}
-        """
-        result = []
-
-        if refresh and self.is_open():
-            self.schema.clear()
-            for row in self.execute(
-                "SELECT * FROM sqlite_master "
-                "WHERE sql != '' ORDER BY type, name COLLATE NOCASE"
-            ).fetchall():
-                self.schema[row["type"]][row["name"].lower()] = row
-
-        for opts in self.schema["table"].values():
-            if full and (refresh or "rows" not in opts):
-                res = self.execute("SELECT COUNT(*) AS count FROM %s" %
-                                   opts["name"], log=False)
-                opts["rows"] = res.fetchone()["count"]
-            result += [copy.deepcopy(opts)]
-
-        return result
 
 
     def row_factory(self, cursor, row):
@@ -614,78 +609,172 @@ class Database(object):
         return result
 
 
-    def get_table_rows(self, table):
+    def populate_schema(self, full=False):
         """
-        Returns all the rows of the specified table.
-        Uses already retrieved cached values if possible.
+        Retrieves metadata on all database tables, triggers etc.
+
+        Returns the names and rowcounts of all tables in the database,
+        as [{"name": "tablename", "sql": CREATE SQL}, ].
+        Uses already retrieved cached values if possible, unless refreshing.
+
+        @param   full     if True, parses all CREATE statements in full,
+                          populates full column metadata and table row counts
         """
-        rows = []
-        table = table.lower()
-        if table in self.schema["table"]:
-            if table not in self.table_rows:
-                col_data = self.get_table_columns(table)
-                pks = [c["name"] for c in col_data if c["pk"]]
-                pk = pks[0] if len(pks) == 1 else None
-                rows = self.execute("SELECT * FROM %s" % table).fetchall()
-                self.table_rows[table] = rows
-                self.table_objects[table] = {}
-                if pk:
-                    for row in rows:
-                        self.table_objects[table][row[pk]] = row
-            else:
-                rows = self.table_rows[table]
-        return rows
+        if not self.is_open(): return
+            
+        self.schema.clear()
+        for row in self.execute(
+            "SELECT * FROM sqlite_master "
+            "WHERE sql != '' ORDER BY type, name COLLATE NOCASE"
+        ).fetchall():
+            if "table" == row["type"] \
+            and "ENABLE_ICU" not in self.compile_options: # Unsupported tokenizer
+                if  re.match(r"CREATE\s+VIRTUAL\s+TABLE", row["sql"], re.I) \
+                and re.search(r"TOKENIZE\s*[\W]*icu[\W]", row["sql"], re.I):
+                    continue # for row
+
+            row["sql"] = row["sql"].strip()
+            self.schema[row["type"]][row["name"].lower()] = row
+
+        for category, itemmap in self.schema.items() if full else ():
+            for opts in itemmap.values():
+                meta = grammar.parse(opts["sql"])
+                opts.update(full=True, meta=meta, sql=grammar.generate(meta))
+                if "table" == category: opts["columns"] = meta["columns"]
+
+        for opts in self.schema["table"].values():
+            sql = ("SELECT COUNT(*) AS count FROM %s" if full
+                   else "PRAGMA table_info(%s)") % grammar.quote(opts["name"])
+            try:
+                rows = self.execute(sql, log=False).fetchall()
+            except Exception:
+                opts.pop("count", None) if full else opts.update(columns=[])
+                logger.exception("Error fetching %s for table %s.",
+                                 "COUNT" if full else "columns",
+                                 grammar.quote(opts["name"]))
+                continue # for opts
+
+            if not full:
+                opts["columns"] = []
+                for row in rows:
+                    col = {"name": row["name"], "type": row["type"].upper()}
+                    if row["dflt_value"] is not None: col["default"] = row["dflt_value"]
+                    if row["notnull"]: col["notnull"] = {}
+                    if row["pk"]:      col["pk"]      = {}
+                    opts["columns"].append(col)
+            else: opts["count"] = rows[0]["count"]
 
 
-    def get_table_columns(self, table):
+    def get_category(self, category, name=None, table=None):
         """
-        Returns the columns of the specified table, as
-        [{"name": "col1", "type": "INTEGER", }, ], or [] if not retrievable.
+        Returns database objects in specified category.
+
+        @param   category  "table"|"index"|"trigger"|"view"
+        @param   name      returns only this object
+        @param   table     specific table for "trigger"|"index" category
+        @result            OrderedDict({name_lower: {opts}}),
+                           or {opts} if name or None if no object by such name
         """
-        table = table.lower()
-        table_columns = []
-        if self.is_open() and table in self.schema["table"]:
-            if "columns" in self.schema["table"][table]:
-                table_columns = self.schema["table"][table]["columns"]
-            else:
-                table_columns = []
-                try:
-                    res = self.execute("PRAGMA table_info(%s)" % table, log=False)
-                    for row in res.fetchall():
-                        row["type"] = row["type"].upper()
-                        table_columns.append(row)
-                except sqlite3.DatabaseError:
-                    guibase.log("Error getting %s column data for %s.\n\n%s",
-                                table, self.filename, traceback.format_exc())
-                self.schema["table"][table]["columns"] = table_columns
-        return copy.deepcopy(table_columns)
+        category, name, table = (x.lower() if x else x for x in (category, name, table))
+
+        if name:
+            result = self.schema.get(category, {}).get(name)
+            if table and "table" in result and result["table"].lower() != table:
+                result = None
+            return result
+
+        result = OrderedDict()
+        for name, opts in self.schema.get(category, {}).items():
+            if table and "table" in opts.get("meta", {}) \
+            and opts["meta"]["table"].lower() != table:
+                continue # for name, opts
+            result[name] = opts
+        return result
 
 
-    def get_sql(self, refresh=False):
+    def get_sql(self, category=None, name=None, column=None, indent="  ",
+                transform=None, refresh=False):
         """
-        Returns full CREATE SQL statement for database.
+        Returns full CREATE SQL statement for database, or for specific
+        category only, or for specific category object only,
+        or SQL line for specific table column only.
 
-        @param   refresh  if True, schema is re-queried
+        @param   category   "table" | "index" | "trigger" | "view" if not everything
+        @param   name       category item name if not everything in category
+        @param   column     named table column to return SQL for
+        @param   indent     whether to format SQL with linefeeds and indentation
+        @param   transform  {"flags":   flags to toggle, like {"exists": True},
+                             "renames": renames to perform in SQL statement body,
+                                        supported types "schema" (top-level rename only),
+                                        "table", "index", "trigger", "view".
+                                        Renames all items of specified category, unless
+                                        given nested value like {"table": {"old": "new"}}
+                            }
+        @param   refresh    if True, schema is re-queried
         """
         result = ""
+        category, name, column = (x.lower() if x else x for x in (category, name, column))
 
-        if refresh and self.is_open(): self.get_tables(refresh=True)
-        for category in "table", "view", "index", "trigger":
-            if not self.schema.get(category): continue # for category
+        if refresh and self.is_open(): self.populate_schema()
+        for mycategory in "table", "view", "index", "trigger":
+            if category and category != mycategory \
+            or not self.schema.get(mycategory): continue # for mycategory
 
-            for opts in self.schema[category].values():
-                sql = opts["sql"].strip()
-                if "table" == category:
-                    # LF after first brace
-                    sql = re.sub(r"^([^(]+)\(\s*", lambda m: m.group(1).strip() + " (\n  ", sql)
-                    # LF after each col
-                    sql = re.sub("\s*,\s*", ",\n  ", sql)
-                    # LF before last brace
-                    sql = re.sub(r"\)(\s*WITHOUT\s+ROWID)$", r"\n)\1", sql, re.I)
-                    sql = re.sub(r"\)$", r"\n)", sql)
-                result += sql + ";\n\n"
-            result += "\n\n"
+            chunk = ""
+            for myname, opts in self.schema[mycategory].items():
+                if name and name != myname:
+                    continue # for myname, opts
 
+                if name and column and "table" == mycategory:
+                    col = next((c for c in opts["columns"]
+                                if c["name"].lower() == column.lower()), None)
+                    if not col: continue # for myname, opts
+                    chunk = grammar.generate(dict(col, __type__="column"), indent=False)
+                    break # for myname, opts
+
+                sql = opts["sql"]
+                kws = {x: transform[x] for x in ("flags", "renames")
+                       if transform and x in transform}
+                if not opts.get("full") or kws or indent != "  ":
+                    sql = grammar.transform(sql, indent=indent, **kws)
+                chunk += sql + (";\n\n" if not name else "")
+            result += ("\n\n" if result else "") + chunk
+
+        return result
+
+
+    @staticmethod
+    def get_affinity(col):
+        """
+        Returns column type affinity, e.g. "REAL" for "FLOAT".
+
+        @param   col  column type string or {"type": column type}
+        @return       matched affinity, or "BLOB" if unknown or unspecified type
+        """
+        mytype = col.get("type") if isinstance(col, dict) else col
+        if not mytype or not isinstance(mytype, basestring): return "BLOB"
+
+        mytype = mytype.upper()            
+        for aff, types in Database.AFFINITY.items(): # Exact match
+            if mytype in types:
+                return aff
+        for aff, types in Database.AFFINITY.items(): # Partial match
+            for afftype in types:
+                if afftype.startswith(mytype) or mytype.startswith(afftype):
+                    return aff
+        return "BLOB"    
+
+
+    @staticmethod
+    def is_valid_name(table=None, column=None):
+        """
+        Returns whether table or column name is a valid identifier.
+
+        Tables must not start with "sqlite_", no limitations otherwise.
+        """
+        result = False
+        if table:    result = not table[:7].lower().startswith("sqlite_")
+        elif column: result = True
         return result
 
 
@@ -734,6 +823,27 @@ class Database(object):
         return filled
 
 
+    def make_args(self, cols, data, existing=None):
+        """
+        Returns ordered params dictionary, with column names made safe to use
+        as ":name" parameters.
+
+        @param   cols      ["col", ] or [{"name": "col"}, ]
+        @param   data      {"col": val}
+        @param   existing  already existing params dictionary,
+                           for unique
+        """
+        result = OrderedDict()
+        for c in cols:
+            if isinstance(c, dict): c = c["name"]
+            name = base = re.sub(r"\W", "", c, flags=re.I)
+            count = 1
+            while name in result or existing and name in existing:
+                name, count = "%s_%s" % (base, count), count + 1
+            result[name] = data[c]
+        return result
+
+
     def create_table(self, table, create_sql):
         """Creates the specified table and updates our column data."""
         table = table.lower()
@@ -745,36 +855,6 @@ class Database(object):
         self.schema["table"][table] = row
 
 
-    def update_row(self, table, row, original_row, rowid=None):
-        """
-        Updates the table row in the database, identified by its primary key
-        in its original values, or the given rowid if table has no primary key.
-        """
-        if not self.is_open():
-            return
-        table, where = table.lower(), ""
-        guibase.log("Updating 1 row in table %s, %s.",
-                    self.schema["table"][table]["name"], self.filename)
-        self.ensure_backup()
-        col_data = self.get_table_columns(table)
-        values, where = row.copy(), ""
-        setsql = ", ".join("%(name)s = :%(name)s" % x for x in col_data)
-        if rowid is not None:
-            pk_key = "PK%s" % int(time.time()) # Avoid existing field collision
-            where, values[pk_key] = "ROWID = :%s" % pk_key, rowid
-        else:
-            for pk in [c["name"] for c in col_data if c["pk"]]:
-                pk_key = "PK%s" % int(time.time())
-                values[pk_key] = original_row[pk]
-                where += (" AND " if where else "") + "%s IS :%s" % (pk, pk_key)
-        if not where:
-            return False # Sanity check: no primary key and no rowid
-        self.execute("UPDATE %s SET %s WHERE %s" % (table, setsql, where),
-                     values)
-        self.connection.commit()
-        self.last_modified = datetime.datetime.now()
-
-
     def insert_row(self, table, row):
         """
         Inserts the new table row in the database.
@@ -784,19 +864,59 @@ class Database(object):
         if not self.is_open():
             return
         table = table.lower()
-        guibase.log("Inserting 1 row into table %s, %s.",
-                    self.schema["table"][table]["name"], self.filename)
+        logger.info("Inserting 1 row into table %s, %s.",
+                    grammar.quote(self.schema["table"][table]["name"]),
+                    self.filename)
         self.ensure_backup()
-        col_data = self.get_table_columns(table)
+        col_data = self.schema["table"][table]["columns"]
         fields = [col["name"] for col in col_data]
-        str_cols = ", ".join(fields)
-        str_vals = ":" + ", :".join(fields)
         row = self.blobs_to_binary(row, fields, col_data)
+        args = self.make_args(fields, row)
+        str_cols = ", ".join(map(grammar.quote, fields))
+        str_vals = ":" + ", :".join(args)
+
         cursor = self.execute("INSERT INTO %s (%s) VALUES (%s)" %
-                              (table, str_cols, str_vals), row)
+                              (grammar.quote(table), str_cols, str_vals), args)
         self.connection.commit()
         self.last_modified = datetime.datetime.now()
         return cursor.lastrowid
+
+
+    def update_row(self, table, row, original_row, rowid=None):
+        """
+        Updates the table row in the database, identified by the given ROWID,
+        or by the primary keys in its original values, or by all columns in its
+        original values if table has no primary key.
+        """
+        if not self.is_open():
+            return
+        table, where = table.lower(), ""
+        logger.info("Updating 1 row in table %s, %s.",
+                    grammar.quote(self.schema["table"][table]["name"]), self.filename)
+        self.ensure_backup()
+        col_data = self.schema["table"][table]["columns"]
+
+
+        changed_cols = [x for x in col_data
+                            if row[x["name"]] != original_row[x["name"]]]
+        where, args = "", self.make_args(changed_cols, row)
+        setsql = ", ".join("%s = :%s" % (grammar.quote(changed_cols[i]["name"]), x)
+                                         for i, x in enumerate(args))
+        if rowid is not None:
+            key_data = [{"name": "rowid"}]
+            keyargs = self.make_args(key_data, {"rowid": rowid}, args)
+        else:
+            # If no primary key either, use all columns to identify row
+            key_data = [c for c in col_data if "pk" in c] or col_data
+            keyargs = self.make_args(key_data, original_row, args)
+        for col, key in zip(key_data, keyargs):
+            where += (" AND " if where else "") + \
+                     "%s IS :%s" % (grammar.quote(col["name"]), key)
+        args.update(keyargs)
+        self.execute("UPDATE %s SET %s WHERE %s" %
+                     (grammar.quote(table), setsql, where), args)
+        self.connection.commit()
+        self.last_modified = datetime.datetime.now()
 
 
     def delete_row(self, table, row, rowid=None):
@@ -809,22 +929,25 @@ class Database(object):
         if not self.is_open():
             return
         table, where = table.lower(), ""
-        guibase.log("Deleting 1 row from table %s, %s.",
-                    self.schema["table"][table]["name"], self.filename)
+        logger.info("Deleting 1 row from table %s, %s.",
+                    grammar.quote(self.schema["table"][table]["name"]),
+                    self.filename)
         self.ensure_backup()
-        col_data = self.get_table_columns(table)
-        values, where = row.copy(), ""
+        col_data = self.schema["table"][table]["columns"]
+
+        where, args = "", {}
+
         if rowid is not None:
-            pk_key = "PK%s" % int(time.time()) # Avoid existing field collision
-            where, values[pk_key] = "ROWID = :%s" % pk_key, rowid
+            key_data = [{"name": "rowid"}]
+            keyargs = self.make_args(key_data, {"rowid": rowid}, args)
         else:
-            for pk in [c["name"] for c in col_data if c["pk"]]:
-                pk_key = "PK%s" % int(time.time())
-                values[pk_key] = row[pk]
-                where += (" AND " if where else "") + "%s IS :%s" % (pk, pk_key)
-        if not where:
-            return False # Sanity check: no primary key and no rowid
-        self.execute("DELETE FROM %s WHERE %s" % (table, where), values)
+            # If no primary key either, use all columns to identify row
+            key_data = [c for c in col_data if "pk" in c] or col_data
+            keyargs = self.make_args(key_data, row, args)
+        for col, key in zip(key_data, keyargs):
+            where += (" AND " if where else "") + "%s IS :%s" % (grammar.quote(col["name"]), key)
+        args.update(keyargs)
+        self.execute("DELETE FROM %s WHERE %s" % (grammar.quote(table), where), args)
         self.connection.commit()
         self.last_modified = datetime.datetime.now()
         return True
@@ -840,15 +963,17 @@ class Database(object):
             if opts.get("read") == False: continue # for name, opts
 
             rows = self.execute("PRAGMA %s" % name).fetchall()
-            if not rows: continue # for name, opts
-                
+            if not rows:
+                if callable(opts["type"]): result[name] = opts["type"]()
+                continue # for name, opts
+
             if "table" == opts["type"]:
                 result[name] = [x[opts["col"]] for x in rows]
             else:
                 result[name] = rows[0].values()[0]
                 if callable(opts["type"]):
                     result[name] = opts["type"](result[name])
-                    
+
         return result
 
 
@@ -890,8 +1015,8 @@ def detect_databases():
                         "/Users" if "mac" == os.name else "/home"]
     search_paths = map(util.to_unicode, search_paths)
     for search_path in filter(os.path.exists, search_paths):
-        guibase.log("Looking for SQLite databases under %s.", search_path)
-        for root, dirs, files in os.walk(search_path):
+        logger.info("Looking for SQLite databases under %s.", search_path)
+        for root, _, files in os.walk(search_path):
             results = []
             for f in files:
                 if is_sqlite_file(f, root):
@@ -900,8 +1025,8 @@ def detect_databases():
 
     # Then search current working directory for database files.
     search_path = util.to_unicode(os.getcwd())
-    guibase.log("Looking for SQLite databases under %s.", search_path)
-    for root, dirs, files in os.walk(search_path):
+    logger.info("Looking for SQLite databases under %s.", search_path)
+    for root, _, files in os.walk(search_path):
         results = []
         for f in (x for x in files if is_sqlite_file(x, root)):
             results.append(os.path.realpath(os.path.join(root, f)))
@@ -910,6 +1035,6 @@ def detect_databases():
 
 def find_databases(folder):
     """Yields a list of all SQLite databases under the specified folder."""
-    for root, dirs, files in os.walk(folder):
+    for root, _, files in os.walk(folder):
         for f in (x for x in files if is_sqlite_file(x, root)):
             yield os.path.join(root, f)

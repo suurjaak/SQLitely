@@ -3,12 +3,12 @@
 Miscellaneous utility functions.
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.08.2019
+@modified    05.09.2019
 ------------------------------------------------------------------------------
 """
 import ctypes
@@ -43,7 +43,14 @@ def safedivf(a, b):
 
 def safe_filename(filename):
     """Returns the filename with characters like \:*?"<>| removed."""
-    return re.sub(r"[\/\\\:\*\?\"\<\>\|]", "", filename)
+    return re.sub(r"[\/\\\:\*\?\"\<\>\|\x00-\x1f]", "", filename)
+
+
+def unprint(s, escape=True):
+    """Returns string with unprintable characters escaped or stripped."""
+    enc = "unicode-escape" if isinstance(s, unicode) else "string-escape"
+    repl = (lambda m: m.group(0).encode(enc)) if escape else ""
+    return re.sub(r"[\x00-\x1f]", repl, s)
 
 
 def format_bytes(size, precision=2, max_units=True):
@@ -213,7 +220,7 @@ def start_file(filepath):
 
 def is_os_64bit():
     """Returns whether the operating system is 64-bit (Windows-only)."""
-    return ('PROCESSOR_ARCHITEW6432' in os.environ 
+    return ('PROCESSOR_ARCHITEW6432' in os.environ
             or os.environ['PROCESSOR_ARCHITECTURE'].endswith('64'))
 
 
@@ -307,7 +314,7 @@ def path_to_url(path, encoding="utf-8"):
 
 def to_unicode(value, encoding=None):
     """
-    Returns the value as a Unicode string. Tries decoding as UTF-8 if 
+    Returns the value as a Unicode string. Tries decoding as UTF-8 if
     locale encoading fails.
     """
     result = value
@@ -336,4 +343,33 @@ def longpath(path):
             if GetLongPathNameW(unicode(head), buf, 65536):
                 result = os.path.join(buf.value, tail)
     except Exception: pass
+    return result
+
+
+def win32_unicode_argv():
+    """
+    Returns Windows command-line arguments converted to Unicode.
+
+    @from    http://stackoverflow.com/a/846931/145400
+    """
+    result = sys.argv[:]
+    try:
+        from ctypes import POINTER, byref, cdll, c_int, windll
+        from ctypes.wintypes import LPCWSTR, LPWSTR
+    except Exception: return result
+
+    GetCommandLineW = cdll.kernel32.GetCommandLineW
+    GetCommandLineW.argtypes = []
+    GetCommandLineW.restype = LPCWSTR
+
+    CommandLineToArgvW = windll.shell32.CommandLineToArgvW
+    CommandLineToArgvW.argtypes = [LPCWSTR, POINTER(c_int)]
+    CommandLineToArgvW.restype = POINTER(LPWSTR)
+
+    argc = c_int(0)
+    argv = CommandLineToArgvW(GetCommandLineW(), byref(argc))
+    if argc.value:
+        # Remove Python executable and commands if present
+        start = argc.value - len(sys.argv)
+        result = [argv[i].encode("utf-8") for i in range(start, argc.value)]
     return result

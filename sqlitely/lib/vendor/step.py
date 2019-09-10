@@ -26,6 +26,10 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
 ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+------------------------------------------------------------------------------
+
+Supplemented with escape and collapse options, by Erki Suurjaak.
 """
 
 import re
@@ -34,14 +38,14 @@ import re
 class Template(object):
 
     COMPILED_TEMPLATES = {} # {(template string, compile options): code object}
-    # Regex for stripping all leading, trailing and interleaving whitespace.
+    # Regex for stripping all leading, trailing and interleaving whitespace (line-based).
     RE_STRIP = re.compile("(^[ \t]+|[ \t]+$|(?<=[ \t])[ \t]+|\A[\r\n]+|[ \t\r\n]+\Z)", re.M)
 
-    def __init__(self, template, strip=True, escape=False):
+    def __init__(self, template, strip=True, escape=False, collapse=False):
         """Initialize class"""
         super(Template, self).__init__()
         self.template = template
-        self.options  = {"strip": strip, "escape": escape}
+        self.options  = {"strip": strip, "escape": escape, "collapse": collapse}
         self.builtins = {"escape": escape_html,
                          "setopt": lambda k, v: self.options.update({k: v}), }
         cache_key = (template, bool(escape))
@@ -68,15 +72,12 @@ class Template(object):
             # Cache output as a single string and write to buffer.
             cache[0] += to_unicode(s)
             if flush and cache[0] or len(cache[0]) > 65536:
-                buffer.write(postprocess(cache[0]))
+                buffer.write(self._postprocess(cache[0]).encode(encoding))
                 cache[0] = ""
 
         namespace.update(kw, **self.builtins)
         namespace["echo"]  = write_buffer
         namespace["isdef"] = lambda v: v in namespace
-        postprocess = lambda s: s.encode(encoding)
-        if self.options["strip"]:
-            postprocess = lambda s: Template.RE_STRIP.sub("", s).encode(encoding)
 
         eval(compile(self.code, "<string>", "exec"), namespace)
         write_buffer("", flush=True) # Flush any last cached bytes
@@ -139,6 +140,8 @@ class Template(object):
         """Modify output string after variables and code evaluation"""
         if self.options["strip"]:
             output = Template.RE_STRIP.sub("", output)
+        if self.options["collapse"]:
+            output = collapse_whitespace(output)
         return output
 
 
@@ -154,4 +157,14 @@ def to_unicode(x, encoding="utf-8"):
     """Convert anything to Unicode."""
     if not isinstance(x, unicode):
         x = unicode(str(x), encoding, errors="replace")
+    return x
+
+
+def collapse_whitespace(x):
+    """
+    Collapse whitespace into a single space globally,
+    and into nothing if between non-alphanumerics.
+    """
+    x = re.sub(r"\s+", " ", x)
+    x = re.sub(r"(\W)\s+(\W)", r"\1\2",  x, re.U)
     return x

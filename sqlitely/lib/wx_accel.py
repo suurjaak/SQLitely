@@ -3,7 +3,7 @@
 Binds wx control label shortcut keys and label clicks to control click events.
 
 In wx, a button with a label "E&xit" is displayed as having the label "Exit"
-with "x" underlined, indicating a keyboard shortcut, but wx does not bind 
+with "x" underlined, indicating a keyboard shortcut, but wx does not bind
 these shortcuts automatically.
 
 Supported controls:
@@ -25,12 +25,12 @@ Uses primitive heuristic analysis to detect connected label-control pairs:
   e.g. "iptext" and "iptext_label"|"iptext.label"|"iptext label"|"labeliptext"
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     19.11.2011
-@modified    27.08.2019
+@modified    05.09.2019
 ------------------------------------------------------------------------------
 """
 import functools
@@ -172,7 +172,7 @@ def collect_shortcuts(control, use_heuristics=True):
 
     collect_recurse(control, result, nameds, statics)
     if not use_heuristics: return result
-        
+
     result_values = set(j for i in result.values() for j in i)
     for ctrl, key in statics.items():
         # For wx.StaticTexts, see if the next sibling, or control with the

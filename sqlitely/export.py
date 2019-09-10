@@ -3,17 +3,18 @@
 Functionality for exporting SQLite data to external files.
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2019
+@modified    10.09.2019
 ------------------------------------------------------------------------------
 """
 import collections
 import csv
 import datetime
+import os
 import re
 
 try: # ImageFont for calculating column widths in Excel export, not required.
@@ -42,45 +43,43 @@ except Exception: # Fall back to a simple mono-spaced calculation if no PIL
 
 """FileDialog wildcard strings, matching extensions lists and default names."""
 XLSX_WILDCARD = "Excel workbook (*.xlsx)|*.xlsx|" if xlsxwriter else ""
-CHAT_WILDCARD = ("HTML document (*.html)|*.html|Text document (*.txt)|*.txt|"
-                 "%sCSV spreadsheet (*.csv)|*.csv" % XLSX_WILDCARD)
-CHAT_EXTS = ["html", "txt", "xlsx", "csv"] if xlsxwriter \
-            else ["html", "txt", "csv"]
-CHAT_WILDCARD_SINGLEFILE = "Excel workbook (*.xlsx)|*.xlsx" # Cannot end with |
-CHAT_EXTS_SINGLEFILE = ["xlsx"]
 
 TABLE_WILDCARD = ("HTML document (*.html)|*.html|"
+                  "Text document (*.txt)|*.txt|"
                   "SQL INSERT statements (*.sql)|*.sql|"
                   "%sCSV spreadsheet (*.csv)|*.csv" % XLSX_WILDCARD)
-TABLE_EXTS = ["html", "sql", "xlsx", "csv"] if xlsxwriter \
-             else ["html", "sql", "csv"]
+TABLE_EXTS = ["html", "txt", "sql", "xlsx", "csv"] if xlsxwriter \
+             else ["html", "txt", "sql", "csv"]
 
-QUERY_WILDCARD = ("HTML document (*.html)|*.html|"
+QUERY_WILDCARD = ("HTML document (*.html)|*.html|Text document (*.txt)|*.txt|"
                   "%sCSV spreadsheet (*.csv)|*.csv" % XLSX_WILDCARD)
-QUERY_EXTS = ["html", "xlsx", "csv"] if xlsxwriter else ["html", "csv"]
+QUERY_EXTS = ["html", "txt", "xlsx", "csv"] if xlsxwriter else ["html", "txt", "csv"]
 
 
-def export_grid(grid, filename, title, db, sql_query="", table=""):
+def export_data(make_iterable, filename, title, db, columns, sql_query="", table=""):
     """
-    Exports the current contents of the specified wx.Grid to file.
+    Exports database data to file.
 
-    @param   grid       a wx.Grid object
-    @param   filename   full path and filename of resulting file, file extension
-                        .html|.csv|.sql|.xslx determines file format
-    @param   title      title used in HTML
-    @param   db         Database instance
-    @param   sql_query  the SQL query producing the grid contents, if any
-    @param   table      name of the table producing the grid contents, if any
+    @param   make_iterable   function returning iterable sequence yielding rows
+    @param   filename        full path and filename of resulting file, file extension
+                             .html|.csv|.sql|.xslx determines file format
+    @param   title           title used in HTML
+    @param   db              Database instance
+    @param   columns         iterable columns, as [name, ] or [{"name": name}, ]
+    @param   sql_query       the SQL query producing the data, if any
+    @param   table           name of the table producing the data, if any
     """
     result = False
     f = None
     is_html = filename.lower().endswith(".html")
     is_csv  = filename.lower().endswith(".csv")
     is_sql  = filename.lower().endswith(".sql")
+    is_txt  = filename.lower().endswith(".txt")
     is_xlsx = filename.lower().endswith(".xlsx")
+    columns = [c if isinstance(c, basestring) else c["name"] for c in columns]
+    tmpfile, tmpname = None, None # Temporary file for exported rows
     try:
         with open(filename, "w") as f:
-            columns = [c["name"] for c in grid.Table.columns]
 
             if is_csv or is_xlsx:
                 if is_csv:
@@ -100,7 +99,7 @@ def export_grid(grid, filename, title, db, sql_query="", table=""):
                     writer.writerow(*a)
                 writer.writerow(*([header, "bold"] if is_xlsx else [header]))
                 writer.set_header(False) if is_xlsx else 0
-                for row in grid.Table.GetRowIterator():
+                for row in make_iterable():
                     values = []
                     for col in columns:
                         val = "" if row[col] is None else row[col]
@@ -115,26 +114,53 @@ def export_grid(grid, filename, title, db, sql_query="", table=""):
                     "db_filename": db.filename,
                     "title":       title,
                     "columns":     columns,
-                    "row_count":   grid.NumberRows,
-                    "rows":        grid.Table.GetRowIterator(),
+                    "rows":        make_iterable(),
+                    "row_count":   0,
                     "sql":         sql_query,
                     "table":       table,
                     "app":         conf.Title,
                 }
-                if is_sql and table:
-                    # Add CREATE TABLE statement.
-                    create_sql = db.tables[table.lower()]["sql"] + ";"
-                    re_sql = re.compile("^(CREATE\\s+TABLE\\s+)", re.IGNORECASE)
-                    replacer = lambda m: ("%sIF NOT EXISTS " % m.group(1))
-                    namespace["create_sql"] = re_sql.sub(replacer, create_sql)
+                namespace["namespace"] = namespace # To update row_count
 
-                template = step.Template(templates.GRID_HTML if is_html else 
-                           templates.SQL_TXT, strip=False, escape=is_html)
+                if is_txt: # Run through rows once, to populate text-justify options
+                    widths = {c: len(c) for c in columns}
+                    justs  = {c: True   for c in columns}
+                    for row in make_iterable():
+                        for col in columns:
+                            v = row[col]
+                            if isinstance(v, (int, long, float)): justs[col] = False
+                            v = "" if v is None \
+                                else v if isinstance(v, basestring) else str(v)
+                            v = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(v))
+                            widths[col] = max(widths[col], len(v))
+                    namespace["columnwidths"] = widths # {col: char length}
+                    namespace["columnjusts"]  = justs  # {col: True if ljust}
+
+                # Write out data to temporary file first, to populate row count.
+                tmpname = util.unique_path("%s.rows" % filename)
+                tmpfile = open(tmpname, "wb+")
+                template = step.Template(templates.DATA_ROWS_HTML if is_html else
+                           templates.DATA_ROWS_SQL if is_sql else templates.DATA_ROWS_TXT,
+                           strip=False, escape=is_html)
+                template.stream(tmpfile, namespace)
+
+                if table:
+                    # Add CREATE TABLE statement.
+                    transform = {"exists": True} if is_sql else None
+                    create_sql = db.get_sql("table", table, transform=transform)
+                    namespace["create_sql"] = create_sql
+
+                tmpfile.flush(), tmpfile.seek(0)
+                namespace["data_buffer"] = iter(lambda: tmpfile.read(65536), "")
+                template = step.Template(templates.DATA_HTML if is_html else
+                           templates.DATA_SQL if is_sql else templates.DATA_TXT,
+                           strip=False, escape=is_html)
                 template.stream(f, namespace)
 
             result = True
     finally:
-        if f: util.try_until(f.close)
+        if tmpfile: util.try_until(tmpfile.close)
+        if tmpname: util.try_until(lambda: os.unlink(tmpname))
     return result
 
 
@@ -264,9 +290,9 @@ class xlsx_writer(object):
                 continue # continue for c, v in enumerate(Values)
 
             # Calculate and update maximum written column width
-            strval = (v.encode("latin1", "replace") if isinstance(v, unicode) 
+            strval = (v.encode("latin1", "replace") if isinstance(v, unicode)
                       else v.strftime("%Y-%m-%d %H:%M") \
-                      if isinstance(v, datetime.datetime) else 
+                      if isinstance(v, datetime.datetime) else
                       v if isinstance(v, basestring) else str(v))
             pixels = max(self._fonts[fmt_name].getsize(x)[0]
                          for x in strval.split("\n"))
