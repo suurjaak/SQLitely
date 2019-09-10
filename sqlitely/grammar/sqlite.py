@@ -461,7 +461,7 @@ class Parser(object):
         result = {}
         result["name"] = self.u(ctx.column_name().any_name)
         if ctx.type_name():
-            result["type"] = " ".join(self.u(x) for x in ctx.type_name().name())
+            result["type"] = " ".join(self.u(x).upper() for x in ctx.type_name().name())
 
         for c in ctx.column_constraint():
             conflict = self.get_conflict(c)
@@ -750,19 +750,19 @@ class Generator(object):
 
 
     def quote(self, val):
-        """Returns token for quoted value if needs quoting, else given value."""
-        val, quoted = uni(val), quote(val)
-        return self.token(quoted, "Q") if quoted != val else val
+        """Returns token for quoted value."""
+        return self.token(quote(val), "Q")
 
 
-    def padding(self, key, data):
+    def padding(self, key, data, quoted=False):
         """
         Returns whitespace padding token for data[key] if indented SQL,
         else empty string. Whitespace will be justified to data[key] max length.
+        If quoted, data[key] is quoted if necessary.
         """
         if not self._indent: return ""
-        return self.token("%s-%s" % (key, data[key]), "PAD",
-                          key=key, value=data[key])
+        val = quote(data[key]) if quoted else data[key]
+        return self.token("%s-%s" % (key, val), "PAD", key=key, value=val)
 
 
     def glue(self):
@@ -810,7 +810,7 @@ def test():
         feeds (
             -- first line comment
             myname TEXT PRIMARY KEY AUTOINCREMENT,
-            mynumber INTEGER NOT NULL, -- my comment
+            "my number" INTEGER NOT NULL, -- my comment
             mybool
             /* multiline
             comment */

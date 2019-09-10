@@ -25,7 +25,7 @@ Released under the MIT License.
 
 
 COLUMN_DEFINITION = """
-  {{ Q(data["name"]) }}{{ PAD("name", data) }}
+  {{ Q(data["name"]) }}{{ PAD("name", data, quoted=True) }}
 
     %if data.get("type") is not None:
   {{ data["type"] }}{{ PAD("type", data) }}
