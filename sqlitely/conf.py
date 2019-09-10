@@ -22,7 +22,7 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev55"
+Version = "1.0.dev56"
 VersionDate = "10.09.2019"
 
 if getattr(sys, "frozen", False):
@@ -48,7 +48,8 @@ OptionalFileDirectives = [
     "DBExtensions", "ExportDbTemplate", "LogSQL", "MinWindowSize",
     "MaxConsoleHistory", "MaxHistoryInitialMessages", "MaxRecentFiles",
     "MaxSearchHistory", "MaxSearchMessages", "MaxSearchTableRows",
-    "SearchResultsChunk", "StatusFlashLength", "UpdateCheckInterval",
+    "PopupUnexpectedErrors", "SearchResultsChunk", "StatusFlashLength",
+    "UpdateCheckInterval",
 ]
 OptionalFileDirectiveDefaults = {}
 
@@ -121,6 +122,9 @@ LogEnabled = True
 
 """Whether to log all SQL statements to log window."""
 LogSQL = False
+
+"""Whether to pop up message dialogs for unhandled errors."""
+PopupUnexpectedErrors = False
 
 """URLs for download list, changelog, submitting feedback and homepage."""
 DownloadURL  = "https://erki.lap.ee/downloads/SQLitely/"

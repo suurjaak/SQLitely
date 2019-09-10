@@ -48,6 +48,7 @@ def except_hook(etype, evalue, etrace):
     text = "".join(traceback.format_exception(etype, evalue, etrace)).strip()
     msg = "An unexpected error has occurred%s:\n\n%s"
     logger.error(msg, "", text)
+    if not conf.PopupUnexpectedErrors: return
     msg %= (", see log for full details", text[:MAXLEN] + "..") \
            if len(text) > MAXLEN else ("", text)
     wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
