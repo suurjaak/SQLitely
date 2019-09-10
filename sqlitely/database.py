@@ -895,15 +895,18 @@ class Database(object):
         self.ensure_backup()
         col_data = self.schema["table"][table]["columns"]
 
-        where, args = "", self.make_args(col_data, row)
-        setsql = ", ".join("%s = :%s" % (grammar.quote(col_data[i]["name"]), x)
+
+        changed_cols = [x for x in col_data
+                            if row[x["name"]] != original_row[x["name"]]]
+        where, args = "", self.make_args(changed_cols, row)
+        setsql = ", ".join("%s = :%s" % (grammar.quote(changed_cols[i]["name"]), x)
                                          for i, x in enumerate(args))
         if rowid is not None:
             key_data = [{"name": "rowid"}]
             keyargs = self.make_args(key_data, {"rowid": rowid}, args)
         else:
             # If no primary key either, use all columns to identify row
-            key_data = [c for c in col_data if c["pk"]] or col_data
+            key_data = [c for c in col_data if "pk" in c] or col_data
             keyargs = self.make_args(key_data, original_row, args)
         for col, key in zip(key_data, keyargs):
             where += (" AND " if where else "") + \
@@ -938,7 +941,7 @@ class Database(object):
             keyargs = self.make_args(key_data, {"rowid": rowid}, args)
         else:
             # If no primary key either, use all columns to identify row
-            key_data = [c for c in col_data if c["pk"]] or col_data
+            key_data = [c for c in col_data if "pk" in c] or col_data
             keyargs = self.make_args(key_data, row, args)
         for col, key in zip(key_data, keyargs):
             where += (" AND " if where else "") + "%s IS :%s" % (grammar.quote(col["name"]), key)

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.09.2019
+@modified    10.09.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3002,7 +3002,7 @@ class DatabasePage(wx.Panel):
                             grid.Table.ClearSort(refresh=False)
                             grid.Table.ClearFilter()
                         columns = tablemap[table_name]["columns"]
-                        id_fields = [c["name"] for c in columns if c.get("pk")]
+                        id_fields = [c["name"] for c in columns if "pk" in c]
                         if not id_fields: # No primary key fields: take all
                             id_fields = [c["name"] for c in columns]
                         row_id = [row[c] for c in id_fields]
@@ -4648,7 +4648,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
                 self.idx_changed.remove(idx)
                 del self.rows_backup[idx]
             # Save all newly inserted rows
-            pks = [c["name"] for c in self.columns if c["pk"]]
+            pks = [c["name"] for c in self.columns if "pk" in c]
             col_map = dict((c["name"], c) for c in self.columns)
             for idx in self.idx_new[:]:
                 row = self.rows_all[idx]
