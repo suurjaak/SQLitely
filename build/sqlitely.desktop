@@ -2,7 +2,7 @@
 Version=1.0
 Type=Application
 Terminal=false
-Exec=sqlitemate
-Name=SQLiteMate
-Icon=sqlitemate
+Exec=sqlitely
+Name=SQLitely
+Icon=sqlitely
 Categories=Utility;Database;GTK;

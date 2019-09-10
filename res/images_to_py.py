@@ -3,12 +3,12 @@ Simple small script for generating a nicely formatted Python module with
 embedded binary resources and docstrings.
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author    Erki Suurjaak
-@created   07.02.2012
-@modified  31.08.2019
+@created   21.08.2019
+@modified  10.09.2019
 ------------------------------------------------------------------------------
 """
 import base64
@@ -18,13 +18,13 @@ import shutil
 import wx.tools.img2py
 
 """Target Python script to write."""
-TARGET = os.path.join("..", "sqlitemate", "images.py")
+TARGET = os.path.join("..", "sqlitely", "images.py")
 
 Q3 = '"""'
 
 """Application icons of different size and colour depth."""
 APPICONS = [("Icon{0}x{0}_{1}bit.png".format(s, b),
-             "SQLiteMate application {0}x{0} icon, {1}-bit colour.".format(s, b))
+             "SQLitely application {0}x{0} icon, {1}-bit colour.".format(s, b))
             for s in (16, 24, 32, 40, 48, 64, 256) for b in (32, 8)]
 IMAGES = {
     "ButtonClear.png":
@@ -99,10 +99,10 @@ IMAGES = {
         "Transparent 1x1 GIF.",
 }
 HEADER = """%s
-Contains embedded image and icon resources for SQLiteMate. Auto-generated.
+Contains embedded image and icon resources for SQLitely. Auto-generated.
 
 ------------------------------------------------------------------------------
-This file is part of SQLiteMate - SQLite database tool.
+This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak

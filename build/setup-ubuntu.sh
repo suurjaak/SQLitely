@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Installs SQLiteMate dependencies on your local machine
+# Installs SQLitely dependencies on your local machine
 # Crafted for Ubuntu systems
 # Tested on Ubuntu Precise
 #
@@ -23,6 +23,6 @@ PIP_BIN=$(which pip)
 sudo $PIP_BIN install -U pip==1.4 distribute setuptools
 
 PIP_BIN=$(which pip)
-sudo $PIP_BIN install sqlitemate
+sudo $PIP_BIN install sqlitely
 
 exit 0

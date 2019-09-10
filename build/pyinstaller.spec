@@ -1,6 +1,6 @@
 # -*- mode: python -*-
 """
-Pyinstaller spec file for SQLiteMate, produces a 32-bit or 64-bit executable,
+Pyinstaller spec file for SQLitely, produces a 32-bit or 64-bit executable,
 depending on current environment.
 
 @created   03.04.2012
@@ -10,7 +10,7 @@ import os
 import sys
 
 os.chdir("..")
-APPPATH = os.path.join(os.getcwd(), "sqlitemate")
+APPPATH = os.path.join(os.getcwd(), "sqlitely")
 sys.path.append(APPPATH)
 
 import conf
@@ -24,7 +24,7 @@ def do_64bit():
         return True
 
 
-app_file = "sqlitemate_%s%s" % (conf.Version, "_x64" if do_64bit() else "")
+app_file = "sqlitely_%s%s" % (conf.Version, "_x64" if do_64bit() else "")
 if DO_WINDOWS:
     app_file += ".exe"
 

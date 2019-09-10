@@ -1,6 +1,6 @@
 """
-Creates SQLiteMate source distribution archive from current version in
-sqlitemate\. Sets execute flag permission on .sh files.
+Creates SQLitely source distribution archive from current version in
+sqlitely\. Sets execute flag permission on .sh files.
 
 @author    Erki Suurjaak
 @created   21.08.2019
@@ -18,12 +18,12 @@ if "__main__" == __name__:
     INITIAL_DIR = os.getcwd()
     PACKAGING_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__)))
     os.chdir(os.path.join(os.path.dirname(__file__), ".."))
-    sys.path.append("sqlitemate")
+    sys.path.append("sqlitely")
     import conf
 
     BASE_DIR = ""
-    ZIP_DIR = "sqlitemate_%s" % conf.Version
-    DEST_FILE = "sqlitemate_%s-src.zip" % conf.Version
+    ZIP_DIR = "sqlitely_%s" % conf.Version
+    DEST_FILE = "sqlitely_%s-src.zip" % conf.Version
     print("Creating source distribution %s.\n" % DEST_FILE)
 
     def pathjoin(*args):
@@ -52,8 +52,8 @@ if "__main__" == __name__:
     with zipfile.ZipFile(os.path.join(INITIAL_DIR, DEST_FILE), mode="w") as zf:
         size = 0
         for subdir, wildcard in [("res", "*"),
-        ("sqlitemate", "*.py"), ("sqlitemate", "sqlitemate.ini"),
-        ("dist", "*"), (pathjoin("sqlitemate", "third_party"), "*.py")]:
+        ("sqlitely", "*.py"), ("sqlitely", "sqlitely.ini"),
+        ("dist", "*"), (pathjoin("sqlitely", "third_party"), "*.py")]:
             entries = glob.glob(os.path.join(BASE_DIR, subdir, wildcard))
             files = sorted([os.path.basename(x) for x in entries
                           if os.path.isfile(x)], key=str.lower)
@@ -62,7 +62,7 @@ if "__main__" == __name__:
             size += add_files(zf, files, subdir)
         rootfiles = ["CHANGELOG.md", "INSTALL.md", "LICENSE.md", "MANIFEST.in",
                      "README.md", "requirements.txt", "setup.py",
-                     "sqlitemate.bat", "sqlitemate.sh"]
+                     "sqlitely.bat", "sqlitely.sh"]
         size += add_files(zf, rootfiles)
 
     os.chdir(INITIAL_DIR)
