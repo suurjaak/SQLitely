@@ -635,10 +635,12 @@ class Database(object):
 
             row["sql"] = row["sql"].strip()
             self.schema[row["type"]][row["name"].lower()] = row
-            if full:
-                meta = grammar.parse(row["sql"])
-                row.update(full=True, meta=meta, sql=grammar.generate(meta))
-                if "table" == row["type"]: row["columns"] = meta["columns"]
+
+        for category, itemmap in self.schema.items() if full else ():
+            for opts in itemmap.values():
+                meta = grammar.parse(opts["sql"])
+                opts.update(full=True, meta=meta, sql=grammar.generate(meta))
+                if "table" == category: opts["columns"] = meta["columns"]
 
         for opts in self.schema["table"].values():
             sql = ("SELECT COUNT(*) AS count FROM %s" if full
@@ -717,15 +719,16 @@ class Database(object):
             if category and category != mycategory \
             or not self.schema.get(mycategory): continue # for mycategory
 
+            chunk = ""
             for myname, opts in self.schema[mycategory].items():
-                if category and name and name != myname:
+                if name and name != myname:
                     continue # for myname, opts
 
-                if name and column:
+                if name and column and "table" == mycategory:
                     col = next((c for c in opts["columns"]
                                 if c["name"].lower() == column.lower()), None)
                     if not col: continue # for myname, opts
-                    result = grammar.generate(dict(col, __type__="column"), indent=False)
+                    chunk = grammar.generate(dict(col, __type__="column"), indent=False)
                     break # for myname, opts
 
                 sql = opts["sql"]
@@ -733,8 +736,8 @@ class Database(object):
                        if transform and x in transform}
                 if not opts.get("full") or kws or indent != "  ":
                     sql = grammar.transform(sql, indent=indent, **kws)
-                result += sql + (";\n\n" if not name else "")
-            if not name: result += "\n\n"
+                chunk += sql + (";\n\n" if not name else "")
+            result += ("\n\n" if result else "") + chunk
 
         return result
 
