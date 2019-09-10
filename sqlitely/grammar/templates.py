@@ -25,7 +25,9 @@ Released under the MIT License.
 
 
 COLUMN_DEFINITION = """
-  {{ Q(data["name"]) }}{{ PAD("name", data, quoted=True) }}
+
+{{ GLUE() }}
+{{ Q(data["name"]) }}{{ PAD("name", data, quoted=True) }}
 
     %if data.get("type") is not None:
   {{ data["type"] }}{{ PAD("type", data) }}
@@ -148,67 +150,13 @@ TABLE
   {{ LF() }}
 %endfor
 
-
-
 %for i, c in enumerate(data.get("constraints", [])):
-{{ PRE() }}
-
-    %if c.get("name"):
-  CONSTRAINT {{ Q(c["name"]) }}
-    %endif
-
-  {{ c["type"] }}
-
-    %if "CHECK" == c.get("type"):
-  ({{ WS(c["check"]) }})
-    %endif
-
-    %if c.get("type") in ("PRIMARY KEY", "UNIQUE"):
-  (
-  {{ GLUE() }}
-        %for j, col in enumerate(c["key"]):
-  {{ Q(col["name"]) if col.get("name") else WS(col["expr"]) }}
-            %if col.get("collate") is not None:
-  COLLATE {{ col["collate"] }}
-            %endif
-            %if col.get("direction") is not None:
-  {{ col["direction"] }}
-            %endif
-  {{ CM("constraints", i, "key", j) }}
-        %endfor
-  {{ GLUE() }}
-  )
-        %if c.get("conflict"):
-  ON CONFLICT {{ c["conflict"] }}
-        %endif
-    %endif
-
-
-    %if "FOREIGN KEY" == c.get("type"):
-  ({{ ", ".join(map(Q, c["columns"])) }})
-  REFERENCES  {{ Q(c["table"]) }}
-        %if c.get("key"):
-  ({{ ", ".join(map(Q, c["key"])) }})
-        %endif
-        %if c.get("defer") is not None:
-    {{ "NOT" if c["defer"].get("not") else "" }}
-    DEFERRABLE 
-            %if c.get("initial"):
-    INITIALLY {{ c["defer"]["initial"] }}
-            %endif
-        %endif
-        %for action, act in c.get("action", {}).items():
-    ON {{ action }} {{ act }}
-        %endfor
-        %for match in c.get("match", []):
-    MATCH {{ match }}
-        %endfor
-    %endif
-
-
+  {{ PRE() }}
+  {{ step.Template(templates.TABLE_CONSTRAINT, strip=True, collapse=True).expand(dict(locals(), data=c)) }}
   {{ CM("constraints", i) }}
   {{ LF() }}
 %endfor
+
 {{ GLUE() }}
 )
 
@@ -308,5 +256,63 @@ USING {{ data["module"]["name"] }}
 
 %if data["module"].get("arguments"):
   ({{ ", ".join(data["module"]["arguments"]) }})
+%endif
+"""
+
+
+
+TABLE_CONSTRAINT = """
+
+{{ GLUE() }}
+%if data.get("name"):
+  CONSTRAINT {{ Q(data["name"]) }}
+%endif
+
+  {{ data["type"] }}
+
+%if "CHECK" == data.get("type"):
+  ({{ WS(data["check"]) }})
+%endif
+
+%if data.get("type") in ("PRIMARY KEY", "UNIQUE"):
+  (
+  {{ GLUE() }}
+    %for j, col in enumerate(data["key"]):
+  {{ Q(col["name"]) if col.get("name") else WS(col["expr"]) }}
+        %if col.get("collate") is not None:
+  COLLATE {{ col["collate"] }}
+        %endif
+        %if col.get("direction") is not None:
+  {{ col["direction"] }}
+        %endif
+  {{ CM("constraints", i, "key", j) }}
+    %endfor
+  {{ GLUE() }}
+  )
+    %if data.get("conflict"):
+  ON CONFLICT {{ data["conflict"] }}
+    %endif
+%endif
+
+
+%if "FOREIGN KEY" == data.get("type"):
+  ({{ ", ".join(map(Q, data["columns"])) }})
+  REFERENCES  {{ Q(data["table"]) }}
+    %if data.get("key"):
+  ({{ ", ".join(map(Q, data["key"])) }})
+    %endif
+    %if data.get("defer") is not None:
+    {{ "NOT" if data["defer"].get("not") else "" }}
+    DEFERRABLE 
+        %if data.get("initial"):
+    INITIALLY {{ data["defer"]["initial"] }}
+        %endif
+    %endif
+    %for action, act in data.get("action", {}).items():
+    ON {{ action }} {{ act }}
+    %endfor
+    %for match in data.get("match", []):
+    MATCH {{ match }}
+    %endfor
 %endif
 """

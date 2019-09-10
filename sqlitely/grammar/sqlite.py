@@ -785,7 +785,7 @@ class Generator(object):
         else:
             islast = (index == len(self._data[collection]) - 1)
             
-        val = "" if islast else "," + (" " if not self._indent else "")
+        val = "" if islast else ", "
         return self.token(val, "CM") if val else ""
 
 
@@ -830,6 +830,12 @@ def test():
             mytext    TEXT NOT NULL CHECK (sometable.somecolumn),
             mydate    TIMESTAMP WITH TIME ZONE,
             fk_col    INTEGER REFERENCES ratings (id) ON delete cascade on update no action match foo MATCH bar,
+            colx DOUBLE TYPE,
+            coly INT,
+            colz INT,
+            colw INT,
+            col1 INT,
+            col2 INT,
             PRIMARY KEY (mykey) ON CONFLICT ROLLBACK,
             FOREIGN KEY (fk_col, myinteger) REFERENCES ratings (id, someid2) ON DELETE CASCADE ON UPDATE RESTRICT,
             CONSTRAINT myconstraint CHECK (666)
