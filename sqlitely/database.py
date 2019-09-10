@@ -685,7 +685,8 @@ class Database(object):
 
         result = OrderedDict()
         for name, opts in self.schema.get(category, {}).items():
-            if table and "table" in opts and opts["table"].lower() != table:
+            if table and "table" in opts.get("meta", {}) \
+            and opts["meta"]["table"].lower() != table:
                 continue # for name, opts
             result[name] = opts
         return result
