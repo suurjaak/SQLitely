@@ -377,20 +377,17 @@ Results for "{{text}}" from {{fromtext}}:
 """
 
 
-"""HTML template for names search results header, stand-alone table."""
-SEARCH_ROW_TABLE_META_HTML = """<%
+"""HTML template for SQL search results."""
+SEARCH_ROW_META_HTML = """<%
 from sqlitely import conf, grammar
 %>
-Table <a href="table:{{table["name"]}}">
-    <font color="{{conf.LinkColour}}">{{!pattern_replace.sub(wrap_b, escape(grammar.quote(table["name"])))}}</font></a>:
-<table>
-%for col in columns:
-  <tr>
-    <td>{{!pattern_replace.sub(wrap_b, escape(col["name"]))}}</td>
-    <td>{{!pattern_replace.sub(wrap_b, escape(col["type"]))}}</td>
-  </tr>
-%endfor
-</table>
+{{ category.capitalize() }}
+%if "table" == category:
+  <a href="table:{{ item["name"] }}"><font color="{{ conf.LinkColour }}">{{! pattern_replace.sub(wrap_b, escape(grammar.quote(item["name"]))) }}</font></a>:
+%else:
+  {{! pattern_replace.sub(wrap_b, escape(grammar.quote(item["name"]))) }}:
+%endif
+<pre><font size="2">{{! pattern_replace.sub(wrap_b, escape(item["sql"])).replace(" ", "&nbsp;") }}</font></pre>
 <br /><br />
 """
 

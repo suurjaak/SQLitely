@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.09.2019
+@modified    10.09.2019
 ------------------------------------------------------------------------------
 """
 import logging
@@ -114,9 +114,9 @@ class SearchThread(WorkerThread):
                 if not search:
                     continue # continue while self._is_running
 
-                TEMPLATES = {"tablemeta": templates.SEARCH_ROW_TABLE_META_HTML,
-                             "table":     templates.SEARCH_ROW_TABLE_HEADER_HTML,
-                             "row":       templates.SEARCH_ROW_TABLE_HTML}
+                TEMPLATES = {"meta":  templates.SEARCH_ROW_META_HTML,
+                             "table": templates.SEARCH_ROW_TABLE_HEADER_HTML,
+                             "row":   templates.SEARCH_ROW_TABLE_HTML}
                 wrap_b = lambda x: "<b>%s</b>" % x.group(0)
                 FACTORY = lambda x: step.Template(TEMPLATES[x], escape=True)
                 logger.info('Searching "%(text)s" in %(table)s (%(db)s).' % search)
@@ -138,32 +138,33 @@ class SearchThread(WorkerThread):
                 pattern_replace = re.compile(patt, re.IGNORECASE)
                 infotext = search["table"]
 
-                # Find from table and column names and types
-                if not self._stop_work and "names" == search["table"] \
+                # Find from database CREATE SQL
+                if not self._stop_work and "meta" == search["table"] \
                 and match_words:
-                    infotext = "table and column names and types"
+                    infotext = "database CREATE SQL"
                     count = 0
-                    template_tablemeta = FACTORY("tablemeta")
-                    for table in search["db"].get_category("table").values():
-                        table_matches = self.match_all(table["name"], match_words)
-                        matching_columns = [c for c in table["columns"]
-                                            if self.match_all(c["name"], match_words)
-                                            or self.match_all(c["type"], match_words)]
+                    template_meta = FACTORY("meta")
+                    for category in search["db"].schema:
+                        for item in search["db"].get_category(category).values():
+                            matches = self.match_all(item["sql"], match_words)
+                            if not matches: continue # for item
 
-                        if table_matches or matching_columns:
                             count += 1
                             result_count += 1
-                            result["output"] += template_tablemeta.expand(locals())
-                            key = "table:%s" % table["name"]
-                            result["map"][key] = {"table": table["name"]}
+                            result["output"] += template_meta.expand(locals())
+                            if "table" == category:
+                                key = "table:%s" % item["name"]
+                                result["map"][key] = {"table": item["name"]}
                             if not count % conf.SearchResultsChunk \
                             and not self._drop_results:
                                 result["count"] = result_count
                                 self.postback(result)
                                 result = {"output": "", "map": {},
                                           "search": search, "count": 0}
+                            if self._stop_work:
+                                break # for item
                         if self._stop_work:
-                            break # break for contact in contacts
+                            break # for category
                 if result["output"] and not self._drop_results:
                     result["count"] = result_count
                     self.postback(result)

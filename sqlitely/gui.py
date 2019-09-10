@@ -1816,7 +1816,7 @@ class DatabasePage(wx.Panel):
             wx.ToolBar(parent=page, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         tb.SetToolBitmapSize((24, 24))
         tb.AddRadioTool(wx.ID_INDEX, bitmap=images.ToolbarTitle.Bitmap,
-            shortHelp="Search in table and column names and types")
+            shortHelp="Search in database CREATE SQL")
         tb.AddRadioTool(wx.ID_STATIC, bitmap=images.ToolbarTables.Bitmap,
             shortHelp="Search in all columns of all database tables")
         tb.AddSeparator()
@@ -1833,9 +1833,9 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_NEW)
         self.Bind(wx.EVT_TOOL, self.on_searchall_stop, id=wx.ID_STOP)
 
-        self.label_search.Label = "&Search in database:"
+        self.label_search.Label = "&Search in table data:"
         if conf.SearchInNames:
-            self.label_search.Label = "&Search in table and column names and types:"
+            self.label_search.Label = "&Search in database CREATE SQL:"
 
         html = self.html_searchall = controls.TabbedHtmlWindow(parent=page)
         default = step.Template(templates.SEARCH_WELCOME_HTML).expand()
@@ -3047,11 +3047,11 @@ class DatabasePage(wx.Panel):
         if wx.ID_INDEX == event.Id:
             conf.SearchInNames = True
             conf.SearchInTables = False
-            self.label_search.Label = "&Search in table and column names and types:"
+            self.label_search.Label = "&Search in database CREATE SQL:"
         elif wx.ID_STATIC == event.Id:
             conf.SearchInTables = True
             conf.SearchInNames = False
-            self.label_search.Label = "&Search in tables:"
+            self.label_search.Label = "&Search in table data:"
         self.label_search.ContainingSizer.Layout()
         if wx.ID_NEW == event.Id:
             conf.SearchUseNewTab = event.EventObject.GetToolState(event.Id)
@@ -3151,8 +3151,8 @@ class DatabasePage(wx.Panel):
                     "width": html.Size.width * 5/9, "table": "",
                     "partial_html": ""}
             if conf.SearchInNames:
-                data["table"] = "names"
-                fromtext = "table and column names and types"
+                data["table"] = "meta"
+                fromtext = "database CREATE SQL"
             elif conf.SearchInTables:
                 data["table"] = "tables"
                 fromtext = "tables"
