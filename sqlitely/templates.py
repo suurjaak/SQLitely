@@ -383,7 +383,7 @@ from sqlitely import conf, grammar
 %>
 {{ category.capitalize() }}
 %if "table" == category:
-  <a href="table:{{ item["name"] }}"><font color="{{ conf.LinkColour }}">{{! pattern_replace.sub(wrap_b, escape(grammar.quote(item["name"]))) }}</font></a>:
+  <a href="table:{{ item["name"]}} "><font color="{{ conf.LinkColour }}">{{! pattern_replace.sub(wrap_b, escape(grammar.quote(item["name"]))) }}</font></a>:
 %else:
   {{! pattern_replace.sub(wrap_b, escape(grammar.quote(item["name"]))) }}:
 %endif
