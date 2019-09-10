@@ -2212,7 +2212,7 @@ class DatabasePage(wx.Panel):
         check_sql.SetToolTipString("See SQL statements for PRAGMA changes")
         check_sql.Value = True
         check_fullsql = self.check_pragma_fullsql = \
-            wx.CheckBox(panel_sql, label="See &full SQL")
+            wx.CheckBox(panel_sql, label="See f&ull SQL")
         check_fullsql.SetToolTipString("See SQL statements for "
                                        "setting all current PRAGMA values")
         check_fullsql.Hide()
