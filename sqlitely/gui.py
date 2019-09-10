@@ -3933,8 +3933,8 @@ class DatabasePage(wx.Panel):
         entrymsg = ('Name conflict on exporting table %(table)s as %(table2)s.\n'
                     'Database %(filename2)s %(entryheader)s '
                     'table named %(table2)s.\n\nYou can:\n'
-                    '- enter another name to export table %(table)s as,\n'
                     '- keep same name to overwrite table %(table2)s,\n'
+                    '- enter another name to export table %(table)s as,\n'
                     '- or set blank to skip table %(table)s.')
         insert_sql, success = "INSERT INTO main2.%s SELECT * FROM main.%s", False
         db1_tables = set(self.db.get_category("table"))
@@ -3996,7 +3996,7 @@ class DatabasePage(wx.Panel):
                         else " as %s" % grammar.quote(table2, force=True)
 
                 create_sql = self.db.get_sql("table", table, indent=False,
-                    transform={"rename": {"schema": "main2", "table": {table: table2}}},
+                    transform={"renames": {"schema": "main2", "table": {table: table2}}},
                 )
                 try:
                     if t2_lower in db2_tables_lower:
@@ -4005,31 +4005,33 @@ class DatabasePage(wx.Panel):
                     logger.info("Creating table %s in %s, using %s.",
                                 grammar.quote(table2, force=True), filename2, create_sql)
                     self.db.execute(create_sql)
-
-                    # Assemble table indices to copy
-                    indices = self.db.get_category("index", table=table)
-                    indices2 = [x["name"] for x in self.db.execute(
-                        "SELECT name FROM main2.sqlite_master "
-                        "WHERE type = 'index' AND sql != ''"
-                    ).fetchall()]
-                    for index in indices:
-                        name = base = index["name"]; counter = 2
-                        if t1_lower != t2_lower:
-                            name = base = re.sub(re.escape(table), re.sub(r"\W", "", table2),
-                                                 name, count=1, flags=re.I | re.U)
-                        while name in indices2:
-                            name, counter = "%s_%s" % (base, counter), counter + 1
-                        indices2.append(name)
-                        index_sql = grammar.transform(index["sql"], rename={
-                            "index": name, "table": table2, "schema": "main2",
-                        }, indent=False)
-                        logger.info("Creating index %s on table %s in %s, using %s.",
-                                    grammar.quote(name, force=True),
-                                    grammar.quote(table2, force=True),
-                                    filename2, index_sql)
-                        self.db.execute(index_sql)
-
                     self.db.execute(insert_sql % (grammar.quote(table2), grammar.quote(table)))
+
+                    # Copy table indices and triggers
+                    for category in "index", "trigger":
+
+                        items = self.db.get_category(category, table=table).values()
+                        items2 = [x["name"] for x in self.db.execute(
+                            "SELECT name FROM main2.sqlite_master "
+                            "WHERE type = ? AND sql != ''", [category]
+                        ).fetchall()]
+                        for item in items:
+                            name = base = item["name"]; counter = 2
+                            if t1_lower != t2_lower:
+                                name = base = re.sub(re.escape(table), re.sub(r"\W", "", table2),
+                                                     name, count=1, flags=re.I | re.U)
+                            while name in items2:
+                                name, counter = "%s_%s" % (base, counter), counter + 1
+                            items2.append(name)
+                            item_sql = grammar.transform(item["sql"], renames={
+                                category: name, "table": table2, "schema": "main2",
+                            }, indent=False)
+                            logger.info("Creating %s %s on table %s in %s, using %s.",
+                                        category, grammar.quote(name, force=True),
+                                        grammar.quote(table2, force=True),
+                                        filename2, item_sql)
+                            self.db.execute(item_sql)
+
                     guibase.status("Exported table %s to %s%s.",
                                    grammar.quote(table), filename2, extra, flash=True)
                     db2_tables_lower.add(t2_lower)
