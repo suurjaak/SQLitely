@@ -9,14 +9,17 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.09.2019
+@modified    10.09.2019
 ------------------------------------------------------------------------------
 """
 import argparse
+import functools
 import glob
 import logging
 import os
 import sys
+import threading
+import traceback
 
 import wx
 
@@ -39,29 +42,32 @@ ARGUMENTS = {
 }
 
 
-def log_error():
+def except_hook(etype, evalue, etrace):
+    """Handler for all unhandled exceptions."""
+    MAXLEN = 500
+    text = "".join(traceback.format_exception(etype, evalue, etrace)).strip()
+    msg = "An unexpected error has occurred%s:\n\n%s"
+    logger.error(msg, "", text)
+    msg %= (", see log for full details", text[:MAXLEN] + "..") \
+           if len(text) > MAXLEN else ("", text)
+    wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
+
+
+def install_thread_excepthook():
     """
-    Decorates a write(str) method with a handler that collects written text
-    and sends it to logging.
+    Workaround for sys.excepthook not catching threading exceptions.
+
+    @from   https://bugs.python.org/issue1230540
     """
-    cached, msglen = [], 500
-    def handle_error():
-        text = "".join(cached)[:100000].strip()
-        if text:
-            msg = "An unexpected error has occurred:\n\n%s" % text
-            logger.error(msg)
-            msg = "An unexpected error has occurred%s:\n\n%s" % (
-                  ", see log for details" if len(text) > msglen else "",
-                  text[:msglen] + (".." if len(text) > msglen else ""))
-            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
-        del cached[:]
-    def cache_text(string):
-        if "Gtk" in string and "eprecat" in string: return # Hide GTK warnings
-        if not cached:
-            # CallLater fails if not called from main thread
-            wx.CallAfter(wx.CallLater, 500, handle_error)
-        cached.append(string)
-    return cache_text
+    init_old = threading.Thread.__init__
+    def init(self, *args, **kwargs):
+        init_old(self, *args, **kwargs)
+        run_old = self.run
+        def run_with_except_hook(*a, **b):
+            try: run_old(*a, **b)
+            except Exception: sys.excepthook(*sys.exc_info())
+        self.run = run_with_except_hook
+    threading.Thread.__init__ = init
 
 
 def run_gui(filenames):
@@ -72,17 +78,20 @@ def run_gui(filenames):
     logger.addHandler(guibase.GUILogHandler())
     logger.setLevel(logging.DEBUG)
 
+    install_thread_excepthook()
+    sys.excepthook = except_hook
+
     # Create application main window
     app = wx.App(redirect=True) # stdout and stderr redirected to wx popup
     window = gui.MainWindow()
     app.SetTopWindow(window) # stdout/stderr popup closes with MainWindow
 
-    # Decorate write to catch printed errors
-    try: sys.stdout.write = log_error()
+    # Override stdout/stderr.write to swallow Gtk warnings
+    swallow = lambda w, s: w(s) if ("Gtk" in s and "eprecat" in s) else None
+    try:
+        sys.stdout.write = functools.partial(swallow, sys.stdout.write)
+        sys.stderr.write = functools.partial(swallow, sys.stderr.write)
     except Exception: raise
-    try: sys.stderr.write = log_error()
-    except Exception: raise
-
 
     # Some debugging support
     window.run_console("import datetime, os, re, time, sys, wx")
