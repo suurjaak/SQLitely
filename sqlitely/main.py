@@ -25,6 +25,8 @@ from . import conf
 from . import guibase
 from . import gui
 
+logger = logging.getLogger(__package__)
+
 
 ARGUMENTS = {
     "description": "%s - SQLite database tool." % conf.Title,
@@ -37,18 +39,50 @@ ARGUMENTS = {
 }
 
 
+def log_error():
+    """
+    Decorates a write(str) method with a handler that collects written text
+    and sends it to logging.
+    """
+    cached, msglen = [], 500
+    def handle_error():
+        text = "".join(cached)[:100000].strip()
+        if text:
+            msg = "An unexpected error has occurred:\n\n%s" % text
+            logger.error(msg)
+            msg = "An unexpected error has occurred%s:\n\n%s" % (
+                  ", see log for details" if len(text) > msglen else "",
+                  text[:msglen] + (".." if len(text) > msglen else ""))
+            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
+        del cached[:]
+    def cache_text(string):
+        if "Gtk" in string and "eprecat" in string: return # Hide GTK warnings
+        if not cached:
+            # CallLater fails if not called from main thread
+            wx.CallAfter(wx.CallLater, 500, handle_error)
+        cached.append(string)
+    return cache_text
+
+
 def run_gui(filenames):
     """Main GUI program entrance."""
+    global logger
 
     # Set up logging to GUI log window
-    logger = logging.getLogger(__package__)
     logger.addHandler(guibase.GUILogHandler())
     logger.setLevel(logging.DEBUG)
 
     # Create application main window
-    app = wx.App(redirect=0) # stdout and stderr redirected to wx popup
+    app = wx.App(redirect=True) # stdout and stderr redirected to wx popup
     window = gui.MainWindow()
     app.SetTopWindow(window) # stdout/stderr popup closes with MainWindow
+
+    # Decorate write to catch printed errors
+    try: sys.stdout.write = log_error()
+    except Exception: raise
+    try: sys.stderr.write = log_error()
+    except Exception: raise
+
 
     # Some debugging support
     window.run_console("import datetime, os, re, time, sys, wx")
