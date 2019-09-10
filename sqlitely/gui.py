@@ -2999,8 +2999,8 @@ class DatabasePage(wx.Panel):
                     if row:
                         grid = self.grid_table
                         if grid.Table.filters:
-                            grid.Table.ClearSort(refresh=False)
                             grid.Table.ClearFilter()
+                            grid.Table.ClearSort()
                         columns = tablemap[table_name]["columns"]
                         id_fields = [c["name"] for c in columns if "pk" in c]
                         if not id_fields: # No primary key fields: take all
@@ -3271,8 +3271,8 @@ class DatabasePage(wx.Panel):
         is_table = (event.EventObject == self.button_reset_grid_table)
         grid = self.grid_table if is_table else self.grid_sql
         if grid.Table and isinstance(grid.Table, SqliteGridBase):
-            grid.Table.ClearSort(refresh=False)
             grid.Table.ClearFilter()
+            grid.Table.ClearSort()
             grid.ContainingSizer.Layout() # React to grid size change
 
 
