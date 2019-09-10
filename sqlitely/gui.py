@@ -3772,7 +3772,7 @@ class DatabasePage(wx.Panel):
             else: tree.ExpandAll(tree.RootItem)
 
         menu = wx.Menu()
-        item_file = item_database = None
+        item_file = item_database = item_database_meta = None
         if isinstance(data, basestring): # Single table
             item_name     = wx.MenuItem(menu, -1, 'Table %s' % \
                             util.unprint(grammar.quote(data, force=True)))
@@ -3793,6 +3793,7 @@ class DatabasePage(wx.Panel):
 
             item_file     = wx.MenuItem(menu, -1, '&Export table to file')
             item_database = wx.MenuItem(menu, -1, 'Export table to another &database')
+            item_database_meta = wx.MenuItem(menu, -1, 'Export table str&ucture to another &database')
         elif isinstance(data, dict): # Column
             item_name     = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
                             util.unprint(grammar.quote(data["table"])),
@@ -3824,16 +3825,20 @@ class DatabasePage(wx.Panel):
 
             item_file     = wx.MenuItem(menu, -1, "&Export all tables to file")
             item_database = wx.MenuItem(menu, -1, "Export all tables to another &database")
+            item_database_meta = wx.MenuItem(menu, -1, "Export all table str&uctures to another &database")
 
-        if item_file and item_database:
+        if item_file:
             menu.AppendSeparator()
             menu.AppendItem(item_file)
             menu.AppendItem(item_database)
+            menu.AppendItem(item_database_meta)
             tables = [data] if isinstance(data, basestring) else data
             menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, tables),
                      id=item_file.GetId())
-            menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, tables),
+            menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, tables, True),
                      id=item_database.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, tables, False),
+                     id=item_database_meta.GetId())
 
         item0 = tree.GetSelection()
         if item != item0: select_item(item)
@@ -3905,10 +3910,11 @@ class DatabasePage(wx.Panel):
                 busy.Close()
 
 
-    def on_export_data_base(self, tables, event):
+    def on_export_data_base(self, tables, data=True, event=None):
         """
         Handler for exporting one or more tables to another database,
         opens file dialog and performs direct copy.
+        By default copies both structure and data.
         """
         exts = ";".join("*" + x for x in conf.DBExtensions)
         wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
@@ -4005,7 +4011,8 @@ class DatabasePage(wx.Panel):
                     logger.info("Creating table %s in %s, using %s.",
                                 grammar.quote(table2, force=True), filename2, create_sql)
                     self.db.execute(create_sql)
-                    self.db.execute(insert_sql % (grammar.quote(table2), grammar.quote(table)))
+                    if data: self.db.execute(insert_sql % (grammar.quote(table2),
+                                             grammar.quote(table)))
 
                     # Copy table indices and triggers
                     for category in "index", "trigger":
