@@ -30,6 +30,7 @@ from . lib.controls import ColourManager
 from . lib import util, wx_accel
 from . import conf
 
+logger = logging.getLogger(__name__)
 
 
 def status(text, *args, **kwargs):
@@ -50,7 +51,7 @@ def status(text, *args, **kwargs):
         msg = text % args if args else text
     msg = re.sub("[\n\r\t]+", " ", msg)
     log, flash = (kwargs.get(x) for x in ("log", "flash"))
-    if log: logging.info(msg)
+    if log: logger.info(msg)
     window.set_status(msg, timeout=flash)
 
 
@@ -78,7 +79,7 @@ class GUILogHandler(logging.Handler):
         window = wx.GetApp() and wx.GetApp().GetTopWindow()
         if window:
             msgs = self.deferred + [msg]
-            for m in msgs: window.log_message(m)
+            for m in msgs: wx.CallAfter(window.log_message, m)
             del self.deferred[:]
         else: self.deferred.append(msg)
 
