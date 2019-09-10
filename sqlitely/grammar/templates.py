@@ -19,7 +19,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    09.09.2019
+@modified    10.09.2019
 ------------------------------------------------------------------------------
 """
 
@@ -139,7 +139,7 @@ TABLE
   IF NOT EXISTS
     %endif
 {{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) }}{{ WS(" ") }}(
-{{ LF() }}
+{{ LF() or GLUE() }}
 
 %for i, c in enumerate(data["columns"]):
   {{ PRE() }}
@@ -209,6 +209,7 @@ TABLE
   {{ CM("constraints", i) }}
   {{ LF() }}
 %endfor
+{{ GLUE() }}
 )
 
 %if data.get("without"):
@@ -278,8 +279,8 @@ VIEW
 {{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) }}
 
 %if data.get("columns"):
-  {{ WS(" ") }}(
-  {{ LF() }}
+  {{ GLUE() }}{{ WS(" ") }}(
+  {{ LF() or GLUE() }}
     %for i, c in enumerate(data["columns"]):
   {{ PRE() }}{{ Q(c) }}
   {{ CM("columns", i) }}
