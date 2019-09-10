@@ -1808,7 +1808,7 @@ class DatabasePage(wx.Panel):
             wx.html.HtmlWindow(page, style=wx.html.HW_SCROLLBAR_NEVER)
         label_html.SetFonts(normal_face=self.Font.FaceName,
                             fixed_face=self.Font.FaceName, sizes=[8] * 7)
-        label_html.SetPage(step.Template(templates.SEARCH_HELP_SHORT).expand())
+        label_html.SetPage(step.Template(templates.SEARCH_HELP_SHORT_HTML).expand())
         label_html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNFACE)
         label_html.ForegroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
 
@@ -2408,7 +2408,7 @@ class DatabasePage(wx.Panel):
         """Handler for system colour change, refreshes content."""
         event.Skip()
         def dorefresh():
-            self.label_html.SetPage(step.Template(templates.SEARCH_HELP_SHORT).expand())
+            self.label_html.SetPage(step.Template(templates.SEARCH_HELP_SHORT_HTML).expand())
             self.label_html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNFACE)
             self.label_html.ForegroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
             default = step.Template(templates.SEARCH_WELCOME_HTML).expand()
@@ -3027,7 +3027,7 @@ class DatabasePage(wx.Panel):
                 if html.GetTabDataByID(0):
                     html.SetActiveTabByID(0)
                 else:
-                    h = step.Template(templates.SEARCH_HELP_LONG).expand()
+                    h = step.Template(templates.SEARCH_HELP_LONG_HTML).expand()
                     html.InsertTab(html.GetTabCount(), "Search help", 0, h, None)
             elif "#search" == page:
                 self.edit_searchall.SetFocus()

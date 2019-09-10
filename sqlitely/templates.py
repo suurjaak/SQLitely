@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.09.2019
+@modified    10.09.2019
 ------------------------------------------------------------------------------
 """
 import re
@@ -236,7 +236,7 @@ from sqlitely import conf
 
 
 """TXT SQL insert statements export template."""
-SQL_TXT = """<%
+DATA_SQL = """<%
 import datetime
 from sqlitely.lib import util
 from sqlitely import conf
@@ -264,7 +264,7 @@ for chunk in data_buffer:
 
 
 """TXT SQL insert statements export template for the rows part."""
-SQL_ROWS_TXT = """<%
+DATA_ROWS_SQL = """<%
 from sqlitely import grammar, templates
 
 str_cols = ", ".join(map(grammar.quote, columns))
@@ -570,7 +570,7 @@ from sqlitely import conf
 
 
 """Long help text shown in a separate tab on search page."""
-SEARCH_HELP_LONG = """<%
+SEARCH_HELP_LONG_HTML = """<%
 from sqlitely import conf
 try:
     import pyparsing
@@ -761,7 +761,7 @@ except ImportError:
 
 
 """Short help text shown on search page."""
-SEARCH_HELP_SHORT = """<%
+SEARCH_HELP_SHORT_HTML = """<%
 import os
 from sqlitely import conf
 helplink = "Search help"

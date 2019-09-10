@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.09.2019
+@modified    10.09.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -140,7 +140,7 @@ def export_data(make_iterable, filename, title, db, columns, sql_query="", table
                 tmpname = util.unique_path("%s.rows" % filename)
                 tmpfile = open(tmpname, "wb+")
                 template = step.Template(templates.DATA_ROWS_HTML if is_html else
-                           templates.SQL_ROWS_TXT if is_sql else templates.DATA_ROWS_TXT,
+                           templates.DATA_ROWS_SQL if is_sql else templates.DATA_ROWS_TXT,
                            strip=False, escape=is_html)
                 template.stream(tmpfile, namespace)
 
@@ -153,7 +153,7 @@ def export_data(make_iterable, filename, title, db, columns, sql_query="", table
                 tmpfile.flush(), tmpfile.seek(0)
                 namespace["data_buffer"] = iter(lambda: tmpfile.read(65536), "")
                 template = step.Template(templates.DATA_HTML if is_html else
-                           templates.SQL_TXT if is_sql else templates.DATA_TXT,
+                           templates.DATA_SQL if is_sql else templates.DATA_TXT,
                            strip=False, escape=is_html)
                 template.stream(f, namespace)
 
