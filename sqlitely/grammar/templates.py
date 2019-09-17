@@ -24,12 +24,15 @@ Released under the MIT License.
 """
 
 
+
 COLUMN_DEFINITION = """
 
 {{ GLUE() }}
-{{ Q(data["name"]) }}{{ PAD("name", data, quoted=True) }}
+    %if data.get("name"):
+  {{ Q(data["name"]) }}{{ PAD("name", data, quoted=True) }}
+    %endif
 
-    %if data.get("type") is not None:
+    %if data.get("type"):
   {{ data["type"] }}{{ PAD("type", data) }}
     %endif
 
@@ -70,7 +73,7 @@ COLUMN_DEFINITION = """
     %endif
 
     %if data.get("fk") is not None:
-  REFERENCES {{ Q(data["fk"]["table"]) }}
+  REFERENCES {{ Q(data["fk"]["table"]) if data["fk"].get("table") else "" }}
         %if data["fk"].get("key"):
   ({{ Q(data["fk"]["key"]) }})
         %endif
@@ -95,7 +98,7 @@ COLUMN_DEFINITION = """
 CREATE_INDEX = """
 CREATE
 
-%if data.get("unique") is not None:
+%if data.get("unique"):
   UNIQUE
 %endif
 INDEX
@@ -104,18 +107,18 @@ INDEX
   IF NOT EXISTS
 %endif
 
-{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) }}
+{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") else "" }}
 {{ LF() if data.get("exists") and data.get("schema") else "" }}
-ON {{ Q(data["table"]) }}{{ WS(" ") }}
+ON {{ Q(data["table"]) if "table" in data else "" }}{{ WS(" ") }}
 
 (
 {{ GLUE() }}
-%for i, col in enumerate(data["columns"]):
-  {{ Q(col["name"]) if col.get("name") else WS(col["expr"]) }}
-    %if col.get("collate") is not None:
+%for i, col in enumerate(data.get("columns", [])):
+  {{ Q(col["name"]) if "name" in col else WS(col["expr"]) if "expr" in col else "" }}
+    %if col.get("collate"):
   COLLATE {{ col["collate"] }}
     %endif
-    %if col.get("direction") is not None:
+    %if col.get("direction"):
   {{ col["direction"] }}
     %endif
   {{ CM("columns", i) }}
@@ -140,17 +143,17 @@ TABLE
     %if data.get("exists"):
   IF NOT EXISTS
     %endif
-{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) }}{{ WS(" ") }}(
+{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") else "" }}{{ WS(" ") if data.get("schema") or data.get("name") else "" }}(
 {{ LF() or GLUE() }}
 
-%for i, c in enumerate(data["columns"]):
+%for i, c in enumerate(data.get("columns") or []):
   {{ PRE() }}
   {{ step.Template(templates.COLUMN_DEFINITION, strip=True, collapse=True).expand(dict(locals(), data=c)) }}
   {{ CM("columns", i) }}
   {{ LF() }}
 %endfor
 
-%for i, c in enumerate(data.get("constraints", [])):
+%for i, c in enumerate(data.get("constraints") or []):
   {{ PRE() }}
   {{ step.Template(templates.TABLE_CONSTRAINT, strip=True, collapse=True).expand(dict(locals(), data=c)) }}
   {{ CM("constraints", i) }}
@@ -167,7 +170,9 @@ WITHOUT ROWID
 
 
 
-CREATE_TRIGGER = """
+CREATE_TRIGGER = """<%
+import re
+%>
 CREATE
 
 %if data.get("temporary"):
@@ -180,20 +185,23 @@ TRIGGER
   IF NOT EXISTS
 %endif
 
-{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) }}
+{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") else "" }}
 
 %if data.get("upon"):
   {{ data["upon"] }}
 %endif
 
-{{ data["action"] }}
+{{ data.get("action") or "" }}
 
 %if data.get("columns"):
-  OF {{ ", ".join(map(Q, data["columns"])) }}
+  OF 
+    %for i, c in enumerate(data["columns"]):
+  {{ Q(c) }}{{ CM("columns", i) }}
+    %endfor
 %endif
 
 ON
-{{ Q(data["table"]) }}
+{{ Q(data["table"]) if data.get("table") else "" }}
 
 %if data.get("for"):
   FOR EACH ROW
@@ -204,9 +212,12 @@ ON
   WHEN {{ WS(data["when"]) }}
 %endif
 
-{{ LF() }}BEGIN
-{{ WS(data["body"]) }}
-{{ LF() }}END
+{{ LF() }}BEGIN{{ LF() }}
+%if data.get("body"):
+  {{ WS(re.sub(r"([^;])(\s*)$", r"\\1;\\2", data["body"])) }}
+  {{ LF() }}
+%endif
+END
 """
 
 
@@ -224,7 +235,7 @@ VIEW
   IF NOT EXISTS
 %endif
 
-{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) }}
+{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") else "" }}
 
 %if data.get("columns"):
   {{ GLUE() }}{{ WS(" ") }}(
@@ -238,7 +249,7 @@ VIEW
 %endif
 
 
-AS {{ WS(data["select"]) }}
+AS {{ WS(data["select"]) if data.get("select") else "" }}
 """
 
 
@@ -261,6 +272,9 @@ USING {{ data["module"]["name"] }}
 
 
 
+"""
+@param   i  constraint index
+"""
 TABLE_CONSTRAINT = """
 
 {{ GLUE() }}
@@ -268,17 +282,17 @@ TABLE_CONSTRAINT = """
   CONSTRAINT {{ Q(data["name"]) }}
 %endif
 
-  {{ data["type"] }}
+  {{ data.get("type") or "" }}
 
-%if "CHECK" == data.get("type"):
+%if "CHECK" == data.get("type") and data.get("check"):
   ({{ WS(data["check"]) }})
 %endif
 
 %if data.get("type") in ("PRIMARY KEY", "UNIQUE"):
   (
   {{ GLUE() }}
-    %for j, col in enumerate(data["key"]):
-  {{ Q(col["name"]) if col.get("name") else WS(col["expr"]) }}
+    %for j, col in enumerate(data.get("key") or []):
+  {{ Q(col["name"]) if col.get("name") else WS(col["expr"]) if col.get("expr") else "" }}
         %if col.get("collate") is not None:
   COLLATE {{ col["collate"] }}
         %endif
@@ -296,10 +310,18 @@ TABLE_CONSTRAINT = """
 
 
 %if "FOREIGN KEY" == data.get("type"):
-  ({{ ", ".join(map(Q, data["columns"])) }})
-  REFERENCES  {{ Q(data["table"]) }}
+    %for j, c in enumerate(data.get("columns") or []):
+    {{ Q(c) }}{{ CM("constraints", i, "columns", j) }}
+    %endfor
+
+  REFERENCES  {{ Q(data["table"]) if data.get("table") else "" }}
     %if data.get("key"):
-  ({{ ", ".join(map(Q, data["key"])) }})
+  {{ GLUE() }}{{ WS(" ") }}
+  (
+        %for j, c in enumerate(data["key"]):
+  {{ Q(c) if c else "" }}{{ CM("constraints", i, "key", j) }}
+        %endfor
+  )
     %endif
     %if data.get("defer") is not None:
     {{ "NOT" if data["defer"].get("not") else "" }}
