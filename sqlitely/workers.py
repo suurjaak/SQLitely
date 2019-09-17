@@ -145,7 +145,7 @@ class SearchThread(WorkerThread):
                     count = 0
                     template_meta = FACTORY("meta")
 
-                    for category in "table", "view", "index", "trigger":
+                    for category in database.Database.CATEGORIES:
                         for item in search["db"].get_category(category).values():
                             matches = self.match_all(item["sql"], match_words)
                             if not matches: continue # for item
