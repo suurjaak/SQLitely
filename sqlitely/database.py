@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.09.2019
+@modified    11.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -38,6 +38,9 @@ class Database(object):
         "REAL":    ["DOUBLE", "DOUBLE PRECISION", "FLOAT", "REAL"],
         "NUMERIC": ["DECIMAL", "BOOLEAN", "DATE", "DATETIME", "NUMERIC"],
     }
+
+    """Schema object categories."""
+    CATEGORIES = ["table", "index", "trigger", "view"]
 
 
     """
@@ -548,6 +551,11 @@ class Database(object):
         return not meta.get("without") if meta else None
 
 
+    def has_view_columns(self):
+        """Returns whether SQLite supports view columns (from version 3.9.0)."""
+        return sqlite3.sqlite_version_info >= (3, 9)
+
+
     def close(self):
         """Closes the database and frees all allocated data."""
         if hasattr(self, "connection"):
@@ -621,7 +629,7 @@ class Database(object):
                           populates full column metadata and table row counts
         """
         if not self.is_open(): return
-            
+
         self.schema.clear()
         for row in self.execute(
             "SELECT * FROM sqlite_master "
@@ -677,7 +685,7 @@ class Database(object):
         """
         category, name, table = (x.lower() if x else x for x in (category, name, table))
 
-        if name:
+        if name is not None:
             result = self.schema.get(category, {}).get(name)
             if table and "table" in result and result["table"].lower() != table:
                 result = None
@@ -700,7 +708,8 @@ class Database(object):
         or SQL line for specific table column only.
 
         @param   category   "table" | "index" | "trigger" | "view" if not everything
-        @param   name       category item name if not everything in category
+        @param   name       category item name if not everything in category,
+                            or a list of names
         @param   column     named table column to return SQL for
         @param   indent     whether to format SQL with linefeeds and indentation
         @param   transform  {"flags":   flags to toggle, like {"exists": True},
@@ -713,19 +722,21 @@ class Database(object):
         @param   refresh    if True, schema is re-queried
         """
         result = ""
-        category, name, column = (x.lower() if x else x for x in (category, name, column))
+        category, column = (x.lower() if x else x for x in (category, column))
+        names = [name.lower()] if isinstance(name, basestring) \
+                else [x.lower() for x in name] if isinstance(name, (list, tuple)) else []
 
         if refresh and self.is_open(): self.populate_schema()
-        for mycategory in "table", "view", "index", "trigger":
+        for mycategory in self.CATEGORIES:
             if category and category != mycategory \
             or not self.schema.get(mycategory): continue # for mycategory
 
             chunk = ""
             for myname, opts in self.schema[mycategory].items():
-                if name and name != myname:
+                if names and myname not in names:
                     continue # for myname, opts
 
-                if name and column and "table" == mycategory:
+                if names and column and "table" == mycategory:
                     col = next((c for c in opts["columns"]
                                 if c["name"].lower() == column.lower()), None)
                     if not col: continue # for myname, opts
@@ -737,7 +748,7 @@ class Database(object):
                        if transform and x in transform}
                 if not opts.get("full") or kws or indent != "  ":
                     sql = grammar.transform(sql, indent=indent, **kws)
-                chunk += sql + (";\n\n" if not name else "")
+                chunk += sql + (";\n\n" if not names or len(names) < 2 else "")
             result += ("\n\n" if result else "") + chunk
 
         return result
@@ -962,7 +973,7 @@ class Database(object):
         for name, opts in self.PRAGMA.items():
             if opts.get("read") == False: continue # for name, opts
 
-            rows = self.execute("PRAGMA %s" % name).fetchall()
+            rows = self.execute("PRAGMA %s" % name, log=False).fetchall()
             if not rows:
                 if callable(opts["type"]): result[name] = opts["type"]()
                 continue # for name, opts
