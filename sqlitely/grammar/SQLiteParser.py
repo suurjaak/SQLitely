@@ -1381,9 +1381,6 @@ class SQLiteParser ( Parser ):
             self.enterOuterAlt(localctx, 1)
             self.state = 173
             localctx._UNEXPECTED_CHAR = self.match(SQLiteParser.UNEXPECTED_CHAR)
-             
-            raise ValueError("UNEXPECTED_CHAR=" + (None if localctx._UNEXPECTED_CHAR is None else localctx._UNEXPECTED_CHAR.text)); 
-               
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
