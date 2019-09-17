@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    10.09.2019
+@modified    16.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -18,6 +18,7 @@ import uuid
 
 from antlr4 import InputStream, CommonTokenStream, TerminalNode
 
+from .. lib import util
 from .. lib.vendor import step
 from . import templates
 from . SQLiteLexer import SQLiteLexer
@@ -166,6 +167,25 @@ class CTX(object):
     VIEW_NAME            = SQLiteParser.View_nameContext
 
 
+class ErrorListener(object):
+    """Collects errors during parsing."""
+    def __init__(self): self._errors = []
+
+    def reportAmbiguity(self, *_, **__): pass
+
+    def reportAttemptingFullContext(self, *_, **__): pass
+
+    def reportContextSensitivity(self, *_, **__): pass
+
+    def syntaxError(self, recognizer, offendingToken, line, column, msg, e):
+        err = "%sine %s:%s %s" % (
+            "L" if not e else "%s: l" % util.format_exc(e), line, column, msg
+        )
+        self._errors.append(err)
+
+    def getErrors(self): return "\n\n".join(self._errors)
+        
+
 
 class Parser(object):
     """
@@ -192,7 +212,7 @@ class Parser(object):
 
 
     def __init__(self):
-        self._stream  = CommonTokenStream(SQLiteLexer())
+        self._stream  = None
 
 
     def parse(self, sql, category=None, renames=None):
@@ -209,14 +229,19 @@ class Parser(object):
         @return            {..}, or None on error
 
         """
-        self._stream.tokenSource.inputStream = InputStream(sql)
-        tree = SQLiteParser(self._stream).parse()
+        self._stream  = CommonTokenStream(SQLiteLexer(InputStream(sql)))
+        parser, listener = SQLiteParser(self._stream), ErrorListener()
+        parser.addErrorListener(listener)
+        tree = parser.parse()
+        if parser.getNumberOfSyntaxErrors():
+            logger.error('Errors parsing SQL "%s":\n\n%s', sql, listener.getErrors())
+            return None
 
         # parse ctx -> statement list ctx -> statement ctx -> specific type ctx
         ctx = tree.children[0].children[0].children[0]
         result, name = None, self.CTXS.get(type(ctx))
         if category and name != category or name not in self.BUILDERS:
-            return
+            return None
 
         if renames: self.recurse_rename([ctx], renames, name)
         result = self.BUILDERS[name](self, ctx)
@@ -229,7 +254,6 @@ class Parser(object):
             elif renames["schema"]: result["schema"] = renames["schema"]
             else: result.pop("schema", None)
 
-        self._stream.tokenSource.inputStream = None
         return result
 
 
@@ -275,6 +299,7 @@ class Parser(object):
             table:    table the index is on
             ?schema:  index schema name
             ?exists:  True if IF NOT EXISTS
+            ?unique:  True if UNIQUE
             columns:  [{?name, ?expr, ?collate, ?direction}, ]
             where:    index WHERE SQL expression
         }.
@@ -508,15 +533,27 @@ class Parser(object):
         Assembles and returns table constraint data for CREATE TABLE, as {
             type:       PRIMARY KEY | FOREIGN KEY | UNIQUE | CHECK
             ?name:      constraint name
-                        
-            ?key:       [{?name, ?expr, ?collate, ?direction}, ] for PRIMARY KEY
-            ?conflict:  ROLLBACK | ABORT | FAIL | IGNORE | REPLACE for PRIMARY KEY
 
-            ?check      (SQL expression) for CHECK
+          # for PRIMARY KEY | UNIQUE:
+            ?key:       [{?name, ?expr, ?collate, ?direction}, ]
+            ?conflict:  ROLLBACK | ABORT | FAIL | IGNORE | REPLACE
 
-            ?columns:   [column_name, ] for FOREIGN KEY
-            ?table:     table name for FOREIGN KEY
-            ?key:       [foreign_column_name, ] for FOREIGN KEY
+          # for CHECK:
+            ?check      (SQL expression)
+
+          # for FOREIGN KEY:
+            ?columns:   [column_name, ]
+            ?table:     foreign table name
+            ?key:       [foreign_column_name, ]
+            ?defer:          { if DEFERRABLE
+                ?not         True if NOT
+                ?initial:    DEFERRED | IMMEDIATE
+            }
+            ?action:         {
+                ?UPDATE:     SET NULL | SET DEFAULT | CASCADE | RESTRICT | NO ACTION
+                ?DELETE:     SET NULL | SET DEFAULT | CASCADE | RESTRICT | NO ACTION
+            }
+            ?match:          [MATCH-clause name, ]
         }.
         """
         result = {}
