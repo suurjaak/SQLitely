@@ -8,9 +8,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.09.2019
+@modified    13.09.2019
 ------------------------------------------------------------------------------
 """
+import collections
 import ctypes
 import io
 import locale
@@ -119,9 +120,9 @@ def plural(word, items=None, with_items=True):
              with_items  if False, count is omitted from final result
     """
     count = items or 0
-    if hasattr(items, "__len__"):
-        count = len(items)
-    result = word + ("" if 1 == count else "s")
+    suffix = "es" if "x" == word[-1].lower() else "s"
+    if hasattr(items, "__len__"): count = len(items)
+    result = word + ("" if 1 == count else suffix)
     if with_items and items is not None:
         result = "%s %s" % (count, result)
     return result
@@ -275,6 +276,52 @@ def add_unique(lst, item, direction=1, maxlen=sys.maxint):
     if len(lst) > maxlen:
         lst[:] = lst[:maxlen] if direction < 0 else lst[-maxlen:]
     return lst
+
+
+def get(collection, *path, **kwargs):
+    """
+    Returns the value at specified collection path. If path not available,
+    returns the first keyword argument if any given, or None.
+    Collection can be a nested structure of dicts, lists, tuples or strings.
+    E.g. util.get({"root": {"first": [{"k": "v"}]}}, "root", "first", 0, "k").
+    """
+    default = (list(kwargs.values()) + [None])[0]
+    result = collection if path else default
+    if len(path) == 1 and isinstance(path[0], list): path = path[0]
+    for p in path:
+        if isinstance(result, collections.Sequence):  # Iterable with index
+            if isinstance(p, (int, long)) and p < len(result):
+                result = result[p]
+            else:
+                result = default
+        elif isinstance(result, collections.Mapping): # Container with lookup
+            result = result.get(p, default)
+        else:
+            result = default
+        if result == default: break  # for p
+    return result
+
+
+def set(collection, value, *path):
+    """
+    Sets the value at specified collection path. If a path step does not exist,
+    it is created as dict. Collection can be a nested structure of dicts and lists.
+    Returns collection.
+    """
+    if len(path) == 1 and isinstance(path[0], list): path = path[0]
+    ptr = collection
+    for p in path[:-1]:
+        if isinstance(ptr, collections.Sequence):  # Iterable with index
+            if isinstance(p, (int, long)) and p < len(ptr):
+                ptr = ptr[p]
+            else:
+                ptr.append({})
+                ptr = ptr[-1]
+        elif isinstance(ptr, collections.Mapping): # Container with lookup
+            if p not in ptr: ptr[p] = {}
+            ptr = ptr[p]
+    ptr[path[-1]] = value
+    return collection
 
 
 def get_locale_day_date(dt):

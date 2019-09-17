@@ -8,12 +8,13 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.09.2019
+@modified    16.09.2019
 ------------------------------------------------------------------------------
 """
 import ast
 import base64
-import collections
+from collections import defaultdict, OrderedDict
+import copy
 import datetime
 import functools
 import hashlib
@@ -260,7 +261,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         list_db.AssignImages([images.ButtonHome.Bitmap, images.ButtonListDatabase.Bitmap])
         ColourManager.Manage(list_db, "ForegroundColour", "DBListForegroundColour")
         ColourManager.Manage(list_db, "BackgroundColour", "DBListBackgroundColour")
-        topdata = collections.defaultdict(lambda: None, name="Home")
+        topdata = defaultdict(lambda: None, name="Home")
         list_db.SetTopRow(topdata, [0])
         list_db.Select(0)
 
@@ -715,7 +716,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 selected = self.list_db.GetNextSelected(selected)
 
             for filename in conf.DBFiles:
-                data = collections.defaultdict(lambda: None, name=filename)
+                data = defaultdict(lambda: None, name=filename)
                 if os.path.exists(filename):
                     if filename in self.dbs:
                         self.dbs[filename].update_fileinfo()
@@ -935,7 +936,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         items, selected_files = [], []
         for filename in conf.DBFiles:
             filename = util.to_unicode(filename)
-            data = collections.defaultdict(lambda: None, name=filename)
+            data = defaultdict(lambda: None, name=filename)
             if os.path.exists(filename):
                 data["size"] = os.path.getsize(filename)
                 data["last_modified"] = datetime.datetime.fromtimestamp(
@@ -986,7 +987,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if filename not in conf.DBFiles:
                 conf.DBFiles.append(filename)
                 conf.save()
-            data = collections.defaultdict(lambda: None, name=filename)
+            data = defaultdict(lambda: None, name=filename)
             if os.path.exists(filename):
                 if filename in self.dbs:
                     self.dbs[filename].update_fileinfo()
@@ -1488,9 +1489,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 info += (", and " if info else "")
                 info += util.plural("table", unsaved["table"], with_items=False)
                 info += " " + ", ".join(map(grammar.quote, sorted(unsaved["table"])))
+            if unsaved.get("schema"):
+                info += (", and " if info else "") + "schema changes"
 
             response = wx.MessageBox(
-                "There is unsaved data in %s:\n%s.\n\n"
+                "There are unsaved changes in %s:\n%s.\n\n"
                 "Save changes before closing?" % (
                     page.db, info
                 ), conf.Title,
@@ -1743,25 +1746,19 @@ class DatabasePage(wx.Panel):
         notebook = self.notebook = wx.lib.agw.labelbook.FlatImageBook(
             parent=self, agwStyle=bookstyle, style=wx.BORDER_STATIC)
 
-        il = wx.ImageList(32, 32)
-        idx1 = il.Add(images.PageSearch.Bitmap)
-        idx2 = il.Add(images.PageTables.Bitmap)
-        idx3 = il.Add(images.PageSQL.Bitmap)
-        idx4 = il.Add(images.PagePragma.Bitmap)
-        idx5 = il.Add(images.PageInfo.Bitmap)
-        notebook.AssignImageList(il)
-
         self.create_page_search(notebook)
         self.create_page_tables(notebook)
+        self.create_page_schema(notebook)
         self.create_page_sql(notebook)
         self.create_page_pragma(notebook)
         self.create_page_info(notebook)
 
-        notebook.SetPageImage(0, idx1)
-        notebook.SetPageImage(1, idx2)
-        notebook.SetPageImage(2, idx3)
-        notebook.SetPageImage(3, idx4)
-        notebook.SetPageImage(4, idx5)
+        IMAGES = [images.PageSearch, images.PageTables, images.PageSchema,
+                  images.PageSQL, images.PagePragma, images.PageInfo]
+        il = wx.ImageList(32, 32)
+        idxs = [il.Add(x.Bitmap) for x in IMAGES]
+        notebook.AssignImageList(il)
+        for i, idx in enumerate(idxs): notebook.SetPageImage(i, idx)
 
         sizer.Add(notebook, proportion=1, border=5, flag=wx.GROW | wx.ALL)
 
@@ -1985,6 +1982,95 @@ class DatabasePage(wx.Panel):
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
         splitter.SplitVertically(panel1, panel2, 270)
         label_help.Hide()
+
+
+    def create_page_schema(self, notebook):
+        """Creates a page for browsing and modifying schema."""
+        page = self.page_schema = wx.Panel(parent=notebook)
+        self.pageorder[page] = len(self.pageorder)
+        notebook.AddPage(page, "Schema")
+
+        self.schema_pages = defaultdict(dict) # {category: {name: SchemaObjectPage}}
+
+        sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
+        splitter = self.splitter_schema = wx.SplitterWindow(
+            parent=page, style=wx.BORDER_NONE
+        )
+        splitter.SetMinimumPaneSize(100)
+
+        panel1 = wx.Panel(parent=splitter)
+        button_refresh = wx.Button(panel1, label="Refresh")
+        button_new = wx.Button(panel1, label="Create new ..")
+        tree = self.tree_schema = wx.gizmos.TreeListCtrl(
+            parent=panel1,
+            style=wx.TR_DEFAULT_STYLE
+            #| wx.TR_HAS_BUTTONS
+            #| wx.TR_TWIST_BUTTONS
+            #| wx.TR_ROW_LINES
+            #| wx.TR_COLUMN_LINES
+            #| wx.TR_NO_LINES
+            | wx.TR_FULL_ROW_HIGHLIGHT
+        )
+        ColourManager.Manage(tree, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
+        ColourManager.Manage(tree, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
+
+        isz = (16,16)
+        il = wx.ImageList(16, 16)
+        self.tree_schema_images = {
+            "table":    il.Add(wx.ArtProvider.GetBitmap(wx.ART_FOLDER,          wx.ART_TOOLBAR, il.GetSize(0))),
+            "index":    il.Add(wx.ArtProvider.GetBitmap(wx.ART_NORMAL_FILE,     wx.ART_TOOLBAR, il.GetSize(0))),
+            "trigger":  il.Add(wx.ArtProvider.GetBitmap(wx.ART_EXECUTABLE_FILE, wx.ART_TOOLBAR, il.GetSize(0))),
+            "view":     il.Add(wx.ArtProvider.GetBitmap(wx.ART_HELP_PAGE,       wx.ART_TOOLBAR, il.GetSize(0))),
+            "columns":  il.Add(wx.ArtProvider.GetBitmap(wx.ART_FOLDER,          wx.ART_TOOLBAR, il.GetSize(0))),
+        }
+        tree.AssignImageList(il)
+
+        tree.AddColumn("Object")
+        tree.AddColumn("Info")
+        tree.AddRoot("Loading schema..")
+        tree.SetMainColumn(0)
+        tree.SetColumnAlignment(1, wx.ALIGN_RIGHT)
+
+        sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_topleft = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_topleft.Add(wx.StaticText(parent=panel1, label="Schema:"),
+                          flag=wx.ALIGN_CENTER_VERTICAL)
+        sizer_topleft.AddStretchSpacer()
+        sizer_topleft.Add(button_refresh)
+        sizer_topleft.Add(button_new, border=5, flag=wx.LEFT)
+
+        sizer1.Add(sizer_topleft, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
+        sizer1.Add(tree, proportion=1,
+                   border=5, flag=wx.GROW | wx.LEFT | wx.TOP | wx.BOTTOM)
+
+        panel2 = wx.Panel(parent=splitter)
+        sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_topright = wx.BoxSizer(wx.HORIZONTAL)
+
+        notebook = self.notebook_schema = wx.lib.agw.flatnotebook.FlatNotebook(
+            parent=panel2, size=(-1, 27),
+            agwStyle=wx.lib.agw.flatnotebook.FNB_X_ON_TAB |
+                     wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
+                     wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
+                     wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
+                     wx.lib.agw.flatnotebook.FNB_VC8)
+        ColourManager.Manage(notebook, "ActiveTabColour", wx.SYS_COLOUR_WINDOW)
+        ColourManager.Manage(notebook, "TabAreaColour", wx.SYS_COLOUR_BTNFACE)
+        try: notebook._pages.GetSingleLineBorderColour = notebook.GetActiveTabColour
+        except Exception: pass # Hack to get uniform background colour
+
+        sizer2.Add(notebook, proportion=1, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
+
+        sizer.Add(splitter, proportion=1, flag=wx.GROW)
+        splitter.SplitVertically(panel1, panel2, 400)
+
+        self.Bind(wx.EVT_BUTTON, self.on_refresh_schema, button_refresh)
+        self.Bind(wx.EVT_BUTTON, self.on_schema_create, button_new)
+        self.Bind(wx.EVT_TREE_ITEM_ACTIVATED, self.on_change_tree_schema, tree)
+        self.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_schema, tree)
+        self.Bind(EVT_SCHEMA_PAGE, self.on_schema_page_event)
+        notebook.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
+                      self.on_close_schema_object)
 
 
     def create_page_sql(self, notebook):
@@ -2416,7 +2502,7 @@ class DatabasePage(wx.Panel):
         wx.CallAfter(dorefresh) # Postpone to allow conf update
 
 
-    def on_update_stc_schema(self, event):
+    def on_update_stc_schema(self, event=None):
         """Handler for clicking to refresh database schema SQL."""
         scrollpos = self.stc_schema.GetScrollPos(wx.VERTICAL)
         self.stc_schema.SetReadOnly(False)
@@ -3541,13 +3627,32 @@ class DatabasePage(wx.Panel):
     def get_unsaved(self):
         """
         Returns whether page has unsaved changes,
-        as {?"pragma": [pragma_name, ], ?"table": [table, ]}.
+        as {?"pragma": [pragma_name, ], ?"table": [table, ], ?"schema": [{item}]}.
         """
         result = {}
         if self.pragma_changes: result["pragma"] = list(self.pragma_changes)
         grids = self.get_unsaved_grids()
         if grids: result["table"] = [x.table for x in grids]
+        schemas = self.get_unsaved_schemas()
+        if schemas: result["schema"] = schemas
         return result
+
+
+    def get_unsaved_grids(self):
+        """
+        Returns a list of SqliteGridBase grids where changes have not been
+        saved after changing.
+        """
+        return [g for g in self.db_grids.values() if g.IsChanged()]
+
+
+    def get_unsaved_schemas(self):
+        """
+        Returns a list of schema objects where changes have not been
+        saved after changing.
+        """
+        return [y for x in self.schema_pages.values()
+                for y in x.values() if y.IsChanged()]
 
 
     def save_unsaved(self):
@@ -3558,14 +3663,6 @@ class DatabasePage(wx.Panel):
         if self.pragma_changes: result = self.on_pragma_save(None)
         result = result and self.save_unsaved_grids()
         return result
-
-
-    def get_unsaved_grids(self):
-        """
-        Returns a list of SqliteGridBase grids where changes have not been
-        saved after changing.
-        """
-        return [g for g in self.db_grids.values() if g.IsChanged()]
 
 
     def save_unsaved_grids(self):
@@ -3844,6 +3941,319 @@ class DatabasePage(wx.Panel):
         if item != item0: select_item(item)
         tree.PopupMenu(menu)
         if item0 and item != item0: select_item(item0)
+
+
+    def on_rclick_tree_schema(self, event):
+        """
+        Handler for right-clicking an item in the schema tree,
+        opens popup menu for choices.
+        """
+        item, tree = event.GetItem(), self.tree_schema
+        if not item or not item.IsOk(): return
+        data = tree.GetItemPyData(item)
+        if not data: return
+
+        def select_item(it, expand, *_, **__):
+            tree.SelectItem(it)
+            if expand: tree.Expand(it)
+        def clipboard_copy(text, *_, **__):
+            if wx.TheClipboard.Open():
+                d = wx.TextDataObject(text() if callable(text) else text)
+                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+        def toggle_items(node, *_, **__):
+            items, it = [node], tree.GetNext(node)
+            while it and it.IsOk():
+                items.append(it)
+                it = tree.GetNextSibling(it)
+            if any(map(tree.IsExpanded, items)):
+                for it in items: tree.Collapse(it)
+            else: tree.ExpandAll(node)
+        def create_object(category, *_, **__):
+            newdata = {"type": category,
+                       "meta": {"__type__": "CREATE %s" % category.upper()}}
+            if category in ("index", "trigger"):
+                if data.get("parent") and "table" == data["parent"]["type"]:
+                    newdata["meta"]["table"] = data["parent"]["name"]
+                elif "table" == data["type"]:
+                    newdata["meta"]["table"] = data["name"]
+            self.add_schema_object(newdata)
+            tree.Expand(item)
+        def delete_items(items, *_, **__):
+            extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
+                    if "table" == items[0]["type"] else ""
+            itemtext = util.plural(items[0]["type"], items)
+            if len(items) == 1:
+                itemtext = " ".join((items[0]["type"], grammar.quote(items[0]["name"], force=True)))
+                
+            if wx.OK != wx.MessageBox(
+                "Are you sure you want to delete the %s?%s" % (itemtext, extra),
+                conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+            ): return
+
+            if "table" == items[0]["type"] and any(x.get("count") for x in items) \
+            and wx.OK != wx.MessageBox(
+                "Are you REALLY sure you want to delete the %s?\n\n"
+                "%s currently %s %s." %
+                (itemtext, "They" if len(items) > 1 else "It",
+                 "contain" if len(items) > 1 else "contains",
+                 util.plural("row", sum(x.get("count") or 0 for x in items))),
+                conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+            ): return
+            deleteds = []
+            try:
+                for x in items:
+                    self.db.execute("DROP %s %s" % (x["type"].upper(), grammar.quote(x["name"])))
+                    deleteds += [x]
+            finally:
+                if not deleteds: return
+                for x in deleteds:
+                    page = self.schema_pages[x["type"]].get(x["name"])
+                    if page: page.Close(force=True)
+                self.load_schema_tree(refresh=True)
+                self.load_tables_data()
+                self.on_update_stc_schema()
+
+        menu = wx.Menu()
+        boldfont = self.Font
+        boldfont.SetWeight(wx.FONTWEIGHT_BOLD)
+        boldfont.SetFaceName(self.Font.FaceName)
+        boldfont.SetPointSize(self.Font.PointSize)
+
+        if "schema" == data["type"]:
+            submenu, keys = wx.Menu(), []
+            item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % data["type"])
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, self.db.get_sql),
+                      id=item_copy_sql.GetId())
+            menu.AppendItem(item_copy_sql)
+            menu.AppendMenu(id=-1, text="Create &new ..", submenu=submenu)
+
+            for category in database.Database.CATEGORIES:
+                key = next((x for x in category if x not in keys), category[0])
+                keys.append(key)
+                it = wx.MenuItem(submenu, -1, 'New ' + category.replace(key, "&" + key, 1))
+                submenu.AppendItem(it)
+                menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), id=it.GetId())
+        elif "category" == data["type"]:
+            sqlkws = {"category": data["category"]}
+            if data.get("parent"): sqlkws["name"] = [x["name"] for x in data["items"]]
+            names = [x["name"] for x in data["items"]]
+
+            if names:
+                item_delete = wx.MenuItem(menu, -1, 'Delete all %s' % util.plural(data["category"]))
+                item_copy     = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
+                item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % util.plural(data["category"]))
+
+                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, delete_items, data["items"]),
+                          id=item_delete.GetId())
+                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, lambda: "\n".join(map(grammar.quote, names))),
+                          id=item_copy.GetId())
+                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
+                          functools.partial(self.db.get_sql, **sqlkws)), id=item_copy_sql.GetId())
+
+            item_create = wx.MenuItem(menu, -1, "Create &new %s" % data["category"])
+
+            if names:
+                menu.AppendItem(item_copy)
+                menu.AppendItem(item_copy_sql)
+                menu.AppendSeparator()
+                menu.AppendItem(item_delete)
+            menu.AppendItem(item_create)
+            menu.Bind(wx.EVT_MENU, functools.partial(create_object, data["category"]), id=item_create.GetId())
+        elif "column" == data["type"]:
+            has_name, has_sql, table = True, True, {}
+            if "view" == data["parent"]["type"]:
+                has_sql = False
+            elif "index" == data["parent"]["type"]:
+                has_name = "name" in data
+                table = self.db.get_category("table", data["parent"]["meta"]["table"])
+                sqltext = " ".join(filter(bool, (
+                    grammar.quote(data["name"]) if has_name else data.get("expr"),
+                    "COLLATE %s" % data["collate"] if data.get("collate") else "",
+                    data.get("direction"),
+                )))
+            else:
+                table = self.db.get_category("table", data["parent"]["name"])
+                sqlkws = {"category": "table", "name": table["name"], "column": data["name"]}
+                sqltext = functools.partial(self.db.get_sql, **sqlkws)
+
+            if has_name:
+                item_name = wx.MenuItem(menu, -1, 'Column "%s"' % ".".join(
+                    util.unprint(grammar.quote(x)) for x in (table.get("name"), data["name"]) if x
+                ))
+                item_name.Font = boldfont
+                item_copy = wx.MenuItem(menu, -1, "&Copy name")
+
+            if has_sql:
+                names = [data["type"]]
+                if "index" == data["parent"]["type"]: names.insert(0, data["parent"]["type"])
+                item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % " ".join(names))
+
+            if has_name:
+                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, True),
+                          id=item_name.GetId())
+                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
+                          id=item_copy.GetId())
+            if has_sql:
+                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
+                          sqltext), id=item_copy_sql.GetId())
+
+            if has_name:
+                menu.AppendItem(item_name)
+                menu.AppendSeparator()
+                menu.AppendItem(item_copy)
+            if has_sql:
+                menu.AppendItem(item_copy_sql)
+        elif "columns" == data["type"]:
+            names = [x["name"] for x in data["parent"]["columns"]]
+            item_copy     = wx.MenuItem(menu, -1, "&Copy column names")
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, lambda: "\n".join(map(grammar.quote, names))),
+                      id=item_copy.GetId())
+            menu.AppendItem(item_copy)
+        else:
+            sqlkws = {"category": data["type"], "name": data["name"]}
+
+            item_name   = wx.MenuItem(menu, -1, '%s %s' % (
+                          data["type"].capitalize(),
+                          util.unprint(grammar.quote(data["name"], force=True))))
+            item_delete = wx.MenuItem(menu, -1, 'Delete %s' % data["type"])
+            item_copy     = wx.MenuItem(menu, -1, "&Copy name")
+            item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % data["type"])
+            item_name.Font = boldfont
+
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, True),
+                      id=item_name.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, delete_items, [data]),
+                      id=item_delete.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
+                      id=item_copy.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
+                      functools.partial(self.db.get_sql, **sqlkws)), id=item_copy_sql.GetId())
+
+            menu.AppendItem(item_name)
+            menu.AppendSeparator()
+            menu.AppendItem(item_copy)
+            menu.AppendItem(item_copy_sql)
+            menu.AppendSeparator()
+
+            if "table" == data["type"]:
+                submenu, keys = wx.Menu(), []
+                menu.AppendMenu(id=-1, text="Create &new ..", submenu=submenu)
+                for category in database.Database.CATEGORIES:
+                    key = next((x for x in category if x not in keys), category[0])
+                    keys.append(key)
+                    if category == data["type"]: continue # for category
+                    it = wx.MenuItem(submenu, -1, 'New ' + category.replace(key, "&" + key, 1))
+                    submenu.AppendItem(it)
+                    menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), id=it.GetId())
+
+            menu.AppendItem(item_delete)
+
+        if tree.HasChildren(item):
+            item_expand   = wx.MenuItem(menu, -1, "&Toggle expanded/collapsed")
+            menu.Bind(wx.EVT_MENU, functools.partial(toggle_items, item), id=item_expand.GetId())
+            if menu.MenuItemCount: menu.AppendSeparator()
+            menu.AppendItem(item_expand)
+
+        item0 = tree.GetSelection()
+        if item != item0: select_item(item, False)
+        tree.PopupMenu(menu)
+        if item0 and item != item0: select_item(item0, False)
+
+
+    def on_refresh_schema(self, event):
+        """Refreshes database schema tree and panel."""
+        self.load_schema_tree(refresh=True)
+
+
+    def on_schema_create(self, event):
+        """Opens popup menu for CREATE options."""
+        
+        def create_object(category, *_, **__):
+            newdata = {"type": category,
+                       "meta": {"__type__": "CREATE %s" % category.upper()}}
+            self.add_schema_object(newdata)
+
+        menu, keys = wx.Menu(), []
+        for category in database.Database.CATEGORIES:
+            key = next((x for x in category if x not in keys), category[0])
+            keys.append(key)
+            it = wx.MenuItem(menu, -1, 'New ' + category.replace(key, "&" + key, 1))
+            menu.AppendItem(it)
+            menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), id=it.GetId())
+        event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
+
+
+    def on_change_tree_schema(self, event):
+        """Handler for activating a schema item, loads object."""
+        item, tree = event.GetItem(), self.tree_schema
+        if not item or not item.IsOk(): return
+        data = tree.GetItemPyData(item) or {}
+        data = data if data.get("type") in database.Database.CATEGORIES \
+               else data.get("parent") if "column" == data.get("type") else None
+
+        if data:
+            nb = self.notebook_schema
+            p = self.schema_pages[data["type"]].get(data["name"])
+            if p: nb.SetSelection(nb.GetPageIndex(p))
+            else: self.add_schema_object(data)
+        else:
+            tree.Collapse(item) if tree.IsExpanded(item) else tree.Expand(item)
+
+
+    def add_schema_object(self, data):
+        """Opens a schema object panel for specified object data."""
+        if "name" in data:
+            title = "%s %s" % (data["type"].capitalize(), grammar.quote(data["name"]))
+        else:
+            title = "* New %s *" % data["type"]
+        p = SchemaObjectPage(self.notebook_schema, self, self.db, data)
+        self.schema_pages[data["type"]][data.get("name") or id(p)] = p
+        self.notebook_schema.InsertPage(0, page=p, text=title, select=True)
+        self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
+
+
+    def on_close_schema_object(self, event):
+        """Handler for closing schema item."""
+        page = self.notebook_schema.GetPage(event.GetSelection())
+        if page.IsChanged():
+            if wx.OK != wx.MessageBox(
+                "There are unsaved changes, "
+                "are you sure you want to discard them?",
+                conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+            ): return event.Veto()
+
+        for c, k, p in ((c, k, p) for c, m in self.schema_pages.items() for k, p in m.items()):
+            if p is page:
+                self.schema_pages[c].pop(k)
+                break # for c, k, p
+        self.TopLevelParent.UpdateAccelerators() # Remove panel accelerators
+        self.update_page_header()
+
+
+    def on_schema_page_event(self, event):
+        """Handler for a message from SchemaObjectPage."""
+        idx = self.notebook_schema.GetPageIndex(event.source)
+        close, modified, updated = (getattr(event, x, False)
+                                    for x in ("close", "modified", "updated"))
+        if close:
+            self.notebook_schema.DeletePage(idx)
+        if (modified or updated) and event.source:
+            if event.item.get("name"):
+                suffix = "*" if event.source.IsChanged() else ""
+                title = "%s %s%s" % (event.item["type"].capitalize(),
+                                     grammar.quote(event.item["name"]), suffix)
+                if self.notebook_schema.GetPageText(idx) != title:
+                    self.notebook_schema.SetPageText(idx, title)
+            self.update_page_header()
+        if updated:
+            for k, p in self.schema_pages[event.item["type"]].items():
+                if p is event.source:
+                    self.schema_pages[event.item["type"]].pop(k)
+                    self.schema_pages[event.item["type"]][event.item["name"]] = p
+                    break # for k, p
+            self.load_schema_tree(refresh=True)
+            self.load_tables_data()
+            self.on_update_stc_schema()
 
 
     def on_export_data_file(self, tables, event):
@@ -4146,45 +4556,45 @@ class DatabasePage(wx.Panel):
 
     def load_later_data(self):
         """
-        Loads later data from the databases, like full database schema SQL
-        and full row counts.
+        Loads later data from the databases, like full database schema SQL,
+        full row counts, and full schema.
         """
         if not self: return
-        self.on_update_stc_schema(None)
+        self.on_update_stc_schema()
         self.load_tables_data(full=True)
+        self.load_schema_tree()
 
 
     def load_tables_data(self, full=False):
         """Loads table data into table tree and SQL editor."""
         try:
+            tree = self.tree_tables
             self.db.populate_schema(full=True)
             tables = self.db.get_category("table").values()
             # Fill table tree with information on row counts and columns
-            self.tree_tables.DeleteAllItems()
-            root = self.tree_tables.AddRoot("SQLITE")
-            self.tree_tables.SetItemPyData(root, [x["name"] for x in tables])
+            tree.DeleteAllItems()
+            root = tree.AddRoot("SQLITE")
+            tree.SetItemPyData(root, [x["name"] for x in tables])
             child = None
             for table in tables:
-                child = self.tree_tables.AppendItem(root, util.unprint(table["name"]))
+                child = tree.AppendItem(root, util.unprint(table["name"]))
                 if "count" in table: t = util.plural("row", table["count"])
                 else: t = "ERROR" if full else "Counting.."
-                self.tree_tables.SetItemText(child, t, 1)
-                self.tree_tables.SetItemPyData(child, table["name"])
+                tree.SetItemText(child, t, 1)
+                tree.SetItemPyData(child, table["name"])
 
                 for col in table["columns"]:
-                    subchild = self.tree_tables.AppendItem(child, util.unprint(col["name"]))
-                    self.tree_tables.SetItemText(subchild, col["type"], 1)
-                    self.tree_tables.SetItemPyData(subchild, dict(col, table=table["name"]))
+                    subchild = tree.AppendItem(child, util.unprint(col["name"]))
+                    tree.SetItemText(subchild, col["type"], 1)
+                    tree.SetItemPyData(subchild, dict(col, table=table["name"]))
 
-            self.tree_tables.Expand(root)
-            if child:
-                # Nudge columns to fit and fill the header exactly.
-                self.tree_tables.Expand(child)
-                self.tree_tables.SetColumnWidth(0, -1)
-                self.tree_tables.SetColumnWidth(1, min(70,
-                    self.tree_tables.Size.width -
-                    self.tree_tables.GetColumnWidth(0) - 5))
-                self.tree_tables.Collapse(child)
+            tree.Expand(root)
+            if child: # Nudge columns to fit and fill the header exactly.
+                tree.Expand(child)
+                tree.SetColumnWidth(0, -1)
+                tree.SetColumnWidth(1, min(70, tree.Size.width -
+                                           tree.GetColumnWidth(0) - 5))
+                tree.Collapse(child)
 
             # Add table and column names to SQL editor autocomplete
             self.stc_sql.AutoCompClearAdded()
@@ -4196,6 +4606,88 @@ class DatabasePage(wx.Panel):
                 self.stc_sql.AutoCompAddSubWords(grammar.quote(table["name"]), fields)
         except Exception:
             if self: logger.exception("Error loading table data from %s.", self.db)
+
+
+    def load_schema_tree(self, refresh=False):
+        """Loads database schema into schema tree."""
+        tree = self.tree_schema
+        tree.DeleteAllItems()
+        tree.AddRoot("Loading schema..")
+        try:
+            if refresh: self.db.populate_schema(full=True)
+        except Exception:
+            if not self: return
+            msg = "Error loading schema data from %s." % self.db
+            logger.exception(msg)
+            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
+            return
+
+        tree.DeleteAllItems()
+        root = tree.AddRoot("SQLITE")
+        tree.SetItemPyData(root, {"type": "schema"})
+        imgs = self.tree_schema_images
+        for category in database.Database.CATEGORIES:
+            items = self.db.get_category(category).values()
+            categorydata = {"type": "category", "category": category, "items": items}
+
+            t = util.plural(category).capitalize()
+            if items: t += " (%s)" % len(items)
+            top = tree.AppendItem(root, t)
+            tree.SetItemPyData(top, categorydata)
+            child = None
+            for item in items:
+                itemdata = dict(item, parent=categorydata)
+                child = tree.AppendItem(top, util.unprint(item["name"]))
+                tree.SetItemPyData(child, itemdata)
+
+                if "table" == category:
+                    colchild = tree.AppendItem(child, "Columns (%s)" % len(item["columns"]))
+                    tree.SetItemPyData(colchild, {"type": "columns", "parent": itemdata})
+                    tree.SetItemImage(colchild, imgs["columns"], wx.TreeItemIcon_Normal)
+                    for col in item["columns"]:
+                        subchild = tree.AppendItem(colchild, util.unprint(col["name"]))
+                        tree.SetItemText(subchild, col["type"], 1)
+                        tree.SetItemPyData(subchild, dict(col, parent=itemdata, type="column"))
+                    for subcategory in ("index", "trigger"):
+                        subitems = self.db.get_category(subcategory, table=item["name"]).values()
+                        t = util.plural(subcategory).capitalize()
+                        if subitems: t += " (%s)" % len(subitems)
+                        categchild = tree.AppendItem(child, t)
+                        subcategorydata = {"type": "category", "category": subcategory, "items": subitems, "parent": itemdata}
+                        tree.SetItemPyData(categchild, subcategorydata)
+                        if subcategory in imgs:
+                            tree.SetItemImage(categchild, imgs[subcategory], wx.TreeItemIcon_Normal)
+
+                        for subitem in subitems:
+                            subchild = tree.AppendItem(categchild, util.unprint(subitem["name"]))
+                            tree.SetItemPyData(subchild, dict(subitem, parent=itemdata))
+                            t = ""
+                            if "index" == subcategory:
+                                t = ", ".join(x.get("name", x.get("expr")) for x in subitem["meta"]["columns"])
+                            elif "trigger" == subcategory:
+                                t = " ".join(filter(bool, (subitem["meta"].get("upon"), subitem["meta"]["action"])))
+                            tree.SetItemText(subchild, t, 1)
+                elif "index" == category:
+                    tree.SetItemText(child, "ON " + grammar.quote(item["meta"]["table"]), 1)
+                elif "trigger" == category:
+                    t = " ".join(filter(bool, (item["meta"].get("upon"), item["meta"]["action"],
+                                               "ON", grammar.quote(item["meta"]["table"]))))
+                    tree.SetItemText(child, t, 1)
+                if "index" == category or "view" == category:
+                    columns = item["meta"].get("columns") or ()
+                    table = self.db.get_category("table", item["meta"]["table"]) \
+                            if "index" == category else {}
+                    for col in columns:
+                        col = col if isinstance(col, dict) else {"name": col}
+                        subchild = tree.AppendItem(child, util.unprint(col.get("name") or col.get("expr")))
+                        tree.SetItemPyData(subchild, dict(col, type="column", parent=itemdata))
+                        if table.get("columns") and col.get("name"):
+                            tcol = next((x for x in table["columns"]
+                                         if x["name"] == col["name"]), None)
+                            if tcol: tree.SetItemText(subchild, tcol["type"], 1)
+            tree.Collapse(top)
+        tree.Expand(root)
+        tree.SetColumnWidth(0, tree.Size[0] - 130)
 
 
     def update_tabheader(self):
@@ -4768,3 +5260,1504 @@ class AboutDialog(wx.Dialog):
             self.html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
             self.html.ForegroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
         wx.CallAfter(dorefresh) # Postpone to allow conf to update
+
+
+
+SchemaPageEvent, EVT_SCHEMA_PAGE = wx.lib.newevent.NewEvent()
+
+class SchemaObjectPage(wx.PyPanel):
+    """
+    Component for viewing and editing schema objects like tables and triggers.
+    """
+
+    ORDER    = ["", "ASC", "DESC"]
+    COLLATE  = ["", "BINARY", "NOCASE", "RTRIM"]
+    UPON     = ["", "BEFORE", "AFTER", "INSTEAD OF"]
+    ACTION   = ["DELETE", "INSERT", "UPDATE"]
+    CONFLICT = ["", "ROLLBACK", "ABORT", "FAIL", "IGNORE", "REPLACE"]
+    TABLECONSTRAINT = ["PRIMARY KEY", "FOREIGN KEY", "UNIQUE", "CHECK"]
+    TABLECONSTRAINT_DEFAULTS = {
+        "PRIMARY KEY": {"type": "PRIMARY KEY", "key": [{}]},
+        "UNIQUE":      {"type": "UNIQUE",      "key": [{}]},
+        "FOREIGN KEY": {"type": "FOREIGN KEY", "key": [""], "columns": [""]},
+        "CHECK":       {"type": "CHECK"},
+    }
+
+
+    def __init__(self, parent, page, db, item, id=wx.ID_ANY, pos=wx.DefaultPosition,
+                 size=wx.DefaultSize):
+        """
+        @param   page  target to send EVT_SCHEMA_PAGE events to
+        """
+        wx.PyPanel.__init__(self, parent, pos=pos, size=size)
+        ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
+        ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
+
+        self._item     = copy.deepcopy(item)
+        self._original = copy.deepcopy(item)
+        self._page     = page
+        self._db       = db
+        self._category = item["type"]
+        self._newmode  = "name" not in item
+        self._editmode = self._newmode
+        self._ctrls    = {} # {}
+        self._buttons  = {} # {name: wx.Button}
+        self._sizers   = {} # {child sizer: parent sizer}
+        self._ignore_change = False
+        self._show_alter    = False
+        self._types    = self._GetColumnTypes()
+        self._tables   = [x["name"] for x in db.get_category("table").values()]
+        self._views    = [x["name"] for x in db.get_category("view").values()]
+
+
+        sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_name         = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_buttons      = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_sql_header   = wx.BoxSizer(wx.HORIZONTAL)
+
+        label_name = wx.StaticText(self, label="&Name:")
+        edit_name = self._ctrls["name"] = wx.TextCtrl(self)
+
+        if   "table"   == item["type"]: creator = self._CreateTable
+        elif "index"   == item["type"]: creator = self._CreateIndex
+        elif "trigger" == item["type"]: creator = self._CreateTrigger
+        elif "view"    == item["type"]: creator = self._CreateView
+        categorypanel = self._panel_category = creator()
+
+        label_stc = self._label_sql = wx.StaticText(self, label="CREATE SQL:")
+        check_alter = None
+
+        if "table" == item["type"]:
+            check_alter = self._ctrls["alter"] = wx.CheckBox(self, label="Show A&LTER SQL")
+            check_alter.ToolTipString = "Show SQL statements used for performing table change"
+            check_alter.Shown = not self._newmode
+
+        tb = wx.ToolBar(parent=self, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
+        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
+        tb.SetToolBitmapSize(bmp1.Size)
+        tb.AddLabelTool(wx.ID_COPY, "", bitmap=bmp1, shortHelp="Copy SQL to clipboard")
+        tb.AddLabelTool(wx.ID_SAVE, "", bitmap=bmp2, shortHelp="Save SQL to file")
+        tb.Realize()
+
+        stc = self._ctrls["sql"] = controls.SQLiteTextCtrl(self,
+            style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
+        stc.SetReadOnly(True)
+        stc._toggle = "skip"
+
+        button_edit    = self._buttons["edit"]    = wx.Button(self, label="&Edit")
+        button_refresh = self._buttons["refresh"] = wx.Button(self, label="&Refresh")
+        button_save    = self._buttons["save"]    = wx.Button(self, label="&Save")
+        button_cancel  = self._buttons["cancel"]  = wx.Button(self, label="&Cancel")
+        button_delete  = self._buttons["delete"]  = wx.Button(self, label="Delete")
+        button_close   = self._buttons["close"]   = wx.Button(self, label="Close")
+        button_refresh._toggle = "skip"
+        button_close._toggle   = "disable"
+        button_refresh.ToolTipString = "Reload statement, and database tables"
+        button_edit._toggle = button_delete._toggle = "disable"
+
+        sizer_name.Add(label_name, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
+        sizer_name.Add(edit_name, proportion=1)
+
+        for i, n in enumerate(["edit", "refresh", "save", "cancel", "delete", "close"]):
+            if i: sizer_buttons.AddStretchSpacer()
+            sizer_buttons.Add(self._buttons[n])
+
+        sizer_sql_header.Add(label_stc, flag=wx.ALIGN_BOTTOM)
+        sizer_sql_header.AddStretchSpacer()
+        if check_alter:
+            sizer_sql_header.Add(check_alter, border=5, flag=wx.BOTTOM | wx.ALIGN_BOTTOM)
+            sizer_sql_header.AddStretchSpacer()
+        sizer_sql_header.Add(tb, border=5, flag=wx.TOP | wx.ALIGN_RIGHT)
+
+        sizer.Add(sizer_name,       border=10, flag=wx.TOP | wx.RIGHT | wx.GROW)
+        sizer.Add(categorypanel,    border=10, proportion=2, flag=wx.RIGHT | wx.GROW)
+        sizer.Add(sizer_sql_header, border=10, flag=wx.RIGHT | wx.GROW)
+        sizer.Add(stc,              border=10, proportion=1, flag=wx.RIGHT | wx.GROW)
+        sizer.Add(sizer_buttons,    border=10, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
+
+        tb.Bind(wx.EVT_TOOL, self._OnCopySQL, id=wx.ID_COPY)
+        tb.Bind(wx.EVT_TOOL, self._OnSaveSQL, id=wx.ID_SAVE)
+        self.Bind(wx.EVT_BUTTON, self._OnToggleEdit, button_edit)
+        self.Bind(wx.EVT_BUTTON, self._OnRefresh,    button_refresh)
+        self.Bind(wx.EVT_BUTTON, self._OnSave,       button_save)
+        self.Bind(wx.EVT_BUTTON, self._OnToggleEdit, button_cancel)
+        self.Bind(wx.EVT_BUTTON, self._OnDelete,     button_delete)
+        self.Bind(wx.EVT_BUTTON, self._OnClose,      button_close)
+        self._BindDataHandler(self._OnChange, edit_name, ["name"])
+        if check_alter: self.Bind(wx.EVT_CHECKBOX, self._OnToggleAlterSQL, check_alter)
+        self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(self.Layout))
+
+        self._Populate()
+        self._ToggleControls(self._editmode)
+        if "sql" not in self._original and "sql" in self._item:
+            self._original["sql"] = self._item["sql"]
+
+
+    def Close(self, force=False):
+        """Closes the page, asking for confirmation if modified and not force."""
+        if force: self._editmode = self._newmode = False
+        self._OnClose()
+
+
+    def IsChanged(self):
+        """Returns whether there are unsaved changes."""
+        result = False
+        if self._editmode:
+            result = (self._original.get("sql") != self._item.get("sql"))
+        return result
+
+
+    def _CreateTable(self):
+        """Returns control panel for CREATE TABLE page."""
+
+        """
+TODO:
+  - columns
+    - check ja collate ja fk
+    - linnukeste täpsemad optionid, nagu conflict-clause jne. vbl eraldi popup?
+  - table constraints
+    - optional constraint nimi
+    - fk
+      - ACTION valikud
+      - MATCH name clause
+      - defer-optionid
+
+välju eemaldades peavad need kohe ka kaduma constraintidest
+hmm.. ja renamedes vist ka ümber nimetuma.
+        """
+        panel = wx.Panel(self)
+        sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
+
+        check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
+        check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT &EXISTS")
+        check_rowid  = self._ctrls["without"]   = wx.CheckBox(panel, label="WITHOUT &ROWID")
+
+        nb = self._notebook_table = wx.Notebook(panel)
+
+        panel_columnwrapper = wx.Panel(nb)
+        sizer_columnwrapper = panel_columnwrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_columnstop    = wx.FlexGridSizer(cols=4, hgap=10)
+        sizer_columnflags   = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_columnbuttons = wx.BoxSizer(wx.HORIZONTAL)
+
+        panel_columns = self._panel_columns = wx.lib.scrolledpanel.ScrolledPanel(panel_columnwrapper, style=wx.BORDER_STATIC)
+        panel_columns.Sizer = wx.FlexGridSizer(cols=5, vgap=4, hgap=10)
+        panel_columns.Sizer.AddGrowableCol(3)
+
+        button_add_column = self._buttons["add_column"] = wx.Button(panel_columnwrapper, label="&Add column")
+
+        panel_constraintwrapper = wx.Panel(nb)
+        sizer_constraintwrapper = panel_constraintwrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_constraintbuttons = wx.BoxSizer(wx.HORIZONTAL)
+
+        panel_constraints = self._panel_constraints = wx.lib.scrolledpanel.ScrolledPanel(panel_constraintwrapper, style=wx.BORDER_STATIC)
+        panel_constraints.Sizer = wx.FlexGridSizer(cols=3, vgap=4, hgap=10)
+        panel_constraints.Sizer.AddGrowableCol(1)
+
+        button_add_constraint = self._buttons["add_constraint"] = wx.Button(panel_constraintwrapper, label="&Add constraint")
+
+        sizer_flags.Add(check_temp)
+        sizer_flags.AddSpacer((100, -1))
+        sizer_flags.Add(check_exists)
+        sizer_flags.AddSpacer((100, -1))
+        sizer_flags.Add(check_rowid)
+
+        for l, t in [("P", grammar.SQL.PRIMARY_KEY), ("I", grammar.SQL.AUTOINCREMENT),
+                     ("N", grammar.SQL.NOT_NULL),    ("U", grammar.SQL.UNIQUE)]:
+            label = wx.StaticText(panel_columnwrapper, label=l, size=(14, -1))
+            label.ToolTipString = t
+            sizer_columnflags.Add(label)
+            
+        sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Name",    size=(150, -1)), border=7, flag=wx.LEFT)
+        sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Type",    size=(100, -1)))
+        sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Default", size=(150, -1)))
+        sizer_columnstop.Add(sizer_columnflags)
+
+        sizer_columnbuttons.AddStretchSpacer()
+        sizer_columnbuttons.Add(button_add_column)
+        sizer_constraintbuttons.AddStretchSpacer()
+        sizer_constraintbuttons.Add(button_add_constraint)
+
+        sizer_columnwrapper.Add(sizer_columnstop, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
+        sizer_columnwrapper.Add(panel_columns, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
+        sizer_columnwrapper.Add(sizer_columnbuttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
+
+        sizer_constraintwrapper.Add(panel_constraints, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
+        sizer_constraintwrapper.Add(sizer_constraintbuttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
+
+        nb.AddPage(panel_columnwrapper,     "Columns")
+        nb.AddPage(panel_constraintwrapper, "Constraints")
+
+        sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
+        sizer.Add(nb, proportion=1, border=5, flag=wx.TOP | wx.GROW)
+
+        self._BindDataHandler(self._OnChange,  check_temp,   ["temporary"])
+        self._BindDataHandler(self._OnChange,  check_exists, ["exists"])
+        self._BindDataHandler(self._OnChange,  check_rowid,  ["without"])
+        self._BindDataHandler(self._OnAddItem, button_add_column, ["columns"], {"name": ""})
+        self.Bind(wx.EVT_BUTTON, self._OnAddConstraint, button_add_constraint)
+
+        panel_columns.SetupScrolling(scroll_x=False)
+        return panel
+
+
+    def _CreateIndex(self):
+        """Returns control panel for CREATE INDEX page."""
+        panel = wx.Panel(self)
+        sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_table   = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_where   = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_columnstop = wx.FlexGridSizer(cols=3, hgap=10)
+
+        label_table = wx.StaticText(panel, label="&Table:")
+        list_table = self._ctrls["table"] = wx.ComboBox(panel,
+            style=wx.CB_DROPDOWN | wx.CB_READONLY)
+
+        check_unique = self._ctrls["unique"] = wx.CheckBox(panel, label="&UNIQUE")
+        check_exists = self._ctrls["exists"] = wx.CheckBox(panel, label="IF NOT &EXISTS")
+
+        panel_wrapper = wx.Panel(panel, style=wx.BORDER_STATIC)
+        sizer_wrapper = panel_wrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
+
+        panel_columns = self._panel_columns = wx.lib.scrolledpanel.ScrolledPanel(panel_wrapper)
+        panel_columns.Sizer = wx.FlexGridSizer(cols=4, vgap=4, hgap=10)
+        panel_columns.Sizer.AddGrowableCol(3)
+
+        button_add_column = self._buttons["add_column"] = wx.Button(panel_wrapper, label="&Add column")
+        button_add_expr =   self._buttons["add_expr"] =   wx.Button(panel_wrapper, label="Add ex&pression")
+
+        label_where = wx.StaticText(panel, label="&WHERE:")
+        stc_where   = self._ctrls["where"] = controls.SQLiteTextCtrl(panel,
+            size=(-1, 40),
+            style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
+        label_where.ToolTipString = "Optional WHERE-clause to create a partial index"
+
+        sizer_table.Add(label_table, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
+        sizer_table.Add(list_table, flag=wx.GROW)
+
+        sizer_flags.Add(check_unique)
+        sizer_flags.AddSpacer((100, -1))
+        sizer_flags.Add(check_exists)
+
+        sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Column",  size=(200, -1)))
+        sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Collate", size=( 80, -1)))
+        sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Order",   size=( 60, -1)))
+
+        sizer_buttons.AddStretchSpacer()
+        sizer_buttons.Add(button_add_column)
+        sizer_buttons.Add(button_add_expr)
+
+        sizer_wrapper.Add(sizer_columnstop, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
+        sizer_wrapper.Add(panel_columns, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
+        sizer_wrapper.Add(sizer_buttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
+
+        sizer_where.Add(label_where, border=5, flag=wx.RIGHT)
+        sizer_where.Add(stc_where, proportion=1, flag=wx.GROW)
+
+        sizer.Add(sizer_table, border=5, flag=wx.TOP | wx.GROW)
+        sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
+        sizer.Add(panel_wrapper, proportion=1, flag=wx.GROW)
+        sizer.Add(sizer_where, border=5, flag=wx.TOP | wx.GROW)
+
+        self._BindDataHandler(self._OnChange,  list_table,   ["table"])
+        self._BindDataHandler(self._OnChange,  check_unique, ["unique"])
+        self._BindDataHandler(self._OnChange,  check_exists, ["exists"])
+        self._BindDataHandler(self._OnChange,  stc_where,    ["where"])
+        self._BindDataHandler(self._OnAddItem, button_add_column, ["columns"], {"name": ""})
+        self._BindDataHandler(self._OnAddItem, button_add_expr,   ["columns"], {"expr": ""})
+
+        panel_columns.SetupScrolling(scroll_x=False)
+        return panel
+
+
+    def _CreateTrigger(self):
+        """Returns control panel for CREATE TRIGGER page."""
+        panel = wx.Panel(self)
+        sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_table   = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_body    = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_when    = wx.BoxSizer(wx.HORIZONTAL)
+
+        label_table = self._ctrls["label_table"] = wx.StaticText(panel, label="&Table:")
+        list_table = self._ctrls["table"] = wx.ComboBox(panel,
+            style=wx.CB_DROPDOWN | wx.CB_READONLY)
+        label_upon = wx.StaticText(panel, label="&Upon:")
+        list_upon = self._ctrls["upon"] = wx.ComboBox(panel,
+            style=wx.CB_DROPDOWN | wx.CB_READONLY, choices=self.UPON)
+        label_action = wx.StaticText(panel, label="&Action:")
+        list_action = self._ctrls["action"] = wx.ComboBox(panel,
+            style=wx.CB_DROPDOWN | wx.CB_READONLY, choices=self.ACTION)
+        label_table._toggle = "skip"
+
+        check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
+        check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT &EXISTS")
+        check_for    = self._ctrls["for"]       = wx.CheckBox(panel, label="FOR EACH &ROW")
+
+        panel_wrapper = wx.Panel(panel, style=wx.BORDER_STATIC)
+        sizer_wrapper = panel_wrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
+
+        panel_columns = self._panel_columns = wx.lib.scrolledpanel.ScrolledPanel(panel_wrapper)
+        panel_columns.Sizer = wx.FlexGridSizer(cols=2, vgap=4, hgap=10)
+        panel_columns.Sizer.AddGrowableCol(1)
+
+        button_add_column = self._buttons["add_column"] = wx.Button(panel_wrapper, label="&Add column")
+
+        label_body = wx.StaticText(panel, label="&Body:")
+        stc_body   = self._ctrls["body"] = controls.SQLiteTextCtrl(panel,
+            size=(-1, 40),
+            style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
+        label_body.ToolTipString = "Trigger body SQL"
+
+        label_when = wx.StaticText(panel, label="&WHEN:")
+        stc_when   = self._ctrls["when"] = controls.SQLiteTextCtrl(panel,
+            size=(-1, 40),
+            style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
+        label_when.ToolTipString = "Trigger WHEN expression"
+
+        sizer_table.Add(label_table, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
+        sizer_table.Add(list_table, flag=wx.GROW)
+        sizer_table.AddSpacer((20, -1))
+        sizer_table.Add(label_upon, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
+        sizer_table.Add(list_upon, flag=wx.GROW)
+        sizer_table.AddSpacer((20, -1))
+        sizer_table.Add(label_action, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
+        sizer_table.Add(list_action, flag=wx.GROW)
+
+        sizer_flags.Add(check_temp)
+        sizer_flags.AddSpacer((100, -1))
+        sizer_flags.Add(check_exists)
+        sizer_flags.AddSpacer((100, -1))
+        sizer_flags.Add(check_for)
+
+        sizer_buttons.AddStretchSpacer()
+        sizer_buttons.Add(button_add_column)
+
+        sizer_wrapper.Add(panel_columns, border=5, proportion=1, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
+        sizer_wrapper.Add(sizer_buttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
+
+        sizer_body.Add(label_body, border=5, flag=wx.RIGHT)
+        sizer_body.Add(stc_body, proportion=1, flag=wx.GROW)
+
+        sizer_when.Add(label_when, border=5, flag=wx.RIGHT)
+        sizer_when.Add(stc_when, proportion=1, flag=wx.GROW)
+
+        sizer.Add(sizer_table, border=5, flag=wx.TOP | wx.GROW)
+        sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
+        sizer.Add(panel_wrapper, proportion=2, flag=wx.GROW)
+        sizer.Add(sizer_body, proportion=3, border=5, flag=wx.TOP | wx.GROW)
+        sizer.Add(sizer_when, proportion=1, border=5, flag=wx.TOP | wx.GROW)
+
+        self._BindDataHandler(self._OnChange,  list_table,    ["table"])
+        self._BindDataHandler(self._OnChange,  list_upon,     ["upon"])
+        self._BindDataHandler(self._OnChange,  list_action,   ["action"])
+        self._BindDataHandler(self._OnChange,  check_temp,    ["temporary"])
+        self._BindDataHandler(self._OnChange,  check_exists,  ["exists"])
+        self._BindDataHandler(self._OnChange,  check_for,     ["for"])
+        self._BindDataHandler(self._OnChange,  stc_body,      ["body"])
+        self._BindDataHandler(self._OnChange,  stc_when,      ["when"])
+        self._BindDataHandler(self._OnAddItem, button_add_column, ["columns"], "")
+
+        panel_columns.SetupScrolling(scroll_x=False)
+        return panel
+
+
+    def _CreateView(self):
+        """Returns control panel for CREATE VIEW page."""
+        panel = wx.Panel(self)
+        sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_select  = wx.BoxSizer(wx.HORIZONTAL)
+
+        check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
+        check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT &EXISTS")
+
+        panel_wrapper = wx.Panel(panel, style=wx.BORDER_STATIC)
+        sizer_wrapper = panel_wrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
+
+        panel_columns = self._panel_columns = wx.lib.scrolledpanel.ScrolledPanel(panel_wrapper)
+        panel_columns.Sizer = wx.FlexGridSizer(cols=2, vgap=4, hgap=10)
+        panel_columns.Sizer.AddGrowableCol(1)
+
+        button_add_column = self._buttons["add_column"] = wx.Button(panel_wrapper, label="&Add column")
+
+        label_body = wx.StaticText(panel, label="Se&lect:")
+        stc_body = self._ctrls["select"] = controls.SQLiteTextCtrl(panel,
+            size=(-1, 40),
+            style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
+        label_body.ToolTipString = "SELECT statement for view"
+
+        sizer_flags.Add(check_temp)
+        sizer_flags.AddSpacer((100, -1))
+        sizer_flags.Add(check_exists)
+
+        sizer_buttons.AddStretchSpacer()
+        sizer_buttons.Add(button_add_column)
+
+        sizer_wrapper.Add(panel_columns, border=5, proportion=1, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
+        sizer_wrapper.Add(sizer_buttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
+
+        sizer_select.Add(label_body, border=5, flag=wx.RIGHT)
+        sizer_select.Add(stc_body, proportion=1, flag=wx.GROW)
+
+        sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
+        sizer.Add(panel_wrapper, proportion=1, flag=wx.GROW)
+        sizer.Add(sizer_select, proportion=2, border=5, flag=wx.TOP | wx.GROW)
+
+        self._BindDataHandler(self._OnChange,  check_temp,   ["temporary"])
+        self._BindDataHandler(self._OnChange,  check_exists, ["exists"])
+        self._BindDataHandler(self._OnChange,  stc_body,     ["select"])
+        self._BindDataHandler(self._OnAddItem, button_add_column, ["columns"], "")
+
+        panel_columns.SetupScrolling(scroll_x=False)
+        return panel
+
+
+    def _Populate(self):
+        """Populates panel with item data."""
+        data, meta = self._item, self._item.get("meta") or {}
+        self._ignore_change = True
+        self.Freeze()
+
+        self._ctrls["name"].Value = meta.get("name") or ""
+
+        self._sizers.clear()
+        if   "table"   == data["type"]: self._PopulateTable()
+        elif "index"   == data["type"]: self._PopulateIndex()
+        elif "trigger" == data["type"]: self._PopulateTrigger()
+        elif "view"    == data["type"]: self._PopulateView()
+
+        self._PopulateSQL()
+        self._ignore_change = False
+        self.Layout()
+        self.Thaw()
+
+
+    def _PopulateTable(self):
+        """Populates panel with table-specific data."""
+        data, meta = self._item, self._item.get("meta") or {}
+
+        self._ctrls["temporary"].Value = bool(meta.get("temporary"))
+        self._ctrls["exists"].Value    = bool(meta.get("exists"))
+        self._ctrls["without"].Value   = bool(meta.get("without"))
+
+        self._EmptyControl(self._panel_columns)
+        for i, col in enumerate(meta.get("columns") or ()):
+            self._AddRowTable(["columns"], i, col)
+        self._panel_columns.Layout()
+
+        self._EmptyControl(self._panel_constraints)
+        for i, cnstr in enumerate(meta.get("constraints") or ()):
+            self._AddRowTableConstraint(["constraints"], i, cnstr)
+        self._panel_constraints.Layout()
+
+        lencol, lencnstr =  (len(meta.get(x) or ()) for x in ("columns", "constraints"))
+        self._notebook_table.SetPageText(0, "Columns"     if not lencol   else "Columns (%s)" % lencol)
+        self._notebook_table.SetPageText(1, "Constraints" if not lencnstr else "Constraints (%s)" % lencnstr)
+        self._notebook_table.Layout()
+
+
+    def _PopulateIndex(self):
+        """Populates panel with index-specific data."""
+        data, meta = self._item, self._item.get("meta") or {}
+        self._ctrls["table"].SetItems(self._tables)
+        self._ctrls["table"].Value = meta.get("table") or ""
+
+        self._ctrls["unique"].Value = bool(meta.get("unique"))
+        self._ctrls["exists"].Value = bool(meta.get("exists"))
+        self._ctrls["where"].SetText(meta.get("where") or "")
+
+        self._EmptyControl(self._panel_columns)
+        for i, col in enumerate(meta.get("columns") or ()):
+            self._AddRowIndex(["columns"], i, col)
+
+
+    def _PopulateTrigger(self):
+        """Populates panel with trigger-specific data."""
+        data, meta = self._item, self._item.get("meta") or {}
+
+        if grammar.SQL.INSTEAD_OF == meta.get("upon"):
+            self._ctrls["label_table"].Label = "&View:"
+            self._item["meta"].pop("columns", None)
+            self._ctrls["table"].SetItems(self._views)
+        else:
+            self._ctrls["label_table"].Label = "&Table:"
+            self._ctrls["table"].SetItems(self._tables)
+
+        self._ctrls["table"].Value = meta.get("table") or ""
+        self._ctrls["temporary"].Value = bool(meta.get("temporary"))
+        self._ctrls["exists"].Value    = bool(meta.get("exists"))
+        self._ctrls["for"].Value       = bool(meta.get("for"))
+        self._ctrls["upon"].Value      = meta.get("upon") or ""
+        self._ctrls["action"].Value    = meta.get("action") or ""
+        self._ctrls["body"].SetText(meta.get("body") or "")
+        self._ctrls["when"].SetText(meta.get("when") or "")
+
+        panel = self._panel_columns
+        self._EmptyControl(panel)
+        if  grammar.SQL.UPDATE     == meta.get("action") \
+        and grammar.SQL.INSTEAD_OF == meta.get("upon") \
+        and self._db.has_view_columns():
+            panel.Parent.Show()
+            for i, col in enumerate(meta.get("columns") or ()):
+                self._AddRowTrigger(["columns"], i, col)
+        else:
+            panel.Parent.Hide()
+        self._panel_category.Layout()
+
+
+    def _PopulateView(self):
+        """Populates panel with view-specific data."""
+        data, meta = self._item, self._item.get("meta") or {}
+
+        self._ctrls["temporary"].Value = bool(meta.get("temporary"))
+        self._ctrls["exists"].Value = bool(meta.get("exists"))
+        self._ctrls["select"].SetText(meta.get("select") or "")
+
+        panel = self._panel_columns
+        self._EmptyControl(panel)
+
+        if self._db.has_view_columns():
+            for i, col in enumerate(meta.get("columns") or ()):
+                self._AddRowView(["columns"], i, col)
+        else: panel.Parent.Hide()
+
+
+    def _AddRowTable(self, path, i, col, insert=False):
+        """Adds a new row of controls for table columns."""
+        first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
+        meta, rowkey = self._item.get("meta") or {}, wx.NewId()
+        panel = self._panel_columns
+
+        sizer_flags = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+
+        text_name     = wx.TextCtrl(panel)
+        list_type     = wx.ComboBox(panel, choices=self._types, style=wx.CB_DROPDOWN)
+        text_default  = wx.TextCtrl(panel)
+
+        check_pk      = wx.CheckBox(panel)
+        check_autoinc = wx.CheckBox(panel)
+        check_notnull = wx.CheckBox(panel)
+        check_unique  = wx.CheckBox(panel)
+        check_pk.ToolTipString      = grammar.SQL.PRIMARY_KEY
+        check_autoinc.ToolTipString = grammar.SQL.AUTOINCREMENT
+        check_notnull.ToolTipString = grammar.SQL.NOT_NULL
+        check_unique.ToolTipString  = grammar.SQL.UNIQUE
+
+        button_open   = wx.Button(panel, label=u"O", size=(20, -1))
+        button_up     = wx.Button(panel, label=u"\u2191", size=(20, -1))
+        button_down   = wx.Button(panel, label=u"\u2193", size=(20, -1))
+        button_remove = wx.Button(panel, label=u"\u2715", size=(20, -1))
+
+        text_name.MinSize    = (150, -1)
+        list_type.MinSize    = (100, -1)
+        text_default.MinSize = (150, -1)
+        check_autoinc._toggle = lambda: "disable" if self._editmode and col.get("pk") is None else ""
+        button_open._toggle = "skip"
+        button_remove._toggle = "show"
+        button_up._toggle   = self._GetMoveButtonToggle(button_up,   -1)
+        button_down._toggle = self._GetMoveButtonToggle(button_down, +1)
+        if first: button_up.Enable(False)
+        if last: button_down.Enable(False)
+        button_open.ToolTipString   = "Open advanced options"
+        button_up.ToolTipString     = "Move one step higher"
+        button_down.ToolTipString   = "Move one step lower"
+        button_remove.ToolTipString = "Remove"                    
+
+        text_name.Value     = col.get("name") or ""
+        list_type.Value     = col.get("type") or ""
+        text_default.Value  = col.get("default") or ""
+        check_pk.Value      = col.get("pk") is not None
+        check_autoinc.Value = bool(col.get("pk", {}).get("autoincrement"))
+        check_notnull.Value = col.get("notnull") is not None
+        check_unique.Value  = col.get("unique")  is not None
+        check_autoinc.Enable(check_pk.Value)
+
+        sizer_flags.Add(check_pk)
+        sizer_flags.Add(check_autoinc)
+        sizer_flags.Add(check_notnull)
+        sizer_flags.Add(check_unique)
+
+        sizer_buttons.Add(button_open)
+        sizer_buttons.Add(button_up)
+        sizer_buttons.Add(button_down)
+        sizer_buttons.Add(button_remove)
+
+        vertical = (wx.TOP if first else wx.BOTTOM if last else 0)
+        if insert:
+            start = panel.Sizer.Cols * i
+            panel.Sizer.Insert(start,   text_name,     border=5, flag=vertical | wx.LEFT)
+            panel.Sizer.Insert(start+1, list_type,     border=5, flag=vertical)
+            panel.Sizer.Insert(start+2, text_default,  border=5, flag=vertical)
+            self._AddSizer(panel.Sizer, sizer_flags,   border=5, flag=vertical | wx.ALIGN_CENTER_VERTICAL,  insert=start+3)
+            self._AddSizer(panel.Sizer, sizer_buttons, border=5, flag=vertical | wx.RIGHT | wx.ALIGN_RIGHT, insert=start+4)
+        else:
+            panel.Sizer.Add(text_name,     border=5, flag=vertical | wx.LEFT)
+            panel.Sizer.Add(list_type,     border=5, flag=vertical)
+            panel.Sizer.Add(text_default,  border=5, flag=vertical)
+            self._AddSizer(panel.Sizer, sizer_flags,   border=5, flag=vertical | wx.ALIGN_CENTER_VERTICAL)
+            self._AddSizer(panel.Sizer, sizer_buttons, border=5, flag=vertical | wx.RIGHT | wx.ALIGN_RIGHT)
+
+        self._BindDataHandler(self._OnChange,      text_name,     ["columns", text_name,    "name"])
+        self._BindDataHandler(self._OnChange,      list_type,     ["columns", list_type,    "type"])
+        self._BindDataHandler(self._OnChange,      text_default,  ["columns", text_default, "default"])
+        self._BindDataHandler(self._OnToggleColumnFlag, check_pk,      ["columns", check_pk,      "pk"],      rowkey)
+        self._BindDataHandler(self._OnToggleColumnFlag, check_notnull, ["columns", check_notnull, "notnull"], rowkey)
+        self._BindDataHandler(self._OnToggleColumnFlag, check_unique,  ["columns", check_unique,  "unique"],  rowkey)
+        self._BindDataHandler(self._OnChange,      check_autoinc, ["columns", check_autoinc, "pk", "autoincrement"])
+        self._BindDataHandler(self._OnMoveItem,    button_up,     ["columns", button_up],   -1)
+        self._BindDataHandler(self._OnMoveItem,    button_down,   ["columns", button_down], +1)
+        self._BindDataHandler(self._OnRemoveItem,  button_remove, ["columns", button_remove])
+
+        self._ctrls.update({"columns.name.%s"     % rowkey: text_name,
+                            "columns.type.%s"     % rowkey: list_type,
+                            "columns.default.%s"  % rowkey: text_default,
+                            "columns.pk.%s"       % rowkey: check_pk,
+                            "columns.autoinc.%s"  % rowkey: check_autoinc,
+                            "columns.notnull.%s"  % rowkey: check_notnull,
+                            "columns.unique.%s"   % rowkey: check_unique, })
+        self._buttons.update({"columns.open.%s"   % rowkey: button_open,
+                              "columns.up.%s"     % rowkey: button_up,
+                              "columns.down.%s"   % rowkey: button_down,
+                              "columns.remove.%s" % rowkey: button_remove, })
+
+
+    def _AddRowTableConstraint(self, path, i, cnstr, insert=False):
+        """Adds a new row of controls for table constraints."""
+        first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
+        meta, rowkey = self._item.get("meta") or {}, wx.NewId()
+        panel = self._panel_constraints
+
+        mycolumns = [x["name"] for x in meta.get("columns") or () if x["name"]]
+
+        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_item    = wx.BoxSizer(wx.HORIZONTAL)
+
+        label_type = wx.StaticText(panel, label=cnstr["type"])
+
+        if grammar.SQL.PRIMARY_KEY == cnstr["type"] \
+        or grammar.SQL.UNIQUE      == cnstr["type"]:
+            kcols = [x.get("name") or "" for x in cnstr.get("key") or ()]
+
+            if len(kcols) > 1:
+                ctrl_cols  = wx.TextCtrl(panel)
+                ctrl_cols.SetEditable(False); ctrl_cols._toggle = "disable"
+            else:
+                ctrl_cols  = wx.ComboBox(panel, choices=mycolumns, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+            label_conflict = wx.StaticText(panel, label=grammar.SQL.ON_CONFLICT + ":")
+            list_conflict  = wx.ComboBox(panel, choices=self.CONFLICT, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+
+            ctrl_cols.MinSize = (150, -1)
+
+            ctrl_cols.Value = ", ".join(kcols)
+            list_conflict.Value = cnstr.get("conflict") or ""
+
+            sizer_item.Add(ctrl_cols)
+            sizer_item.Add(label_conflict, border=5, flag=wx.LEFT | wx.ALIGN_CENTER_VERTICAL)
+            sizer_item.Add(list_conflict,  border=5, flag=wx.LEFT)
+
+            self._BindDataHandler(self._OnChange, ctrl_cols,     ["constraints", ctrl_cols,     "key", 0, "name"])
+            self._BindDataHandler(self._OnChange, list_conflict, ["constraints", list_conflict, "conflict"])
+
+            self._ctrls.update({"constraints.columns.%s"  % rowkey: ctrl_cols,
+                                "constraints.conflict.%s" % rowkey: list_conflict})
+
+        elif grammar.SQL.FOREIGN_KEY == cnstr["type"]:
+            ftable = self._db.get_category("table", cnstr["table"]) if cnstr.get("table") else {}
+            fcolumns = [x["name"] for x in ftable.get("columns") or ()]
+            kcols  = cnstr.get("columns") or ()
+            fkcols = cnstr.get("key")     or ()
+
+            sizer_foreign = wx.FlexGridSizer(cols=2, vgap=4, hgap=10)
+
+            if len(kcols) > 1:
+                ctrl_cols  = wx.TextCtrl(panel)
+                ctrl_cols.SetEditable(False); ctrl_cols._toggle = "disable"
+            else:
+                ctrl_cols = wx.ComboBox(panel, choices=mycolumns, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+            label_table = wx.StaticText(panel, label="Foreign table:")
+            list_table  = wx.ComboBox(panel, choices=self._tables, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+            label_keys  = wx.StaticText(panel, label="Foreign column:")
+            if len(fkcols) > 1:
+                ctrl_keys  = wx.TextCtrl(panel)
+                ctrl_keys.SetEditable(False); ctrl_keys._toggle = "disable"
+            else:
+                ctrl_keys = wx.ComboBox(panel, choices=fcolumns, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+            button_open = wx.Button(panel, label="O", size=(20, -1))
+
+            ctrl_cols.MinSize  = (150, -1)
+            list_table.MinSize = (150, -1)
+            ctrl_keys.MinSize  = (150, -1)
+            button_open._toggle = "skip"
+            button_open.ToolTipString   = "Open advanced options"
+
+            ctrl_cols.Value  = ", ".join(kcols)
+            list_table.Value = cnstr.get("table") or ""
+            ctrl_keys.Value  = ", ".join(fkcols)
+
+            sizer_foreign.Add(label_table, flag=wx.ALIGN_CENTER_VERTICAL)
+            sizer_foreign.Add(list_table)
+            sizer_foreign.Add(label_keys,  flag=wx.ALIGN_CENTER_VERTICAL)
+            sizer_foreign.Add(ctrl_keys)
+
+            sizer_item.Add(ctrl_cols, flag=wx.ALIGN_CENTER_VERTICAL)
+            self._AddSizer(sizer_item, sizer_foreign, border=5, flag=wx.LEFT)
+
+            sizer_buttons.Add(button_open)
+
+            self._BindDataHandler(self._OnChange, ctrl_cols,  ["constraints", ctrl_cols,  "columns", 0])
+            self._BindDataHandler(self._OnChange, list_table, ["constraints", list_table, "table"])
+            self._BindDataHandler(self._OnChange, ctrl_keys,  ["constraints", ctrl_keys,  "key", 0])
+
+            self._ctrls.update({"constraints.columns.%s" % rowkey: ctrl_cols,
+                                "constraints.table.%s"   % rowkey: list_table,
+                                "constraints.keys.%s"    % rowkey: ctrl_keys})
+            self._buttons.update({"constraints.open.%s"  % rowkey: button_open})
+
+        elif grammar.SQL.CHECK == cnstr["type"]:
+            stc_check = controls.SQLiteTextCtrl(panel, size=(-1, 40))
+
+            label_type.ToolTipString = "Expression yielding a NUMERIC 0 on " \
+                                       "constraint violation,\ncannot contain a subquery."
+
+            sizer_item.Add(stc_check, proportion=1)
+
+            self._BindDataHandler(self._OnChange, stc_check, ["constraints", stc_check, "check"])
+
+            self._ctrls.update({"constraints.check.%s" % rowkey: stc_check})
+
+
+        button_up     = wx.Button(panel, label=u"\u2191", size=(20, -1))
+        button_down   = wx.Button(panel, label=u"\u2193", size=(20, -1))
+        button_remove = wx.Button(panel, label=u"\u2715", size=(20, -1))
+
+        button_remove._toggle = "show"
+        button_up._toggle   = self._GetMoveButtonToggle(button_up,   -1)
+        button_down._toggle = self._GetMoveButtonToggle(button_down, +1)
+        if first: button_up.Enable(False)
+        if last:  button_down.Enable(False)
+        button_up.ToolTipString     = "Move one step higher"
+        button_down.ToolTipString   = "Move one step lower"
+        button_remove.ToolTipString = "Remove"                    
+
+        sizer_buttons.Add(button_up)
+        sizer_buttons.Add(button_down)
+        sizer_buttons.Add(button_remove)
+
+        vertical = (wx.TOP if first else wx.BOTTOM if last else 0)
+        if insert:
+            start = panel.Sizer.Cols * i
+            panel.Sizer.Insert(start, label_type, border=5, flag=vertical | wx.LEFT  | wx.ALIGN_CENTER_VERTICAL)
+            self._AddSizer(panel.Sizer, sizer_item,     border=5, flag=vertical | wx.LEFT  | wx.ALIGN_CENTER_VERTICAL | wx.GROW, insert=start+1)
+            self._AddSizer(panel.Sizer, sizer_buttons,  border=5, flag=vertical | wx.RIGHT | wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL, insert=start+2)
+        else:
+            panel.Sizer.Add(label_type, border=5, flag=vertical | wx.LEFT  | wx.ALIGN_CENTER_VERTICAL)
+            self._AddSizer(panel.Sizer, sizer_item,     border=5, flag=vertical | wx.LEFT  | wx.ALIGN_CENTER_VERTICAL | wx.GROW)
+            self._AddSizer(panel.Sizer, sizer_buttons,  border=5, flag=vertical | wx.RIGHT | wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
+
+        self._BindDataHandler(self._OnMoveItem,   button_up,     ["constraints", button_up],   -1)
+        self._BindDataHandler(self._OnMoveItem,   button_down,   ["constraints", button_down], +1)
+        self._BindDataHandler(self._OnRemoveItem, button_remove, ["constraints", button_remove])
+
+        self._buttons.update({"constraints.up.%s"     % rowkey: button_up,
+                              "constraints.down.%s"   % rowkey: button_down,
+                              "constraints.remove.%s" % rowkey: button_remove, })
+
+
+    def _AddRowIndex(self, path, i, col, insert=False):
+        """Adds a new row of controls for index columns."""
+        first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
+        data, meta, rowkey = self._item, self._item.get("meta") or {}, wx.NewId()
+        table = self._db.get_category("table", meta["table"]) \
+                if meta.get("table") else {}
+        tablecols = [x["name"] for x in table.get("columns") or ()]
+        panel = self._panel_columns
+
+        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+
+        if "name" in col:
+            ctrl_index = wx.ComboBox(panel, choices=tablecols,
+                style=wx.CB_DROPDOWN | wx.CB_READONLY)
+        else:
+            ctrl_index = wx.TextCtrl(panel)
+        list_collate  = wx.ComboBox(panel, choices=self.COLLATE, style=wx.CB_DROPDOWN)
+        list_order    = wx.ComboBox(panel, choices=self.ORDER, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+        button_up     = wx.Button(panel, label=u"\u2191", size=(20, -1))
+        button_down   = wx.Button(panel, label=u"\u2193", size=(20, -1))
+        button_remove = wx.Button(panel, label=u"\u2715", size=(20, -1))
+
+        ctrl_index.MinSize =   (200, -1)
+        list_collate.MinSize = ( 80, -1)
+        list_order.MinSize =   ( 60, -1)
+        button_remove._toggle = "show"
+        button_up._toggle   = self._GetMoveButtonToggle(button_up,   -1)
+        button_down._toggle = self._GetMoveButtonToggle(button_down, +1)
+        if first: button_up.Enable(False)
+        if last:  button_down.Enable(False)
+        button_up.ToolTipString     = "Move one step higher"
+        button_down.ToolTipString   = "Move one step lower"
+        button_remove.ToolTipString = "Remove"                    
+
+        ctrl_index.Value   = col.get("name") or col.get("expr") or ""
+        list_collate.Value = col.get("collate") or ""
+        list_order.Value   = col.get("direction") or ""
+
+        sizer_buttons.Add(button_up)
+        sizer_buttons.Add(button_down)
+        sizer_buttons.Add(button_remove)
+
+        if insert:
+            start = panel.Sizer.Cols * i
+            panel.Sizer.Insert(start,   ctrl_index)
+            panel.Sizer.Insert(start+1, list_collate)
+            panel.Sizer.Insert(start+2, list_order)
+            self._AddSizer(panel.Sizer, sizer_buttons, flag=wx.ALIGN_RIGHT, insert=start+3)
+        else:
+            panel.Sizer.Add(ctrl_index)
+            panel.Sizer.Add(list_collate)
+            panel.Sizer.Add(list_order)
+            self._AddSizer(panel.Sizer, sizer_buttons, flag=wx.ALIGN_RIGHT)
+
+        self._BindDataHandler(self._OnChange,     ctrl_index,    ["columns", ctrl_index,   "name" if "name" in col else "expr"])
+        self._BindDataHandler(self._OnChange,     list_collate,  ["columns", list_collate, "collate"])
+        self._BindDataHandler(self._OnChange,     list_order,    ["columns", list_order,   "direction"])
+        self._BindDataHandler(self._OnMoveItem,   button_up,     ["columns", button_up],   -1)
+        self._BindDataHandler(self._OnMoveItem,   button_down,   ["columns", button_down], +1)
+        self._BindDataHandler(self._OnRemoveItem, button_remove, ["columns", button_remove])
+
+        self._ctrls.update({"columns.index.%s"    % rowkey: ctrl_index,
+                            "columns.collate.%s"  % rowkey: list_collate,
+                            "columns.order.%s"    % rowkey: list_order, })
+        self._buttons.update({"columns.up.%s"     % rowkey: button_up,
+                              "columns.down.%s"   % rowkey: button_down,
+                              "columns.remove.%s" % rowkey: button_remove, })
+
+
+    def _AddRowTrigger(self, path, i, value, insert=False):
+        """Adds a new row of controls for trigger columns."""
+        first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
+        data, meta, rowkey = self._item, self._item.get("meta") or {}, wx.NewId()
+        if "INSTEAD OF" == meta.get("upon"):
+            self._ctrls["label_table"].Label = "&View:"
+            self._ctrls["table"].SetItems(self._views)
+            table = self._db.get_category("view", meta["table"]) \
+                    if meta.get("table") else {}
+        else:
+            self._ctrls["label_table"].Label = "&Table:"
+            self._ctrls["table"].SetItems(self._tables)
+            table = self._db.get_category("table", meta["table"]) \
+                    if meta.get("table") else {}
+        tablecols = [x["name"] for x in table.get("columns") or ()]
+        panel = self._panel_columns
+
+        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+
+        list_column = wx.ComboBox(panel, choices=tablecols,
+            style=wx.CB_DROPDOWN | wx.CB_READONLY)
+        button_up     = wx.Button(panel, label=u"\u2191", size=(20, -1))
+        button_down   = wx.Button(panel, label=u"\u2193", size=(20, -1))
+        button_remove = wx.Button(panel, label=u"\u2715", size=(20, -1))
+
+        list_column.MinSize = (200, -1)
+        button_remove._toggle = "show"
+        button_up._toggle   = self._GetMoveButtonToggle(button_up,   -1)
+        button_down._toggle = self._GetMoveButtonToggle(button_down, +1)
+        if first: button_up.Enable(False)
+        if last:  button_down.Enable(False)
+        button_up.ToolTipString     = "Move one step higher"
+        button_down.ToolTipString   = "Move one step lower"
+        button_remove.ToolTipString = "Remove"                    
+
+        list_column.Value = value
+
+        sizer_buttons.Add(button_up)
+        sizer_buttons.Add(button_down)
+        sizer_buttons.Add(button_remove)
+
+        if insert:
+            start = panel.Sizer.Cols * i
+            panel.Sizer.Insert(start, list_column)
+            self._AddSizer(panel.Sizer, sizer_buttons, flag=wx.ALIGN_RIGHT, insert=start+1)
+        else:
+            panel.Sizer.Add(list_column)
+            self._AddSizer(panel.Sizer, sizer_buttons, flag=wx.ALIGN_RIGHT)
+
+        self._BindDataHandler(self._OnChange,      list_column,   ["columns", list_column])
+        self._BindDataHandler(self._OnMoveItem,    button_up,     ["columns", button_up],   -1)
+        self._BindDataHandler(self._OnMoveItem,    button_down,   ["columns", button_down], +1)
+        self._BindDataHandler(self._OnRemoveItem,  button_remove, ["columns", button_remove])
+
+        self._ctrls.update({"columns.name.%s"     % rowkey: list_column})
+        self._buttons.update({"columns.up.%s"     % rowkey: button_up,
+                              "columns.down.%s"   % rowkey: button_down,
+                              "columns.remove.%s" % rowkey: button_remove})
+
+
+    def _AddRowView(self, path, i, value, insert=False):
+        """Adds a new row of controls for view columns."""
+        first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
+        panel = self._panel_columns
+        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+
+        text_column = wx.TextCtrl(panel)
+        button_up     = wx.Button(panel, label=u"\u2191", size=(20, -1))
+        button_down   = wx.Button(panel, label=u"\u2193", size=(20, -1))
+        button_remove = wx.Button(panel, label=u"\u2715", size=(20, -1))
+
+        text_column.MinSize = (200, -1)
+        button_remove._toggle = "show"
+        button_up._toggle   = self._GetMoveButtonToggle(button_up,   -1)
+        button_down._toggle = self._GetMoveButtonToggle(button_down, +1)
+        if first: button_up.Enable(False)
+        if last:  button_down.Enable(False)
+        button_up.ToolTipString     = "Move one step higher"
+        button_down.ToolTipString   = "Move one step lower"
+        button_remove.ToolTipString = "Remove"                    
+
+        text_column.Value = value
+
+        sizer_buttons.Add(button_up)
+        sizer_buttons.Add(button_down)
+        sizer_buttons.Add(button_remove)
+
+        if insert:
+            start = panel.Sizer.Cols * i
+            panel.Sizer.Insert(start, text_column)
+            self._AddSizer(panel.Sizer, sizer_buttons, flag=wx.ALIGN_RIGHT, insert=start+1)
+        else:
+            panel.Sizer.Add(text_column)
+            self._AddSizer(panel.Sizer, sizer_buttons, flag=wx.ALIGN_RIGHT)
+
+        self._BindDataHandler(self._OnChange,     text_column,   ["columns", text_column])
+        self._BindDataHandler(self._OnMoveItem,   button_up,     ["columns", button_up],   -1)
+        self._BindDataHandler(self._OnMoveItem,   button_down,   ["columns", button_down], +1)
+        self._BindDataHandler(self._OnRemoveItem, button_remove, ["columns", button_remove])
+
+        self._ctrls.update({"columns.name.%s"     % id(text_column): text_column})
+        self._buttons.update({"columns.up.%s"     % id(text_column): button_up,
+                              "columns.down.%s"   % id(text_column): button_down,
+                              "columns.remove.%s" % id(text_column): button_remove})
+
+
+    def _BindDataHandler(self, handler, ctrl, path, *args):
+        """
+        Binds handler(path, *args) handler to control.
+        If path contains ctrl, ctrl is assumed to be in a row under FlexGridSizer,
+        and path will have row index instead of ctrl when invoking handler.
+        """
+        if isinstance(ctrl, wx.stc.StyledTextCtrl): events = [wx.stc.EVT_STC_CHANGE]
+        elif isinstance(ctrl, wx.ComboBox): events = [wx.EVT_TEXT, wx.EVT_COMBOBOX]
+        elif isinstance(ctrl, wx.CheckBox): events = [wx.EVT_CHECKBOX]
+        elif isinstance(ctrl, wx.Button):   events = [wx.EVT_BUTTON]
+        else: events = [wx.EVT_TEXT]
+        for e in events:
+            self.Bind(e, functools.partial(self._OnDataEvent, handler, path, *args), ctrl)
+
+
+    def _OnDataEvent(self, handler, path, *args):
+        """
+        Intermediary handler for data control, calculates control row index
+        and invokes handler with indexed path, if control in path.
+
+        @param   path    [key, .., ctrl, ..] ctrl will be replaced with row index
+        """
+        event = args[-1]
+        ctrl = event.EventObject
+        if ctrl in path:
+            indexitem, parentsizer = ctrl, ctrl.ContainingSizer
+            while parentsizer is not ctrl.Parent.Sizer:
+                indexitem = parentsizer
+                parentsizer = self._sizers.get(indexitem)
+            index = ctrl.Parent.Sizer.GetItemIndex(indexitem) / ctrl.Parent.Sizer.Cols
+            path = [index if x is ctrl else x for x in path]
+        handler(path, *args)
+
+
+    def _EmptyControl(self, window):
+        """Empties a component of children, updates _ctrls and _buttons."""
+        buttonmap = {v: k for k, v in self._buttons.items()}
+        ctrlmap   = {v: k for k, v in self._ctrls.items()}
+        while window.Sizer and window.Sizer.Children:
+            sizeritem = window.Sizer.Children[0]
+            if sizeritem.IsSizer(): self._RemoveSizer(sizeritem.GetSizer())
+            window.Sizer.Remove(0)
+        for c in window.Children:
+            if c in buttonmap: self._buttons.pop(buttonmap.pop(c))
+            elif c in ctrlmap: self._ctrls  .pop(ctrlmap.pop(c))
+            c.Destroy()
+
+
+    def _ToggleControls(self, edit):
+        """Toggles controls editable/readonly, updates buttons state."""
+        self.Freeze()
+        for b in self._buttons.values():
+            action = getattr(b, "_toggle", None) or []
+            if callable(action): action = action() or []
+            if "disable" in action: b.Enable(not edit)
+            if "show"    in action: b.Show(edit)
+            if not ("disable" in action or "skip" in action): b.Enable(edit)
+        for c in self._ctrls.values():
+            action = getattr(c, "_toggle", None) or []
+            if callable(action): action = action() or []
+            if   "skip"    in action: continue # for c
+            if "disable" in action: c.Enable(not edit)                
+            if "disable" not in action:
+                if isinstance(c, (wx.ComboBox, wx.stc.StyledTextCtrl)): c.Enable(edit)
+                else:
+                    try: c.SetEditable(edit)
+                    except Exception: c.Enable(edit)
+        if "table" == self._category:
+            self._ctrls["alter"].Show(edit and not self._newmode)
+        for c in (c for n, c in vars(self).items() if n.startswith("_panel_")):
+            c.Layout()
+        self.Layout()
+        self.Thaw()
+
+
+    def _PopulateSQL(self):
+        """Populates CREATE SQL window."""
+        sql = grammar.generate(self._item["meta"])
+        if not sql: return
+        self._ctrls["sql"].SetReadOnly(False)
+        self._item["sql"] = sql
+        self._ctrls["sql"].SetText(sql + "\n")
+        self._ctrls["sql"].SetReadOnly(True)
+
+
+    def _GetColumnTypes(self):
+        """
+        Returns a list of available column types,
+        SQLite defaults + defined in database + defined locally.
+        """
+        result = set([""] + list(database.Database.AFFINITY))
+        uppers = set(x.upper() for x in result)
+        tt = self._db.get_category("table").values()
+        if "table" == self._category: tt.append(self._item)
+        for table in tt:
+            for c in table.get("columns") or ():
+                t = c.get("type")
+                if not t or t.upper() in uppers: continue # for c
+                result.add(t); uppers.add(t.upper())
+        return sorted(result)
+
+
+    def _GetMoveButtonToggle(self, button, direction):
+        """
+        Returns function, returning a list with ["show", "disable"]
+        depending on editmode and direction.
+        """
+        def inner():
+            result = ["show"]
+            if not self._editmode: return result
+
+            indexitem, parentsizer = button, button.ContainingSizer
+            while parentsizer is not button.Parent.Sizer:
+                indexitem = parentsizer
+                parentsizer = self._sizers.get(indexitem)
+            index = button.Parent.Sizer.GetItemIndex(indexitem) / button.Parent.Sizer.Cols
+            count = len(button.Parent.Sizer.Children) / button.Parent.Sizer.Cols
+
+            if index + direction < 0 or index + direction >= count:
+                result.append("disable")
+            return result
+        return inner
+
+
+    def _GetSizerChildren(self, sizer):
+        """Returns all the nested child components of a sizer."""
+        result = []
+        for x in sizer.Children:
+            if x.IsWindow() : result.append(x.GetWindow())
+            elif x.IsSizer(): result.extend(self._GetSizerChildren(x.GetSizer()))
+        return result
+        
+
+    def _PostEvent(self, **kwargs):
+        """Posts an EVT_SCHEMA_PAGE event to parent page."""
+        wx.PostEvent(self._page, SchemaPageEvent(source=self, item=self._item, **kwargs))
+
+
+    def _AddSizer(self, parentsizer, childsizer, *args, **kwargs):
+        """
+        Adds the child sizer to parent sizer and registers the nesting,
+        for index lookup in handlers.
+
+        @param   insert  if numeric, sizer is inserted at index instead of added
+        """
+        index = kwargs.pop("insert", None)
+        if index is None: parentsizer.Add(childsizer, *args, **kwargs)
+        else: parentsizer.Insert(index, childsizer, *args, **kwargs)
+        self._sizers[childsizer] = parentsizer        
+
+
+    def _RemoveSizer(self, sizer):
+        """
+        Clears registered sizer and all its registered child sizers.
+        """
+        self._sizers.pop(sizer, None)
+        for x in sizer.Children:
+            if x.IsSizer(): self._RemoveSizer(x.GetSizer())
+
+
+    def _AddRow(self, path, i, value, insert=False):
+        """Adds a new row of controls for value at path index."""
+        panel = self._panel_columns
+        if "table" == self._category:
+            adder = self._AddRowTable
+            if "constraints" == path[-1]:
+                adder, panel = self._AddRowTableConstraint, self._panel_constraints
+        elif "index"   == self._category: adder = self._AddRowIndex
+        elif "trigger" == self._category: adder = self._AddRowTrigger
+        elif "view"    == self._category: adder = self._AddRowView
+        adder(path, i, value, insert)
+        panel.Layout()
+
+        if "table" == self._category:
+            label, count = path[0].capitalize(), len(self._item["meta"].get(path[0]) or ())
+            if count: label = "%s (%s)" % (label, count)
+            self._notebook_table.SetPageText(0 if ["columns"] == path else 1, label)
+        self._panel_category.Layout()
+
+
+    def _RemoveRow(self, path, index):
+        """
+        Removes row components from parent's FlexGridSizer.
+        """
+        buttonmap = {v: k for k, v in self._buttons.items()}
+        ctrlmap   = {v: k for k, v in self._ctrls.items()}
+        parent = self._panel_columns if "columns" == path[-1] else self._panel_constraints
+        comps, cols = [], parent.Sizer.Cols
+        for i in range(cols * index, cols * index + cols)[::-1]:
+            sizeritem = parent.Sizer.Children[i]
+            if sizeritem.IsWindow(): comps.append(sizeritem.GetWindow())
+            elif sizeritem.IsSizer():
+                comps.extend(self._GetSizerChildren(sizeritem.GetSizer()))
+            parent.Sizer.Remove(i)
+        for c in comps:
+            if c in buttonmap: self._buttons.pop(buttonmap.pop(c))
+            elif c in ctrlmap: self._ctrls  .pop(ctrlmap.pop(c))
+            c.Destroy()
+
+        if "table" == self._category:
+            label, count = path[0].capitalize(), len(self._item["meta"].get(path[0]) or ())
+            if count: label = "%s (%s)" % (label, count)
+            self._notebook_table.SetPageText(0 if ["columns"] == path else 1, label)
+        parent.Layout()
+
+
+    def _OnAddConstraint(self, event):
+        """Opens popup for choosing constraint type."""
+        menu = wx.Menu()
+
+        def add_constraint(ctype, *_, **__):
+            constraint = self.TABLECONSTRAINT_DEFAULTS[ctype]
+            constraints = self._item["meta"].setdefault("constraints", [])
+            constraints.append(constraint)
+            self._AddRowTableConstraint(["constraints"], len(constraints) - 1, constraint)
+            self._ToggleControls(self._editmode)
+
+            label, count = "Constraints", len(self._item["meta"].get("constraints") or ())
+            if count: label = "%s (%s)" % (label, count)
+            self._notebook_table.SetPageText(1, label)
+
+            self._panel_constraints.Layout()
+            self._panel_category.Layout()
+
+        menu = wx.Menu()
+        for ctype in self.TABLECONSTRAINT:
+            it = wx.MenuItem(menu, -1, ctype)
+            menu.AppendItem(it)
+            menu.Bind(wx.EVT_MENU, functools.partial(add_constraint, ctype), id=it.GetId())
+        event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
+
+
+    def _OnAddItem(self, path, value, event=None):
+        """Adds value to object meta at path, adds item controls."""
+        ptr = parent = self._item["meta"]
+        for i, p in enumerate(path):
+            ptr = ptr.get(p)
+            if ptr is None: ptr = parent[p] = {} if i < len(path) - 1 else []
+            parent = ptr
+        ptr.append(copy.deepcopy(value))
+        panel = self._panel_columns if "columns" == path[-1] else self._panel_constraints
+        self.Freeze()
+        self._AddRow(path, len(ptr) - 1, value)
+        self._PopulateSQL()
+        self._ToggleControls(self._editmode)
+        self.Layout()
+        self.Thaw()
+        self._PostEvent(modified=True)
+
+
+    def _OnRemoveItem(self, path, event=None):
+        """Removes item from object meta and item controls from panel at path."""
+        path, index = path[:-1], path[-1]
+        ptr = self._item["meta"]
+        for i, p in enumerate(path): ptr = ptr.get(p)
+        ptr[index:index+1] = []
+        self.Freeze()
+        self._RemoveRow(path, index)
+        self._PopulateSQL()
+        self._ToggleControls(self._editmode)
+        self.Layout()
+        self.Thaw()
+        self._PostEvent(modified=True)
+
+
+    def _OnMoveItem(self, path, direction, event=None):
+        """Swaps the order of two meta items at path."""
+        path, index = path[:-1], path[-1]
+        ptr = self._item["meta"]
+        for i, p in enumerate(path): ptr = ptr.get(p)
+        index2 = index + direction
+        ptr[index], ptr[index2] = ptr[index2], ptr[index]
+        self.Freeze()
+        self._RemoveRow(path, index)
+        self._AddRow(path, index2, ptr[index2], insert=True)
+        self._PopulateSQL()
+        self._ToggleControls(self._editmode)
+        self.Thaw()
+        self._PostEvent(modified=True)
+
+
+    def _OnChange(self, path, event):
+        """Handler for changing a value in a control, updates data and SQL."""
+        if self._ignore_change: return
+
+        path = [path] if isinstance(path, basestring) else path
+        rebuild, meta = False, self._item["meta"]
+        value0 = util.get(meta, path)
+
+        value = event.EventObject.Value
+        if isinstance(value, basestring) \
+        and (not isinstance(event.EventObject, wx.stc.StyledTextCtrl)
+        or not value.strip()): value = value.strip()
+        if value == value0: return
+
+        util.set(meta, value, path)
+
+        if "trigger" == self._category:
+            # Trigger special: INSTEAD OF UPDATE triggers on a view
+            if ["upon"] == path and grammar.SQL.INSTEAD_OF in (value0, value) \
+            or ["action"] == path and grammar.SQL.INSTEAD_OF == meta.get("upon") \
+            and grammar.SQL.UPDATE in (value0, value):
+                rebuild = True
+                meta.pop("columns", None), meta.pop("table", None)
+        elif "table" == self._category:
+            if "constraints" == path[0] and "table" == path[-1]:
+                rebuild = True # Foreign table changed, clear foreign cols
+                # TODO siin võiks aint constraintid rebuildiga.
+                # tegelt oleks vaja aint clearida list_keys 
+                # ja populeerida uue tabeli väljadega.
+                ptr = util.get(meta, path[:-1]).get("key")
+                if ptr: ptr[:] = [""]
+        elif ["table"] == path:
+            rebuild = meta.get("columns")
+            meta.pop("columns", None)
+
+        self._Populate() if rebuild else self._PopulateSQL()
+        self._PostEvent(modified=True)
+
+
+    def _OnToggleColumnFlag(self, path, rowkey, event):
+        """Toggles PRIMARY KEY / NOT NULL / UNIQUE flag."""
+        path, flag = path[:-1], path[-1]
+        col = util.get(self._item["meta"], path)
+
+        check_autoinc = self._ctrls["columns.autoinc.%s" % rowkey]
+        if event.EventObject.Value:
+            col[flag] = {}
+            if "pk" == flag: check_autoinc.Enable()
+        else:
+            col.pop(flag, None)
+            if "pk" == flag:
+                check_autoinc.Enable(False)
+                check_autoinc.Value = False
+        self._PopulateSQL()
+
+
+    def _OnToggleAlterSQL(self, event=None):
+        """Toggles showing ALTER SQL statement instead of CREATE SQL."""
+        self._show_alter = not self._show_alter
+        self._label_sql.Label = "ALTER TABLE SQL:" if self._show_alter else "CREATE SQL:"
+        self._ctrls["alter"].Value = self._show_alter
+        self._PopulateSQL()
+
+
+    def _OnCopySQL(self, event=None):
+        """Handler for copying SQL to clipboard."""
+        if wx.TheClipboard.Open():
+            d = wx.TextDataObject(self._ctrls["sql"].GetText())
+            wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+
+
+    def _OnSaveSQL(self, event=None):
+        """
+        Handler for saving SQL to file, opens file dialog and saves content.
+        """
+        action, category = "CREATE", self._category.upper()
+        if self._show_alter: action = "ALTER"
+        name = self._item["meta"].get("name") or ""
+        filename = " ".join((action, category, name))
+        dialog = wx.FileDialog(
+            parent=self, message="Save as", defaultFile=filename,
+            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        filename = dialog.GetPath()
+        title = " ".join(filter(bool, (category, grammar.quote(name))))
+        try:
+            content = step.Template(templates.CREATE_SQL, strip=False).expand(
+                title=title, db_filename=self._db.filename,
+                sql=self._ctrls["sql"].GetText())
+            with open(filename, "wb") as f:
+                f.write(content.encode("utf-8"))
+            util.start_file(filename)
+        except Exception as e:
+            msg = "Error saving SQL to %s." % filename
+            logger.exception(msg); guibase.status(msg, flash=True)
+            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
+
+
+    def _OnRefresh(self, event=None):
+        """Handler for clicking refresh, updates database data in controls."""
+        self._types = self._GetColumnTypes()
+        self._tables = [x["name"] for x in self._db.get_category("table").values()]
+        # TODO siin peaks tegelt legitiimselt refreshima tabeleid-view'sid (mitte tingimata schemaga)
+        # ja refreshima enda itemi schemat.
+        self._views  = [x["name"] for x in self._db.get_category("view").values()]
+        if not self._editmode:
+            item = self._db.get_category(self._category, self._item["name"])
+            if not item:
+                wx.MessageBox("%s %s no longer present in the database." %
+                              (self._category.capitalize(), grammar.quote(self._item["name"])),
+                              conf.Title, wx.OK | wx.ICON_ERROR)
+                return
+
+            if "meta" not in item: # Full schema not retrieved
+                wx.CallAfter(self._db.populate_schema, full=True)
+                return wx.CallAfter(self._OnRefresh)
+
+            self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
+        # TODO siin võiks ka vaadata, kas on muutunud, enne kui populate.
+        self._Populate()
+        self._ToggleControls(self._editmode)
+
+
+    def _OnToggleEdit(self, event=None):
+        """Handler for toggling edit mode."""
+        is_changed =  self.IsChanged()
+        if is_changed and wx.OK != wx.MessageBox(
+            "There are unsaved changes, "
+            "are you sure you want to discard them?",
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+        ): return
+
+        self._editmode = not self._editmode
+
+        if self._newmode and not self._editmode:
+            self._newmode = False
+            self._PostEvent(close=True)
+            return
+
+        if self._editmode:
+            self._ToggleControls(self._editmode)
+        else:
+            if self._show_alter: self._OnToggleAlterSQL()
+            if is_changed: self._OnRefresh()
+            else:
+                self._item = copy.deepcopy(self._original)
+                self._ToggleControls(self._editmode)
+        self._PostEvent(modified=True)
+
+
+    def _OnClose(self, event=None):
+        """Handler for clicking to close the item, sends message to parent."""
+        if self._editmode and self.IsChanged() and wx.OK != wx.MessageBox(
+            "There are unsaved changes, "
+            "are you sure you want to discard them?",
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+        ): return
+        self._editmode = self._newmode = False
+        self._PostEvent(close=True)
+
+
+    def _OnSave(self, event=None):
+        """Handler for clicking to save the item, validates and saves."""
+        if not self._newmode and not self.IsChanged(): return self._OnToggleEdit()
+
+        errors, meta, meta2 = [], self._item["meta"], None
+        name = meta.get("name") or ""
+
+        if not name:
+            errors += ["Name is required."]
+        if self._category in ("index", "trigger") and not meta.get("table"):
+            if "trigger" == self._category and "INSTEAD OF" == meta.get("upon"):
+                errors += ["View is required."]
+            else:
+                errors += ["Table is required."]
+        if "trigger" == self._category and not meta.get("body"):
+            errors += ["Body is required."]
+        if "view"    == self._category and not meta.get("select"):
+            errors += ["Select is required."]
+        if "table"   == self._category and not meta.get("columns"):
+            errors += ["Columns are required."]
+
+        if (self._newmode or name.lower() != self._item["name"].lower()) \
+        and self._db.get_category(self._category, name):
+            errors += ["%s named %s already exists." % (self._category.capitalize(),
+                       grammar.quote(name, force=True))]
+        if not errors:
+            meta2 = grammar.parse(self._item["sql"])
+            if not meta2: errors += ["Invalid options for CREATE %s." % self._category.upper()]
+        if errors: return wx.MessageBox("Errors:\n\n%s" % "\n\n".join(errors),
+                                        conf.Title, wx.OK | wx.ICON_WARNING)
+
+        # TODO siin võiks kõigepealt üritada CREATEda mingi temporary nime alla,
+        # et kas SQLite'i jaoks on kõik ok. kui on, alles siis läheb DROP.
+        # või siis transaktsioon.
+
+        if "table" != self._category and "name" in self._item:
+            self._db.execute("DROP %s IF EXISTS %s" % (
+                self._category.upper(), grammar.quote(self._item["name"])))
+
+        self._db.execute(self._item["sql"])
+        self._item.update(name=name, meta=meta2)
+        self._original = copy.deepcopy(self._item)
+        self._newmode = self._editmode = False
+        if self._show_alter: self._OnToggleAlterSQL()
+        self._ToggleControls(self._editmode)
+        self._PostEvent(updated=True)
+
+
+    def _OnDelete(self, event=None):
+        """Handler for clicking to delete the item, asks for confirmation."""
+        extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
+                if "table" == self._category else ""                    
+        if wx.OK != wx.MessageBox(
+            "Are you sure you want to delete the %s %s?%s" %
+            (self._category, grammar.quote(self._item["name"], force=True), extra),
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+        ): return
+
+        if "table" == self._category and self._item.get("count") \
+        and wx.OK != wx.MessageBox(
+            "Are you REALLY sure you want to delete the %s %s?\n\n"
+            "It currently contains %s." %
+            (self._category, grammar.quote(self._item["name"], force=True),
+             util.plural("row", self._item["count"])),
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+        ): return
+
+        self._db.execute("DROP %s %s" % (self._category, grammar.quote(self._item["name"])))
+        self._PostEvent(close=True, updated=True)
