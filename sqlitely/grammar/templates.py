@@ -19,7 +19,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    10.09.2019
+@modified    20.09.2019
 ------------------------------------------------------------------------------
 """
 
@@ -75,7 +75,7 @@ COLUMN_DEFINITION = """
     %if data.get("fk") is not None:
   REFERENCES {{ Q(data["fk"]["table"]) if data["fk"].get("table") else "" }}
         %if data["fk"].get("key"):
-  ({{ Q(data["fk"]["key"]) }})
+  {{ WS(" ") }}({{ Q(data["fk"]["key"]) }})
         %endif
         %if data["fk"].get("defer") is not None:
     {{ "NOT" if data["fk"]["defer"].get("not") else "" }}
@@ -87,8 +87,8 @@ COLUMN_DEFINITION = """
         %for action, act in data["fk"].get("action", {}).items():
     ON {{ action }} {{ act }}
         %endfor
-        %for match in data["fk"].get("match", []):
-    MATCH {{ match }}
+        %if data["fk"].get("match"):
+    MATCH {{ data["fk"]["match"] }}
         %endfor
     %endif
 """
@@ -333,8 +333,8 @@ TABLE_CONSTRAINT = """
     %for action, act in data.get("action", {}).items():
     ON {{ action }} {{ act }}
     %endfor
-    %for match in data.get("match", []):
-    MATCH {{ match }}
+    %if data.get("match"):
+    MATCH {{ data["match"] }}
     %endfor
 %endif
 """
