@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.09.2019
+@modified    20.09.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -46,6 +46,7 @@ import wx.stc
 from . lib import controls
 from . lib.controls import ColourManager
 from . lib import util
+from . lib import wx_accel
 from . lib.vendor import step
 
 from . import conf
@@ -2000,7 +2001,7 @@ class DatabasePage(wx.Panel):
 
         panel1 = wx.Panel(parent=splitter)
         button_refresh = wx.Button(panel1, label="Refresh")
-        button_new = wx.Button(panel1, label="Create new ..")
+        button_new = wx.Button(panel1, label="Create ne&w ..")
         tree = self.tree_schema = wx.gizmos.TreeListCtrl(
             parent=panel1,
             style=wx.TR_DEFAULT_STYLE
@@ -5270,16 +5271,19 @@ class SchemaObjectPage(wx.PyPanel):
     Component for viewing and editing schema objects like tables and triggers.
     """
 
-    ORDER    = ["", "ASC", "DESC"]
-    COLLATE  = ["", "BINARY", "NOCASE", "RTRIM"]
-    UPON     = ["", "BEFORE", "AFTER", "INSTEAD OF"]
-    ACTION   = ["DELETE", "INSERT", "UPDATE"]
-    CONFLICT = ["", "ROLLBACK", "ABORT", "FAIL", "IGNORE", "REPLACE"]
+    ORDER      = ["", "ASC", "DESC"]
+    COLLATE    = ["", "BINARY", "NOCASE", "RTRIM"]
+    UPON       = ["", "BEFORE", "AFTER", "INSTEAD OF"]
+    ACTION     = ["DELETE", "INSERT", "UPDATE"]
+    MATCH      = ["SIMPLE", "FULL", "PARTIAL"]
+    ON_ACTION  = ["SET NULL", "SET DEFAULT", "CASCADE", "RESTRICT", "NO ACTION"]
+    CONFLICT   = ["", "ROLLBACK", "ABORT", "FAIL", "IGNORE", "REPLACE"]
+    DEFERRABLE = ["DEFERRED", "IMMEDIATE"]
     TABLECONSTRAINT = ["PRIMARY KEY", "FOREIGN KEY", "UNIQUE", "CHECK"]
     TABLECONSTRAINT_DEFAULTS = {
         "PRIMARY KEY": {"type": "PRIMARY KEY", "key": [{}]},
         "UNIQUE":      {"type": "UNIQUE",      "key": [{}]},
-        "FOREIGN KEY": {"type": "FOREIGN KEY", "key": [""], "columns": [""]},
+        "FOREIGN KEY": {"type": "FOREIGN KEY", "key": [], "columns": []},
         "CHECK":       {"type": "CHECK"},
     }
 
@@ -5410,22 +5414,6 @@ class SchemaObjectPage(wx.PyPanel):
 
     def _CreateTable(self):
         """Returns control panel for CREATE TABLE page."""
-
-        """
-TODO:
-  - columns
-    - check ja collate ja fk
-    - linnukeste täpsemad optionid, nagu conflict-clause jne. vbl eraldi popup?
-  - table constraints
-    - optional constraint nimi
-    - fk
-      - ACTION valikud
-      - MATCH name clause
-      - defer-optionid
-
-välju eemaldades peavad need kohe ka kaduma constraintidest
-hmm.. ja renamedes vist ka ümber nimetuma.
-        """
         panel = wx.Panel(self)
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
@@ -5472,7 +5460,7 @@ hmm.. ja renamedes vist ka ümber nimetuma.
             
         sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Name",    size=(150, -1)), border=7, flag=wx.LEFT)
         sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Type",    size=(100, -1)))
-        sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Default", size=(150, -1)))
+        sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Default", size=(100, -1)))
         sizer_columnstop.Add(sizer_columnflags)
 
         sizer_columnbuttons.AddStretchSpacer()
@@ -5484,7 +5472,7 @@ hmm.. ja renamedes vist ka ümber nimetuma.
         sizer_columnwrapper.Add(panel_columns, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
         sizer_columnwrapper.Add(sizer_columnbuttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
-        sizer_constraintwrapper.Add(panel_constraints, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
+        sizer_constraintwrapper.Add(panel_constraints, border=5, proportion=1, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
         sizer_constraintwrapper.Add(sizer_constraintbuttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
         nb.AddPage(panel_columnwrapper,     "Columns")
@@ -5499,7 +5487,7 @@ hmm.. ja renamedes vist ka ümber nimetuma.
         self._BindDataHandler(self._OnAddItem, button_add_column, ["columns"], {"name": ""})
         self.Bind(wx.EVT_BUTTON, self._OnAddConstraint, button_add_constraint)
 
-        panel_columns.SetupScrolling(scroll_x=False)
+        panel_columns.SetupScrolling()
         return panel
 
 
@@ -5570,7 +5558,7 @@ hmm.. ja renamedes vist ka ümber nimetuma.
         self._BindDataHandler(self._OnAddItem, button_add_column, ["columns"], {"name": ""})
         self._BindDataHandler(self._OnAddItem, button_add_expr,   ["columns"], {"expr": ""})
 
-        panel_columns.SetupScrolling(scroll_x=False)
+        panel_columns.SetupScrolling()
         return panel
 
 
@@ -5858,7 +5846,7 @@ hmm.. ja renamedes vist ka ümber nimetuma.
 
         text_name.MinSize    = (150, -1)
         list_type.MinSize    = (100, -1)
-        text_default.MinSize = (150, -1)
+        text_default.MinSize = (100, -1)
         check_autoinc._toggle = lambda: "disable" if self._editmode and col.get("pk") is None else ""
         button_open._toggle = "skip"
         button_remove._toggle = "show"
@@ -5912,6 +5900,7 @@ hmm.. ja renamedes vist ka ümber nimetuma.
         self._BindDataHandler(self._OnToggleColumnFlag, check_notnull, ["columns", check_notnull, "notnull"], rowkey)
         self._BindDataHandler(self._OnToggleColumnFlag, check_unique,  ["columns", check_unique,  "unique"],  rowkey)
         self._BindDataHandler(self._OnChange,      check_autoinc, ["columns", check_autoinc, "pk", "autoincrement"])
+        self._BindDataHandler(self._OnOpenItem,    button_open,   ["columns", button_open])
         self._BindDataHandler(self._OnMoveItem,    button_up,     ["columns", button_up],   -1)
         self._BindDataHandler(self._OnMoveItem,    button_down,   ["columns", button_down], +1)
         self._BindDataHandler(self._OnRemoveItem,  button_remove, ["columns", button_remove])
@@ -6012,9 +6001,10 @@ hmm.. ja renamedes vist ka ümber nimetuma.
 
             sizer_buttons.Add(button_open)
 
-            self._BindDataHandler(self._OnChange, ctrl_cols,  ["constraints", ctrl_cols,  "columns", 0])
-            self._BindDataHandler(self._OnChange, list_table, ["constraints", list_table, "table"])
-            self._BindDataHandler(self._OnChange, ctrl_keys,  ["constraints", ctrl_keys,  "key", 0])
+            self._BindDataHandler(self._OnChange,   ctrl_cols,   ["constraints", ctrl_cols,  "columns"])
+            self._BindDataHandler(self._OnChange,   list_table,  ["constraints", list_table, "table"])
+            self._BindDataHandler(self._OnChange,   ctrl_keys,   ["constraints", ctrl_keys,  "key"])
+            self._BindDataHandler(self._OnOpenItem, button_open, ["constraints", button_open])
 
             self._ctrls.update({"constraints.columns.%s" % rowkey: ctrl_cols,
                                 "constraints.table.%s"   % rowkey: list_table,
@@ -6253,9 +6243,9 @@ hmm.. ja renamedes vist ka ümber nimetuma.
         and path will have row index instead of ctrl when invoking handler.
         """
         if isinstance(ctrl, wx.stc.StyledTextCtrl): events = [wx.stc.EVT_STC_CHANGE]
-        elif isinstance(ctrl, wx.ComboBox): events = [wx.EVT_TEXT, wx.EVT_COMBOBOX]
-        elif isinstance(ctrl, wx.CheckBox): events = [wx.EVT_CHECKBOX]
         elif isinstance(ctrl, wx.Button):   events = [wx.EVT_BUTTON]
+        elif isinstance(ctrl, wx.CheckBox): events = [wx.EVT_CHECKBOX]
+        elif isinstance(ctrl, wx.ComboBox): events = [wx.EVT_TEXT, wx.EVT_COMBOBOX]
         else: events = [wx.EVT_TEXT]
         for e in events:
             self.Bind(e, functools.partial(self._OnDataEvent, handler, path, *args), ctrl)
@@ -6379,6 +6369,72 @@ hmm.. ja renamedes vist ka ümber nimetuma.
         return result
         
 
+    def _GetFormDialogProps(self, path):
+        """Returns (title, field properties) for table column or constraint FormDialog."""
+        
+        def get_foreign_cols(data):
+            result = []
+            if data and data.get("table"):
+                ftable = self._db.get_category("table", data["table"])
+                result = [x["name"] for x in ftable.get("columns") or ()]
+            return result
+
+
+        def get_table_cols(data):
+            return [x["name"] for x in self._item["meta"].get("columns") or ()]
+
+
+        return [
+            {"name": "name",    "label": "Name"},
+            {"name": "type",    "label": "Type", "choices": self._types, "choicesedit": True},
+            {"name": "default", "label": "Default"},
+            {"name": "pk", "label": "PRIMARY KEY", "toggle": True, "children": [
+                {"name": "autoincrement", "label": "AUTOINCREMENT", "type": bool},
+                {"name": "direction", "label": "Direction", "toggle": True, "choices": self.ORDER,
+                 "help": "If DESC, an integer key is not an alias for ROWID."},
+                {"name": "conflict", "label": "ON CONFLICT", "toggle": True, "choices": self.CONFLICT},
+            ]},
+            {"name": "notnull", "label": "NOT NULL", "toggle": True, "children": [
+                {"name": "conflict", "label": "ON CONFLICT", "toggle": True, "choices": self.CONFLICT},
+            ]},
+            {"name": "unique", "label": "UNIQUE", "toggle": True, "children": [
+                {"name": "conflict", "label": "ON CONFLICT", "toggle": True, "choices": self.CONFLICT},
+            ]},
+            {"name": "fk", "label": "FOREIGN KEY", "toggle": True, "children": [
+                {"name": "table",  "label": "Foreign table", "choices": self._tables, "link": "key"},
+                {"name": "key",    "label": "Foreign column", "choices": get_foreign_cols},
+                {"name": "delete", "label": "ON DELETE", "toggle": True, "choices": self.ON_ACTION},
+                {"name": "update", "label": "ON UPDATE", "toggle": True, "choices": self.ON_ACTION},
+                {"name": "match",   "label": "MATCH", "toggle": True, "choices": self.MATCH,
+                 "help": "Not enforced by SQLite."},
+                {"name": "defer",  "label": "DEFERRABLE", "toggle": True,
+                 "help": "Foreign key constraint enforced on COMMIT vs immediately",
+                 "children": [
+                    {"name": "not",     "label": "NOT", "type": bool, "help": "Whether enforced immediately"},
+                    {"name": "initial", "label": "INITIALLY", "choices": self.DEFERRABLE},
+                ]},
+            ]},
+            {"name": "check",   "label": "CHECK",   "toggle": True, "component": controls.SQLiteTextCtrl,
+             "help": "Expression yielding a NUMERIC 0 on constraint violation,\ncannot contain a subquery."},
+            {"name": "collate", "label": "COLLATE", "toggle": True, "choices": self.COLLATE, "choicesedit": True,
+             "help": "Collating sequence to use for the column (defaults to BINARY)."},
+        ] if "columns" == path[0] else [
+            {"name": "columns", "label": "Local column", "type": list, "choices": get_table_cols},
+            {"name": "table",   "label": "Foreign table", "choices": self._tables, "link": "key"},
+            {"name": "key",     "label": "Foreign column", "type": list, "choices": get_foreign_cols},
+            {"name": "delete",  "label": "ON DELETE", "toggle": True, "choices": self.ON_ACTION},
+            {"name": "update",  "label": "ON UPDATE", "toggle": True, "choices": self.ON_ACTION},
+            {"name": "match",   "label": "MATCH", "toggle": True, "choices": self.MATCH,
+             "help": "Not enforced by SQLite."},
+            {"name": "defer",   "label": "DEFERRABLE", "toggle": True,
+             "help": "Foreign key constraint enforced on COMMIT vs immediately",
+             "children": [
+                {"name": "not",     "label": "NOT", "type": bool, "help": "Whether enforced immediately"},
+                {"name": "initial", "label": "INITIALLY", "choices": self.DEFERRABLE},
+            ]},
+        ]
+
+
     def _PostEvent(self, **kwargs):
         """Posts an EVT_SCHEMA_PAGE event to parent page."""
         wx.PostEvent(self._page, SchemaPageEvent(source=self, item=self._item, **kwargs))
@@ -6457,7 +6513,7 @@ hmm.. ja renamedes vist ka ümber nimetuma.
         menu = wx.Menu()
 
         def add_constraint(ctype, *_, **__):
-            constraint = self.TABLECONSTRAINT_DEFAULTS[ctype]
+            constraint = copy.deepcopy(self.TABLECONSTRAINT_DEFAULTS[ctype])
             constraints = self._item["meta"].setdefault("constraints", [])
             constraints.append(constraint)
             self._AddRowTableConstraint(["constraints"], len(constraints) - 1, constraint)
@@ -6527,6 +6583,30 @@ hmm.. ja renamedes vist ka ümber nimetuma.
         self._PostEvent(modified=True)
 
 
+    def _OnOpenItem(self, path, event=None):
+        """Opens a FormDialog for row item."""
+        props = self._GetFormDialogProps(path)
+        data  = util.get(self._item["meta"], path)
+        title = "Table column"
+        if "constraints" == path[0]:
+            title = "%s constraint" % data["type"]
+        dlg = controls.FormDialog(self.TopLevelParent, title, props, data, self._editmode)
+        wx_accel.accelerate(dlg)
+        if wx.OK != dlg.ShowModal() or not self._editmode: return
+        data2 = dlg.GetData()
+        if data == data2: return
+
+        util.set(self._item["meta"], data2, path)
+        self.Freeze()
+        path2, index = path[:-1], path[-1]
+        self._RemoveRow(path2, index)
+        self._AddRow(path2, index, data2, insert=True)
+        self._PopulateSQL()
+        self._ToggleControls(self._editmode)
+        self.Thaw()
+        self._PostEvent(modified=True)
+
+
     def _OnChange(self, path, event):
         """Handler for changing a value in a control, updates data and SQL."""
         if self._ignore_change: return
@@ -6539,8 +6619,10 @@ hmm.. ja renamedes vist ka ümber nimetuma.
         if isinstance(value, basestring) \
         and (not isinstance(event.EventObject, wx.stc.StyledTextCtrl)
         or not value.strip()): value = value.strip()
-        if value == value0: return
+        if isinstance(value0, list) and not isinstance(value, list):
+            value = [value]
 
+        if value == value0: return
         util.set(meta, value, path)
 
         if "trigger" == self._category:
@@ -6552,12 +6634,14 @@ hmm.. ja renamedes vist ka ümber nimetuma.
                 meta.pop("columns", None), meta.pop("table", None)
         elif "table" == self._category:
             if "constraints" == path[0] and "table" == path[-1]:
-                rebuild = True # Foreign table changed, clear foreign cols
-                # TODO siin võiks aint constraintid rebuildiga.
-                # tegelt oleks vaja aint clearida list_keys 
-                # ja populeerida uue tabeli väljadega.
-                ptr = util.get(meta, path[:-1]).get("key")
-                if ptr: ptr[:] = [""]
+                # Foreign table changed, clear foreign cols
+                path2, fkpath, index = path[:-2], path[:-1], path[-2]
+                data2 = util.get(meta, fkpath)
+                if data2.get("key"): data2["key"][:] = []
+                self.Freeze()
+                self._RemoveRow(path2, index)
+                self._AddRow(path2, index, data2, insert=True)
+                self.Thaw()
         elif ["table"] == path:
             rebuild = meta.get("columns")
             meta.pop("columns", None)

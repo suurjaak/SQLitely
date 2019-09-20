@@ -9,6 +9,9 @@ Stand-alone GUI components for wx:
 - ColourManager(object):
   Updates managed component colours on Windows system colour change.
 
+- FormDialog(wx.Dialog):
+  Dialog for displaying a complex editable form.
+
 - NonModalOKDialog(wx.Dialog):
   A simple non-modal dialog with an OK button, stays on top of parent.
 
@@ -56,7 +59,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    09.09.2019
+@modified    20.09.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -242,6 +245,416 @@ class ColourManager(object):
             setattr(ctrl, prop, mycolour)
         elif hasattr(ctrl, "Set" + prop):
             getattr(ctrl, "Set" + prop)(mycolour)
+
+
+
+class FormDialog(wx.Dialog):
+    """
+    Dialog for displaying a complex editable form.
+    Uses ComboBox for fields with choices.
+    Uses two ListBoxes for list fields.
+
+    fields = [{
+      name:          field name
+      ?type:         (bool | list | anything) if field has direct content
+      ?label:        field label if not using name
+      ?help:         field tooltip
+      ?path:         [data path, if, more, complex, nesting]
+      ?choices:      [value, ] or callback(field, path, data) returning list
+      ?choicesedit   true if value not limited to given choices
+      ?component     specific wx component to use
+      ?toggle:       if true, field is toggle-able and children hidden when off
+      ?children:     [{field}, ]
+      ?link:         "name" of linked field, cleared and repopulated on change
+    }]
+    """
+
+    def __init__(self, parent, title, props=None, data=None, edit=None):
+        wx.Dialog.__init__(self, parent=parent, title=title,
+                          style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER)
+        self._ignore_change = False
+        self._editmode = True
+        self._comps   = collections.defaultdict(list) # {(path): [wx component, ]}
+        self._toggles = {} # {(path): wx.CheckBox, }
+        self._props   = []
+        self._data    = {}
+        self._rows    = 0
+
+        panel_wrap  = wx.lib.scrolledpanel.ScrolledPanel(self)
+        panel_items = self._panel = wx.Panel(panel_wrap)
+
+        button_save   = wx.Button(self, label="OK",     id=wx.OK)
+        button_cancel = wx.Button(self, label="Cancel", id=wx.CANCEL)
+
+        button_save.SetDefault()
+        self.SetEscapeId(wx.CANCEL)
+        self.Bind(wx.EVT_BUTTON, self._OnClose, button_save)
+
+        self.Sizer        = wx.BoxSizer(wx.VERTICAL)
+        sizer_buttons     = wx.BoxSizer(wx.HORIZONTAL)
+        panel_wrap.Sizer  = wx.BoxSizer(wx.VERTICAL)
+        panel_items.Sizer = wx.GridBagSizer(hgap=5, vgap=0)
+
+        panel_items.Sizer.SetEmptyCellSize((0, 0))
+        panel_wrap.Sizer.Add(panel_items, border=10, proportion=1, flag=wx.RIGHT | wx.GROW)
+
+        sizer_buttons.AddStretchSpacer()
+        sizer_buttons.Add(button_save,   border=10, flag=wx.LEFT)
+        sizer_buttons.Add(button_cancel, border=10, flag=wx.LEFT)
+        sizer_buttons.AddStretchSpacer()
+
+        panel_wrap.SetupScrolling(scroll_x=False)
+        self.Sizer.Add(panel_wrap, border=15, proportion=1, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
+        self.Sizer.Add(sizer_buttons, border=5, flag=wx.ALL | wx.GROW)
+
+        for x in self, panel_wrap, panel_items:
+            ColourManager.Manage(x, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
+            ColourManager.Manage(x, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
+        self.Populate(props, data, edit)
+        self.MinSize = (440, panel_wrap.Size[1] + 20)
+        if not self._editmode: self.Fit()
+        self.CenterOnParent()
+
+
+    def Populate(self, props, data, edit=None):
+        """
+        Clears current content, if any, adds controls to dialog,
+        and populates with data.
+        """
+        self._ignore_change = True
+        self._props = copy.deepcopy(props or [])
+        self._data  = copy.deepcopy(data  or {})
+        if edit is not None: self._editmode = edit
+        self._rows  = 0
+
+        while self._panel.Sizer.Children: self._panel.Sizer.Remove(0)
+        for c in self._panel.Children: c.Destroy()
+        self._toggles.clear()
+        self._comps.clear()
+
+        for f in self._props: self._AddField(f)
+
+        for f in self._props: self._PopulateField(f)
+        self._panel.Sizer.AddGrowableCol(6, 1)
+        self._ignore_change = False
+        self.Layout()
+
+
+    def GetData(self):
+        """Returns the current data values."""
+        result = copy.deepcopy(self._data)
+        for p in sorted(self._toggles, key=len, reverse=True):
+            if not self._toggles[p].Value:
+                ptr = result
+                for x in p[:-1]: ptr = ptr.get(x) or {}
+                ptr.pop(p[-1], None)
+        return result
+
+
+    def _GetValue(self, field, path=()):
+        """Returns field data value."""
+        ptr = self._data
+        for x in path: ptr = ptr.get(x, {})
+        return ptr.get(field["name"])
+
+
+    def _SetValue(self, field, value, path=()):
+        """Sets field data value."""
+        ptr = parent = self._data
+        for x in path:
+            ptr = ptr.get(x)
+            if ptr is None: ptr = parent[x] = {}
+            parent = ptr
+        ptr[field["name"]] = value
+
+
+    def _DelValue(self, field, path=()):
+        """Deletes field data value."""
+        ptr = self._data
+        for x in path: ptr = ptr.get(x, {})
+        ptr.pop(field["name"], None)
+
+
+    def _GetField(self, name, path=()):
+        """Returns field from props."""
+        fields, path = self._props, list(path) + [name]
+        while fields:
+            for f in fields:
+                if [f["name"]] == path: return f
+                if f["name"] == path[0] and f.get("children"):
+                    fields, path = f["children"], path[1:]
+                    break # for f
+
+
+    def _GetChoices(self, field, path):
+        """Returns the choices list for field, if any."""
+        result = field.get("choices") or []
+        if callable(result):
+            if path:
+                parentfield = self._GetField(path[-1], path[:-1])
+                data = self._GetValue(parentfield, path[:-1])
+            else: data = self.GetData()
+            result = result(data)
+        return result
+
+
+    def _AddField(self, field, path=()):
+        """Adds field controls to dialog."""
+        if not self._editmode and self._GetValue(field, path) is None: return
+        MAXCOL = 8
+        parent, sizer = self._panel, self._panel.Sizer
+        level, fpath = len(path), path + (field["name"], )
+
+        col = 0
+        if field.get("toggle"):
+            toggle = wx.CheckBox(parent, label=field["label"] if "label" in field else field["name"])
+            if field.get("help"): toggle.SetToolTipString(field["help"])
+            sizer.Add(toggle, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
+            self._comps[fpath].append(toggle)
+            self._toggles[fpath] = toggle
+            self._BindHandler(self._OnToggleField, toggle, field, path, toggle)
+            col += 2
+
+        if not field.get("toggle") or any(field.get(x) for x in ["type", "choices", "component"]):
+            ctrls = self._MakeControls(field, path)
+            for i, c in enumerate(ctrls):
+                colspan = 2 if isinstance(c, wx.StaticText) else MAXCOL - level - col
+                brd, BRD = (5, wx.BOTTOM) if isinstance(c, wx.CheckBox) else (0, 0)
+                sizer.Add(c, border=brd, pos=(self._rows, level + col), span=(1, colspan), flag=BRD | wx.GROW)
+                col += colspan
+
+        self._rows += 1
+        for f in field.get("children") or (): self._AddField(f, fpath)
+
+
+    def _PopulateField(self, field, path=()):
+        """Populates field controls with data state."""
+        if not self._editmode and self._GetValue(field, path) is None: return
+        fpath = path + (field["name"], )
+        choices = self._GetChoices(field, path)
+        value = self._GetValue(field, path)
+
+        ctrls = [x for x in self._comps[fpath]
+                 if not isinstance(x, (wx.Button, wx.StaticText, wx.Sizer))]
+        if list is field.get("type"):
+            value = value or []
+            listbox1, listbox2 = (x for x in ctrls if isinstance(x, wx.ListBox))
+            listbox1.SetItems([x for x in choices if x not in value])
+            listbox2.SetItems(value or [])
+        else:
+            for i, c in enumerate(ctrls):
+                if not i and isinstance(c, wx.CheckBox) and field.get("toggle"):
+                    c.Value = (value is not None)
+                    self._OnToggleField(field, path, c)
+                    c.Enable(self._editmode)
+                    continue # for i, c
+                if isinstance(c, wx.stc.StyledTextCtrl): c.SetText(value or "")
+                elif isinstance(c, wx.CheckBox): c.Value = bool(value) 
+                else:
+                    if isinstance(c, wx.ComboBox): c.SetItems(choices)
+                    if isinstance(value, (list, tuple)): value = "".join(value)                        
+                    c.Value = "" if value is None else value
+
+                if isinstance(c, (wx.TextCtrl, wx.stc.StyledTextCtrl)):
+                    c.SetEditable(self._editmode)
+                else: c.Enable(self._editmode)
+
+        for f in field.get("children") or (): self._PopulateField(f, fpath)
+
+
+    def _MakeControls(self, field, path=()):
+        """Returns a list of wx components for field."""
+        result = []
+        parent, sizer, ctrl = self._panel, self._panel.Sizer, None
+        fpath = path + (field["name"], )
+        label = field["label"] if "label" in field else field["name"]
+        accname = "ctrl_%s" % self._rows # Associating label click with control
+
+        if not field.get("toggle") and field.get("type") not in (bool, list):
+            result.append(wx.StaticText(parent, label=label, name=accname + "_label"))
+
+        if list is field.get("type"):
+            sizer_f = wx.BoxSizer(wx.VERTICAL)
+            sizer_l = wx.BoxSizer(wx.HORIZONTAL)
+            sizer_b1 = wx.BoxSizer(wx.VERTICAL)
+            sizer_b2 = wx.BoxSizer(wx.VERTICAL)
+            ctrl1 = wx.ListBox(parent, style=wx.LB_EXTENDED)
+            b1    = wx.Button(parent, label=">", size=(30, -1))
+            b2    = wx.Button(parent, label="<", size=(30, -1))
+            ctrl2 = wx.ListBox(parent, style=wx.LB_EXTENDED)
+            b3    = wx.Button(parent, label=u"\u2191", size=(20, -1))
+            b4    = wx.Button(parent, label=u"\u2193", size=(20, -1))
+
+            b1.SetToolTipString("Add selected from left to right")
+            b2.SetToolTipString("Remove selected from right")
+            b3.SetToolTipString("Move selected items higher")
+            b4.SetToolTipString("Move selected items lower")
+            ctrl1.SetName(accname)
+            ctrl1.MinSize = ctrl2.MinSize = (150, 100)
+            if field.get("help"): ctrl1.SetToolTipString(field["help"])
+
+            sizer_b1.Add(b1); sizer_b1.Add(b2)
+            sizer_b2.Add(b3); sizer_b2.Add(b4)
+            sizer_l.Add(ctrl1, proportion=1)
+            sizer_l.Add(sizer_b1, flag=wx.ALIGN_CENTER_VERTICAL);
+            sizer_l.Add(ctrl2, proportion=1)
+            sizer_l.Add(sizer_b2, flag=wx.ALIGN_CENTER_VERTICAL);
+
+            toplabel = wx.StaticText(parent, label=label, name=accname + "_label")
+            sizer_f.Add(toplabel, flag=wx.GROW)
+            sizer_f.Add(sizer_l, border=10, proportion=1, flag=wx.BOTTOM | wx.GROW)
+
+            result.append(sizer_f)
+            self._comps[fpath].extend([toplabel, ctrl1, b1, b2, ctrl2, b3, b4])
+
+            self._BindHandler(self._OnAddToList,      ctrl1, field, path)
+            self._BindHandler(self._OnAddToList,      b1,    field, path)
+            self._BindHandler(self._OnRemoveFromList, b2,    field, path)
+            self._BindHandler(self._OnRemoveFromList, ctrl2, field, path)
+            self._BindHandler(self._OnMoveInList,     b3,    field, path, -1)
+            self._BindHandler(self._OnMoveInList,     b4,    field, path, +1)
+        else:
+            if field.get("component"):
+                ctrl = field["component"](parent)
+                if isinstance(ctrl, SQLiteTextCtrl): ctrl.MinSize = (-1, 60)
+            elif bool is field.get("type"):
+                ctrl = wx.CheckBox(parent, label=label)
+            elif "choices" in field:
+                style = wx.CB_DROPDOWN | (0 if field.get("choicesedit") else wx.CB_READONLY)
+                ctrl = wx.ComboBox(parent, style=style)
+            else:
+                ctrl = wx.TextCtrl(parent)
+
+            result.append(ctrl)
+            self._BindHandler(self._OnChange, ctrl, field, path)
+
+        for i, x in enumerate(result):
+            if not isinstance(x, wx.Window): continue # for i, x
+            self._comps[fpath].append(x)
+            if not i: continue # for i, x
+            x.SetName(accname)
+            if field.get("help"): x.SetToolTipString(field["help"])
+        return result
+
+
+    def _BindHandler(self, handler, ctrl, *args):
+        """Binds appropriate handler for control type."""
+        if isinstance(ctrl, wx.stc.StyledTextCtrl): events = [wx.stc.EVT_STC_CHANGE]
+        elif isinstance(ctrl, wx.Button):   events = [wx.EVT_BUTTON]
+        elif isinstance(ctrl, wx.CheckBox): events = [wx.EVT_CHECKBOX]
+        elif isinstance(ctrl, wx.ComboBox): events = [wx.EVT_TEXT, wx.EVT_COMBOBOX]
+        elif isinstance(ctrl, wx.ListBox): events = [wx.EVT_LISTBOX_DCLICK]
+        else: events = [wx.EVT_TEXT]
+        for e in events: self.Bind(e, lambda e: handler(*args+(e, )), ctrl)
+
+
+    def _OnChange(self, field, path, event):
+        """
+        Handler for changing field content, updates data,
+        refreshes linked field if any.
+        """
+        if self._ignore_change: return
+        value = event.EventObject.Value
+        if isinstance(value, basestring) \
+        and (not isinstance(event.EventObject, wx.stc.StyledTextCtrl)
+        or not value.strip()): value = value.strip()
+        self._SetValue(field, value, path)
+        if field.get("link"):
+            linkfield = self._GetField(field["link"], path)
+            self._DelValue(linkfield, path)
+            self._PopulateField(linkfield, path)
+
+
+    def _OnAddToList(self, field, path, event):
+        """Handler from adding items from listbox on the left to the right."""
+        indexes = []
+
+        listbox1, listbox2 = (x for x in self._comps[path + (field["name"], )]
+                              if isinstance(x, wx.ListBox))
+        if isinstance(event.EventObject, wx.ListBox):
+            indexes.append(event.GetSelection())
+        else:
+            indexes.extend(listbox1.GetSelections())
+            if not indexes and listbox1.GetCount(): indexes.append(0)
+        selecteds = map(listbox1.GetString, indexes)
+
+        for i in indexes[::-1]: listbox1.Delete(i)
+        listbox2.AppendItems(selecteds)
+        self._SetValue(field, listbox2.GetItems(), path)
+
+
+    def _OnRemoveFromList(self, field, path, event):
+        """Handler from removing items from listbox on the right."""
+        indexes = []
+        listbox1, listbox2 = (x for x in self._comps[path + (field["name"], )]
+                              if isinstance(x, wx.ListBox))
+        if isinstance(event.EventObject, wx.ListBox):
+            indexes.append(event.GetSelection())
+        else:
+            indexes.extend(listbox2.GetSelections())
+            if not indexes and listbox2.GetCount(): indexes.append(0)
+
+        for i in indexes[::-1]: listbox2.Delete(i)
+        items2 = listbox2.GetItems()
+        allchoices = self._GetChoices(field, path)
+        listbox1.SetItems([x for x in allchoices if x not in items2])
+        self._SetValue(field, items2, path)
+
+
+    def _OnMoveInList(self, field, path, direction, event):
+        """Handler for moving selected items up/down within listbox."""
+        _, listbox2 = (x for x in self._comps[path + (field["name"], )]
+                       if isinstance(x, wx.ListBox))
+        indexes = listbox2.GetSelections()
+        selecteds, items = map(listbox2.GetString, indexes), listbox2.GetItems()
+
+        if not indexes or direction < 0 and not indexes[0] \
+        or direction > 0 and indexes[-1] == len(items) - 1: return
+
+        for i in range(len(items))[::-direction]:
+            if i not in indexes: continue # for i
+            i2 = i + direction
+            items[i], items[i2] = items[i2], items[i]
+
+        listbox2.SetItems(items)
+        for i in indexes: listbox2.Select(i + direction)
+        self._SetValue(field, items, path)
+
+
+    def _OnToggleField(self, field, path, ctrl, event=None):
+        """
+        Handler for toggling a field (and subfields) on/off, updates display.
+        """
+        fpath = path + (field["name"], )
+        ctrls = [] # [(field, path, ctrl)]
+        for c in self._comps.get(fpath, []):
+            ctrls.append((field, path, c))
+        for f in field.get("children", []):
+            for c in self._comps.get(fpath + (f["name"], ), []):
+                ctrls.append((f, fpath, c))
+
+        on = event.EventObject.Value if event else ctrl.Value
+        for f, p, c in ctrls:
+            # Never hide field-level toggle itself
+            if isinstance(c, wx.CheckBox) and f.get("toggle") and p == path:
+                continue # for f, p, c
+
+            fon = on
+            # Hide field children that are toggled off
+            if not isinstance(c, wx.CheckBox) and f.get("toggle") \
+            and p != path and self._GetValue(f, p) is None:
+                fon = False
+
+            c.Show(fon)
+        if on and self._GetValue(field, path) is None:
+            self._SetValue(field, {} if field.get("children") else "", path)
+        self.Layout()
+
+
+    def _OnClose(self, event):
+        """Handler for clicking OK/Cancel, hides the dialog."""
+        self.Hide()
+        self.IsModal() and self.EndModal(event.GetId())
 
 
 
