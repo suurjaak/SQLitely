@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    16.09.2019
+@modified    21.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -300,7 +300,7 @@ class Parser(object):
             ?schema:  index schema name
             ?exists:  True if IF NOT EXISTS
             ?unique:  True if UNIQUE
-            columns:  [{?name, ?expr, ?collate, ?direction}, ]
+            columns:  [{?name, ?expr, ?collate, ?order}, ]
             where:    index WHERE SQL expression
         }.
         """
@@ -320,7 +320,7 @@ class Parser(object):
             if c.K_COLLATE():
                 col["collate"] = self.u(c.collation_name).upper()
             if c.K_ASC() or c.K_DESC():
-                col["direction"] = self.t(c.K_ASC() or c.K_DESC())
+                col["order"] = self.t(c.K_ASC() or c.K_DESC())
             result["columns"].append(col)
 
         if ctx.expr(): result["where"] = self.r(ctx.expr())
@@ -456,7 +456,7 @@ class Parser(object):
           ?type:               column type
           ?pk                  { if PRIMARY KEY
               ?autoincrement:  True if AUTOINCREMENT
-              ?direction:      ASC | DESC
+              ?order:          ASC | DESC
               ?conflict:       ROLLBACK | ABORT | FAIL | IGNORE | REPLACE
           ?
           ?notnull             { if NOT NULL
@@ -494,8 +494,8 @@ class Parser(object):
             if c.K_PRIMARY() and c.K_KEY():
                 result["pk"] = {}
                 if c.K_AUTOINCREMENT(): result["pk"]["autoincrement"] = True
-                direction = c.K_ASC() or c.K_DESC()
-                if direction: result["pk"]["direction"] = self.t(direction)
+                order = c.K_ASC() or c.K_DESC()
+                if order: result["pk"]["order"] = self.t(order)
                 if conflict:  result["pk"]["conflict"] = conflict
 
             elif c.K_NOT() and c.K_NULL():
@@ -535,7 +535,7 @@ class Parser(object):
             ?name:      constraint name
 
           # for PRIMARY KEY | UNIQUE:
-            ?key:       [{?name, ?expr, ?collate, ?direction}, ]
+            ?key:       [{?name, ?expr, ?collate, ?order}, ]
             ?conflict:  ROLLBACK | ABORT | FAIL | IGNORE | REPLACE
 
           # for CHECK:
@@ -570,8 +570,8 @@ class Parser(object):
                 else: col["expr"] = self.r(c.expr())
 
                 if c.K_COLLATE(): col["collate"] = self.u(c.collation_name).upper()
-                direction = c.K_ASC() or c.K_DESC()
-                if direction: col["direction"] = self.t(direction)
+                order = c.K_ASC() or c.K_DESC()
+                if order: col["order"] = self.t(order)
                 result["key"].append(col)
             if conflict: result["conflict"] = conflict
 

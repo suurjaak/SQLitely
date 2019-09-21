@@ -4072,7 +4072,7 @@ class DatabasePage(wx.Panel):
                 sqltext = " ".join(filter(bool, (
                     grammar.quote(data["name"]) if has_name else data.get("expr"),
                     "COLLATE %s" % data["collate"] if data.get("collate") else "",
-                    data.get("direction"),
+                    data.get("order"),
                 )))
             else:
                 table = self.db.get_category("table", data["parent"]["name"])
@@ -6101,7 +6101,7 @@ class SchemaObjectPage(wx.PyPanel):
 
         ctrl_index.Value   = col.get("name") or col.get("expr") or ""
         list_collate.Value = col.get("collate") or ""
-        list_order.Value   = col.get("direction") or ""
+        list_order.Value   = col.get("order") or ""
 
         sizer_buttons.Add(button_up)
         sizer_buttons.Add(button_down)
@@ -6121,7 +6121,7 @@ class SchemaObjectPage(wx.PyPanel):
 
         self._BindDataHandler(self._OnChange,     ctrl_index,    ["columns", ctrl_index,   "name" if "name" in col else "expr"])
         self._BindDataHandler(self._OnChange,     list_collate,  ["columns", list_collate, "collate"])
-        self._BindDataHandler(self._OnChange,     list_order,    ["columns", list_order,   "direction"])
+        self._BindDataHandler(self._OnChange,     list_order,    ["columns", list_order,   "order"])
         self._BindDataHandler(self._OnMoveItem,   button_up,     ["columns", button_up],   -1)
         self._BindDataHandler(self._OnMoveItem,   button_down,   ["columns", button_down], +1)
         self._BindDataHandler(self._OnRemoveItem, button_remove, ["columns", button_remove])
@@ -6394,7 +6394,7 @@ class SchemaObjectPage(wx.PyPanel):
             {"name": "default", "label": "Default"},
             {"name": "pk", "label": "PRIMARY KEY", "toggle": True, "children": [
                 {"name": "autoincrement", "label": "AUTOINCREMENT", "type": bool},
-                {"name": "direction", "label": "Direction", "toggle": True, "choices": self.ORDER,
+                {"name": "order", "label": "Order", "toggle": True, "choices": self.ORDER,
                  "help": "If DESC, an integer key is not an alias for ROWID."},
                 {"name": "conflict", "label": "ON CONFLICT", "toggle": True, "choices": self.CONFLICT},
             ]},

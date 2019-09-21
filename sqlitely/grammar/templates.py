@@ -19,7 +19,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    20.09.2019
+@modified    21.09.2019
 ------------------------------------------------------------------------------
 """
 
@@ -37,7 +37,7 @@ COLUMN_DEFINITION = """
     %endif
 
     %if data.get("pk") is not None:
-  PRIMARY KEY {{ data["pk"].get("direction", "") }}
+  PRIMARY KEY {{ data["pk"].get("order", "") }}
         %if data["pk"].get("conflict"):
   ON CONFLICT {{ data["pk"]["conflict"] }}
         %endif
@@ -118,8 +118,8 @@ ON {{ Q(data["table"]) if "table" in data else "" }}{{ WS(" ") }}
     %if col.get("collate"):
   COLLATE {{ col["collate"] }}
     %endif
-    %if col.get("direction"):
-  {{ col["direction"] }}
+    %if col.get("order"):
+  {{ col["order"] }}
     %endif
   {{ CM("columns", i) }}
 %endfor
@@ -296,8 +296,8 @@ TABLE_CONSTRAINT = """
         %if col.get("collate") is not None:
   COLLATE {{ col["collate"] }}
         %endif
-        %if col.get("direction") is not None:
-  {{ col["direction"] }}
+        %if col.get("order") is not None:
+  {{ col["order"] }}
         %endif
   {{ CM("constraints", i, "key", j) }}
     %endfor
