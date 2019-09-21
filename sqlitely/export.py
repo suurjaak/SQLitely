@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.09.2019
+@modified    21.09.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -183,7 +183,7 @@ class xlsx_writer(object):
     def __init__(self, filename, sheetname=None, autowrap=()):
         """
         @param   sheetname  title of the first sheet to create, if any
-        @param   autowrap   a list of column indices that will get their width
+        @param   autowrap   a list of column indexes that will get their width
                             set to COL_MAXWIDTH and their contents wrapped
         """
         self._workbook = xlsxwriter.Workbook(filename,
@@ -263,7 +263,7 @@ class xlsx_writer(object):
         If current sheet is full, starts a new one.
 
         @param   style       format name to apply for all columns, or a dict
-                             mapping column indices to format names
+                             mapping column indexes to format names
         @param   merge_cols  how many columns to merge (0 for none)
         @param   autowidth   are the values used to auto-size column max width
         """

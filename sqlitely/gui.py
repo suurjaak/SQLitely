@@ -4429,7 +4429,7 @@ class DatabasePage(wx.Panel):
                     if data: self.db.execute(insert_sql % (grammar.quote(table2),
                                              grammar.quote(table)))
 
-                    # Copy table indices and triggers
+                    # Copy table indexes and triggers
                     for category in "index", "trigger":
 
                         items = self.db.get_category(category, table=table).values()
@@ -4726,9 +4726,9 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         self.rows_all = {} # Unfiltered, unsorted rows {id: row, }
         self.rows_current = [] # Currently shown (filtered/sorted) rows
         self.rowids = {} # SQLite table rowids, used for UPDATE and DELETE
-        self.idx_changed = set() # set of indices for changed rows in rows_all
+        self.idx_changed = set() # set of indexes for changed rows in rows_all
         self.rows_backup = {} # For changed rows {id: original_row, }
-        self.idx_new = [] # Unsaved added row indices
+        self.idx_new = [] # Unsaved added row indexes
         self.rows_deleted = {} # Uncommitted deleted rows {id: deleted_row, }
         self.rowid_name = None
         self.iterator_index = -1

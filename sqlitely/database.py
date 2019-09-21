@@ -84,7 +84,7 @@ class Database(object):
         "label": "Automatic index",
         "type": bool,
         "short": "Use an automatic index if table has none of its own",
-        "description": "When no indices are available to aid the evaluation of a query, SQLite might create an automatic index that lasts only for the duration of a single SQL statement.",
+        "description": "When no indexes are available to aid the evaluation of a query, SQLite might create an automatic index that lasts only for the duration of a single SQL statement.",
       },
       "busy_timeout": {
         "name": "busy_timeout",
@@ -372,12 +372,12 @@ class Database(object):
         "label": "Temporary store",
         "type": int,
         "values": {0: "DEFAULT", 1: "FILE", 2: "MEMORY"},
-        "short": "Location of temporary tables and indices",
-        "description": """  DEFAULT: the compile-time C preprocessor macro SQLITE_TEMP_STORE is used to determine where temporary tables and indices are stored.
-  FILE: temporary tables and indices are stored in a file. The temp_store_directory pragma can be used to specify the directory containing temporary files when FILE is specified. 
-  MEMORY: temporary tables and indices are kept in as if they were pure in-memory databases memory. 
+        "short": "Location of temporary tables and indexes",
+        "description": """  DEFAULT: the compile-time C preprocessor macro SQLITE_TEMP_STORE is used to determine where temporary tables and indexes are stored.
+  FILE: temporary tables and indexes are stored in a file. The temp_store_directory pragma can be used to specify the directory containing temporary files when FILE is specified. 
+  MEMORY: temporary tables and indexes are kept in as if they were pure in-memory databases memory. 
 
-  When the temp_store setting is changed, all existing temporary tables, indices, triggers, and views are immediately deleted.""",
+  When the temp_store setting is changed, all existing temporary tables, indexes, triggers, and views are immediately deleted.""",
       },
       "temp_store_directory": {
         "name": "temp_store_directory",
@@ -385,7 +385,7 @@ class Database(object):
         "type": unicode,
         "deprecated": True,
         "short": "Location of temporary storage",
-        "description": "Value of the sqlite3_temp_directory global variable, which some operating-system interface backends use to determine where to store temporary tables and indices.",
+        "description": "Value of the sqlite3_temp_directory global variable, which some operating-system interface backends use to determine where to store temporary tables and indexes.",
       },
       "threads": {
         "name": "threads",
