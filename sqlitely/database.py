@@ -8,10 +8,11 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.09.2019
+@modified    21.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
+import copy
 import datetime
 import logging
 import os
@@ -444,7 +445,7 @@ class Database(object):
         # {"table|index|view|trigger":
         #   {name.lower():
         #     {name: str, sql: str, table: str, ?columns: [], ?count: int,
-        #      ?full: bool, ?meta: {full metadata}}}}
+        #      ?meta: {full metadata}}}}
         self.schema = defaultdict(OrderedDict)
         self.table_rows    = {} # {tablename1: [..], }
         self.table_objects = {} # {tablename1: {id1: {rowdata1}, }, }
@@ -617,7 +618,7 @@ class Database(object):
         return result
 
 
-    def populate_schema(self, full=False):
+    def populate_schema(self, count=False, parse=False, category=None, name=None):
         """
         Retrieves metadata on all database tables, triggers etc.
 
@@ -625,15 +626,28 @@ class Database(object):
         as [{"name": "tablename", "sql": CREATE SQL}, ].
         Uses already retrieved cached values if possible, unless refreshing.
 
-        @param   full     if True, parses all CREATE statements in full,
-                          populates full column metadata and table row counts
+        @param   count      populate table row counts
+        @param   parse      parse all CREATE statements in full, complete metadata
+        @param   category   "table" | "index" | "trigger" | "view" if not everything
+        @param   name       category item name if not everything in category
         """
         if not self.is_open(): return
+        category, name = (x.lower() if x else x for x in (category, name))
 
-        self.schema.clear()
+        schema0 = copy.deepcopy(self.schema)
+        if category:
+            if name: self.schema[category].pop(name, None)
+            else: self.schema[category].clear()
+        else: self.schema.clear()
+
+        # Retrieve general information from master
+        where, args = "sql != :sql", {"sql": ""}
+        if category:
+            where += " AND type = :type"; args.update(type=category)
+            if name: where += " AND LOWER(name) = :name"; args.update(name=name)
         for row in self.execute(
             "SELECT * FROM sqlite_master "
-            "WHERE sql != '' ORDER BY type, name COLLATE NOCASE"
+            "WHERE %s ORDER BY type, name COLLATE NOCASE" % where, args
         ).fetchall():
             if "table" == row["type"] \
             and "ENABLE_ICU" not in self.compile_options: # Unsupported tokenizer
@@ -641,36 +655,59 @@ class Database(object):
                 and re.search(r"TOKENIZE\s*[\W]*icu[\W]", row["sql"], re.I):
                     continue # for row
 
-            row["sql"] = row["sql"].strip()
+            row["sql"] = row["sql0"] = row["sql"].strip()
             self.schema[row["type"]][row["name"].lower()] = row
 
-        for category, itemmap in self.schema.items() if full else ():
-            for opts in itemmap.values():
-                meta = grammar.parse(opts["sql"])
-                opts.update(full=True, meta=meta, sql=grammar.generate(meta))
-                if "table" == category: opts["columns"] = meta["columns"]
+        for mycategory, itemmap in self.schema.items():
+            if category and category != mycategory: continue # for mycategory
+            for myname, opts in itemmap.items():
+                if category and name and myname != name: continue # for myname
 
-        for opts in self.schema["table"].values():
-            sql = ("SELECT COUNT(*) AS count FROM %s" if full
-                   else "PRAGMA table_info(%s)") % grammar.quote(opts["name"])
-            try:
-                rows = self.execute(sql, log=False).fetchall()
-            except Exception:
-                opts.pop("count", None) if full else opts.update(columns=[])
-                logger.exception("Error fetching %s for table %s.",
-                                 "COUNT" if full else "columns",
-                                 grammar.quote(opts["name"]))
-                continue # for opts
+                opts0 = schema0.get(mycategory, {}).get(myname, {})
 
-            if not full:
-                opts["columns"] = []
-                for row in rows:
-                    col = {"name": row["name"], "type": row["type"].upper()}
-                    if row["dflt_value"] is not None: col["default"] = row["dflt_value"]
-                    if row["notnull"]: col["notnull"] = {}
-                    if row["pk"]:      col["pk"]      = {}
-                    opts["columns"].append(col)
-            else: opts["count"] = rows[0]["count"]
+                # Retrieve metainfo from PRAGMA
+                if mycategory in ("table", "view") and opts0 and opts["sql0"] == opts0["sql0"]:
+                    opts["columns"] = opts0.get("columns") or []
+                elif mycategory in ("table", "view"):
+                    sql = "PRAGMA table_info(%s)" % grammar.quote(opts["name"])
+                    try:
+                        rows = self.execute(sql, log=False).fetchall()
+                    except Exception:
+                        opts.update(columns=[])
+                        logger.exception("Error fetching columns for %s %s.",
+                                         mycategory, grammar.quote(opts["name"]))
+                    else:
+                        opts["columns"] = []
+                        for row in rows:
+                            col = {"name": row["name"], "type": row["type"].upper()}
+                            if row["dflt_value"] is not None:
+                                col["default"] = row["dflt_value"]
+                            if row["notnull"]: col["notnull"] = {}
+                            if row["pk"]:      col["pk"]      = {}
+                            opts["columns"].append(col)
+
+                # Parse metainfo from SQL
+                meta, sql = None, None
+                if opts0 and opts0.get("meta") and opts["sql0"] == opts0["sql0"]:
+                    meta, sql = opts0["meta"], opts0["sql"]
+                elif parse:
+                    meta = grammar.parse(opts["sql"])
+                    sql = grammar.generate(meta)
+                if meta and sql:
+                    opts.update(meta=meta, sql=sql)
+                    if "table" == mycategory: opts["columns"] = meta["columns"]
+
+                # Retrieve table row counts
+                if "table" == mycategory and count:
+                    sql = "SELECT COUNT(*) AS count FROM %s" % grammar.quote(opts["name"])
+                    try:
+                        opts["count"] = self.execute(sql, log=False).fetchone()["count"]
+                    except Exception:
+                        opts.pop("count", None)
+                        logger.exception("Error fetching COUNT for table %s.",
+                                         grammar.quote(opts["name"]))
+                elif "table" == mycategory and opts0 and "count" in opts0:
+                    opts["count"] = opts0["count"]
 
 
     def get_category(self, category, name=None, table=None):
@@ -701,7 +738,7 @@ class Database(object):
 
 
     def get_sql(self, category=None, name=None, column=None, indent="  ",
-                transform=None, refresh=False):
+                transform=None):
         """
         Returns full CREATE SQL statement for database, or for specific
         category only, or for specific category object only,
@@ -719,14 +756,12 @@ class Database(object):
                                         Renames all items of specified category, unless
                                         given nested value like {"table": {"old": "new"}}
                             }
-        @param   refresh    if True, schema is re-queried
         """
         result = ""
         category, column = (x.lower() if x else x for x in (category, column))
         names = [name.lower()] if isinstance(name, basestring) \
                 else [x.lower() for x in name] if isinstance(name, (list, tuple)) else []
 
-        if refresh and self.is_open(): self.populate_schema()
         for mycategory in self.CATEGORIES:
             if category and category != mycategory \
             or not self.schema.get(mycategory): continue # for mycategory
@@ -746,7 +781,7 @@ class Database(object):
                 sql = opts["sql"]
                 kws = {x: transform[x] for x in ("flags", "renames")
                        if transform and x in transform}
-                if not opts.get("full") or kws or indent != "  ":
+                if not opts.get("meta") or kws or indent != "  ":
                     sql = grammar.transform(sql, indent=indent, **kws)
                 chunk += sql + (";\n\n" if not names or len(names) < 2 else "")
             result += ("\n\n" if result else "") + chunk

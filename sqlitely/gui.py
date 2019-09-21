@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.09.2019
+@modified    21.09.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2505,9 +2505,10 @@ class DatabasePage(wx.Panel):
 
     def on_update_stc_schema(self, event=None):
         """Handler for clicking to refresh database schema SQL."""
+        self.db.populate_schema(parse=True)
         scrollpos = self.stc_schema.GetScrollPos(wx.VERTICAL)
         self.stc_schema.SetReadOnly(False)
-        self.stc_schema.SetText(self.db.get_sql(refresh=True))
+        self.stc_schema.SetText(self.db.get_sql())
         self.stc_schema.SetReadOnly(True)
         self.stc_schema.ScrollToLine(scrollpos)
 
@@ -2900,7 +2901,7 @@ class DatabasePage(wx.Panel):
         if do_refresh:
             self.db.clear_cache()
             self.db_grids.clear()
-            self.load_tables_data(full=True)
+            self.load_tables_data(refresh=True)
             if self.grid_table.Table:
                 grid, table_name = self.grid_table, self.grid_table.Table.table
                 scrollpos = map(grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
@@ -3724,13 +3725,14 @@ class DatabasePage(wx.Panel):
             "Are you sure you want to commit these changes (%s)?" %
             info, conf.Title, wx.OK | wx.CANCEL | wx.ICON_QUESTION
         ):
+            mytable = self.grid_table.Table.table
             logger.info("Committing %s in table %s (%s).", info,
-                        grammar.quote(self.grid_table.Table.table), self.db)
+                        grammar.quote(mytable), self.db)
             if not self.grid_table.Table.SaveChanges(): return
 
             self.on_change_table(None)
-            # Refresh tables list with updated row counts
-            self.db.populate_schema(full=True)
+            # Refresh tables list with updated row count
+            self.db.populate_schema(count=True, category="table", name=mytable)
             tablemap = self.db.get_category("table")
             item = self.tree_tables.GetNext(self.tree_tables.RootItem)
             while item and item.IsOk():
@@ -4236,23 +4238,25 @@ class DatabasePage(wx.Panel):
         idx = self.notebook_schema.GetPageIndex(event.source)
         close, modified, updated = (getattr(event, x, False)
                                     for x in ("close", "modified", "updated"))
+        category, name = (event.item.get(x) for x in ("type", "name"))
         if close:
             self.notebook_schema.DeletePage(idx)
         if (modified or updated) and event.source:
-            if event.item.get("name"):
+            if name:
                 suffix = "*" if event.source.IsChanged() else ""
-                title = "%s %s%s" % (event.item["type"].capitalize(),
-                                     grammar.quote(event.item["name"]), suffix)
+                title = "%s %s%s" % (category.capitalize(),
+                                     grammar.quote(name), suffix)
                 if self.notebook_schema.GetPageText(idx) != title:
                     self.notebook_schema.SetPageText(idx, title)
             self.update_page_header()
         if updated:
-            for k, p in self.schema_pages[event.item["type"]].items():
+            for k, p in self.schema_pages[category].items():
                 if p is event.source:
-                    self.schema_pages[event.item["type"]].pop(k)
-                    self.schema_pages[event.item["type"]][event.item["name"]] = p
+                    self.schema_pages[category].pop(k)
+                    self.schema_pages[category][name] = p
                     break # for k, p
-            self.load_schema_tree(refresh=True)
+            self.db.populate_schema(parse=True, category=category, name=name)
+            self.load_schema_tree()
             self.load_tables_data()
             self.on_update_stc_schema()
 
@@ -4562,15 +4566,15 @@ class DatabasePage(wx.Panel):
         """
         if not self: return
         self.on_update_stc_schema()
-        self.load_tables_data(full=True)
-        self.load_schema_tree()
+        self.load_tables_data(refresh=True)
+        self.load_schema_tree(refresh=True)
 
 
-    def load_tables_data(self, full=False):
+    def load_tables_data(self, refresh=False):
         """Loads table data into table tree and SQL editor."""
         try:
             tree = self.tree_tables
-            self.db.populate_schema(full=True)
+            if refresh: self.db.populate_schema(count=True)
             tables = self.db.get_category("table").values()
             # Fill table tree with information on row counts and columns
             tree.DeleteAllItems()
@@ -4580,7 +4584,7 @@ class DatabasePage(wx.Panel):
             for table in tables:
                 child = tree.AppendItem(root, util.unprint(table["name"]))
                 if "count" in table: t = util.plural("row", table["count"])
-                else: t = "ERROR" if full else "Counting.."
+                else: t = "ERROR" if refresh else "Counting.."
                 tree.SetItemText(child, t, 1)
                 tree.SetItemPyData(child, table["name"])
 
@@ -4615,7 +4619,7 @@ class DatabasePage(wx.Panel):
         tree.DeleteAllItems()
         tree.AddRoot("Loading schema..")
         try:
-            if refresh: self.db.populate_schema(full=True)
+            if refresh: self.db.populate_schema(parse=True)
         except Exception:
             if not self: return
             msg = "Error loading schema data from %s." % self.db
@@ -6715,10 +6719,11 @@ class SchemaObjectPage(wx.PyPanel):
 
     def _OnRefresh(self, event=None):
         """Handler for clicking refresh, updates database data in controls."""
+        self._db.populate_schema()
+        prevs = {"_types": self._types, "_tables": self._tables,
+                 "_views": self._views, "_item": self._item}
         self._types = self._GetColumnTypes()
         self._tables = [x["name"] for x in self._db.get_category("table").values()]
-        # TODO siin peaks tegelt legitiimselt refreshima tabeleid-view'sid (mitte tingimata schemaga)
-        # ja refreshima enda itemi schemat.
         self._views  = [x["name"] for x in self._db.get_category("view").values()]
         if not self._editmode:
             item = self._db.get_category(self._category, self._item["name"])
@@ -6728,14 +6733,11 @@ class SchemaObjectPage(wx.PyPanel):
                               conf.Title, wx.OK | wx.ICON_ERROR)
                 return
 
-            if "meta" not in item: # Full schema not retrieved
-                wx.CallAfter(self._db.populate_schema, full=True)
-                return wx.CallAfter(self._OnRefresh)
-
             self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
-        # TODO siin võiks ka vaadata, kas on muutunud, enne kui populate.
-        self._Populate()
-        self._ToggleControls(self._editmode)
+
+        if any(prevs[x] == getattr(self, x) for x in prevs):
+            self._Populate()
+            self._ToggleControls(self._editmode)
 
 
     def _OnToggleEdit(self, event=None):
