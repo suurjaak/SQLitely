@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.09.2019
+@modified    21.09.2019
 ------------------------------------------------------------------------------
 """
 import argparse
@@ -44,13 +44,12 @@ ARGUMENTS = {
 
 def except_hook(etype, evalue, etrace):
     """Handler for all unhandled exceptions."""
-    MAXLEN = 500
     text = "".join(traceback.format_exception(etype, evalue, etrace)).strip()
-    msg = "An unexpected error has occurred%s:\n\n%s"
-    logger.error(msg, "", text)
+    log = "An unexpected error has occurred:\n\n%s"
+    logger.error(log, text)
     if not conf.PopupUnexpectedErrors: return
-    msg %= (", see log for full details", text[:MAXLEN] + "..") \
-           if len(text) > MAXLEN else ("", text)
+    msg = "An unexpected error has occurred:\n\n%s\n\n" \
+          "See log for full details." % util.format_exc(evalue)
     wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
