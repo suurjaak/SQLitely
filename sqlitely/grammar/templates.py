@@ -110,7 +110,9 @@ DROP TABLE {{ Q(data["name"]) }};{{ LF() }}
 DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
     %endfor
 %endfor
+%if any(data.get(x) for x in ("index", "trigger", "view")):
 {{ LF() }}
+%endif
 
 ALTER TABLE {{ Q(data["tempname"]) }} RENAME TO {{ Q(data["name2"]) }};{{ LF() }}
 {{ LF() }}
@@ -120,7 +122,9 @@ ALTER TABLE {{ Q(data["tempname"]) }} RENAME TO {{ Q(data["name2"]) }};{{ LF() }
 {{ WS(x["sql"]) }};{{ LF() }}
     %endfor
 %endfor
+%if any(data.get(x) for x in ("index", "trigger", "view")):
 {{ LF() }}
+%endif
 
 RELEASE SAVEPOINT alter_table;{{ LF() }}
 {{ LF() }}
