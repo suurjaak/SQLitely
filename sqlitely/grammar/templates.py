@@ -4,14 +4,17 @@ Templates for generating SQL statements.
 
 Parameters expected by templates:
 
-    data    statement data structure
-    CM      comma setter(type, i)
-    GLUE    surrounding whitespace consuming token setter()
-    LF      linefeed token setter()
-    PAD     padding token setter(key, data)
-    PRE     line start indentation token setter()
-    Q       quoted name token setter(identifier)
-    WS      whitespace as-is token setter(val)
+    data       statement data structure
+    root       root data structure
+    Template   Template-class
+    templates  this module
+    CM         comma setter(type, i, ?subtype, ?j, ?root=None)
+    GLUE       surrounding whitespace consuming token setter()
+    LF         linefeed token setter()
+    PAD        padding token setter(key, data)
+    PRE        line start indentation token setter()
+    Q          quoted name token setter(identifier)
+    WS         whitespace as-is token setter(val)
 
 ------------------------------------------------------------------------------
 This file is part of SQLitely - SQLite database tool.
@@ -19,8 +22,110 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    21.09.2019
+@modified    22.09.2019
 ------------------------------------------------------------------------------
+"""
+
+
+
+"""
+@param   data {
+             name: table name,
+             ?rename: {?table: new table name, ?column: {old name: new name}},
+             ?add: {column data},
+         }
+"""
+ALTER_TABLE = """
+ALTER TABLE {{ Q(data["name"]) }}
+
+%if data.get("rename") and data["rename"].get("table"):
+  RENAME TO {{ Q(data["rename"]["table"]) }}
+
+%elif data.get("rename") and data["rename"].get("column"):
+  RENAME COLUMN {{ Q(data["rename"]["column"].keys()[0]) }} TO {{ Q(data["rename"]["column"].values()[0]) }}
+
+%elif data.get("add"):
+  ADD COLUMN{{ WS(" ") }}
+  {{ Template(templates.COLUMN_DEFINITION, strip=True, collapse=True).expand(dict(locals(), data=data["add"])) }}
+
+%endif
+"""
+
+
+
+"""
+Complex ALTER TABLE: re-create table under new temporary name,
+copy rows from existing to new, drop existing, rename new to existing. Steps:
+
+ 1. PRAGMA foreign_keys = on
+ 2. BEGIN TRANSACTION
+ 3. CREATE TABLE tempname
+ 4. INSERT INTO tempname (..) SELECT .. FROM old
+ 6. DROP TABLE old
+ 5. DROP all related indexes-triggers-views
+ 7. ALTER TABLE tempname RENAME TO old
+ 8. CREATE indexes-triggers-views
+ 9. COMMIT TRANSACTION
+10. PRAGMA foreign_keys = on
+
+@param   data {
+             name:      table old name,
+             name2:     table new name if renamed else old name,
+             tempname:  table temporary name,
+             meta:      {table CREATE metainfo, using temporary name}
+             columns:   [(column name in old, column name in new)]
+             ?index:    [{related index {name, sql}, using name2}, ]
+             ?trigger:  [{related trigger {name, sql}, using name2}, ]
+             ?view:     [{related view {name, sql}, using name2}, ]
+         }
+"""
+ALTER_TABLE_COMPLEX = """
+
+PRAGMA foreign_keys = off;{{ LF() }}
+{{ LF() }}
+SAVEPOINT alter_table;{{ LF() }}
+{{ LF() }}
+
+{{ Template(templates.CREATE_TABLE).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
+{{ LF() }}
+
+INSERT INTO {{ Q(data["tempname"]) }}
+(
+%for i, (c1, c2) in enumerate(data["columns"]):
+  {{ GLUE() }}{{ Q(c2) }}{{ CM("columns", i) }}
+%endfor
+{{ GLUE() }}){{ LF() }}
+SELECT{{ WS(" ") }}
+%for i, (c1, c2) in enumerate(data["columns"]):
+  {{ GLUE() }}{{ Q(c1) }}{{ CM("columns", i) }}
+%endfor
+FROM {{ Q(data["name"]) }};{{ LF() }}
+{{ LF() }}
+
+DROP TABLE {{ Q(data["name"]) }};{{ LF() }}
+{{ LF() }}
+
+%for category in "index", "trigger", "view":
+    %for x in data.get(category) or []:
+DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
+    %endfor
+%endfor
+{{ LF() }}
+
+ALTER TABLE {{ Q(data["tempname"]) }} RENAME TO {{ Q(data["name2"]) }};{{ LF() }}
+{{ LF() }}
+
+%for category in "index", "trigger", "view":
+    %for x in data.get(category) or []:
+{{ WS(x["sql"]) }};{{ LF() }}
+    %endfor
+%endfor
+{{ LF() }}
+
+RELEASE SAVEPOINT alter_table;{{ LF() }}
+{{ LF() }}
+
+PRAGMA foreign_keys = on;{{ LF() }}
 """
 
 
@@ -60,7 +165,7 @@ COLUMN_DEFINITION = """
         %endif
     %endif
 
-    %if data.get("default") is not None:
+    %if data.get("default") not in (None, ""):
   DEFAULT {{ WS(data["default"]) }}
     %endif
 
@@ -121,7 +226,7 @@ ON {{ Q(data["table"]) if "table" in data else "" }}{{ WS(" ") }}
     %if col.get("order"):
   {{ col["order"] }}
     %endif
-  {{ CM("columns", i) }}
+  {{ CM("columns", i, root=root) }}
 %endfor
 {{ GLUE() }}
 )
@@ -148,15 +253,15 @@ TABLE
 
 %for i, c in enumerate(data.get("columns") or []):
   {{ PRE() }}
-  {{ step.Template(templates.COLUMN_DEFINITION, strip=True, collapse=True).expand(dict(locals(), data=c)) }}
-  {{ CM("columns", i) }}
+  {{ Template(templates.COLUMN_DEFINITION, strip=True, collapse=True).expand(dict(locals(), data=c)) }}
+  {{ CM("columns", i, root=root) }}
   {{ LF() }}
 %endfor
 
 %for i, c in enumerate(data.get("constraints") or []):
   {{ PRE() }}
-  {{ step.Template(templates.TABLE_CONSTRAINT, strip=True, collapse=True).expand(dict(locals(), data=c)) }}
-  {{ CM("constraints", i) }}
+  {{ Template(templates.TABLE_CONSTRAINT, strip=True, collapse=True).expand(dict(locals(), data=c)) }}
+  {{ CM("constraints", i, root=root) }}
   {{ LF() }}
 %endfor
 
@@ -196,7 +301,7 @@ TRIGGER
 %if data.get("columns"):
   OF 
     %for i, c in enumerate(data["columns"]):
-  {{ Q(c) }}{{ CM("columns", i) }}
+  {{ Q(c) }}{{ CM("columns", i, root=root) }}
     %endfor
 %endif
 
@@ -242,7 +347,7 @@ VIEW
   {{ LF() or GLUE() }}
     %for i, c in enumerate(data["columns"]):
   {{ PRE() }}{{ Q(c) }}
-  {{ CM("columns", i) }}
+  {{ CM("columns", i, root=root) }}
   {{ LF() }}
     %endfor
   )
@@ -273,7 +378,7 @@ USING {{ data["module"]["name"] }}
 
 
 """
-@param   i  constraint index
+@param   i     constraint index
 """
 TABLE_CONSTRAINT = """
 
@@ -299,7 +404,7 @@ TABLE_CONSTRAINT = """
         %if col.get("order") is not None:
   {{ col["order"] }}
         %endif
-  {{ CM("constraints", i, "key", j) }}
+  {{ CM("constraints", i, "key", j, root=root) }}
     %endfor
   {{ GLUE() }}
   )
@@ -311,7 +416,7 @@ TABLE_CONSTRAINT = """
 
 %if "FOREIGN KEY" == data.get("type"):
     %for j, c in enumerate(data.get("columns") or []):
-    {{ Q(c) }}{{ CM("constraints", i, "columns", j) }}
+    {{ Q(c) }}{{ CM("constraints", i, "columns", j, root=root) }}
     %endfor
 
   REFERENCES  {{ Q(data["table"]) if data.get("table") else "" }}
@@ -319,7 +424,7 @@ TABLE_CONSTRAINT = """
   {{ GLUE() }}{{ WS(" ") }}
   (
         %for j, c in enumerate(data["key"]):
-  {{ Q(c) if c else "" }}{{ CM("constraints", i, "key", j) }}
+  {{ Q(c) if c else "" }}{{ CM("constraints", i, "key", j, root=root) }}
         %endfor
   )
     %endif

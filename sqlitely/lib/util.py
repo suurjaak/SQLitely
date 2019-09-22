@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.09.2019
+@modified    21.09.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -322,6 +322,18 @@ def set(collection, value, *path):
             ptr = ptr[p]
     ptr[path[-1]] = value
     return collection
+
+
+def walk(data, callback):
+    """
+    Walks through the collection of nested dicts or lists or tuples, invoking
+    callback(child, key, parent) for each element, recursively.
+    """
+    if isinstance(data, collections.Iterable) and not isinstance(data, basestring):
+        for k, v in enumerate(data):
+            if isinstance(data, collections.Mapping): k, v = v, data[v]
+            callback(k, v, data)
+            walk(v, callback)
 
 
 def get_locale_day_date(dt):

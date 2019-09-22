@@ -4255,7 +4255,7 @@ class DatabasePage(wx.Panel):
                     self.schema_pages[category].pop(k)
                     self.schema_pages[category][name] = p
                     break # for k, p
-            self.db.populate_schema(parse=True, category=category, name=name)
+            self.db.populate_schema(parse=True)
             self.load_schema_tree()
             self.load_tables_data()
             self.on_update_stc_schema()
@@ -6318,11 +6318,115 @@ class SchemaObjectPage(wx.PyPanel):
     def _PopulateSQL(self):
         """Populates CREATE SQL window."""
         sql = grammar.generate(self._item["meta"])
-        if not sql: return
+        if sql is not None: self._item["sql"] = sql
+        if self._show_alter: sql = self._GetAlterSQL()
+        if sql is None: return
+        scrollpos = self._ctrls["sql"].GetScrollPos(wx.VERTICAL)
         self._ctrls["sql"].SetReadOnly(False)
-        self._item["sql"] = sql
         self._ctrls["sql"].SetText(sql + "\n")
         self._ctrls["sql"].SetReadOnly(True)
+        self._ctrls["sql"].ScrollToLine(scrollpos)
+
+
+    def _GetAlterSQL(self):
+        """
+        Returns ALTER SQL for table changes.
+        """
+        result = ""
+        old, new = self._original["meta"], self._item["meta"]
+
+        can_simple = True
+        cols1, cols2 = (x.get("columns", []) for x in (old, new))
+        colmap1 = {c["__id__"]: c for c in cols1 if "__id__" in c}
+        colmap2 = {c["__id__"]: c for c in cols2 if "__id__" in c}
+
+        for k in "temporary", "exists", "without", "constraints":
+            if bool(new.get(k)) != bool(old.get(k)):
+                can_simple = False # Top-level flag or constraints existence changed
+        if can_simple:
+            cnstr1_sqls = [grammar.generate(dict(c, __type__="constraint"))
+                          for c in old.get("constraints") or []]
+            cnstr2_sqls = [grammar.generate(dict(c, __type__="constraint"))
+                          for c in new.get("constraints") or []]
+            # Table constraints changed
+            can_simple = (cnstr1_sqls == cnstr2_sqls)
+        if can_simple and any(x not in colmap2 for x in colmap1):
+            can_simple = False # There are deleted columns
+        if can_simple:
+            colids2 = [x.get("__id__") for x in cols2]
+            if any(x is None and colids2[i+1] is not None
+                   for i, x in enumerate(colids2[:-1])):
+                can_simple = False # There are new columns in between
+        if can_simple:
+            for i, c1 in enumerate(cols1):
+                if cols2[i]["__id__"] != c1["__id__"]:
+                    can_simple = False # Column order changed
+                    break # for i, c1
+        if can_simple:
+            cols1_sqls = [grammar.generate(dict(c, name="", __type__="column"))
+                          for c in cols1]
+            cols2_sqls = [grammar.generate(dict(c, name="", __type__="column"))
+                          for c in cols2 if "__id__" in c]
+            # Column definition changed
+            can_simple = (cols1_sqls == cols2_sqls)
+
+
+        if can_simple:
+            # Possible to use just simple ALTER TABLE statements
+
+            sqls, base = [], dict(name=old["name"], __type__="ALTER TABLE")
+
+            for c2 in cols2:
+                c1 = colmap1.get(c2.get("__id__"))
+                if c1 and c1["name"] != c2["name"]:
+                    args = dict(rename={"column": {c1["name"]: c2["name"]}}, **base)
+                    sqls.append(grammar.generate(args))
+
+            for c2 in cols2:
+                c1 = colmap1.get(c2.get("__id__"))
+                if not c1:
+                    sqls.append(grammar.generate(dict(add=c2, **base)))
+
+            if old["name"] != new["name"]:
+                args = dict(rename={"table": new["name"]}, **base)
+                sqls.append(grammar.generate(args))
+            result = ";\n\n".join(sqls) + (";" if sqls else "")
+
+        else:
+            # Need to re-create table, first under temporary name to copy data.
+            tempname, counter = "%s_temp" % new["name"], 2
+            while tempname in self._db.schema["table"]:
+                counter += 1
+                tempname = "%s_temp_%s" % (new["name"], counter)
+
+            meta = copy.deepcopy(self._item["meta"])
+            util.walk(meta, (lambda x, *_: isinstance(x, dict)
+                             and x.get("table") == old["name"]
+                             and x.update(table=tempname))) # Rename in constraints
+            meta["name"] = tempname
+
+            args = {"name": old["name"], "name2": new["name"], "tempname": tempname,
+                    "meta": meta, "__type__": "COMPLEX ALTER TABLE",
+                    "columns": [(colmap1[c2["__id__"]]["name"], c2["name"])
+                                for c2 in cols2 if c2.get("__id__") is not None]}
+
+            renames = {"table":  {old["name"]: new["name"]}
+                                 if old["name"] != new["name"] else {},
+                       "column": {colmap1[c2["__id__"]]["name"]: c2["name"]
+                                  for c2 in cols2 if "__id__" in c2
+                                  and colmap1[c2["__id__"]]["name"] != c2["name"]}}
+            for k, v in renames.items(): renames.pop(k) if not v else None
+            for category in "index", "trigger", "view":
+                if "view" == category and not renames: continue # for category
+                for item in self._db.get_category(category).values():
+                    if old["name"].lower() not in item["meta"].get("__tables__", []):
+                        continue # for item
+                    sql = grammar.transform(item["sql"], renames=renames) \
+                          if renames else item["sql"]
+                    args.setdefault(category, []).append(dict(item, sql=sql))
+            result = grammar.generate(args)
+
+        return result
 
 
     def _GetColumnTypes(self):
@@ -6691,8 +6795,9 @@ class SchemaObjectPage(wx.PyPanel):
         Handler for saving SQL to file, opens file dialog and saves content.
         """
         action, category = "CREATE", self._category.upper()
-        if self._show_alter: action = "ALTER"
         name = self._item["meta"].get("name") or ""
+        if self._show_alter:
+            action, name = "ALTER", self._original["name"]
         filename = " ".join((action, category, name))
         dialog = wx.FileDialog(
             parent=self, message="Save as", defaultFile=filename,
@@ -6703,6 +6808,7 @@ class SchemaObjectPage(wx.PyPanel):
 
         filename = dialog.GetPath()
         title = " ".join(filter(bool, (category, grammar.quote(name))))
+        if self._show_alter: title = " ".join((action, title))
         try:
             content = step.Template(templates.CREATE_SQL, strip=False).expand(
                 title=title, db_filename=self._db.filename,
@@ -6809,15 +6915,26 @@ class SchemaObjectPage(wx.PyPanel):
         if errors: return wx.MessageBox("Errors:\n\n%s" % "\n\n".join(errors),
                                         conf.Title, wx.OK | wx.ICON_WARNING)
 
-        # TODO siin võiks kõigepealt üritada CREATEda mingi temporary nime alla,
-        # et kas SQLite'i jaoks on kõik ok. kui on, alles siis läheb DROP.
-        # või siis transaktsioon.
+        sql, drop = self._item["sql"] + ";", not self._newmode
+        oldname = grammar.quote(self._item["name"])
+        if "table" == self._category and not self._newmode:
+            # Do ALTER TABLE if table has any content
+            if self._db.execute("SELECT 1 FROM %s LIMIT 1" % oldname).fetchone():
+                sql, drop = self._GetAlterSQL(), False
 
-        if "table" != self._category and "name" in self._item:
-            self._db.execute("DROP %s IF EXISTS %s" % (
-                self._category.upper(), grammar.quote(self._item["name"])))
+        fullsql = "SAVEPOINT save;\n\n%s%s\n\nRELEASE SAVEPOINT save;" % \
+                  ("DROP %s IF EXISTS %s;\n\n" % (self._category.upper(), oldname)
+                   if drop else "", sql)
 
-        self._db.execute(self._item["sql"])
+        logger.info("Executing change SQL:\n\n%s", fullsql)
+        try: self._db.connection.executescript(fullsql)
+        except Exception as e:
+            logger.exception("Error executing SQL.")
+            try: self._db.execute("ROLLBACK")
+            except Exception: pass
+            msg = "Error saving changes:\n\n%s" % util.format_exc(e)
+            return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+
         self._item.update(name=name, meta=meta2)
         self._original = copy.deepcopy(self._item)
         self._newmode = self._editmode = False

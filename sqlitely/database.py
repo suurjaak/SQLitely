@@ -680,6 +680,7 @@ class Database(object):
                         opts["columns"] = []
                         for row in rows:
                             col = {"name": row["name"], "type": row["type"].upper()}
+                            col["__id__"] = hash(col["name"].lower())
                             if row["dflt_value"] is not None:
                                 col["default"] = row["dflt_value"]
                             if row["notnull"]: col["notnull"] = {}

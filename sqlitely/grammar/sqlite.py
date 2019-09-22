@@ -8,12 +8,13 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    21.09.2019
+@modified    22.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
 import logging
 import re
+import traceback
 import uuid
 
 from antlr4 import InputStream, CommonTokenStream, TerminalNode
@@ -33,7 +34,7 @@ def parse(sql, category=None):
     Returns data structure for SQL statement.
 
     @param   category  expected statement category if any
-    @return            {}, or None on error
+    @return            {..}, or None on error
     """
     result = None
     try:
@@ -67,9 +68,9 @@ def transform(sql, flags=None, renames=None, indent="  "):
     @param   flags    flags to toggle, like {"exists": True}
     @param   renames  renames to perform in SQL statement body,
                       supported types "schema" (top-level rename only),
-                      "table", "index", "trigger", "view".
-                      Renames all items of specified category, unless
-                      given nested value like {"table": {"old": "new"}}
+                      "table", "index", "trigger", "view", "column".
+                      Renames all items of specified category, unless given
+                      specific value to replace like {"table": {"old": "new"}}
     @param   indent   indentation level to use. If falsy,
                       result is not indented in any, including linefeeds.
     """
@@ -118,10 +119,12 @@ def uni(x, encoding="utf-8"):
 class SQL(object):
     """SQL word constants."""
     AFTER                = "AFTER"
+    ALTER_TABLE          = "ALTER TABLE"
     AUTOINCREMENT        = "AUTOINCREMENT"
     BEFORE               = "BEFORE"
     CHECK                = "CHECK"
     COLLATE              = "COLLATE"
+    COLUMN               = "COLUMN"
     CONSTRAINT           = "CONSTRAINT"
     CREATE_INDEX         = "CREATE INDEX"
     CREATE_TABLE         = "CREATE TABLE"
@@ -161,6 +164,7 @@ class CTX(object):
     INSERT               = SQLiteParser.Insert_stmtContext
     SELECT               = SQLiteParser.Select_stmtContext
     UPDATE               = SQLiteParser.Update_stmtContext
+    COLUMN_NAME          = SQLiteParser.Column_nameContext
     INDEX_NAME           = SQLiteParser.Index_nameContext
     TABLE_NAME           = SQLiteParser.Table_nameContext
     TRIGGER_NAME         = SQLiteParser.Trigger_nameContext
@@ -169,7 +173,7 @@ class CTX(object):
 
 class ErrorListener(object):
     """Collects errors during parsing."""
-    def __init__(self): self._errors = []
+    def __init__(self): self._errors, self._stack = [], []
 
     def reportAmbiguity(self, *_, **__): pass
 
@@ -182,8 +186,10 @@ class ErrorListener(object):
             "L" if not e else "%s: l" % util.format_exc(e), line, column, msg
         )
         self._errors.append(err)
+        if not self._stack: self._stack = traceback.format_stack()            
 
-    def getErrors(self): return "\n\n".join(self._errors)
+    def getErrors(self):
+        return "%s\n%s" % ("\n\n".join(self._errors), "".join(self._stack))
         
 
 
@@ -207,7 +213,8 @@ class Parser(object):
         SQL.CREATE_VIRTUAL_TABLE:  lambda self, ctx: self.build_create_virtual_table(ctx),
     }
     RENAME_CTXS = {"index":   CTX.INDEX_NAME,   "table": CTX.TABLE_NAME,
-                   "trigger": CTX.TRIGGER_NAME, "view":  CTX.VIEW_NAME}
+                   "trigger": CTX.TRIGGER_NAME, "view":  CTX.VIEW_NAME,
+                   "column":  CTX.COLUMN_NAME}
     TRIGGER_BODY_CTXS = [CTX.DELETE, CTX.INSERT, CTX.SELECT, CTX.UPDATE]
 
 
@@ -218,12 +225,14 @@ class Parser(object):
     def parse(self, sql, category=None, renames=None):
         """
         Parses the SQL statement and returns data structure.
+        Result will have "__tables__" as a list of all the table names
+        the SQL statement refers to, in lowercase.
 
         @param   sql       source SQL string
         @param   category  expected statement category if any
         @param   renames   renames to perform in SQL data,
                            supported types: "schema" (top-level rename only),
-                           "table", "index", "trigger", "view".
+                           "table", "index", "trigger", "view", "column".
                            Renames all items of specified category, unless
                            given nested value like {"table": {"old": "new"}}
         @return            {..}, or None on error
@@ -246,6 +255,7 @@ class Parser(object):
         if renames: self.recurse_rename([ctx], renames, name)
         result = self.BUILDERS[name](self, ctx)
         result["__type__"] = name
+        result["__tables__"] = self.recurse_collect([ctx], CTX.TABLE_NAME, name)
         if renames and "schema" in renames:
             if isinstance(renames["schema"], dict):
                 for v1, v2 in renames["schema"].items():
@@ -453,6 +463,7 @@ class Parser(object):
         """
         Assembles and returns column data for CREATE TABLE, as {
           name:                column name
+          __id__:              column unique ID (name.lower() hash)
           ?type:               column type
           ?pk                  { if PRIMARY KEY
               ?autoincrement:  True if AUTOINCREMENT
@@ -485,6 +496,7 @@ class Parser(object):
         """
         result = {}
         result["name"] = self.u(ctx.column_name().any_name)
+        result["__id__"] = hash(result["name"].lower())
         if ctx.type_name():
             result["type"] = " ".join(self.u(x).upper() for x in ctx.type_name().name())
 
@@ -644,6 +656,38 @@ class Parser(object):
         return result
 
 
+    def recurse_collect(self, items, ctxtype, category):
+        """
+        Recursively goes through all items and item children,
+        returning a list of terminal values of specified context type,
+        lower-cased.
+
+        @param   ctxtype   node context type to collect,
+                           like SQLiteParser.Table_nameContext
+        @param   category  original statement category
+        """
+        result = []
+        for ctx in items:
+            if not isinstance(ctx, ctxtype): continue # for ctx
+
+            # Get the deepest terminal, the one holding name value
+            c = ctx
+            while not isinstance(c, TerminalNode): c = c.children[0]
+            v = self.u(c).lower()
+
+            # Skip special table names "OLD"/"NEW" in trigger body and WHEN
+            if SQL.CREATE_TRIGGER == category and v in ("old", "new") \
+            and self.get_parent(c, self.TRIGGER_BODY_CTXS):
+                continue # for ctx
+
+            if v not in result: result.append(v)
+
+        if getattr(ctx, "children", None):
+            for x in self.recurse_collect(ctx.children, ctxtype, category):
+                if x not in result: result.append(x)
+        return result
+
+
     def recurse_rename(self, items, renames, category):
         """
         Recursively goes through all items and item children,
@@ -682,7 +726,10 @@ class Generator(object):
     """
 
     TEMPLATES = {
-        "COLUMN":                  templates.COLUMN_DEFINITION,
+        SQL.COLUMN:                templates.COLUMN_DEFINITION,
+        SQL.CONSTRAINT:            templates.TABLE_CONSTRAINT,
+        SQL.ALTER_TABLE:           templates.ALTER_TABLE,
+        "COMPLEX ALTER TABLE":     templates.ALTER_TABLE_COMPLEX,
         SQL.CREATE_INDEX:          templates.CREATE_INDEX,
         SQL.CREATE_TABLE:          templates.CREATE_TABLE,
         SQL.CREATE_TRIGGER:        templates.CREATE_TRIGGER,
@@ -717,8 +764,8 @@ class Generator(object):
         REPLACE_ORDER = ["Q", "PAD", "GLUE", "LF", "CM", "PRE", "WS"]
         ns = {"Q":    self.quote,   "LF": self.linefeed, "PRE": self.indentation,
               "PAD":  self.padding, "CM": self.comma,    "WS":  self.token,
-              "GLUE": self.glue,
-              "data": data, "step": step, "templates": templates}
+              "GLUE": self.glue, "data": data, "root": data,
+              "Template": step.Template, "templates": templates}
 
         # Generate SQL, using unique tokens for whitespace-sensitive parts,
         # replaced after stripping down whitespace in template result.
@@ -807,20 +854,23 @@ class Generator(object):
         return self.token("", "GLUE")
 
 
-    def comma(self, collection, index, subcollection=None, subindex=None):
+    def comma(self, collection, index, subcollection=None, subindex=None, root=None):
         """
         Returns trailing comma token for item in specified collection,
         if not last item and no other collections following.
+
+        @param   root  collection root if not using self._data
         """
         islast = True
+        root = root or self._data
         if subcollection:
-            container = self._data[collection][index]
+            container = root[collection][index]
             islast = (subindex == len(container[subcollection]) - 1)
         elif "columns" == collection and SQL.CREATE_TABLE == self._category:
-            islast = not self._data.get("constraints") and \
-                     (index == len(self._data[collection]) - 1)
+            islast = not root.get("constraints") and \
+                     (index == len(root[collection]) - 1)
         else:
-            islast = (index == len(self._data[collection]) - 1)
+            islast = (index == len(root[collection]) - 1)
             
         val = "" if islast else ", "
         return self.token(val, "CM") if val else ""
