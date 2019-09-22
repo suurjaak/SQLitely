@@ -5353,21 +5353,19 @@ class SchemaObjectPage(wx.PyPanel):
         stc.SetReadOnly(True)
         stc._toggle = "skip"
 
-        button_edit    = self._buttons["edit"]    = wx.Button(self, label="&Edit")
-        button_refresh = self._buttons["refresh"] = wx.Button(self, label="&Refresh")
-        button_save    = self._buttons["save"]    = wx.Button(self, label="&Save")
-        button_cancel  = self._buttons["cancel"]  = wx.Button(self, label="&Cancel")
+        button_edit    = self._buttons["edit"]    = wx.Button(self, label="Edit")
+        button_refresh = self._buttons["refresh"] = wx.Button(self, label="Refresh")
+        button_cancel  = self._buttons["cancel"]  = wx.Button(self, label="Cancel")
         button_delete  = self._buttons["delete"]  = wx.Button(self, label="Delete")
         button_close   = self._buttons["close"]   = wx.Button(self, label="Close")
-        button_refresh._toggle = "skip"
-        button_close._toggle   = "disable"
+        button_edit._toggle   = button_refresh._toggle = "skip"
+        button_delete._toggle = button_close._toggle   = "disable"
         button_refresh.ToolTipString = "Reload statement, and database tables"
-        button_edit._toggle = button_delete._toggle = "disable"
 
         sizer_name.Add(label_name, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_name.Add(edit_name, proportion=1)
 
-        for i, n in enumerate(["edit", "refresh", "save", "cancel", "delete", "close"]):
+        for i, n in enumerate(["edit", "refresh", "cancel", "delete", "close"]):
             if i: sizer_buttons.AddStretchSpacer()
             sizer_buttons.Add(self._buttons[n])
 
@@ -5386,9 +5384,8 @@ class SchemaObjectPage(wx.PyPanel):
 
         tb.Bind(wx.EVT_TOOL, self._OnCopySQL, id=wx.ID_COPY)
         tb.Bind(wx.EVT_TOOL, self._OnSaveSQL, id=wx.ID_SAVE)
-        self.Bind(wx.EVT_BUTTON, self._OnToggleEdit, button_edit)
+        self.Bind(wx.EVT_BUTTON, self._OnSaveOrEdit, button_edit)
         self.Bind(wx.EVT_BUTTON, self._OnRefresh,    button_refresh)
-        self.Bind(wx.EVT_BUTTON, self._OnSave,       button_save)
         self.Bind(wx.EVT_BUTTON, self._OnToggleEdit, button_cancel)
         self.Bind(wx.EVT_BUTTON, self._OnDelete,     button_delete)
         self.Bind(wx.EVT_BUTTON, self._OnClose,      button_close)
@@ -6297,6 +6294,7 @@ class SchemaObjectPage(wx.PyPanel):
             if "disable" in action: b.Enable(not edit)
             if "show"    in action: b.Show(edit)
             if not ("disable" in action or "skip" in action): b.Enable(edit)
+        self._buttons["edit"].Label = "Save" if edit else "Edit"
         for c in self._ctrls.values():
             action = getattr(c, "_toggle", None) or []
             if callable(action): action = action() or []
@@ -6844,6 +6842,11 @@ class SchemaObjectPage(wx.PyPanel):
         if any(prevs[x] == getattr(self, x) for x in prevs):
             self._Populate()
             self._ToggleControls(self._editmode)
+
+
+    def _OnSaveOrEdit(self, event=None):
+        """Handler for clicking save in edit mode, or edit in view mode."""
+        self._OnSave() if self._editmode else self._OnToggleEdit()
 
 
     def _OnToggleEdit(self, event=None):
