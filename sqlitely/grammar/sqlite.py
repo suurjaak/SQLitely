@@ -8,11 +8,12 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    22.09.2019
+@modified    23.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
 import logging
+import os
 import re
 import traceback
 import uuid
@@ -186,7 +187,13 @@ class ErrorListener(object):
             "L" if not e else "%s: l" % util.format_exc(e), line, column, msg
         )
         self._errors.append(err)
-        if not self._stack: self._stack = traceback.format_stack()            
+        if not self._stack:
+            stack = traceback.extract_stack()[:-1]
+            for i, (f, l, fn, t) in enumerate(stack):
+                if f == __file__:
+                    del stack[:max(i-1, 0)]
+                    break # for i, (..)
+            self._stack = traceback.format_list(stack)
 
     def getErrors(self):
         return "%s\n%s" % ("\n\n".join(self._errors), "".join(self._stack))
