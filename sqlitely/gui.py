@@ -4645,52 +4645,31 @@ class DatabasePage(wx.Panel):
                 itemdata = dict(item, parent=categorydata)
                 child = tree.AppendItem(top, util.unprint(item["name"]))
                 tree.SetItemPyData(child, itemdata)
+                columns, subcategories, childtext = None, [], ""
 
                 if "table" == category:
-                    colchild = tree.AppendItem(child, "Columns (%s)" % len(item["columns"]))
-                    tree.SetItemPyData(colchild, {"type": "columns", "parent": itemdata})
-                    tree.SetItemImage(colchild, imgs["columns"], wx.TreeItemIcon_Normal)
-                    for col in item["columns"]:
-                        subchild = tree.AppendItem(colchild, util.unprint(col["name"]))
-                        tree.SetItemText(subchild, col["type"], 1)
-                        tree.SetItemPyData(subchild, dict(col, parent=itemdata, type="column"))
-                    for subcategory in ("index", "trigger", "view"):
-                        subitems = self.db.get_category(subcategory, table=item["name"]).values()
-                        t = util.plural(subcategory).capitalize()
-                        if subitems: t += " (%s)" % len(subitems)
-                        categchild = tree.AppendItem(child, t)
-                        subcategorydata = {"type": "category", "category": subcategory, "items": subitems, "parent": itemdata}
-                        tree.SetItemPyData(categchild, subcategorydata)
-                        if subcategory in imgs:
-                            tree.SetItemImage(categchild, imgs[subcategory], wx.TreeItemIcon_Normal)
-
-                        for subitem in subitems:
-                            subchild = tree.AppendItem(categchild, util.unprint(subitem["name"]))
-                            tree.SetItemPyData(subchild, dict(subitem, parent=itemdata))
-                            t = ""
-                            if "index" == subcategory:
-                                t = ", ".join(x.get("name", x.get("expr")) for x in subitem["meta"]["columns"])
-                            elif "trigger" == subcategory:
-                                t = " ".join(filter(bool, (subitem["meta"].get("upon"), subitem["meta"]["action"])))
-                            tree.SetItemText(subchild, t, 1)
+                    columns = item.get("columns") or []
+                    subcategories = ["index", "trigger", "view"]
                 elif "index" == category:
-                    tree.SetItemText(child, "ON " + grammar.quote(item["meta"]["table"]), 1)
-                    columns = item["meta"].get("columns") or ()
+                    childtext = "ON " + grammar.quote(item["meta"]["table"])
+                    columns = copy.deepcopy(item["meta"].get("columns") or [])
                     table = self.db.get_category("table", item["meta"]["table"])
                     for col in columns:
-                        col = col if isinstance(col, dict) else {"name": col}
-                        subchild = tree.AppendItem(child, util.unprint(col.get("name") or col.get("expr")))
-                        tree.SetItemPyData(subchild, dict(col, type="column", parent=itemdata))
                         if table.get("columns") and col.get("name"):
                             tcol = next((x for x in table["columns"]
                                          if x["name"] == col["name"]), None)
-                            if tcol: tree.SetItemText(subchild, tcol["type"], 1)
+                            if tcol: col["type"] = tcol["type"]
                 elif "trigger" == category:
-                    t = " ".join(filter(bool, (item["meta"].get("upon"), item["meta"]["action"],
-                                               "ON", grammar.quote(item["meta"]["table"]))))
-                    tree.SetItemText(child, t, 1)
+                    childtext = " ".join(filter(bool, (item["meta"].get("upon"), item["meta"]["action"],
+                                                       "ON", grammar.quote(item["meta"]["table"]))))
+                    subcategories = ["table"]
                 elif "view" == category:
                     columns = item.get("columns") or []
+                    subcategories = ["table"]
+
+                tree.SetItemText(child, childtext, 1)
+
+                if columns is not None:
                     colchild = tree.AppendItem(child, "Columns (%s)" % len(columns))
                     tree.SetItemPyData(colchild, {"type": "columns", "parent": itemdata})
                     tree.SetItemImage(colchild, imgs["columns"], wx.TreeItemIcon_Normal)
@@ -4698,11 +4677,10 @@ class DatabasePage(wx.Panel):
                         subchild = tree.AppendItem(colchild, util.unprint(col["name"]))
                         tree.SetItemText(subchild, col["type"], 1)
                         tree.SetItemPyData(subchild, dict(col, parent=itemdata, type="column"))
-
-                    subcategory = "table"
-                    mytables = item["meta"].get("__tables__")
-                    subitems = self.db.get_category(subcategory, table=mytables).values() \
-                               if mytables else []
+                for subcategory in subcategories:
+                    mytables = [item["name"]] if "table" == category \
+                               else item["meta"].get("__tables__") or []
+                    subitems = self.db.get_category(subcategory, table=mytables).values()
                     t = util.plural(subcategory).capitalize()
                     if subitems: t += " (%s)" % len(subitems)
                     categchild = tree.AppendItem(child, t)
@@ -4714,6 +4692,13 @@ class DatabasePage(wx.Panel):
                     for subitem in subitems:
                         subchild = tree.AppendItem(categchild, util.unprint(subitem["name"]))
                         tree.SetItemPyData(subchild, dict(subitem, parent=itemdata))
+                        t = ""
+                        if "index" == subcategory:
+                            t = ", ".join(x.get("name", x.get("expr")) for x in subitem["meta"]["columns"])
+                        elif "trigger" == subcategory:
+                            t = " ".join(filter(bool, (subitem["meta"].get("upon"), subitem["meta"]["action"])))
+                        tree.SetItemText(subchild, t, 1)
+
             tree.Collapse(top)
         tree.Expand(root)
         tree.SetColumnWidth(0, tree.Size[0] - 130)
