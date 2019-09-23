@@ -717,23 +717,26 @@ class Database(object):
 
         @param   category  "table"|"index"|"trigger"|"view"
         @param   name      returns only this object
-        @param   table     specific table for "index"|"trigger"|"view" category
+        @param   table     specific table for "index"|"trigger"|"view" category,
+                           or a list of tables
         @result            OrderedDict({name_lower: {opts}}),
                            or {opts} if name or None if no object by such name
         """
-        category, name, table = (x.lower() if x else x for x in (category, name, table))
+        category, name = (x.lower() if x else x for x in (category, name))
+        table = [table] if isinstance(table, basestring) else table or []
+        table = set(x.lower() for x in table)
 
         if name is not None:
             result = self.schema.get(category, {}).get(name)
-            if table and "table" in result and result["table"].lower() != table:
+            if table and "table" in result and result["table"].lower() not in table:
                 result = None
             return result
 
         result = OrderedDict()
         for myname, opts in self.schema.get(category, {}).items():
-            if table and "table" in opts.get("meta", {}) \
-            and opts["meta"]["table"].lower() != table \
-            and table not in opts["meta"].get("__tables__", []):
+            if table and ("table" in opts.get("meta", {})
+            and opts["meta"]["table"].lower() not in table
+            or not table & set(opts["meta"].get("__tables__", []))):
                 continue # for myname, opts
             result[myname] = opts
         return result

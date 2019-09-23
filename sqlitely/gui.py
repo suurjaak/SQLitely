@@ -2018,7 +2018,7 @@ class DatabasePage(wx.Panel):
         isz = (16,16)
         il = wx.ImageList(16, 16)
         self.tree_schema_images = {
-            "table":    il.Add(wx.ArtProvider.GetBitmap(wx.ART_FOLDER,          wx.ART_TOOLBAR, il.GetSize(0))),
+            "table":    il.Add(wx.ArtProvider.GetBitmap(wx.ART_REPORT_VIEW,     wx.ART_TOOLBAR, il.GetSize(0))),
             "index":    il.Add(wx.ArtProvider.GetBitmap(wx.ART_NORMAL_FILE,     wx.ART_TOOLBAR, il.GetSize(0))),
             "trigger":  il.Add(wx.ArtProvider.GetBitmap(wx.ART_EXECUTABLE_FILE, wx.ART_TOOLBAR, il.GetSize(0))),
             "view":     il.Add(wx.ArtProvider.GetBitmap(wx.ART_HELP_PAGE,       wx.ART_TOOLBAR, il.GetSize(0))),
@@ -4675,14 +4675,8 @@ class DatabasePage(wx.Panel):
                             tree.SetItemText(subchild, t, 1)
                 elif "index" == category:
                     tree.SetItemText(child, "ON " + grammar.quote(item["meta"]["table"]), 1)
-                elif "trigger" == category:
-                    t = " ".join(filter(bool, (item["meta"].get("upon"), item["meta"]["action"],
-                                               "ON", grammar.quote(item["meta"]["table"]))))
-                    tree.SetItemText(child, t, 1)
-                if "index" == category or "view" == category:
                     columns = item["meta"].get("columns") or ()
-                    table = self.db.get_category("table", item["meta"]["table"]) \
-                            if "index" == category else {}
+                    table = self.db.get_category("table", item["meta"]["table"])
                     for col in columns:
                         col = col if isinstance(col, dict) else {"name": col}
                         subchild = tree.AppendItem(child, util.unprint(col.get("name") or col.get("expr")))
@@ -4691,6 +4685,35 @@ class DatabasePage(wx.Panel):
                             tcol = next((x for x in table["columns"]
                                          if x["name"] == col["name"]), None)
                             if tcol: tree.SetItemText(subchild, tcol["type"], 1)
+                elif "trigger" == category:
+                    t = " ".join(filter(bool, (item["meta"].get("upon"), item["meta"]["action"],
+                                               "ON", grammar.quote(item["meta"]["table"]))))
+                    tree.SetItemText(child, t, 1)
+                elif "view" == category:
+                    columns = item.get("columns") or []
+                    colchild = tree.AppendItem(child, "Columns (%s)" % len(columns))
+                    tree.SetItemPyData(colchild, {"type": "columns", "parent": itemdata})
+                    tree.SetItemImage(colchild, imgs["columns"], wx.TreeItemIcon_Normal)
+                    for col in columns:
+                        subchild = tree.AppendItem(colchild, util.unprint(col["name"]))
+                        tree.SetItemText(subchild, col["type"], 1)
+                        tree.SetItemPyData(subchild, dict(col, parent=itemdata, type="column"))
+
+                    subcategory = "table"
+                    mytables = item["meta"].get("__tables__")
+                    subitems = self.db.get_category(subcategory, table=mytables).values() \
+                               if mytables else []
+                    t = util.plural(subcategory).capitalize()
+                    if subitems: t += " (%s)" % len(subitems)
+                    categchild = tree.AppendItem(child, t)
+                    subcategorydata = {"type": "category", "category": subcategory, "items": subitems, "parent": itemdata}
+                    tree.SetItemPyData(categchild, subcategorydata)
+                    if subcategory in imgs:
+                        tree.SetItemImage(categchild, imgs[subcategory], wx.TreeItemIcon_Normal)
+
+                    for subitem in subitems:
+                        subchild = tree.AppendItem(categchild, util.unprint(subitem["name"]))
+                        tree.SetItemPyData(subchild, dict(subitem, parent=itemdata))
             tree.Collapse(top)
         tree.Expand(root)
         tree.SetColumnWidth(0, tree.Size[0] - 130)
