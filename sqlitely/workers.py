@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.09.2019
+@modified    23.09.2019
 ------------------------------------------------------------------------------
 """
 import logging
@@ -240,10 +240,6 @@ class SearchThread(WorkerThread):
 
                 if self._stop_work:
                     final_text += " Stopped by user."
-                elif "messages" == result_type \
-                and count >= conf.MaxSearchMessages:
-                    final_text += " Stopped at %s limit %s." % \
-                                  (result_type, conf.MaxSearchMessages)
                 elif "table row" == result_type \
                 and count >= conf.MaxSearchTableRows:
                     final_text += " Stopped at %s limit %s." % \

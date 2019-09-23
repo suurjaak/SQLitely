@@ -47,9 +47,8 @@ FileDirectives = ["ConsoleHistoryCommands", "DBDoBackup",  "DBFiles", "DBSort",
 OptionalFileDirectives = [
     "DBExtensions", "ExportDbTemplate", "LogSQL", "MinWindowSize",
     "MaxConsoleHistory", "MaxHistoryInitialMessages", "MaxRecentFiles",
-    "MaxSearchHistory", "MaxSearchMessages", "MaxSearchTableRows",
-    "PopupUnexpectedErrors", "SearchResultsChunk", "StatusFlashLength",
-    "UpdateCheckInterval",
+    "MaxSearchHistory", "MaxSearchTableRows", "PopupUnexpectedErrors",
+    "SearchResultsChunk", "StatusFlashLength", "UpdateCheckInterval",
 ]
 OptionalFileDirectiveDefaults = {}
 
