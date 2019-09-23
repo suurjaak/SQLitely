@@ -57,16 +57,16 @@ ALTER TABLE {{ Q(data["name"]) }}
 Complex ALTER TABLE: re-create table under new temporary name,
 copy rows from existing to new, drop existing, rename new to existing. Steps:
 
- 1. PRAGMA foreign_keys = on
- 2. BEGIN TRANSACTION
+ 1. BEGIN TRANSACTION
+ 2. PRAGMA foreign_keys = on
  3. CREATE TABLE tempname
  4. INSERT INTO tempname (..) SELECT .. FROM old
  6. DROP TABLE old
  5. DROP all related indexes-triggers-views
  7. ALTER TABLE tempname RENAME TO old
  8. CREATE indexes-triggers-views
- 9. COMMIT TRANSACTION
-10. PRAGMA foreign_keys = on
+ 9. PRAGMA foreign_keys = on
+10. COMMIT TRANSACTION
 
 @param   data {
              name:      table old name,
@@ -81,16 +81,17 @@ copy rows from existing to new, drop existing, rename new to existing. Steps:
 """
 ALTER_TABLE_COMPLEX = """
 
-PRAGMA foreign_keys = off;{{ LF() }}
-{{ LF() }}
 SAVEPOINT alter_table;{{ LF() }}
+{{ LF() }}
+
+PRAGMA foreign_keys = off;{{ LF() }}
 {{ LF() }}
 
 {{ Template(templates.CREATE_TABLE).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
 {{ LF() }}
 
 %if data.get("columns"):
-INSERT INTO {{ Q(data["tempname"]) }}
+INSERT INTO {{ Q(data["tempname"]) }}{{ WS(" ") }}
 (
     %for i, (c1, c2) in enumerate(data["columns"]):
   {{ GLUE() }}{{ Q(c2) }}{{ CM("columns", i) }}
@@ -128,10 +129,10 @@ ALTER TABLE {{ Q(data["tempname"]) }} RENAME TO {{ Q(data["name2"]) }};{{ LF() }
 {{ LF() }}
 %endif
 
-RELEASE SAVEPOINT alter_table;{{ LF() }}
+PRAGMA foreign_keys = on;{{ LF() }}
 {{ LF() }}
 
-PRAGMA foreign_keys = on;{{ LF() }}
+RELEASE SAVEPOINT alter_table;{{ LF() }}
 """
 
 

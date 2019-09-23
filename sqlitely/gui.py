@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.09.2019
+@modified    23.09.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5308,9 +5308,11 @@ class SchemaObjectPage(wx.PyPanel):
         self._category = item["type"]
         self._newmode  = "name" not in item
         self._editmode = self._newmode
-        self._ctrls    = {} # {}
-        self._buttons  = {} # {name: wx.Button}
-        self._sizers   = {} # {child sizer: parent sizer}
+        self._ctrls    = {}  # {}
+        self._buttons  = {}  # {name: wx.Button}
+        self._sizers   = {}  # {child sizer: parent sizer}
+        self._col_updater = None # Column update cascade callback timer
+        self._col_updates = {}   # Pending column updates as {__id__: {col: {}, ?rename: newname, ?remove: bool}}
         self._ignore_change = False
         self._has_alter     = False
         self._show_alter    = False
@@ -6669,9 +6671,20 @@ class SchemaObjectPage(wx.PyPanel):
         path, index = path[:-1], path[-1]
         ptr = self._item["meta"]
         for i, p in enumerate(path): ptr = ptr.get(p)
-        ptr[index:index+1] = []
         self.Freeze()
         self._RemoveRow(path, index)
+
+        if "table" == self._category and "columns" == path[0]:
+            # Queue removing column from constraints
+            myid = ptr[index]["__id__"]
+            if myid in self._col_updates:
+                self._col_updates[myid]["remove"] = True
+            else:
+                self._col_updates[myid] = {"col": copy.deepcopy(ptr[index]), "remove": True}
+            if self._col_updater: self._col_updater.Stop()
+            self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
+
+        ptr[index:index+1] = []
         self._PopulateSQL()
         self._ToggleControls(self._editmode)
         self.Layout()
@@ -6754,12 +6767,84 @@ class SchemaObjectPage(wx.PyPanel):
                 self._RemoveRow(path2, index)
                 self._AddRow(path2, index, data2, insert=True)
                 self.Thaw()
+            elif "columns" == path[0] and "name" == path[-1]:
+                col = util.get(meta, path[:-1])
+                if value0 and not value: col["name_last"] = value0
+                myid = col["__id__"]
+                if myid in self._col_updates:
+                    self._col_updates[myid].update(rename=value)
+                else:
+                    col = copy.deepcopy(dict(col, name=value0))
+                    self._col_updates[col["__id__"]] = {"col": col, "rename": value}
+
+                if self._col_updater: self._col_updater.Stop()
+                self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
+                
         elif ["table"] == path:
             rebuild = meta.get("columns")
             meta.pop("columns", None)
 
         self._Populate() if rebuild else self._PopulateSQL()
         self._PostEvent(modified=True)
+
+
+    def _OnCascadeColumnUpdates(self):
+        """Handler for column updates, rebuilds constraints on rename/remove."""
+        self._col_updater = None
+        constraints = self._item["meta"].get("constraints") or []
+        changed, renames = False, {} # {old column name: new name}
+
+        logger.info("col updates %s", self._col_updates)
+
+        for myid, opts in self._col_updates.items():
+            name = opts["col"].get("name") or opts["col"].get("name_last")
+
+            if opts.get("remove"):
+                # Skip constraint drop if we have no name to match
+                if not name: continue # for myid, opts
+
+                for i, cnstr in list(enumerate(constraints))[::-1]:
+                    if cnstr["type"] in (grammar.SQL.PRIMARY_KEY, grammar.SQL.UNIQUE):
+                        keys, keychanged = cnstr.get("key") or [], False
+                        for j, col in list(enumerate(keys))[::-1]:
+                            if col.get("name") == name:
+                                del keys[j]
+                                changed = keychanged = True
+                        if not keys and keychanged: del constraints[i]
+
+                    elif cnstr["type"] in (grammar.SQL.FOREIGN_KEY, ):
+                        keychanged = False
+                        if name in cnstr.get("columns", []):
+                            cnstr["columns"] = [x for x in cnstr["columns"] if x != name]
+                            changed = keychanged = True
+                        if cnstr.get("table") == self._item.get("name") \
+                        and name in cnstr.get("key", []):
+                            cnstr["key"] = [x for x in cnstr["key"] if x != name]
+                            changed = True
+                        if keychanged and not cnstr["columns"]: del constraints[i]
+                continue # for myid, opts
+
+            if name and opts.get("rename"):
+                renames[name] = opts["rename"]
+
+        self._col_updates = {}
+        if not changed and not renames: return
+
+        if renames:
+            self._item["sql"] = grammar.transform(self._item["sql"],
+                                                  renames={"column": renames})
+            self._item["meta"] = grammar.parse(self._item["sql"])
+            constraints = self._item["meta"].get("constraints") or []
+
+        self.Freeze()
+        self._EmptyControl(self._panel_constraints)
+        for i, cnstr in enumerate(constraints):
+            self._AddRowTableConstraint(["constraints"], i, cnstr)
+        self._panel_constraints.Layout()
+        self._notebook_table.SetPageText(1, "Constraints" if not constraints
+                                         else "Constraints (%s)" % len(constraints))
+        self._PopulateSQL()
+        self.Thaw()
 
 
     def _OnToggleColumnFlag(self, path, rowkey, event):
