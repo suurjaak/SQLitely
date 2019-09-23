@@ -5949,8 +5949,11 @@ class SchemaObjectPage(wx.PyPanel):
                 ctrl_cols  = wx.ComboBox(panel, choices=mycolumns, style=wx.CB_DROPDOWN | wx.CB_READONLY)
             label_conflict = wx.StaticText(panel, label=grammar.SQL.ON_CONFLICT + ":")
             list_conflict  = wx.ComboBox(panel, choices=self.CONFLICT, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+            button_open = wx.Button(panel, label="O", size=(20, -1))
 
             ctrl_cols.MinSize = (150, -1)
+            button_open._toggle = "skip"
+            button_open.ToolTipString   = "Open advanced options"
 
             ctrl_cols.Value = ", ".join(kcols)
             list_conflict.Value = cnstr.get("conflict") or ""
@@ -5959,11 +5962,15 @@ class SchemaObjectPage(wx.PyPanel):
             sizer_item.Add(label_conflict, border=5, flag=wx.LEFT | wx.ALIGN_CENTER_VERTICAL)
             sizer_item.Add(list_conflict,  border=5, flag=wx.LEFT)
 
-            self._BindDataHandler(self._OnChange, ctrl_cols,     ["constraints", ctrl_cols,     "key", 0, "name"])
-            self._BindDataHandler(self._OnChange, list_conflict, ["constraints", list_conflict, "conflict"])
+            sizer_buttons.Add(button_open)
+
+            self._BindDataHandler(self._OnChange,   ctrl_cols,     ["constraints", ctrl_cols,     "key", 0, "name"])
+            self._BindDataHandler(self._OnChange,   list_conflict, ["constraints", list_conflict, "conflict"])
+            self._BindDataHandler(self._OnOpenItem, button_open,   ["constraints", button_open])
 
             self._ctrls.update({"constraints.columns.%s"  % rowkey: ctrl_cols,
                                 "constraints.conflict.%s" % rowkey: list_conflict})
+            self._buttons.update({"constraints.open.%s"   % rowkey: button_open})
 
         elif grammar.SQL.FOREIGN_KEY == cnstr["type"]:
             ftable = self._db.get_category("table", cnstr["table"]) if cnstr.get("table") else {}
@@ -6483,7 +6490,7 @@ class SchemaObjectPage(wx.PyPanel):
         return result
         
 
-    def _GetFormDialogProps(self, path):
+    def _GetFormDialogProps(self, path, data):
         """Returns (title, field properties) for table column or constraint FormDialog."""
         
         def get_foreign_cols(data):
@@ -6493,12 +6500,11 @@ class SchemaObjectPage(wx.PyPanel):
                 result = [x["name"] for x in ftable.get("columns") or ()]
             return result
 
-
         def get_table_cols(data):
             return [x["name"] for x in self._item["meta"].get("columns") or ()]
 
 
-        return [
+        if "columns" == path[0]: return [
             {"name": "name",    "label": "Name"},
             {"name": "type",    "label": "Type", "choices": self._types, "choicesedit": True},
             {"name": "default", "label": "Default"},
@@ -6532,7 +6538,9 @@ class SchemaObjectPage(wx.PyPanel):
              "help": "Expression yielding a NUMERIC 0 on constraint violation,\ncannot contain a subquery."},
             {"name": "collate", "label": "COLLATE", "toggle": True, "choices": self.COLLATE, "choicesedit": True,
              "help": "Collating sequence to use for the column (defaults to BINARY)."},
-        ] if "columns" == path[0] else [
+        ]
+
+        if grammar.SQL.FOREIGN_KEY == data["type"]: return [
             {"name": "columns", "label": "Local column", "type": list, "choices": get_table_cols},
             {"name": "table",   "label": "Foreign table", "choices": self._tables, "link": "key"},
             {"name": "key",     "label": "Foreign column", "type": list, "choices": get_foreign_cols},
@@ -6546,6 +6554,11 @@ class SchemaObjectPage(wx.PyPanel):
                 {"name": "not",     "label": "NOT", "type": bool, "help": "Whether enforced immediately"},
                 {"name": "initial", "label": "INITIALLY", "choices": self.DEFERRABLE},
             ]},
+        ]
+
+        if data["type"] in (grammar.SQL.PRIMARY_KEY, grammar.SQL.UNIQUE): return [
+            {"name": "columns",  "label": "Indexed column", "type": list, "choices": get_table_cols},
+            {"name": "conflict", "label": "ON CONFLICT", "choices": self.CONFLICT},
         ]
 
 
@@ -6710,8 +6723,11 @@ class SchemaObjectPage(wx.PyPanel):
 
     def _OnOpenItem(self, path, event=None):
         """Opens a FormDialog for row item."""
-        props = self._GetFormDialogProps(path)
         data  = util.get(self._item["meta"], path)
+        props = self._GetFormDialogProps(path, data)
+
+        # TODO needs more work if pk / unique
+
         title = "Table column"
         if "constraints" == path[0]:
             title = "%s constraint" % data["type"]
