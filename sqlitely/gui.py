@@ -2204,6 +2204,7 @@ class DatabasePage(wx.Panel):
         label_header.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                     wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
         edit_filter = self.edit_pragma_filter = controls.SearchCtrl(page, "Filter settings")
+        edit_filter.SetToolTipString("Filter PRAGMA directive list (Ctrl-F)")
 
         def on_help(ctrl, text, event):
             """Handler for clicking help bitmap, shows text popup."""
