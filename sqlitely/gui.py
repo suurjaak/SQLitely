@@ -5312,6 +5312,7 @@ class SchemaObjectPage(wx.PyPanel):
         self._buttons  = {} # {name: wx.Button}
         self._sizers   = {} # {child sizer: parent sizer}
         self._ignore_change = False
+        self._has_alter     = False
         self._show_alter    = False
         self._types    = self._GetColumnTypes()
         self._tables   = [x["name"] for x in db.get_category("table").values()]
@@ -5338,7 +5339,7 @@ class SchemaObjectPage(wx.PyPanel):
         if "table" == item["type"]:
             check_alter = self._ctrls["alter"] = wx.CheckBox(self, label="Show A&LTER SQL")
             check_alter.ToolTipString = "Show SQL statements used for performing table change"
-            check_alter.Shown = not self._newmode
+            check_alter.Shown = self._has_alter = not self._newmode
 
         tb = wx.ToolBar(parent=self, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
@@ -5355,17 +5356,19 @@ class SchemaObjectPage(wx.PyPanel):
 
         button_edit    = self._buttons["edit"]    = wx.Button(self, label="Edit")
         button_refresh = self._buttons["refresh"] = wx.Button(self, label="Refresh")
+        button_import  = self._buttons["import"]  = wx.Button(self, label="Import SQL")
         button_cancel  = self._buttons["cancel"]  = wx.Button(self, label="Cancel")
         button_delete  = self._buttons["delete"]  = wx.Button(self, label="Delete")
         button_close   = self._buttons["close"]   = wx.Button(self, label="Close")
         button_edit._toggle   = button_refresh._toggle = "skip"
         button_delete._toggle = button_close._toggle   = "disable"
         button_refresh.ToolTipString = "Reload statement, and database tables"
+        button_import.ToolTipString  = "Import %s definition from external SQL" % item["type"]
 
         sizer_name.Add(label_name, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_name.Add(edit_name, proportion=1)
 
-        for i, n in enumerate(["edit", "refresh", "cancel", "delete", "close"]):
+        for i, n in enumerate(["edit", "refresh", "import", "cancel", "delete", "close"]):
             if i: sizer_buttons.AddStretchSpacer()
             sizer_buttons.Add(self._buttons[n])
 
@@ -5386,6 +5389,7 @@ class SchemaObjectPage(wx.PyPanel):
         tb.Bind(wx.EVT_TOOL, self._OnSaveSQL, id=wx.ID_SAVE)
         self.Bind(wx.EVT_BUTTON, self._OnSaveOrEdit, button_edit)
         self.Bind(wx.EVT_BUTTON, self._OnRefresh,    button_refresh)
+        self.Bind(wx.EVT_BUTTON, self._OnImportSQL,  button_import)
         self.Bind(wx.EVT_BUTTON, self._OnToggleEdit, button_cancel)
         self.Bind(wx.EVT_BUTTON, self._OnDelete,     button_delete)
         self.Bind(wx.EVT_BUTTON, self._OnClose,      button_close)
@@ -6306,7 +6310,7 @@ class SchemaObjectPage(wx.PyPanel):
                     try: c.SetEditable(edit)
                     except Exception: c.Enable(edit)
         if "table" == self._category:
-            self._ctrls["alter"].Show(edit and not self._newmode)
+            self._ctrls["alter"].Show(edit and self._has_alter)
         for c in (c for n, c in vars(self).items() if n.startswith("_panel_")):
             c.Layout()
         self.Layout()
@@ -6406,12 +6410,14 @@ class SchemaObjectPage(wx.PyPanel):
             args = {"name": old["name"], "name2": new["name"], "tempname": tempname,
                     "meta": meta, "__type__": "COMPLEX ALTER TABLE",
                     "columns": [(colmap1[c2["__id__"]]["name"], c2["name"])
-                                for c2 in cols2 if c2.get("__id__") is not None]}
+                                for c2 in cols2 if c2.get("__id__") is not None
+                                and c2["__id__"] in colmap1]}
 
             renames = {"table":  {old["name"]: new["name"]}
                                  if old["name"] != new["name"] else {},
                        "column": {colmap1[c2["__id__"]]["name"]: c2["name"]
                                   for c2 in cols2 if "__id__" in c2
+                                  and c2["__id__"] in colmap1
                                   and colmap1[c2["__id__"]]["name"] != c2["name"]}}
             for k, v in renames.items(): renames.pop(k) if not v else None
             for category in "index", "trigger", "view":
@@ -6821,6 +6827,34 @@ class SchemaObjectPage(wx.PyPanel):
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
 
 
+    def _OnImportSQL(self, event=None):
+        """Handler for importing from external SQL, opens dialog."""
+        props = [{"name": "sql", "label": "SQL:", "component": controls.SQLiteTextCtrl,
+                  "tb": [{"type": "paste", "help": "Paste from clipboard"},
+                         {"type": "open",  "help": "Load from file"}, ]}]
+        title = "Import definition from SQL"
+        dlg = controls.FormDialog(self.TopLevelParent, title, props)
+        wx_accel.accelerate(dlg)
+        if wx.OK != dlg.ShowModal(): return
+        sql = dlg.GetData().get("sql", "").strip()
+        if not sql: return
+            
+        logger.info("Importing %s definition from SQL:\n\n%s", self._category, sql)
+        meta = grammar.parse(sql, self._category)
+        if not meta:
+            return wx.MessageBox("Failed to parse SQL.\n\nSee log for details.",
+                                 conf.Title, wx.OK | wx.ICON_ERROR)
+
+        if "table" == self._category:
+            if self._show_alter: self._OnToggleAlterSQL()                
+            self._has_alter = False
+            [x.pop("__id__", None) for x in meta.get("columns") or ()]
+
+        self._item.update(sql=sql, meta=meta)
+        self._Populate()
+        self._ToggleControls(self._editmode)
+
+
     def _OnRefresh(self, event=None):
         """Handler for clicking refresh, updates database data in controls."""
         self._db.populate_schema()
@@ -6866,6 +6900,7 @@ class SchemaObjectPage(wx.PyPanel):
             return
 
         if self._editmode:
+            self._has_alter = ("table" == self._category)
             self._ToggleControls(self._editmode)
         else:
             if self._show_alter: self._OnToggleAlterSQL()
@@ -6920,13 +6955,13 @@ class SchemaObjectPage(wx.PyPanel):
 
         sql, drop = self._item["sql"] + ";", not self._newmode
         oldname = grammar.quote(self._item["name"])
-        if "table" == self._category and not self._newmode:
+        if "table" == self._category and self._has_alter:
             # Do ALTER TABLE if table has any content
             if self._db.execute("SELECT 1 FROM %s LIMIT 1" % oldname).fetchone():
                 sql, drop = self._GetAlterSQL(), False
 
         fullsql = "SAVEPOINT save;\n\n%s%s\n\nRELEASE SAVEPOINT save;" % \
-                  ("DROP %s IF EXISTS %s;\n\n" % (self._category.upper(), oldname)
+                  ("DROP %s %s;\n\n" % (self._category.upper(), oldname)
                    if drop else "", sql)
 
         logger.info("Executing change SQL:\n\n%s", fullsql)
@@ -6942,6 +6977,7 @@ class SchemaObjectPage(wx.PyPanel):
         self._original = copy.deepcopy(self._item)
         self._newmode = self._editmode = False
         if self._show_alter: self._OnToggleAlterSQL()
+        self._has_alter = ("table" == self._category)
         self._ToggleControls(self._editmode)
         self._PostEvent(updated=True)
 

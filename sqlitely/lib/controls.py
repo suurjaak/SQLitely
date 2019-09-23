@@ -59,11 +59,12 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    20.09.2019
+@modified    22.09.2019
 ------------------------------------------------------------------------------
 """
 import collections
 import copy
+import functools
 import locale
 import os
 import re
@@ -266,6 +267,8 @@ class FormDialog(wx.Dialog):
       ?toggle:       if true, field is toggle-able and children hidden when off
       ?children:     [{field}, ]
       ?link:         "name" of linked field, cleared and repopulated on change
+      ?tb:           [{type, ?help}] for SQLiteTextCtrl component, adds toolbar,
+                     supported toolbar buttons "open" and "paste"
     }]
     """
 
@@ -298,14 +301,12 @@ class FormDialog(wx.Dialog):
         panel_items.Sizer.SetEmptyCellSize((0, 0))
         panel_wrap.Sizer.Add(panel_items, border=10, proportion=1, flag=wx.RIGHT | wx.GROW)
 
-        sizer_buttons.AddStretchSpacer()
         sizer_buttons.Add(button_save,   border=10, flag=wx.LEFT)
         sizer_buttons.Add(button_cancel, border=10, flag=wx.LEFT)
-        sizer_buttons.AddStretchSpacer()
 
         panel_wrap.SetupScrolling(scroll_x=False)
         self.Sizer.Add(panel_wrap, border=15, proportion=1, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
-        self.Sizer.Add(sizer_buttons, border=5, flag=wx.ALL | wx.GROW)
+        self.Sizer.Add(sizer_buttons, border=5, flag=wx.ALL | wx.ALIGN_CENTER_HORIZONTAL)
 
         for x in self, panel_wrap, panel_items:
             ColourManager.Manage(x, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
@@ -336,6 +337,9 @@ class FormDialog(wx.Dialog):
 
         for f in self._props: self._PopulateField(f)
         self._panel.Sizer.AddGrowableCol(6, 1)
+        if len(self._comps) == 1:
+            self._panel.Sizer.AddGrowableRow(0, 1)
+            self.Sizer.Children[1].SetFlag(wx.BOTTOM | wx.ALIGN_CENTER_HORIZONTAL)
         self._ignore_change = False
         self.Layout()
 
@@ -470,10 +474,10 @@ class FormDialog(wx.Dialog):
         label = field["label"] if "label" in field else field["name"]
         accname = "ctrl_%s" % self._rows # Associating label click with control
 
-        if not field.get("toggle") and field.get("type") not in (bool, list):
-            result.append(wx.StaticText(parent, label=label, name=accname + "_label"))
-
         if list is field.get("type"):
+            if not field.get("toggle") and field.get("type") not in (bool, list):
+                result.append(wx.StaticText(parent, label=label, name=accname + "_label"))
+
             sizer_f = wx.BoxSizer(wx.VERTICAL)
             sizer_l = wx.BoxSizer(wx.HORIZONTAL)
             sizer_b1 = wx.BoxSizer(wx.VERTICAL)
@@ -513,7 +517,41 @@ class FormDialog(wx.Dialog):
             self._BindHandler(self._OnRemoveFromList, ctrl2, field, path)
             self._BindHandler(self._OnMoveInList,     b3,    field, path, -1)
             self._BindHandler(self._OnMoveInList,     b4,    field, path, +1)
+        elif field.get("tb") and field.get("component") is SQLiteTextCtrl:
+            # Special case, add toolbar buttons to STC
+            sizer_top = wx.BoxSizer(wx.HORIZONTAL)
+            sizer_stc = wx.BoxSizer(wx.VERTICAL)
+
+            mylabel = wx.StaticText(parent, label=label, name=accname + "_label")
+            tb = wx.ToolBar(parent=parent, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+            ctrl = field["component"](parent)
+
+            OPTS = {"open":  {"id": wx.ID_OPEN,  "bmp": wx.ART_FILE_OPEN, "handler": self._OnOpenFile},
+                    "paste": {"id": wx.ID_PASTE, "bmp": wx.ART_PASTE,     "handler": self._OnPaste}, }
+            for prop in field["tb"]:
+                opts = OPTS[prop["type"]]
+                bmp = wx.ArtProvider.GetBitmap(opts["bmp"], wx.ART_TOOLBAR, (16, 16))
+                tb.SetToolBitmapSize(bmp.Size)
+                tb.AddLabelTool(opts["id"], "", bitmap=bmp, shortHelp=prop.get("help", ""))
+                tb.Bind(wx.EVT_TOOL, functools.partial(opts["handler"], field, path), id=opts["id"])
+            tb.Realize()
+            ctrl.SetName(accname)
+
+            sizer_top.Add(mylabel, border=5, flag=wx.BOTTOM | wx.ALIGN_BOTTOM)
+            sizer_top.AddStretchSpacer()
+            sizer_top.Add(tb, flag=wx.ALIGN_BOTTOM)
+            
+            sizer_stc.Add(sizer_top, flag=wx.GROW)
+            sizer_stc.Add(ctrl, proportion=1, flag=wx.GROW)
+
+            result.append(sizer_stc)
+            self._comps[fpath].append(ctrl)
+
+            self._BindHandler(self._OnChange, ctrl, field, path)
         else:
+            if not field.get("toggle") and field.get("type") not in (bool, list):
+                result.append(wx.StaticText(parent, label=label, name=accname + "_label"))
+
             if field.get("component"):
                 ctrl = field["component"](parent)
                 if isinstance(ctrl, SQLiteTextCtrl): ctrl.MinSize = (-1, 60)
@@ -545,7 +583,7 @@ class FormDialog(wx.Dialog):
         elif isinstance(ctrl, wx.ComboBox): events = [wx.EVT_TEXT, wx.EVT_COMBOBOX]
         elif isinstance(ctrl, wx.ListBox): events = [wx.EVT_LISTBOX_DCLICK]
         else: events = [wx.EVT_TEXT]
-        for e in events: self.Bind(e, lambda e: handler(*args+(e, )), ctrl)
+        for e in events: self.Bind(e, functools.partial(handler, *args), ctrl)
 
 
     def _OnChange(self, field, path, event):
@@ -649,6 +687,31 @@ class FormDialog(wx.Dialog):
         if on and self._GetValue(field, path) is None:
             self._SetValue(field, {} if field.get("children") else "", path)
         self.Layout()
+
+
+    def _OnOpenFile(self, field, path, event=None):
+        """Handler for opening file dialog and loading file contents to STC field."""
+        dialog = wx.FileDialog(
+            parent=self, message="Open file", defaultFile="",
+            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+        fpath = path + (field["name"], )
+        ctrl = self._comps[fpath][0]
+        filename = dialog.GetPath()
+        ctrl.LoadFile(filename)
+        self._SetValue(field, ctrl.GetText(), path)
+
+
+    def _OnPaste(self, field, path, event=None):
+        """Handler for pasting clipboard contents to STC field."""
+        if wx.TheClipboard.Open():
+            d = wx.TextDataObject()
+            if wx.TheClipboard.GetData(d):
+                fpath = path + (field["name"], )
+                self._comps[fpath][0].SetText(d.GetText())
+                self._SetValue(field, d.GetText(), path)
+            wx.TheClipboard.Close()
 
 
     def _OnClose(self, event):

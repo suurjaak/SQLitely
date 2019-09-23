@@ -89,18 +89,20 @@ SAVEPOINT alter_table;{{ LF() }}
 {{ Template(templates.CREATE_TABLE).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
 {{ LF() }}
 
+%if data.get("columns"):
 INSERT INTO {{ Q(data["tempname"]) }}
 (
-%for i, (c1, c2) in enumerate(data["columns"]):
+    %for i, (c1, c2) in enumerate(data["columns"]):
   {{ GLUE() }}{{ Q(c2) }}{{ CM("columns", i) }}
-%endfor
+    %endfor
 {{ GLUE() }}){{ LF() }}
 SELECT{{ WS(" ") }}
-%for i, (c1, c2) in enumerate(data["columns"]):
+    %for i, (c1, c2) in enumerate(data["columns"]):
   {{ GLUE() }}{{ Q(c1) }}{{ CM("columns", i) }}
-%endfor
+    %endfor
 FROM {{ Q(data["name"]) }};{{ LF() }}
 {{ LF() }}
+%endif
 
 DROP TABLE {{ Q(data["name"]) }};{{ LF() }}
 {{ LF() }}

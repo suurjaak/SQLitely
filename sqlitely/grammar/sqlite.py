@@ -33,7 +33,7 @@ def parse(sql, category=None):
     """
     Returns data structure for SQL statement.
 
-    @param   category  expected statement category if any
+    @param   category  expected statement category if any, like "table"
     @return            {..}, or None on error
     """
     result = None
@@ -215,6 +215,9 @@ class Parser(object):
     RENAME_CTXS = {"index":   CTX.INDEX_NAME,   "table": CTX.TABLE_NAME,
                    "trigger": CTX.TRIGGER_NAME, "view":  CTX.VIEW_NAME,
                    "column":  CTX.COLUMN_NAME}
+    CATEGORIES = {"index":   SQL.CREATE_INDEX,   "table": SQL.CREATE_TABLE,
+                  "trigger": SQL.CREATE_TRIGGER, "view":  SQL.CREATE_VIEW,
+                  "virtual table":  SQL.CREATE_VIRTUAL_TABLE}
     TRIGGER_BODY_CTXS = [CTX.DELETE, CTX.INSERT, CTX.SELECT, CTX.UPDATE]
 
 
@@ -229,7 +232,7 @@ class Parser(object):
         the SQL statement refers to, in lowercase.
 
         @param   sql       source SQL string
-        @param   category  expected statement category if any
+        @param   category  expected statement category if any, like "table"
         @param   renames   renames to perform in SQL data,
                            supported types: "schema" (top-level rename only),
                            "table", "index", "trigger", "view", "column".
@@ -249,7 +252,11 @@ class Parser(object):
         # parse ctx -> statement list ctx -> statement ctx -> specific type ctx
         ctx = tree.children[0].children[0].children[0]
         result, name = None, self.CTXS.get(type(ctx))
-        if category and name != category or name not in self.BUILDERS:
+        categoryname = self.CATEGORIES.get(category)
+        if category and name != categoryname or name not in self.BUILDERS:
+            logger.error("Unexpected statement category: '%s'%s.", name,
+                         " (expected '%s')" % (categoryname or category)
+                         if category else "")
             return None
 
         if renames: self.recurse_rename([ctx], renames, name)
