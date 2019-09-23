@@ -7056,15 +7056,17 @@ class SchemaObjectPage(wx.PyPanel):
                                         conf.Title, wx.OK | wx.ICON_WARNING)
 
         sql, drop = self._item["sql"] + ";", not self._newmode
-        oldname = grammar.quote(self._item["name"])
+        oldname = None if self._newmode else grammar.quote(self._item["name"])
         if "table" == self._category and self._has_alter:
             # Do ALTER TABLE if table has any content
             if self._db.execute("SELECT 1 FROM %s LIMIT 1" % oldname).fetchone():
                 sql, drop = self._GetAlterSQL(), False
 
-        fullsql = "SAVEPOINT save;\n\n%s%s\n\nRELEASE SAVEPOINT save;" % \
-                  ("DROP %s %s;\n\n" % (self._category.upper(), oldname)
-                   if drop else "", sql)
+        fullsql = sql
+        if oldname:
+            fullsql = "SAVEPOINT save;\n\n%s%s\n\nRELEASE SAVEPOINT save;" % \
+                      ("DROP %s %s;\n\n" % (self._category.upper(), oldname)
+                       if drop else "", sql)
 
         logger.info("Executing change SQL:\n\n%s", fullsql)
         try: self._db.connection.executescript(fullsql)
