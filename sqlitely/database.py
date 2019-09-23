@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.09.2019
+@modified    23.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -717,7 +717,7 @@ class Database(object):
 
         @param   category  "table"|"index"|"trigger"|"view"
         @param   name      returns only this object
-        @param   table     specific table for "trigger"|"index" category
+        @param   table     specific table for "index"|"trigger"|"view" category
         @result            OrderedDict({name_lower: {opts}}),
                            or {opts} if name or None if no object by such name
         """
@@ -730,11 +730,12 @@ class Database(object):
             return result
 
         result = OrderedDict()
-        for name, opts in self.schema.get(category, {}).items():
+        for myname, opts in self.schema.get(category, {}).items():
             if table and "table" in opts.get("meta", {}) \
-            and opts["meta"]["table"].lower() != table:
-                continue # for name, opts
-            result[name] = opts
+            and opts["meta"]["table"].lower() != table \
+            and table not in opts["meta"].get("__tables__", []):
+                continue # for myname, opts
+            result[myname] = opts
         return result
 
 

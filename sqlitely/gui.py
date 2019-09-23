@@ -4654,7 +4654,7 @@ class DatabasePage(wx.Panel):
                         subchild = tree.AppendItem(colchild, util.unprint(col["name"]))
                         tree.SetItemText(subchild, col["type"], 1)
                         tree.SetItemPyData(subchild, dict(col, parent=itemdata, type="column"))
-                    for subcategory in ("index", "trigger"):
+                    for subcategory in ("index", "trigger", "view"):
                         subitems = self.db.get_category(subcategory, table=item["name"]).values()
                         t = util.plural(subcategory).capitalize()
                         if subitems: t += " (%s)" % len(subitems)
