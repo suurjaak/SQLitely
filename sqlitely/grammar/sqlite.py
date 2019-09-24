@@ -168,6 +168,7 @@ class CTX(object):
     COLUMN_NAME          = SQLiteParser.Column_nameContext
     INDEX_NAME           = SQLiteParser.Index_nameContext
     TABLE_NAME           = SQLiteParser.Table_nameContext
+    FOREIGN_TABLE        = SQLiteParser.Foreign_tableContext
     TRIGGER_NAME         = SQLiteParser.Trigger_nameContext
     VIEW_NAME            = SQLiteParser.View_nameContext
 
@@ -219,9 +220,9 @@ class Parser(object):
         SQL.CREATE_VIEW:           lambda self, ctx: self.build_create_view(ctx),
         SQL.CREATE_VIRTUAL_TABLE:  lambda self, ctx: self.build_create_virtual_table(ctx),
     }
-    RENAME_CTXS = {"index":   CTX.INDEX_NAME,   "table": CTX.TABLE_NAME,
-                   "trigger": CTX.TRIGGER_NAME, "view":  CTX.VIEW_NAME,
-                   "column":  CTX.COLUMN_NAME}
+    RENAME_CTXS = {"index": CTX.INDEX_NAME, "trigger": CTX.TRIGGER_NAME,
+                   "view":  CTX.VIEW_NAME,  "column":  CTX.COLUMN_NAME,
+                   "table": (CTX.TABLE_NAME, CTX.FOREIGN_TABLE)}
     CATEGORIES = {"index":   SQL.CREATE_INDEX,   "table": SQL.CREATE_TABLE,
                   "trigger": SQL.CREATE_TRIGGER, "view":  SQL.CREATE_VIEW,
                   "virtual table":  SQL.CREATE_VIRTUAL_TABLE}
@@ -269,7 +270,9 @@ class Parser(object):
         if renames: self.recurse_rename([ctx], renames, name)
         result = self.BUILDERS[name](self, ctx)
         result["__type__"] = name
-        result["__tables__"] = self.recurse_collect([ctx], CTX.TABLE_NAME, name)
+        result["__tables__"] = self.recurse_collect(
+            [ctx], (CTX.TABLE_NAME, CTX.FOREIGN_TABLE), name
+        )
         if renames and "schema" in renames:
             if isinstance(renames["schema"], dict):
                 for v1, v2 in renames["schema"].items():
@@ -668,19 +671,23 @@ class Parser(object):
         return result
 
 
-    def recurse_collect(self, items, ctxtype, category):
+    def recurse_collect(self, items, ctxtypes, category):
         """
         Recursively goes through all items and item children,
         returning a list of terminal values of specified context type,
         lower-cased.
 
-        @param   ctxtype   node context type to collect,
+        @param   ctxtypes  node context types to collect,
                            like SQLiteParser.Table_nameContext
         @param   category  original statement category
         """
-        result = []
+        result, ctxtypes = [], tuple(ctxtypes)
         for ctx in items:
-            if not isinstance(ctx, ctxtype): continue # for ctx
+            if getattr(ctx, "children", None):
+                for x in self.recurse_collect(ctx.children, ctxtypes, category):
+                    if x not in result: result.append(x)
+
+            if not isinstance(ctx, ctxtypes): continue # for ctx
 
             # Get the deepest terminal, the one holding name value
             c = ctx
@@ -694,9 +701,6 @@ class Parser(object):
 
             if v not in result: result.append(v)
 
-        if getattr(ctx, "children", None):
-            for x in self.recurse_collect(ctx.children, ctxtype, category):
-                if x not in result: result.append(x)
         return result
 
 
