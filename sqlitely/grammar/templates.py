@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    22.09.2019
+@modified    24.09.2019
 ------------------------------------------------------------------------------
 """
 
@@ -422,9 +422,12 @@ TABLE_CONSTRAINT = """
 
 
 %if "FOREIGN KEY" == data.get("type"):
+  {{ GLUE() }}{{ WS(" ") }}
+  (
     %for j, c in enumerate(data.get("columns") or []):
     {{ Q(c) }}{{ CM("constraints", i, "columns", j, root=root) }}
     %endfor
+  )
 
   REFERENCES  {{ Q(data["table"]) if data.get("table") else "" }}
     %if data.get("key"):
