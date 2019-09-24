@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    23.09.2019
+@modified    24.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -477,7 +477,6 @@ class Parser(object):
         """
         Assembles and returns column data for CREATE TABLE, as {
           name:                column name
-          __id__:              column unique ID (name.lower() hash)
           ?type:               column type
           ?pk                  { if PRIMARY KEY
               ?autoincrement:  True if AUTOINCREMENT
@@ -510,7 +509,6 @@ class Parser(object):
         """
         result = {}
         result["name"] = self.u(ctx.column_name().any_name)
-        result["__id__"] = hash(result["name"].lower())
         if ctx.type_name():
             result["type"] = " ".join(self.u(x).upper() for x in ctx.type_name().name())
 

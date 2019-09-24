@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.09.2019
+@modified    24.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -680,7 +680,6 @@ class Database(object):
                         opts["columns"] = []
                         for row in rows:
                             col = {"name": row["name"], "type": row["type"].upper()}
-                            col["__id__"] = hash(col["name"].lower())
                             if row["dflt_value"] is not None:
                                 col["default"] = row["dflt_value"]
                             if row["notnull"]: col["notnull"] = {}

@@ -13,7 +13,7 @@ Released under the MIT License.
 """
 import ast
 import base64
-from collections import defaultdict, OrderedDict
+from collections import defaultdict, Counter, OrderedDict
 import copy
 import datetime
 import functools
@@ -5269,18 +5269,20 @@ class SchemaObjectPage(wx.PyPanel):
         ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
         ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
 
-        self._item     = copy.deepcopy(item)
-        self._original = copy.deepcopy(item)
+        item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
         self._page     = page
         self._db       = db
         self._category = item["type"]
+        self._item     = copy.deepcopy(item)
+        self._original = copy.deepcopy(item)
         self._newmode  = "name" not in item
         self._editmode = self._newmode
         self._ctrls    = {}  # {}
         self._buttons  = {}  # {name: wx.Button}
         self._sizers   = {}  # {child sizer: parent sizer}
         self._col_updater = None # Column update cascade callback timer
-        self._col_updates = {}   # Pending column updates as {__id__: {col: {}, ?rename: newname, ?remove: bool}}
+        # Pending column updates as {__id__: {col: {}, ?rename: newname, ?remove: bool}}
+        self._col_updates = {}
         self._ignore_change = False
         self._has_alter     = False
         self._show_alter    = False
@@ -5384,6 +5386,17 @@ class SchemaObjectPage(wx.PyPanel):
         result = False
         if self._editmode:
             result = (self._original.get("sql") != self._item.get("sql"))
+        return result
+
+
+    def _AssignColumnIDs(self, meta):
+        """Populates table meta coluns with __id__ fields."""
+        result, counts = copy.deepcopy(meta), Counter()
+        if grammar.SQL.CREATE_TABLE == result["__type__"]:
+            for c in result.get("columns", []):
+                name = c.get("name", "").lower()
+                c["__id__"] = "%s_%s" % (name, counts[name])
+                counts[name] += 1
         return result
 
 
@@ -6316,8 +6329,8 @@ class SchemaObjectPage(wx.PyPanel):
 
         can_simple = True
         cols1, cols2 = (x.get("columns", []) for x in (old, new))
-        colmap1 = {c["__id__"]: c for c in cols1 if "__id__" in c}
-        colmap2 = {c["__id__"]: c for c in cols2 if "__id__" in c}
+        colmap1 = {c["__id__"]: c for c in cols1}
+        colmap2 = {c["__id__"]: c for c in cols2}
 
         for k in "temporary", "exists", "without", "constraints":
             if bool(new.get(k)) != bool(old.get(k)):
@@ -6332,9 +6345,8 @@ class SchemaObjectPage(wx.PyPanel):
         if can_simple and any(x not in colmap2 for x in colmap1):
             can_simple = False # There are deleted columns
         if can_simple:
-            colids2 = [x.get("__id__") for x in cols2]
-            if any(x is None and colids2[i+1] is not None
-                   for i, x in enumerate(colids2[:-1])):
+            if any(x["__id__"] not in colmap1 and cols2[i+1]["__id__"] in colmap1
+                   for i, x in enumerate(cols2[:-1])):
                 can_simple = False # There are new columns in between
         if can_simple:
             for i, c1 in enumerate(cols1):
@@ -6345,24 +6357,23 @@ class SchemaObjectPage(wx.PyPanel):
             cols1_sqls = [grammar.generate(dict(c, name="", __type__="column"))
                           for c in cols1]
             cols2_sqls = [grammar.generate(dict(c, name="", __type__="column"))
-                          for c in cols2 if "__id__" in c]
+                          for c in cols2]
             # Column definition changed
             can_simple = (cols1_sqls == cols2_sqls)
 
 
         if can_simple:
             # Possible to use just simple ALTER TABLE statements
-
             sqls, base = [], dict(name=old["name"], __type__="ALTER TABLE")
 
             for c2 in cols2:
-                c1 = colmap1.get(c2.get("__id__"))
+                c1 = colmap1.get(c2["__id__"])
                 if c1 and c1["name"] != c2["name"]:
                     args = dict(rename={"column": {c1["name"]: c2["name"]}}, **base)
                     sqls.append(grammar.generate(args))
 
             for c2 in cols2:
-                c1 = colmap1.get(c2.get("__id__"))
+                c1 = colmap1.get(c2["__id__"])
                 if not c1:
                     sqls.append(grammar.generate(dict(add=c2, **base)))
 
@@ -6387,14 +6398,12 @@ class SchemaObjectPage(wx.PyPanel):
             args = {"name": old["name"], "name2": new["name"], "tempname": tempname,
                     "meta": meta, "__type__": "COMPLEX ALTER TABLE",
                     "columns": [(colmap1[c2["__id__"]]["name"], c2["name"])
-                                for c2 in cols2 if c2.get("__id__") is not None
-                                and c2["__id__"] in colmap1]}
+                                for c2 in cols2 if c2["__id__"] in colmap1]}
 
             renames = {"table":  {old["name"]: new["name"]}
                                  if old["name"] != new["name"] else {},
                        "column": {colmap1[c2["__id__"]]["name"]: c2["name"]
-                                  for c2 in cols2 if "__id__" in c2
-                                  and c2["__id__"] in colmap1
+                                  for c2 in cols2 if c2["__id__"] in colmap1
                                   and colmap1[c2["__id__"]]["name"] != c2["name"]}}
             for k, v in renames.items(): renames.pop(k) if not v else None
             for category in "index", "trigger", "view":
@@ -6636,6 +6645,8 @@ class SchemaObjectPage(wx.PyPanel):
             ptr = ptr.get(p)
             if ptr is None: ptr = parent[p] = {} if i < len(path) - 1 else []
             parent = ptr
+        if "table" == self._category and "columns" == path[-1]:
+            value = dict(value, __id__=wx.NewId())
         ptr.append(copy.deepcopy(value))
         panel = self._panel_columns if "columns" == path[-1] else self._panel_constraints
         self.Freeze()
@@ -6759,7 +6770,7 @@ class SchemaObjectPage(wx.PyPanel):
                     self._col_updates[myid].update(rename=value)
                 else:
                     col = copy.deepcopy(dict(col, name=value0))
-                    self._col_updates[col["__id__"]] = {"col": col, "rename": value}
+                    self._col_updates[myid] = {"col": col, "rename": value}
 
                 if self._col_updater: self._col_updater.Stop()
                 self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
@@ -6778,7 +6789,7 @@ class SchemaObjectPage(wx.PyPanel):
         constraints = self._item["meta"].get("constraints") or []
         changed, renames = False, {} # {old column name: new name}
 
-        logger.info("col updates %s", self._col_updates)
+        logger.info("col updates %s", self._col_updates) # TODO remove
 
         for myid, opts in self._col_updates.items():
             name = opts["col"].get("name") or opts["col"].get("name_last")
@@ -6815,9 +6826,14 @@ class SchemaObjectPage(wx.PyPanel):
         if not changed and not renames: return
 
         if renames:
-            self._item["sql"] = grammar.transform(self._item["sql"],
-                                                  renames={"column": renames})
-            self._item["meta"] = grammar.parse(self._item["sql"])
+            sql = grammar.transform(self._item["sql"], renames={"column": renames})
+            meta = grammar.parse(sql)
+
+            # TODO ega järjekorra muutmine pekki ei keera midagi?
+
+            for i, c in enumerate(self._item["meta"]["columns"]):
+                meta["columns"][i]["__id__"] = c["__id__"]
+            self._item.update(sql=sql, meta=meta)
             constraints = self._item["meta"].get("constraints") or []
 
         self.Freeze()
@@ -6915,11 +6931,10 @@ class SchemaObjectPage(wx.PyPanel):
                                  conf.Title, wx.OK | wx.ICON_ERROR)
 
         if "table" == self._category:
-            if self._show_alter: self._OnToggleAlterSQL()                
+            if self._show_alter: self._OnToggleAlterSQL()
             self._has_alter = False
-            [x.pop("__id__", None) for x in meta.get("columns") or ()]
 
-        self._item.update(sql=sql, meta=meta)
+        self._item.update(sql=sql, meta=self._AssignColumnIDs(meta))
         self._Populate()
         self._ToggleControls(self._editmode)
 
@@ -6934,12 +6949,13 @@ class SchemaObjectPage(wx.PyPanel):
         self._views  = [x["name"] for x in self._db.get_category("view").values()]
         if not self._editmode:
             item = self._db.get_category(self._category, self._item["name"])
-            if not item:
-                wx.MessageBox("%s %s no longer present in the database." %
-                              (self._category.capitalize(), grammar.quote(self._item["name"])),
-                              conf.Title, wx.OK | wx.ICON_ERROR)
-                return
+            if not item: return wx.MessageBox(
+                "%s %s no longer present in the database." %
+                (self._category.capitalize(), grammar.quote(self._item["name"])),
+                conf.Title, wx.OK | wx.ICON_ERROR
+            )
 
+            item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
             self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
 
         if any(prevs[x] == getattr(self, x) for x in prevs):
@@ -7044,7 +7060,7 @@ class SchemaObjectPage(wx.PyPanel):
             msg = "Error saving changes:\n\n%s" % util.format_exc(e)
             return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
 
-        self._item.update(name=name, meta=meta2)
+        self._item.update(name=name, meta=self._AssignColumnIDs(meta2))
         self._original = copy.deepcopy(self._item)
         self._newmode = self._editmode = False
         if self._show_alter: self._OnToggleAlterSQL()
