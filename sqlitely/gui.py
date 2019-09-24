@@ -3367,14 +3367,14 @@ class DatabasePage(wx.Panel):
         user to select filename and type and creates the file.
         """
         grid_source = self.grid_table
-        sql = ""
-        table = ""
+        sql = table = ""
         if event.EventObject is self.button_export_sql:
             grid_source, sql = self.grid_sql, self.last_sql
         if not grid_source.Table: return
 
         if grid_source is self.grid_table:
-            table_lower = grid_source.Table.table.lower()
+            table = grid_source.Table.table
+            table_lower = table.lower()
             opts = self.db.get_category("table", table_lower)
             title = "Table %s" % grammar.quote(opts["name"], force=True)
             self.dialog_savefile.Wildcard = export.TABLE_WILDCARD
