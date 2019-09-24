@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.09.2019
+@modified    24.09.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2192,12 +2192,11 @@ class DatabasePage(wx.Panel):
         panel_wrapper = wx.lib.scrolledpanel.ScrolledPanel(page)
         panel_pragma = wx.Panel(panel_wrapper)
         panel_sql = wx.Panel(page)
-        panel_stc = wx.Panel(page)
         sizer_wrapper = panel_wrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
         sizer_pragma = panel_pragma.Sizer = wx.FlexGridSizer(cols=4, vgap=4, hgap=10)
-        sizer_sql = panel_sql.Sizer = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_stc = panel_stc.Sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_sql = panel_sql.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_sql_header = wx.BoxSizer(wx.HORIZONTAL)
         sizer_footer = wx.BoxSizer(wx.HORIZONTAL)
 
         label_header = wx.StaticText(page, label="Database PRAGMA settings")
@@ -2306,10 +2305,10 @@ class DatabasePage(wx.Panel):
         check_fullsql.Hide()
 
         stc = self.stc_pragma = controls.SQLiteTextCtrl(
-            panel_stc, style=wx.BORDER_STATIC)
+            panel_sql, style=wx.BORDER_STATIC)
         stc.SetReadOnly(True)
-        tb = self.tb_pragma = wx.ToolBar(panel_stc,
-                                         style=wx.VERTICAL | wx.TB_FLAT | wx.TB_NODIVIDER)
+        tb = self.tb_pragma = wx.ToolBar(panel_sql,
+                                         style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR,
                                         (16, 16))
         bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR,
@@ -2322,21 +2321,17 @@ class DatabasePage(wx.Panel):
         tb.Bind(wx.EVT_TOOL, lambda e: self.on_save_sql(self.stc_pragma, e), id=wx.ID_SAVE)
 
         button_edit = self.button_pragma_edit = \
-            wx.Button(page, label="&Edit")
+            wx.Button(page, label="Edit")
         button_refresh = self.button_pragma_refresh = \
-            wx.Button(page, label="&Refresh")
-        button_save = self.button_pragma_save = \
-            wx.Button(page, label="&Save")
+            wx.Button(page, label="Refresh")
         button_cancel = self.button_pragma_cancel = \
-            wx.Button(page, label="&Cancel")
+            wx.Button(page, label="Cancel")
 
-        button_edit.SetToolTipString("Edit PRAGMA values")
+        button_edit.SetToolTipString("Change PRAGMA values")
         button_refresh.SetToolTipString("Reload PRAGMA values from database")
-        button_save.SetToolTipString("Save changed PRAGMAs")
         button_cancel.SetToolTipString("Cancel PRAGMA changes")
-        button_save.Enabled = button_cancel.Enabled = False
+        button_cancel.Enabled = False
 
-        self.Bind(wx.EVT_BUTTON,     self.on_pragma_save,    button_save)
         self.Bind(wx.EVT_BUTTON,     self.on_pragma_edit,    button_edit)
         self.Bind(wx.EVT_BUTTON,     self.on_pragma_refresh, button_refresh)
         self.Bind(wx.EVT_BUTTON,     self.on_pragma_cancel,  button_cancel)
@@ -2353,19 +2348,18 @@ class DatabasePage(wx.Panel):
 
         sizer_wrapper.Add(panel_pragma, proportion=1, border=20, flag=wx.TOP | wx.GROW)
 
-        sizer_sql.Add(check_sql)
-        sizer_sql.AddStretchSpacer()
-        sizer_sql.Add(check_fullsql, border=21, flag=wx.RIGHT)
+        sizer_sql_header.Add(check_sql, flag=wx.ALIGN_CENTER_VERTICAL)
+        sizer_sql_header.AddStretchSpacer()
+        sizer_sql_header.Add(check_fullsql, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
+        sizer_sql_header.Add(tb)
 
-        sizer_stc.Add(stc, proportion=1, flag=wx.GROW)
-        sizer_stc.Add(tb)
+        sizer_sql.Add(sizer_sql_header, flag=wx.GROW)
+        sizer_sql.Add(stc, proportion=1, flag=wx.GROW)
 
         sizer_footer.AddStretchSpacer()
         sizer_footer.Add(button_edit)
         sizer_footer.AddStretchSpacer()
         sizer_footer.Add(button_refresh)
-        sizer_footer.AddStretchSpacer()
-        sizer_footer.Add(button_save)
         sizer_footer.AddStretchSpacer()
         sizer_footer.Add(button_cancel)
         sizer_footer.AddStretchSpacer()
@@ -2373,11 +2367,9 @@ class DatabasePage(wx.Panel):
         sizer.Add(sizer_header, border=10, flag=wx.TOP | wx.BOTTOM | wx.GROW)
         sizer.Add(panel_wrapper, proportion=1, border=5, flag=wx.LEFT | wx.GROW)
         sizer.Add(panel_sql, border=5, flag=wx.LEFT | wx.TOP | wx.GROW)
-        sizer.Add(panel_stc, border=5, flag=wx.LEFT | wx.TOP | wx.GROW)
         sizer.Add(sizer_footer, border=10, flag=wx.BOTTOM | wx.TOP | wx.GROW)
 
         panel_sql.Hide()
-        panel_stc.Hide()
         ColourManager.Manage(panel_wrapper, "BackgroundColour", "BgColour")
         panel_wrapper.SetupScrolling(scroll_x=False)
 
@@ -2577,18 +2569,19 @@ class DatabasePage(wx.Panel):
         self.update_page_header()
 
 
-    def on_pragma_sql(self, event):
+    def on_pragma_sql(self, event=None):
         """Handler for toggling PRAGMA change SQL visible."""
-        self.stc_pragma.Parent.Shown = self.check_pragma_sql.Value
+        self.stc_pragma.Shown = self.check_pragma_sql.Value
         self.check_pragma_fullsql.Shown = self.check_pragma_sql.Value
+        self.tb_pragma.Shown = self.check_pragma_sql.Value
         self.page_pragma.Layout()
 
 
-    def on_pragma_fullsql(self, event):
+    def on_pragma_fullsql(self, event=None):
         """Handler for toggling full PRAGMA SQL."""
         self.pragma_fullsql = self.check_pragma_fullsql.Value
         self.populate_pragma_sql()
-        
+
 
     def on_pragma_filter(self, event):
         """Handler for filtering PRAGMA list, shows/hides components."""
@@ -2620,12 +2613,12 @@ class DatabasePage(wx.Panel):
         """
         Handler for pressing a key in pragma page, focuses filter on Ctrl-F.
         """
-        event.Skip()
-        if event.KeyCode in [ord('F')] and event.ControlDown():
+        if event.ControlDown() and event.KeyCode in [ord('F')]:
             self.edit_pragma_filter.SetFocus()
+        else: event.Skip()
 
 
-    def on_pragma_save(self, event):
+    def on_pragma_save(self, event=None):
         """Handler for clicking to save PRAGMA changes."""
         result = True
 
@@ -2649,21 +2642,22 @@ class DatabasePage(wx.Panel):
             guibase.status(msg, flash=True)
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
         else:
-            self.on_pragma_cancel(None)
+            self.on_pragma_cancel()
         return result
 
 
-    def on_pragma_edit(self, event):
+    def on_pragma_edit(self, event=None):
         """Handler for clicking to edit PRAGMA settings."""
+        if self.pragma_edit: return self.on_pragma_save()
+
         self.pragma_edit = True
-        self.button_pragma_save.Enable()
+        self.button_pragma_edit.Label = "Save"
         self.button_pragma_cancel.Enable()
-        self.button_pragma_edit.Disable()
-        self.check_pragma_sql.Enable()
         self.check_pragma_sql.Parent.Show()
         if self.check_pragma_sql.Value:
-            self.stc_pragma.Parent.Shown = True
+            self.stc_pragma.Shown = True
             self.check_pragma_fullsql.Shown = True
+            self.tb_pragma.Shown = True
         for name, opts in database.Database.PRAGMA.items():
             ctrl = self.pragma_ctrls[name]
             if opts.get("write") != False and "table" != opts["type"]:
@@ -2671,7 +2665,7 @@ class DatabasePage(wx.Panel):
         self.page_pragma.Layout()
 
 
-    def on_pragma_refresh(self, event):
+    def on_pragma_refresh(self, event=None):
         """Handler for clicking to refresh PRAGMA settings."""
         editmode = self.pragma_edit
         self.pragma.update(self.db.get_pragma_values())
@@ -2697,23 +2691,25 @@ class DatabasePage(wx.Panel):
         self.update_page_header()
 
 
-    def on_pragma_cancel(self, event):
+    def on_pragma_cancel(self, event=None):
         """Handler for clicking to cancel PRAGMA changes."""
+        if event and self.pragma_changes and wx.OK != wx.MessageBox(
+            "You have unsaved changes, are you sure you want to discard them?",
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+        ): return
+
         self.pragma_edit = False
-        self.button_pragma_edit.Enable()
-        self.button_pragma_save.Disable()
+        self.button_pragma_edit.Label = "Edit"
         self.button_pragma_cancel.Disable()
-        self.check_pragma_sql.Disable()
         self.on_pragma_refresh(None)
         self.check_pragma_sql.Parent.Hide()
-        self.stc_pragma.Parent.Hide()
         for name, opts in database.Database.PRAGMA.items():
             if "table" != opts["type"]: self.pragma_ctrls[name].Disable()
         self.page_pragma.Layout()
         self.update_page_header()
 
 
-    def on_check_integrity(self, event):
+    def on_check_integrity(self, event=None):
         """
         Handler for checking database integrity, offers to save a fixed
         database if corruption detected.
@@ -2774,7 +2770,7 @@ class DatabasePage(wx.Panel):
                                       % self.db, conf.Title, wx.ICON_WARNING)
 
 
-    def on_vacuum(self, event):
+    def on_vacuum(self, event=None):
         """
         Handler for vacuuming the database.
         """
