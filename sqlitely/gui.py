@@ -1070,7 +1070,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for clicking to clear the database list."""
         if (self.list_db.GetItemCount() > 1) and wx.OK == wx.MessageBox(
             "Are you sure you want to clear the list of all databases?",
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_QUESTION
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
         ):
             self.list_db.Populate([])
             del conf.DBFiles[:]
@@ -1117,7 +1117,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if filename == newpath:
                 logger.error("Attempted to save %s as itself.", filename)
                 wx.MessageBox("Cannot overwrite %s with itself." % filename,
-                              conf.Title, wx.OK | wx.ICON_WARNING)
+                              conf.Title, wx.OK | wx.ICON_ERROR)
                 continue # for filename
             try: shutil.copyfile(filename, newpath)
             except Exception as e:
@@ -1125,7 +1125,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                                  e, basename, newpath)
                 wx.MessageBox('Failed to copy "%s" to "%s":\n\n%s' %
                               (basename, newpath, util.format_exc(e)),
-                              conf.Title, wx.OK | wx.ICON_WARNING)
+                              conf.Title, wx.OK | wx.ICON_ERROR)
             else:
                 guibase.status("Saved a copy of %s as %s.", filename, newpath,
                                log=True, flash=True)
@@ -1146,7 +1146,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if len(self.dbs_selected) == 1: msg = self.dbs_selected[0]
         if wx.OK == wx.MessageBox(
             "Remove %s from database list?" % msg,
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_QUESTION
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
         ):
             for filename in self.dbs_selected:
                 for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
@@ -1299,7 +1299,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             wx.MessageBox("Could not create %s.\n\n"
                           "Some other process may be using the file:\n\n%s" % (
                           filename, util.format_exc(e)),
-                          conf.Title, wx.OK | wx.ICON_WARNING)
+                          conf.Title, wx.OK | wx.ICON_ERROR)
         else:
             self.update_database_list(filename)
             self.load_database_page(filename)
@@ -1424,40 +1424,36 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         Handler on application exit, asks about unsaved changes, if any.
         """
-        do_exit = True
         unsaved_pages = {} # {DatabasePage: filename, }
         for page, db in self.db_pages.items():
             if page and page.get_unsaved():
                 unsaved_pages[page] = db.filename
         if unsaved_pages:
-            response = wx.MessageBox(
+            if wx.OK != wx.MessageBox(
                 "There are unsaved changes in files\n(%s).\n\n"
-                "Save changes before closing?" %
+                "Are you sure you want to discard them?" %
                 "\n".join(textwrap.wrap(", ".join(sorted(unsaved_pages.values())))),
-                conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION
-            )
-            do_exit = (wx.CANCEL != response)
-            if wx.YES == response:
-                do_exit = all(p.save_unsaved() for p in unsaved_pages)
-        if do_exit:
-            for page in self.db_pages:
-                if not page: continue # continue for page, if dead object
-                active_idx = page.notebook.Selection
-                if active_idx:
-                    conf.LastActivePage[page.db.filename] = active_idx
-                elif page.db.filename in conf.LastActivePage:
-                    del conf.LastActivePage[page.db.filename]
-                page.save_page_conf()
-                for worker in page.workers_search.values(): worker.stop()
-            self.worker_detection.stop()
+                conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            ): return
 
-            # Save last selected files in db lists, to reselect them on rerun
-            conf.LastSelectedFiles[:] = self.dbs_selected[:]
-            if not conf.WindowIconized: conf.WindowPosition = self.Position[:]
-            conf.WindowSize = [-1, -1] if self.IsMaximized() else self.Size[:]
-            conf.save()
-            self.trayicon.Destroy()
-            wx.CallAfter(sys.exit) # Immediate exit fails if exiting from tray
+        for page in self.db_pages:
+            if not page: continue # continue for page, if dead object
+            active_idx = page.notebook.Selection
+            if active_idx:
+                conf.LastActivePage[page.db.filename] = active_idx
+            elif page.db.filename in conf.LastActivePage:
+                del conf.LastActivePage[page.db.filename]
+            page.save_page_conf()
+            for worker in page.workers_search.values(): worker.stop()
+        self.worker_detection.stop()
+
+        # Save last selected files in db lists, to reselect them on rerun
+        conf.LastSelectedFiles[:] = self.dbs_selected[:]
+        if not conf.WindowIconized: conf.WindowPosition = self.Position[:]
+        conf.WindowSize = [-1, -1] if self.IsMaximized() else self.Size[:]
+        conf.save()
+        self.trayicon.Destroy()
+        wx.CallAfter(sys.exit) # Immediate exit fails if exiting from tray
 
 
     def on_close_page(self, event):
@@ -1481,7 +1477,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             return event.Veto()
 
         # Remove page from MainWindow data structures
-        do_close = True
         unsaved = page.get_unsaved()
         if unsaved:
             info = ""
@@ -1493,19 +1488,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if unsaved.get("schema"):
                 info += (", and " if info else "") + "schema changes"
 
-            response = wx.MessageBox(
+            if wx.OK != wx.MessageBox(
                 "There are unsaved changes in %s:\n%s.\n\n"
-                "Save changes before closing?" % (
+                "Are you sure you want to discard them?" % (
                     page.db, info
                 ), conf.Title,
-                wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION
-            )
-            if wx.YES == response:
-                do_close = page.save_unsaved()
-            elif wx.CANCEL == response:
-                do_close = False
-        if not do_close:
-            return event.Veto()
+                wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            ): return event.Veto()
 
         if page.notebook.Selection:
             conf.LastActivePage[page.db.filename] = page.notebook.Selection
@@ -1550,15 +1539,15 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for clicking to clear search history in a database page,
         confirms action and clears history globally.
         """
-        choice = wx.MessageBox("Clear search history?", conf.Title,
-                               wx.OK | wx.CANCEL | wx.ICON_WARNING)
-        if wx.OK == choice:
-            conf.SearchHistory = []
-            for page in self.db_pages:
-                page.edit_searchall.SetChoices(conf.SearchHistory)
-                page.edit_searchall.ShowDropDown(False)
-                page.edit_searchall.Value = ""
-            conf.save()
+        if wx.OK != wx.MessageBox("Clear search history?", conf.Title,
+                                  wx.OK | wx.CANCEL | wx.ICON_INFORMATION):
+            return
+        conf.SearchHistory = []
+        for page in self.db_pages:
+            page.edit_searchall.SetChoices(conf.SearchHistory)
+            page.edit_searchall.ShowDropDown(False)
+            page.edit_searchall.Value = ""
+        conf.save()
 
 
     def get_unique_tab_title(self, title):
@@ -1602,12 +1591,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                         wx.MessageBox(
                             "Could not open %s.\n\n"
                             "Some other process may be using the file."
-                            % filename, conf.Title, wx.OK | wx.ICON_WARNING)
+                            % filename, conf.Title, wx.OK | wx.ICON_ERROR)
                     else:
                         wx.MessageBox(
                             "Could not open %s.\n\n"
                             "Not a valid SQLITE database?" % filename,
-                            conf.Title, wx.OK | wx.ICON_WARNING)
+                            conf.Title, wx.OK | wx.ICON_ERROR)
                 if db:
                     logger.info("Opened %s (%s).", db, util.format_bytes(db.filesize))
                     guibase.status("Reading database file %s.", db, flash=True)
@@ -1623,7 +1612,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     conf.save()
             else:
                 wx.MessageBox("Nonexistent file: %s." % filename,
-                              conf.Title, wx.OK | wx.ICON_WARNING)
+                              conf.Title, wx.OK | wx.ICON_ERROR)
         return db
 
 
@@ -2640,7 +2629,7 @@ class DatabasePage(wx.Panel):
             msg = "Error setting %s:\n\n%s" % (sql, util.format_exc(e))
             logger.exception(msg)
             guibase.status(msg, flash=True)
-            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
         else:
             self.on_pragma_cancel()
         return result
@@ -2767,7 +2756,7 @@ class DatabasePage(wx.Panel):
                         util.start_file(os.path.dirname(newfile))
                     else:
                         wx.MessageBox("Cannot recover data from %s to itself."
-                                      % self.db, conf.Title, wx.ICON_WARNING)
+                                      % self.db, conf.Title, wx.ICON_ERROR)
 
 
     def on_vacuum(self, event=None):
@@ -2789,7 +2778,7 @@ class DatabasePage(wx.Panel):
             err = "\n- ".join(errors)
             logger.info("Error running vacuum on %s: %s", self.db, err)
             err = err[:500] + ".." if len(err) > 500 else err
-            wx.MessageBox(err, conf.Title, wx.ICON_WARNING | wx.OK)
+            wx.MessageBox(err, conf.Title, wx.OK | wx.ICON_ERROR)
         else:
             self.update_info_panel()
 
@@ -2885,57 +2874,54 @@ class DatabasePage(wx.Panel):
         Refreshes the table tree and open table data. Asks for confirmation
         if there are uncommitted changes.
         """
-        do_refresh, unsaved = True, self.get_unsaved_grids()
+        unsaved = self.get_unsaved_grids()
         if unsaved:
-            response = wx.MessageBox("Some tables have unsaved data (%s).\n\n"
-                "Save before refreshing (changes will be lost otherwise)?"
+            if wx.OK != wx.MessageBox("Some tables have unsaved changes (%s).\n\n"
+                "Are you sure you want to discard them?"
                 % (", ".join(sorted(x.table for x in unsaved))), conf.Title,
-                wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION)
-            if wx.YES == response:
-                do_refresh = self.save_unsaved_grids()
-            elif wx.CANCEL == response:
-                do_refresh = False
-        if do_refresh:
-            self.db.clear_cache()
-            self.db_grids.clear()
-            self.load_tables_data(refresh=True)
-            if self.grid_table.Table:
-                grid, table_name = self.grid_table, self.grid_table.Table.table
-                scrollpos = map(grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
-                cursorpos = grid.GridCursorCol, grid.GridCursorRow
-                self.on_change_table(None)
-                grid.Table = wx.grid.PyGridTableBase() # Clear grid visually
-                grid.Freeze()
-                grid.Table = None # Reset grid data to empty
+                wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            ): return
 
-                tableitem = None
-                table_name = table_name.lower()
-                opts = self.db.get_category("table", table_name)
-                item = self.tree_tables.GetNext(self.tree_tables.RootItem)
-                while opts and item and item.IsOk():
-                    table2 = self.tree_tables.GetItemPyData(item)
-                    if isinstance(table2, basestring) and table2.lower() == table_name:
-                        tableitem = item
-                        break # while table_name
-                    item = self.tree_tables.GetNextSibling(item)
-                if tableitem:
-                    # Only way to create state change in wx.gizmos.TreeListCtrl
-                    class HackEvent(object):
-                        def __init__(self, item): self._item = item
-                        def GetItem(self):        return self._item
-                    self.on_change_tree_tables(HackEvent(tableitem))
-                    self.tree_tables.SelectItem(tableitem)
-                    grid.Scroll(*scrollpos)
-                    grid.SetGridCursor(*cursorpos)
-                else:
-                    self.label_table.Label = ""
-                    for x in [wx.ID_ADD, wx.ID_DELETE, wx.ID_UNDO, wx.ID_SAVE]:
-                        self.tb_grid.EnableTool(x, False)
-                    self.button_reset_grid_table.Enabled = False
-                    self.button_export_table.Enabled = False
-                    self.button_close_grid_table.Enabled = False
-                grid.Thaw()
-                self.page_tables.Refresh()
+        self.db.clear_cache()
+        self.db_grids.clear()
+        self.load_tables_data(refresh=True)
+        if self.grid_table.Table:
+            grid, table_name = self.grid_table, self.grid_table.Table.table
+            scrollpos = map(grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
+            cursorpos = grid.GridCursorCol, grid.GridCursorRow
+            self.on_change_table(None)
+            grid.Table = wx.grid.PyGridTableBase() # Clear grid visually
+            grid.Freeze()
+            grid.Table = None # Reset grid data to empty
+
+            tableitem = None
+            table_name = table_name.lower()
+            opts = self.db.get_category("table", table_name)
+            item = self.tree_tables.GetNext(self.tree_tables.RootItem)
+            while opts and item and item.IsOk():
+                table2 = self.tree_tables.GetItemPyData(item)
+                if isinstance(table2, basestring) and table2.lower() == table_name:
+                    tableitem = item
+                    break # while table_name
+                item = self.tree_tables.GetNextSibling(item)
+            if tableitem:
+                # Only way to create state change in wx.gizmos.TreeListCtrl
+                class HackEvent(object):
+                    def __init__(self, item): self._item = item
+                    def GetItem(self):        return self._item
+                self.on_change_tree_tables(HackEvent(tableitem))
+                self.tree_tables.SelectItem(tableitem)
+                grid.Scroll(*scrollpos)
+                grid.SetGridCursor(*cursorpos)
+            else:
+                self.label_table.Label = ""
+                for x in [wx.ID_ADD, wx.ID_DELETE, wx.ID_UNDO, wx.ID_SAVE]:
+                    self.tb_grid.EnableTool(x, False)
+                self.button_reset_grid_table.Enabled = False
+                self.button_export_table.Enabled = False
+                self.button_close_grid_table.Enabled = False
+            grid.Thaw()
+            self.page_tables.Refresh()
 
 
     def on_scroll_grid_sql(self, event):
@@ -3406,7 +3392,7 @@ class DatabasePage(wx.Panel):
             logger.exception(msg, filename)
             guibase.status(msg, flash=True)
             error = "Error saving %s:\n\n%s" % (filename, util.format_exc(e))
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         finally:
             busy.Close()
 
@@ -3423,23 +3409,21 @@ class DatabasePage(wx.Panel):
         if is_table:
             info = grid.Table.GetChangedInfo()
             if grid.Table.IsChanged():
-                response = wx.MessageBox(
-                    "There are unsaved changes. Are you sure you want to "
-                    "commit these changes (%s)?" % info,
-                    conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.ICON_QUESTION
-                )
-                if wx.CANCEL == response: return
-                if wx.YES == response:
-                    try:
-                        grid.Table.SaveChanges()
-                    except Exception as e:
-                        msg = 'Error saving table %s in "%s".' % (
-                               grammar.quote(grid.Table.table), self.db)
-                        logger.exception(msg)
-                        guibase.status(msg, flash=True)
-                        error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-                        wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
-                        return
+                if wx.OK != wx.MessageBox(
+                    "There are unsaved changes (%s).\n\nAre you sure you want to "
+                    "discard them?" % info,
+                    conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+                ): return
+                try:
+                    grid.Table.SaveChanges()
+                except Exception as e:
+                    msg = 'Error saving table %s in "%s".' % (
+                           grammar.quote(grid.Table.table), self.db)
+                    logger.exception(msg)
+                    guibase.status(msg, flash=True)
+                    error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+                    wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+                    return
                 else: grid.Table.UndoChanges()
                 self.on_change_table(None)
 
@@ -3491,7 +3475,7 @@ class DatabasePage(wx.Panel):
             msg = "Error loading SQL from %s." % filename
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
     def on_copy_sql(self, stc, event):
@@ -3526,7 +3510,7 @@ class DatabasePage(wx.Panel):
             msg = "Error saving SQL to %s." % filename
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
     def on_keydown_sql(self, event):
@@ -3579,7 +3563,7 @@ class DatabasePage(wx.Panel):
             msg = "Error running SQL script."
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
     def execute_sql(self, sql):
@@ -3620,7 +3604,7 @@ class DatabasePage(wx.Panel):
             logger.exception("Error running SQL %s.", sql)
             guibase.status("Error running SQL.", flash=True)
             error = "Error running SQL:\n\n%s" % util.format_exc(e)
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
     def get_unsaved(self):
@@ -3652,33 +3636,6 @@ class DatabasePage(wx.Panel):
         """
         return [y for x in self.schema_pages.values()
                 for y in x.values() if y.IsChanged()]
-
-
-    def save_unsaved(self):
-        """
-        Saves unsaved grids and PRAGMA settings, returns success.
-        """
-        result = True
-        if self.pragma_changes: result = self.on_pragma_save(None)
-        result = result and self.save_unsaved_grids()
-        return result
-
-
-    def save_unsaved_grids(self):
-        """Saves all data in unsaved table grids, returns success/failure."""
-        result = True
-        for grid in (x for x in self.db_grids.values() if x.IsChanged()):
-            try:
-                grid.SaveChanges()
-            except Exception as e:
-                result = False
-                msg = 'Error saving table %s in "%s".' % (
-                      grammar.quote(grid.table), self.db)
-                logger.exception(msg); guibase.status(msg, flash=True)
-                error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-                wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
-                break # for grid
-        return result
 
 
     def on_change_table(self, event):
@@ -3718,37 +3675,44 @@ class DatabasePage(wx.Panel):
     def on_commit_table(self, event):
         """Handler for clicking to commit the changed database table."""
         info = self.grid_table.Table.GetChangedInfo()
-        if wx.OK == wx.MessageBox(
+        if wx.OK != wx.MessageBox(
             "Are you sure you want to commit these changes (%s)?" %
-            info, conf.Title, wx.OK | wx.CANCEL | wx.ICON_QUESTION
-        ):
-            mytable = self.grid_table.Table.table
-            logger.info("Committing %s in table %s (%s).", info,
-                        grammar.quote(mytable), self.db)
-            if not self.grid_table.Table.SaveChanges(): return
+            info, conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+        ): return
 
-            self.on_change_table(None)
-            # Refresh tables list with updated row count
-            self.db.populate_schema(count=True, category="table", name=mytable)
-            tablemap = self.db.get_category("table")
-            item = self.tree_tables.GetNext(self.tree_tables.RootItem)
-            while item and item.IsOk():
-                table = self.tree_tables.GetItemPyData(item)
-                if isinstance(table, basestring):
-                    opts = tablemap.get(table.lower())
-                    if opts and "count" in opts: self.tree_tables.SetItemText(
-                        item, util.plural("row", opts["count"])
-                    , 1)
-                    if table == self.grid_table.Table.table:
-                        self.tree_tables.SetItemBold(item,
-                        self.grid_table.Table.IsChanged())
-                item = self.tree_tables.GetNextSibling(item)
-            # Refresh cell colours; without CallAfter wx 2.8 can crash
-            wx.CallLater(0, self.grid_table.ForceRefresh)
+        mytable = self.grid_table.Table.table
+        logger.info("Committing %s in table %s (%s).", info,
+                    grammar.quote(mytable), self.db)
+        if not self.grid_table.Table.SaveChanges(): return
+
+        self.on_change_table(None)
+        # Refresh tables list with updated row count
+        self.db.populate_schema(count=True, category="table", name=mytable)
+        tablemap = self.db.get_category("table")
+        item = self.tree_tables.GetNext(self.tree_tables.RootItem)
+        while item and item.IsOk():
+            table = self.tree_tables.GetItemPyData(item)
+            if isinstance(table, basestring):
+                opts = tablemap.get(table.lower())
+                if opts and "count" in opts: self.tree_tables.SetItemText(
+                    item, util.plural("row", opts["count"])
+                , 1)
+                if table == self.grid_table.Table.table:
+                    self.tree_tables.SetItemBold(item,
+                    self.grid_table.Table.IsChanged())
+            item = self.tree_tables.GetNextSibling(item)
+        # Refresh cell colours; without CallAfter wx 2.8 can crash
+        wx.CallLater(0, self.grid_table.ForceRefresh)
 
 
     def on_rollback_table(self, event):
         """Handler for clicking to rollback the changed database table."""
+        info = self.grid_table.Table.GetChangedInfo()
+        if wx.OK != wx.MessageBox(
+            "Are you sure you want to discard these changes (%s)?" %
+            info, conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+        ): return
+
         self.grid_table.Table.UndoChanges()
         self.on_change_table(None)
         # Refresh scrollbars and colours; without CallAfter wx 2.8 can crash
@@ -3839,7 +3803,7 @@ class DatabasePage(wx.Panel):
                 msg = "Could not load table %s." % grammar.quote(table)
                 logger.exception(msg); guibase.status(msg, flash=True)
                 error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-                wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
+                wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
     def on_rclick_tree_tables(self, event):
@@ -4219,7 +4183,7 @@ class DatabasePage(wx.Panel):
             if wx.OK != wx.MessageBox(
                 "There are unsaved changes, "
                 "are you sure you want to discard them?",
-                conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+                conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
             ): return event.Veto()
 
         for c, k, p in ((c, k, p) for c, m in self.schema_pages.items() for k, p in m.items()):
@@ -4316,7 +4280,7 @@ class DatabasePage(wx.Panel):
                 msg = "Error saving %s." % filename
                 logger.exception(msg); guibase.status(msg, flash=True)
                 error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-                wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
+                wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
                 break # for table, filename
             finally:
                 busy.Close()
@@ -4346,7 +4310,7 @@ class DatabasePage(wx.Panel):
             msg = "Could not load database %s." % filename2
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-            return wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
+            return wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
         entrymsg = ('Name conflict on exporting table %(table)s as %(table2)s.\n'
                     'Database %(filename2)s %(entryheader)s '
@@ -4459,7 +4423,7 @@ class DatabasePage(wx.Panel):
                           (grammar.quote(table), extra)
                     logger.exception(msg); guibase.status(msg, flash=True)
                     error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-                    wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
+                    wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
                     break # for table
             else: # nobreak
                 success = True
@@ -4467,7 +4431,7 @@ class DatabasePage(wx.Panel):
             msg = "Failed to read database %s." % filename2
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         finally:
             try: self.db.execute("DETACH DATABASE main2")
             except Exception: pass
@@ -4621,8 +4585,7 @@ class DatabasePage(wx.Panel):
             if not self: return
             msg = "Error loading schema data from %s." % self.db
             logger.exception(msg)
-            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
-            return
+            return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
 
         tree.DeleteAllItems()
         root = tree.AddRoot("SQLITE")
@@ -5183,7 +5146,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
             msg = "Error saving changes in %s." % grammar.quote(self.table)
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         if self.View: self.View.Refresh()
         return result
 
@@ -6930,7 +6893,7 @@ class SchemaObjectPage(wx.PyPanel):
             msg = "Error saving SQL to %s." % filename
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_WARNING)
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
     def _OnImportSQL(self, event=None):
@@ -6995,7 +6958,7 @@ class SchemaObjectPage(wx.PyPanel):
         if is_changed and wx.OK != wx.MessageBox(
             "There are unsaved changes, "
             "are you sure you want to discard them?",
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
         ): return
 
         self._editmode = not self._editmode
@@ -7022,7 +6985,7 @@ class SchemaObjectPage(wx.PyPanel):
         if self._editmode and self.IsChanged() and wx.OK != wx.MessageBox(
             "There are unsaved changes, "
             "are you sure you want to discard them?",
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
         ): return
         self._editmode = self._newmode = False
         self._PostEvent(close=True)
