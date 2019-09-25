@@ -4675,14 +4675,17 @@ class DatabasePage(wx.Panel):
 
             self.set_tree_expanded_state(tree, tree.RootItem, expandeds)
 
-            # Add table and column names to SQL editor autocomplete
+            # Add PRAGMAS, and table/view/column names to SQL editor autocomplete
             self.stc_sql.AutoCompClearAdded()
             pragmas = list(database.Database.PRAGMA) + database.Database.EXTRA_PRAGMAS
             self.stc_sql.AutoCompAddWords(pragmas)
-            for table in tables:
-                if not table.get("columns"): continue # for table
-                fields = [grammar.quote(c["name"]) for c in table["columns"]]
-                self.stc_sql.AutoCompAddSubWords(grammar.quote(table["name"]), fields)
+            for category in ("table", "view"):
+                for item in self.db.get_category(category).values():
+                    myname = grammar.quote(item["name"])
+                    self.stc_sql.AutoCompAddWords([myname])
+                    if not item.get("columns"): continue # for item
+                    fields = [grammar.quote(c["name"]) for c in item["columns"]]
+                    self.stc_sql.AutoCompAddSubWords(myname, fields)
         except Exception:
             if not self: return
             logger.exception("Error loading table data from %s.", self.db)
@@ -5712,6 +5715,15 @@ class SchemaObjectPage(wx.PyPanel):
         stc_body   = self._ctrls["body"] = controls.SQLiteTextCtrl(panel,
             size=(-1, 40),
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
+        # Add table/view/column names to SQL editor autocomplete
+        for category in ("table", "view"):
+            for item in self._db.get_category(category).values():
+                myname = grammar.quote(item["name"])
+                stc_body.AutoCompAddWords([myname])
+                if not item.get("columns"): continue # for item
+                fields = [grammar.quote(c["name"]) for c in item["columns"]]
+                stc_body.AutoCompAddSubWords(myname, fields)
+
         label_body.ToolTipString = "Trigger body SQL"
 
         label_when = wx.StaticText(panel, label="&WHEN:")
