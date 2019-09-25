@@ -788,12 +788,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         item_save    = wx.MenuItem(menu, -1, "&Save as")
         item_remove  = wx.MenuItem(menu, -1, "&Remove from list")
         item_missing = wx.MenuItem(menu, -1, "Remove &missing from list")
+        item_delete  = wx.MenuItem(menu, -1, "Delete from disk")
 
         menu.Bind(wx.EVT_MENU, clipboard_copy,                id=item_copy.GetId())
         menu.Bind(wx.EVT_MENU, open_folder,                   id=item_folder.GetId())
         menu.Bind(wx.EVT_MENU, self.on_open_current_database, id=item_open.GetId())
         menu.Bind(wx.EVT_MENU, self.on_save_database_as,      id=item_save.GetId())
         menu.Bind(wx.EVT_MENU, self.on_remove_database,       id=item_remove.GetId())
+        menu.Bind(wx.EVT_MENU, self.on_delete_database,       id=item_delete.GetId())
         menu.Bind(wx.EVT_MENU, lambda e: self.on_remove_missing(event, selecteds),
                  id=item_missing.GetId())
 
@@ -806,6 +808,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu.AppendItem(item_save)
         menu.AppendItem(item_remove)
         menu.AppendItem(item_missing)
+        menu.AppendItem(item_delete)
 
         wx.CallAfter(self.list_db.PopupMenu, menu)
 
@@ -1144,27 +1147,28 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         msg = "%s files" % len(self.dbs_selected)
         if len(self.dbs_selected) == 1: msg = self.dbs_selected[0]
-        if wx.OK == wx.MessageBox(
+        if wx.OK != wx.MessageBox(
             "Remove %s from database list?" % msg,
             conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
-        ):
-            for filename in self.dbs_selected:
-                for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
-                    if filename in lst: lst.remove(filename)
-                for dct in conf.LastSearchResults, self.db_datas, self.dbs:
-                    dct.pop(filename, None)
-            for i in range(self.list_db.GetItemCount())[::-1]:
-                if self.list_db.GetItemText(i) in self.dbs_selected:
-                    self.list_db.DeleteItem(i)
-            # Remove from recent file history
-            historyfiles = [(i, self.history_file.GetHistoryFile(i))
-                            for i in range(self.history_file.Count)]
-            for i in [i for i, f in historyfiles if f in self.dbs_selected][::-1]:
-                self.history_file.RemoveFileFromHistory(i)
-            del self.dbs_selected[:]
-            self.list_db.Select(0)
-            self.update_database_list()
-            conf.save()
+        ): return
+
+        for filename in self.dbs_selected:
+            for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
+                if filename in lst: lst.remove(filename)
+            for dct in conf.LastSearchResults, self.db_datas, self.dbs:
+                dct.pop(filename, None)
+        for i in range(self.list_db.GetItemCount())[::-1]:
+            if self.list_db.GetItemText(i) in self.dbs_selected:
+                self.list_db.DeleteItem(i)
+        # Remove from recent file history
+        historyfiles = [(i, self.history_file.GetHistoryFile(i))
+                        for i in range(self.history_file.Count)]
+        for i in [i for i, f in historyfiles if f in self.dbs_selected][::-1]:
+            self.history_file.RemoveFileFromHistory(i)
+        del self.dbs_selected[:]
+        self.list_db.Select(0)
+        self.update_database_list()
+        conf.save()
 
 
     def on_remove_missing(self, event, selecteds=None):
@@ -1194,6 +1198,68 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         for i, f in historyfiles[::-1]: # Work upwards to have unchanged index
             if f in filenames: self.history_file.RemoveFileFromHistory(i)
         conf.save()
+
+
+    def on_delete_database(self, event=None):
+        """Handler for clicking to delete a database from disk."""
+        if not self.dbs_selected: return
+
+        msg = "%s files" % len(self.dbs_selected)
+        if len(self.dbs_selected) == 1: msg = self.dbs_selected[0]
+        if wx.OK != wx.MessageBox(
+            "Delete %s from disk?" % msg,
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+        ): return
+
+        unsaved_pages = {}
+        for page, db in self.db_pages.items():
+            if db.filename in self.dbs_selected and page and page.get_unsaved():
+                unsaved_pages[page] = db.filename
+        if unsaved_pages:
+            if wx.OK != wx.MessageBox(
+                "There are unsaved changes in files\n(%s).\n\n"
+                "Are you sure you want to discard them?" %
+                "\n".join(textwrap.wrap(", ".join(sorted(unsaved_pages.values())))),
+                conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            ): return
+
+        errors = []
+        for filename in self.dbs_selected[:]:
+            try:
+                page = next((k for k, v in self.db_pages.items()
+                             if v.filename == filename), None)
+                if page:
+                    page.set_ignore_unsaved()
+                    self.notebook.DeletePage(self.notebook.GetPageIndex(page))
+
+                os.unlink(filename)
+
+                for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
+                    if filename in lst: lst.remove(filename)
+                for dct in conf.LastSearchResults, self.db_datas, self.dbs:
+                    dct.pop(filename, None)
+
+                for i in range(self.list_db.GetItemCount())[::-1]:
+                    if self.list_db.GetItemText(i) == filename:
+                        self.list_db.DeleteItem(i)
+
+                # Remove from recent file history
+                historyfiles = [(i, self.history_file.GetHistoryFile(i))
+                                for i in range(self.history_file.Count)]
+                for i in [i for i, f in historyfiles if f == filename][::-1]:
+                    self.history_file.RemoveFileFromHistory(i)
+                self.dbs_selected.remove(filename)
+            except Exception as e:
+                logger.exception("Error deleting %s.", filename)
+                errors.append("%s: %s" % (filename, util.format_exc(e)))
+
+        self.list_db.Select(0)
+        self.update_database_list()
+        conf.save()
+        if errors:
+            wx.MessageBox("Error removing %s:\n\n%s" % (
+                          util.plural("file", errors, False),
+                          "\n".join(errors)), conf.Title, wx.OK | wx.ICON_ERROR)
 
 
     def on_showhide_log(self, event):
@@ -1672,6 +1738,7 @@ class DatabasePage(wx.Panel):
         self.db = db
         self.db.register_consumer(self)
         self.db_grids = {} # {"tablename": SqliteGridBase, }
+        self.ignore_unsaved = False
         self.pragma         = db.get_pragma_values() # {pragma_name: value}
         self.pragma_changes = {}    # {pragma_name: value}
         self.pragma_ctrls   = {}    # {pragma_name: wx control}
@@ -3607,12 +3674,19 @@ class DatabasePage(wx.Panel):
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
+    def set_ignore_unsaved(self, ignore=True):
+        """Sets page to ignore unsaved changes on close."""
+        self.ignore_unsaved = True
+
+
     def get_unsaved(self):
         """
         Returns whether page has unsaved changes,
         as {?"pragma": [pragma_name, ], ?"table": [table, ], ?"schema": [{item}]}.
         """
         result = {}
+        if self.ignore_unsaved: return result
+            
         if self.pragma_changes: result["pragma"] = list(self.pragma_changes)
         grids = self.get_unsaved_grids()
         if grids: result["table"] = [x.table for x in grids]
