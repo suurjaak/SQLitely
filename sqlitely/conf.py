@@ -22,7 +22,7 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev75"
+Version = "1.0.dev76"
 VersionDate = "25.09.2019"
 
 if getattr(sys, "frozen", False):
@@ -96,7 +96,7 @@ SearchInNames = False
 """Whether to search in all columns of all tables."""
 SearchInTables = True
 
-"""Texts in SQL window, loaded on reopening a database {filename: text, }."""
+"""Texts in SQL window, loaded on reopening a database {filename: [{name: text}, ], }."""
 SQLWindowTexts = {}
 
 """Whether the program tray icon is used."""

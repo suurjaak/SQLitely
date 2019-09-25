@@ -1972,7 +1972,7 @@ class DatabasePage(wx.Panel):
         panel2 = wx.Panel(parent=splitter)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
-        notebook = self.notebook_data = wx.lib.agw.flatnotebook.FlatNotebook(
+        nb = self.notebook_data = wx.lib.agw.flatnotebook.FlatNotebook(
             parent=panel2, size=(-1, 27),
             agwStyle=wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
                      wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
@@ -1981,19 +1981,19 @@ class DatabasePage(wx.Panel):
                      wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
                      wx.lib.agw.flatnotebook.FNB_X_ON_TAB |
                      wx.lib.agw.flatnotebook.FNB_VC8)
-        ColourManager.Manage(notebook, "ActiveTabColour", wx.SYS_COLOUR_WINDOW)
-        ColourManager.Manage(notebook, "TabAreaColour",   wx.SYS_COLOUR_BTNFACE)
-        try: notebook._pages.GetSingleLineBorderColour = notebook.GetActiveTabColour
+        ColourManager.Manage(nb, "ActiveTabColour", wx.SYS_COLOUR_WINDOW)
+        ColourManager.Manage(nb, "TabAreaColour",   wx.SYS_COLOUR_BTNFACE)
+        try: nb._pages.GetSingleLineBorderColour = nb.GetActiveTabColour
         except Exception: pass # Hack to get uniform background colour
 
-        sizer2.Add(notebook, proportion=1, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
+        sizer2.Add(nb, proportion=1, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
         splitter.SplitVertically(panel1, panel2, 270)
 
         self.Bind(EVT_DATA_PAGE, self.on_data_page_event)
-        notebook.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
-                      self.on_close_data_object)
+        nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
+                self.on_close_data_page)
 
 
     def create_page_schema(self, notebook):
@@ -2058,7 +2058,7 @@ class DatabasePage(wx.Panel):
         panel2 = wx.Panel(parent=splitter)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
-        notebook = self.notebook_schema = wx.lib.agw.flatnotebook.FlatNotebook(
+        nb = self.notebook_schema = wx.lib.agw.flatnotebook.FlatNotebook(
             parent=panel2, size=(-1, 27),
             agwStyle=wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
                      wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
@@ -2067,12 +2067,12 @@ class DatabasePage(wx.Panel):
                      wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
                      wx.lib.agw.flatnotebook.FNB_X_ON_TAB |
                      wx.lib.agw.flatnotebook.FNB_VC8)
-        ColourManager.Manage(notebook, "ActiveTabColour", wx.SYS_COLOUR_WINDOW)
-        ColourManager.Manage(notebook, "TabAreaColour",   wx.SYS_COLOUR_BTNFACE)
-        try: notebook._pages.GetSingleLineBorderColour = notebook.GetActiveTabColour
+        ColourManager.Manage(nb, "ActiveTabColour", wx.SYS_COLOUR_WINDOW)
+        ColourManager.Manage(nb, "TabAreaColour",   wx.SYS_COLOUR_BTNFACE)
+        try: nb._pages.GetSingleLineBorderColour = nb.GetActiveTabColour
         except Exception: pass # Hack to get uniform background colour
 
-        sizer2.Add(notebook, proportion=1, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
+        sizer2.Add(nb, proportion=1, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
         splitter.SplitVertically(panel1, panel2, 400)
@@ -2082,8 +2082,8 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_TREE_ITEM_ACTIVATED, self.on_change_tree_schema, tree)
         self.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_schema, tree)
         self.Bind(EVT_SCHEMA_PAGE, self.on_schema_page_event)
-        notebook.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
-                      self.on_close_schema_object)
+        nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
+                self.on_close_schema_page)
 
 
     def create_page_sql(self, notebook):
@@ -2091,107 +2091,43 @@ class DatabasePage(wx.Panel):
         page = self.page_sql = wx.Panel(parent=notebook)
         self.pageorder[page] = len(self.pageorder)
         notebook.AddPage(page, "SQL")
+
+        self.sql_pages = defaultdict(dict) # {name: SQLPage}
+        self.sql_page_counter = 0
+
         sizer = page.Sizer = wx.BoxSizer(wx.VERTICAL)
-        splitter = self.splitter_sql = \
-            wx.SplitterWindow(parent=page, style=wx.BORDER_NONE)
-        splitter.SetMinimumPaneSize(100)
 
-        panel1 = self.panel_sql1 = wx.Panel(parent=splitter)
-        sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
+        nb = self.notebook_sql = wx.lib.agw.flatnotebook.FlatNotebook(
+            parent=page, size=(-1, 27),
+            agwStyle=wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
+                     wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
+                     wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
+                     wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
+                     wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
+                     wx.lib.agw.flatnotebook.FNB_X_ON_TAB |
+                     wx.lib.agw.flatnotebook.FNB_VC8)
+        ColourManager.Manage(nb, "ActiveTabColour", wx.SYS_COLOUR_WINDOW)
+        ColourManager.Manage(nb, "TabAreaColour",   wx.SYS_COLOUR_BTNFACE)
+        try: nb._pages.GetSingleLineBorderColour = nb.GetActiveTabColour
+        except Exception: pass # Hack to get uniform background colour
 
-        sizer_top = wx.BoxSizer(wx.HORIZONTAL)
-        label_stc = wx.StaticText(parent=panel1, label="SQ&L:")
-        tb = self.tb_sql = wx.ToolBar(parent=panel1,
-                                      style=wx.TB_FLAT | wx.TB_NODIVIDER)
-        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN, wx.ART_TOOLBAR, (16, 16))
-        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
-        tb.SetToolBitmapSize(bmp1.Size)
-        tb.AddLabelTool(wx.ID_OPEN, "", bitmap=bmp1, shortHelp="Load SQL file")
-        tb.AddLabelTool(wx.ID_SAVE, "", bitmap=bmp2, shortHelp="Save SQL file")
-        tb.Realize()
-        tb.Bind(wx.EVT_TOOL, lambda e: self.on_open_sql(self.stc_sql, e), id=wx.ID_OPEN)
-        tb.Bind(wx.EVT_TOOL, lambda e: self.on_save_sql(self.stc_sql, e), id=wx.ID_SAVE)
+        for x in conf.SQLWindowTexts.get(self.db.filename, []):
+            name, text = x.items()[0]
+            self.add_sql_page(name, text)
+        if self.sql_pages:
+            self.sql_page_counter = max(
+                int(re.sub(r"[^\d]", "", x) or 0) for x in self.sql_pages
+            )
+        else: self.add_sql_page()
+        nb.AddPage(page=wx.Panel(page), text="+")
 
-        stc = self.stc_sql = controls.SQLiteTextCtrl(parent=panel1,
-            style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
-        stc.Bind(wx.EVT_KEY_DOWN, self.on_keydown_sql)
-        stc.SetText(conf.SQLWindowTexts.get(self.db.filename, ""))
-        stc.EmptyUndoBuffer() # So that undo does not clear the STC
-        sizer_top.Add(label_stc, border=5, flag=wx.ALL)
-        sizer_top.AddStretchSpacer()
-        sizer_top.Add(tb, flag=wx.ALIGN_RIGHT)
-        sizer1.Add(sizer_top, border=5, flag=wx.RIGHT | wx.GROW)
-        sizer1.Add(stc, border=5, proportion=1, flag=wx.GROW | wx.LEFT)
+        sizer.Add(nb, proportion=1, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
 
-        panel2 = self.panel_sql2 = wx.Panel(parent=splitter)
-        sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
-        label_help = wx.StaticText(panel2, label=
-            "Alt-Enter/Ctrl-Enter runs the query contained in currently selected "
-            "text or on the current line. Ctrl-Space shows autocompletion list.")
-        ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
-        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
-        button_sql = self.button_sql = wx.Button(panel2, label="Execute S&QL")
-        button_script = self.button_script = wx.Button(panel2,
-                                                       label="Execute scrip&t")
-        button_sql.SetToolTipString("Execute a single statement "
-                                    "from the SQL window")
-        button_script.SetToolTipString("Execute multiple SQL statements, "
-                                       "separated by semicolons")
-        self.Bind(wx.EVT_BUTTON, self.on_button_sql, button_sql)
-        self.Bind(wx.EVT_BUTTON, self.on_button_script, button_script)
-        button_reset = self.button_reset_grid_sql = \
-            wx.Button(parent=panel2, label="&Reset filter/sort")
-        button_reset.SetToolTipString("Resets all applied sorting "
-                                      "and filtering.")
-        button_reset.Bind(wx.EVT_BUTTON, self.on_button_reset_grid)
-        button_reset.Enabled = False
-        button_export = self.button_export_sql = \
-            wx.Button(parent=panel2, label="&Export to file")
-        button_export.SetToolTipString("Export result to a file.")
-        button_export.Bind(wx.EVT_BUTTON, self.on_button_export_grid)
-        button_export.Enabled = False
-        button_close = self.button_close_grid_sql = \
-            wx.Button(parent=panel2, label="&Close query")
-        button_close.Bind(wx.EVT_BUTTON, self.on_button_close_grid)
-        button_close.Enabled = False
-        sizer_buttons.Add(button_sql, flag=wx.ALIGN_LEFT)
-        sizer_buttons.Add(button_script, border=5, flag=wx.LEFT | wx.ALIGN_LEFT)
-        sizer_buttons.AddStretchSpacer()
-        sizer_buttons.Add(button_reset, border=5,
-                          flag=wx.ALIGN_RIGHT | wx.RIGHT)
-        sizer_buttons.Add(button_export, border=5, flag=wx.RIGHT | wx.ALIGN_RIGHT)
-        sizer_buttons.Add(button_close, flag=wx.ALIGN_RIGHT)
-        grid = self.grid_sql = wx.grid.Grid(parent=panel2)
-        ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
-        ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
-        ColourManager.Manage(grid, "LabelBackgroundColour",       wx.SYS_COLOUR_BTNFACE)
-        ColourManager.Manage(grid, "LabelTextColour",             wx.SYS_COLOUR_WINDOWTEXT)
-
-        grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,
-                  self.on_sort_grid_column)
-        grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,
-                  self.on_filter_grid_column)
-        grid.Bind(wx.EVT_SCROLLWIN, self.on_scroll_grid_sql)
-        grid.Bind(wx.EVT_SCROLL_THUMBRELEASE, self.on_scroll_grid_sql)
-        grid.Bind(wx.EVT_SCROLL_CHANGED, self.on_scroll_grid_sql)
-        grid.Bind(wx.EVT_KEY_DOWN, self.on_scroll_grid_sql)
-        grid.GridWindow.Bind(wx.EVT_MOTION, self.on_mouse_over_grid)
-        grid.GridWindow.Bind(wx.EVT_CHAR_HOOK, functools.partial(self.on_grid_key, grid))
-
-        label_help_sql = self.label_help_sql = wx.StaticText(panel2,
-            label="Double-click on column header to sort, right click to filter.")
-        ColourManager.Manage(label_help_sql, "ForegroundColour", "DisabledColour")
-
-        sizer2.Add(label_help, border=5, flag=wx.GROW | wx.LEFT | wx.BOTTOM)
-        sizer2.Add(sizer_buttons, border=5, flag=wx.GROW | wx.ALL)
-        sizer2.Add(grid, border=5, proportion=2,
-                   flag=wx.GROW | wx.LEFT | wx.RIGHT)
-        sizer2.Add(label_help_sql, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
-
-        sizer.Add(splitter, proportion=1, flag=wx.GROW)
-        sash_pos = self.Size[1] / 3
-        splitter.SplitHorizontally(panel1, panel2, sashPosition=sash_pos)
-        label_help_sql.Hide()
+        nb.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_sql_page)
+        nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
+                self.on_close_sql_page)
+        nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_DROPPED,
+                self.on_dragdrop_sql_page)
 
 
     def create_page_pragma(self, notebook):
@@ -2829,13 +2765,11 @@ class DatabasePage(wx.Panel):
         elif self.db.filename in conf.LastSearchResults:
             del conf.LastSearchResults[self.db.filename]
 
-        # Save page SQL window content, if changed from previous value
-        sql_text = self.stc_sql.Text
-        if sql_text != conf.SQLWindowTexts.get(self.db.filename, ""):
-            if sql_text:
-                conf.SQLWindowTexts[self.db.filename] = sql_text
-            elif self.db.filename in conf.SQLWindowTexts:
-                del conf.SQLWindowTexts[self.db.filename]
+        # Save page SQL windows content, if changed from previous value
+        sqls = [{k: v.GetText()} for k, v in self.sql_pages.items() if v.GetText()]
+        if sqls != conf.SQLWindowTexts.get(self.db.filename):
+            if sqls: conf.SQLWindowTexts[self.db.filename] = sqls
+            else: conf.SQLWindowTexts.pop(self.db.filename, None)
 
 
     def split_panels(self):
@@ -2849,9 +2783,6 @@ class DatabasePage(wx.Panel):
         panel1, panel2 = self.splitter_tables.Children
         self.splitter_tables.Unsplit()
         self.splitter_tables.SplitVertically(panel1, panel2, 270)
-        panel1, panel2 = self.splitter_sql.Children
-        self.splitter_sql.Unsplit()
-        self.splitter_sql.SplitHorizontally(panel1, panel2, sash_pos)
         wx.CallLater(1000, lambda: self and
                      (self.tree_data.SetColumnWidth(0, -1),
                       self.tree_data.SetColumnWidth(1, -1)))
@@ -2895,28 +2826,7 @@ class DatabasePage(wx.Panel):
     def on_refresh_tables(self, event):
         """Refreshes the table tree and open table data."""
         self.load_data_tree(refresh=True)
-
-
-    def on_scroll_grid_sql(self, event):
-        """
-        Handler for scrolling the SQL grid, seeks ahead if nearing the end of
-        retrieved rows.
-        """
-        event.Skip()
-        # Execute seek later, to give scroll position time to update
-        wx.CallLater(50, self.seekahead_grid_sql)
-
-
-    def seekahead_grid_sql(self):
-        """Seeks ahead on the SQL grid if scroll position nearing the end."""
-        SEEKAHEAD_POS_RATIO = 0.8
-        scrollpos = self.grid_sql.GetScrollPos(wx.VERTICAL)
-        scrollrange = self.grid_sql.GetScrollRange(wx.VERTICAL)
-        if scrollpos > scrollrange * SEEKAHEAD_POS_RATIO:
-            scrollpage = self.grid_sql.GetScrollPageSize(wx.VERTICAL)
-            to_end = (scrollpos + scrollpage == scrollrange)
-            # Seek to end if scrolled to the very bottom
-            self.grid_sql.Table.SeekAhead(to_end)
+        self.update_autocomp()
 
 
     def on_rightclick_searchall(self, event):
@@ -3017,6 +2927,9 @@ class DatabasePage(wx.Panel):
                         filename
                     wx.MessageBox(e, conf.Title, wx.OK | wx.ICON_INFORMATION)
             elif table_name:
+
+                # TODO see on siin muutunud
+
                 tableitem = None
                 table_name = table_name.lower()
                 item = self.tree_data.GetNext(self.tree_data.RootItem)
@@ -3241,230 +3154,12 @@ class DatabasePage(wx.Panel):
             del self.workers_search[tab["id"]]
 
 
-    def on_grid_key(self, grid, event):
-        """
-        Handler for keypress in data grid,
-        copies selection to clipboard on Ctrl-C.
-        """
-        if not (event.KeyCode in [ord('C')] and event.ControlDown()):
-            return event.Skip()
-
-        rows, cols = [], []
-        if grid.GetSelectedCols():
-            cols += sorted(grid.GetSelectedCols())
-            rows += range(grid.GetNumberRows())
-        if grid.GetSelectedRows():
-            rows += sorted(grid.GetSelectedRows())
-            cols += range(grid.GetNumberCols())
-        if grid.GetSelectionBlockTopLeft():
-            end = grid.GetSelectionBlockBottomRight()
-            for i, (r, c) in enumerate(grid.GetSelectionBlockTopLeft()):
-                r2, c2 = end[i]
-                rows += range(r, r2 + 1)
-                cols += range(c, c2 + 1)
-        if grid.GetSelectedCells():
-            rows += [r for r, c in grid.GetSelectedCells()]
-            cols += [c for r, c in grid.GetSelectedCells()]
-        if not rows and not cols:
-            if grid.GetGridCursorRow() >= 0 and grid.GetGridCursorCol() >= 0:
-                rows, cols = [grid.GetGridCursorRow()], [grid.GetGridCursorCol()]
-        rows, cols = (sorted(set(y for y in x if y >= 0)) for x in (rows, cols))
-        if not rows or not cols: return
-
-        if wx.TheClipboard.Open():
-            data = [[grid.GetCellValue(r, c) for c in cols] for r in rows]
-            text = "\n".join("\t".join(c for c in r) for r in data)
-            d = wx.TextDataObject(text)
-            wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-
-
-    def on_mouse_over_grid(self, event):
-        """
-        Handler for moving the mouse over a grid, shows datetime tooltip for
-        UNIX timestamp cells.
-        """
-        tip = ""
-        grid = event.EventObject.Parent
-        prev_cell = getattr(grid, "_hovered_cell", None)
-        x, y = grid.CalcUnscrolledPosition(event.X, event.Y)
-        row, col = grid.XYToCell(x, y)
-        if row >= 0 and col >= 0:
-            value = grid.Table.GetValue(row, col)
-            col_name = grid.Table.GetColLabelValue(col).lower()
-            if type(value) is int and value > 100000000 \
-            and ("time" in col_name or "history" in col_name):
-                try:
-                    tip = self.db.stamp_to_date(value).strftime(
-                          "%Y-%m-%d %H:%M:%S")
-                except Exception:
-                    tip = unicode(value)
-            else:
-                tip = unicode(value)
-            tip = tip if len(tip) < 1000 else tip[:1000] + ".."
-        if (row, col) != prev_cell or not (event.EventObject.ToolTip) \
-        or event.EventObject.ToolTip.Tip != tip:
-            event.EventObject.SetToolTipString(tip)
-        grid._hovered_cell = (row, col)
-
-
-    def on_button_reset_grid(self, event):
-        """
-        Handler for clicking to remove sorting and filtering on a grid,
-        resets the grid and its view.
-        """
-        is_table = (event.EventObject == self.button_reset_grid_table)
-        grid = self.grid_table if is_table else self.grid_sql
-        if grid.Table and isinstance(grid.Table, SqliteGridBase):
-            grid.Table.ClearFilter()
-            grid.Table.ClearSort()
-            grid.ContainingSizer.Layout() # React to grid size change
-
-
-    def on_button_export_grid(self, event):
-        """
-        Handler for clicking to export wx.Grid contents to file, allows the
-        user to select filename and type and creates the file.
-        """
-        grid_source = self.grid_table
-        sql = table = ""
-        if event.EventObject is self.button_export_sql:
-            grid_source, sql = self.grid_sql, self.last_sql
-        if not grid_source.Table: return
-
-        if grid_source is self.grid_table:
-            table = grid_source.Table.table
-            table_lower = table.lower()
-            opts = self.db.get_category("table", table_lower)
-            title = "Table %s" % grammar.quote(opts["name"], force=True)
-            self.dialog_savefile.Wildcard = export.TABLE_WILDCARD
-        else:
-            title = "SQL query"
-            self.dialog_savefile.Wildcard = export.QUERY_WILDCARD
-            grid_source.Table.SeekAhead(True)
-        self.dialog_savefile.Filename = util.safe_filename(title)
-        self.dialog_savefile.Message = "Save table as"
-        self.dialog_savefile.WindowStyle |= wx.FD_OVERWRITE_PROMPT
-        if wx.ID_OK != self.dialog_savefile.ShowModal(): return
-
-        filename = self.dialog_savefile.GetPath()
-        exts = export.TABLE_EXTS if grid_source is self.grid_table \
-               else export.QUERY_EXTS
-        extname = exts[self.dialog_savefile.FilterIndex]
-        if not filename.lower().endswith(".%s" % extname):
-            filename += ".%s" % extname
-        busy = controls.BusyPanel(self, "Exporting \"%s\"." % filename)
-        guibase.status('Exporting "%s".', filename)
-        try:
-            make_iterable = grid_source.Table.GetRowIterator
-            export.export_data(make_iterable, filename, title, self.db,
-                               grid_source.Table.columns, sql, table)
-            guibase.status('Exported "%s".', filename, log=True, flash=True)
-            util.start_file(filename)
-        except Exception as e:
-            msg = "Error saving %s."
-            logger.exception(msg, filename)
-            guibase.status(msg, flash=True)
-            error = "Error saving %s:\n\n%s" % (filename, util.format_exc(e))
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
-        finally:
-            busy.Close()
-
-
-    def on_button_close_grid(self, event):
-        """
-        Handler for clicking to close a grid.
-        """
-        is_table = (event.EventObject == self.button_close_grid_table)
-        grid = self.grid_table if is_table else self.grid_sql
-        if not grid.Table or not isinstance(grid.Table, SqliteGridBase):
-            return
-
-        if is_table:
-            info = grid.Table.GetChangedInfo()
-            if grid.Table.IsChanged():
-                if wx.OK != wx.MessageBox(
-                    "There are unsaved changes (%s).\n\nAre you sure you want to "
-                    "discard them?" % info,
-                    conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
-                ): return
-                try:
-                    grid.Table.SaveChanges()
-                except Exception as e:
-                    msg = 'Error saving table %s in "%s".' % (
-                           grammar.quote(grid.Table.table), self.db)
-                    logger.exception(msg)
-                    guibase.status(msg, flash=True)
-                    error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-                    wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
-                    return
-                else: grid.Table.UndoChanges()
-                self.on_change_table(None)
-
-            self.db_grids.pop(grid.Table.table, None)
-            i = self.tree_data.GetNext(self.tree_data.RootItem)
-            while i:
-                data = self.tree_data.GetItemPyData(i)
-                if isinstance(data, basestring) \
-                and data.lower() == grid.Table.table.lower():
-                    self.tree_data.SetItemBold(i, False)
-                    break # while i
-                i = self.tree_data.GetNextSibling(i)
-
-        grid.SetTable(None)
-        grid.Parent.Refresh()
-
-        if is_table:
-            self.label_table.Label = ""
-            self.tb_grid.EnableTool(wx.ID_ADD, False)
-            self.tb_grid.EnableTool(wx.ID_DELETE, False)
-            self.button_export_table.Enabled = False
-            self.button_reset_grid_table.Enabled = False
-            self.button_close_grid_table.Enabled = False
-            self.label_help_table.Hide()
-            self.label_help_table.ContainingSizer.Layout()
-        else:
-            self.button_export_sql.Enabled = False
-            self.button_reset_grid_sql.Enabled = False
-            self.button_close_grid_sql.Enabled = False
-            self.label_help_sql.Hide()
-            self.label_help_sql.ContainingSizer.Layout()
-
-
-    def on_open_sql(self, stc, event):
-        """
-        Handler for loading SQL from file, opens file dialog and loads content.
-        """
-        dialog = wx.FileDialog(
-            parent=self, message="Open", defaultFile="",
-            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
-            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
-        )
-        if wx.ID_OK != dialog.ShowModal(): return
-
-        filename = dialog.GetPath()
-        try:
-            stc.LoadFile(filename)
-        except Exception as e:
-            msg = "Error loading SQL from %s." % filename
-            logger.exception(msg); guibase.status(msg, flash=True)
-            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
-
-
-    def on_copy_sql(self, stc, event):
-        """Handler for copying SQL to clipboard."""
-        if wx.TheClipboard.Open():
-            d = wx.TextDataObject(stc.Text)
-            wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-
-
     def on_save_sql(self, stc, event):
         """
         Handler for saving SQL to file, opens file dialog and saves content.
         """
         filename = os.path.splitext(os.path.basename(self.db.filename))[0]
-        if stc is self.stc_sql: filename += " SQL"
-        elif stc is self.stc_pragma: filename += " PRAGMA"
+        if stc is self.stc_pragma: filename += " PRAGMA"
         dialog = wx.FileDialog(
             parent=self, message="Save as", defaultFile=filename,
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
@@ -3483,100 +3178,6 @@ class DatabasePage(wx.Panel):
             msg = "Error saving SQL to %s." % filename
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
-
-
-    def on_keydown_sql(self, event):
-        """
-        Handler for pressing a key in SQL editor, listens for Alt-Enter and
-        executes the currently selected line, or currently active line.
-        """
-        event.Skip() # Allow to propagate to other handlers
-        stc = event.GetEventObject()
-        if (event.AltDown() or event.ControlDown()) and wx.WXK_RETURN == event.KeyCode:
-            sql = (stc.SelectedText or stc.CurLine[0]).strip()
-            if sql: self.execute_sql(sql)
-
-
-    def on_button_sql(self, event):
-        """
-        Handler for clicking to run an SQL query, runs the selected text or
-        whole contents, displays its results, if any, and commits changes
-        done, if any.
-        """
-        sql = (self.stc_sql.SelectedText or self.stc_sql.Text).strip()
-        if sql:
-            self.execute_sql(sql)
-
-
-    def on_button_script(self, event):
-        """
-        Handler for clicking to run multiple SQL statements, runs the selected
-        text or whole contents as an SQL script.
-        """
-        sql = self.stc_sql.SelectedText.strip() or self.stc_sql.Text.strip()
-        try:
-            if sql:
-                logger.info('Executing SQL script "%s".', sql)
-                self.db.connection.executescript(sql)
-                self.grid_sql.SetTable(None)
-                self.grid_sql.CreateGrid(1, 1)
-                self.grid_sql.SetColLabelValue(0, "Affected rows")
-                self.grid_sql.SetCellValue(0, 0, "-1")
-                self.button_reset_grid_sql.Enabled = False
-                self.button_export_sql.Enabled = False
-                self.label_help_sql.Show()
-                self.label_help_sql.ContainingSizer.Layout()
-                size = self.grid_sql.Size
-                self.grid_sql.Fit()
-                # Jiggle size by 1 pixel to refresh scrollbars
-                self.grid_sql.Size = size[0], size[1]-1
-                self.grid_sql.Size = size[0], size[1]
-        except Exception as e:
-            msg = "Error running SQL script."
-            logger.exception(msg); guibase.status(msg, flash=True)
-            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
-
-
-    def execute_sql(self, sql):
-        """Executes the SQL query and populates the SQL grid with results."""
-        try:
-            grid_data = None
-            if sql.lower().startswith(("select", "pragma", "explain")):
-                # SELECT statement: populate grid with rows
-                grid_data = SqliteGridBase(self.db, sql=sql)
-                self.grid_sql.SetTable(grid_data)
-                self.button_reset_grid_sql.Enabled = True
-                self.button_export_sql.Enabled = True
-            else:
-                # Assume action query
-                affected_rows = self.db.execute_action(sql)
-                self.grid_sql.SetTable(None)
-                self.grid_sql.CreateGrid(1, 1)
-                self.grid_sql.SetColLabelValue(0, "Affected rows")
-                self.grid_sql.SetCellValue(0, 0, str(affected_rows))
-                self.button_reset_grid_sql.Enabled = False
-                self.button_export_sql.Enabled = False
-            self.button_close_grid_sql.Enabled = True
-            self.label_help_sql.Show()
-            self.label_help_sql.ContainingSizer.Layout()
-            guibase.status('Executed SQL "%s" (%s).', sql, self.db,
-                           log=True, flash=True)
-            size = self.grid_sql.Size
-            self.grid_sql.Fit()
-            # Jiggle size by 1 pixel to refresh scrollbars
-            self.grid_sql.Size = size[0], size[1]-1
-            self.grid_sql.Size = size[0], size[1]
-            self.last_sql = sql
-            self.grid_sql.SetColMinimalAcceptableWidth(100)
-            if grid_data:
-                col_range = range(grid_data.GetNumberCols())
-                [self.grid_sql.AutoSizeColLabelSize(x) for x in col_range]
-        except Exception as e:
-            logger.exception("Error running SQL %s.", sql)
-            guibase.status("Error running SQL.", flash=True)
-            error = "Error running SQL:\n\n%s" % util.format_exc(e)
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
@@ -3650,17 +3251,32 @@ class DatabasePage(wx.Panel):
             if p: nb.SetSelection(nb.GetPageIndex(p))
             else:
                 data = self.db.get_category(data["type"], data["name"])
-                self.add_data_object(data)
+                self.add_data_page(data)
         else:
             tree.Collapse(item) if tree.IsExpanded(item) else tree.Expand(item)
 
 
-    def add_data_object(self, data):
-        """Opens a data object panel for specified object data."""
+    def add_data_page(self, data):
+        """Opens a data object page for specified object data."""
         title = "%s %s" % (data["type"].capitalize(), grammar.quote(data["name"]))
         p = DataObjectPage(self.notebook_schema, self, self.db, data)
         self.data_pages[data["type"]][data.get("name") or id(p)] = p
         self.notebook_data.InsertPage(0, page=p, text=title, select=True)
+        self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
+
+
+    def add_sql_page(self, name="", text=""):
+        """Opens an SQL page with specified text."""
+        self.sql_page_counter += 1
+        if not name:
+            name = "SQL"
+            if not self.sql_pages: self.sql_page_counter = 1
+            if self.sql_page_counter > 1:
+                name += " (%s)" % self.sql_page_counter
+        p = SQLPage(self.notebook_schema, self, self.db)
+        p.SetText(text)
+        self.sql_pages[name] = p
+        self.notebook_sql.InsertPage(0, page=p, text=name, select=True)
         self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
 
 
@@ -3806,7 +3422,7 @@ class DatabasePage(wx.Panel):
                     newdata["meta"]["table"] = data["parent"]["name"]
                 elif "table" == data["type"]:
                     newdata["meta"]["table"] = data["name"]
-            self.add_schema_object(newdata)
+            self.add_schema_page(newdata)
             tree.Expand(item)
         def delete_items(items, *_, **__):
             extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
@@ -3839,9 +3455,11 @@ class DatabasePage(wx.Panel):
                 for x in deleteds:
                     page = self.schema_pages[x["type"]].get(x["name"])
                     if page: page.Close(force=True)
-                self.load_schema_tree(refresh=True)
+                self.db.populate_schema(count=True)
+                self.load_schema_tree()
                 self.load_data_tree()
                 self.on_update_stc_schema()
+                self.update_autocomp()
 
         menu = wx.Menu()
         boldfont = self.Font
@@ -4001,7 +3619,7 @@ class DatabasePage(wx.Panel):
         def create_object(category, *_, **__):
             newdata = {"type": category,
                        "meta": {"__type__": "CREATE %s" % category.upper()}}
-            self.add_schema_object(newdata)
+            self.add_schema_page(newdata)
 
         menu, keys = wx.Menu(), []
         for category in database.Database.CATEGORIES:
@@ -4027,13 +3645,13 @@ class DatabasePage(wx.Panel):
             if p: nb.SetSelection(nb.GetPageIndex(p))
             else:
                 data = self.db.get_category(data["type"], data["name"])
-                self.add_schema_object(data)
+                self.add_schema_page(data)
         else:
             tree.Collapse(item) if tree.IsExpanded(item) else tree.Expand(item)
 
 
-    def add_schema_object(self, data):
-        """Opens a schema object panel for specified object data."""
+    def add_schema_page(self, data):
+        """Opens a schema object page for specified object data."""
         if "name" in data:
             title = "%s %s" % (data["type"].capitalize(), grammar.quote(data["name"]))
         else:
@@ -4044,8 +3662,8 @@ class DatabasePage(wx.Panel):
         self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
 
 
-    def on_close_schema_object(self, event):
-        """Handler for closing schema item."""
+    def on_close_schema_page(self, event):
+        """Handler for closing a schema object page."""
         page = self.notebook_schema.GetPage(event.GetSelection())
         if page.IsChanged():
             if wx.OK != wx.MessageBox(
@@ -4087,11 +3705,49 @@ class DatabasePage(wx.Panel):
             self.db.populate_schema(parse=True)
             self.load_schema_tree()
             self.load_data_tree()
+            self.update_autocomp()
             self.on_update_stc_schema()
 
 
-    def on_close_data_object(self, event):
-        """Handler for closing data item."""
+    def on_change_sql_page(self, event):
+        """Handler for SQL notebook tab change, adds new window if adder-tab."""
+        if "+" == self.notebook_sql.GetPageText(self.notebook_sql.GetSelection()):
+            self.notebook_sql.Freeze() # Avoid flicker from changing tab
+            self.add_sql_page()
+            wx.CallAfter(self.notebook_sql.Thaw)
+
+
+    def on_dragdrop_sql_page(self, event):
+        """Handler for dragging tabs in SQL window, moves adder-tab to end."""
+        nb = self.notebook_sql
+        if "+" != nb.GetPageText(nb.GetPageCount() - 1):
+            i = next(i for i in range(nb.GetPageCount())
+                     if "+" == nb.GetPageText(i))
+            p = nb.GetPage(i)
+            self._ignore_adder_close = True
+            nb.RemovePage(i)
+            delattr(self, "_ignore_adder_close")
+            nb.AddPage(p, text="+")
+
+
+    def on_close_sql_page(self, event):
+        """Handler for closing an SQL page."""
+        if "+" == self.notebook_sql.GetPageText(event.GetSelection()):
+            if not getattr(self, "_ignore_adder_close", False): event.Veto()
+            return
+        self.notebook_sql.Freeze() # Avoid flicker when closing last
+        page = self.notebook_sql.GetPage(event.GetSelection())
+
+        for k, p in self.sql_pages.items():
+            if p is page:
+                self.sql_pages.pop(k)
+                break # for k, p
+        self.TopLevelParent.UpdateAccelerators() # Remove panel accelerators
+        wx.CallAfter(self.notebook_sql.Thaw)
+
+
+    def on_close_data_page(self, event):
+        """Handler for closing data object page."""
         page = self.notebook_data.GetPage(event.GetSelection())
         if page.IsChanged():
             if wx.OK != wx.MessageBox(
@@ -4435,9 +4091,11 @@ class DatabasePage(wx.Panel):
         full row counts, and full schema.
         """
         if not self: return
+        self.db.populate_schema(count=True, parse=True)
         self.on_update_stc_schema()
-        self.load_data_tree(refresh=True)
-        self.load_schema_tree(refresh=True)
+        self.load_data_tree()
+        self.load_schema_tree()
+        self.update_autocomp()
 
 
     def get_tree_expanded_state(self, tree, root):
@@ -4505,19 +4163,6 @@ class DatabasePage(wx.Panel):
                 tree.Collapse(child)
 
             self.set_tree_expanded_state(tree, tree.RootItem, expandeds)
-
-            # Add PRAGMAS, and table/view/column names to SQL editor autocomplete
-            self.stc_sql.AutoCompClearAdded()
-            # TODO see eraldi meetodiks
-            pragmas = list(database.Database.PRAGMA) + database.Database.EXTRA_PRAGMAS
-            self.stc_sql.AutoCompAddWords(pragmas)
-            for category in ("table", "view"):
-                for item in self.db.get_category(category).values():
-                    myname = grammar.quote(item["name"])
-                    self.stc_sql.AutoCompAddWords([myname])
-                    if not item.get("columns"): continue # for item
-                    fields = [grammar.quote(c["name"]) for c in item["columns"]]
-                    self.stc_sql.AutoCompAddSubWords(myname, fields)
         except Exception:
             if not self: return
             logger.exception("Error loading table data from %s.", self.db)
@@ -4612,6 +4257,20 @@ class DatabasePage(wx.Panel):
         tree.SetColumnWidth(0, tree.Size[0] - 130)
         tree.Expand(root)
         self.set_tree_expanded_state(tree, tree.RootItem, expandeds)
+
+
+    def update_autocomp(self):
+        """Add PRAGMAS, and table/view/column names to SQL autocomplete."""
+        words = list(database.Database.PRAGMA) + database.Database.EXTRA_PRAGMAS
+        subwords = {}
+
+        for category in ("table", "view"):
+            for item in self.db.get_category(category).values():
+                myname = grammar.quote(item["name"])
+                words.append(myname)
+                if not item.get("columns"): continue # for item
+                subwords[myname] = [grammar.quote(c["name"]) for c in item["columns"]]
+        for p in self.sql_pages.values(): p.SetAutoComp(words, subwords)
 
 
     def update_tabheader(self):
@@ -5187,6 +4846,474 @@ class AboutDialog(wx.Dialog):
 
 
 
+class SQLPage(wx.PyPanel):
+    """
+    Component for running SQL queries and seeing results in a grid.
+    """
+
+    def __init__(self, parent, page, db, id=wx.ID_ANY, pos=wx.DefaultPosition,
+                 size=wx.DefaultSize):
+        """
+        @param   page  target to send EVT_SCHEMA_PAGE events to
+        """
+        wx.PyPanel.__init__(self, parent, pos=pos, size=size)
+        ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
+        ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
+
+        self._page     = page
+        self._db       = db
+        self._hovered_cell  = None # (row, col)
+
+        sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
+
+        splitter = wx.SplitterWindow(parent=self, style=wx.BORDER_NONE)
+        splitter.SetMinimumPaneSize(100)
+
+        panel1 = wx.Panel(parent=splitter)
+        sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_header = wx.BoxSizer(wx.HORIZONTAL)
+
+        tb = self._tb = wx.ToolBar(panel1, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY,      wx.ART_TOOLBAR, (16, 16))
+        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN, wx.ART_TOOLBAR, (16, 16))
+        bmp3 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
+        tb.SetToolBitmapSize(bmp1.Size)
+        tb.AddLabelTool(wx.ID_COPY, "", bitmap=bmp1, shortHelp="Copy SQL to clipboard")
+        tb.AddLabelTool(wx.ID_OPEN, "", bitmap=bmp2, shortHelp="Load SQL from file")
+        tb.AddLabelTool(wx.ID_SAVE, "", bitmap=bmp3, shortHelp="Save SQL to file")
+        tb.Realize()
+
+        stc = self._stc = controls.SQLiteTextCtrl(panel1,
+            style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
+
+        panel2 = wx.Panel(parent=splitter)
+        sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
+
+        label_help_stc = wx.StaticText(panel2, label=
+            "Alt-Enter/Ctrl-Enter runs the query contained in currently selected "
+            "text or on the current line. Ctrl-Space shows autocompletion list.")
+        ColourManager.Manage(label_help_stc, "ForegroundColour", "DisabledColour")
+        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+        button_sql    = wx.Button(panel2, label="Execute S&QL")
+        button_script = wx.Button(panel2, label="Execute scrip&t")
+        button_reset  = self._button_reset  = wx.Button(panel2, label="&Reset filter/sort")
+        button_export = self._button_export = wx.Button(panel2, label="&Export to file")
+        button_close  = self._button_close  = wx.Button(panel2, label="&Close query")
+
+        button_sql.ToolTipString    = "Execute a single statement from the SQL window"
+        button_script.ToolTipString = "Execute multiple SQL statements, separated by semicolons"
+        button_reset.ToolTipString  = "Resets all applied sorting and filtering"
+        button_export.ToolTipString = "Export result to a file"
+        button_close.ToolTipString  = "Close data grid"
+
+        button_reset.Enabled = button_export.Enabled = button_close.Enabled = False
+
+        grid = self._grid = wx.grid.Grid(parent=panel2)
+        ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
+        ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
+        ColourManager.Manage(grid, "LabelBackgroundColour",       wx.SYS_COLOUR_BTNFACE)
+        ColourManager.Manage(grid, "LabelTextColour",             wx.SYS_COLOUR_WINDOWTEXT)
+
+        label_help = self._label_help = wx.StaticText(panel2,
+            label="Double-click on column header to sort, right click to filter.")
+        ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
+
+        self.Bind(wx.EVT_TOOL,     self._OnCopySQL,       id=wx.ID_COPY)
+        self.Bind(wx.EVT_TOOL,     self._OnLoadSQL,       id=wx.ID_OPEN)
+        self.Bind(wx.EVT_TOOL,     self._OnSaveSQL,       id=wx.ID_SAVE)
+        self.Bind(wx.EVT_BUTTON,   self._OnExecuteSQL,    button_sql)
+        self.Bind(wx.EVT_BUTTON,   self._OnExecuteScript, button_script)
+        self.Bind(wx.EVT_BUTTON,   self._OnResetView,     button_reset)
+        self.Bind(wx.EVT_BUTTON,   self._OnExport,        button_export)
+        self.Bind(wx.EVT_BUTTON,   self._OnGridClose,     button_close)
+        stc.Bind(wx.EVT_KEY_DOWN,                         self._OnSTCKey)
+        grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,     self._OnSort)
+        grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,     self._OnFilter)
+        grid.Bind(wx.EVT_SCROLLWIN,                       self._OnGridScroll)
+        grid.Bind(wx.EVT_SCROLL_THUMBRELEASE,             self._OnGridScroll)
+        grid.Bind(wx.EVT_SCROLL_CHANGED,                  self._OnGridScroll)
+        grid.Bind(wx.EVT_KEY_DOWN,                        self._OnGridScroll)
+        grid.GridWindow.Bind(wx.EVT_MOTION,               self._OnGridMouse)
+        grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,            self._OnGridKey)
+
+        sizer_header.Add(tb)
+        sizer1.Add(sizer_header)
+        sizer1.Add(stc, proportion=1, flag=wx.GROW)
+
+        sizer_buttons.Add(button_sql, flag=wx.ALIGN_LEFT)
+        sizer_buttons.Add(button_script, border=5, flag=wx.LEFT | wx.ALIGN_LEFT)
+        sizer_buttons.AddStretchSpacer()
+        sizer_buttons.Add(button_reset, border=5, flag=wx.ALIGN_RIGHT | wx.RIGHT)
+        sizer_buttons.Add(button_export, border=5, flag=wx.RIGHT | wx.ALIGN_RIGHT)
+        sizer_buttons.Add(button_close, flag=wx.ALIGN_RIGHT)
+
+        sizer2.Add(label_help_stc, border=5, flag=wx.BOTTOM | wx.GROW)
+        sizer2.Add(sizer_buttons, border=5, flag=wx.RIGHT | wx.BOTTOM | wx.GROW)
+        sizer2.Add(grid, proportion=1, flag=wx.GROW)
+        sizer2.Add(label_help, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
+
+        sizer.Add(splitter, proportion=1, flag=wx.GROW)
+        label_help.Hide()
+        self.Layout()
+        wx.CallAfter(lambda: splitter.SplitHorizontally(panel1, panel2, sashPosition=self.Size[1] * 2/5))
+
+
+    def GetText(self):
+        """Returns the current contents of the SQL window."""
+        return self._stc.Text
+
+
+    def SetText(self, text):
+        """Sets the contents of the SQL window."""
+        self._stc.SetText(text)
+        self._stc.EmptyUndoBuffer() # So that undo does not clear the STC
+
+
+    def SetAutoComp(self, words=[], subwords={}):
+        """Sets additional words to use in STC autocompletion."""
+        self._stc.AutoCompClearAdded()
+        self._stc.AutoCompAddWords(words)
+        for word, subwords in subwords.items():
+            self._stc.AutoCompAddSubWords(word, subwords)
+
+
+    def ExecuteSQL(self, sql):
+        """Executes the SQL query and populates the SQL grid with results."""
+        try:
+            grid_data = None
+            if sql.lower().startswith(("select", "pragma", "explain")):
+                # SELECT statement: populate grid with rows
+                grid_data = SqliteGridBase(self._db, sql=sql)
+                self._grid.Table = grid_data
+                self._button_reset.Enabled = True
+                self._button_export.Enabled = True
+            else:
+                # Assume action query
+                affected_rows = self._db.execute_action(sql)
+                self._grid.Table = None
+                self._grid.CreateGrid(1, 1)
+                self._grid.SetColLabelValue(0, "Affected rows")
+                self._grid.SetCellValue(0, 0, str(affected_rows))
+                self._button_reset.Enabled = False
+                self._button_export.Enabled = False
+            self._button_close.Enabled = True
+            self._label_help.Show()
+            self._label_help.ContainingSizer.Layout()
+            guibase.status('Executed SQL "%s" (%s).', sql, self._db,
+                           log=True, flash=True)
+            size = self._grid.Size
+            self._grid.Fit()
+            # Jiggle size by 1 pixel to refresh scrollbars
+            self._grid.Size = size[0], size[1]-1
+            self._grid.Size = size[0], size[1]
+            self.last_sql = sql
+            self._grid.SetColMinimalAcceptableWidth(100)
+            if grid_data:
+                col_range = range(grid_data.GetNumberCols())
+                [self._grid.AutoSizeColLabelSize(x) for x in col_range]
+        except Exception as e:
+            logger.exception("Error running SQL %s.", sql)
+            guibase.status("Error running SQL.", flash=True)
+            error = "Error running SQL:\n\n%s" % util.format_exc(e)
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+
+
+    def _OnExport(self, event=None):
+        """
+        Handler for clicking to export grid contents to file, allows the
+        user to select filename and type and creates the file.
+        """
+        if not self._grid.Table: return
+
+        self._grid.Table.SeekAhead(True)
+
+        title = "SQL query"
+        dialog = wx.FileDialog(self, defaultDir=os.getcwd(),
+            message="Save query as",
+            defaultFile=util.safe_filename(title),
+            wildcard=export.QUERY_WILDCARD,
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        filename = dialog.GetPath()
+        extname = export.QUERY_EXTS[dialog.FilterIndex]
+        if not filename.lower().endswith(".%s" % extname):
+            filename += ".%s" % extname
+        busy = controls.BusyPanel(self, 'Exporting "%s".' % filename)
+        guibase.status('Exporting "%s".', filename)
+        try:
+            make_iterable = self._grid.Table.GetRowIterator
+            export.export_data(make_iterable, filename, title, self._db,
+                               self._grid.Table.columns,
+                               sql_query=self._grid.Table.sql)
+            guibase.status('Exported "%s".', filename, log=True, flash=True)
+            util.start_file(filename)
+        except Exception as e:
+            msg = "Error saving %s."
+            logger.exception(msg, filename)
+            guibase.status(msg, flash=True)
+            error = "Error saving %s:\n\n%s" % (filename, util.format_exc(e))
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+        finally:
+            busy.Close()
+
+
+    def _OnFilter(self, event):
+        """
+        Handler for right-clicking a table grid column, lets the user
+        change the column filter.
+        """
+        row, col = event.GetRow(), event.GetCol()
+        # Remember scroll positions, as grid update loses them
+        if row >= 0: return # Only react to clicks in the header
+
+        grid_data = self._grid.Table
+        current_filter = unicode(grid_data.filters[col]) \
+                         if col in grid_data.filters else ""
+        name = grammar.quote(grid_data.columns[col]["name"], force=True)
+        dialog = wx.TextEntryDialog(self,
+            "Filter column %s by:" % name, "Filter", defaultValue=current_filter,
+            style=wx.OK | wx.CANCEL)
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        new_filter = dialog.GetValue()
+        if len(new_filter):
+            busy = controls.BusyPanel(self,
+                'Filtering column %s by "%s".' %
+                (name, new_filter))
+            grid_data.AddFilter(col, new_filter)
+            busy.Close()
+        else:
+            grid_data.RemoveFilter(col)
+        self.Layout() # React to grid size change
+
+
+    def _OnSort(self, event):
+        """
+        Handler for clicking a table grid column, sorts table by the column.
+        """
+        row, col = event.GetRow(), event.GetCol()
+        # Remember scroll positions, as grid update loses them
+        scroll_hor = self._grid.GetScrollPos(wx.HORIZONTAL)
+        scroll_ver = self._grid.GetScrollPos(wx.VERTICAL)
+        if row < 0: # Only react to clicks in the header
+            self._grid.Table.SortColumn(col)
+        self.Layout() # React to grid size change
+        self._grid.Scroll(scroll_hor, scroll_ver)
+
+
+    def _OnResetView(self, event):
+        """
+        Handler for clicking to remove sorting and filtering,
+        resets the grid and its view.
+        """
+        self._grid.Table.ClearFilter()
+        self._grid.Table.ClearSort()
+        self.Layout() # React to grid size change
+
+
+    def _OnGridScroll(self, event):
+        """
+        Handler for scrolling the grid, seeks ahead if nearing the end of
+        retrieved rows.
+        """
+        SEEKAHEAD_POS_RATIO = 0.8
+        event.Skip()
+
+        def seekahead():
+            scrollpos = self._grid.GetScrollPos(wx.VERTICAL)
+            scrollrange = self._grid.GetScrollRange(wx.VERTICAL)
+            if scrollpos > scrollrange * SEEKAHEAD_POS_RATIO:
+                scrollpage = self._grid.GetScrollPageSize(wx.VERTICAL)
+                to_end = (scrollpos + scrollpage == scrollrange)
+                # Seek to end if scrolled to the very bottom
+                self._grid.Table.SeekAhead(to_end)
+
+        wx.CallLater(50, seekahead) # Give scroll position time to update
+
+
+    def _OnGridKey(self, event):
+        """Handler for grid keypress, copies selection to clipboard on Ctrl-C."""
+        if not event.ControlDown() or ord('C') != event.KeyCode:
+            return event.Skip()
+
+        rows, cols = [], []
+        if self._grid.GetSelectedCols():
+            cols += sorted(self._grid.GetSelectedCols())
+            rows += range(self._grid.GetNumberRows())
+        if self._grid.GetSelectedRows():
+            rows += sorted(self._grid.GetSelectedRows())
+            cols += range(self._grid.GetNumberCols())
+        if self._grid.GetSelectionBlockTopLeft():
+            end = self._grid.GetSelectionBlockBottomRight()
+            for i, (r, c) in enumerate(self._grid.GetSelectionBlockTopLeft()):
+                r2, c2 = end[i]
+                rows += range(r, r2 + 1)
+                cols += range(c, c2 + 1)
+        if self._grid.GetSelectedCells():
+            rows += [r for r, c in self._grid.GetSelectedCells()]
+            cols += [c for r, c in self._grid.GetSelectedCells()]
+        if not rows and not cols:
+            if self._grid.GetGridCursorRow() >= 0 and self._grid.GetGridCursorCol() >= 0:
+                rows, cols = [self._grid.GetGridCursorRow()], [self._grid.GetGridCursorCol()]
+        rows, cols = (sorted(set(y for y in x if y >= 0)) for x in (rows, cols))
+        if not rows or not cols: return
+
+        if wx.TheClipboard.Open():
+            data = [[self._grid.GetCellValue(r, c) for c in cols] for r in rows]
+            text = "\n".join("\t".join(c for c in r) for r in data)
+            d = wx.TextDataObject(text)
+            wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+
+
+    def _OnGridMouse(self, event):
+        """
+        Handler for moving the mouse over a grid, shows datetime tooltip for
+        UNIX timestamp cells.
+        """
+        tip = ""
+        prev_cell = self._hovered_cell
+        x, y = self._grid.CalcUnscrolledPosition(event.X, event.Y)
+        row, col = self._grid.XYToCell(x, y)
+        if row >= 0 and col >= 0:
+            value = self._grid.Table.GetValue(row, col)
+            col_name = self._grid.Table.GetColLabelValue(col).lower()
+            if type(value) is int and value > 100000000 \
+            and ("time" in col_name or "date" in col_name):
+                try:
+                    tip = datetime.datetime.fromtimestamp(value).strftime(
+                          "%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    tip = unicode(value)
+            else:
+                tip = unicode(value)
+            tip = tip if len(tip) < 1000 else tip[:1000] + ".."
+        if (row, col) != prev_cell or not (event.EventObject.ToolTip) \
+        or event.EventObject.ToolTip.Tip != tip:
+            event.EventObject.SetToolTipString(tip)
+        self._hovered_cell = (row, col)
+
+
+    def _OnSTCKey(self, event):
+        """
+        Handler for pressing a key in STC, listens for Alt-Enter and
+        executes the currently selected line, or currently active line.
+        """
+        event.Skip() # Allow to propagate to other handlers
+        stc = event.GetEventObject()
+        if (event.AltDown() or event.ControlDown()) and wx.WXK_RETURN == event.KeyCode:
+            sql = (stc.SelectedText or stc.CurLine[0]).strip()
+            if sql: self.ExecuteSQL(sql)
+
+
+    def _OnExecuteSQL(self, event=None):
+        """
+        Handler for clicking to run an SQL query, runs the selected text or
+        whole contents, displays its results, if any, and commits changes
+        done, if any.
+        """
+        sql = (self._stc.SelectedText or self._stc.Text).strip()
+        if sql: self.ExecuteSQL(sql)
+
+
+    def _OnExecuteScript(self, event=None):
+        """
+        Handler for clicking to run multiple SQL statements, runs the selected
+        text or whole contents as an SQL script.
+        """
+        sql = (self._stc.SelectedText or self._stc.Text).strip()
+        if not sql: return
+            
+        try:
+            logger.info('Executing SQL script "%s".', sql)
+            self._db.connection.executescript(sql)
+            self._grid.SetTable(None)
+            self._grid.CreateGrid(1, 1)
+            self._grid.SetColLabelValue(0, "Affected rows")
+            self._grid.SetCellValue(0, 0, "-1")
+            self._button_reset.Enabled = False
+            self._button_export.Enabled = False
+            self._label_help.Show()
+            self._label_help.ContainingSizer.Layout()
+            size = self._grid.Size
+            self._grid.Fit()
+            # Jiggle size by 1 pixel to refresh scrollbars
+            self._grid.Size = size[0], size[1]-1
+            self._grid.Size = size[0], size[1]
+        except Exception as e:
+            msg = "Error running SQL script."
+            logger.exception(msg); guibase.status(msg, flash=True)
+            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+
+
+    def _OnGridClose(self, event=None):
+        """Handler for clicking to close the results grid."""
+        self._grid.Table = None
+        self.Refresh()
+        self._button_export.Enabled = False
+        self._button_reset.Enabled = False
+        self._button_close.Enabled = False
+        self._label_help.Hide()
+        self._label_help.ContainingSizer.Layout()
+
+
+    def _OnCopySQL(self, event):
+        """Handler for copying SQL to clipboard."""
+        if wx.TheClipboard.Open():
+            d = wx.TextDataObject(self._stc.Text)
+            wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+
+
+    def _OnLoadSQL(self, event):
+        """
+        Handler for loading SQL from file, opens file dialog and loads content.
+        """
+        dialog = wx.FileDialog(
+            self, message="Open", defaultFile="",
+            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
+            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        filename = dialog.GetPath()
+        try:
+            self._stc.LoadFile(filename)
+        except Exception as e:
+            msg = "Error loading SQL from %s." % filename
+            logger.exception(msg); guibase.status(msg, flash=True)
+            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+
+
+    def _OnSaveSQL(self, event):
+        """
+        Handler for saving SQL to file, opens file dialog and saves content.
+        """
+        filename = "%s SQL" % os.path.splitext(os.path.basename(self._db.filename))[0]
+        dialog = wx.FileDialog(
+            self, message="Save as", defaultFile=filename,
+            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        filename = dialog.GetPath()
+        try:
+            content = step.Template(templates.CREATE_SQL, strip=False).expand(
+                title="SQL window.", db_filename=self._db.filename, sql=self._stc.Text)
+            with open(filename, "wb") as f:
+                f.write(content.encode("utf-8"))
+            util.start_file(filename)
+        except Exception as e:
+            msg = "Error saving SQL to %s." % filename
+            logger.exception(msg); guibase.status(msg, flash=True)
+            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+
+
+
 DataPageEvent, EVT_DATA_PAGE = wx.lib.newevent.NewEvent()
 
 class DataObjectPage(wx.PyPanel):
@@ -5448,7 +5575,7 @@ class DataObjectPage(wx.PyPanel):
         dialog = wx.TextEntryDialog(self,
             "Filter column %s by:" % name, "Filter", defaultValue=current_filter,
             style=wx.OK | wx.CANCEL)
-        if wx.OK != dialog.ShowModal(): return
+        if wx.ID_OK != dialog.ShowModal(): return
 
         new_filter = dialog.GetValue()
         if len(new_filter):
