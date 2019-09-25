@@ -1744,7 +1744,6 @@ class DatabasePage(wx.Panel):
         self.ready_to_close = False
         self.db = db
         self.db.register_consumer(self)
-        self.db_grids = {} # {"tablename": SqliteGridBase, }
         self.ignore_unsaved = False
         self.pragma         = db.get_pragma_values() # {pragma_name: value}
         self.pragma_changes = {}    # {pragma_name: value}
@@ -1926,6 +1925,9 @@ class DatabasePage(wx.Panel):
         page = self.page_tables = wx.Panel(parent=notebook)
         self.pageorder[page] = len(self.pageorder)
         notebook.AddPage(page, "Data")
+
+        self.data_pages = defaultdict(dict) # {category: {name: DataObjectPage}}
+
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
         splitter = self.splitter_tables = wx.SplitterWindow(
             parent=page, style=wx.BORDER_NONE
@@ -1941,7 +1943,7 @@ class DatabasePage(wx.Panel):
             wx.Button(panel1, label="Refresh")
         sizer_topleft.AddStretchSpacer()
         sizer_topleft.Add(button_refresh)
-        tree = self.tree_tables = wx.gizmos.TreeListCtrl(
+        tree = self.tree_data = wx.gizmos.TreeListCtrl(
             parent=panel1,
             style=wx.TR_DEFAULT_STYLE
             #| wx.TR_HAS_BUTTONS
@@ -1960,8 +1962,8 @@ class DatabasePage(wx.Panel):
         tree.SetMainColumn(0)
         tree.SetColumnAlignment(1, wx.ALIGN_RIGHT)
         self.Bind(wx.EVT_BUTTON, self.on_refresh_tables, button_refresh)
-        self.Bind(wx.EVT_TREE_ITEM_ACTIVATED, self.on_change_tree_tables, tree)
-        self.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_tables, tree)
+        self.Bind(wx.EVT_TREE_ITEM_ACTIVATED, self.on_change_tree_data, tree)
+        self.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_data, tree)
 
         sizer1.Add(sizer_topleft, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
         sizer1.Add(tree, proportion=1,
@@ -1969,83 +1971,29 @@ class DatabasePage(wx.Panel):
 
         panel2 = wx.Panel(parent=splitter)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_tb = wx.BoxSizer(wx.HORIZONTAL)
-        tb = self.tb_grid = wx.ToolBar(
-            parent=panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
-        bmp_tb = images.ToolbarInsert.Bitmap
-        tb.SetToolBitmapSize(bmp_tb.Size)
-        tb.AddLabelTool(id=wx.ID_ADD, label="Insert new row.",
-                        bitmap=bmp_tb, shortHelp="Add new row.")
-        tb.AddLabelTool(id=wx.ID_DELETE, label="Delete current row.",
-            bitmap=images.ToolbarDelete.Bitmap, shortHelp="Delete row.")
-        tb.AddSeparator()
-        tb.AddLabelTool(id=wx.ID_SAVE, label="Commit",
-                        bitmap=images.ToolbarCommit.Bitmap,
-                        shortHelp="Commit changes to database.")
-        tb.AddLabelTool(id=wx.ID_UNDO, label="Rollback",
-            bitmap=images.ToolbarRollback.Bitmap,
-            shortHelp="Rollback changes and restore original values.")
-        tb.EnableTool(wx.ID_ADD, False)
-        tb.EnableTool(wx.ID_DELETE, False)
-        tb.EnableTool(wx.ID_UNDO, False)
-        tb.EnableTool(wx.ID_SAVE, False)
-        self.Bind(wx.EVT_TOOL, handler=self.on_insert_row, id=wx.ID_ADD)
-        self.Bind(wx.EVT_TOOL, handler=self.on_delete_row, id=wx.ID_DELETE)
-        self.Bind(wx.EVT_TOOL, handler=self.on_commit_table, id=wx.ID_SAVE)
-        self.Bind(wx.EVT_TOOL, handler=self.on_rollback_table, id=wx.ID_UNDO)
-        tb.Realize() # should be called after adding tools
-        label_table = self.label_table = wx.StaticText(parent=panel2, label="")
-        button_reset = self.button_reset_grid_table = \
-            wx.Button(parent=panel2, label="&Reset filter/sort")
-        button_reset.SetToolTipString("Resets all applied sorting "
-                                      "and filtering.")
-        button_reset.Bind(wx.EVT_BUTTON, self.on_button_reset_grid)
-        button_reset.Enabled = False
-        button_export = self.button_export_table = \
-            wx.Button(parent=panel2, label="&Export to file")
-        button_export.MinSize = (100, -1)
-        button_export.SetToolTipString("Export rows to a file.")
-        button_export.Bind(wx.EVT_BUTTON, self.on_button_export_grid)
-        button_export.Enabled = False
-        button_close = self.button_close_grid_table = \
-            wx.Button(parent=panel2, label="&Close table")
-        button_close.Bind(wx.EVT_BUTTON, self.on_button_close_grid)
-        button_close.Enabled = False
-        sizer_tb.Add(label_table, flag=wx.ALIGN_CENTER_VERTICAL)
-        sizer_tb.AddStretchSpacer()
-        sizer_tb.Add(button_reset, border=5, flag=wx.BOTTOM | wx.RIGHT |
-                     wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
-        sizer_tb.Add(button_export, border=5, flag=wx.BOTTOM | wx.RIGHT |
-                     wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
-        sizer_tb.Add(button_close, border=5, flag=wx.BOTTOM | wx.RIGHT |
-                     wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
-        sizer_tb.Add(tb, flag=wx.ALIGN_RIGHT)
-        grid = self.grid_table = wx.grid.Grid(parent=panel2)
-        grid.SetToolTipString("Double click on column header to sort, "
-                              "right click to filter.")
-        ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
-        ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
-        ColourManager.Manage(grid, "LabelBackgroundColour",       wx.SYS_COLOUR_BTNFACE)
-        ColourManager.Manage(grid, "LabelTextColour",             wx.SYS_COLOUR_WINDOWTEXT)
 
-        grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK, self.on_sort_grid_column)
-        grid.GridWindow.Bind(wx.EVT_MOTION, self.on_mouse_over_grid)
-        grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,
-                  self.on_filter_grid_column)
-        grid.Bind(wx.grid.EVT_GRID_CELL_CHANGE, self.on_change_table)
-        grid.GridWindow.Bind(wx.EVT_CHAR_HOOK, functools.partial(self.on_grid_key, grid))
+        notebook = self.notebook_data = wx.lib.agw.flatnotebook.FlatNotebook(
+            parent=panel2, size=(-1, 27),
+            agwStyle=wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
+                     wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
+                     wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
+                     wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
+                     wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
+                     wx.lib.agw.flatnotebook.FNB_X_ON_TAB |
+                     wx.lib.agw.flatnotebook.FNB_VC8)
+        ColourManager.Manage(notebook, "ActiveTabColour", wx.SYS_COLOUR_WINDOW)
+        ColourManager.Manage(notebook, "TabAreaColour",   wx.SYS_COLOUR_BTNFACE)
+        try: notebook._pages.GetSingleLineBorderColour = notebook.GetActiveTabColour
+        except Exception: pass # Hack to get uniform background colour
 
-        label_help = self.label_help_table = wx.StaticText(panel2,
-            label="Double-click on column header to sort, right click to filter.")
-        ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
-        sizer2.Add(sizer_tb, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
-        sizer2.Add(grid, border=5, proportion=2,
-                   flag=wx.GROW | wx.LEFT | wx.RIGHT)
-        sizer2.Add(label_help, border=5, flag=wx.LEFT | wx.TOP)
+        sizer2.Add(notebook, proportion=1, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
         splitter.SplitVertically(panel1, panel2, 270)
-        label_help.Hide()
+
+        self.Bind(EVT_DATA_PAGE, self.on_data_page_event)
+        notebook.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
+                      self.on_close_data_object)
 
 
     def create_page_schema(self, notebook):
@@ -2109,7 +2057,6 @@ class DatabasePage(wx.Panel):
 
         panel2 = wx.Panel(parent=splitter)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_topright = wx.BoxSizer(wx.HORIZONTAL)
 
         notebook = self.notebook_schema = wx.lib.agw.flatnotebook.FlatNotebook(
             parent=panel2, size=(-1, 27),
@@ -2121,7 +2068,7 @@ class DatabasePage(wx.Panel):
                      wx.lib.agw.flatnotebook.FNB_X_ON_TAB |
                      wx.lib.agw.flatnotebook.FNB_VC8)
         ColourManager.Manage(notebook, "ActiveTabColour", wx.SYS_COLOUR_WINDOW)
-        ColourManager.Manage(notebook, "TabAreaColour", wx.SYS_COLOUR_BTNFACE)
+        ColourManager.Manage(notebook, "TabAreaColour",   wx.SYS_COLOUR_BTNFACE)
         try: notebook._pages.GetSingleLineBorderColour = notebook.GetActiveTabColour
         except Exception: pass # Hack to get uniform background colour
 
@@ -2906,14 +2853,14 @@ class DatabasePage(wx.Panel):
         self.splitter_sql.Unsplit()
         self.splitter_sql.SplitHorizontally(panel1, panel2, sash_pos)
         wx.CallLater(1000, lambda: self and
-                     (self.tree_tables.SetColumnWidth(0, -1),
-                      self.tree_tables.SetColumnWidth(1, -1)))
+                     (self.tree_data.SetColumnWidth(0, -1),
+                      self.tree_data.SetColumnWidth(1, -1)))
 
 
     def update_info_panel(self, reload=True):
         """Updates the Information page panel with current data."""
         if reload:
-            self.db.clear_cache()
+            self.db.populate_schema()
             self.db.update_fileinfo()
         for name in ["size", "modified", "sha1", "md5"]:
             getattr(self, "edit_info_%s" % name).Value = ""
@@ -2946,58 +2893,8 @@ class DatabasePage(wx.Panel):
 
 
     def on_refresh_tables(self, event):
-        """
-        Refreshes the table tree and open table data. Asks for confirmation
-        if there are uncommitted changes.
-        """
-        unsaved = self.get_unsaved_grids()
-        if unsaved:
-            if wx.OK != wx.MessageBox("Some tables have unsaved changes (%s).\n\n"
-                "Are you sure you want to discard them?"
-                % (", ".join(sorted(x.table for x in unsaved))), conf.Title,
-                wx.OK | wx.CANCEL | wx.ICON_INFORMATION
-            ): return
-
-        self.db.clear_cache()
-        self.db_grids.clear()
-        self.load_tables_data(refresh=True)
-        if self.grid_table.Table:
-            grid, table_name = self.grid_table, self.grid_table.Table.table
-            scrollpos = map(grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
-            cursorpos = grid.GridCursorCol, grid.GridCursorRow
-            self.on_change_table(None)
-            grid.Table = wx.grid.PyGridTableBase() # Clear grid visually
-            grid.Freeze()
-            grid.Table = None # Reset grid data to empty
-
-            tableitem = None
-            table_name = table_name.lower()
-            opts = self.db.get_category("table", table_name)
-            item = self.tree_tables.GetNext(self.tree_tables.RootItem)
-            while opts and item and item.IsOk():
-                table2 = self.tree_tables.GetItemPyData(item)
-                if isinstance(table2, basestring) and table2.lower() == table_name:
-                    tableitem = item
-                    break # while table_name
-                item = self.tree_tables.GetNextSibling(item)
-            if tableitem:
-                # Only way to create state change in wx.gizmos.TreeListCtrl
-                class HackEvent(object):
-                    def __init__(self, item): self._item = item
-                    def GetItem(self):        return self._item
-                self.on_change_tree_tables(HackEvent(tableitem))
-                self.tree_tables.SelectItem(tableitem)
-                grid.Scroll(*scrollpos)
-                grid.SetGridCursor(*cursorpos)
-            else:
-                self.label_table.Label = ""
-                for x in [wx.ID_ADD, wx.ID_DELETE, wx.ID_UNDO, wx.ID_SAVE]:
-                    self.tb_grid.EnableTool(x, False)
-                self.button_reset_grid_table.Enabled = False
-                self.button_export_table.Enabled = False
-                self.button_close_grid_table.Enabled = False
-            grid.Thaw()
-            self.page_tables.Refresh()
+        """Refreshes the table tree and open table data."""
+        self.load_data_tree(refresh=True)
 
 
     def on_scroll_grid_sql(self, event):
@@ -3122,14 +3019,14 @@ class DatabasePage(wx.Panel):
             elif table_name:
                 tableitem = None
                 table_name = table_name.lower()
-                item = self.tree_tables.GetNext(self.tree_tables.RootItem)
+                item = self.tree_data.GetNext(self.tree_data.RootItem)
                 tablemap = self.db.get_category("table")
                 while table_name in tablemap and item and item.IsOk():
-                    table2 = self.tree_tables.GetItemPyData(item)
+                    table2 = self.tree_data.GetItemPyData(item)
                     if isinstance(table2, basestring) and table2.lower() == table_name:
                         tableitem = item
                         break # while table_name
-                    item = self.tree_tables.GetNextSibling(item)
+                    item = self.tree_data.GetNextSibling(item)
                 if tableitem:
                     self.notebook.SetSelection(self.pageorder[self.page_tables])
                     wx.YieldIfNeeded()
@@ -3137,9 +3034,9 @@ class DatabasePage(wx.Panel):
                     class HackEvent(object):
                         def __init__(self, item): self._item = item
                         def GetItem(self):        return self._item
-                    self.on_change_tree_tables(HackEvent(tableitem))
-                    if self.tree_tables.Selection != tableitem:
-                        self.tree_tables.SelectItem(tableitem)
+                    self.on_change_tree_data(HackEvent(tableitem))
+                    if self.tree_data.Selection != tableitem:
+                        self.tree_data.SelectItem(tableitem)
                         wx.YieldIfNeeded()
 
                     # Search for matching row and scroll to it.
@@ -3504,14 +3401,14 @@ class DatabasePage(wx.Panel):
                 self.on_change_table(None)
 
             self.db_grids.pop(grid.Table.table, None)
-            i = self.tree_tables.GetNext(self.tree_tables.RootItem)
+            i = self.tree_data.GetNext(self.tree_data.RootItem)
             while i:
-                data = self.tree_tables.GetItemPyData(i)
+                data = self.tree_data.GetItemPyData(i)
                 if isinstance(data, basestring) \
                 and data.lower() == grid.Table.table.lower():
-                    self.tree_tables.SetItemBold(i, False)
+                    self.tree_data.SetItemBold(i, False)
                     break # while i
-                i = self.tree_tables.GetNextSibling(i)
+                i = self.tree_data.GetNextSibling(i)
 
         grid.SetTable(None)
         grid.Parent.Refresh()
@@ -3697,8 +3594,8 @@ class DatabasePage(wx.Panel):
         if self.ignore_unsaved: return result
             
         if self.pragma_changes: result["pragma"] = list(self.pragma_changes)
-        grids = self.get_unsaved_grids()
-        if grids: result["table"] = [x.table for x in grids]
+        tables = self.get_unsaved_grids()
+        if tables: result["table"] = tables
         schemas = self.get_unsaved_schemas()
         if schemas: result["schema"] = schemas
         return result
@@ -3706,42 +3603,20 @@ class DatabasePage(wx.Panel):
 
     def get_unsaved_grids(self):
         """
-        Returns a list of SqliteGridBase grids where changes have not been
+        Returns a list of data page objects where changes have not been
         saved after changing.
         """
-        return [g for g in self.db_grids.values() if g.IsChanged()]
+        return [k for x in self.data_pages.values()
+                for k, v in x.items() if v.IsChanged()]
 
 
     def get_unsaved_schemas(self):
         """
-        Returns a list of schema objects where changes have not been
+        Returns a list of schema page objects where changes have not been
         saved after changing.
         """
         return [y for x in self.schema_pages.values()
                 for y in x.values() if y.IsChanged()]
-
-
-    def on_change_table(self, event):
-        """
-        Handler when table grid data is changed, refreshes icons,
-        table lists and database display.
-        """
-        grid_data = self.grid_table.Table
-        # Enable/disable commit and rollback icons
-        self.tb_grid.EnableTool(wx.ID_SAVE, grid_data.IsChanged())
-        self.tb_grid.EnableTool(wx.ID_UNDO, grid_data.IsChanged())
-        # Highlight changed tables in the table list
-        colour = conf.DBTableChangedColour if grid_data.IsChanged() \
-                 else self.tree_tables.ForegroundColour
-        item = self.tree_tables.GetNext(self.tree_tables.RootItem)
-        while item and item.IsOk():
-            list_table = self.tree_tables.GetItemPyData(item)
-            if isinstance(list_table, basestring):
-                if list_table.lower() == grid_data.table.lower():
-                    self.tree_tables.SetItemTextColour(item, colour)
-                    break # while item and item.IsOk()
-            item = self.tree_tables.GetNextSibling(item)
-        self.update_page_header()
 
 
     def update_page_header(self):
@@ -3755,146 +3630,46 @@ class DatabasePage(wx.Panel):
                 break # for i
 
 
-    def on_commit_table(self, event):
-        """Handler for clicking to commit the changed database table."""
-        info = self.grid_table.Table.GetChangedInfo()
-        if wx.OK != wx.MessageBox(
-            "Are you sure you want to commit these changes (%s)?" %
-            info, conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
-        ): return
-
-        mytable = self.grid_table.Table.table
-        logger.info("Committing %s in table %s (%s).", info,
-                    grammar.quote(mytable), self.db)
-        if not self.grid_table.Table.SaveChanges(): return
-
-        self.on_change_table(None)
-        # Refresh tables list with updated row count
-        self.db.populate_schema(count=True, category="table", name=mytable)
-        tablemap = self.db.get_category("table")
-        item = self.tree_tables.GetNext(self.tree_tables.RootItem)
-        while item and item.IsOk():
-            table = self.tree_tables.GetItemPyData(item)
-            if isinstance(table, basestring):
-                opts = tablemap.get(table.lower())
-                if opts and "count" in opts: self.tree_tables.SetItemText(
-                    item, util.plural("row", opts["count"])
-                , 1)
-                if table == self.grid_table.Table.table:
-                    self.tree_tables.SetItemBold(item,
-                    self.grid_table.Table.IsChanged())
-            item = self.tree_tables.GetNextSibling(item)
-        # Refresh cell colours; without CallAfter wx 2.8 can crash
-        wx.CallLater(0, self.grid_table.ForceRefresh)
-
-
-    def on_rollback_table(self, event):
-        """Handler for clicking to rollback the changed database table."""
-        info = self.grid_table.Table.GetChangedInfo()
-        if wx.OK != wx.MessageBox(
-            "Are you sure you want to discard these changes (%s)?" %
-            info, conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
-        ): return
-
-        self.grid_table.Table.UndoChanges()
-        self.on_change_table(None)
-        # Refresh scrollbars and colours; without CallAfter wx 2.8 can crash
-        wx.CallLater(0, lambda: (self.grid_table.ContainingSizer.Layout(),
-                                 self.grid_table.ForceRefresh()))
-
-
-    def on_insert_row(self, event):
-        """
-        Handler for clicking to insert a table row, lets the user edit a new
-        grid line.
-        """
-        self.grid_table.InsertRows(pos=0, numRows=1)
-        self.grid_table.SetGridCursor(0, self.grid_table.GetGridCursorCol())
-        self.grid_table.Scroll(self.grid_table.GetScrollPos(wx.HORIZONTAL), 0)
-        self.grid_table.Refresh()
-        self.on_change_table(None)
-        # Refresh scrollbars; without CallAfter wx 2.8 can crash
-        wx.CallAfter(self.grid_table.ContainingSizer.Layout)
-
-
-    def on_delete_row(self, event):
-        """
-        Handler for clicking to delete a table row, removes the row from grid.
-        """
-        selected_rows = self.grid_table.GetSelectedRows()
-        cursor_row = self.grid_table.GetGridCursorRow()
-        if cursor_row >= 0:
-            selected_rows.append(cursor_row)
-        for row in selected_rows:
-            self.grid_table.DeleteRows(row)
-        self.grid_table.ContainingSizer.Layout() # Refresh scrollbars
-        self.on_change_table(None)
-
-
     def on_update_grid_table(self, event):
         """Refreshes the table grid UI components, like toolbar icons."""
         self.tb_grid.EnableTool(wx.ID_SAVE, self.grid_table.Table.IsChanged())
         self.tb_grid.EnableTool(wx.ID_UNDO, self.grid_table.Table.IsChanged())
 
 
-    def on_change_tree_tables(self, event):
-        """
-        Handler for selecting an item in the tables list, loads the table data
-        into the table grid.
-        """
-        item = event.GetItem()
+    def on_change_tree_data(self, event):
+        """Handler for activating a schema item, loads object."""
+        item, tree = event.GetItem(), self.tree_schema
         if not item or not item.IsOk(): return
+        data = tree.GetItemPyData(item) or {}
+        data = data if data.get("type") in database.Database.CATEGORIES \
+               else data.get("parent") if "column" == data.get("type") else None
 
-        table = self.tree_tables.GetItemPyData(item)
-        if not isinstance(table, basestring): return
-
-        lower = table.lower()
-        if not self.grid_table.Table \
-        or self.grid_table.Table.table.lower() != lower:
-            i = self.tree_tables.GetNext(self.tree_tables.RootItem)
-            while i:
-                text = self.tree_tables.GetItemText(i).lower()
-                self.tree_tables.SetItemBold(i, text == lower)
-                i = self.tree_tables.GetNextSibling(i)
-            logger.info("Loading table %s (%s).", grammar.quote(table), self.db)
-            busy = controls.BusyPanel(self, "Loading table %s." %
-                                      grammar.quote(table, force=True))
-            try:
-                grid_data = self.db_grids.get(lower)
-                if not grid_data:
-                    grid_data = SqliteGridBase(self.db, table=table)
-                    self.db_grids[lower] = grid_data
-                self.label_table.Label = "Table %s:" % \
-                    util.unprint(grammar.quote(table, force=True))
-                self.grid_table.SetTable(grid_data)
-                self.page_tables.Layout() # React to grid size change
-                self.grid_table.Scroll(0, 0)
-                self.grid_table.SetColMinimalAcceptableWidth(100)
-                col_range = range(grid_data.GetNumberCols())
-                [self.grid_table.AutoSizeColLabelSize(x) for x in col_range]
-                self.on_change_table(None)
-                self.tb_grid.EnableTool(wx.ID_ADD, True)
-                self.tb_grid.EnableTool(wx.ID_DELETE, True)
-                self.button_export_table.Enabled = True
-                self.button_reset_grid_table.Enabled = True
-                self.button_close_grid_table.Enabled = True
-                self.label_help_table.Show()
-                self.label_help_table.ContainingSizer.Layout()
-                busy.Close()
-            except Exception as e:
-                busy.Close()
-                msg = "Could not load table %s." % grammar.quote(table)
-                logger.exception(msg); guibase.status(msg, flash=True)
-                error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-                wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+        if data:
+            nb = self.notebook_data
+            p = self.data_pages[data["type"]].get(data["name"])
+            if p: nb.SetSelection(nb.GetPageIndex(p))
+            else:
+                data = self.db.get_category(data["type"], data["name"])
+                self.add_data_object(data)
+        else:
+            tree.Collapse(item) if tree.IsExpanded(item) else tree.Expand(item)
 
 
-    def on_rclick_tree_tables(self, event):
+    def add_data_object(self, data):
+        """Opens a data object panel for specified object data."""
+        title = "%s %s" % (data["type"].capitalize(), grammar.quote(data["name"]))
+        p = DataObjectPage(self.notebook_schema, self, self.db, data)
+        self.data_pages[data["type"]][data.get("name") or id(p)] = p
+        self.notebook_data.InsertPage(0, page=p, text=title, select=True)
+        self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
+
+
+    def on_rclick_tree_data(self, event):
         """
         Handler for right-clicking an item in the tables list,
         opens popup menu for choices to export data.
         """
-        item, tree = event.GetItem(), self.tree_tables
+        item, tree = event.GetItem(), self.tree_data
         if not item or not item.IsOk(): return
         data = tree.GetItemPyData(item)
         if not data: return
@@ -3921,17 +3696,17 @@ class DatabasePage(wx.Panel):
 
         menu = wx.Menu()
         item_file = item_database = item_database_meta = None
-        if isinstance(data, basestring): # Single table
+        if "table" == data.get("type"): # Single table
             item_name     = wx.MenuItem(menu, -1, 'Table %s' % \
-                            util.unprint(grammar.quote(data, force=True)))
+                            util.unprint(grammar.quote(data["name"], force=True)))
             item_copy     = wx.MenuItem(menu, -1, "&Copy name")
             item_copy_sql = wx.MenuItem(menu, -1, "Copy CREATE &SQL")
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, True),
                       id=item_name.GetId())
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data),
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
                       id=item_copy.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
-                      self.db.get_sql("table", data)),
+                      self.db.get_sql("table", data["name"])),
                       id=item_copy_sql.GetId())
 
             item_name.Font = boldfont
@@ -3944,9 +3719,9 @@ class DatabasePage(wx.Panel):
             item_file     = wx.MenuItem(menu, -1, '&Export table to file')
             item_database = wx.MenuItem(menu, -1, 'Export table to another &database')
             item_database_meta = wx.MenuItem(menu, -1, 'Export table str&ucture to another &database')
-        elif isinstance(data, dict): # Column
+        elif "column" == data.get("type"): # Column
             item_name     = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
-                            util.unprint(grammar.quote(data["table"])),
+                            util.unprint(grammar.quote(data["parent"]["name"])),
                             util.unprint(grammar.quote(data["name"]))))
             item_copy     = wx.MenuItem(menu, -1, "&Copy name")
             item_copy_sql = wx.MenuItem(menu, -1, "Copy column &SQL")
@@ -3955,7 +3730,7 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
                       id=item_copy.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
-                self.db.get_sql("table", data["table"], column=data["name"])
+                self.db.get_sql("table", data["parent"]["name"], column=data["name"])
             ), id=item_copy_sql.GetId())
 
             item_name.Font = boldfont
@@ -3984,7 +3759,7 @@ class DatabasePage(wx.Panel):
             menu.AppendItem(item_file)
             menu.AppendItem(item_database)
             menu.AppendItem(item_database_meta)
-            tables = [data] if isinstance(data, basestring) else data
+            tables = [data["name"]] if isinstance(data, dict) else data
             menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, tables),
                      id=item_file.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, tables, True),
@@ -4065,7 +3840,7 @@ class DatabasePage(wx.Panel):
                     page = self.schema_pages[x["type"]].get(x["name"])
                     if page: page.Close(force=True)
                 self.load_schema_tree(refresh=True)
-                self.load_tables_data()
+                self.load_data_tree()
                 self.on_update_stc_schema()
 
         menu = wx.Menu()
@@ -4290,12 +4065,12 @@ class DatabasePage(wx.Panel):
     def on_schema_page_event(self, event):
         """Handler for a message from SchemaObjectPage."""
         idx = self.notebook_schema.GetPageIndex(event.source)
-        close, modified, updated = (getattr(event, x, False)
+        close, modified, updated = (getattr(event, x, None)
                                     for x in ("close", "modified", "updated"))
         category, name = (event.item.get(x) for x in ("type", "name"))
         if close:
             self.notebook_schema.DeletePage(idx)
-        if (modified or updated) and event.source:
+        if (modified is not None or updated is not None) and event.source:
             if name:
                 suffix = "*" if event.source.IsChanged() else ""
                 title = "%s %s%s" % (category.capitalize(),
@@ -4311,8 +4086,47 @@ class DatabasePage(wx.Panel):
                     break # for k, p
             self.db.populate_schema(parse=True)
             self.load_schema_tree()
-            self.load_tables_data()
+            self.load_data_tree()
             self.on_update_stc_schema()
+
+
+    def on_close_data_object(self, event):
+        """Handler for closing data item."""
+        page = self.notebook_data.GetPage(event.GetSelection())
+        if page.IsChanged():
+            if wx.OK != wx.MessageBox(
+                "There are unsaved changes, "
+                "are you sure you want to discard them?",
+                conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            ): return event.Veto()
+
+        for c, k, p in ((c, k, p) for c, m in self.data_pages.items() for k, p in m.items()):
+            if p is page:
+                self.data_pages[c].pop(k)
+                break # for c, k, p
+        self.TopLevelParent.UpdateAccelerators() # Remove panel accelerators
+        self.update_page_header()
+
+
+    def on_data_page_event(self, event):
+        """Handler for a message from DataObjectPage."""
+        idx = self.notebook_data.GetPageIndex(event.source)
+        close, modified, updated = (getattr(event, x, None)
+                                    for x in ("close", "modified", "updated"))
+        category, name = (event.item.get(x) for x in ("type", "name"))
+        if close:
+            self.notebook_data.DeletePage(idx)
+        if (modified is not None or updated is not None) and event.source:
+            if name:
+                suffix = "*" if event.source.IsChanged() else ""
+                title = "%s %s%s" % (category.capitalize(),
+                                     grammar.quote(name), suffix)
+                if self.notebook_data.GetPageText(idx) != title:
+                    self.notebook_data.SetPageText(idx, title)
+            self.update_page_header()
+        if updated:
+            self.db.populate_schema(count=True, category=category, name=name)
+            self.load_data_tree()
 
 
     def on_export_data_file(self, tables, event):
@@ -4610,7 +4424,7 @@ class DatabasePage(wx.Panel):
             tabid = self.counter() if 0 != last_search.get("id") else 0
             self.html_searchall.InsertTab(0, title, tabid, html, info)
         wx.CallLater(100, self.update_tabheader)
-        wx.CallLater(200, self.load_tables_data)
+        wx.CallLater(200, self.load_data_tree)
         wx.CallLater(500, self.update_info_panel, False)
         wx.CallLater(1000, self.load_later_data)
 
@@ -4622,7 +4436,7 @@ class DatabasePage(wx.Panel):
         """
         if not self: return
         self.on_update_stc_schema()
-        self.load_tables_data(refresh=True)
+        self.load_data_tree(refresh=True)
         self.load_schema_tree(refresh=True)
 
 
@@ -4658,29 +4472,29 @@ class DatabasePage(wx.Panel):
             item = tree.GetNextSibling(item)
 
 
-    def load_tables_data(self, refresh=False):
-        """Loads table data into table tree and SQL editor."""
+    def load_data_tree(self, refresh=False):
+        """Loads table data into table tree."""
         try:
-            tree = self.tree_tables
+            tree = self.tree_data
             expandeds = self.get_tree_expanded_state(tree, tree.RootItem)
             if refresh: self.db.populate_schema(count=True)
             tables = self.db.get_category("table").values()
             # Fill table tree with information on row counts and columns
             tree.DeleteAllItems()
             root = tree.AddRoot("SQLITE")
-            tree.SetItemPyData(root, [x["name"] for x in tables])
+            tree.SetItemPyData(root, {"type": "schema", "table": [x["name"] for x in tables]})
             child = None
             for table in tables:
                 child = tree.AppendItem(root, util.unprint(table["name"]))
                 if "count" in table: t = util.plural("row", table["count"])
                 else: t = "ERROR" if refresh else "Counting.."
                 tree.SetItemText(child, t, 1)
-                tree.SetItemPyData(child, table["name"])
+                tree.SetItemPyData(child, table)
 
                 for col in table["columns"]:
                     subchild = tree.AppendItem(child, util.unprint(col["name"]))
                     tree.SetItemText(subchild, col.get("type", ""), 1)
-                    tree.SetItemPyData(subchild, dict(col, table=table["name"]))
+                    tree.SetItemPyData(subchild, dict(col, parent=table, type="column"))
 
             tree.Expand(root)
             if child: # Nudge columns to fit and fill the header exactly.
@@ -4694,6 +4508,7 @@ class DatabasePage(wx.Panel):
 
             # Add PRAGMAS, and table/view/column names to SQL editor autocomplete
             self.stc_sql.AutoCompClearAdded()
+            # TODO see eraldi meetodiks
             pragmas = list(database.Database.PRAGMA) + database.Database.EXTRA_PRAGMAS
             self.stc_sql.AutoCompAddWords(pragmas)
             for category in ("table", "view"):
@@ -5369,6 +5184,368 @@ class AboutDialog(wx.Dialog):
             self.html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
             self.html.ForegroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
         wx.CallAfter(dorefresh) # Postpone to allow conf to update
+
+
+
+DataPageEvent, EVT_DATA_PAGE = wx.lib.newevent.NewEvent()
+
+class DataObjectPage(wx.PyPanel):
+    """
+    Component for viewing and editing data objects like tables and views.
+    """
+
+    def __init__(self, parent, page, db, item, id=wx.ID_ANY, pos=wx.DefaultPosition,
+                 size=wx.DefaultSize):
+        """
+        @param   page  target to send EVT_SCHEMA_PAGE events to
+        """
+        wx.PyPanel.__init__(self, parent, pos=pos, size=size)
+        ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
+        ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
+
+        self._page     = page
+        self._db       = db
+        self._category = item["type"]
+        self._item     = copy.deepcopy(item)
+        self._ignore_change = False
+        self._hovered_cell  = None # (row, col)
+
+        sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_header       = wx.BoxSizer(wx.HORIZONTAL)
+
+        tb = self._tb = wx.ToolBar(self, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        bmp1 = images.ToolbarInsert.Bitmap
+        bmp2 = images.ToolbarDelete.Bitmap
+        bmp3 = images.ToolbarRefresh.Bitmap
+        bmp4 = images.ToolbarCommit.Bitmap
+        bmp5 = images.ToolbarRollback.Bitmap
+        tb.SetToolBitmapSize(bmp1.Size)
+        tb.AddLabelTool(wx.ID_ADD,     "", bitmap=bmp1, shortHelp="Add new row")
+        tb.AddLabelTool(wx.ID_DELETE,  "", bitmap=bmp2, shortHelp="Delete current row")
+        tb.AddSeparator()
+        tb.AddLabelTool(wx.ID_REFRESH, "", bitmap=bmp3, shortHelp="Reload data")
+        tb.AddSeparator()
+        tb.AddLabelTool(wx.ID_SAVE,    "", bitmap=bmp4, shortHelp="Commit changes to database")
+        tb.AddLabelTool(wx.ID_UNDO,    "", bitmap=bmp5, shortHelp="Rollback changes and restore original values")
+        tb.EnableTool(wx.ID_UNDO, False)
+        tb.EnableTool(wx.ID_SAVE, False)
+        tb.Realize()
+
+        button_reset  = wx.Button(self, label="&Reset filter/sort")
+        button_export = wx.Button(self, label="&Export to file")
+        button_reset.ToolTipString  = "Reset all applied sorting and filtering"
+        button_export.ToolTipString = "Export rows to a file"
+
+        grid = self._grid = wx.grid.Grid(self)
+        grid.ToolTipString = "Double click on column header to sort, right click to filter."
+        ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
+        ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
+        ColourManager.Manage(grid, "LabelBackgroundColour",       wx.SYS_COLOUR_BTNFACE)
+        ColourManager.Manage(grid, "LabelTextColour",             wx.SYS_COLOUR_WINDOWTEXT)
+
+        label_help = wx.StaticText(self, label="Double-click on column header to sort, right click to filter.")
+        ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
+
+        self.Bind(wx.EVT_TOOL,   self._OnInsert,    id=wx.ID_ADD)
+        self.Bind(wx.EVT_TOOL,   self._OnDelete,    id=wx.ID_DELETE)
+        self.Bind(wx.EVT_TOOL,   self._OnRefresh,   id=wx.ID_REFRESH)
+        self.Bind(wx.EVT_TOOL,   self._OnCommit,    id=wx.ID_SAVE)
+        self.Bind(wx.EVT_TOOL,   self._OnRollback,  id=wx.ID_UNDO)
+        self.Bind(wx.EVT_BUTTON, self._OnResetView, button_reset)
+        self.Bind(wx.EVT_BUTTON, self._OnExport,    button_export)
+        grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK, self._OnSort)
+        grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK, self._OnFilter)
+        grid.Bind(wx.grid.EVT_GRID_CELL_CHANGE,       self._OnChange)
+        grid.GridWindow.Bind(wx.EVT_MOTION,           self._OnGridMouse)
+        grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,        self._OnGridKey)
+
+        sizer_header.Add(tb)
+        sizer_header.AddStretchSpacer()
+        sizer_header.Add(button_reset, border=5, flag=wx.RIGHT)
+        sizer_header.Add(button_export)
+
+        sizer.Add(sizer_header, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
+        sizer.Add(grid, proportion=1, flag=wx.GROW)
+        sizer.Add(label_help, border=5, flag=wx.TOP | wx.BOTTOM)
+        self._Populate()
+
+
+    def Close(self, force=False):
+        """Closes the page, asking for confirmation if modified and not force."""
+        if force: self._ignore_change = True
+        self._OnClose()
+
+
+    def IsChanged(self):
+        """Returns whether there are unsaved changes."""
+        return self._grid.Table.IsChanged()
+
+
+    def _Populate(self):
+        """Loads data to grid."""
+        grid_data = SqliteGridBase(self._db, table=self._item["name"])
+        self._grid.SetTable(grid_data)
+        self._grid.Scroll(0, 0)
+        self._grid.SetColMinimalAcceptableWidth(100)
+        col_range = range(grid_data.GetNumberCols())
+        [self._grid.AutoSizeColLabelSize(x) for x in col_range]
+
+
+    def _PostEvent(self, **kwargs):
+        """Posts an EVT_DATA_PAGE event to parent page."""
+        wx.PostEvent(self._page, DataPageEvent(source=self, item=self._item, **kwargs))
+
+
+    def _OnChange(self, event=None):
+        """Refresh toolbar icons based on data change state, notifies parent."""
+        changed = self._grid.Table.IsChanged()
+        self._tb.EnableTool(wx.ID_SAVE, changed)
+        self._tb.EnableTool(wx.ID_UNDO, changed)
+        self._PostEvent(modified=changed)
+
+
+    def _OnClose(self, event=None):
+        """Handler for clicking to close the item, sends message to parent."""
+        if self.IsChanged() and not self._ignore_change and wx.OK != wx.MessageBox(
+            "There are unsaved changes, "
+            "are you sure you want to discard them?",
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+        ): return
+        self._ignore_change = False
+        self._PostEvent(close=True)
+
+
+    def _OnExport(self, event=None):
+        """
+        Handler for clicking to export grid contents to file, allows the
+        user to select filename and type and creates the file.
+        """
+        title = "%s %s" % (self._category.capitalize(),
+                           grammar.quote(self._item["name"], force=True))
+        dialog = wx.FileDialog(self, defaultDir=os.getcwd(),
+            message="Save %s as" % self._category,
+            defaultFile=util.safe_filename(title),
+            wildcard=export.TABLE_WILDCARD,
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        filename = dialog.GetPath()
+        extname = export.TABLE_EXTS[dialog.FilterIndex]
+        if not filename.lower().endswith(".%s" % extname):
+            filename += ".%s" % extname
+        busy = controls.BusyPanel(self, 'Exporting "%s".' % filename)
+        guibase.status('Exporting "%s".', filename)
+        try:
+            make_iterable = self._grid.Table.GetRowIterator
+            export.export_data(make_iterable, filename, title, self._db,
+                               self._grid.Table.columns, table=self._item["name"])
+            guibase.status('Exported "%s".', filename, log=True, flash=True)
+            util.start_file(filename)
+        except Exception as e:
+            msg = "Error saving %s."
+            logger.exception(msg, filename)
+            guibase.status(msg, flash=True)
+            error = "Error saving %s:\n\n%s" % (filename, util.format_exc(e))
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+        finally:
+            busy.Close()
+
+
+    def _OnInsert(self, event):
+        """
+        Handler for clicking to insert a table row, lets the user edit a new
+        grid line.
+        """
+        self._grid.InsertRows(pos=0, numRows=1)
+        self._grid.SetGridCursor(0, self._grid.GetGridCursorCol())
+        self._grid.Scroll(self._grid.GetScrollPos(wx.HORIZONTAL), 0)
+        self._grid.Refresh()
+        # Refresh scrollbars; without CallAfter wx 2.8 can crash
+        wx.CallAfter(self.Layout)
+        self._OnChange()
+
+
+    def _OnDelete(self, event):
+        """
+        Handler for clicking to delete a table row, removes the row from grid.
+        """
+        selected_rows = self._grid.GetSelectedRows()
+        cursor_row = self._grid.GetGridCursorRow()
+        if cursor_row >= 0: selected_rows.append(cursor_row)
+        for row in selected_rows: self._grid.DeleteRows(row)
+        self.Layout() # Refresh scrollbars
+        self._OnChange()
+
+
+    def _OnCommit(self, event=None):
+        """Handler for clicking to commit the changed database table."""
+        info = self._grid.Table.GetChangedInfo()
+        if wx.OK != wx.MessageBox(
+            "Are you sure you want to commit these changes (%s)?" %
+            info, conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+        ): return
+
+        logger.info("Committing %s in table %s (%s).", info,
+                    grammar.quote(self._item["name"]), self._db)
+        if not self._grid.Table.SaveChanges(): return
+
+        self._OnChange()
+        # Refresh cell colours; without CallLater wx 2.8 can crash
+        wx.CallLater(0, self._grid.ForceRefresh)
+
+
+    def _OnRollback(self, event=None):
+        """Handler for clicking to rollback the changed database table."""
+        info = self._grid.Table.GetChangedInfo()
+        if wx.OK != wx.MessageBox(
+            "Are you sure you want to discard these changes (%s)?" %
+            info, conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+        ): return
+
+        self._grid.Table.UndoChanges()
+        # Refresh scrollbars and colours; without CallAfter wx 2.8 can crash
+        wx.CallLater(0, lambda: (self._grid.ContainingSizer.Layout(),
+                                 self._grid.ForceRefresh()))
+        self._OnChange()
+
+
+    def _OnRefresh(self, event):
+        """Handler for refreshing grid data, asks for confirmation if changed."""
+        if self.IsChanged() and wx.OK != wx.MessageDialog(
+            "There are unsaved changes (%s).\n\n"
+            "Are you sure you want to discard them?" % 
+            self._grid.Table.GetChangedInfo(), 
+            conf.Title, wx.OK | wx.ICON_INFORMATION
+        ): return
+
+        scrollpos = map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
+        cursorpos = [self._grid.GridCursorRow, self._grid.GridCursorCol]
+        self._grid.Freeze()
+        self._grid.Table = None # Reset grid data to empty
+        self._Populate()
+        self._grid.Scroll(*scrollpos)
+        maxpos = self._grid.GetNumberRows() - 1, self._grid.GetNumberCols() - 1
+        cursorpos = [min(x) for x in zip(cursorpos, maxpos)]
+        self._grid.SetGridCursor(*cursorpos)
+        self._grid.Thaw()
+        self._OnChange()
+
+
+    def _OnFilter(self, event):
+        """
+        Handler for right-clicking a table grid column, lets the user
+        change the column filter.
+        """
+        row, col = event.GetRow(), event.GetCol()
+        # Remember scroll positions, as grid update loses them
+        if row >= 0: return # Only react to clicks in the header
+
+        grid_data = self._grid.Table
+        current_filter = unicode(grid_data.filters[col]) \
+                         if col in grid_data.filters else ""
+        name = grammar.quote(grid_data.columns[col]["name"], force=True)
+        dialog = wx.TextEntryDialog(self,
+            "Filter column %s by:" % name, "Filter", defaultValue=current_filter,
+            style=wx.OK | wx.CANCEL)
+        if wx.OK != dialog.ShowModal(): return
+
+        new_filter = dialog.GetValue()
+        if len(new_filter):
+            busy = controls.BusyPanel(self,
+                'Filtering column %s by "%s".' %
+                (name, new_filter))
+            grid_data.AddFilter(col, new_filter)
+            busy.Close()
+        else:
+            grid_data.RemoveFilter(col)
+        self.Layout() # React to grid size change
+
+
+    def _OnSort(self, event):
+        """
+        Handler for clicking a table grid column, sorts table by the column.
+        """
+        row, col = event.GetRow(), event.GetCol()
+        # Remember scroll positions, as grid update loses them
+        scroll_hor = self._grid.GetScrollPos(wx.HORIZONTAL)
+        scroll_ver = self._grid.GetScrollPos(wx.VERTICAL)
+        if row < 0: # Only react to clicks in the header
+            self._grid.Table.SortColumn(col)
+        self.Layout() # React to grid size change
+        self._grid.Scroll(scroll_hor, scroll_ver)
+
+
+    def _OnResetView(self, event):
+        """
+        Handler for clicking to remove sorting and filtering,
+        resets the grid and its view.
+        """
+        self._grid.Table.ClearFilter()
+        self._grid.Table.ClearSort()
+        self.Layout() # React to grid size change
+
+
+    def _OnGridKey(self, event):
+        """Handler for grid keypress, copies selection to clipboard on Ctrl-C."""
+        if not event.ControlDown() or ord('C') != event.KeyCode:
+            return event.Skip()
+
+        rows, cols = [], []
+        if self._grid.GetSelectedCols():
+            cols += sorted(self._grid.GetSelectedCols())
+            rows += range(self._grid.GetNumberRows())
+        if self._grid.GetSelectedRows():
+            rows += sorted(self._grid.GetSelectedRows())
+            cols += range(self._grid.GetNumberCols())
+        if self._grid.GetSelectionBlockTopLeft():
+            end = self._grid.GetSelectionBlockBottomRight()
+            for i, (r, c) in enumerate(self._grid.GetSelectionBlockTopLeft()):
+                r2, c2 = end[i]
+                rows += range(r, r2 + 1)
+                cols += range(c, c2 + 1)
+        if self._grid.GetSelectedCells():
+            rows += [r for r, c in self._grid.GetSelectedCells()]
+            cols += [c for r, c in self._grid.GetSelectedCells()]
+        if not rows and not cols:
+            if self._grid.GetGridCursorRow() >= 0 and self._grid.GetGridCursorCol() >= 0:
+                rows, cols = [self._grid.GetGridCursorRow()], [self._grid.GetGridCursorCol()]
+        rows, cols = (sorted(set(y for y in x if y >= 0)) for x in (rows, cols))
+        if not rows or not cols: return
+
+        if wx.TheClipboard.Open():
+            data = [[self._grid.GetCellValue(r, c) for c in cols] for r in rows]
+            text = "\n".join("\t".join(c for c in r) for r in data)
+            d = wx.TextDataObject(text)
+            wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+
+
+    def _OnGridMouse(self, event):
+        """
+        Handler for moving the mouse over a grid, shows datetime tooltip for
+        UNIX timestamp cells.
+        """
+        tip = ""
+        prev_cell = self._hovered_cell
+        x, y = self._grid.CalcUnscrolledPosition(event.X, event.Y)
+        row, col = self._grid.XYToCell(x, y)
+        if row >= 0 and col >= 0:
+            value = self._grid.Table.GetValue(row, col)
+            col_name = self._grid.Table.GetColLabelValue(col).lower()
+            if type(value) is int and value > 100000000 \
+            and ("time" in col_name or "date" in col_name):
+                try:
+                    tip = datetime.datetime.fromtimestamp(value).strftime(
+                          "%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    tip = unicode(value)
+            else:
+                tip = unicode(value)
+            tip = tip if len(tip) < 1000 else tip[:1000] + ".."
+        if (row, col) != prev_cell or not (event.EventObject.ToolTip) \
+        or event.EventObject.ToolTip.Tip != tip:
+            event.EventObject.SetToolTipString(tip)
+        self._hovered_cell = (row, col)
 
 
 

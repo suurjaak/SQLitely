@@ -447,8 +447,6 @@ class Database(object):
         #     {name: str, sql: str, table: str, ?columns: [], ?count: int,
         #      ?meta: {full metadata}}}}
         self.schema = defaultdict(OrderedDict)
-        self.table_rows    = {} # {tablename1: [..], }
-        self.table_objects = {} # {tablename1: {id1: {rowdata1}, }, }
         self.update_fileinfo()
         try:
             self.connection = sqlite3.connect(self.filename,
@@ -515,18 +513,6 @@ class Database(object):
         return result
 
 
-    def clear_cache(self):
-        """Clears all the currently cached rows."""
-        self.table_rows.clear()
-        self.table_objects.clear()
-        self.populate_schema()
-
-
-    def stamp_to_date(self, timestamp):
-        """Converts the UNIX timestamp to datetime using localtime."""
-        return datetime.datetime.fromtimestamp(timestamp)
-
-
     def register_consumer(self, consumer):
         """
         Registers a consumer with the database, notified on clearing cache by
@@ -571,7 +557,7 @@ class Database(object):
                 pass
             del self.connection
             self.connection = None
-        self.schema.clear(), self.table_rows.clear(), self.table_objects.clear()
+        self.schema.clear()
 
 
     def execute(self, sql, params=(), log=True):
