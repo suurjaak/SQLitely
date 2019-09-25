@@ -4159,7 +4159,9 @@ class DatabasePage(wx.Panel):
             nb = self.notebook_schema
             p = self.schema_pages[data["type"]].get(data["name"])
             if p: nb.SetSelection(nb.GetPageIndex(p))
-            else: self.add_schema_object(data)
+            else:
+                data = self.db.get_category(data["type"], data["name"])
+                self.add_schema_object(data)
         else:
             tree.Collapse(item) if tree.IsExpanded(item) else tree.Expand(item)
 
@@ -4322,7 +4324,8 @@ class DatabasePage(wx.Panel):
         db1_tables = set(self.db.get_category("table"))
         try:
             db2_tables_lower = set(x["name"].lower() for x in self.db.execute(
-                "SELECT name FROM main2.sqlite_master WHERE type = 'table'"
+                "SELECT name FROM main2.sqlite_master WHERE type = 'table' "
+                "AND sql != '' AND name NOT LIKE 'sqlite_%'"
             ).fetchall())
             tables1, tables2, tables2_lower = [], [], []
 
@@ -4396,7 +4399,7 @@ class DatabasePage(wx.Panel):
                         items = self.db.get_category(category, table=table).values()
                         items2 = [x["name"] for x in self.db.execute(
                             "SELECT name FROM main2.sqlite_master "
-                            "WHERE type = ? AND sql != ''", [category]
+                            "WHERE type = ? AND sql != '' AND name NOT LIKE 'sqlite_%'", [category]
                         ).fetchall()]
                         for item in items:
                             name = base = item["name"]; counter = 2
@@ -6344,6 +6347,8 @@ class SchemaObjectPage(wx.PyPanel):
             can_simple = (cnstr1_sqls == cnstr2_sqls)
         if can_simple and any(x not in colmap2 for x in colmap1):
             can_simple = False # There are deleted columns
+        if can_simple and any(colmap2[x]["name"] != colmap1[x]["name"] for x in colmap1):
+            can_simple = self._db.has_rename_column() # There are renamed columns
         if can_simple:
             if any(x["__id__"] not in colmap1 and cols2[i+1]["__id__"] in colmap1
                    for i, x in enumerate(cols2[:-1])):
@@ -6384,11 +6389,16 @@ class SchemaObjectPage(wx.PyPanel):
 
         else:
             # Need to re-create table, first under temporary name to copy data.
-            tempname, counter = "%s_temp" % new["name"], 2
-            while tempname in self._db.schema["table"]:
-                counter += 1
-                tempname = "%s_temp_%s" % (new["name"], counter)
+            tables_existing = list(self._db.schema["table"])
+            def make_tempname(name):
+                tempname, counter = "%s_temp" % name.lower(), 2
+                while tempname in tables_existing:
+                    counter += 1
+                    tempname = "%s_temp_%s" % (name.lower(), counter)
+                tables_existing.append(tempname)
+                return tempname
 
+            tempname = make_tempname(new["name"])
             meta = copy.deepcopy(self._item["meta"])
             util.walk(meta, (lambda x, *_: isinstance(x, dict)
                              and x.get("table") == old["name"]
@@ -6406,14 +6416,28 @@ class SchemaObjectPage(wx.PyPanel):
                                   for c2 in cols2 if c2["__id__"] in colmap1
                                   and colmap1[c2["__id__"]]["name"] != c2["name"]}}
             for k, v in renames.items(): renames.pop(k) if not v else None
-            for category in "index", "trigger", "view":
-                if "view" == category and not renames: continue # for category
-                for item in self._db.get_category(category).values():
-                    if old["name"].lower() not in item["meta"].get("__tables__", []):
+            for category in "table", "index", "trigger", "view":
+                if not renames and category in ("view", "table"):
+                    continue # for category
+                for item in self._db.get_category(category, table=old["name"]).values():
+                    if "table" == category and item["name"] == old["name"]:
                         continue # for item
-                    sql = grammar.transform(item["sql"], renames=renames) \
-                          if renames else item["sql"]
-                    args.setdefault(category, []).append(dict(item, sql=sql))
+
+                    mytempname = make_tempname(item["name"])
+                    myrenames = dict(renames)
+                    myrenames.setdefault("table", {})[item["name"]] = mytempname
+                    sql = grammar.transform(item["sql"], renames=myrenames)
+                    myitem = dict(item, sql=sql, tempname=mytempname)
+                    args.setdefault(category, []).append(myitem)
+
+                    for subcategory in ("index", "trigger") if "table" == category else ():
+                        # Re-create table indexes and triggers
+                        for subitem in self._db.get_category(subcategory, table=item["name"]).values():
+                            if subitem["meta"]["table"].lower() == item["name"].lower():
+                                sql = grammar.transform(subitem["sql"], renames=renames) \
+                                      if renames else subitem["sql"]
+                                args.setdefault(subcategory, []).append(dict(subitem, sql=sql))
+
             result = grammar.generate(args)
 
         return result
@@ -6788,8 +6812,6 @@ class SchemaObjectPage(wx.PyPanel):
         self._col_updater = None
         constraints = self._item["meta"].get("constraints") or []
         changed, renames = False, {} # {old column name: new name}
-
-        logger.info("col updates %s", self._col_updates) # TODO remove
 
         for myid, opts in self._col_updates.items():
             name = opts["col"].get("name") or opts["col"].get("name_last")

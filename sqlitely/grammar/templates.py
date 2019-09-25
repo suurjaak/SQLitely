@@ -57,16 +57,22 @@ ALTER TABLE {{ Q(data["name"]) }}
 Complex ALTER TABLE: re-create table under new temporary name,
 copy rows from existing to new, drop existing, rename new to existing. Steps:
 
- 1. BEGIN TRANSACTION
- 2. PRAGMA foreign_keys = on
+ 1. PRAGMA foreign_keys = off
+ 2. BEGIN TRANSACTION
  3. CREATE TABLE tempname
- 4. INSERT INTO tempname (..) SELECT .. FROM old
- 6. DROP TABLE old
- 5. DROP all related indexes-triggers-views
- 7. ALTER TABLE tempname RENAME TO old
- 8. CREATE indexes-triggers-views
- 9. PRAGMA foreign_keys = on
+ 4. INSERT INTO tempname (..) SELECT .. FROM oldname
+ 5. DROP TABLE oldname
+ 8. ALTER TABLE tempname RENAME TO oldname
+ 6. for every related table affected by change:
+    - CREATE TABLE related_tempname
+    - INSERT INTO related_tempname SELECT * FROM related_name
+    - DROP TABLE related_name
+    - ALTER TABLE related_tempname RENAME TO related_name
+    - CREATE indexes-triggers for related_name
+ 7. DROP all related indexes-triggers-views
+ 9. CREATE indexes-triggers-views
 10. COMMIT TRANSACTION
+11. PRAGMA foreign_keys = on
 
 @param   data {
              name:      table old name,
@@ -74,17 +80,20 @@ copy rows from existing to new, drop existing, rename new to existing. Steps:
              tempname:  table temporary name,
              meta:      {table CREATE metainfo, using temporary name}
              columns:   [(column name in old, column name in new)]
-             ?index:    [{related index {name, sql}, using name2}, ]
-             ?trigger:  [{related trigger {name, sql}, using name2}, ]
-             ?view:     [{related view {name, sql}, using name2}, ]
+             ?table:    [{related table {name, tempname, sql, ?index, ?trigger}, using new names}, ]
+             ?index:    [{related index {name, sql}, using new names}, ]
+             ?trigger:  [{related trigger {name, sql}, using new names}, ]
+             ?view:     [{related view {name, sql}, using new names}, ]
          }
 """
-ALTER_TABLE_COMPLEX = """
-
-SAVEPOINT alter_table;{{ LF() }}
-{{ LF() }}
+ALTER_TABLE_COMPLEX = """<%
+CATEGORIES = ["index", "trigger", "view"]
+%>
 
 PRAGMA foreign_keys = off;{{ LF() }}
+{{ LF() }}
+
+SAVEPOINT alter_table;{{ LF() }}
 {{ LF() }}
 
 {{ Template(templates.CREATE_TABLE).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
@@ -108,31 +117,44 @@ FROM {{ Q(data["name"]) }};{{ LF() }}
 DROP TABLE {{ Q(data["name"]) }};{{ LF() }}
 {{ LF() }}
 
-%for category in "index", "trigger", "view":
+ALTER TABLE {{ Q(data["tempname"]) }} RENAME TO {{ Q(data["name2"]) }};{{ LF() }}
+{{ LF() }}
+
+%for reltable in data.get("table") or []:
+{{ WS(reltable["sql"]) }};{{ LF() }}
+INSERT INTO {{ Q(reltable["tempname"]) }} SELECT * FROM {{ Q(reltable["name"]) }};{{ LF() }}
+DROP TABLE {{ Q(reltable["name"]) }};{{ LF() }}
+ALTER TABLE {{ Q(reltable["tempname"]) }} RENAME TO {{ Q(reltable["name"]) }};{{ LF() }}
+    %for category in CATEGORIES:
+        %for x in reltable.get(category) or []:
+{{ WS(x["sql"]) }};{{ LF() }}
+        %endfor
+    %endfor
+{{ LF() }}
+%endfor
+
+%for category in CATEGORIES:
     %for x in data.get(category) or []:
 DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
     %endfor
 %endfor
-%if any(data.get(x) for x in ("index", "trigger", "view")):
+%if any(data.get(x) for x in CATEGORIES):
 {{ LF() }}
 %endif
 
-ALTER TABLE {{ Q(data["tempname"]) }} RENAME TO {{ Q(data["name2"]) }};{{ LF() }}
-{{ LF() }}
-
-%for category in "index", "trigger", "view":
+%for category in CATEGORIES:
     %for x in data.get(category) or []:
 {{ WS(x["sql"]) }};{{ LF() }}
     %endfor
 %endfor
-%if any(data.get(x) for x in ("index", "trigger", "view")):
+%if any(data.get(x) for x in CATEGORIES):
 {{ LF() }}
 %endif
 
-PRAGMA foreign_keys = on;{{ LF() }}
+RELEASE SAVEPOINT alter_table;{{ LF() }}
 {{ LF() }}
 
-RELEASE SAVEPOINT alter_table;{{ LF() }}
+PRAGMA foreign_keys = on;{{ LF() }}
 """
 
 

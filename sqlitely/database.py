@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.09.2019
+@modified    25.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -553,8 +553,13 @@ class Database(object):
 
 
     def has_view_columns(self):
-        """Returns whether SQLite supports view columns (from version 3.9.0)."""
+        """Returns whether SQLite supports view columns (from version 3.9)."""
         return sqlite3.sqlite_version_info >= (3, 9)
+
+
+    def has_rename_column(self):
+        """Returns whether SQLite supports renaming columns (from version 3.25)."""
+        return sqlite3.sqlite_version_info >= (3, 25)
 
 
     def close(self):
@@ -641,7 +646,8 @@ class Database(object):
         else: self.schema.clear()
 
         # Retrieve general information from master
-        where, args = "sql != :sql", {"sql": ""}
+        where = "sql != :sql AND name NOT LIKE :notname"
+        args = {"sql": "", "notname": "sqlite_%"}
         if category:
             where += " AND type = :type"; args.update(type=category)
             if name: where += " AND LOWER(name) = :name"; args.update(name=name)
@@ -716,8 +722,8 @@ class Database(object):
 
         @param   category  "table"|"index"|"trigger"|"view"
         @param   name      returns only this object
-        @param   table     specific table for "index"|"trigger"|"view" category,
-                           or a list of tables
+        @param   table     specific table (or a list of tables) the object
+                           references in any way
         @result            OrderedDict({name_lower: {opts}}),
                            or {opts} if name or None if no object by such name
         """
