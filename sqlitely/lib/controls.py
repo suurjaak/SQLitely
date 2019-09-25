@@ -59,7 +59,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    22.09.2019
+@modified    25.09.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -2284,9 +2284,11 @@ class TabbedHtmlWindow(wx.PyPanel):
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
         notebook = self._notebook = wx.lib.agw.flatnotebook.FlatNotebook(
             parent=self, size=(-1, 27),
-            agwStyle=wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
+            agwStyle=wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
                      wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
+                     wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
                      wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
+                     wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
                      wx.lib.agw.flatnotebook.FNB_VC8)
         self._html = wx.html.HtmlWindow(parent=self, style=style, name=name)
 

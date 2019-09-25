@@ -116,10 +116,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         notebook = self.notebook = wx.lib.agw.flatnotebook.FlatNotebook(
             parent=panel, style=wx.NB_TOP,
-            agwStyle=wx.lib.agw.flatnotebook.FNB_NODRAG |
-                     wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
+            agwStyle=wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
                      wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
+                     wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
                      wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
+                     wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
                      wx.lib.agw.flatnotebook.FNB_FF2)
         ColourManager.Manage(notebook, "ActiveTabColour",        wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(notebook, "ActiveTabTextColour",    wx.SYS_COLOUR_BTNTEXT)
@@ -2112,10 +2113,12 @@ class DatabasePage(wx.Panel):
 
         notebook = self.notebook_schema = wx.lib.agw.flatnotebook.FlatNotebook(
             parent=panel2, size=(-1, 27),
-            agwStyle=wx.lib.agw.flatnotebook.FNB_X_ON_TAB |
-                     wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
+            agwStyle=wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
                      wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
+                     wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
                      wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
+                     wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
+                     wx.lib.agw.flatnotebook.FNB_X_ON_TAB |
                      wx.lib.agw.flatnotebook.FNB_VC8)
         ColourManager.Manage(notebook, "ActiveTabColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(notebook, "TabAreaColour", wx.SYS_COLOUR_BTNFACE)
