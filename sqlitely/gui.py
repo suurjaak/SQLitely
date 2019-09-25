@@ -784,6 +784,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         item_copy    = wx.MenuItem(menu, -1, "&Copy file path")
         item_folder  = wx.MenuItem(menu, -1, "Open file &directory")
 
+        boldfont = item_name.Font
+        boldfont.SetWeight(wx.FONTWEIGHT_BOLD)
+        boldfont.SetFaceName(self.Font.FaceName)
+        boldfont.SetPointSize(self.Font.PointSize)
+        item_name.Font = boldfont
+
         item_open    = wx.MenuItem(menu, -1, "&Open")
         item_save    = wx.MenuItem(menu, -1, "&Save as")
         item_remove  = wx.MenuItem(menu, -1, "&Remove from list")
@@ -3890,8 +3896,9 @@ class DatabasePage(wx.Panel):
         data = tree.GetItemPyData(item)
         if not data: return
 
-        def select_item(item, *_, **__):
+        def select_item(item, expand=False, *_, **__):
             tree.SelectItem(item)
+            if expand: tree.Expand(item)
         def clipboard_copy(text, *_, **__):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text)
@@ -3906,6 +3913,9 @@ class DatabasePage(wx.Panel):
                 for item in items: tree.Collapse(item)
             else: tree.ExpandAll(tree.RootItem)
 
+        boldfont = wx.Font(self.Font.PointSize, wx.FONTFAMILY_SWISS,
+            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
+
         menu = wx.Menu()
         item_file = item_database = item_database_meta = None
         if isinstance(data, basestring): # Single table
@@ -3913,13 +3923,15 @@ class DatabasePage(wx.Panel):
                             util.unprint(grammar.quote(data, force=True)))
             item_copy     = wx.MenuItem(menu, -1, "&Copy name")
             item_copy_sql = wx.MenuItem(menu, -1, "Copy CREATE &SQL")
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, True),
                       id=item_name.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data),
                       id=item_copy.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
                       self.db.get_sql("table", data)),
                       id=item_copy_sql.GetId())
+
+            item_name.Font = boldfont
 
             menu.AppendItem(item_name)
             menu.AppendSeparator()
@@ -3935,13 +3947,15 @@ class DatabasePage(wx.Panel):
                             util.unprint(grammar.quote(data["name"]))))
             item_copy     = wx.MenuItem(menu, -1, "&Copy name")
             item_copy_sql = wx.MenuItem(menu, -1, "Copy column &SQL")
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, False),
                       id=item_name.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
                       id=item_copy.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
                 self.db.get_sql("table", data["table"], column=data["name"])
             ), id=item_copy_sql.GetId())
+
+            item_name.Font = boldfont
 
             menu.AppendItem(item_name)
             menu.AppendSeparator()
