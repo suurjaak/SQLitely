@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.09.2019
+@modified    25.09.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4409,9 +4409,10 @@ class DatabasePage(wx.Panel):
                             while name in items2:
                                 name, counter = "%s_%s" % (base, counter), counter + 1
                             items2.append(name)
-                            item_sql = grammar.transform(item["sql"], renames={
+                            item_sql, err = grammar.transform(item["sql"], renames={
                                 category: name, "table": table2, "schema": "main2",
                             }, indent=False)
+                            if err: raise Exception(err)
                             logger.info("Creating %s %s on table %s in %s, using %s.",
                                         category, grammar.quote(name, force=True),
                                         grammar.quote(table2, force=True),
@@ -4554,7 +4555,7 @@ class DatabasePage(wx.Panel):
 
                 for col in table["columns"]:
                     subchild = tree.AppendItem(child, util.unprint(col["name"]))
-                    tree.SetItemText(subchild, col["type"], 1)
+                    tree.SetItemText(subchild, col.get("type", ""), 1)
                     tree.SetItemPyData(subchild, dict(col, table=table["name"]))
 
             tree.Expand(root)
@@ -4620,7 +4621,7 @@ class DatabasePage(wx.Panel):
                         if table.get("columns") and col.get("name"):
                             tcol = next((x for x in table["columns"]
                                          if x["name"] == col["name"]), None)
-                            if tcol: col["type"] = tcol["type"]
+                            if tcol: col["type"] = tcol.get("type", "")
                 elif "trigger" == category:
                     childtext = " ".join(filter(bool, (item["meta"].get("upon"), item["meta"]["action"],
                                                        "ON", grammar.quote(item["meta"]["table"]))))
@@ -4637,7 +4638,7 @@ class DatabasePage(wx.Panel):
                     tree.SetItemImage(colchild, imgs["columns"], wx.TreeItemIcon_Normal)
                     for col in columns:
                         subchild = tree.AppendItem(colchild, util.unprint(col["name"]))
-                        tree.SetItemText(subchild, col["type"], 1)
+                        tree.SetItemText(subchild, col.get("type", ""), 1)
                         tree.SetItemPyData(subchild, dict(col, parent=itemdata, type="column"))
                 for subcategory in subcategories:
                     mytables = [item["name"]] if "table" == category \
@@ -4730,7 +4731,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
             if self.rows_current:
                 for col in self.columns:
                     value = self.rows_current[0][col["name"]]
-                    col["type"] = TYPES.get(type(value), col["type"])
+                    col["type"] = TYPES.get(type(value), col.get("type", ""))
         else:
             self.columns = db.get_category("table", table)["columns"]
             self.row_count = next(db.execute("SELECT COUNT(*) AS count FROM %s"
@@ -4811,7 +4812,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
                 value = self.rows_current[row][self.columns[col]["name"]]
                 if type(value) is buffer:
                     value = str(value).decode("latin1")
-        if value and "BLOB" == self.columns[col]["type"] and isinstance(value, basestring):
+        if value and "BLOB" == self.columns[col].get("type") and isinstance(value, basestring):
             # Blobs need special handling, as the text editor does not
             # support control characters or null bytes.
             value = value.encode("unicode-escape")
@@ -4879,7 +4880,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
                         accepted = True
                     except Exception:
                         pass
-            elif "BLOB" == self.columns[col]["type"]:
+            elif "BLOB" == self.columns[col].get("type"):
                 # Blobs need special handling, as the text editor does not
                 # support control characters or null bytes.
                 try:
@@ -4940,7 +4941,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         # Sanity check, UI controls can still be referring to a previous table
         col = min(col, len(self.columns) - 1)
 
-        blob = "blob" if (self.columns[col]["type"].lower() == "blob") else ""
+        blob = "blob" if (self.columns[col].get("type", "").lower() == "blob") else ""
         attr = self.attrs["default%s" % blob]
         if row < len(self.rows_current):
             if self.rows_current[row]["__changed__"]:
@@ -6312,7 +6313,7 @@ class SchemaObjectPage(wx.PyPanel):
 
     def _PopulateSQL(self):
         """Populates CREATE SQL window."""
-        sql = grammar.generate(self._item["meta"])
+        sql, _ = grammar.generate(self._item["meta"])
         if sql is not None: self._item["sql"] = sql
         if self._show_alter: sql = self._GetAlterSQL()
         if sql is None: return
@@ -6339,9 +6340,9 @@ class SchemaObjectPage(wx.PyPanel):
             if bool(new.get(k)) != bool(old.get(k)):
                 can_simple = False # Top-level flag or constraints existence changed
         if can_simple:
-            cnstr1_sqls = [grammar.generate(dict(c, __type__="constraint"))
+            cnstr1_sqls = [grammar.generate(dict(c, __type__="constraint"))[0]
                           for c in old.get("constraints") or []]
-            cnstr2_sqls = [grammar.generate(dict(c, __type__="constraint"))
+            cnstr2_sqls = [grammar.generate(dict(c, __type__="constraint"))[0]
                           for c in new.get("constraints") or []]
             # Table constraints changed
             can_simple = (cnstr1_sqls == cnstr2_sqls)
@@ -6359,9 +6360,9 @@ class SchemaObjectPage(wx.PyPanel):
                     can_simple = False # Column order changed
                     break # for i, c1
         if can_simple:
-            cols1_sqls = [grammar.generate(dict(c, name="", __type__="column"))
+            cols1_sqls = [grammar.generate(dict(c, name="", __type__="column"))[0]
                           for c in cols1]
-            cols2_sqls = [grammar.generate(dict(c, name="", __type__="column"))
+            cols2_sqls = [grammar.generate(dict(c, name="", __type__="column"))[0]
                           for c in cols2]
             # Column definition changed
             can_simple = (cols1_sqls == cols2_sqls)
@@ -6375,16 +6376,16 @@ class SchemaObjectPage(wx.PyPanel):
                 c1 = colmap1.get(c2["__id__"])
                 if c1 and c1["name"] != c2["name"]:
                     args = dict(rename={"column": {c1["name"]: c2["name"]}}, **base)
-                    sqls.append(grammar.generate(args))
+                    sqls.append(grammar.generate(args)[0])
 
             for c2 in cols2:
                 c1 = colmap1.get(c2["__id__"])
                 if not c1:
-                    sqls.append(grammar.generate(dict(add=c2, **base)))
+                    sqls.append(grammar.generate(dict(add=c2, **base))[0])
 
             if old["name"] != new["name"]:
                 args = dict(rename={"table": new["name"]}, **base)
-                sqls.append(grammar.generate(args))
+                sqls.append(grammar.generate(args)[0])
             result = ";\n\n".join(sqls) + (";" if sqls else "")
 
         else:
@@ -6426,7 +6427,7 @@ class SchemaObjectPage(wx.PyPanel):
                     mytempname = make_tempname(item["name"])
                     myrenames = dict(renames)
                     myrenames.setdefault("table", {})[item["name"]] = mytempname
-                    sql = grammar.transform(item["sql"], renames=myrenames)
+                    sql, _ = grammar.transform(item["sql"], renames=myrenames)
                     myitem = dict(item, sql=sql, tempname=mytempname)
                     args.setdefault(category, []).append(myitem)
 
@@ -6434,11 +6435,11 @@ class SchemaObjectPage(wx.PyPanel):
                         # Re-create table indexes and triggers
                         for subitem in self._db.get_category(subcategory, table=item["name"]).values():
                             if subitem["meta"]["table"].lower() == item["name"].lower():
-                                sql = grammar.transform(subitem["sql"], renames=renames) \
-                                      if renames else subitem["sql"]
+                                sql, _ = grammar.transform(subitem["sql"], renames=renames) \
+                                         if renames else subitem["sql"]
                                 args.setdefault(subcategory, []).append(dict(subitem, sql=sql))
 
-            result = grammar.generate(args)
+            result, _ = grammar.generate(args)
 
         return result
 
@@ -6848,8 +6849,10 @@ class SchemaObjectPage(wx.PyPanel):
         if not changed and not renames: return
 
         if renames:
-            sql = grammar.transform(self._item["sql"], renames={"column": renames})
-            meta = grammar.parse(sql)
+            sql, err = grammar.transform(self._item["sql"], renames={"column": renames})
+            if err: return
+            meta, err = grammar.parse(sql)
+            if err: return
 
             # TODO ega järjekorra muutmine pekki ei keera midagi?
 
@@ -6947,9 +6950,9 @@ class SchemaObjectPage(wx.PyPanel):
         if not sql: return
             
         logger.info("Importing %s definition from SQL:\n\n%s", self._category, sql)
-        meta = grammar.parse(sql, self._category)
+        meta, err = grammar.parse(sql, self._category)
         if not meta:
-            return wx.MessageBox("Failed to parse SQL.\n\nSee log for details.",
+            return wx.MessageBox("Failed to parse SQL.\n\n%s" % err,
                                  conf.Title, wx.OK | wx.ICON_ERROR)
 
         if "table" == self._category:
@@ -7055,8 +7058,8 @@ class SchemaObjectPage(wx.PyPanel):
             errors += ["%s named %s already exists." % (self._category.capitalize(),
                        grammar.quote(name, force=True))]
         if not errors:
-            meta2 = grammar.parse(self._item["sql"])
-            if not meta2: errors += ["Invalid options for CREATE %s." % self._category.upper()]
+            meta2, err = grammar.parse(self._item["sql"])
+            if not meta2: errors += [err[:200] + (".." if len(err) > 200 else "")]
         if errors: return wx.MessageBox("Errors:\n\n%s" % "\n\n".join(errors),
                                         conf.Title, wx.OK | wx.ICON_WARNING)
 

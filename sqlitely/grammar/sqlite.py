@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    24.09.2019
+@modified    25.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -35,14 +35,15 @@ def parse(sql, category=None):
     Returns data structure for SQL statement.
 
     @param   category  expected statement category if any, like "table"
-    @return            {..}, or None on error
+    @return            ({..}, None), or (None, error)
     """
-    result = None
+    result, err = None, None
     try:
-        result = Parser().parse(sql, category)
-    except Exception:
+        result, err = Parser().parse(sql, category)
+    except Exception as e:
         logger.exception("Error parsing SQL %s.", sql)
-    return result
+        err = util.format_exc(e)
+    return result, err
 
 
 def generate(data, indent="  "):
@@ -52,14 +53,15 @@ def generate(data, indent="  "):
     @param   data    {"__type__": "CREATE TABLE"|.., ..}
     @param   indent  indentation level to use. If falsy,
                      result is not indented in any, including linefeeds.
-    @return          SQL string, or None on error
+    @return          (SQL string, None) or (None, error)
     """
-    result, generator = None, Generator(indent)
+    result, err, generator = None, None, Generator(indent)
     try:
-        result = generator.generate(data)
-    except Exception:
+        result, err = generator.generate(data)
+    except Exception as e:
         logger.exception("Error generating SQL for %s.", data)
-    return result
+        err = util.format_exc(e)
+    return result, err
 
 
 def transform(sql, flags=None, renames=None, indent="  "):
@@ -74,15 +76,17 @@ def transform(sql, flags=None, renames=None, indent="  "):
                       specific value to replace like {"table": {"old": "new"}}
     @param   indent   indentation level to use. If falsy,
                       result is not indented in any, including linefeeds.
+    @return           (SQL string, None) or (None, error)
     """
-    result, parser, generator = None, Parser(), Generator(indent)
+    result, err, parser, generator = None, None, Parser(), Generator(indent)
     try:
         data = parser.parse(sql, renames=renames)
         if flags: data.update(flags)
-        result = generator.generate(data)
-    except Exception:
+        result, err = generator.generate(data)
+    except Exception as e:
         logger.exception("Error transforming SQL %s.", sql)
-    return result
+        err = util.format_exc(e)
+    return result, err
 
 
 def quote(val, force=False):
@@ -196,7 +200,8 @@ class ErrorListener(object):
                     break # for i, (..)
             self._stack = traceback.format_list(stack)
 
-    def getErrors(self):
+    def getErrors(self, stack=False):
+        if not stack: return "\n\n".join(self._errors)
         return "%s\n%s" % ("\n\n".join(self._errors), "".join(self._stack))
         
 
@@ -246,7 +251,7 @@ class Parser(object):
                            "table", "index", "trigger", "view", "column".
                            Renames all items of specified category, unless
                            given nested value like {"table": {"old": "new"}}
-        @return            {..}, or None on error
+        @return            ({..}, None) or (None, error)
 
         """
         self._stream  = CommonTokenStream(SQLiteLexer(InputStream(sql)))
@@ -254,18 +259,20 @@ class Parser(object):
         parser.addErrorListener(listener)
         tree = parser.parse()
         if parser.getNumberOfSyntaxErrors():
-            logger.error('Errors parsing SQL "%s":\n\n%s', sql, listener.getErrors())
-            return None
+            logger.error('Errors parsing SQL "%s":\n\n%s', sql,
+                         listener.getErrors(stack=True))
+            return None, listener.getErrors()
 
         # parse ctx -> statement list ctx -> statement ctx -> specific type ctx
         ctx = tree.children[0].children[0].children[0]
         result, name = None, self.CTXS.get(type(ctx))
         categoryname = self.CATEGORIES.get(category)
         if category and name != categoryname or name not in self.BUILDERS:
-            logger.error("Unexpected statement category: '%s'%s.", name,
-                         " (expected '%s')" % (categoryname or category)
-                         if category else "")
-            return None
+            error = "Unexpected statement category: '%s'%s."% (name,
+                     " (expected '%s')" % (categoryname or category)
+                     if category else "")
+            logger.error(error)
+            return None, error
 
         if renames: self.recurse_rename([ctx], renames, name)
         result = self.BUILDERS[name](self, ctx)
@@ -281,7 +288,7 @@ class Parser(object):
             elif renames["schema"]: result["schema"] = renames["schema"]
             else: result.pop("schema", None)
 
-        return result
+        return result, None
 
 
     def t(self, ctx):
@@ -772,10 +779,11 @@ class Generator(object):
 
         @param   data      SQL data structure {"__type__": "CREATE TABLE"|.., }
         @param   category  data category if not using data["__type__"]
-        @return            SQL string, or None if unknown data category
+        @return            (SQL string, None) or (None, error)
         """
         category = self._category = (category or data["__type__"]).upper()
-        if category not in self.TEMPLATES: return
+        if category not in self.TEMPLATES:
+            return None, "Unknown category: %s" % category
 
         REPLACE_ORDER = ["Q", "PAD", "GLUE", "LF", "CM", "PRE", "WS"]
         ns = {"Q":    self.quote,   "LF": self.linefeed, "PRE": self.indentation,
@@ -819,7 +827,7 @@ class Generator(object):
             break # while
 
         self._tokens.clear(); self._tokendata.clear(); self._data = None
-        return result
+        return result, None
 
 
     def token(self, val, tokentype="WS", **kwargs):
@@ -979,18 +987,18 @@ def test():
         print "\n%s\nORIGINAL:\n" % ("-" * 70)
         print sql1.encode("utf-8")
 
-        x = parse(sql1)
+        x, err = parse(sql1)
         if not x: continue # for sql1
 
         print "\n%s\nPARSED:" % ("-" * 70)
         print json.dumps(x, indent=2)
-        sql2 = generate(x, indent)
+        sql2, err2 = generate(x, indent)
         if sql2:
             print "\n%s\nGENERATED:\n" % ("-" * 70)
             print sql2.encode("utf-8") if sql2 else sql2
 
             print "\n%s\nTRANSFORMED:\n" % ("-" * 70)
-            sql3 = transform(sql2, renames=renames, indent=indent)
+            sql3, err3 = transform(sql2, renames=renames, indent=indent)
             print sql3.encode("utf-8") if sql3 else sql3
 
 

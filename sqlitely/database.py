@@ -697,8 +697,8 @@ class Database(object):
                 if opts0 and opts0.get("meta") and opts["sql0"] == opts0["sql0"]:
                     meta, sql = opts0["meta"], opts0["sql"]
                 elif parse:
-                    meta = grammar.parse(opts["sql"])
-                    sql = grammar.generate(meta)
+                    meta, _ = grammar.parse(opts["sql"])
+                    if meta: sql, _ = grammar.generate(meta)
                 if meta and sql:
                     opts.update(meta=meta, sql=sql)
                     if "table" == mycategory: opts["columns"] = meta["columns"]
@@ -785,14 +785,16 @@ class Database(object):
                     col = next((c for c in opts["columns"]
                                 if c["name"].lower() == column.lower()), None)
                     if not col: continue # for myname, opts
-                    chunk = grammar.generate(dict(col, __type__="column"), indent=False)
+                    chunk, err = grammar.generate(dict(col, __type__="column"), indent=False)
+                    if err: raise Exception(err)                        
                     break # for myname, opts
 
                 sql = opts["sql"]
                 kws = {x: transform[x] for x in ("flags", "renames")
                        if transform and x in transform}
                 if not opts.get("meta") or kws or indent != "  ":
-                    sql = grammar.transform(sql, indent=indent, **kws)
+                    sql, err = grammar.transform(sql, indent=indent, **kws)
+                    if err: raise Exception(err)                        
                 chunk += sql + (";\n\n" if not names or len(names) < 2 else "")
             result += ("\n\n" if result else "") + chunk
 
