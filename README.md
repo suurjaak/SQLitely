@@ -3,12 +3,15 @@ SQLitely 1.0
 
 SQLitely is an SQLite database tool, written in Python.
 
-You can open SQLite databases and look at their contents:
+You can open SQLite databases and work with their contents:
 
-- search across all tables and columns
-- view any database table and export their data, fix database corruption
-- change, add or delete data in any table
+- search the database, either from table data or database metadata
+- view and export data in various formats
+- change, add or delete table data
+- edit database schema
 - execute direct SQL queries
+- see and edit PRAGMA directives
+- vacuum database, fix database corruption
 
 Downloads, help texts, and more screenshots at
 http://suurjaak.github.io/SQLitely.
@@ -18,6 +21,10 @@ http://suurjaak.github.io/SQLitely.
 
 Using The Program
 -----------------
+
+SQLitely offers a convenient way for performing complex ALTER TABLE operations.
+Columns and constraints can be changed, reordered, added, dropped;
+encapsulating the multiple steps that SQLite requires for table modifications.
 
 Searching an opened database supports a simple Google-like
 [query syntax](http://suurjaak.github.io/SQLitely/help.html).
@@ -32,8 +39,7 @@ a search popup.
 The program itself is stand-alone, can work from any directory, and does not 
 need additional installation, Windows installers have been provided for 
 convenience. The installed program can be copied to a USB stick and used
-elsewhere, same goes for the source code. The command line interface only needs
-Python to run.
+elsewhere, same goes for the source code.
 
 SQLitely has been tested under Windows 7, Windows Vista, Windows XP and
 Ubuntu Linux. In source code form, it should run wherever Python and the
@@ -95,9 +101,9 @@ Includes several icons from Fugue Icons,
 Includes fonts Carlito Regular and Carlito bold,
 https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts
 
-Binaries compiled with PyInstaller 2.1, http://www.pyinstaller.org
+Binaries compiled with PyInstaller, http://www.pyinstaller.org
 
-Installers created with Nullsoft Scriptable Install System 3.0b1,
+Installers created with Nullsoft Scriptable Install System,
 http://nsis.sourceforge.net/
 
 
