@@ -5412,24 +5412,28 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_buttons      = wx.BoxSizer(wx.HORIZONTAL)
         sizer_sql_header   = wx.BoxSizer(wx.HORIZONTAL)
 
-        label_name = wx.StaticText(self, label="&Name:")
-        edit_name = self._ctrls["name"] = wx.TextCtrl(self)
+        splitter = self._splitter = wx.SplitterWindow(parent=self, style=wx.BORDER_NONE)
+        panel1, panel2 = wx.Panel(splitter), wx.Panel(splitter)
+        panel1.Sizer, panel2.Sizer = wx.BoxSizer(wx.VERTICAL), wx.BoxSizer(wx.VERTICAL)
+
+        label_name = wx.StaticText(panel1, label="&Name:")
+        edit_name = self._ctrls["name"] = wx.TextCtrl(panel1)
 
         if   "table"   == item["type"]: creator = self._CreateTable
         elif "index"   == item["type"]: creator = self._CreateIndex
         elif "trigger" == item["type"]: creator = self._CreateTrigger
         elif "view"    == item["type"]: creator = self._CreateView
-        categorypanel = self._panel_category = creator()
+        categorypanel = self._panel_category = creator(panel1)
 
-        label_stc = self._label_sql = wx.StaticText(self, label="CREATE SQL:")
+        label_stc = self._label_sql = wx.StaticText(panel2, label="CREATE SQL:")
         check_alter = None
 
         if "table" == item["type"]:
-            check_alter = self._ctrls["alter"] = wx.CheckBox(self, label="Show A&LTER SQL")
+            check_alter = self._ctrls["alter"] = wx.CheckBox(panel2, label="Show A&LTER SQL")
             check_alter.ToolTipString = "Show SQL statements used for performing table change"
             check_alter.Shown = self._has_alter = not self._newmode
 
-        tb = wx.ToolBar(parent=self, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        tb = wx.ToolBar(parent=panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
         bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
         tb.SetToolBitmapSize(bmp1.Size)
@@ -5437,17 +5441,17 @@ class SchemaObjectPage(wx.PyPanel):
         tb.AddLabelTool(wx.ID_SAVE, "", bitmap=bmp2, shortHelp="Save SQL to file")
         tb.Realize()
 
-        stc = self._ctrls["sql"] = controls.SQLiteTextCtrl(self,
+        stc = self._ctrls["sql"] = controls.SQLiteTextCtrl(panel2,
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
         stc.SetReadOnly(True)
         stc._toggle = "skip"
 
-        button_edit    = self._buttons["edit"]    = wx.Button(self, label="Edit")
-        button_refresh = self._buttons["refresh"] = wx.Button(self, label="Refresh")
-        button_import  = self._buttons["import"]  = wx.Button(self, label="Import SQL")
-        button_cancel  = self._buttons["cancel"]  = wx.Button(self, label="Cancel")
-        button_delete  = self._buttons["delete"]  = wx.Button(self, label="Delete")
-        button_close   = self._buttons["close"]   = wx.Button(self, label="Close")
+        button_edit    = self._buttons["edit"]    = wx.Button(panel2, label="Edit")
+        button_refresh = self._buttons["refresh"] = wx.Button(panel2, label="Refresh")
+        button_import  = self._buttons["import"]  = wx.Button(panel2, label="Import SQL")
+        button_cancel  = self._buttons["cancel"]  = wx.Button(panel2, label="Cancel")
+        button_delete  = self._buttons["delete"]  = wx.Button(panel2, label="Delete")
+        button_close   = self._buttons["close"]   = wx.Button(panel2, label="Close")
         button_edit._toggle   = button_refresh._toggle = "skip"
         button_delete._toggle = button_close._toggle   = "disable"
         button_refresh.ToolTipString = "Reload statement, and database tables"
@@ -5467,11 +5471,11 @@ class SchemaObjectPage(wx.PyPanel):
             sizer_sql_header.AddStretchSpacer()
         sizer_sql_header.Add(tb, border=5, flag=wx.TOP | wx.ALIGN_RIGHT)
 
-        sizer.Add(sizer_name,       border=10, flag=wx.TOP | wx.RIGHT | wx.GROW)
-        sizer.Add(categorypanel,    border=10, proportion=2, flag=wx.RIGHT | wx.GROW)
-        sizer.Add(sizer_sql_header, border=10, flag=wx.RIGHT | wx.GROW)
-        sizer.Add(stc,              border=10, proportion=1, flag=wx.RIGHT | wx.GROW)
-        sizer.Add(sizer_buttons,    border=10, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
+        panel1.Sizer.Add(sizer_name,       border=10, flag=wx.TOP | wx.RIGHT | wx.GROW)
+        panel1.Sizer.Add(categorypanel,    border=10, proportion=2, flag=wx.RIGHT | wx.GROW)
+        panel2.Sizer.Add(sizer_sql_header, border=10, flag=wx.RIGHT | wx.GROW)
+        panel2.Sizer.Add(stc,              border=10, proportion=1, flag=wx.RIGHT | wx.GROW)
+        panel2.Sizer.Add(sizer_buttons,    border=10, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
         tb.Bind(wx.EVT_TOOL, self._OnCopySQL, id=wx.ID_COPY)
         tb.Bind(wx.EVT_TOOL, self._OnSaveSQL, id=wx.ID_SAVE)
@@ -5489,6 +5493,10 @@ class SchemaObjectPage(wx.PyPanel):
         self._ToggleControls(self._editmode)
         if "sql" not in self._original and "sql" in self._item:
             self._original["sql"] = self._item["sql"]
+
+        splitter.SetMinimumPaneSize(100)
+        sizer.Add(splitter, proportion=1, flag=wx.GROW)
+        splitter.SplitHorizontally(panel1, panel2, splitter.Size[1] - 200)
 
 
     def Close(self, force=False):
@@ -5516,9 +5524,9 @@ class SchemaObjectPage(wx.PyPanel):
         return result
 
 
-    def _CreateTable(self):
+    def _CreateTable(self, parent):
         """Returns control panel for CREATE TABLE page."""
-        panel = wx.Panel(self)
+        panel = wx.Panel(parent)
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
 
@@ -5595,9 +5603,9 @@ class SchemaObjectPage(wx.PyPanel):
         return panel
 
 
-    def _CreateIndex(self):
+    def _CreateIndex(self, parent):
         """Returns control panel for CREATE INDEX page."""
-        panel = wx.Panel(self)
+        panel = wx.Panel(parent)
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_table   = wx.BoxSizer(wx.HORIZONTAL)
         sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
@@ -5666,9 +5674,9 @@ class SchemaObjectPage(wx.PyPanel):
         return panel
 
 
-    def _CreateTrigger(self):
+    def _CreateTrigger(self, parent):
         """Returns control panel for CREATE TRIGGER page."""
-        panel = wx.Panel(self)
+        panel = wx.Panel(parent)
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_table   = wx.BoxSizer(wx.HORIZONTAL)
         sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
@@ -5759,9 +5767,9 @@ class SchemaObjectPage(wx.PyPanel):
         return panel
 
 
-    def _CreateView(self):
+    def _CreateView(self, parent):
         """Returns control panel for CREATE VIEW page."""
-        panel = wx.Panel(self)
+        panel = wx.Panel(parent)
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
