@@ -4535,10 +4535,43 @@ class DatabasePage(wx.Panel):
         self.load_schema_tree(refresh=True)
 
 
+    def get_tree_expanded_state(self, tree, root):
+        """Returns {data, children: [{data, children}]} for expanded nodes."""
+        item = tree.GetNext(root) if tree.IsExpanded(root) else None
+        result = {"data": tree.GetItemPyData(root)} if item else None
+        while item and item.IsOk():
+            if tree.IsExpanded(item):
+                childstate = self.get_tree_expanded_state(tree, item)
+                result.setdefault("children", []).append(childstate)
+            item = tree.GetNextSibling(item)
+        return result
+
+
+    def set_tree_expanded_state(self, tree, root, state):
+        """Sets tree expanded state."""
+        if not state: return
+
+        tree.Expand(root)
+        if not state.get("children"): return
+        item = tree.GetNext(root)
+        while item and item.IsOk():
+            mydata = tree.GetItemPyData(item)
+            mystate = next((x for x in state["children"] if x["data"] == mydata
+                            or (isinstance(mydata, dict) and isinstance(x["data"], dict)
+                            and ("category" == mydata.get("type")
+                                 and mydata.get("category") == x["data"].get("category")
+                                 or "category" != mydata.get("type") and mydata.get("type")
+                                 and mydata.get("name") == x["data"].get("name")
+                            ))), None)
+            if mystate: self.set_tree_expanded_state(tree, item, mystate)
+            item = tree.GetNextSibling(item)
+
+
     def load_tables_data(self, refresh=False):
         """Loads table data into table tree and SQL editor."""
         try:
             tree = self.tree_tables
+            expandeds = self.get_tree_expanded_state(tree, tree.RootItem)
             if refresh: self.db.populate_schema(count=True)
             tables = self.db.get_category("table").values()
             # Fill table tree with information on row counts and columns
@@ -4566,6 +4599,8 @@ class DatabasePage(wx.Panel):
                                            tree.GetColumnWidth(0) - 5))
                 tree.Collapse(child)
 
+            self.set_tree_expanded_state(tree, tree.RootItem, expandeds)
+
             # Add table and column names to SQL editor autocomplete
             self.stc_sql.AutoCompClearAdded()
             pragmas = list(database.Database.PRAGMA) + database.Database.EXTRA_PRAGMAS
@@ -4575,12 +4610,14 @@ class DatabasePage(wx.Panel):
                 fields = [grammar.quote(c["name"]) for c in table["columns"]]
                 self.stc_sql.AutoCompAddSubWords(grammar.quote(table["name"]), fields)
         except Exception:
-            if self: logger.exception("Error loading table data from %s.", self.db)
+            if not self: return
+            logger.exception("Error loading table data from %s.", self.db)
 
 
     def load_schema_tree(self, refresh=False):
         """Loads database schema into schema tree."""
         tree = self.tree_schema
+        expandeds = self.get_tree_expanded_state(tree, tree.RootItem)
         tree.DeleteAllItems()
         tree.AddRoot("Loading schema..")
         try:
@@ -4663,8 +4700,9 @@ class DatabasePage(wx.Panel):
                         tree.SetItemText(subchild, t, 1)
 
             tree.Collapse(top)
-        tree.Expand(root)
         tree.SetColumnWidth(0, tree.Size[0] - 130)
+        tree.Expand(root)
+        self.set_tree_expanded_state(tree, tree.RootItem, expandeds)
 
 
     def update_tabheader(self):
