@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.09.2019
+@modified    25.09.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -56,7 +56,7 @@ QUERY_WILDCARD = ("HTML document (*.html)|*.html|Text document (*.txt)|*.txt|"
 QUERY_EXTS = ["html", "txt", "xlsx", "csv"] if xlsxwriter else ["html", "txt", "csv"]
 
 
-def export_data(make_iterable, filename, title, db, columns, sql_query="", table=""):
+def export_data(make_iterable, filename, title, db, columns, query="", category="", name=""):
     """
     Exports database data to file.
 
@@ -66,8 +66,9 @@ def export_data(make_iterable, filename, title, db, columns, sql_query="", table
     @param   title           title used in HTML
     @param   db              Database instance
     @param   columns         iterable columns, as [name, ] or [{"name": name}, ]
-    @param   sql_query       the SQL query producing the data, if any
-    @param   table           name of the table producing the data, if any
+    @param   query           the SQL query producing the data, if any
+    @param   category        category producing the data, if any, "table" or "view"
+    @param   name            name of the table or view producing the data, if any
     """
     result = False
     f = None
@@ -86,16 +87,16 @@ def export_data(make_iterable, filename, title, db, columns, sql_query="", table
                     dialect = csv.excel
                     dialect.delimiter, dialect.lineterminator = ";", "\r"
                     writer = csv.writer(f, dialect)
-                    if sql_query:
-                        flat = sql_query.replace("\r", " ").replace("\n", " ")
-                        sql_query = flat.encode("latin1", "replace")
+                    if query:
+                        flat = query.replace("\r", " ").replace("\n", " ")
+                        query = flat.encode("latin1", "replace")
                     header = [c.encode("latin1", "replace") for c in columns]
                 else:
-                    writer = xlsx_writer(filename, table or "SQL Query")
+                    writer = xlsx_writer(filename, name or "SQL Query")
                     writer.set_header(True)
                     header = columns
-                if sql_query:
-                    a = [[sql_query]] + (["bold", 0, False] if is_xlsx else [])
+                if query:
+                    a = [[query]] + (["bold", 0, False] if is_xlsx else [])
                     writer.writerow(*a)
                 writer.writerow(*([header, "bold"] if is_xlsx else [header]))
                 writer.set_header(False) if is_xlsx else 0
@@ -116,8 +117,9 @@ def export_data(make_iterable, filename, title, db, columns, sql_query="", table
                     "columns":     columns,
                     "rows":        make_iterable(),
                     "row_count":   0,
-                    "sql":         sql_query,
-                    "table":       table,
+                    "sql":         query,
+                    "category":    category,
+                    "name":        name,
                     "app":         conf.Title,
                 }
                 namespace["namespace"] = namespace # To update row_count
@@ -144,10 +146,10 @@ def export_data(make_iterable, filename, title, db, columns, sql_query="", table
                            strip=False, escape=is_html)
                 template.stream(tmpfile, namespace)
 
-                if table:
-                    # Add CREATE TABLE statement.
+                if name:
+                    # Add CREATE statement.
                     transform = {"exists": True} if is_sql else None
-                    create_sql = db.get_sql("table", table, transform=transform)
+                    create_sql = db.get_sql(category, name, transform=transform)
                     namespace["create_sql"] = create_sql
 
                 tmpfile.flush(), tmpfile.seek(0)

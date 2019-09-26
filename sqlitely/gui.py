@@ -1863,7 +1863,7 @@ class DatabasePage(wx.Panel):
             parent=self, agwStyle=bookstyle, style=wx.BORDER_STATIC)
 
         self.create_page_search(notebook)
-        self.create_page_tables(notebook)
+        self.create_page_data(notebook)
         self.create_page_schema(notebook)
         self.create_page_sql(notebook)
         self.create_page_pragma(notebook)
@@ -1974,9 +1974,9 @@ class DatabasePage(wx.Panel):
         wx.CallAfter(label_html.Show)
 
 
-    def create_page_tables(self, notebook):
-        """Creates a page for listing and browsing tables."""
-        page = self.page_tables = wx.Panel(parent=notebook)
+    def create_page_data(self, notebook):
+        """Creates a page for listing and browsing tables and views."""
+        page = self.page_data = wx.Panel(parent=notebook)
         self.pageorder[page] = len(self.pageorder)
         notebook.AddPage(page, "Data")
 
@@ -1993,7 +1993,7 @@ class DatabasePage(wx.Panel):
         sizer_topleft = wx.BoxSizer(wx.HORIZONTAL)
         sizer_topleft.Add(wx.StaticText(parent=panel1, label="&Tables:"),
                           flag=wx.ALIGN_CENTER_VERTICAL)
-        button_refresh = self.button_refresh_tables = \
+        button_refresh = self.button_refresh_data = \
             wx.Button(panel1, label="Refresh")
         sizer_topleft.AddStretchSpacer()
         sizer_topleft.Add(button_refresh)
@@ -2015,7 +2015,7 @@ class DatabasePage(wx.Panel):
         tree.AddRoot("Loading data..")
         tree.SetMainColumn(0)
         tree.SetColumnAlignment(1, wx.ALIGN_RIGHT)
-        self.Bind(wx.EVT_BUTTON, self.on_refresh_tables, button_refresh)
+        self.Bind(wx.EVT_BUTTON, self.on_refresh_data, button_refresh)
         self.Bind(wx.EVT_TREE_ITEM_ACTIVATED, self.on_change_tree_data, tree)
         self.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_data, tree)
 
@@ -2891,8 +2891,8 @@ class DatabasePage(wx.Panel):
         self.button_refresh_fileinfo.Enabled = True
 
 
-    def on_refresh_tables(self, event):
-        """Refreshes the table tree and open table data."""
+    def on_refresh_data(self, event):
+        """Refreshes the data tree."""
         self.load_tree_data(refresh=True)
         self.update_autocomp()
 
@@ -2995,21 +2995,19 @@ class DatabasePage(wx.Panel):
                         filename
                     wx.MessageBox(e, conf.Title, wx.OK | wx.ICON_INFORMATION)
             elif table_name:
-
-                # TODO see on siin muutunud
-
                 tableitem = None
                 table_name = table_name.lower()
-                item = self.tree_data.GetNext(self.tree_data.RootItem)
+                item = self.tree_data.GetNext(self.tree_data.GetNext(self.tree_data.RootItem))
                 tablemap = self.db.get_category("table")
                 while table_name in tablemap and item and item.IsOk():
-                    table2 = self.tree_data.GetItemPyData(item)
-                    if isinstance(table2, basestring) and table2.lower() == table_name:
+                    data = self.tree_data.GetItemPyData(item)
+                    if isinstance(data, dict) and "table" == data.get("type") \
+                    and data["name"].lower() == table_name:
                         tableitem = item
                         break # while table_name
                     item = self.tree_data.GetNextSibling(item)
                 if tableitem:
-                    self.notebook.SetSelection(self.pageorder[self.page_tables])
+                    self.notebook.SetSelection(self.pageorder[self.page_data])
                     wx.YieldIfNeeded()
                     # Only way to create state change in wx.gizmos.TreeListCtrl
                     class HackEvent(object):
@@ -3020,30 +3018,10 @@ class DatabasePage(wx.Panel):
                         self.tree_data.SelectItem(tableitem)
                         wx.YieldIfNeeded()
 
-                    # Search for matching row and scroll to it.
-                    if row:
-                        grid = self.grid_table
-                        if grid.Table.filters:
-                            grid.Table.ClearFilter()
-                            grid.Table.ClearSort()
-                        columns = tablemap[table_name]["columns"]
-                        id_fields = [c["name"] for c in columns if "pk" in c]
-                        if not id_fields: # No primary key fields: take all
-                            id_fields = [c["name"] for c in columns]
-                        row_id = [row[c] for c in id_fields]
-                        for i in range(grid.Table.GetNumberRows()):
-                            row2 = grid.Table.GetRow(i)
-                            row2_id = [row2[c] for c in id_fields]
-                            if row_id == row2_id:
-                                grid.MakeCellVisible(i, 0)
-                                grid.SelectRow(i)
-                                pagesize = grid.GetScrollPageSize(wx.VERTICAL)
-                                pxls = grid.GetScrollPixelsPerUnit()
-                                cell_coords = grid.CellToRect(i, 0)
-                                y = cell_coords.y / (pxls[1] or 15)
-                                x, y = 0, y - pagesize / 2
-                                grid.Scroll(x, y)
-                                break # for i
+                    if row: # Scroll to matching row
+                        p = self.data_pages["table"][tablemap[table_name]["name"]]
+                        if p: p.ScrollToRow(row)
+
         elif href.startswith("page:"):
             # Go to database subpage
             page = href[5:]
@@ -3299,12 +3277,6 @@ class DatabasePage(wx.Panel):
                 break # for i
 
 
-    def on_update_grid_table(self, event):
-        """Refreshes the table grid UI components, like toolbar icons."""
-        self.tb_grid.EnableTool(wx.ID_SAVE, self.grid_table.Table.IsChanged())
-        self.tb_grid.EnableTool(wx.ID_UNDO, self.grid_table.Table.IsChanged())
-
-
     def on_change_tree_data(self, event):
         """Handler for activating a schema item, loads object."""
         item, tree = event.GetItem(), self.tree_schema
@@ -3373,15 +3345,14 @@ class DatabasePage(wx.Panel):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-        def toggle_items(*_, **__):
-            if not tree.IsExpanded(tree.RootItem): tree.Expand(tree.RootItem)
-            items, item = [], tree.GetNext(tree.RootItem)
-            while item and item.IsOk():
-                items.append(item)
-                item = tree.GetNextSibling(item)
+        def toggle_items(node, *_, **__):
+            items, it = [node], tree.GetNext(node)
+            while it and it.IsOk():
+                items.append(it)
+                it = tree.GetNextSibling(it)
             if any(map(tree.IsExpanded, items)):
-                for item in items: tree.Collapse(item)
-            else: tree.ExpandAll(tree.RootItem)
+                for it in items: tree.Collapse(it)
+            else: tree.ExpandAll(node)
 
         boldfont = wx.Font(self.Font.PointSize, wx.FONTFAMILY_SWISS,
             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
@@ -3410,6 +3381,26 @@ class DatabasePage(wx.Panel):
             item_file     = wx.MenuItem(menu, -1, '&Export table to file')
             item_database = wx.MenuItem(menu, -1, 'Export table to another &database')
             item_database_meta = wx.MenuItem(menu, -1, 'Export table str&ucture to another &database')
+        elif "view" == data.get("type"): # Single view
+            item_name = wx.MenuItem(menu, -1, 'View %s' % \
+                        util.unprint(grammar.quote(data["name"], force=True)))
+            item_copy = wx.MenuItem(menu, -1, "&Copy name")
+            item_open = wx.MenuItem(menu, -1, "&Open view")
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, True),
+                      id=item_name.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
+                      id=item_copy.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(open_item, item),
+                      id=item_open.GetId())
+
+            item_name.Font = boldfont
+
+            menu.AppendItem(item_name)
+            menu.AppendSeparator()
+            menu.AppendItem(item_copy)
+            menu.AppendItem(item_open)
+
+            item_file     = wx.MenuItem(menu, -1, '&Export view to file')
         elif "column" == data.get("type"): # Column
             item_name = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
                         util.unprint(grammar.quote(data["parent"]["name"])),
@@ -3430,32 +3421,47 @@ class DatabasePage(wx.Panel):
             menu.AppendItem(item_copy)
             menu.AppendItem(item_open)
 
-        else: # Tables list
+        elif "category" == data.get("type") and "table" == data["category"]: # Tables list
             item_copy     = wx.MenuItem(menu, -1, "&Copy table names")
-            item_expand   = wx.MenuItem(menu, -1, "&Toggle tables expanded/collapsed")
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, ", ".join(data["items"])),
                       id=item_copy.GetId())
-            menu.Bind(wx.EVT_MENU, toggle_items, id=item_expand.GetId())
 
             menu.AppendItem(item_copy)
-            menu.AppendItem(item_expand)
 
             item_file     = wx.MenuItem(menu, -1, "&Export all tables to file")
             item_database = wx.MenuItem(menu, -1, "Export all tables to another &database")
             item_database_meta = wx.MenuItem(menu, -1, "Export all table str&uctures to another &database")
 
+        elif "category" == data.get("type") and "view" == data["category"]: # Views list
+            item_copy     = wx.MenuItem(menu, -1, "&Copy view names")
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, ", ".join(data["items"])),
+                      id=item_copy.GetId())
+
+            menu.AppendItem(item_copy)
+
+            item_file     = wx.MenuItem(menu, -1, "&Export all views to file")
+
         if item_file:
             menu.AppendSeparator()
             menu.AppendItem(item_file)
-            menu.AppendItem(item_database)
-            menu.AppendItem(item_database_meta)
-            tables = data["items"] if "schema" == data["type"] else [data["name"]]
-            menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, tables),
+            if item_database:      menu.AppendItem(item_database)
+            if item_database_meta: menu.AppendItem(item_database_meta)
+            names = data["items"] if "category" == data["type"] else [data["name"]]
+            category = data["category"] if "category" == data["type"] else data["type"]
+            menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, category, names),
                      id=item_file.GetId())
-            menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, tables, True),
-                     id=item_database.GetId())
-            menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, tables, False),
-                     id=item_database_meta.GetId())
+            if item_database:
+                menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, names, True),
+                         id=item_database.GetId())
+            if item_database_meta:
+                menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, names, False),
+                         id=item_database_meta.GetId())
+
+        if tree.HasChildren(item):
+            item_expand   = wx.MenuItem(menu, -1, "&Toggle expanded/collapsed")
+            menu.Bind(wx.EVT_MENU, functools.partial(toggle_items, item), id=item_expand.GetId())
+            if menu.MenuItemCount: menu.AppendSeparator()
+            menu.AppendItem(item_expand)
 
         item0 = tree.GetSelection()
         if item != item0: select_item(item)
@@ -3859,32 +3865,36 @@ class DatabasePage(wx.Panel):
             self.load_tree_data()
 
 
-    def on_export_data_file(self, tables, event):
+    def on_export_data_file(self, category, items, event=None):
         """
-        Handler for exporting one or more tables to file, opens file dialog
+        Handler for exporting one or more tables/views to file, opens file dialog
         and performs export.
         """
-        if len(tables) == 1:
-            filename = "Table %s" % tables[0]
+        WILDCARD, EXTS = export.TABLE_WILDCARD, export.TABLE_EXTS
+        if "view" == category:
+            WILDCARD, EXTS = export.QUERY_WILDCARD, export.QUERY_EXTS
+
+        if len(items) == 1:
+            filename = "%s %s" % (category.capitalize(), items[0])
             self.dialog_savefile.Filename = util.safe_filename(filename)
-            self.dialog_savefile.Message = "Save table as"
+            self.dialog_savefile.Message = "Save %s as" % category
             self.dialog_savefile.WindowStyle |= wx.FD_OVERWRITE_PROMPT
         else:
             self.dialog_savefile.Filename = "Filename will be ignored"
             self.dialog_savefile.Message = "Choose directory where to save files"
             self.dialog_savefile.WindowStyle ^= wx.FD_OVERWRITE_PROMPT
-        self.dialog_savefile.Wildcard = export.TABLE_WILDCARD
+        self.dialog_savefile.Wildcard = WILDCARD
         if wx.ID_OK != self.dialog_savefile.ShowModal(): return
 
         wx.YieldIfNeeded() # Allow dialog to disappear
-        extname = export.TABLE_EXTS[self.dialog_savefile.FilterIndex]
+        extname = EXTS[self.dialog_savefile.FilterIndex]
         path = self.dialog_savefile.GetPath()
         filenames = [path]
-        if len(tables) > 1:
+        if len(items) > 1:
             path, _ = os.path.split(path)
             filenames, names_unique = [], []
-            for t in tables:
-                name = base = util.safe_filename("Table %s" % t)
+            for t in items:
+                name = base = util.safe_filename("%s %s" % (category.capitalize(),  t))
                 counter = 2
                 while name in names_unique:
                     name, counter = "%s (%s)" % (base, counter), counter + 1
@@ -3898,18 +3908,18 @@ class DatabasePage(wx.Panel):
                 conf.Title, wx.YES | wx.NO | wx.ICON_WARNING
             ): return
 
-        for table, filename in zip(tables, filenames):
+        for name, filename in zip(items, filenames):
             if not filename.lower().endswith(".%s" % extname):
                 filename += ".%s" % extname
             busy = controls.BusyPanel(self, 'Exporting %s.' % filename)
             guibase.status('Exporting %s.', filename)
             try:
-                sql = "SELECT * FROM %s" % grammar.quote(table)
+                sql = "SELECT * FROM %s" % grammar.quote(name)
                 make_iterable = functools.partial(self.db.execute, sql)
                 export.export_data(make_iterable, filename,
-                    "Table %s" % grammar.quote(table, force=True),
-                    self.db, self.db.get_category("table", table)["columns"],
-                    table=table
+                    "%s %s" % (category.capitalize(), grammar.quote(name, force=True)),
+                    self.db, self.db.get_category(category, name)["columns"],
+                    category=category, name=name
                 )
                 guibase.status("Exported %s.", filename, log=True, flash=True)
                 util.start_file(filename)
@@ -3918,7 +3928,7 @@ class DatabasePage(wx.Panel):
                 logger.exception(msg); guibase.status(msg, flash=True)
                 error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
                 wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
-                break # for table, filename
+                break # for name, filename
             finally:
                 busy.Close()
 
@@ -4085,53 +4095,6 @@ class DatabasePage(wx.Panel):
             wx.PostEvent(self.TopLevelParent, OpenDatabaseEvent(file=filename2))
 
 
-    def on_sort_grid_column(self, event):
-        """
-        Handler for clicking a table grid column, sorts table by the column.
-        """
-        grid = event.GetEventObject()
-        if grid.Table and isinstance(grid.Table, SqliteGridBase):
-            row, col = event.GetRow(), event.GetCol()
-            # Remember scroll positions, as grid update loses them
-            scroll_hor = grid.GetScrollPos(wx.HORIZONTAL)
-            scroll_ver = grid.GetScrollPos(wx.VERTICAL)
-            if row < 0: # Only react to clicks in the header
-                grid.Table.SortColumn(col)
-            grid.ContainingSizer.Layout() # React to grid size change
-            grid.Scroll(scroll_hor, scroll_ver)
-
-
-    def on_filter_grid_column(self, event):
-        """
-        Handler for right-clicking a table grid column, lets the user
-        change the column filter.
-        """
-        grid = event.GetEventObject()
-        if grid.Table and isinstance(grid.Table, SqliteGridBase):
-            row, col = event.GetRow(), event.GetCol()
-            # Remember scroll positions, as grid update loses them
-            if row < 0: # Only react to clicks in the header
-                grid_data = grid.Table
-                current_filter = unicode(grid_data.filters[col]) \
-                                 if col in grid_data.filters else ""
-                name = grammar.quote(grid_data.columns[col]["name"], force=True)
-                dialog = wx.TextEntryDialog(self,
-                    "Filter column %s by:" % name,
-                    "Filter", defaultValue=current_filter,
-                    style=wx.OK | wx.CANCEL)
-                if wx.ID_OK == dialog.ShowModal():
-                    new_filter = dialog.GetValue()
-                    if len(new_filter):
-                        busy = controls.BusyPanel(self.page_tables,
-                            'Filtering column %s by "%s".' %
-                            (name, new_filter))
-                        grid_data.AddFilter(col, new_filter)
-                        busy.Close()
-                    else:
-                        grid_data.RemoveFilter(col)
-            grid.ContainingSizer.Layout() # React to grid size change
-
-
     def load_data(self):
         """Loads data from our Database."""
         self.edit_title.Value = self.db.filename
@@ -4205,41 +4168,58 @@ class DatabasePage(wx.Panel):
 
 
     def load_tree_data(self, refresh=False):
-        """Loads table data into table tree."""
+        """Loads table and view data into data tree."""
+        tree = self.tree_data
+        expandeds = self.get_tree_expanded_state(tree, tree.RootItem)
+        tree.DeleteAllItems()
+        tree.AddRoot("Loading data..")
         try:
-            tree = self.tree_data
-            expandeds = self.get_tree_expanded_state(tree, tree.RootItem)
             if refresh: self.db.populate_schema(count=True)
-            tables = self.db.get_category("table").values()
-            # Fill table tree with information on row counts and columns
-            tree.DeleteAllItems()
-            root = tree.AddRoot("SQLITE")
-            tree.SetItemPyData(root, {"type": "schema", "items": [x["name"] for x in tables]})
-            child = None
-            for table in tables:
-                child = tree.AppendItem(root, util.unprint(table["name"]))
-                if "count" in table: t = util.plural("row", table["count"])
-                else: t = "ERROR" if refresh else "Counting.."
-                tree.SetItemText(child, t, 1)
-                tree.SetItemPyData(child, table)
-
-                for col in table["columns"]:
-                    subchild = tree.AppendItem(child, util.unprint(col["name"]))
-                    tree.SetItemText(subchild, col.get("type", ""), 1)
-                    tree.SetItemPyData(subchild, dict(col, parent=table, type="column"))
-
-            tree.Expand(root)
-            if child: # Nudge columns to fit and fill the header exactly.
-                tree.Expand(child)
-                tree.SetColumnWidth(0, -1)
-                tree.SetColumnWidth(1, min(70, tree.Size.width -
-                                           tree.GetColumnWidth(0) - 5))
-                tree.Collapse(child)
-
-            self.set_tree_expanded_state(tree, tree.RootItem, expandeds)
         except Exception:
             if not self: return
-            logger.exception("Error loading table data from %s.", self.db)
+            msg = "Error loading data from %s." % self.db
+            logger.exception(msg)
+            return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
+
+        tree.DeleteAllItems()
+        root = tree.AddRoot("SQLITE")
+        tree.SetItemPyData(root, {"type": "data"})
+
+        child, tops = None, []
+        for category in "table", "view":
+            # Fill data tree with information on row counts and columns
+            items = self.db.get_category(category).values()
+            categorydata = {"type": "category", "category": category,
+                            "items": [x["name"] for x in items]}
+
+            t = util.plural(category).capitalize()
+            if items: t += " (%s)" % len(items)
+            top = tree.AppendItem(root, t)
+            tree.SetItemPyData(top, categorydata)
+            tops.append(top)
+            for item in items:
+                itemdata = dict(item, parent=categorydata)
+                child = tree.AppendItem(top, util.unprint(item["name"]))
+                tree.SetItemPyData(child, itemdata)
+
+                if "count" in item: t = util.plural("row", item["count"])
+                else: t = "" if "view" == category else "ERROR" if refresh else "Counting.."
+                tree.SetItemText(child, t, 1)
+
+                for col in item["columns"]:
+                    subchild = tree.AppendItem(child, util.unprint(col["name"]))
+                    tree.SetItemText(subchild, col.get("type", ""), 1)
+                    tree.SetItemPyData(subchild, dict(col, parent=item, type="column"))
+
+        tree.Expand(root)
+        for top in tops: tree.Expand(top)
+        if child: # Nudge columns to fit and fill the header exactly.
+            tree.Expand(child)
+            tree.SetColumnWidth(0, -1)
+            tree.SetColumnWidth(1, max(70, tree.Size.width -
+                                       tree.GetColumnWidth(0) - 26))
+            tree.Collapse(child)
+        self.set_tree_expanded_state(tree, tree.RootItem, expandeds)
 
 
     def load_tree_schema(self, refresh=False):
@@ -4268,7 +4248,6 @@ class DatabasePage(wx.Panel):
             if items: t += " (%s)" % len(items)
             top = tree.AppendItem(root, t)
             tree.SetItemPyData(top, categorydata)
-            child = None
             for item in items:
                 itemdata = dict(item, parent=categorydata)
                 child = tree.AppendItem(top, util.unprint(item["name"]))
@@ -4360,9 +4339,9 @@ class DatabasePage(wx.Panel):
 
 
 
-class SqliteGridBase(wx.grid.PyGridTableBase):
+class SQLiteGridBase(wx.grid.PyGridTableBase):
     """
-    Table base for wx.grid.Grid, can take its data from a single table, or from
+    Table base for wx.grid.Grid, can take its data from a single table/view, or from
     the results of any SELECT query.
     """
 
@@ -4370,12 +4349,13 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
     SEEK_CHUNK_LENGTH = 100
 
 
-    def __init__(self, db, table="", sql=""):
-        super(SqliteGridBase, self).__init__()
+    def __init__(self, db, category="", name="", sql=""):
+        super(SQLiteGridBase, self).__init__()
         self.is_query = bool(sql)
         self.db = db
         self.sql = sql
-        self.table = table
+        self.category = category
+        self.name = name
         # ID here is a unique value identifying rows in this object,
         # no relation to table data
         self.idx_all = [] # An ordered list of row identifiers in rows_all
@@ -4394,9 +4374,9 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         self.attrs = {} # {"new": wx.grid.GridCellAttr, }
 
         if not self.is_query:
-            if db.has_rowid(table): self.rowid_name = "rowid"
+            if "table" == category and db.has_rowid(name): self.rowid_name = "rowid"
             cols = ("%s, *" % self.rowid_name) if self.rowid_name else "*"
-            self.sql = "SELECT %s FROM %s" % (cols, grammar.quote(table))
+            self.sql = "SELECT %s FROM %s" % (cols, grammar.quote(name))
         self.row_iterator = db.execute(self.sql)
         if self.is_query:
             self.columns = [{"name": c[0], "type": "TEXT"}
@@ -4417,9 +4397,9 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
                     value = self.rows_current[0][col["name"]]
                     col["type"] = TYPES.get(type(value), col.get("type", ""))
         else:
-            self.columns = db.get_category("table", table)["columns"]
+            self.columns = db.get_category(category, name)["columns"]
             self.row_count = next(db.execute("SELECT COUNT(*) AS count FROM %s"
-                                  % grammar.quote(table)))["count"]
+                                  % grammar.quote(name)))["count"]
 
 
     def GetColLabelValue(self, col):
@@ -4516,14 +4496,14 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
     def GetRowIterator(self):
         """
         Returns an iterator producing all current grid rows if query grid,
-        or a cursor producing all table rows from database if table grid,
+        or a cursor producing all rows from database if category grid,
         both in current sort order and matching current filter.
         """
         if self.is_query:
             self.SeekAhead(True)
             return iter(self.rows_current)
 
-        sql, args = "SELECT * FROM %s" % grammar.quote(self.table), {}
+        sql, args = "SELECT * FROM %s" % grammar.quote(self.name), {}
 
         where, order = "", ""
         if self.filters:
@@ -4550,44 +4530,46 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
 
 
     def SetValue(self, row, col, val):
-        if not (self.is_query) and (row < self.row_count):
-            accepted = False
-            col_value = None
-            if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
-                if not val: # Set column to NULL
-                    accepted = True
-                else:
-                    try:
-                        # Allow user to enter a comma for decimal separator.
-                        valc = val.replace(",", ".")
-                        col_value = float(valc) if ("." in valc) else int(val)
-                        accepted = True
-                    except Exception:
-                        pass
-            elif "BLOB" == self.columns[col].get("type"):
-                # Blobs need special handling, as the text editor does not
-                # support control characters or null bytes.
-                try:
-                    col_value = val.decode("unicode-escape")
-                    accepted = True
-                except UnicodeError: # Text is not valid escaped Unicode
-                    pass
-            else:
-                col_value = val
+        if self.is_query or "view" == self.category or row >= self.row_count:
+            return
+
+        accepted = False
+        col_value = None
+        if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
+            if not val: # Set column to NULL
                 accepted = True
-            if accepted:
-                self.SeekToRow(row)
-                data = self.rows_current[row]
-                idx = data["__id__"]
-                if not data["__new__"]:
-                    if idx not in self.rows_backup:
-                        # Backup only existing rows, new rows will be dropped
-                        # on rollback anyway.
-                        self.rows_backup[idx] = data.copy()
-                    data["__changed__"] = True
-                    self.idx_changed.add(idx)
-                data[self.columns[col]["name"]] = col_value
-                if self.View: self.View.Refresh()
+            else:
+                try:
+                    # Allow user to enter a comma for decimal separator.
+                    valc = val.replace(",", ".")
+                    col_value = float(valc) if ("." in valc) else int(val)
+                    accepted = True
+                except Exception:
+                    pass
+        elif "BLOB" == self.columns[col].get("type"):
+            # Blobs need special handling, as the text editor does not
+            # support control characters or null bytes.
+            try:
+                col_value = val.decode("unicode-escape")
+                accepted = True
+            except UnicodeError: # Text is not valid escaped Unicode
+                pass
+        else:
+            col_value = val
+            accepted = True
+        if accepted:
+            self.SeekToRow(row)
+            data = self.rows_current[row]
+            idx = data["__id__"]
+            if not data["__new__"]:
+                if idx not in self.rows_backup:
+                    # Backup only existing rows, new rows will be dropped
+                    # on rollback anyway.
+                    self.rows_backup[idx] = data.copy()
+                data["__changed__"] = True
+                self.idx_changed.add(idx)
+            data[self.columns[col]["name"]] = col_value
+            if self.View: self.View.Refresh()
 
 
     def IsChanged(self):
@@ -4622,8 +4604,6 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
             for n in ["newblob", "defaultblob",
             "row_changedblob", "cell_changedblob"]:
                 self.attrs[n].SetEditor(wx.grid.GridCellAutoWrapStringEditor())
-        # Sanity check, UI controls can still be referring to a previous table
-        col = min(col, len(self.columns) - 1)
 
         blob = "blob" if (self.columns[col].get("type", "").lower() == "blob") else ""
         attr = self.attrs["default%s" % blob]
@@ -4737,7 +4717,8 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
 
     def RemoveFilter(self, col):
         """Removes filter on the specified column, if any."""
-        self.filters.pop(col, None)
+        if col not in self.filters: return
+        self.filters.pop(col)
         self.Filter()
 
 
@@ -4804,7 +4785,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
         try:
             for idx in self.idx_changed.copy():
                 row = self.rows_all[idx]
-                self.db.update_row(self.table, row, self.rows_backup[idx],
+                self.db.update_row(self.name, row, self.rows_backup[idx],
                                    self.rowids.get(idx))
                 row["__changed__"] = False
                 self.idx_changed.remove(idx)
@@ -4814,7 +4795,7 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
             col_map = dict((c["name"], c) for c in self.columns)
             for idx in self.idx_new[:]:
                 row = self.rows_all[idx]
-                insert_id = self.db.insert_row(self.table, row)
+                insert_id = self.db.insert_row(self.name, row)
                 if len(pks) == 1 and row[pks[0]] in (None, ""):
                     if "INTEGER" == self.db.get_affinity(col_map[pks[0]]):
                         # Autoincremented row: update with new value
@@ -4825,13 +4806,13 @@ class SqliteGridBase(wx.grid.PyGridTableBase):
                 self.idx_new.remove(idx)
             # Delete all newly deleted rows
             for idx, row in self.rows_deleted.copy().items():
-                self.db.delete_row(self.table, row, self.rowids.get(idx))
+                self.db.delete_row(self.name, row, self.rowids.get(idx))
                 del self.rows_deleted[idx]
                 del self.rows_all[idx]
                 self.idx_all.remove(idx)
             result = True
         except Exception as e:
-            msg = "Error saving changes in %s." % grammar.quote(self.table)
+            msg = "Error saving changes in %s." % grammar.quote(self.name)
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
@@ -5061,7 +5042,7 @@ class SQLPage(wx.PyPanel):
             grid_data = None
             if sql.lower().startswith(("select", "pragma", "explain")):
                 # SELECT statement: populate grid with rows
-                grid_data = SqliteGridBase(self._db, sql=sql)
+                grid_data = SQLiteGridBase(self._db, sql=sql)
                 self._grid.Table = grid_data
                 self._button_reset.Enabled = True
                 self._button_export.Enabled = True
@@ -5434,6 +5415,9 @@ class DataObjectPage(wx.PyPanel):
         tb.AddLabelTool(wx.ID_UNDO,    "", bitmap=bmp5, shortHelp="Rollback changes and restore original values")
         tb.EnableTool(wx.ID_UNDO, False)
         tb.EnableTool(wx.ID_SAVE, False)
+        if "view" == self._category:
+            tb.EnableTool(wx.ID_ADD, False)
+            tb.EnableTool(wx.ID_DELETE, False)
         tb.Realize()
 
         button_reset  = wx.Button(self, label="&Reset filter/sort")
@@ -5486,9 +5470,33 @@ class DataObjectPage(wx.PyPanel):
         return self._grid.Table.IsChanged()
 
 
+    def ScrollToRow(self, row):
+        """Scrolls to row matching given row dict."""
+        columns = self._item["columns"]
+        id_fields = [c["name"] for c in columns if "pk" in c]
+        if not id_fields: # No primary key fields: take all
+            id_fields = [c["name"] for c in columns]
+        row_id = [row[c] for c in id_fields]
+        for i in range(self._grid.Table.GetNumberRows()):
+            row2 = self._grid.Table.GetRow(i)
+            if not row2: break # for i                
+
+            row2_id = [row2[c] for c in id_fields]
+            if row_id == row2_id:
+                self._grid.MakeCellVisible(i, 0)
+                self._grid.SelectRow(i)
+                pagesize = self._grid.GetScrollPageSize(wx.VERTICAL)
+                pxls = self._grid.GetScrollPixelsPerUnit()
+                cell_coords = self._grid.CellToRect(i, 0)
+                y = cell_coords.y / (pxls[1] or 15)
+                x, y = 0, y - pagesize / 2
+                self._grid.Scroll(x, y)
+                break # for i
+
+
     def _Populate(self):
         """Loads data to grid."""
-        grid_data = SqliteGridBase(self._db, table=self._item["name"])
+        grid_data = SQLiteGridBase(self._db, category=self._category, name=self._item["name"])
         self._grid.SetTable(grid_data)
         self._grid.Scroll(0, 0)
         self._grid.SetColMinimalAcceptableWidth(100)
@@ -5525,18 +5533,22 @@ class DataObjectPage(wx.PyPanel):
         Handler for clicking to export grid contents to file, allows the
         user to select filename and type and creates the file.
         """
+        WILDCARD, EXTS = export.TABLE_WILDCARD, export.TABLE_EXTS
+        if "view" == self._category:
+            WILDCARD, EXTS = export.QUERY_WILDCARD, export.QUERY_EXTS
+
         title = "%s %s" % (self._category.capitalize(),
                            grammar.quote(self._item["name"], force=True))
         dialog = wx.FileDialog(self, defaultDir=os.getcwd(),
             message="Save %s as" % self._category,
             defaultFile=util.safe_filename(title),
-            wildcard=export.TABLE_WILDCARD,
+            wildcard=WILDCARD,
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
         filename = dialog.GetPath()
-        extname = export.TABLE_EXTS[dialog.FilterIndex]
+        extname = EXTS[dialog.FilterIndex]
         if not filename.lower().endswith(".%s" % extname):
             filename += ".%s" % extname
         busy = controls.BusyPanel(self, 'Exporting "%s".' % filename)
@@ -5544,7 +5556,8 @@ class DataObjectPage(wx.PyPanel):
         try:
             make_iterable = self._grid.Table.GetRowIterator
             export.export_data(make_iterable, filename, title, self._db,
-                               self._grid.Table.columns, table=self._item["name"])
+                               self._grid.Table.columns, category=self._category,
+                               name=self._item["name"])
             guibase.status('Exported "%s".', filename, log=True, flash=True)
             util.start_file(filename)
         except Exception as e:

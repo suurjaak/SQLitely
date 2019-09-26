@@ -260,7 +260,7 @@ from sqlitely import conf
 --
 -- SQL: {{sql}};
 %endif
-%if table:
+%if name:
 
 {{create_sql}};
 %endif
@@ -307,7 +307,7 @@ else:
 values.append(value)
 %>
 %endfor
-INSERT INTO {{table}} ({{str_cols}}) VALUES ({{", ".join(values)}});
+INSERT INTO {{name}} ({{str_cols}}) VALUES ({{", ".join(values)}});
 %endfor
 """
 
@@ -327,9 +327,9 @@ Exported with {{conf.Title}} on {{datetime.datetime.now().strftime("%d.%m.%Y %H:
 
 SQL: {{sql}}
 %endif
-%if table:
+%if name:
 
-{{create_sql}};
+{{create_sql.rstrip(";")}};
 %endif
 
 <%
