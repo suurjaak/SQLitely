@@ -3358,9 +3358,17 @@ class DatabasePage(wx.Panel):
         data = tree.GetItemPyData(item)
         if not data: return
 
+        # Only way to create state change in wx.gizmos.TreeListCtrl
+        class HackEvent(object):
+            def __init__(self, item): self._item = item
+            def GetItem(self):        return self._item
+
         def select_item(item, expand=False, *_, **__):
             tree.SelectItem(item)
             if expand: tree.Expand(item)
+        def open_item(item, *_, **__):
+            self.on_change_tree_data(HackEvent(item))
+            wx.CallAfter(select_item, item)
         def clipboard_copy(text, *_, **__):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text)
@@ -3381,53 +3389,51 @@ class DatabasePage(wx.Panel):
         menu = wx.Menu()
         item_file = item_database = item_database_meta = None
         if "table" == data.get("type"): # Single table
-            item_name     = wx.MenuItem(menu, -1, 'Table %s' % \
-                            util.unprint(grammar.quote(data["name"], force=True)))
-            item_copy     = wx.MenuItem(menu, -1, "&Copy name")
-            item_copy_sql = wx.MenuItem(menu, -1, "Copy CREATE &SQL")
+            item_name = wx.MenuItem(menu, -1, 'Table %s' % \
+                        util.unprint(grammar.quote(data["name"], force=True)))
+            item_copy = wx.MenuItem(menu, -1, "&Copy name")
+            item_open = wx.MenuItem(menu, -1, "&Open table")
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, True),
                       id=item_name.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
                       id=item_copy.GetId())
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
-                      self.db.get_sql("table", data["name"])),
-                      id=item_copy_sql.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(open_item, item),
+                      id=item_open.GetId())
 
             item_name.Font = boldfont
 
             menu.AppendItem(item_name)
             menu.AppendSeparator()
             menu.AppendItem(item_copy)
-            menu.AppendItem(item_copy_sql)
+            menu.AppendItem(item_open)
 
             item_file     = wx.MenuItem(menu, -1, '&Export table to file')
             item_database = wx.MenuItem(menu, -1, 'Export table to another &database')
             item_database_meta = wx.MenuItem(menu, -1, 'Export table str&ucture to another &database')
         elif "column" == data.get("type"): # Column
-            item_name     = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
-                            util.unprint(grammar.quote(data["parent"]["name"])),
-                            util.unprint(grammar.quote(data["name"]))))
-            item_copy     = wx.MenuItem(menu, -1, "&Copy name")
-            item_copy_sql = wx.MenuItem(menu, -1, "Copy column &SQL")
+            item_name = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
+                        util.unprint(grammar.quote(data["parent"]["name"])),
+                        util.unprint(grammar.quote(data["name"]))))
+            item_copy = wx.MenuItem(menu, -1, "&Copy name")
+            item_open = wx.MenuItem(menu, -1, "&Open table")
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, False),
                       id=item_name.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
                       id=item_copy.GetId())
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
-                self.db.get_sql("table", data["parent"]["name"], column=data["name"])
-            ), id=item_copy_sql.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(open_item, tree.GetItemParent(item)),
+                      id=item_open.GetId())
 
             item_name.Font = boldfont
 
             menu.AppendItem(item_name)
             menu.AppendSeparator()
             menu.AppendItem(item_copy)
-            menu.AppendItem(item_copy_sql)
+            menu.AppendItem(item_open)
 
         else: # Tables list
             item_copy     = wx.MenuItem(menu, -1, "&Copy table names")
             item_expand   = wx.MenuItem(menu, -1, "&Toggle tables expanded/collapsed")
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, ", ".join(data)),
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, ", ".join(data["items"])),
                       id=item_copy.GetId())
             menu.Bind(wx.EVT_MENU, toggle_items, id=item_expand.GetId())
 
@@ -3443,7 +3449,7 @@ class DatabasePage(wx.Panel):
             menu.AppendItem(item_file)
             menu.AppendItem(item_database)
             menu.AppendItem(item_database_meta)
-            tables = [data["name"]] if isinstance(data, dict) else data
+            tables = data["items"] if "schema" == data["type"] else [data["name"]]
             menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, tables),
                      id=item_file.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, tables, True),
@@ -4009,7 +4015,7 @@ class DatabasePage(wx.Panel):
                 extra = "" if t1_lower == t2_lower \
                         else " as %s" % grammar.quote(table2, force=True)
 
-                create_sql = self.db.get_sql("table", table, indent=False,
+                create_sql = self.db.get_sql("table", table,
                     transform={"renames": {"schema": "main2", "table": {table: table2}}},
                 )
                 try:
@@ -4040,7 +4046,7 @@ class DatabasePage(wx.Panel):
                             items2.append(name)
                             item_sql, err = grammar.transform(item["sql"], renames={
                                 category: name, "table": table2, "schema": "main2",
-                            }, indent=False)
+                            })
                             if err: raise Exception(err)
                             logger.info("Creating %s %s on table %s in %s, using %s.",
                                         category, grammar.quote(name, force=True),
@@ -4208,7 +4214,7 @@ class DatabasePage(wx.Panel):
             # Fill table tree with information on row counts and columns
             tree.DeleteAllItems()
             root = tree.AddRoot("SQLITE")
-            tree.SetItemPyData(root, {"type": "schema", "table": [x["name"] for x in tables]})
+            tree.SetItemPyData(root, {"type": "schema", "items": [x["name"] for x in tables]})
             child = None
             for table in tables:
                 child = tree.AppendItem(root, util.unprint(table["name"]))
