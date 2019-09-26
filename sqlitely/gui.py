@@ -4310,8 +4310,8 @@ class DatabasePage(wx.Panel):
                     if "table" == category:
                          subitems = self.db.get_category(subcategory, table=item["name"]).values()
                     elif item["meta"].get("__tables__"):
-                         subitems = [self.db.get_category(subcategory, x)
-                                     for x in item["meta"]["__tables__"]]
+                         subitems = filter(bool, (self.db.get_category(subcategory, x)
+                                                  for x in item["meta"]["__tables__"]))
 
                     t = util.plural(subcategory).capitalize()
                     if subitems: t += " (%s)" % len(subitems)
