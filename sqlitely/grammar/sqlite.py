@@ -80,9 +80,10 @@ def transform(sql, flags=None, renames=None, indent="  "):
     """
     result, err, parser, generator = None, None, Parser(), Generator(indent)
     try:
-        data = parser.parse(sql, renames=renames)
-        if flags: data.update(flags)
-        result, err = generator.generate(data)
+        data, err = parser.parse(sql, renames=renames)
+        if data:
+            if flags: data.update(flags)
+            result, err = generator.generate(data)
     except Exception as e:
         logger.exception("Error transforming SQL %s.", sql)
         err = util.format_exc(e)
