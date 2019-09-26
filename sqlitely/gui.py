@@ -2173,7 +2173,7 @@ class DatabasePage(wx.Panel):
         if self.sql_pages:
             self.sql_page_counter = max(
                 int(re.sub(r"[^\d]", "", x) or 0) for x in self.sql_pages
-            )
+            ) or len(self.sql_pages)
         else: self.add_sql_page()
         nb.AddPage(page=wx.Panel(page), text="+")
 
