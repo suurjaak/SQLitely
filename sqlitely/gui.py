@@ -2893,7 +2893,7 @@ class DatabasePage(wx.Panel):
 
     def on_refresh_tables(self, event):
         """Refreshes the table tree and open table data."""
-        self.load_data_tree(refresh=True)
+        self.load_tree_data(refresh=True)
         self.update_autocomp()
 
 
@@ -3524,8 +3524,8 @@ class DatabasePage(wx.Panel):
                     page = self.schema_pages[x["type"]].get(x["name"])
                     if page: page.Close(force=True)
                 self.db.populate_schema(count=True)
-                self.load_schema_tree()
-                self.load_data_tree()
+                self.load_tree_schema()
+                self.load_tree_data()
                 self.on_update_stc_schema()
                 self.update_autocomp()
 
@@ -3678,7 +3678,7 @@ class DatabasePage(wx.Panel):
 
     def on_refresh_schema(self, event):
         """Refreshes database schema tree and panel."""
-        self.load_schema_tree(refresh=True)
+        self.load_tree_schema(refresh=True)
 
 
     def on_schema_create(self, event):
@@ -3771,8 +3771,8 @@ class DatabasePage(wx.Panel):
                     self.schema_pages[category][name] = p
                     break # for k, p
             self.db.populate_schema(parse=True)
-            self.load_schema_tree()
-            self.load_data_tree()
+            self.load_tree_schema()
+            self.load_tree_data()
             self.update_autocomp()
             self.on_update_stc_schema()
 
@@ -3850,7 +3850,7 @@ class DatabasePage(wx.Panel):
             self.update_page_header()
         if updated:
             self.db.populate_schema(count=True, category=category, name=name)
-            self.load_data_tree()
+            self.load_tree_data()
 
 
     def on_export_data_file(self, tables, event):
@@ -4148,7 +4148,7 @@ class DatabasePage(wx.Panel):
             tabid = self.counter() if 0 != last_search.get("id") else 0
             self.html_searchall.InsertTab(0, title, tabid, html, info)
         wx.CallLater(100, self.update_tabheader)
-        wx.CallLater(200, self.load_data_tree)
+        wx.CallLater(200, self.load_tree_data)
         wx.CallLater(500, self.update_info_panel, False)
         wx.CallLater(1000, self.load_later_data)
 
@@ -4161,8 +4161,8 @@ class DatabasePage(wx.Panel):
         if not self: return
         self.db.populate_schema(count=True, parse=True)
         self.on_update_stc_schema()
-        self.load_data_tree()
-        self.load_schema_tree()
+        self.load_tree_data()
+        self.load_tree_schema()
         self.update_autocomp()
 
 
@@ -4198,7 +4198,7 @@ class DatabasePage(wx.Panel):
             item = tree.GetNextSibling(item)
 
 
-    def load_data_tree(self, refresh=False):
+    def load_tree_data(self, refresh=False):
         """Loads table data into table tree."""
         try:
             tree = self.tree_data
@@ -4236,7 +4236,7 @@ class DatabasePage(wx.Panel):
             logger.exception("Error loading table data from %s.", self.db)
 
 
-    def load_schema_tree(self, refresh=False):
+    def load_tree_schema(self, refresh=False):
         """Loads database schema into schema tree."""
         tree = self.tree_schema
         expandeds = self.get_tree_expanded_state(tree, tree.RootItem)
@@ -4300,9 +4300,13 @@ class DatabasePage(wx.Panel):
                         tree.SetItemText(subchild, col.get("type", ""), 1)
                         tree.SetItemPyData(subchild, dict(col, parent=itemdata, type="column"))
                 for subcategory in subcategories:
-                    mytables = [item["name"]] if "table" == category \
-                               else item["meta"].get("__tables__") or []
-                    subitems = self.db.get_category(subcategory, table=mytables).values()
+                    subitems = []
+                    if "table" == category:
+                         subitems = self.db.get_category(subcategory, table=item["name"]).values()
+                    elif item["meta"].get("__tables__"):
+                         subitems = [self.db.get_category(subcategory, x)
+                                     for x in item["meta"]["__tables__"]]
+
                     t = util.plural(subcategory).capitalize()
                     if subitems: t += " (%s)" % len(subitems)
                     categchild = tree.AppendItem(child, t)
@@ -5607,11 +5611,11 @@ class DataObjectPage(wx.PyPanel):
 
     def _OnRefresh(self, event):
         """Handler for refreshing grid data, asks for confirmation if changed."""
-        if self.IsChanged() and wx.OK != wx.MessageDialog(
+        if self.IsChanged() and wx.OK != wx.MessageBox(
             "There are unsaved changes (%s).\n\n"
             "Are you sure you want to discard them?" % 
             self._grid.Table.GetChangedInfo(), 
-            conf.Title, wx.OK | wx.ICON_INFORMATION
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
         ): return
 
         scrollpos = map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
@@ -5859,7 +5863,7 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_sql_header.Add(label_stc, flag=wx.ALIGN_BOTTOM)
         sizer_sql_header.AddStretchSpacer()
         if check_alter:
-            sizer_sql_header.Add(check_alter, border=5, flag=wx.BOTTOM | wx.ALIGN_BOTTOM)
+            sizer_sql_header.Add(check_alter, border=1, flag=wx.BOTTOM | wx.ALIGN_BOTTOM)
             sizer_sql_header.AddStretchSpacer()
         sizer_sql_header.Add(tb, border=5, flag=wx.TOP | wx.ALIGN_RIGHT)
 
@@ -6826,6 +6830,7 @@ class SchemaObjectPage(wx.PyPanel):
                     except Exception: c.Enable(edit)
         if "table" == self._category:
             self._ctrls["alter"].Show(edit and self._has_alter)
+            self._ctrls["alter"].ContainingSizer.Layout()
         for c in (c for n, c in vars(self).items() if n.startswith("_panel_")):
             c.Layout()
         self.Layout()
@@ -7602,6 +7607,8 @@ class SchemaObjectPage(wx.PyPanel):
         except Exception as e:
             logger.exception("Error executing SQL.")
             try: self._db.execute("ROLLBACK")
+            except Exception: pass
+            try: self._db.execute("PRAGMA foreign_keys = on")
             except Exception: pass
             msg = "Error saving changes:\n\n%s" % util.format_exc(e)
             return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
