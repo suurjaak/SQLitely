@@ -59,7 +59,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    25.09.2019
+@modified    26.09.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -2314,7 +2314,7 @@ class TabbedHtmlWindow(wx.PyPanel):
                      "SelectAll", "SelectionToText",
                      "GetBackgroundColour", "SetBackgroundColour"]:
             setattr(self, name, getattr(self._html, name))
-        for name in ["GetTabAreaColour", "SetTabAreaColour"]:
+        for name in ["DeletePage", "GetSelection", "GetTabAreaColour", "SetTabAreaColour"]:
             setattr(self, name, getattr(self._notebook, name))
 
         self._CreateTab(0, "") # Make default empty tab in notebook with no text

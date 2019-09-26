@@ -6890,8 +6890,7 @@ class SchemaObjectPage(wx.PyPanel):
                           for c in cols1]
             cols2_sqls = [grammar.generate(dict(c, name="", __type__="column"))[0]
                           for c in cols2]
-            # Column definition changed
-            can_simple = (cols1_sqls == cols2_sqls)
+            can_simple = (cols1_sqls == cols2_sqls) # Column definition changed
 
 
         if can_simple:
