@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.09.2019
+@modified    26.09.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -168,6 +168,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_page)
         notebook.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
                       self.on_close_page)
+        notebook.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_DROPPED,
+                      self.on_dragdrop_page)
+
 
         # Register Ctrl-F4 and Ctrl-W close and Ctrl-1..9 tab handlers
         def on_close_hotkey(event):
@@ -609,8 +612,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         Handler for changing a page in the main Notebook, remembers the visit.
         """
+        if getattr(self, "_ignore_paging", False): return
         if event: event.Skip() # Pass event along to next handler
-        p = self.notebook.GetPage(self.notebook.GetSelection())
+        p = self.notebook.GetCurrentPage()
         if not self.pages_visited or self.pages_visited[-1] != p:
             self.pages_visited.append(p)
         self.Title = conf.Title
@@ -621,6 +625,29 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 subtitle = os.path.join(os.path.split(path)[-1] or path, file)
             self.Title += " - " + subtitle
         self.update_notebook_header()
+
+
+    def on_dragdrop_page(self, event):
+        """
+        Handler for dragging notebook tabs, keeps main-tab first and log-tab last.
+        """
+        self.notebook.Freeze()
+        self._ignore_paging = True
+        cur_page = self.notebook.GetCurrentPage()
+        idx_main = self.notebook.GetPageIndex(self.page_main)
+        if idx_main > 0:
+            text = self.notebook.GetPageText(idx_main)
+            self.notebook.RemovePage(idx_main)
+            self.notebook.InsertPage(0, page=self.page_main, text=text)
+        idx_log = self.notebook.GetPageIndex(self.page_log)
+        if 0 <= idx_log < self.notebook.GetPageCount() - 1:
+            text = self.notebook.GetPageText(idx_log)
+            self.notebook.RemovePage(idx_log)
+            self.notebook.AddPage(page=self.page_log, text=text)
+        delattr(self, "_ignore_paging")
+        if self.notebook.GetCurrentPage() != cur_page:
+            self.notebook.SetSelection(self.notebook.GetPageIndex(cur_page))
+        self.notebook.Thaw()
 
 
     def on_size(self, event):
@@ -1534,6 +1561,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for closing a page, asks the user about saving unsaved data,
         if any, removes page from main notebook and updates accelerators.
         """
+        if getattr(self, "_ignore_paging", False): return
         if event.EventObject == self.notebook:
             page = self.notebook.GetPage(event.GetSelection())
         else:
