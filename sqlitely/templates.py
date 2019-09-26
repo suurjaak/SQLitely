@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.09.2019
+@modified    26.09.2019
 ------------------------------------------------------------------------------
 """
 import re
@@ -40,20 +40,25 @@ from sqlitely.lib import util
     * { font-family: Tahoma; font-size: 11px; }
     body {
       background: #8CBEFF;
-      margin: 0px 10px 0px 10px;
+      margin: 0;
     }
-    .title { font-size: 1.1em; font-weight: bold; color: #3399FF; }
+    #title { font-size: 1.1em; font-weight: bold; color: #3399FF; }
     table#header_table {
       width: 100%;
+    }
+    #content_wrapper {
+      max-width: calc(100vw - 40px);
+      overflow-x: auto;
     }
     table#body_table {
       margin-left: auto;
       margin-right: auto;
       border-spacing: 0px 10px;
+      padding: 0 10px;
     }
     table#body_table > tbody > tr > td {
       background: white;
-      width: 800px;
+      min-width: 800px;
       font-family: Tahoma;
       font-size: 11px;
       border-radius: 10px;
@@ -62,6 +67,7 @@ from sqlitely.lib import util
     table#content_table {
       empty-cells: show;
       border-spacing: 2px;
+      width: 100%;
     }
     table#content_table td {
       line-height: 1.5em;
@@ -75,15 +81,16 @@ from sqlitely.lib import util
       padding-bottom: 10px;
       color: #666;
     }
+    #search { text-align: right; }
     td { text-align: left; vertical-align: top; }
-    td.index, th.index { color: gray; }
+    td.index, th.index { color: gray; max-width: 50px; }
     td.index { color: gray; text-align: right; }
     th { padding-left: 5px; padding-right: 5px; text-align: center; white-space: nowrap; }
     span#sql { display: inline; font-family: monospace; overflow: visible; white-space: pre-wrap; }
     span#sql.clip { display: inline-block; font-family: inherit; height: 1em; overflow: hidden; }
-    a.toggle:hover { cursor: pointer; text-decoration: none; }
-    span#sql + a.toggle { padding-left: 3px; }
-    span#sql.clip + a.toggle { background: white; position: relative; left: -8px; }
+    a#toggle:hover { cursor: pointer; text-decoration: none; }
+    span#sql + a#toggle { padding-left: 3px; }
+    span#sql.clip + a#toggle { background: white; position: relative; left: -8px; }
     a.sort { display: block; }
     a.sort:hover { cursor: pointer; text-decoration: none; }
     a.sort::after      { content: ""; display: inline-block; min-width: 6px; position: relative; left: 3px; top: -1px; }
@@ -167,9 +174,9 @@ from sqlitely.lib import util
 <tr><td><table id="header_table">
   <tr>
     <td>
-      <div class="title">{{title}}</div><br />
+      <div id="title">{{title}}</div><br />
       <b>SQL:</b> <span id="sql">{{sql or create_sql}}</span>
-      <a class="toggle" title="Toggle full SQL" onclick="document.getElementById('sql').classList.toggle('clip')">...</a>
+      <a id="toggle" title="Toggle full SQL" onclick="document.getElementById('sql').classList.toggle('clip')">...</a>
       <br />
       Source: <b>{{db_filename}}</b>.<br />
       <b>{{row_count}}</b> {{util.plural("row", row_count, with_items=False)}}{{" in results" if sql else ""}}.<br />
@@ -178,19 +185,23 @@ from sqlitely.lib import util
   <script> document.getElementById('sql').classList.add('clip'); </script>
 </td></tr><tr><td>
 
-<input type="search" placeholder="Filter rows" onkeyup="onSearch(event)" onsearch="onSearch(event)">
-<table id="content_table">
-<tr>
-  <th class="index asc"><a class="sort asc" title="Sort by index" onclick="onSort(0)">#</a></th>
+<div id="search">
+    <input type="search" placeholder="Filter rows" title="Show only rows containing entered text" onkeyup="onSearch(event)" onsearch="onSearch(event)">
+</div>
+<div id="content_wrapper">
+  <table id="content_table">
+  <tr>
+    <th class="index asc"><a class="sort asc" title="Sort by index" onclick="onSort(0)">#</a></th>
 %for i, col in enumerate(columns):
-  <th><a class="sort" title="Sort by {{grammar.quote(col)}}" onclick="onSort({{i + 1}})">{{col}}</a></th>
+    <th><a class="sort" title="Sort by {{grammar.quote(col)}}" onclick="onSort({{i + 1}})">{{col}}</a></th>
 %endfor
-</tr>
+  </tr>
 <%
 for chunk in data_buffer:
     echo(chunk)
 %>
-</table>
+  </table>
+</div>
 </td></tr></table>
 <div id="footer">Exported with {{conf.Title}} on {{datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}}.</div>
 </body>
