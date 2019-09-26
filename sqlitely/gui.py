@@ -172,7 +172,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                       self.on_dragdrop_page)
 
 
-        # Register Ctrl-F4 and Ctrl-W close and Ctrl-1..9 tab handlers
+        # Register Ctrl-F4 close and Ctrl-1..9 tab handlers
         def on_close_hotkey(event):
             notebook and notebook.DeletePage(notebook.GetSelection())
         def on_tab_hotkey(number, event):
@@ -182,7 +182,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.on_change_page(None)
 
         id_close = wx.NewId()
-        accelerators = [(wx.ACCEL_CTRL, k, id_close) for k in (ord('W'), wx.WXK_F4)]
+        accelerators = [(wx.ACCEL_CTRL, k, id_close) for k in [wx.WXK_F4]]
         for i in range(9):
             id_tab = wx.NewId()
             accelerators += [(wx.ACCEL_CTRL, ord(str(i + 1)), id_tab)]
@@ -1961,6 +1961,7 @@ class DatabasePage(wx.Panel):
         html._html.Bind(wx.EVT_RIGHT_UP, self.on_rightclick_searchall)
         html.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_searchall_tab)
         html.Bind(controls.EVT_TAB_LEFT_DCLICK, self.on_dclick_searchall_tab)
+        self.register_notebook_hotkeys(html)
         ColourManager.Manage(html, "TabAreaColour", "WidgetColour")
         html.Font.PixelSize = (0, 8)
 
@@ -2047,6 +2048,7 @@ class DatabasePage(wx.Panel):
         self.Bind(EVT_DATA_PAGE, self.on_data_page_event)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
                 self.on_close_data_page)
+        self.register_notebook_hotkeys(nb)
 
 
     def create_page_schema(self, notebook):
@@ -2137,6 +2139,7 @@ class DatabasePage(wx.Panel):
         self.Bind(EVT_SCHEMA_PAGE, self.on_schema_page_event)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
                 self.on_close_schema_page)
+        self.register_notebook_hotkeys(nb)
 
 
     def create_page_sql(self, notebook):
@@ -2181,6 +2184,7 @@ class DatabasePage(wx.Panel):
                 self.on_close_sql_page)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_DROPPED,
                 self.on_dragdrop_sql_page)
+        self.register_notebook_hotkeys(nb)
 
 
     def create_page_pragma(self, notebook):
@@ -2495,6 +2499,17 @@ class DatabasePage(wx.Panel):
             default = step.Template(templates.SEARCH_WELCOME_HTML).expand()
             self.html_searchall.SetDefaultPage(default)
         wx.CallAfter(dorefresh) # Postpone to allow conf update
+
+
+    def register_notebook_hotkeys(self, notebook):
+        """Register Ctrl-W close handler to notebook pages."""
+        def on_close_hotkey(event):
+            notebook and notebook.DeletePage(notebook.GetSelection())
+
+        id_close = wx.NewId()
+        accelerators = [(wx.ACCEL_CTRL, k, id_close) for k in [ord('W')]]
+        notebook.Bind(wx.EVT_MENU, on_close_hotkey, id=id_close)
+        notebook.SetAcceleratorTable(wx.AcceleratorTable(accelerators))
 
 
     def on_update_stc_schema(self, event=None):
