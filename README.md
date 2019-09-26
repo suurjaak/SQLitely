@@ -24,7 +24,8 @@ Using The Program
 
 SQLitely offers a convenient way for performing complex ALTER TABLE operations.
 Columns and constraints can be changed, reordered, added, dropped;
-encapsulating the multiple steps that SQLite requires for table modifications.
+encapsulating the multiple steps that SQLite requires for table modifications
+while retaining existing table data.
 
 Searching an opened database supports a simple Google-like
 [query syntax](http://suurjaak.github.io/SQLitely/help.html).
@@ -47,7 +48,7 @@ required Python packages are installed.
 
 If running from pip installation, run `sqlitely` from the command-line. 
 If running from straight source code, launch `sqlitely.sh` where shell 
-scripts are supported, or launch `sqlitely.bat` under Windows, or open 
+scripts are supported, or `sqlitely.bat` under Windows, or open 
 a terminal and run `python -m sqlitely.main` in SQLitely directory.
 
 

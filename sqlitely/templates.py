@@ -615,7 +615,7 @@ except ImportError:
     </td>
     <td bgcolor="{{conf.BgColour}}">
       <br /><br />
-      To find messages containing at least one of several words,
+      To find results containing at least one of several words,
       include <font color="{{conf.HelpCodeColour}}"><code>OR</code></font> between the words.
       <font color="{{conf.HelpCodeColour}}"><code>OR</code></font> works also
       for phrases and grouped words (but not keywords).
@@ -646,7 +646,7 @@ except ImportError:
       <br /><br />
       Use an asterisk (<font color="{{conf.HelpCodeColour}}"><code>*</code></font>) to make a
       wildcard query: the wildcard will match any text between its front and
-      rear characters (including other words).
+      rear characters (including other words and whitespace).
       <br />
     </td>
   </tr>
@@ -716,7 +716,7 @@ except ImportError:
       <font color="{{conf.HelpCodeColour}}"><code>date:period</code></font> can use a wildcard
       in place of any part, so
       <font color="{{conf.HelpCodeColour}}"><code>date:*-12-24</code></font> would search for
-      all messages from the 24th of December.<br /><br />
+      all rows having a timestamp from the 24th of December.<br /><br />
       Search from a more narrowly defined period by adding more
       <font color="{{conf.HelpCodeColour}}"><code>date:</code></font> keywords.
       <br />
@@ -729,10 +729,10 @@ except ImportError:
   <b><font size="3">Examples</font></b><br /><br />
 
   <ul>
-    <li>search for "flickr.com" in tables named "links":
+    <li>search for "flickr.com" in columns named "url":
         <br /><br />
         <font color="{{conf.HelpCodeColour}}">
-        <code>flickr.com table:links</code></font><br />
+        <code>flickr.com column:url</code></font><br />
     </li>
     <li>search for "foo bar" up to 2011:<br /><br />
         <font color="{{conf.HelpCodeColour}}"><code>"foo bar" date:..2011</code></font>
@@ -761,7 +761,8 @@ except ImportError:
   <br /><br />
   All search text is case-insensitive. <br />
   Keywords are case-sensitive
-  (<code>OR</code>, <code>table:</code>, <code>column:</code>, <code>date:</code>).
+  (<code>OR</code>, <code>table:</code>, <code>column:</code>, <code>date:</code>). <br />
+  Keywords are global and cannot be grouped.
 
 </td></tr></table>
 </font>
