@@ -793,9 +793,34 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 files.append(self.list_db.GetItemText(selected))
             selected = self.list_db.GetNextSelected(selected)
         if event.GetIndex() >= 0 and event.GetIndex() not in selecteds:
-            if not event.GetIndex(): return # Home row
-            files, selecteds = [event.GetText()], [event.GetIndex()]
-        if not files: return
+            if event.GetIndex():
+                files, selecteds = [event.GetText()], [event.GetIndex()]
+        if not files:
+            menu = wx.Menu()
+            item_new     = wx.MenuItem(menu, -1, "&New database")
+            item_open    = wx.MenuItem(menu, -1, "&Open a database..")
+            item_import  = wx.MenuItem(menu, -1, "&Import from folder")
+            item_detect  = wx.MenuItem(menu, -1, "Detect databases")
+            item_missing = wx.MenuItem(menu, -1, "Remove missing")
+            item_clear   = wx.MenuItem(menu, -1, "C&lear list")
+
+            menu.Bind(wx.EVT_MENU, self.on_new_database,     id=item_new.GetId())
+            menu.Bind(wx.EVT_MENU, self.on_open_database,    id=item_open.GetId())
+            menu.Bind(wx.EVT_MENU, self.on_add_from_folder,  id=item_import.GetId())
+            menu.Bind(wx.EVT_MENU, self.on_detect_databases, id=item_detect.GetId())
+            menu.Bind(wx.EVT_MENU, self.on_detect_databases, id=item_detect.GetId())
+            menu.Bind(wx.EVT_MENU, self.on_clear_databases,  id=item_clear.GetId())
+
+            menu.AppendItem(item_new)
+            menu.AppendItem(item_open)
+            menu.AppendItem(item_import)
+            menu.AppendItem(item_detect)
+            menu.AppendSeparator()
+            menu.AppendItem(item_missing)
+            menu.AppendItem(item_clear)
+
+            return wx.CallAfter(self.list_db.PopupMenu, menu)
+
 
         def clipboard_copy(*a, **kw):
             if wx.TheClipboard.Open():
