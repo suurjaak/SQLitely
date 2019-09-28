@@ -4432,6 +4432,7 @@ class DatabasePage(wx.Panel):
                 tree.SetItemPyData(child, itemdata)
                 columns, subcategories, childtext = None, [], ""
 
+                subcategories = ["table"]
                 if "table" == category:
                     columns = item.get("columns") or []
                     subcategories = ["index", "trigger", "view"]
@@ -4447,12 +4448,10 @@ class DatabasePage(wx.Panel):
                 elif "trigger" == category:
                     childtext = " ".join(filter(bool, (item["meta"].get("upon"), item["meta"]["action"],
                                                        "ON", grammar.quote(item["meta"]["table"]))))
-                    subcategories = ["table"]
                 elif "view" == category:
                     childtext = "ON " + ", ".join(grammar.quote(x)
                         for x in item["meta"].get("__tables__") or [])
                     columns = item.get("columns") or []
-                    subcategories = ["table"]
 
                 tree.SetItemText(child, childtext, 1)
 
