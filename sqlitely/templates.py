@@ -512,63 +512,71 @@ from sqlitely import conf
 %>
 <font face="{{conf.HtmlFontName}}" size="2" color="{{conf.FgColour}}">
 <center>
-<h5><font color="{{conf.TitleColour}}">Explore the database</font></h5>
-<table cellpadding="10" cellspacing="0">
+<h5><font color="{{conf.TitleColour}}">Overview</font></h5>
+<table cellpadding="0" cellspacing="5">
 <tr>
-  <td>
-    <table cellpadding="0" cellspacing="2"><tr><td>
-        <a href="page:#search"><img src="memory:HelpSearch.png" /></a>
-      </td><td width="10"></td><td valign="center">
-        Search from table data over entire database,<br />
-        using a simple Google-like <a href="page:#help"><font color="{{conf.LinkColour}}">syntax</font></a>.<br /><br />
-        Or search in table and column names and types.<br />
-      </td></tr><tr><td nowrap align="center">
-        <a href="page:#search"><b><font color="{{conf.FgColour}}">Search</font></b></a><br />
-    </td></tr></table>
-  </td>
-  <td>
-    <table cellpadding="0" cellspacing="2"><tr><td>
-        <a href="page:data"><img src="memory:HelpTables.png" /></a>
-      </td><td width="10"></td><td valign="center">
-        Browse, filter and change table data,<br />
-        export as HTML, SQL INSERT-statements or spreadsheet.
-      </td></tr><tr><td nowrap align="center">
-        <a href="page:data"><b><font color="{{conf.FgColour}}">Data</font></b></a><br />
-    </td></tr></table>
+  <td valign="top">
+    <a href="page:#search"><img src="memory:HelpSearch.png" /></a>
+  </td><td valign="center">
+    Search from table data over entire database,<br />
+    using a simple Google-like <a href="page:#help"><font color="{{conf.LinkColour}}">syntax</font></a>.<br /><br />
+    Or search in database metadata:<br />
+    table and column names and definitions.
+  </td><td width="30"></td>
+  <td valign="top">
+    <a href="page:data"><img src="memory:HelpTables.png" /></a>
+  </td><td valign="center">
+    Browse, filter and change table data,<br />
+    export as HTML, SQL, text or spreadsheet.
   </td>
 </tr>
 <tr>
-  <td>
-    <table cellpadding="0" cellspacing="2"><tr><td>
-        <a href="page:sql"><img src="memory:HelpSQL.png" /></a>
-      </td><td width="10"></td><td valign="center">
-        Make direct SQL queries in the database,<br />
-        export results as HTML or spreadsheet.
-      </td></tr><tr><td nowrap align="center">
-        <a href="page:sql"><b><font color="{{conf.FgColour}}">SQL</font></b></a><br />
-    </td></tr></table>
-  </td>
-  <td>
-    <table cellpadding="0" cellspacing="2"><tr><td>
-        <a href="page:pragma"><img src="memory:HelpPragma.png" /></a>
-      </td><td width="10"></td><td valign="center">
-        See and modify database PRAGMA settings.
-      </td></tr><tr><td nowrap align="center">
-        <a href="page:pragma"><b><font color="{{conf.FgColour}}">Pragma</font></b></a><br />
-    </td></tr></table>
+  <td align="center">
+    <br /><a href="page:#search"><b><font color="{{conf.FgColour}}">Search</font></b></a><br /><br />
+  </td><td></td><td></td><td align="center">
+    <br /><a href="page:data"><b><font color="{{conf.FgColour}}">Data</font></b></a><br /><br />
   </td>
 </tr>
 <tr>
-  <td>
-    <table cellpadding="0" cellspacing="2"><tr><td>
-        <a href="page:info"><img src="memory:HelpInfo.png" /></a>
-      </td><td width="10"></td><td valign="center">
-        See information about the database,<br />
-        view general database statistics,<br />
-        check database integrity for corruption and recovery.
-      </td></tr><tr><td nowrap align="center">
-        <a href="page:info"><b><font color="{{conf.FgColour}}">Information</font></b></a>
-    </td></tr></table>
+  <td valign="top">
+    <a href="page:schema"><img src="memory:HelpTables.png" /></a>
+  </td><td valign="center">
+    Create and edit database schema definitions.
+  </td><td width="30"></td>
+  <td valign="top">
+    <a href="page:sql"><img src="memory:HelpSQL.png" /></a>
+  </td><td valign="center">
+    Make direct SQL queries in the database,<br />
+    export results as HTML, text or spreadsheet.
+  </td>
+</tr>
+<tr>
+  <td align="center">
+    <br /><a href="page:schema"><b><font color="{{conf.FgColour}}">Schema</font></b></a><br /><br />
+  </td><td></td><td></td><td align="center">
+    <br /><a href="page:sql"><b><font color="{{conf.FgColour}}">SQL</font></b></a><br /><br />
+  </td>
+</tr>
+
+<tr>
+  <td valign="top">
+    <a href="page:pragma"><img src="memory:HelpPragma.png" /></a>
+  </td><td valign="center">
+    See and modify database PRAGMA settings.
+  </td><td width="30"></td>
+  <td valign="top">
+    <a href="page:info"><img src="memory:HelpInfo.png" /></a>
+  </td><td valign="center">
+    See information about the database,<br />
+    view general database statistics,<br />
+    check database integrity for corruption and recovery.
+  </td>
+</tr>
+<tr>
+  <td align="center">
+    <br /><a href="page:pragma"><b><font color="{{conf.FgColour}}">Pragma</font></b></a><br /><br />
+  </td><td></td><td></td><td align="center">
+    <br /><a href="page:info"><b><font color="{{conf.FgColour}}">Information</font></b></a><br /><br />
   </td>
 </tr>
 </table>
