@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.09.2019
+@modified    28.09.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3374,7 +3374,7 @@ class DatabasePage(wx.Panel):
         if schemas: result["schema"] = True
         if not result and self.db.temporary:
             self.db.populate_schema()
-            if any(x for x in self.db.schema.values()): result["temporary"] = True
+            if any(self.db.schema.values()): result["temporary"] = True
         return result
 
 
@@ -3592,25 +3592,22 @@ class DatabasePage(wx.Panel):
             menu.AppendItem(item_copy)
             menu.AppendItem(item_open)
 
-        elif "category" == data.get("type") and "table" == data["category"]: # Tables list
-            item_copy     = wx.MenuItem(menu, -1, "&Copy table names")
+        elif "category" == data.get("type"): # Category list
+            item_copy     = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
+            item_file     = wx.MenuItem(menu, -1, "&Export all %s to file" % util.plural(data["category"]))
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, ", ".join(data["items"])),
                       id=item_copy.GetId())
 
             menu.AppendItem(item_copy)
 
-            item_file     = wx.MenuItem(menu, -1, "&Export all tables to file")
-            item_database = wx.MenuItem(menu, -1, "Export all tables to another &database")
-            item_database_meta = wx.MenuItem(menu, -1, "Export all table str&uctures to another &database")
-
-        elif "category" == data.get("type") and "view" == data["category"]: # Views list
-            item_copy     = wx.MenuItem(menu, -1, "&Copy view names")
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, ", ".join(data["items"])),
-                      id=item_copy.GetId())
-
-            menu.AppendItem(item_copy)
-
-            item_file     = wx.MenuItem(menu, -1, "&Export all views to file")
+            if "table" == data["category"]:
+                item_database = wx.MenuItem(menu, -1, "Export all tables to another &database")
+                item_database_meta = wx.MenuItem(menu, -1, "Export all table str&uctures to another &database")
+            if not data["items"]:
+                item_copy.Enable(False)
+                item_file.Enable(False)
+                if item_database:      item_database.Enable(False)
+                if item_database_meta: item_database_meta.Enable(False)
 
         if item_file:
             menu.AppendSeparator()
@@ -3720,12 +3717,13 @@ class DatabasePage(wx.Panel):
 
         if "schema" == data["type"]:
             submenu, keys = wx.Menu(), []
-            item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % data["type"])
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, self.db.get_sql),
-                      id=item_copy_sql.GetId())
-            menu.AppendItem(item_copy_sql)
-            menu.AppendMenu(id=-1, text="Create &new ..", submenu=submenu)
+            if any(self.db.schema.values()):
+                item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % data["type"])
+                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, self.db.get_sql),
+                          id=item_copy_sql.GetId())
+                menu.AppendItem(item_copy_sql)
 
+            menu.AppendMenu(id=-1, text="Create &new ..", submenu=submenu)
             for category in database.Database.CATEGORIES:
                 key = next((x for x in category if x not in keys), category[0])
                 keys.append(key)
