@@ -6638,7 +6638,7 @@ class SchemaObjectPage(wx.PyPanel):
         else: panel.Parent.Hide()
 
 
-    def _AddRowTable(self, path, i, col, insert=False):
+    def _AddRowTable(self, path, i, col, insert=False, focus=False):
         """Adds a new row of controls for table columns."""
         first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
         meta, rowkey = self._item.get("meta") or {}, wx.NewId()
@@ -6737,9 +6737,10 @@ class SchemaObjectPage(wx.PyPanel):
                               "columns.up.%s"     % rowkey: button_up,
                               "columns.down.%s"   % rowkey: button_down,
                               "columns.remove.%s" % rowkey: button_remove, })
+        if focus: text_name.SetFocus()
 
 
-    def _AddRowTableConstraint(self, path, i, cnstr, insert=False):
+    def _AddRowTableConstraint(self, path, i, cnstr, insert=False, focus=False):
         """Adds a new row of controls for table constraints."""
         first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
         meta, rowkey = self._item.get("meta") or {}, wx.NewId()
@@ -6887,9 +6888,10 @@ class SchemaObjectPage(wx.PyPanel):
         self._buttons.update({"constraints.up.%s"     % rowkey: button_up,
                               "constraints.down.%s"   % rowkey: button_down,
                               "constraints.remove.%s" % rowkey: button_remove, })
+        if focus: sizer_item.Children[0].Window.SetFocus()
 
 
-    def _AddRowIndex(self, path, i, col, insert=False):
+    def _AddRowIndex(self, path, i, col, insert=False, focus=False):
         """Adds a new row of controls for index columns."""
         first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
         data, meta, rowkey = self._item, self._item.get("meta") or {}, wx.NewId()
@@ -6956,9 +6958,10 @@ class SchemaObjectPage(wx.PyPanel):
         self._buttons.update({"columns.up.%s"     % rowkey: button_up,
                               "columns.down.%s"   % rowkey: button_down,
                               "columns.remove.%s" % rowkey: button_remove, })
+        if focus: ctrl_index.SetFocus()
 
 
-    def _AddRowTrigger(self, path, i, value, insert=False):
+    def _AddRowTrigger(self, path, i, value, insert=False, focus=False):
         """Adds a new row of controls for trigger columns."""
         first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
         data, meta, rowkey = self._item, self._item.get("meta") or {}, wx.NewId()
@@ -7016,9 +7019,10 @@ class SchemaObjectPage(wx.PyPanel):
         self._buttons.update({"columns.up.%s"     % rowkey: button_up,
                               "columns.down.%s"   % rowkey: button_down,
                               "columns.remove.%s" % rowkey: button_remove})
+        if focus: list_column.SetFocus()
 
 
-    def _AddRowView(self, path, i, value, insert=False):
+    def _AddRowView(self, path, i, value, insert=False, focus=False):
         """Adds a new row of controls for view columns."""
         first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
         panel = self._panel_columns
@@ -7062,6 +7066,7 @@ class SchemaObjectPage(wx.PyPanel):
         self._buttons.update({"columns.up.%s"     % id(text_column): button_up,
                               "columns.down.%s"   % id(text_column): button_down,
                               "columns.remove.%s" % id(text_column): button_remove})
+        if focus: text_column.SetFocus()
 
 
     def _BindDataHandler(self, handler, ctrl, path, *args):
@@ -7420,7 +7425,7 @@ class SchemaObjectPage(wx.PyPanel):
             if x.IsSizer(): self._RemoveSizer(x.GetSizer())
 
 
-    def _AddRow(self, path, i, value, insert=False):
+    def _AddRow(self, path, i, value, insert=False, focus=False):
         """Adds a new row of controls for value at path index."""
         panel = self._panel_columns
         if "table" == self._category:
@@ -7430,7 +7435,7 @@ class SchemaObjectPage(wx.PyPanel):
         elif "index"   == self._category: adder = self._AddRowIndex
         elif "trigger" == self._category: adder = self._AddRowTrigger
         elif "view"    == self._category: adder = self._AddRowView
-        adder(path, i, value, insert)
+        adder(path, i, value, insert=insert, focus=focus)
         panel.Layout()
 
         if "table" == self._category:
@@ -7474,7 +7479,8 @@ class SchemaObjectPage(wx.PyPanel):
             constraint = copy.deepcopy(self.TABLECONSTRAINT_DEFAULTS[ctype])
             constraints = self._item["meta"].setdefault("constraints", [])
             constraints.append(constraint)
-            self._AddRowTableConstraint(["constraints"], len(constraints) - 1, constraint)
+            self._AddRowTableConstraint(["constraints"], len(constraints) - 1,
+                                        constraint, focus=True)
             self._ToggleControls(self._editmode)
 
             label, count = "Constraints", len(self._item["meta"].get("constraints") or ())
@@ -7504,7 +7510,7 @@ class SchemaObjectPage(wx.PyPanel):
         ptr.append(copy.deepcopy(value))
         panel = self._panel_columns if "columns" == path[-1] else self._panel_constraints
         self.Freeze()
-        self._AddRow(path, len(ptr) - 1, value)
+        self._AddRow(path, len(ptr) - 1, value, focus=True)
         self._PopulateSQL()
         self._ToggleControls(self._editmode)
         self.Layout()
