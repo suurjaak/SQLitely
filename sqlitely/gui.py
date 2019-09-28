@@ -4443,8 +4443,9 @@ class DatabasePage(wx.Panel):
                 child = tree.AppendItem(top, util.unprint(item["name"]))
                 tree.SetItemPyData(child, itemdata)
 
-                if "count" in item: t = util.plural("row", item["count"])
-                else: t = "" if "view" == category else "ERROR" if refresh else "Counting.."
+                if "count" in item:
+                    t = "ERROR" if item["count"] is None else util.plural("row", item["count"])
+                else: t = "" if "view" == category else "Counting.."
                 tree.SetItemText(child, t, 1)
 
                 for col in item["columns"]:
@@ -4608,6 +4609,7 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
         self.idx_new = [] # Unsaved added row indexes
         self.rows_deleted = {} # Uncommitted deleted rows {id: deleted_row, }
         self.rowid_name = None
+        self.row_count = 0
         self.iterator_index = -1
         self.sort_ascending = True
         self.sort_column = None # Index of column currently sorted by
@@ -4638,9 +4640,17 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
                     value = self.rows_current[0][col["name"]]
                     col["type"] = TYPES.get(type(value), col.get("type", ""))
         else:
-            self.columns = self.db.get_category(self.category, self.name)["columns"]
-            self.row_count = next(self.db.execute("SELECT COUNT(*) AS count FROM %s"
-                                  % grammar.quote(self.name)))["count"]
+            self.columns = self.db.get_category(category, name)["columns"]
+            try:
+                res = self.db.execute("SELECT COUNT(*) AS count FROM %s"
+                                      % grammar.quote(self.name)).fetchone()
+                self.row_count = res["count"]
+            except Exception:
+                logger.exception("Error getting row count for %s in %s",
+                                 grammar.quote(name), db)
+                self.SeekAhead(to_end=True)
+                self.row_count = self.iterator_index + 1
+                self.NotifyViewChange(0)
 
 
     def GetColLabelValue(self, col):

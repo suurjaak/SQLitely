@@ -732,7 +732,7 @@ class Database(object):
                     try:
                         opts["count"] = self.execute(sql, log=False).fetchone()["count"]
                     except Exception:
-                        opts.pop("count", None)
+                        opts["count"] = None
                         logger.exception("Error fetching COUNT for table %s.",
                                          grammar.quote(opts["name"]))
                 elif "table" == mycategory and opts0 and "count" in opts0:
