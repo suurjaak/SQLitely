@@ -3463,6 +3463,7 @@ class DatabasePage(wx.Panel):
             else:
                 data = self.db.get_category(data["type"], data["name"])
                 self.add_data_page(data)
+            tree.Expand(tree.GetItemParent(item))
         else:
             tree.Collapse(item) if tree.IsExpanded(item) else tree.Expand(item)
 
@@ -3512,6 +3513,9 @@ class DatabasePage(wx.Panel):
         def open_item(item, *_, **__):
             self.on_change_tree_data(HackEvent(item))
             wx.CallAfter(select_item, item)
+        def open_meta(item, *_, **__):
+            self.notebook.SetSelection(self.pageorder[self.page_schema])
+            self.on_change_tree_schema(HackEvent(item))
         def clipboard_copy(text, *_, **__):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text)
@@ -3530,67 +3534,50 @@ class DatabasePage(wx.Panel):
 
         menu = wx.Menu()
         item_file = item_database = item_database_meta = None
-        if "table" == data.get("type"): # Single table
-            item_name = wx.MenuItem(menu, -1, 'Table %s' % \
-                        util.unprint(grammar.quote(data["name"], force=True)))
+        if data.get("type") in ("table", "view"): # Single table/view
+            item_name = wx.MenuItem(menu, -1, '%s %s' % (
+                        data["type"].capitalize(), util.unprint(grammar.quote(data["name"], force=True))))
+            item_open = wx.MenuItem(menu, -1, "&Open %s" % data["type"])
+            item_open_meta = wx.MenuItem(menu, -1, "Open %s &schema" % data["type"])
             item_copy = wx.MenuItem(menu, -1, "&Copy name")
-            item_open = wx.MenuItem(menu, -1, "&Open table")
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, True),
                       id=item_name.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(open_meta, item), id=item_open_meta.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
                       id=item_copy.GetId())
-            menu.Bind(wx.EVT_MENU, functools.partial(open_item, item),
-                      id=item_open.GetId())
 
             item_name.Font = boldfont
 
             menu.AppendItem(item_name)
             menu.AppendSeparator()
-            menu.AppendItem(item_copy)
             menu.AppendItem(item_open)
-
-            item_file     = wx.MenuItem(menu, -1, '&Export table to file')
-            item_database = wx.MenuItem(menu, -1, 'Export table to another &database')
-            item_database_meta = wx.MenuItem(menu, -1, 'Export table str&ucture to another &database')
-        elif "view" == data.get("type"): # Single view
-            item_name = wx.MenuItem(menu, -1, 'View %s' % \
-                        util.unprint(grammar.quote(data["name"], force=True)))
-            item_copy = wx.MenuItem(menu, -1, "&Copy name")
-            item_open = wx.MenuItem(menu, -1, "&Open view")
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, True),
-                      id=item_name.GetId())
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
-                      id=item_copy.GetId())
-            menu.Bind(wx.EVT_MENU, functools.partial(open_item, item),
-                      id=item_open.GetId())
-
-            item_name.Font = boldfont
-
-            menu.AppendItem(item_name)
-            menu.AppendSeparator()
+            menu.AppendItem(item_open_meta)
             menu.AppendItem(item_copy)
-            menu.AppendItem(item_open)
 
-            item_file     = wx.MenuItem(menu, -1, '&Export view to file')
+            item_file     = wx.MenuItem(menu, -1, '&Export %s to file' % data["type"])
+            if "table" == data["type"]:
+                item_database = wx.MenuItem(menu, -1, 'Export table to another &database')
+                item_database_meta = wx.MenuItem(menu, -1, 'Export table str&ucture to another &database')
+
         elif "column" == data.get("type"): # Column
             item_name = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
                         util.unprint(grammar.quote(data["parent"]["name"])),
                         util.unprint(grammar.quote(data["name"]))))
-            item_copy = wx.MenuItem(menu, -1, "&Copy name")
             item_open = wx.MenuItem(menu, -1, "&Open table")
+            item_copy = wx.MenuItem(menu, -1, "&Copy name")
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, False),
                       id=item_name.GetId())
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
-                      id=item_copy.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(open_item, tree.GetItemParent(item)),
                       id=item_open.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
+                      id=item_copy.GetId())
 
             item_name.Font = boldfont
 
             menu.AppendItem(item_name)
             menu.AppendSeparator()
-            menu.AppendItem(item_copy)
             menu.AppendItem(item_open)
+            menu.AppendItem(item_copy)
 
         elif "category" == data.get("type"): # Category list
             item_copy     = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
@@ -3647,6 +3634,11 @@ class DatabasePage(wx.Panel):
         data = tree.GetItemPyData(item)
         if not data: return
 
+        # Only way to create state change in wx.gizmos.TreeListCtrl
+        class HackEvent(object):
+            def __init__(self, item): self._item = item
+            def GetItem(self):        return self._item
+
         def select_item(it, expand, *_, **__):
             tree.SelectItem(it)
             if expand: tree.Expand(it)
@@ -3662,6 +3654,12 @@ class DatabasePage(wx.Panel):
             if any(map(tree.IsExpanded, items)):
                 for it in items: tree.Collapse(it)
             else: tree.ExpandAll(node)
+        def open_item(item, *_, **__):
+            self.on_change_tree_schema(HackEvent(item))
+            select_item(item, True)
+        def open_data(item, *_, **__):
+            self.notebook.SetSelection(self.pageorder[self.page_data])
+            self.on_change_tree_data(HackEvent(item))
         def create_object(category, *_, **__):
             newdata = {"type": category,
                        "meta": {"__type__": "CREATE %s" % category.upper()}}
@@ -3806,28 +3804,35 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, lambda: "\n".join(map(grammar.quote, names))),
                       id=item_copy.GetId())
             menu.AppendItem(item_copy)
-        else:
+        else: # Single category item, like table
             sqlkws = {"category": data["type"], "name": data["name"]}
 
             item_name   = wx.MenuItem(menu, -1, '%s %s' % (
                           data["type"].capitalize(),
                           util.unprint(grammar.quote(data["name"], force=True))))
-            item_delete = wx.MenuItem(menu, -1, 'Delete %s' % data["type"])
-            item_copy     = wx.MenuItem(menu, -1, "&Copy name")
-            item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % data["type"])
+            item_open = wx.MenuItem(menu, -1, "&Open %s" % data["type"])
+            item_open_data = wx.MenuItem(menu, -1, "Open %s &data" % data["type"])
+            item_copy      = wx.MenuItem(menu, -1, "&Copy name")
+            item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s &SQL" % data["type"])
+            item_delete    = wx.MenuItem(menu, -1, 'Delete %s' % data["type"])
+
             item_name.Font = boldfont
 
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, True),
                       id=item_name.GetId())
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, delete_items, [data]),
-                      id=item_delete.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(open_item, item), id=item_open.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(open_data, item), id=item_open_data.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
                       id=item_copy.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
                       functools.partial(self.db.get_sql, **sqlkws)), id=item_copy_sql.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, delete_items, [data]),
+                      id=item_delete.GetId())
 
             menu.AppendItem(item_name)
             menu.AppendSeparator()
+            menu.AppendItem(item_open)
+            menu.AppendItem(item_open_data)
             menu.AppendItem(item_copy)
             menu.AppendItem(item_copy_sql)
             menu.AppendSeparator()
@@ -3895,6 +3900,7 @@ class DatabasePage(wx.Panel):
             else:
                 data = self.db.get_category(data["type"], data["name"])
                 self.add_schema_page(data)
+            tree.Expand(tree.GetItemParent(item))
         else:
             tree.Collapse(item) if tree.IsExpanded(item) else tree.Expand(item)
 
