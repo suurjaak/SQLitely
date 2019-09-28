@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.09.2019
+@modified    28.09.2019
 ------------------------------------------------------------------------------
 """
 import logging
@@ -41,8 +41,8 @@ class WorkerThread(threading.Thread):
         """
         threading.Thread.__init__(self)
         self._callback = callback
-        self._is_running = False
-        self._stop_work = False   # Flag to stop the current work
+        self._is_running   = False # Flag whether thread is running
+        self._is_working   = False # Flag whether thread is currently working
         self._drop_results = False # Flag to not post back obtained results
         self._queue = Queue.Queue()
 
@@ -54,7 +54,7 @@ class WorkerThread(threading.Thread):
 
         @param   data  a dict with work data
         """
-        self._stop_work = True
+        self._is_working = False
         self._queue.put(data)
         if not self._is_running: self.start()
 
@@ -62,8 +62,8 @@ class WorkerThread(threading.Thread):
     def stop(self):
         """Stops the worker thread."""
         self._is_running = False
+        self._is_working = False
         self._drop_results = True
-        self._stop_work = True
         self._queue.put(None) # To wake up thread waiting on queue
 
 
@@ -72,8 +72,13 @@ class WorkerThread(threading.Thread):
         Signals to stop the currently ongoing work, if any. Obtained results
         will be posted back, unless drop_results is True.
         """
-        self._stop_work = True
+        self._is_working = False
         self._drop_results = drop_results
+
+
+    def is_working(self):
+        """Returns whether the thread is currently doing work."""
+        return self._is_working
 
 
     def postback(self, data):
@@ -112,7 +117,7 @@ class SearchThread(WorkerThread):
             try:
                 search = self._queue.get()
                 if not search:
-                    continue # continue while self._is_running
+                    continue # while self._is_running
 
                 TEMPLATES = {"meta":  templates.SEARCH_ROW_META_HTML,
                              "table": templates.SEARCH_ROW_TABLE_HEADER_HTML,
@@ -120,8 +125,7 @@ class SearchThread(WorkerThread):
                 wrap_b = lambda x: "<b>%s</b>" % x.group(0)
                 FACTORY = lambda x: step.Template(TEMPLATES[x], escape=True)
                 logger.info('Searching "%(text)s" in %(table)s (%(db)s).' % search)
-                self._stop_work = False
-                self._drop_results = False
+                self._is_working, self._drop_results = True, False
 
                 # {"output": text with results, "map": link data map}
                 # map data: {"table:name:index": {"table": "name", "row": {}}, }
@@ -139,7 +143,7 @@ class SearchThread(WorkerThread):
                 infotext = search["table"]
 
                 # Find from database CREATE SQL
-                if not self._stop_work and "meta" == search["table"] \
+                if self._is_working and "meta" == search["table"] \
                 and match_words:
                     infotext = "database CREATE SQL"
                     count = 0
@@ -162,9 +166,9 @@ class SearchThread(WorkerThread):
                                 self.postback(result)
                                 result = {"output": "", "map": {},
                                           "search": search, "count": 0}
-                            if self._stop_work:
+                            if not self._is_working:
                                 break # for item
-                        if self._stop_work:
+                        if not self._is_working:
                             break # for category
                 if result["output"] and not self._drop_results:
                     result["count"] = result_count
@@ -174,7 +178,7 @@ class SearchThread(WorkerThread):
 
 
                 # Find from table content
-                if not self._stop_work and "tables" == search["table"]:
+                if self._is_working and "tables" == search["table"]:
                     infotext, result_type = "", "table row"
                     # Search over all fields of all tables.
                     template_table = FACTORY("table")
@@ -183,7 +187,7 @@ class SearchThread(WorkerThread):
                         sql, params, words, keywords = \
                             query_parser.Parse(search["text"], table)
                         if not sql:
-                            continue # continue for table in search["db"]..
+                            continue # for table
                         cursor = search["db"].execute(sql, params)
                         row = cursor.fetchone()
                         namepre, namesuf = ("<b>", "</b>") if row else ("", "")
@@ -193,7 +197,7 @@ class SearchThread(WorkerThread):
                         infotext += (", " if infotext else "") \
                                     + namepre + table["name"] + namesuf
                         if not row:
-                            continue # continue for table in search["db"]..
+                            continue # for table
                         result["output"] = template_table.expand(locals())
                         count = 0
                         while row:
@@ -209,9 +213,9 @@ class SearchThread(WorkerThread):
                                 self.postback(result)
                                 result = {"output": "", "map": {},
                                           "search": search, "count": 0}
-                            if self._stop_work \
+                            if not self._is_working \
                             or result_count >= conf.MaxSearchTableRows:
-                                break # break while row
+                                break # while row
                             row = cursor.fetchone()
                         if not self._drop_results:
                             result["output"] += "</table></font>"
@@ -221,9 +225,9 @@ class SearchThread(WorkerThread):
                                       "search": search, "count": 0}
                         infotext += " (%s%s%s)" % (countpre,
                                     util.plural("result", count), countsuf)
-                        if self._stop_work \
+                        if not self._is_working \
                         or result_count >= conf.MaxSearchTableRows:
-                            break # break for table in search["db"]..
+                            break # for table
                     single_table = ("," not in infotext)
                     infotext = "table%s: %s" % \
                                ("" if single_table else "s", infotext)
@@ -238,7 +242,7 @@ class SearchThread(WorkerThread):
                 if result_count:
                     final_text = "Finished searching %s." % infotext
 
-                if self._stop_work:
+                if not self._is_working:
                     final_text += " Stopped by user."
                 elif "table row" == result_type \
                 and count >= conf.MaxSearchTableRows:
@@ -250,6 +254,7 @@ class SearchThread(WorkerThread):
                 result["count"] = result_count
                 self.postback(result)
                 logger.info("Search found %s results.", result["count"])
+                self._is_working = False
             except Exception as e:
                 if not result:
                     result = {}
@@ -269,17 +274,45 @@ class DetectDatabaseThread(WorkerThread):
         self._is_running = True
         while self._is_running:
             search = self._queue.get()
-            self._stop_work = self._drop_results = False
-            if search:
-                all_filenames = set() # To handle potential duplicates
-                for filenames in database.detect_databases():
-                    filenames = all_filenames.symmetric_difference(filenames)
-                    if not self._drop_results:
-                        result = {"filenames": filenames}
-                        self.postback(result)
-                    all_filenames.update(filenames)
-                    if self._stop_work:
-                        break # break for filename in database.detect_data...
+            if not search: continue # while self._is_running
 
-                result = {"done": True, "count": len(all_filenames)}
-                self.postback(result)
+            self._is_working, self._drop_results = True, False
+            all_filenames = set() # To handle potential duplicates
+            for filenames in database.detect_databases():
+                filenames = all_filenames.symmetric_difference(filenames)
+                if not self._drop_results:
+                    self.postback({"filenames": filenames})
+                all_filenames.update(filenames)
+                if not self._is_working:
+                    break # for filename
+
+            if not self._drop_results:
+                self.postback({"done": True, "count": len(all_filenames)})
+            self._is_working = False
+
+
+
+class ImportFolderThread(WorkerThread):
+    """
+    SQLite database import background thread, goes through given folder
+    and yields database filenames back to main thread one by one.
+    """
+
+    def run(self):
+        self._is_running = True
+        while self._is_running:
+            path = self._queue.get()
+            if not path: continue # while self._is_running
+
+            self._is_working, self._drop_results = True, False
+            all_filenames = set()
+            for filenames in database.find_databases(path):
+                all_filenames.update(filenames)
+                if filenames and not self._drop_results:
+                    self.postback({"filenames": filenames, "folder": path})
+                if not self._is_working:
+                    break # for filename
+
+            if not self._drop_results:
+                self.postback({"done": True, "count": len(all_filenames), "folder": path})
+            self._is_working = False

@@ -65,6 +65,7 @@ logger = logging.getLogger(__name__)
 """Custom application events for worker results."""
 WorkerEvent, EVT_WORKER = wx.lib.newevent.NewEvent()
 DetectionWorkerEvent, EVT_DETECTION_WORKER = wx.lib.newevent.NewEvent()
+ImportFolderEvent, EVT_FOLDER_WORKER = wx.lib.newevent.NewEvent()
 OpenDatabaseEvent, EVT_OPEN_DATABASE = wx.lib.newevent.NewEvent()
 
 
@@ -158,7 +159,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         self.worker_detection = \
             workers.DetectDatabaseThread(self.on_detect_databases_callback)
+        self.worker_folder = \
+            workers.ImportFolderThread(self.on_add_from_folder_callback)
         self.Bind(EVT_DETECTION_WORKER, self.on_detect_databases_result)
+        self.Bind(EVT_FOLDER_WORKER, self.on_add_from_folder_result)
         self.Bind(EVT_OPEN_DATABASE, self.on_open_database_event)
         self.Bind(EVT_DATABASE_PAGE, self.on_database_page_event)
 
@@ -292,7 +296,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
              "Create a new SQLite database."),
             ("opena", "&Open a database..", images.ButtonOpenA,
              "Choose a database from your computer to open."),
-            ("folder", "&Import from folder.", images.ButtonFolder,
+            ("folder", "&Import from folder", images.ButtonFolder,
              "Select a folder where to look for databases."),
             ("detect", "Detect databases", images.ButtonDetect,
              "Auto-detect databases from user folders."),
@@ -832,10 +836,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 files, selecteds = [event.GetText()], [event.GetIndex()]
         if not files:
             menu = wx.Menu()
+            label1 = "Stop &import from folder" if self.worker_folder.is_working() \
+                     else "&Import from folder"
+            label2 = "Stop detecting databases" if self.worker_detection.is_working() \
+                     else "Detect databases"
             item_new     = wx.MenuItem(menu, -1, "&New database")
             item_open    = wx.MenuItem(menu, -1, "&Open a database..")
-            item_import  = wx.MenuItem(menu, -1, "&Import from folder")
-            item_detect  = wx.MenuItem(menu, -1, "Detect databases")
+            item_import  = wx.MenuItem(menu, -1, label1)
+            item_detect  = wx.MenuItem(menu, -1, label2)
             item_missing = wx.MenuItem(menu, -1, "Remove missing")
             item_clear   = wx.MenuItem(menu, -1, "C&lear list")
 
@@ -987,44 +995,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             conf.LastUpdateCheck = datetime.date.today().strftime("%Y%m%d")
             conf.save()
         support.update_window = None
-
-
-    def on_detect_databases(self, event):
-        """
-        Handler for clicking to auto-detect databases, starts the
-        detection in a background thread.
-        """
-        if self.button_detect.FindFocus() == self.button_detect:
-            self.list_db.SetFocus()
-        guibase.status("Searching local computer for databases..", log=True)
-        self.button_detect.Enabled = False
-        self.worker_detection.work(True)
-
-
-    def on_detect_databases_callback(self, result):
-        """Callback for DetectDatabaseThread, posts the data to self."""
-        if self: # Check if instance is still valid (i.e. not destroyed by wx)
-            wx.PostEvent(self, DetectionWorkerEvent(result=result))
-
-
-    def on_detect_databases_result(self, event):
-        """
-        Handler for getting results from database detection thread, adds the
-        results to the database list.
-        """
-        result = event.result
-        if "filenames" in result:
-            filenames = [f for f in result["filenames"] if f not in conf.DBFiles]
-            if filenames:
-                self.update_database_list(filenames)
-                for f in filenames: logger.info("Detected database %s.", f)
-        if "count" in result:
-            name = ("" if result["count"] else "additional ") + "database"
-            guibase.status("Detected %s.", util.plural(name, result["count"]),
-                           log=True, flash=True)
-        if result.get("done", False):
-            self.button_detect.Enabled = True
-            wx.Bell()
 
 
     def populate_database_list(self):
@@ -1551,28 +1521,90 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.load_database_page(filename)
 
 
+    def on_detect_databases(self, event):
+        """
+        Handler for clicking to auto-detect databases, starts the
+        detection in a background thread.
+        """
+        if self.button_detect.FindFocus() == self.button_detect:
+            self.list_db.SetFocus()
+        if self.worker_detection.is_working():
+            self.worker_detection.stop_work()
+            self.button_detect.Label = "Detect databases"
+        else:
+            guibase.status("Searching local computer for databases..", log=True)
+            self.button_detect.Label = "Stop detecting databases"
+            self.worker_detection.work(True)
+
+
+    def on_detect_databases_callback(self, result):
+        """Callback for DetectDatabaseThread, posts the data to self."""
+        if self: # Check if instance is still valid (i.e. not destroyed by wx)
+            wx.PostEvent(self, DetectionWorkerEvent(result=result))
+
+
+    def on_detect_databases_result(self, event):
+        """
+        Handler for getting results from database detection thread, adds the
+        results to the database list.
+        """
+        result = event.result
+        if "filenames" in result:
+            filenames = [f for f in result["filenames"] if f not in conf.DBFiles]
+            if filenames:
+                self.update_database_list(filenames)
+                for f in filenames: logger.info("Detected database %s.", f)
+        if "count" in result:
+            name = ("" if result["count"] else "additional ") + "database"
+            guibase.status("Detected %s.", util.plural(name, result["count"]),
+                           log=True, flash=True)
+        if result.get("done", False):
+            self.button_detect.Label = "Detect databases"
+            wx.Bell()
+
+
     def on_add_from_folder(self, event):
         """
         Handler for clicking to select folder where to search for databases,
         updates database list.
         """
-        if self.dialog_selectfolder.ShowModal() == wx.ID_OK:
-            if self.button_folder.FindFocus() == self.button_folder:
-                self.list_db.SetFocus()
-            self.button_folder.Enabled = False
+        if self.button_folder.FindFocus() == self.button_folder:
+            self.list_db.SetFocus()
+        if self.worker_folder.is_working():
+            self.worker_folder.stop_work()
+            self.button_folder.Label = "&Import from folder"
+        else:
+            if wx.ID_OK != self.dialog_selectfolder.ShowModal(): return
             folder = self.dialog_selectfolder.GetPath()
             guibase.status("Detecting databases under %s.", folder, log=True)
-            wx.YieldIfNeeded()
-            count = 0
-            for filename in database.find_databases(folder):
-                if "name" not in self.db_datas.get(filename, {}):
-                    logger.info("Detected database %s.", filename)
-                    self.update_database_list(filename)
-                    count += 1
-            self.button_folder.Enabled = True
-            self.list_db.RefreshRows()
-            guibase.status("Detected %s under %s.", util.plural("new database", count),
-                           folder, log=True, flash=True)
+            self.button_folder.Label = "Stop &import from folder"
+            self.worker_folder.work(folder)
+
+
+    def on_add_from_folder_callback(self, result):
+        """Callback for ImportFolderThread, posts the data to self."""
+        if self: # Check if instance is still valid (i.e. not destroyed by wx)
+            wx.PostEvent(self, ImportFolderEvent(result=result))
+
+
+    def on_add_from_folder_result(self, event):
+        """
+        Handler for getting results from import folder thread, adds the
+        results to the database list.
+        """
+        result = event.result
+        if "filenames" in result:
+            filenames = [f for f in result["filenames"] if f not in conf.DBFiles]
+            if filenames:
+                self.update_database_list(filenames)
+                for f in filenames: logger.info("Detected database %s.", f)
+        if "count" in result:
+            guibase.status("Detected %s under %s.",
+                           util.plural("database", result["count"]),
+                           result["folder"], log=True, flash=True)
+        if result.get("done"):
+            self.button_folder.Label = "&Import from folder"
+            wx.Bell()
 
 
     def on_open_current_database(self, event):
@@ -1676,6 +1708,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             for worker in page.workers_search.values(): worker.stop()
             db.close()
         self.worker_detection.stop()
+        self.worker_folder.stop()
 
         # Save last selected files in db lists, to reselect them on rerun
         conf.LastSelectedFiles[:] = self.dbs_selected[:]

@@ -1081,7 +1081,9 @@ def detect_databases():
 
 
 def find_databases(folder):
-    """Yields a list of all SQLite databases under the specified folder."""
+    """Yields lists of all SQLite databases under the specified folder."""
     for root, _, files in os.walk(folder):
-        for f in (x for x in files if is_sqlite_file(x, root)):
-            yield os.path.join(root, f)
+        yield []
+        for f in files:
+            p = os.path.join(root, f)
+            yield [p] if is_sqlite_file(p) else []
