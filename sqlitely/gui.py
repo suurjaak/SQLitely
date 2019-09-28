@@ -7467,6 +7467,7 @@ class SchemaObjectPage(wx.PyPanel):
         if "table" == self._category:
             label, count = path[0].capitalize(), len(self._item["meta"].get(path[0]) or ())
             if count: label = "%s (%s)" % (label, count)
+            logger.info("label %s, count %s, meta %s", label, count, self._item["meta"]) # TODO remove
             self._notebook_table.SetPageText(0 if ["columns"] == path else 1, label)
         parent.Layout()
 
@@ -7523,20 +7524,21 @@ class SchemaObjectPage(wx.PyPanel):
         path, index = path[:-1], path[-1]
         ptr = self._item["meta"]
         for i, p in enumerate(path): ptr = ptr.get(p)
+        mydata = ptr[index]
+        ptr[index:index+1] = []
         self.Freeze()
         self._RemoveRow(path, index)
 
         if "table" == self._category and "columns" == path[0]:
             # Queue removing column from constraints
-            myid = ptr[index]["__id__"]
+            myid = mydata["__id__"]
             if myid in self._col_updates:
                 self._col_updates[myid]["remove"] = True
             else:
-                self._col_updates[myid] = {"col": copy.deepcopy(ptr[index]), "remove": True}
+                self._col_updates[myid] = {"col": copy.deepcopy(mydata), "remove": True}
             if self._col_updater: self._col_updater.Stop()
             self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
 
-        ptr[index:index+1] = []
         self._PopulateSQL()
         self._ToggleControls(self._editmode)
         self.Layout()
