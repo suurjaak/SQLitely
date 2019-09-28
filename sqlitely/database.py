@@ -475,7 +475,7 @@ class Database(object):
             self.connection.row_factory = self.row_factory
             self.connection.text_factory = str
             self.compile_options = [x["compile_option"] for x in 
-                                    self.execute("PRAGMA compile_options").fetchall()]
+                                    self.execute("PRAGMA compile_options", log=False).fetchall()]
             self.populate_schema()
             self.update_fileinfo()
         except Exception:
