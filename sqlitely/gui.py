@@ -1225,12 +1225,20 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         page = self.notebook.GetCurrentPage()
         if not isinstance(page, DatabasePage): return
+        self.save_page_database_as(page)
 
+
+    def save_page_database_as(self, page):
+        """
+        Opens file dialog and saves database to selected file,
+        returns success.
+        """
         db = page.db
         exts = ";".join("*" + x for x in conf.DBExtensions)
         wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
+        title = "Save %s as.." % os.path.split(db.name)[-1]
         dialog = wx.FileDialog(self,
-            message="Save as..", wildcard=wildcard,
+            message=title, wildcard=wildcard,
             defaultDir="" if db.temporary else os.path.split(db.filename)[0],
             defaultFile="" if db.temporary else os.path.basename(db.filename),
             style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
@@ -1242,13 +1250,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             "%s is already open in %s." % (filename2, conf.Title),
             conf.Title, wx.OK | wx.ICON_WARNING
         )
-        self.save_page_database(page, filename2)
+        return self.save_page_database(page, filename2)
 
 
     def save_page_database(self, page, filename2=None):
-        """Saves the database, under a new name if specified."""
+        """Saves the database, under a new name if specified, returns success."""
         db = page.db
         filename1, filename2 = db.filename, filename2 or db.filename
+        file_existed = os.path.exists(filename2)
         try:
             if filename1 != filename2:
                 shutil.copy(filename1, filename2)
@@ -1265,6 +1274,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if filename1 != filename2:
                 db.reopen(filename1)
                 page.reload_grids()
+                try: db.temporary and not file_existed and os.unlink(filename2)
+                except Exception: pass
             return
 
         db.name, db.temporary, was_temporary = filename2, False, db.temporary
@@ -1289,7 +1300,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             conf.save()
             page.reload_grids()
             page.load_data()
-
+        return True
 
 
     def on_remove_database(self, event):
@@ -1690,12 +1701,16 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if page and page.get_unsaved():
                 unsaved_pages[page] = db.name
         if unsaved_pages:
-            if wx.OK != wx.MessageBox(
+            resp = wx.MessageBox(
                 "There are unsaved changes in files\n(%s).\n\n"
-                "Are you sure you want to discard them?" %
+                "Do you want to save the changes?" %
                 "\n".join(textwrap.wrap(", ".join(sorted(unsaved_pages.values())))),
-                conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
-            ): return
+                conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION
+            )
+            if wx.CANCEL == resp: return
+            for page in unsaved_pages if wx.YES == resp else ():
+                if not self.save_page_database_as(page) if page.db.temporary \
+                else not page.save_unsaved(): return
 
         for page, db in self.db_pages.items():
             if not page: continue # continue for page, if dead object
@@ -1758,10 +1773,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     info += (", and " if info else "") + "temporary file"
                 msg = "There are unsaved changes in %s:\n%s.\n\n" % (page.db, info)
 
-            if wx.OK != wx.MessageBox(
-                msg + "Are you sure you want to discard them?", conf.Title,
-                wx.OK | wx.CANCEL | wx.ICON_INFORMATION
-            ): return event.Veto()
+            resp = wx.MessageBox(msg + "Do you want to save the changes?", conf.Title,
+                                 wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION)
+            if wx.CANCEL == resp: return event.Veto()
+            if wx.YES == resp:
+                if not self.save_page_database_as(page) if page.db.temporary \
+                else not page.save_unsaved(): return event.Veto()
 
         if page.notebook.Selection and not page.db.temporary:
             conf.LastActivePage[page.db.filename] = page.notebook.Selection
@@ -7469,7 +7486,6 @@ class SchemaObjectPage(wx.PyPanel):
         if "table" == self._category:
             label, count = path[0].capitalize(), len(self._item["meta"].get(path[0]) or ())
             if count: label = "%s (%s)" % (label, count)
-            logger.info("label %s, count %s, meta %s", label, count, self._item["meta"]) # TODO remove
             self._notebook_table.SetPageText(0 if ["columns"] == path else 1, label)
         parent.Layout()
 
