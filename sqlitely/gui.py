@@ -335,9 +335,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             ("open", "&Open", images.ButtonOpen,
              "Open the database."),
             ("saveas", "Save &as..", images.ButtonSaveAs,
-             "Save a copy of the database under another name."),
+             "Save a copy under another name."),
             ("remove", "Remove", images.ButtonRemove,
-             "Remove this database from the list."), ]
+             "Remove from list."), ]
         for name, label, img, note in BUTTONS_DETAIL:
             button = controls.NoteButton(panel_detail, label, note, img.Bitmap)
             setattr(self, "button_" + name, button)
