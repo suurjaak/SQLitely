@@ -2940,10 +2940,10 @@ class DatabasePage(wx.Panel):
                               + "\n- ".join(copyerrors)) if copyerrors else ""
                         err = err[:500] + ".." if len(err) > 500 else err
                         guibase.status("Recovery to %s complete." % newfile, flash=True)
+                        wx.PostEvent(self.TopLevelParent, OpenDatabaseEvent(file=newfile))
                         wx.MessageBox("Recovery to %s complete.%s" %
                                       (newfile, err), conf.Title,
                                       wx.ICON_INFORMATION)
-                        util.start_file(os.path.dirname(newfile))
                     else:
                         wx.MessageBox("Cannot recover data from %s to itself."
                                       % self.db, conf.Title, wx.ICON_ERROR)

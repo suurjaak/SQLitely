@@ -526,30 +526,42 @@ class Database(object):
         result = []
         with open(filename, "w") as _: pass # Truncate file
         self.execute("ATTACH DATABASE ? AS new", (filename, ))
+        fks = self.execute("PRAGMA foreign_keys").fetchone()["foreign_keys"]
+        if fks: self.execute("PRAGMA foreign_keys = FALSE")
 
         # Create structure for all tables
         for name, opts in sorted(self.schema["table"].items()):
-            self.execute(opts["sql"].replace("CREATE TABLE ", "CREATE TABLE new."))
+            try:
+                sql, err = grammar.transform(opts["sql"], renames={"schema": "new"})
+                if sql: self.execute(sql)
+                else: result.append(err)
+            except Exception as e:
+                result.append(util.format_exc(e))
+                logger.exception("Error creating table %s in %s.",
+                                 grammar.quote(name), filename)
 
         # Copy data from all tables
         for name, opts in sorted(self.schema["table"].items()):
-            sql = "INSERT INTO new.%(name)s SELECT * FROM main.%(name)s" % opts
+            sql = "INSERT INTO new.%s SELECT * FROM main.%s" % ((grammar.quote(opts["name"]),) * 2)
             try:
                 self.execute(sql)
             except Exception as e:
-                result.append(repr(e))
+                result.append(util.format_exc(e))
                 logger.exception("Error copying table %s from %s to %s.",
                                  grammar.quote(name), self.filename, filename)
 
-        # Create indexes
-        for name, opts in sorted(self.schema["table"].items()):
-            sql  = opts["sql"].replace("CREATE INDEX ", "CREATE INDEX new.")
-            try:
-                self.execute(sql)
-            except Exception as e:
-                result.append(repr(e))
-                logger.exception("Error creating index %s for %s.",
-                                 grammar.quote(name), filename)
+        # Create indexes-triggers-views
+        for category in "index", "trigger", "view":
+            for name, opts in sorted(self.schema[category].items()):
+                try:
+                    sql, err = grammar.transform(opts["sql"], renames={"schema": "new"})
+                    if sql: self.execute(sql)
+                    else: result.append(err)
+                except Exception as e:
+                    result.append(util.format_exc(e))
+                    logger.exception("Error creating %s %s for %s.",
+                                     category, grammar.quote(name), filename)
+        if fks: self.execute("PRAGMA foreign_keys = TRUE")
         self.execute("DETACH DATABASE new")
         return result
 
