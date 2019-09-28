@@ -2568,9 +2568,10 @@ class DatabasePage(wx.Panel):
             if not name and not label:
                 sizer_info.AddSpacer(20), sizer_info.AddSpacer(20)
                 continue # for name, label
-            labeltext = wx.StaticText(parent=panel1c, label="%s:" % label)
+            labeltext = wx.StaticText(parent=panel1c, label="%s:" % label,
+                                      name=name+"_label")
             ColourManager.Manage(labeltext, "ForegroundColour", "DisabledColour")
-            valuetext = wx.TextCtrl(parent=panel1c, value="Analyzing..",
+            valuetext = wx.TextCtrl(parent=panel1c, value="Analyzing..", name=name,
                 style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH | wx.TE_NO_VSCROLL)
             valuetext.MinSize = (-1, 35)
             valuetext.SetEditable(False)
@@ -3030,25 +3031,29 @@ class DatabasePage(wx.Panel):
 
         self.edit_info_path.Value = "<temporary file>" if self.db.temporary \
                                     else self.db.filename
-        self.edit_info_size.Value = "%s (%s)" % \
-            (util.format_bytes(self.db.filesize),
-             util.format_bytes(self.db.filesize, max_units=False))
+        if self.db.filesize:
+            self.edit_info_size.Value = "%s (%s)" % \
+                (util.format_bytes(self.db.filesize),
+                 util.format_bytes(self.db.filesize, max_units=False))
+        else:
+            self.edit_info_size.Value = "0 bytes"
         self.edit_info_created.Value = \
             self.db.date_created.strftime("%Y-%m-%d %H:%M:%S")
         self.edit_info_modified.Value = \
             self.db.last_modified.strftime("%Y-%m-%d %H:%M:%S")
         BLOCKSIZE = 1048576
-        sha1, md5 = hashlib.sha1(), hashlib.md5()
-        try:
-            with open(self.db.filename, "rb") as f:
-                buf = f.read(BLOCKSIZE)
-                while len(buf):
-                    sha1.update(buf), md5.update(buf)
+        if not self.db.temporary or self.db.filesize:
+            sha1, md5 = hashlib.sha1(), hashlib.md5()
+            try:
+                with open(self.db.filename, "rb") as f:
                     buf = f.read(BLOCKSIZE)
-            self.edit_info_sha1.Value = sha1.hexdigest()
-            self.edit_info_md5.Value = md5.hexdigest()
-        except Exception as e:
-            self.edit_info_sha1.Value = self.edit_info_md5.Value = util.format_exc(e)
+                    while len(buf):
+                        sha1.update(buf), md5.update(buf)
+                        buf = f.read(BLOCKSIZE)
+                self.edit_info_sha1.Value = sha1.hexdigest()
+                self.edit_info_md5.Value = md5.hexdigest()
+            except Exception as e:
+                self.edit_info_sha1.Value = self.edit_info_md5.Value = util.format_exc(e)
 
         for name in ["size", "created", "modified", "sha1", "md5", "path"]:
             getattr(self, "edit_info_%s" % name).MinSize = (-1, -1)
