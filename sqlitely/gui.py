@@ -1934,7 +1934,6 @@ class DatabasePage(wx.Panel):
     def __init__(self, parent_notebook, title, db, memoryfs):
         wx.Panel.__init__(self, parent=parent_notebook)
         self.parent_notebook = parent_notebook
-        self.title = title
 
         self.pageorder = {} # {page: notebook index, }
         self.ready_to_close = False
@@ -6331,7 +6330,7 @@ class SchemaObjectPage(wx.PyPanel):
         button_add_column = self._buttons["add_column"] = wx.Button(panel_wrapper, label="&Add column")
         button_add_expr =   self._buttons["add_expr"] =   wx.Button(panel_wrapper, label="Add ex&pression")
 
-        label_where = wx.StaticText(panel, label="&WHERE:")
+        label_where = wx.StaticText(panel, label="WHE&RE:")
         stc_where   = self._ctrls["where"] = controls.SQLiteTextCtrl(panel,
             size=(-1, 40),
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
@@ -6424,7 +6423,7 @@ class SchemaObjectPage(wx.PyPanel):
 
         label_body.ToolTipString = "Trigger body SQL"
 
-        label_when = wx.StaticText(panel, label="&WHEN:")
+        label_when = wx.StaticText(panel, label="WHEN:")
         stc_when   = self._ctrls["when"] = controls.SQLiteTextCtrl(panel,
             size=(-1, 40),
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
