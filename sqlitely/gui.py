@@ -6125,6 +6125,7 @@ class SchemaObjectPage(wx.PyPanel):
         self._ignore_change = False
         self._has_alter     = False
         self._show_alter    = False
+        self._fks_on        = db.execute("PRAGMA foreign_keys").fetchone()["foreign_keys"]
         self._types    = self._GetColumnTypes()
         self._tables   = [x["name"] for x in db.get_category("table").values()]
         self._views    = [x["name"] for x in db.get_category("view").values()]
@@ -7272,7 +7273,7 @@ class SchemaObjectPage(wx.PyPanel):
             meta["name"] = tempname
 
             args = {"name": old["name"], "name2": new["name"], "tempname": tempname,
-                    "meta": meta, "__type__": "COMPLEX ALTER TABLE",
+                    "fks": self._fks_on, "meta": meta, "__type__": "COMPLEX ALTER TABLE",
                     "columns": [(colmap1[c2["__id__"]]["name"], c2["name"])
                                 for c2 in cols2 if c2["__id__"] in colmap1]}
 
@@ -7953,7 +7954,7 @@ class SchemaObjectPage(wx.PyPanel):
             logger.exception("Error executing SQL.")
             try: oldname and self._db.execute("ROLLBACK")
             except Exception: pass
-            try: self._db.execute("PRAGMA foreign_keys = on")
+            try: self._fks_on and self._db.execute("PRAGMA foreign_keys = on")
             except Exception: pass
             msg = "Error saving changes:\n\n%s" % util.format_exc(e)
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)

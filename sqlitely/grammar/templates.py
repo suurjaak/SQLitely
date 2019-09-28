@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    24.09.2019
+@modified    28.09.2019
 ------------------------------------------------------------------------------
 """
 
@@ -80,6 +80,7 @@ copy rows from existing to new, drop existing, rename new to existing. Steps:
              tempname:  table temporary name,
              meta:      {table CREATE metainfo, using temporary name}
              columns:   [(column name in old, column name in new)]
+             fks:       whether foreign_keys PRAGMA is on
              ?table:    [{related table {name, tempname, sql, ?index, ?trigger}, using new names}, ]
              ?index:    [{related index {name, sql}, using new names}, ]
              ?trigger:  [{related trigger {name, sql}, using new names}, ]
@@ -90,8 +91,10 @@ ALTER_TABLE_COMPLEX = """<%
 CATEGORIES = ["index", "trigger", "view"]
 %>
 
+%if data["fks"]:
 PRAGMA foreign_keys = off;{{ LF() }}
 {{ LF() }}
+%endif
 
 SAVEPOINT alter_table;{{ LF() }}
 {{ LF() }}
@@ -154,7 +157,9 @@ DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
 RELEASE SAVEPOINT alter_table;{{ LF() }}
 {{ LF() }}
 
+%if data["fks"]:
 PRAGMA foreign_keys = on;{{ LF() }}
+%endif
 """
 
 
