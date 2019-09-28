@@ -3533,7 +3533,7 @@ class DatabasePage(wx.Panel):
             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
 
         menu = wx.Menu()
-        item_file = item_database = item_database_meta = None
+        item_file = item_database = None
         if data.get("type") in ("table", "view"): # Single table/view
             item_name = wx.MenuItem(menu, -1, '%s %s' % (
                         data["type"].capitalize(), util.unprint(grammar.quote(data["name"], force=True))))
@@ -3557,7 +3557,6 @@ class DatabasePage(wx.Panel):
             item_file     = wx.MenuItem(menu, -1, '&Export %s to file' % data["type"])
             if "table" == data["type"]:
                 item_database = wx.MenuItem(menu, -1, 'Export table to another &database')
-                item_database_meta = wx.MenuItem(menu, -1, 'Export table str&ucture to another &database')
 
         elif "column" == data.get("type"): # Column
             item_name = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
@@ -3589,18 +3588,15 @@ class DatabasePage(wx.Panel):
 
             if "table" == data["category"]:
                 item_database = wx.MenuItem(menu, -1, "Export all tables to another &database")
-                item_database_meta = wx.MenuItem(menu, -1, "Export all table str&uctures to another &database")
             if not data["items"]:
                 item_copy.Enable(False)
                 item_file.Enable(False)
                 if item_database:      item_database.Enable(False)
-                if item_database_meta: item_database_meta.Enable(False)
 
         if item_file:
             menu.AppendSeparator()
             menu.AppendItem(item_file)
             if item_database:      menu.AppendItem(item_database)
-            if item_database_meta: menu.AppendItem(item_database_meta)
             names = data["items"] if "category" == data["type"] else [data["name"]]
             category = data["category"] if "category" == data["type"] else data["type"]
             menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, category, names),
@@ -3608,9 +3604,6 @@ class DatabasePage(wx.Panel):
             if item_database:
                 menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, names, True),
                          id=item_database.GetId())
-            if item_database_meta:
-                menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, names, False),
-                         id=item_database_meta.GetId())
 
         if tree.HasChildren(item):
             item_expand   = wx.MenuItem(menu, -1, "&Toggle expanded/collapsed")
@@ -3750,6 +3743,13 @@ class DatabasePage(wx.Panel):
             if names:
                 menu.AppendItem(item_copy)
                 menu.AppendItem(item_copy_sql)
+
+                if "table" == data["category"]:
+                    item_database_meta = wx.MenuItem(menu, -1, "Export all %s str&uctures to another database" % data["category"])
+                    menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, names, False),
+                             id=item_database_meta.GetId())
+                    menu.AppendItem(item_database_meta)
+
                 menu.AppendSeparator()
                 menu.AppendItem(item_delete)
             menu.AppendItem(item_create)
@@ -3835,6 +3835,13 @@ class DatabasePage(wx.Panel):
             menu.AppendItem(item_open_data)
             menu.AppendItem(item_copy)
             menu.AppendItem(item_copy_sql)
+
+            if "table" == data["type"]:
+                item_database_meta = wx.MenuItem(menu, -1, 'Export %s str&ucture to another database' % data["type"])
+                menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, [data["name"]], False),
+                         id=item_database_meta.GetId())
+                menu.AppendItem(item_database_meta)
+
             menu.AppendSeparator()
 
             if "table" == data["type"]:
