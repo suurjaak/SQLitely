@@ -6107,7 +6107,7 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_buttons      = wx.BoxSizer(wx.HORIZONTAL)
         sizer_sql_header   = wx.BoxSizer(wx.HORIZONTAL)
 
-        splitter = self._splitter = wx.SplitterWindow(parent=self, style=wx.BORDER_NONE)
+        splitter = wx.SplitterWindow(parent=self, style=wx.BORDER_NONE)
         panel1, panel2 = wx.Panel(splitter), wx.Panel(splitter)
         panel1.Sizer, panel2.Sizer = wx.BoxSizer(wx.VERTICAL), wx.BoxSizer(wx.VERTICAL)
 
@@ -6487,17 +6487,18 @@ class SchemaObjectPage(wx.PyPanel):
         check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
         check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT &EXISTS")
 
-        panel_wrapper = wx.Panel(panel, style=wx.BORDER_STATIC)
-        sizer_wrapper = panel_wrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
+        splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
+        panel1, panel2 = wx.Panel(splitter, style=wx.BORDER_STATIC), wx.Panel(splitter)
+        panel1.Sizer, panel2.Sizer = wx.BoxSizer(wx.VERTICAL), wx.BoxSizer(wx.HORIZONTAL)
 
-        panel_columns = self._panel_columns = wx.lib.scrolledpanel.ScrolledPanel(panel_wrapper)
+        panel_columns = self._panel_columns = wx.lib.scrolledpanel.ScrolledPanel(panel1)
         panel_columns.Sizer = wx.FlexGridSizer(cols=2, vgap=4, hgap=10)
         panel_columns.Sizer.AddGrowableCol(1)
 
-        button_add_column = self._buttons["add_column"] = wx.Button(panel_wrapper, label="&Add column")
+        button_add_column = self._buttons["add_column"] = wx.Button(panel1, label="&Add column")
 
-        label_body = wx.StaticText(panel, label="Se&lect:")
-        stc_body = self._ctrls["select"] = controls.SQLiteTextCtrl(panel,
+        label_body = wx.StaticText(panel2, label="Se&lect:")
+        stc_body = self._ctrls["select"] = controls.SQLiteTextCtrl(panel2,
             size=(-1, 40),
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
         label_body.ToolTipString = "SELECT statement for view"
@@ -6509,15 +6510,14 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_buttons.AddStretchSpacer()
         sizer_buttons.Add(button_add_column)
 
-        sizer_wrapper.Add(panel_columns, border=5, proportion=1, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
-        sizer_wrapper.Add(sizer_buttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
+        panel1.Sizer.Add(panel_columns, border=5, proportion=1, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
+        panel1.Sizer.Add(sizer_buttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
-        sizer_select.Add(label_body, border=5, flag=wx.RIGHT)
-        sizer_select.Add(stc_body, proportion=1, flag=wx.GROW)
+        panel2.Sizer.Add(label_body, border=5, flag=wx.RIGHT)
+        panel2.Sizer.Add(stc_body, proportion=1, flag=wx.GROW)
 
         sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
-        sizer.Add(panel_wrapper, proportion=1, flag=wx.GROW)
-        sizer.Add(sizer_select, proportion=2, border=5, flag=wx.TOP | wx.GROW)
+        sizer.Add(splitter, proportion=1, flag=wx.GROW)
 
         self._BindDataHandler(self._OnChange,  check_temp,   ["temporary"])
         self._BindDataHandler(self._OnChange,  check_exists, ["exists"])
@@ -6525,6 +6525,8 @@ class SchemaObjectPage(wx.PyPanel):
         self._BindDataHandler(self._OnAddItem, button_add_column, ["columns"], "")
 
         panel_columns.SetupScrolling(scroll_x=False)
+        splitter.SetMinimumPaneSize(100)
+        splitter.SplitHorizontally(panel1, panel2, 100)
         return panel
 
 
