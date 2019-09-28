@@ -112,7 +112,7 @@ def export_data(make_iterable, filename, title, db, columns, query="", category=
                 writer.close() if is_xlsx else 0
             else:
                 namespace = {
-                    "db_filename": db.filename,
+                    "db_filename": db.name,
                     "title":       title,
                     "columns":     columns,
                     "rows":        make_iterable(),

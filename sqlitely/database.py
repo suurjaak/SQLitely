@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.09.2019
+@modified    26.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -19,6 +19,7 @@ import os
 import re
 import sqlite3
 import shutil
+import tempfile
 
 from . lib import util
 from . import conf
@@ -426,18 +427,31 @@ class Database(object):
         "shrink_memory", "soft_heap_limit", "table_info", "wal_checkpoint"
     ]
 
+    """Temporary file name counter."""
+    temp_counter = 1
 
 
-    def __init__(self, filename, log_error=True):
+
+    def __init__(self, filename=None, log_error=True):
         """
         Initializes a new database object from the file.
 
+        @param   filename   if None, creates a temporary file database,
+                            file deleted on close
         @param   log_error  if False, exceptions on opening the database
                             are not written to log (written by default)
         """
         self.filename = filename
-        self.basefilename = os.path.basename(self.filename)
+        self.name = filename
+        self.temporary = (filename is None)
+        if self.temporary:
+            fh, self.filename = tempfile.mkstemp(".db")
+            os.close(fh)
+            self.name = "New database"
+            if self.temp_counter > 1: self.name += " (%s)" % self.temp_counter
+            Database.temp_counter += 1
         self.filesize = None
+        self.date_created = None
         self.last_modified = None
         self.backup_created = False
         self.compile_options = []
@@ -446,8 +460,17 @@ class Database(object):
         #   {name.lower():
         #     {name: str, sql: str, table: str, ?columns: [], ?count: int,
         #      ?meta: {full metadata}}}}
+        self.connection = None
         self.schema = defaultdict(OrderedDict)
-        self.update_fileinfo()
+        self.open()
+
+
+    def __str__(self):
+        return self.name
+
+
+    def open(self):
+        """Opens the database."""
         try:
             self.connection = sqlite3.connect(self.filename,
                                               check_same_thread=False)
@@ -456,15 +479,35 @@ class Database(object):
             self.compile_options = [x["compile_option"] for x in 
                                     self.execute("PRAGMA compile_options").fetchall()]
             self.populate_schema()
+            self.update_fileinfo()
         except Exception:
-            if log_error: logger.exception("Error opening database %s.", filename)
-            self.close()
+            if log_error: logger.exception("Error opening database %s.", self.filename)
+            try: self.connection.close()
+            except Exception: pass
+            self.connection = None
             raise
 
 
-    def __str__(self):
-        if self and hasattr(self, "filename"):
-            return self.filename
+    def close(self):
+        """Closes the database and frees all allocated data."""
+        if self.connection:
+            try: self.connection.close()
+            except Exception: pass
+            self.connection = None
+        if self.temporary:
+            try: os.unlink(self.filename)
+            except Exception: pass
+        self.schema.clear()
+
+
+    def reopen(self, filename):
+        """Opens the database with a new file, closing current connection if any."""
+        if self.connection:
+            try: self.connection.close()
+            except Exception: pass
+            self.connection = None
+        self.filename = filename
+        self.open()
 
 
     def check_integrity(self):
@@ -548,18 +591,6 @@ class Database(object):
         return sqlite3.sqlite_version_info >= (3, 25)
 
 
-    def close(self):
-        """Closes the database and frees all allocated data."""
-        if hasattr(self, "connection"):
-            try:
-                self.connection.close()
-            except Exception:
-                pass
-            del self.connection
-            self.connection = None
-        self.schema.clear()
-
-
     def execute(self, sql, params=(), log=True):
         """Shorthand for self.connection.execute()."""
         result = None
@@ -579,20 +610,17 @@ class Database(object):
         self.ensure_backup()
         res = self.execute(sql)
         affected_rows = res.rowcount
-        self.connection.commit()
+        if self.connection.isolation_level is not None: self.connection.commit()
         return affected_rows
 
 
     def is_open(self):
         """Returns whether the database is currently open."""
-        return (self.connection is not None)
+        return self.connection is not None
 
 
     def row_factory(self, cursor, row):
-        """
-        Creates dicts from resultset rows, with BLOB fields converted to
-        strings.
-        """
+        """Returns dict from resultset rows, with BLOBs converted to strings."""
         result = {}
         for idx, col in enumerate(cursor.description):
             name = col[0]
@@ -639,7 +667,7 @@ class Database(object):
             if name: where += " AND LOWER(name) = :name"; args.update(name=name)
         for row in self.execute(
             "SELECT * FROM sqlite_master "
-            "WHERE %s ORDER BY type, name COLLATE NOCASE" % where, args
+            "WHERE %s ORDER BY type, name COLLATE NOCASE" % where, args, log=False
         ).fetchall():
             if "table" == row["type"] \
             and "ENABLE_ICU" not in self.compile_options: # Unsupported tokenizer
@@ -825,17 +853,19 @@ class Database(object):
     def update_fileinfo(self):
         """Updates database file size and modification information."""
         self.filesize = os.path.getsize(self.filename)
+        self.date_created  = datetime.datetime.fromtimestamp(
+                             os.path.getctime(self.filename))
         self.last_modified = datetime.datetime.fromtimestamp(
                              os.path.getmtime(self.filename))
 
 
     def ensure_backup(self):
         """Creates a backup file if configured so, and not already created."""
-        if conf.DBDoBackup:
-            if (not self.backup_created
-            or not os.path.exists("%s.bak" % self.filename)):
-                shutil.copyfile(self.filename, "%s.bak" % self.filename)
-                self.backup_created = True
+        if not conf.DBDoBackup or self.temporary or self.backup_created \
+        or os.path.exists("%s.bak" % self.filename): return
+
+        shutil.copyfile(self.filename, "%s.bak" % self.filename)
+        self.backup_created = True
 
 
     def blobs_to_binary(self, values, list_columns, col_data):
@@ -848,7 +878,7 @@ class Database(object):
         list_values = [values[i] for i in list_columns] if is_dict else values
         map_columns = dict([(i["name"], i) for i in col_data])
         for i, val in enumerate(list_values):
-            if "blob" == map_columns[list_columns[i]]["type"].lower() and val:
+            if val and "BLOB" == self.get_affinity(map_columns[list_columns[i]]):
                 if isinstance(val, unicode):
                     val = val.encode("latin1")
                 val = sqlite3.Binary(val)
@@ -888,17 +918,6 @@ class Database(object):
         return result
 
 
-    def create_table(self, table, create_sql):
-        """Creates the specified table and updates our column data."""
-        table = table.lower()
-        self.execute(create_sql)
-        self.connection.commit()
-        row = self.execute("SELECT name, sql FROM sqlite_master "
-                            "WHERE type = 'table' "
-                            "AND LOWER(name) = ?", [table]).fetchone()
-        self.schema["table"][table] = row
-
-
     def insert_row(self, table, row):
         """
         Inserts the new table row in the database.
@@ -910,7 +929,7 @@ class Database(object):
         table = table.lower()
         logger.info("Inserting 1 row into table %s, %s.",
                     grammar.quote(self.schema["table"][table]["name"]),
-                    self.filename)
+                    self.name)
         self.ensure_backup()
         col_data = self.schema["table"][table]["columns"]
         fields = [col["name"] for col in col_data]
@@ -921,7 +940,7 @@ class Database(object):
 
         cursor = self.execute("INSERT INTO %s (%s) VALUES (%s)" %
                               (grammar.quote(table), str_cols, str_vals), args)
-        self.connection.commit()
+        if self.connection.isolation_level is not None: self.connection.commit()
         self.last_modified = datetime.datetime.now()
         return cursor.lastrowid
 
@@ -936,7 +955,7 @@ class Database(object):
             return
         table, where = table.lower(), ""
         logger.info("Updating 1 row in table %s, %s.",
-                    grammar.quote(self.schema["table"][table]["name"]), self.filename)
+                    grammar.quote(self.schema["table"][table]["name"]), self.name)
         self.ensure_backup()
         col_data = self.schema["table"][table]["columns"]
 
@@ -959,7 +978,7 @@ class Database(object):
         args.update(keyargs)
         self.execute("UPDATE %s SET %s WHERE %s" %
                      (grammar.quote(table), setsql, where), args)
-        self.connection.commit()
+        if self.connection.isolation_level is not None: self.connection.commit()
         self.last_modified = datetime.datetime.now()
 
 
@@ -975,7 +994,7 @@ class Database(object):
         table, where = table.lower(), ""
         logger.info("Deleting 1 row from table %s, %s.",
                     grammar.quote(self.schema["table"][table]["name"]),
-                    self.filename)
+                    self.name)
         self.ensure_backup()
         col_data = self.schema["table"][table]["columns"]
 
@@ -992,7 +1011,7 @@ class Database(object):
             where += (" AND " if where else "") + "%s IS :%s" % (grammar.quote(col["name"]), key)
         args.update(keyargs)
         self.execute("DELETE FROM %s WHERE %s" % (grammar.quote(table), where), args)
-        self.connection.commit()
+        if self.connection.isolation_level is not None: self.connection.commit()
         self.last_modified = datetime.datetime.now()
         return True
 

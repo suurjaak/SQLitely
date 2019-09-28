@@ -97,8 +97,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             "HelpBorderColour":        wx.SYS_COLOUR_ACTIVEBORDER,
         })
         self.dbs_selected = []  # Current selected files in main list
-        self.db_datas = {}  # added DBs {filename: {size, last_modified,
-                            #            tables, error},}
+        self.db_datas = {}  # added DBs {filename: {name, size, last_modified,
+                            #            tables, title, error},}
         self.dbs = {}       # Open databases {filename: Database, }
         self.db_pages = {}  # {DatabasePage: Database, }
         self.page_db_latest = None  # Last opened database page
@@ -160,6 +160,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             workers.DetectDatabaseThread(self.on_detect_databases_callback)
         self.Bind(EVT_DETECTION_WORKER, self.on_detect_databases_result)
         self.Bind(EVT_OPEN_DATABASE, self.on_open_database_event)
+        self.Bind(EVT_DATABASE_PAGE, self.on_database_page_event)
 
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.on_sys_colour_change)
         self.Bind(wx.EVT_CLOSE, self.on_exit)
@@ -402,18 +403,28 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         menu_new_database = self.menu_new_database = menu_file.Append(
             id=wx.ID_ANY, text="&New database\tCtrl-N",
-            help="Create a new SQLite database."
+            help="Create a new SQLite database"
         )
         menu_open_database = self.menu_open_database = menu_file.Append(
             id=wx.ID_ANY, text="&Open database...\tCtrl-O",
-            help="Choose a database file to open."
+            help="Choose a database file to open"
         )
+        menu_save_database = self.menu_save_database = menu_file.Append(
+            id=wx.ID_ANY, text="&Save",
+            help="Save changes to the active database"
+        )
+        menu_save_database_as = self.menu_save_database_as = menu_file.Append(
+            id=wx.ID_ANY, text="Save &as...",
+            help="Save the active database under a new name"
+        )
+        menu_save_database.Enable(False)
+        menu_save_database_as.Enable(False)
         menu_recent = self.menu_recent = wx.Menu()
         menu_file.AppendMenu(id=wx.ID_ANY, text="&Recent files",
-            submenu=menu_recent, help="Recently opened databases.")
+            submenu=menu_recent, help="Recently opened databases")
         menu_file.AppendSeparator()
         menu_options = self.menu_options = \
-            menu_file.Append(id=wx.ID_ANY, text="&Advanced options",
+            menu_file.Append(id=wx.ID_ANY, text="Advanced opt&ions",
                 help="Edit advanced program options")
         menu_iconize = self.menu_iconize = \
             menu_file.Append(id=wx.ID_ANY, text="Minimize to &tray",
@@ -461,6 +472,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         self.Bind(wx.EVT_MENU, self.on_new_database, menu_new_database)
         self.Bind(wx.EVT_MENU, self.on_open_database, menu_open_database)
+        self.Bind(wx.EVT_MENU, self.on_save_active_database, menu_save_database)
+        self.Bind(wx.EVT_MENU, self.on_save_active_database_as, menu_save_database_as)
         self.Bind(wx.EVT_MENU, self.on_open_options, menu_options)
         self.Bind(wx.EVT_MENU, self.on_exit, menu_exit)
         self.Bind(wx.EVT_MENU, self.on_toggle_iconize, menu_iconize)
@@ -562,20 +575,21 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         boldfont.SetPointSize(self.Font.PointSize)
 
         curpage = self.notebook.GetCurrentPage()
-        curfile = curpage.db.filename if isinstance(curpage, DatabasePage) else None
+        curfile = curpage.db.name if isinstance(curpage, DatabasePage) else None
 
-        openfiles = [(os.path.split(d.filename)[-1], p)
-                     for p, d in self.db_pages.items()]
+        openfiles = [(os.path.split(db.name)[-1], p)
+                     for p, db in self.db_pages.items()]
         for filename, page in sorted(openfiles):
             item = wx.MenuItem(menu, -1, filename)
-            if page.db.filename == curfile or len(openfiles) < 2:
+            if page.db.name == curfile or len(openfiles) < 2:
                 item.Font = boldfont
             menu.AppendItem(item)
-            menu.Bind(wx.EVT_MENU, functools.partial(open_item, page.db.filename),
+            menu.Bind(wx.EVT_MENU, functools.partial(open_item, page.db.name),
                       id=item.GetId())
         if openfiles: menu.AppendSeparator()
 
-        allfiles = [(os.path.split(f)[-1], f) for f in self.db_datas]
+        allfiles = [(os.path.split(k)[-1], k) for k, v in self.db_datas.items()
+                    if "name" in v]
         for i, (filename, path) in enumerate(sorted(allfiles)):
             label = "&%s %s" % ((i + 1), filename)
             item = wx.MenuItem(menu, -1, label)
@@ -621,9 +635,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if hasattr(p, "title"):
             subtitle = p.title
             if isinstance(p, DatabasePage): # Use parent/file.db or C:/file.db
-                path, file = os.path.split(p.db.filename)
+                path, file = os.path.split(p.db.name)
                 subtitle = os.path.join(os.path.split(path)[-1] or path, file)
             self.Title += " - " + subtitle
+        self.menu_save_database.Enable(isinstance(p, DatabasePage) and
+                                       (p.db.temporary or bool(p.get_unsaved())))
+        self.menu_save_database_as.Enable(isinstance(p, DatabasePage))
         self.update_notebook_header()
 
 
@@ -703,9 +720,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Removes or adds X to notebook tab style, depending on whether current
         page can be closed.
         """
-        if not self:
-            return
-        p = self.notebook.GetPage(self.notebook.GetSelection())
+        if not self: return
+
+        p = self.notebook.GetCurrentPage()
         style = self.notebook.GetAGWWindowStyleFlag()
         if isinstance(p, DatabasePage):
             if p.ready_to_close \
@@ -726,6 +743,24 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for toggling automatic update checking, changes conf."""
         conf.UpdateCheckAutomatic = event.IsChecked()
         conf.save()
+
+
+    def on_database_page_event(self, event):
+        """Handler for notification from DatabasePage, updates UI."""
+        idx = self.notebook.GetPageIndex(event.source)
+        ready, modified = (getattr(event, x, None) for x in ("ready", "modified"))
+        if ready: self.update_notebook_header()
+
+        if modified is not None:
+            suffix = "*" if modified else ""
+            title1 = self.db_datas[event.source.db.filename].get("title") \
+                     or self.get_unique_tab_title(event.source.db.name)
+            title2 = title1 + suffix
+            if self.notebook.GetPageText(idx) != title2:
+                self.notebook.SetPageText(idx, title2)
+            if self.notebook.GetCurrentPage() is event.source:
+                saveable = event.source.db.temporary or bool(modified)
+                self.menu_save_database.Enable(saveable)
 
 
     def on_list_db_key(self, event):
@@ -1061,10 +1096,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     data["last_modified"] = datetime.datetime.fromtimestamp(
                                             os.path.getmtime(filename))
             data_old = self.db_datas.get(filename)
-            if not data_old or data_old["size"] != data["size"] \
+            if not data_old or "name" not in data_old \
+            or data_old["size"] != data["size"] \
             or data_old["last_modified"] != data["last_modified"]:
+                if not data_old or "name" not in data_old:
+                    self.list_db.AppendRow(data, [1])
                 self.db_datas.setdefault(filename, {}).update(data)
-                if not data_old: self.list_db.AppendRow(data, [1])
                 result = True
 
         self.button_missing.Show(self.list_db.GetItemCount() > 1)
@@ -1075,7 +1112,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def update_database_count(self):
         """Updates database count label."""
-        count, total = self.list_db.GetItemCount() - 1, len(self.db_datas)
+        count = self.list_db.GetItemCount() - 1
+        total = len([v for v in self.db_datas.values() if "name" in v])
         text = ""
         if total: text = util.plural("file", count)
         if count != total: text += " visible (%s in total)" % total
@@ -1142,13 +1180,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             while self.history_file.Count:
                 self.history_file.RemoveFileFromHistory(0)
             del self.dbs_selected[:]
-            self.db_datas.clear()
+            for v in self.db_datas.values(): v.pop("name", None)
             self.dbs.clear()
             conf.save()
             self.update_database_list()
 
 
-    def on_save_database_as(self, event):
+    def on_save_database_as(self, event=None):
         """Handler for clicking to save a copy of a database in the list."""
         filenames = filter(os.path.exists, self.dbs_selected)
         if not filenames:
@@ -1157,11 +1195,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             return wx.MessageBox("%s exist on this computer." % m, conf.Title,
                                  wx.OK | wx.ICON_INFORMATION)
 
-        dialog = wx.DirDialog(parent=self,
+        dialog = wx.DirDialog(self,
             message="Choose directory where to save databases",
             defaultPath=os.getcwd(),
             style=wx.DD_DIR_MUST_EXIST | wx.RESIZE_BORDER
-        ) if len(filenames) > 1 else wx.FileDialog(parent=self,
+        ) if len(filenames) > 1 else wx.FileDialog(self,
             message="Save a copy..",
             defaultDir=os.path.split(filenames[0])[0],
             defaultFile=os.path.basename(filenames[0]),
@@ -1199,6 +1237,90 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.list_db.Select(i, on=self.list_db.GetItemText(i) in new_filenames)
 
 
+    def on_save_active_database(self, event=None):
+        """
+        Handler for clicking to save changes to the active database,
+        commits unsaved changes.
+        """
+        page = self.notebook.GetCurrentPage()
+        if not isinstance(page, DatabasePage): return
+        if page.db.temporary: self.on_save_active_database_as()
+        else: self.save_page_database(page)
+
+
+    def on_save_active_database_as(self, event=None):
+        """
+        Handler for clicking to save the active database under a new name,
+        opens a save as dialog, copies file and commits unsaved changes.
+        """
+        page = self.notebook.GetCurrentPage()
+        if not isinstance(page, DatabasePage): return
+
+        db = page.db
+        exts = ";".join("*" + x for x in conf.DBExtensions)
+        wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
+        dialog = wx.FileDialog(self,
+            message="Save as..", wildcard=wildcard,
+            defaultDir="" if db.temporary else os.path.split(db.filename)[0],
+            defaultFile="" if db.temporary else os.path.basename(db.filename),
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        filename2 = dialog.GetPath()
+        if filename2 != db.filename and filename2 in self.dbs: return wx.MessageBox(
+            "%s is already open in %s." % (filename2, conf.Title),
+            conf.Title, wx.OK | wx.ICON_WARNING
+        )
+        self.save_page_database(page, filename2)
+
+
+    def save_page_database(self, page, filename2=None):
+        """Saves the database, under a new name if specified."""
+        db = page.db
+        filename1, filename2 = db.filename, filename2 or db.filename
+        try:
+            if filename1 != filename2:
+                shutil.copy(filename1, filename2)
+                db.reopen(filename2)
+        except Exception as e:
+            logger.exception("Error saving %s as %s.", db.name, filename2)
+            db.reopen(filename1)
+            page.reload_grids()
+            return
+
+        success = not page.get_unsaved() or page.save_unsaved()
+
+        if not success:
+            if filename1 != filename2:
+                db.reopen(filename1)
+                page.reload_grids()
+            return
+
+        db.name, db.temporary, was_temporary = filename2, False, db.temporary
+        if filename1 != filename2:
+            self.dbs.pop(filename1, None)
+            self.dbs[filename2] = db
+
+            if was_temporary: self.db_datas.pop(filename1, None)
+            self.update_database_list(filename2)
+            self.on_database_page_event(DatabasePageEvent(source=page, modified=False, ready=True))
+            for i in range(1, self.list_db.GetItemCount()):
+                fn = self.list_db.GetItemText(i)
+                if fn in (filename1, filename2):
+                    self.list_db.Select(i, on=(fn == filename2))
+            if filename2 in conf.RecentFiles: # Remove earlier position
+                idx = conf.RecentFiles.index(filename2)
+                try: self.history_file.RemoveFileFromHistory(idx)
+                except Exception: pass
+            self.history_file.AddFileToHistory(filename2)
+            util.add_unique(conf.RecentFiles, filename2, -1,
+                            conf.MaxRecentFiles)
+            conf.save()
+            page.reload_grids()
+            page.load_data()
+
+
 
     def on_remove_database(self, event):
         """Handler for clicking to remove an item from the database list."""
@@ -1214,8 +1336,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         for filename in self.dbs_selected:
             for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
                 if filename in lst: lst.remove(filename)
-            for dct in conf.LastSearchResults, self.db_datas, self.dbs:
+            for dct in conf.LastSearchResults, self.dbs:
                 dct.pop(filename, None)
+            self.db_datas.get(filename, {}).pop("name", None)
         for i in range(self.list_db.GetItemCount())[::-1]:
             if self.list_db.GetItemText(i) in self.dbs_selected:
                 self.list_db.DeleteItem(i)
@@ -1243,8 +1366,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             for lst in (conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles,
                         self.dbs_selected):
                 if filename in lst: lst.remove(filename)
-            for dct in conf.LastSearchResults, self.db_datas:
-                dct.pop(filename, None)
+            conf.LastSearchResults.pop(filename, None)
+            self.db_datas.get(filename, {}).pop("name", None)
             self.list_db.DeleteItem(selected)
         self.update_database_list()
         if self.dbs_selected: self.update_database_detail()
@@ -1295,8 +1418,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
                 for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
                     if filename in lst: lst.remove(filename)
-                for dct in conf.LastSearchResults, self.db_datas, self.dbs:
+                for dct in conf.LastSearchResults, self.dbs:
                     dct.pop(filename, None)
+                self.db_datas.get(filename, {}).pop("name", None)
 
                 for i in range(self.list_db.GetItemCount())[::-1]:
                     if self.list_db.GetItemText(i) == filename:
@@ -1405,29 +1529,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_new_database(self, event):
         """
-        Handler for new database menu or button, displays a save file dialog,
-        creates and loads the chosen database.
+        Handler for new database menu or button, opens a temporary file database.
         """
-        self.dialog_savefile.Filename = "database"
-        self.dialog_savefile.Message = "Save new database as"
-        exts = ";".join("*" + x for x in conf.DBExtensions)
-        self.dialog_savefile.Wildcard = "SQLite database (%s)|%s" % (exts, exts)
-        self.dialog_savefile.WindowStyle |= wx.FD_OVERWRITE_PROMPT
-        if wx.ID_OK != self.dialog_savefile.ShowModal():
-            return
-
-        filename = self.dialog_savefile.GetPath()
-        try:
-            with open(filename, "w"): pass
-        except Exception as e:
-            logger.exception("Error creating %s.", filename)
-            wx.MessageBox("Could not create %s.\n\n"
-                          "Some other process may be using the file:\n\n%s" % (
-                          filename, util.format_exc(e)),
-                          conf.Title, wx.OK | wx.ICON_ERROR)
-        else:
-            self.update_database_list(filename)
-            self.load_database_page(filename)
+        self.load_database_page(None)
 
 
     def on_open_database_event(self, event):
@@ -1461,7 +1565,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             wx.YieldIfNeeded()
             count = 0
             for filename in database.find_databases(folder):
-                if filename not in self.db_datas:
+                if "name" not in self.db_datas.get(filename, {}):
                     logger.info("Detected database %s.", filename)
                     self.update_database_list(filename)
                     count += 1
@@ -1552,7 +1656,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         unsaved_pages = {} # {DatabasePage: filename, }
         for page, db in self.db_pages.items():
             if page and page.get_unsaved():
-                unsaved_pages[page] = db.filename
+                unsaved_pages[page] = db.name
         if unsaved_pages:
             if wx.OK != wx.MessageBox(
                 "There are unsaved changes in files\n(%s).\n\n"
@@ -1561,15 +1665,16 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
             ): return
 
-        for page in self.db_pages:
+        for page, db in self.db_pages.items():
             if not page: continue # continue for page, if dead object
             active_idx = page.notebook.Selection
-            if active_idx:
-                conf.LastActivePage[page.db.filename] = active_idx
+            if active_idx and not db.temporary:
+                conf.LastActivePage[db.filename] = active_idx
             elif page.db.filename in conf.LastActivePage:
                 del conf.LastActivePage[page.db.filename]
             page.save_page_conf()
             for worker in page.workers_search.values(): worker.stop()
+            db.close()
         self.worker_detection.stop()
 
         # Save last selected files in db lists, to reselect them on rerun
@@ -1605,24 +1710,27 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         # Remove page from MainWindow data structures
         unsaved = page.get_unsaved()
         if unsaved:
-            info = ""
-            if unsaved.get("pragma"): info = "PRAGMA settings"
-            if unsaved.get("table"):
-                info += (", and " if info else "")
-                info += util.plural("table", unsaved["table"], with_items=False)
-                info += " " + ", ".join(map(grammar.quote, sorted(unsaved["table"])))
-            if unsaved.get("schema"):
-                info += (", and " if info else "") + "schema changes"
+            if unsaved.pop("temporary", None) and not unsaved:
+                msg = "%s has modifications.\n\n" % page.db
+            else:
+                info = ""
+                if unsaved.get("pragma"): info = "PRAGMA settings"
+                if unsaved.get("table"):
+                    info += (", and " if info else "")
+                    info += util.plural("table", unsaved["table"], with_items=False)
+                    info += " " + ", ".join(map(grammar.quote, sorted(unsaved["table"])))
+                if unsaved.get("schema"):
+                    info += (", and " if info else "") + "schema changes"
+                if unsaved.get("temporary"):
+                    info += (", and " if info else "") + "temporary file"
+                msg = "There are unsaved changes in %s:\n%s.\n\n" % (page.db, info)
 
             if wx.OK != wx.MessageBox(
-                "There are unsaved changes in %s:\n%s.\n\n"
-                "Are you sure you want to discard them?" % (
-                    page.db, info
-                ), conf.Title,
+                msg + "Are you sure you want to discard them?", conf.Title,
                 wx.OK | wx.CANCEL | wx.ICON_INFORMATION
             ): return event.Veto()
 
-        if page.notebook.Selection:
+        if page.notebook.Selection and not page.db.temporary:
             conf.LastActivePage[page.db.filename] = page.notebook.Selection
         elif page.db.filename in conf.LastActivePage:
             del conf.LastActivePage[page.db.filename]
@@ -1638,9 +1746,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         # Close databases, if not used in any other page
         page.db.unregister_consumer(page)
         if not page.db.has_consumers():
-            if page.db.filename in self.dbs:
-                del self.dbs[page.db.filename]
+            if page.db.name in self.dbs:
+                del self.dbs[page.db.name]
             page.db.close()
+            self.db_datas.get(page.db.filename, {}).pop("title", None)
             logger.info("Closed database %s.", page.db)
         # Remove any dangling references
         if self.page_db_latest == page:
@@ -1676,66 +1785,48 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         conf.save()
 
 
-    def get_unique_tab_title(self, title):
-        """
-        Returns a title that is unique for the current notebook - if the
-        specified title already exists, appends a counter to the end,
-        e.g. "Database comparison (1)". Title is shortened from the left
-        if longer than allowed.
-        """
-        if len(title) > conf.MaxTabTitleLength:
-            title = "..%s" % title[-conf.MaxTabTitleLength:]
-        unique = title_base = title
-        all_titles = [self.notebook.GetPageText(i)
-                      for i in range(self.notebook.GetPageCount())]
-        i = 1 # Start counter from 1
-        while unique in all_titles:
-            unique = "%s (%d)" % (title_base, i)
-            i += 1
-        return unique
-
-
     def load_database(self, filename):
         """
         Tries to load the specified database, if not already open, and returns
-        it.
+        it. If filename is None, creates a temporary file database.
         """
         db = self.dbs.get(filename)
         if not db:
-            db = None
-            if os.path.exists(filename):
+            if not filename or os.path.exists(filename):
                 try:
                     db = database.Database(filename)
                 except Exception:
+                    logger.exception("some error")
                     is_accessible = False
-                    try:
-                        with open(filename, "rb"):
-                            is_accessible = True
-                    except Exception:
-                        pass
-                    if not is_accessible:
+                    if filename:
+                        try:
+                            with open(filename, "rb"):
+                                is_accessible = True
+                        except Exception: pass
+                    if filename and not is_accessible:
                         wx.MessageBox(
                             "Could not open %s.\n\n"
                             "Some other process may be using the file."
                             % filename, conf.Title, wx.OK | wx.ICON_ERROR)
-                    else:
+                    elif filename:
                         wx.MessageBox(
                             "Could not open %s.\n\n"
                             "Not a valid SQLITE database?" % filename,
                             conf.Title, wx.OK | wx.ICON_ERROR)
                 if db:
                     logger.info("Opened %s (%s).", db, util.format_bytes(db.filesize))
-                    guibase.status("Reading database file %s.", db, flash=True)
-                    self.dbs[filename] = db
+                    guibase.status("Reading database %s.", db, flash=True)
+                    self.dbs[db.name] = db
                     # Add filename to Recent Files menu and conf, if needed
-                    if filename in conf.RecentFiles: # Remove earlier position
-                        idx = conf.RecentFiles.index(filename)
-                        try: self.history_file.RemoveFileFromHistory(idx)
-                        except Exception: pass
-                    self.history_file.AddFileToHistory(filename)
-                    util.add_unique(conf.RecentFiles, filename, -1,
-                                    conf.MaxRecentFiles)
-                    conf.save()
+                    if filename:
+                        if filename in conf.RecentFiles: # Remove earlier position
+                            idx = conf.RecentFiles.index(filename)
+                            try: self.history_file.RemoveFileFromHistory(idx)
+                            except Exception: pass
+                        self.history_file.AddFileToHistory(filename)
+                        util.add_unique(conf.RecentFiles, filename, -1,
+                                        conf.MaxRecentFiles)
+                        conf.save()
             else:
                 wx.MessageBox("Nonexistent file: %s." % filename,
                               conf.Title, wx.OK | wx.ICON_ERROR)
@@ -1746,21 +1837,18 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         Tries to load the specified database, if not already open, create a
         subpage for it, if not already created, and focuses the subpage.
+        If filename is None, creates a temporary file database.
 
         @return  database page instance
         """
-        db = None
-        page = None
-        if filename in self.dbs:
-            db = self.dbs[filename]
-        if db and db in self.db_pages.values():
-            page = next((x for x in self.db_pages if x and x.db == db), None)
+        page, db = None, self.dbs.get(filename)
+        if db: page = next((x for x in self.db_pages if x and x.db == db), None)
         if not page:
-            if not db:
-                db = self.load_database(filename)
+            if not db: db = self.load_database(filename)
             if db:
-                guibase.status("Opening database file %s." % db, flash=True)
-                tab_title = self.get_unique_tab_title(db.filename)
+                guibase.status("Opening database %s." % db, flash=True)
+                tab_title = self.get_unique_tab_title(db.name)
+                self.db_datas.setdefault(db.filename, {})["title"] = tab_title
                 page = DatabasePage(self.notebook, tab_title, db, self.memoryfs)
                 self.db_pages[page] = db
                 self.UpdateAccelerators()
@@ -1768,11 +1856,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.Bind(wx.EVT_LIST_DELETE_ALL_ITEMS,
                           self.on_clear_searchall, page.edit_searchall)
         if page:
-            self.list_db.Select(0, on=False) # Deselect home row
-            for i in range(1, self.list_db.GetItemCount()):
-                if self.list_db.GetItemText(i) == filename:
-                    self.list_db.Select(i)
-                    break # break for i
+            if filename:
+                self.list_db.Select(0, on=False) # Deselect home row
+                for i in range(1, self.list_db.GetItemCount()):
+                    if self.list_db.GetItemText(i) == filename:
+                        self.list_db.Select(i)
+                        break # break for i
             for i in range(self.notebook.GetPageCount()):
                 if self.notebook.GetPage(i) == page:
                     self.notebook.SetSelection(i)
@@ -1781,6 +1870,27 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         return page
 
 
+    def get_unique_tab_title(self, title):
+        """
+        Returns a title that is unique for the current notebook - if the
+        specified title already exists, appends a counter to the end,
+        e.g. "..longpath\myname.db (2)". Title is shortened from the left
+        if longer than allowed.
+        """
+        if len(title) > conf.MaxTabTitleLength:
+            title = "..%s" % title[-conf.MaxTabTitleLength:]
+        unique = title_base = title
+        all_titles = [self.notebook.GetPageText(i)
+                      for i in range(self.notebook.GetPageCount())]
+        i = 2 # Start counter from 1
+        while unique in all_titles:
+            unique = "%s (%d)" % (title_base, i)
+            i += 1
+        return unique
+
+
+
+DatabasePageEvent, EVT_DATABASE_PAGE = wx.lib.newevent.NewEvent()
 
 class DatabasePage(wx.Panel):
     """
@@ -1798,6 +1908,7 @@ class DatabasePage(wx.Panel):
         self.db = db
         self.db.register_consumer(self)
         self.ignore_unsaved = False
+        self.save_underway  = False
         self.pragma         = db.get_pragma_values() # {pragma_name: value}
         self.pragma_changes = {}    # {pragma_name: value}
         self.pragma_ctrls   = {}    # {pragma_name: wx control}
@@ -1808,7 +1919,7 @@ class DatabasePage(wx.Panel):
         self.last_sql = ""          # Last executed SQL
         self.memoryfs = memoryfs
         parent_notebook.InsertPage(1, self, title)
-        busy = controls.BusyPanel(self, "Loading \"%s\"." % db.filename)
+        busy = controls.BusyPanel(self, 'Loading "%s".' % db.name)
         self.counter = lambda x={"c": 0}: x.update(c=1+x["c"]) or x["c"]
         ColourManager.Manage(self, "BackgroundColour", "WidgetColour")
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.on_sys_colour_change)
@@ -1821,7 +1932,7 @@ class DatabasePage(wx.Panel):
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
-        label_title = wx.StaticText(parent=self, label="Database")
+        label_title = self.label_title = wx.StaticText(parent=self, label="Database")
         edit_title = self.edit_title = wx.TextCtrl(parent=self,
             style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH | wx.TE_NO_VSCROLL)
         edit_title.SetEditable(False)
@@ -1829,6 +1940,7 @@ class DatabasePage(wx.Panel):
         ColourManager.Manage(edit_title, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
         sizer_header.Add(label_title, border=5, flag=wx.RIGHT | wx.TOP)
         sizer_header.Add(edit_title, proportion=1, border=5, flag=wx.TOP | wx.GROW)
+        sizer_header.AddStretchSpacer()
 
 
         self.label_search = wx.StaticText(self, -1, "&Search in messages:")
@@ -1900,7 +2012,7 @@ class DatabasePage(wx.Panel):
 
         try:
             self.load_data()
-            guibase.status("Opened database file %s." % db, flash=True)
+            guibase.status("Opened database %s." % db, flash=True)
         finally:
             busy.Close()
         self.edit_searchall.SetFocus()
@@ -1991,7 +2103,7 @@ class DatabasePage(wx.Panel):
         panel1 = wx.Panel(parent=splitter)
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_topleft = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_topleft.Add(wx.StaticText(parent=panel1, label="&Tables:"),
+        sizer_topleft.Add(wx.StaticText(parent=panel1, label="Data:"),
                           flag=wx.ALIGN_CENTER_VERTICAL)
         button_refresh = self.button_refresh_data = \
             wx.Button(panel1, label="Refresh")
@@ -2043,7 +2155,7 @@ class DatabasePage(wx.Panel):
         sizer2.Add(nb, proportion=1, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
-        splitter.SplitVertically(panel1, panel2, 270)
+        splitter.SplitVertically(panel1, panel2, 400)
 
         self.Bind(EVT_DATA_PAGE, self.on_data_page_event)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
@@ -2399,9 +2511,9 @@ class DatabasePage(wx.Panel):
         label_file.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                   wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
 
-        names = ["edit_info_path", "edit_info_size", "edit_info_modified",
-                 "edit_info_sha1", "edit_info_md5", ]
-        labels = ["Full path", "File size", "Last modified",
+        names = ["edit_info_path", "edit_info_size", "edit_info_created",
+                 "edit_info_modified", "edit_info_sha1", "edit_info_md5", ]
+        labels = ["Full path", "File size", "Created", "Last modified",
                   "SHA-1 checksum", "MD5 checksum",  ]
         for name, label in zip(names, labels):
             if not name and not label:
@@ -2416,7 +2528,8 @@ class DatabasePage(wx.Panel):
             sizer_info.Add(labeltext, border=5, flag=wx.LEFT | wx.TOP)
             sizer_info.Add(valuetext, border=5, flag=wx.TOP | wx.GROW)
             setattr(self, name, valuetext)
-        self.edit_info_path.Value = self.db.filename
+        self.edit_info_path.Value = "<temporary file>" if self.db.temporary \
+                                    else self.db.filename
 
         button_vacuum = self.button_vacuum = \
             wx.Button(parent=panel1c, label="Vacuum")
@@ -2429,13 +2542,14 @@ class DatabasePage(wx.Panel):
                                        "it into a minimal amount of disk space.")
         button_check.SetToolTipString("Check database integrity for "
                                       "corruption and recovery.")
+        button_check.Enable(not self.db.temporary)
 
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
         sizer_buttons.Add(button_vacuum)
         sizer_buttons.AddStretchSpacer()
         sizer_buttons.Add(button_check)
         sizer_buttons.AddStretchSpacer()
-        sizer_buttons.Add(button_refresh, border=15,
+        sizer_buttons.Add(button_refresh, border=10,
                        flag=wx.ALIGN_RIGHT | wx.RIGHT)
         self.Bind(wx.EVT_BUTTON, self.on_vacuum, button_vacuum)
         self.Bind(wx.EVT_BUTTON, self.on_check_integrity, button_check)
@@ -2790,7 +2904,7 @@ class DatabasePage(wx.Panel):
         """
         Handler for vacuuming the database.
         """
-        msg = "Vacuuming %s." % self.db.filename
+        msg = "Vacuuming %s." % self.db.name
         guibase.status(msg, log=True, flash=True)
         busy = controls.BusyPanel(self, msg)
         wx.YieldIfNeeded()
@@ -2812,6 +2926,7 @@ class DatabasePage(wx.Panel):
 
     def save_page_conf(self):
         """Saves page last configuration like search text and results."""
+        if self.db.temporary: return
 
         # Save search box state
         if conf.SearchHistory[-1:] == [""]: # Clear empty search flag
@@ -2861,12 +2976,16 @@ class DatabasePage(wx.Panel):
         if reload:
             self.db.populate_schema()
             self.db.update_fileinfo()
-        for name in ["size", "modified", "sha1", "md5"]:
+        for name in ["size", "created", "modified", "sha1", "md5"]:
             getattr(self, "edit_info_%s" % name).Value = ""
 
+        self.edit_info_path.Value = "<temporary file>" if self.db.temporary \
+                                    else self.db.filename
         self.edit_info_size.Value = "%s (%s)" % \
             (util.format_bytes(self.db.filesize),
              util.format_bytes(self.db.filesize, max_units=False))
+        self.edit_info_created.Value = \
+            self.db.date_created.strftime("%Y-%m-%d %H:%M:%S")
         self.edit_info_modified.Value = \
             self.db.last_modified.strftime("%Y-%m-%d %H:%M:%S")
         BLOCKSIZE = 1048576
@@ -2882,12 +3001,12 @@ class DatabasePage(wx.Panel):
         except Exception as e:
             self.edit_info_sha1.Value = self.edit_info_md5.Value = util.format_exc(e)
 
-        for name in ["size", "modified", "sha1", "md5", "path"]:
+        for name in ["size", "created", "modified", "sha1", "md5", "path"]:
             getattr(self, "edit_info_%s" % name).MinSize = (-1, -1)
         self.edit_info_path.ContainingSizer.Layout()
 
         self.button_vacuum.Enabled = True
-        self.button_check_integrity.Enabled = True
+        self.button_check_integrity.Enabled = not self.db.temporary
         self.button_refresh_fileinfo.Enabled = True
 
 
@@ -3122,7 +3241,7 @@ class DatabasePage(wx.Panel):
                                                tab_data["info"])
         if search_done:
             guibase.status('Finished searching for "%s" in %s.',
-                           result["search"]["text"], self.db.filename, flash=True)
+                           result["search"]["text"], self.db, flash=True)
             self.tb_search_settings.SetToolNormalBitmap(
                 wx.ID_STOP, images.ToolbarStopped.Bitmap)
             if search_id in self.workers_search:
@@ -3148,7 +3267,7 @@ class DatabasePage(wx.Panel):
         text = self.edit_searchall.Value
         if text.strip():
             guibase.status('Searching for "%s" in %s.',
-                           text, self.db.filename, flash=True)
+                           text, self.db, flash=True)
             html = self.html_searchall
             data = {"id": self.counter(), "db": self.db, "text": text, "map": {},
                     "width": html.Size.width * 5/9, "table": "",
@@ -3200,11 +3319,18 @@ class DatabasePage(wx.Panel):
             del self.workers_search[tab["id"]]
 
 
+    def on_copy_sql(self, stc, event):
+        """Handler for copying SQL to clipboard."""
+        if wx.TheClipboard.Open():
+            d = wx.TextDataObject(stc.Text)
+            wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+
+
     def on_save_sql(self, stc, event):
         """
         Handler for saving SQL to file, opens file dialog and saves content.
         """
-        filename = os.path.splitext(os.path.basename(self.db.filename))[0]
+        filename = os.path.splitext(os.path.basename(self.db.name))[0]
         if stc is self.stc_pragma: filename += " PRAGMA"
         dialog = wx.FileDialog(
             parent=self, message="Save as", defaultFile=filename,
@@ -3216,7 +3342,7 @@ class DatabasePage(wx.Panel):
         filename = dialog.GetPath()
         try:
             content = step.Template(templates.CREATE_SQL, strip=False).expand(
-                title="Database schema.", db_filename=self.db.filename, sql=stc.GetText())
+                title="Database schema.", db_filename=self.db.name, sql=stc.GetText())
             with open(filename, "wb") as f:
                 f.write(content.encode("utf-8"))
             util.start_file(filename)
@@ -3235,16 +3361,20 @@ class DatabasePage(wx.Panel):
     def get_unsaved(self):
         """
         Returns whether page has unsaved changes,
-        as {?"pragma": [pragma_name, ], ?"table": [table, ], ?"schema": [{item}]}.
+        as {?"pragma": [pragma_name, ], ?"table": [table, ],
+            ?"schema": True, ?"temporary"? True}.
         """
         result = {}
-        if self.ignore_unsaved: return result
-            
+        if self.ignore_unsaved or not hasattr(self, "data_pages"): return result
+
         if self.pragma_changes: result["pragma"] = list(self.pragma_changes)
-        tables = self.get_unsaved_grids()
-        if tables: result["table"] = tables
+        grids = self.get_unsaved_grids()
+        if grids: result["table"] = [x.Name for x in grids]
         schemas = self.get_unsaved_schemas()
-        if schemas: result["schema"] = schemas
+        if schemas: result["schema"] = True
+        if not result and self.db.temporary:
+            self.db.populate_schema()
+            if any(x for x in self.db.schema.values()): result["temporary"] = True
         return result
 
 
@@ -3253,8 +3383,8 @@ class DatabasePage(wx.Panel):
         Returns a list of data page objects where changes have not been
         saved after changing.
         """
-        return [k for x in self.data_pages.values()
-                for k, v in x.items() if v.IsChanged()]
+        return [y for x in self.data_pages.values()
+                for y in x.values() if y.IsChanged()]
 
 
     def get_unsaved_schemas(self):
@@ -3266,15 +3396,56 @@ class DatabasePage(wx.Panel):
                 for y in x.values() if y.IsChanged()]
 
 
+    def save_unsaved(self):
+        """
+        Saves unsaved changes in data and schema pages, and PRAGMA settings,
+        returns success.
+        """
+        result, anyresult = True, False
+
+        self.save_underway = True
+        try:
+            for page in self.get_unsaved_grids():
+                result = page.Save()
+                if not result: break # for page
+                anyresult = True
+
+            for page in self.get_unsaved_schemas() if result else ():
+                result = page.Save()
+                if not result: break # for page
+                anyresult = True
+
+            if result and self.pragma_changes:
+                result = self.on_pragma_save()
+
+        except Exception as e:
+            logger.exception("Error saving changes in %s.", self.db)
+            try: self.db.execute("ROLLBACK")
+            except Exception: pass
+            wx.MessageBox("Error saving changes:\n\n%s" % util.format_exc(e),
+                          conf.Title, wx.OK | wx.ICON_ERROR)
+
+        self.save_underway = False
+        if anyresult:
+            self.db.populate_schema(count=True, parse=True)
+            self.load_tree_data()
+            self.load_tree_schema()
+            self.on_update_stc_schema()
+            self.update_autocomp()
+
+        return result
+
+
+    def reload_grids(self):
+        """Reloads all grids in data and SQL tabs."""
+        for p in self.data_pages["table"].values(): p.Reload()
+        for p in self.sql_pages.values():           p.Reload()
+
+
     def update_page_header(self):
         """Mark database as changed/pristine in the parent notebook tabs."""
-        for i in range(self.parent_notebook.GetPageCount()):
-            if self.parent_notebook.GetPage(i) == self:
-                suffix = "*" if self.get_unsaved() else ""
-                title = self.title + suffix
-                if self.parent_notebook.GetPageText(i) != title:
-                    self.parent_notebook.SetPageText(i, title)
-                break # for i
+        wx.PostEvent(self.TopLevelParent,
+                     DatabasePageEvent(source=self, modified=self.get_unsaved()))
 
 
     def on_change_tree_data(self, event):
@@ -3775,14 +3946,15 @@ class DatabasePage(wx.Panel):
                                      grammar.quote(name), suffix)
                 if self.notebook_schema.GetPageText(idx) != title:
                     self.notebook_schema.SetPageText(idx, title)
-            self.update_page_header()
+            if not self.save_underway: self.update_page_header()
         if updated:
             for k, p in self.schema_pages[category].items():
                 if p is event.source:
                     self.schema_pages[category].pop(k)
                     self.schema_pages[category][name] = p
                     break # for k, p
-            self.db.populate_schema(parse=True)
+        if updated and not self.save_underway:
+            self.db.populate_schema(count=True, parse=True)
             self.load_tree_schema()
             self.load_tree_data()
             self.update_autocomp()
@@ -3859,8 +4031,8 @@ class DatabasePage(wx.Panel):
                                      grammar.quote(name), suffix)
                 if self.notebook_data.GetPageText(idx) != title:
                     self.notebook_data.SetPageText(idx, title)
-            self.update_page_header()
-        if updated:
+            if not self.save_underway: self.update_page_header()
+        if updated and not self.save_underway:
             self.db.populate_schema(count=True, category=category, name=name)
             self.load_tree_data()
 
@@ -4097,7 +4269,11 @@ class DatabasePage(wx.Panel):
 
     def load_data(self):
         """Loads data from our Database."""
-        self.edit_title.Value = self.db.filename
+        if self.db.temporary:
+            self.label_title.Shown = self.edit_title.Shown = False
+        else:
+            self.label_title.Shown = self.edit_title.Shown = True
+            self.edit_title.Value = self.db.name
         self.edit_title.ContainingSizer.Layout()
 
         # Restore last search text, if any
@@ -4185,7 +4361,7 @@ class DatabasePage(wx.Panel):
         root = tree.AddRoot("SQLITE")
         tree.SetItemPyData(root, {"type": "data"})
 
-        child, tops = None, []
+        tops = []
         for category in "table", "view":
             # Fill data tree with information on row counts and columns
             items = self.db.get_category(category).values()
@@ -4213,12 +4389,8 @@ class DatabasePage(wx.Panel):
 
         tree.Expand(root)
         for top in tops: tree.Expand(top)
-        if child: # Nudge columns to fit and fill the header exactly.
-            tree.Expand(child)
-            tree.SetColumnWidth(0, -1)
-            tree.SetColumnWidth(1, max(70, tree.Size.width -
-                                       tree.GetColumnWidth(0) - 26))
-            tree.Collapse(child)
+        tree.SetColumnWidth(1, 100)
+        tree.SetColumnWidth(0, tree.Size[0] - 130)
         self.set_tree_expanded_state(tree, tree.RootItem, expandeds)
 
 
@@ -4240,6 +4412,7 @@ class DatabasePage(wx.Panel):
         root = tree.AddRoot("SQLITE")
         tree.SetItemPyData(root, {"type": "schema"})
         imgs = self.tree_schema_images
+        tops = []
         for category in database.Database.CATEGORIES:
             items = self.db.get_category(category).values()
             categorydata = {"type": "category", "category": category, "items": items}
@@ -4248,6 +4421,7 @@ class DatabasePage(wx.Panel):
             if items: t += " (%s)" % len(items)
             top = tree.AppendItem(root, t)
             tree.SetItemPyData(top, categorydata)
+            tops.append(top)
             for item in items:
                 itemdata = dict(item, parent=categorydata)
                 child = tree.AppendItem(top, util.unprint(item["name"]))
@@ -4271,6 +4445,8 @@ class DatabasePage(wx.Panel):
                                                        "ON", grammar.quote(item["meta"]["table"]))))
                     subcategories = ["table"]
                 elif "view" == category:
+                    childtext = "ON " + ", ".join(grammar.quote(x)
+                        for x in item["meta"].get("__tables__") or [])
                     columns = item.get("columns") or []
                     subcategories = ["table"]
 
@@ -4311,8 +4487,10 @@ class DatabasePage(wx.Panel):
                         tree.SetItemText(subchild, t, 1)
 
             tree.Collapse(top)
-        tree.SetColumnWidth(0, tree.Size[0] - 130)
+        tree.SetColumnWidth(0, tree.Size[0] - 180)
+        tree.SetColumnWidth(1, 150)
         tree.Expand(root)
+        for top in tops: tree.Expand(top)
         self.set_tree_expanded_state(tree, tree.RootItem, expandeds)
 
 
@@ -4332,10 +4510,9 @@ class DatabasePage(wx.Panel):
 
     def update_tabheader(self):
         """Updates page tab header with option to close page."""
-        if self:
-            self.ready_to_close = True
-        if self:
-            self.TopLevelParent.update_notebook_header()
+        if not self: return
+        self.ready_to_close = True
+        wx.PostEvent(self.TopLevelParent, DatabasePageEvent(source=self, ready=True))
 
 
 
@@ -4377,7 +4554,7 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
             if "table" == category and db.has_rowid(name): self.rowid_name = "rowid"
             cols = ("%s, *" % self.rowid_name) if self.rowid_name else "*"
             self.sql = "SELECT %s FROM %s" % (cols, grammar.quote(name))
-        self.row_iterator = db.execute(self.sql)
+        self.row_iterator = self.db.execute(self.sql)
         if self.is_query:
             self.columns = [{"name": c[0], "type": "TEXT"}
                             for c in self.row_iterator.description or ()]
@@ -4397,9 +4574,9 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
                     value = self.rows_current[0][col["name"]]
                     col["type"] = TYPES.get(type(value), col.get("type", ""))
         else:
-            self.columns = db.get_category(category, name)["columns"]
-            self.row_count = next(db.execute("SELECT COUNT(*) AS count FROM %s"
-                                  % grammar.quote(name)))["count"]
+            self.columns = self.db.get_category(self.category, self.name)["columns"]
+            self.row_count = next(self.db.execute("SELECT COUNT(*) AS count FROM %s"
+                                  % grammar.quote(self.name)))["count"]
 
 
     def GetColLabelValue(self, col):
@@ -4996,7 +5173,7 @@ class SQLPage(wx.PyPanel):
         grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,            self._OnGridKey)
 
         sizer_header.Add(tb)
-        sizer1.Add(sizer_header)
+        sizer1.Add(sizer_header, border=5, flag=wx.TOP | wx.BOTTOM)
         sizer1.Add(stc, proportion=1, flag=wx.GROW)
 
         sizer_buttons.Add(button_sql, flag=wx.ALIGN_LEFT)
@@ -5075,6 +5252,26 @@ class SQLPage(wx.PyPanel):
             guibase.status("Error running SQL.", flash=True)
             error = "Error running SQL:\n\n%s" % util.format_exc(e)
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+
+
+    def Reload(self):
+        """Reloads current data grid, if any."""
+        if not self._grid.Table: return
+        if not isinstance(self._grid.Table, SQLiteGridBase): # Action query
+            self._OnGridClose()
+            return
+
+        scrollpos = map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
+        cursorpos = [self._grid.GridCursorRow, self._grid.GridCursorCol]
+        self._grid.Freeze()
+        grid_data = SQLiteGridBase(self._db, sql=self._grid.Table.sql)
+        self._grid.Table = None # Reset grid data to empty
+        self._grid.Table = grid_data
+        self._grid.Scroll(*scrollpos)
+        maxpos = self._grid.GetNumberRows() - 1, self._grid.GetNumberCols() - 1
+        cursorpos = [min(x) for x in zip(cursorpos, maxpos)]
+        self._grid.SetGridCursor(*cursorpos)
+        self._grid.Thaw()
 
 
     def _OnExport(self, event=None):
@@ -5350,7 +5547,7 @@ class SQLPage(wx.PyPanel):
         """
         Handler for saving SQL to file, opens file dialog and saves content.
         """
-        filename = "%s SQL" % os.path.splitext(os.path.basename(self._db.filename))[0]
+        filename = "%s SQL" % os.path.splitext(os.path.basename(self._db.name))[0]
         dialog = wx.FileDialog(
             self, message="Save as", defaultFile=filename,
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
@@ -5361,7 +5558,7 @@ class SQLPage(wx.PyPanel):
         filename = dialog.GetPath()
         try:
             content = step.Template(templates.CREATE_SQL, strip=False).expand(
-                title="SQL window.", db_filename=self._db.filename, sql=self._stc.Text)
+                title="SQL window.", db_filename=self._db.name, sql=self._stc.Text)
             with open(filename, "wb") as f:
                 f.write(content.encode("utf-8"))
             util.start_file(filename)
@@ -5492,6 +5689,31 @@ class DataObjectPage(wx.PyPanel):
                 x, y = 0, y - pagesize / 2
                 self._grid.Scroll(x, y)
                 break # for i
+
+
+    def Save(self):
+        """Saves unsaved changes, if any, returns success."""
+        info = self._grid.Table.GetChangedInfo()
+        if not info: return True
+
+        logger.info("Committing %s in table %s (%s).", info,
+                    grammar.quote(self._item["name"]), self._db)
+        if not self._grid.Table.SaveChanges(): return False
+
+        self._OnChange()
+        # Refresh cell colours; without CallLater wx 2.8 can crash
+        wx.CallLater(0, self._grid.ForceRefresh)
+        return True
+
+
+    def GetName(self):
+        return self._item["name"]
+    Name = property(GetName)
+
+
+    def Reload(self):
+        """Reloads current data grid."""
+        self._OnRefresh()
 
 
     def _Populate(self):
@@ -5628,7 +5850,7 @@ class DataObjectPage(wx.PyPanel):
         self._OnChange()
 
 
-    def _OnRefresh(self, event):
+    def _OnRefresh(self, event=None):
         """Handler for refreshing grid data, asks for confirmation if changed."""
         if self.IsChanged() and wx.OK != wx.MessageBox(
             "There are unsaved changes (%s).\n\n"
@@ -5926,6 +6148,11 @@ class SchemaObjectPage(wx.PyPanel):
         if self._editmode:
             result = (self._original.get("sql") != self._item.get("sql"))
         return result
+
+
+    def Save(self):
+        """Saves unsaved changes, if any, returns success."""
+        return self._OnSave()
 
 
     def _AssignColumnIDs(self, meta):
@@ -7469,7 +7696,7 @@ class SchemaObjectPage(wx.PyPanel):
         if self._show_alter: title = " ".join((action, title))
         try:
             content = step.Template(templates.CREATE_SQL, strip=False).expand(
-                title=title, db_filename=self._db.filename,
+                title=title, db_filename=self._db.name,
                 sql=self._ctrls["sql"].GetText())
             with open(filename, "wb") as f:
                 f.write(content.encode("utf-8"))
@@ -7577,8 +7804,10 @@ class SchemaObjectPage(wx.PyPanel):
 
 
     def _OnSave(self, event=None):
-        """Handler for clicking to save the item, validates and saves."""
-        if not self._newmode and not self.IsChanged(): return self._OnToggleEdit()
+        """Handler for clicking to save the item, validates and saves, returns success."""
+        if not self._newmode and not self.IsChanged():
+            self._OnToggleEdit()
+            return True
 
         errors, meta, meta2 = [], self._item["meta"], None
         name = meta.get("name") or ""
@@ -7604,8 +7833,10 @@ class SchemaObjectPage(wx.PyPanel):
         if not errors:
             meta2, err = grammar.parse(self._item["sql"])
             if not meta2: errors += [err[:200] + (".." if len(err) > 200 else "")]
-        if errors: return wx.MessageBox("Errors:\n\n%s" % "\n\n".join(errors),
-                                        conf.Title, wx.OK | wx.ICON_WARNING)
+        if errors:
+            wx.MessageBox("Errors:\n\n%s" % "\n\n".join(errors),
+                          conf.Title, wx.OK | wx.ICON_WARNING)
+            return
 
         sql, drop = self._item["sql"] + ";", not self._newmode
         oldname = None if self._newmode else grammar.quote(self._item["name"])
@@ -7620,16 +7851,17 @@ class SchemaObjectPage(wx.PyPanel):
                       ("DROP %s %s;\n\n" % (self._category.upper(), oldname)
                        if drop else "", sql)
 
-        logger.info("Executing change SQL:\n\n%s", fullsql)
+        logger.info("Executing schema SQL:\n\n%s", fullsql)
         try: self._db.connection.executescript(fullsql)
         except Exception as e:
             logger.exception("Error executing SQL.")
-            try: self._db.execute("ROLLBACK")
+            try: oldname and self._db.execute("ROLLBACK")
             except Exception: pass
             try: self._db.execute("PRAGMA foreign_keys = on")
             except Exception: pass
             msg = "Error saving changes:\n\n%s" % util.format_exc(e)
-            return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+            return
 
         self._item.update(name=name, meta=self._AssignColumnIDs(meta2))
         self._original = copy.deepcopy(self._item)
@@ -7638,6 +7870,7 @@ class SchemaObjectPage(wx.PyPanel):
         self._has_alter = ("table" == self._category)
         self._ToggleControls(self._editmode)
         self._PostEvent(updated=True)
+        return True
 
 
     def _OnDelete(self, event=None):
@@ -7660,4 +7893,5 @@ class SchemaObjectPage(wx.PyPanel):
         ): return
 
         self._db.execute("DROP %s %s" % (self._category, grammar.quote(self._item["name"])))
+        self._editmode = False
         self._PostEvent(close=True, updated=True)
