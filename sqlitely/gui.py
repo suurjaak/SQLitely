@@ -2087,14 +2087,14 @@ class DatabasePage(wx.Panel):
         label_html.ForegroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
 
         tb = self.tb_search_settings = \
-            wx.ToolBar(parent=page, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+            wx.ToolBar(parent=page, style=wx.TB_FLAT | wx.TB_NODIVIDER | wx.TB_HORZ_TEXT)
         tb.SetToolBitmapSize((24, 24))
-        tb.AddRadioTool(wx.ID_INDEX, bitmap=images.ToolbarTitle.Bitmap,
-            shortHelp="Search in database CREATE SQL")
-        tb.AddRadioTool(wx.ID_STATIC, bitmap=images.ToolbarTables.Bitmap,
+        tb.AddRadioLabelTool(wx.ID_STATIC, "Data", bitmap=images.ToolbarTables.Bitmap,
             shortHelp="Search in all columns of all database tables")
+        tb.AddRadioLabelTool(wx.ID_INDEX, "Meta", bitmap=images.ToolbarTitle.Bitmap,
+            shortHelp="Search in database CREATE SQL")
         tb.AddSeparator()
-        tb.AddCheckTool(wx.ID_NEW, bitmap=images.ToolbarTabs.Bitmap,
+        tb.AddCheckLabelTool(wx.ID_NEW, "Tabs", bitmap=images.ToolbarTabs.Bitmap,
             shortHelp="New tab for each search  (Alt-N)", longHelp="")
         tb.AddSimpleTool(wx.ID_STOP, bitmap=images.ToolbarStopped.Bitmap,
             shortHelpString="Stop current search, if any")
@@ -2127,7 +2127,7 @@ class DatabasePage(wx.Panel):
         html.Font.PixelSize = (0, 8)
 
         sizer_top.Add(label_html, proportion=1, flag=wx.GROW)
-        sizer_top.Add(tb, border=5, flag=wx.TOP | wx.RIGHT |
+        sizer_top.Add(tb, border=5, flag=wx.TOP | 
                       wx.ALIGN_CENTER_VERTICAL | wx.ALIGN_RIGHT)
         sizer.Add(sizer_top, border=5, flag=wx.TOP | wx.RIGHT | wx.GROW)
         sizer.Add(html, border=5, proportion=1,
