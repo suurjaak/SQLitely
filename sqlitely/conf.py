@@ -22,7 +22,7 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev87"
+Version = "1.0.dev88"
 VersionDate = "28.09.2019"
 
 if getattr(sys, "frozen", False):
@@ -37,7 +37,7 @@ else:
 ConfigFile = "%s.ini" % os.path.join(ApplicationDirectory, "etc", Title.lower())
 
 """List of attribute names that can be saved to and loaded from ConfigFile."""
-FileDirectives = ["ConsoleHistoryCommands", "DBDoBackup",  "DBFiles", "DBSort",
+FileDirectives = ["ConsoleHistoryCommands", "DBFiles", "DBSort",
     "LastActivePage", "LastSearchResults", "LastSelectedFiles",
     "LastUpdateCheck", "RecentFiles", "SearchHistory", "SearchInNames",
     "SearchInTables", "SearchUseNewTab", "SQLWindowTexts", "TrayIconEnabled",
@@ -53,9 +53,6 @@ OptionalFileDirectives = [
 OptionalFileDirectiveDefaults = {}
 
 """---------------------------- FileDirectives: ----------------------------"""
-
-"""Whether a backup copy is made of a database before it's changed."""
-DBDoBackup = False
 
 """All detected/added databases."""
 DBFiles = []

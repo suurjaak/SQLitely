@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.09.2019
+@modified    28.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -18,7 +18,6 @@ import logging
 import os
 import re
 import sqlite3
-import shutil
 import tempfile
 
 from . lib import util
@@ -453,7 +452,6 @@ class Database(object):
         self.filesize = None
         self.date_created = None
         self.last_modified = None
-        self.backup_created = False
         self.compile_options = []
         self.consumers = set() # Registered objects using this database
         # {"table|index|view|trigger":
@@ -607,7 +605,6 @@ class Database(object):
         Executes the specified SQL INSERT/UPDATE/DELETE statement and returns
         the number of affected rows.
         """
-        self.ensure_backup()
         res = self.execute(sql)
         affected_rows = res.rowcount
         if self.connection.isolation_level is not None: self.connection.commit()
@@ -859,15 +856,6 @@ class Database(object):
                              os.path.getmtime(self.filename))
 
 
-    def ensure_backup(self):
-        """Creates a backup file if configured so, and not already created."""
-        if not conf.DBDoBackup or self.temporary or self.backup_created \
-        or os.path.exists("%s.bak" % self.filename): return
-
-        shutil.copyfile(self.filename, "%s.bak" % self.filename)
-        self.backup_created = True
-
-
     def blobs_to_binary(self, values, list_columns, col_data):
         """
         Converts blob columns in the list to sqlite3.Binary, suitable
@@ -930,7 +918,6 @@ class Database(object):
         logger.info("Inserting 1 row into table %s, %s.",
                     grammar.quote(self.schema["table"][table]["name"]),
                     self.name)
-        self.ensure_backup()
         col_data = self.schema["table"][table]["columns"]
         fields = [col["name"] for col in col_data]
         row = self.blobs_to_binary(row, fields, col_data)
@@ -956,9 +943,7 @@ class Database(object):
         table, where = table.lower(), ""
         logger.info("Updating 1 row in table %s, %s.",
                     grammar.quote(self.schema["table"][table]["name"]), self.name)
-        self.ensure_backup()
         col_data = self.schema["table"][table]["columns"]
-
 
         changed_cols = [x for x in col_data
                             if row[x["name"]] != original_row[x["name"]]]
@@ -995,7 +980,6 @@ class Database(object):
         logger.info("Deleting 1 row from table %s, %s.",
                     grammar.quote(self.schema["table"][table]["name"]),
                     self.name)
-        self.ensure_backup()
         col_data = self.schema["table"][table]["columns"]
 
         where, args = "", {}
