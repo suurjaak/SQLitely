@@ -3694,6 +3694,8 @@ class DatabasePage(wx.Panel):
                 for x in deleteds:
                     page = self.schema_pages[x["type"]].get(x["name"])
                     if page: page.Close(force=True)
+                    page = self.data_pages.get(x["type"], {}).get(x["name"])
+                    if page: page.Close(force=True)
                 self.db.populate_schema(count=True)
                 self.load_tree_schema()
                 self.load_tree_data()
@@ -3966,6 +3968,9 @@ class DatabasePage(wx.Panel):
                     break # for k, p
         if updated and not self.save_underway:
             self.db.populate_schema(count=True, parse=True)
+            if name not in self.db.schema[category] \
+            and name in self.data_pages.get(category, {}):
+                self.data_pages[category][name].Close(force=True)
             self.load_tree_schema()
             self.load_tree_data()
             self.update_autocomp()
@@ -5674,7 +5679,7 @@ class DataObjectPage(wx.PyPanel):
 
     def IsChanged(self):
         """Returns whether there are unsaved changes."""
-        return self._grid.Table.IsChanged()
+        return not self._ignore_change and self._grid.Table.IsChanged()
 
 
     def ScrollToRow(self, row):
@@ -5751,12 +5756,11 @@ class DataObjectPage(wx.PyPanel):
 
     def _OnClose(self, event=None):
         """Handler for clicking to close the item, sends message to parent."""
-        if self.IsChanged() and not self._ignore_change and wx.OK != wx.MessageBox(
+        if self.IsChanged() and wx.OK != wx.MessageBox(
             "There are unsaved changes, "
             "are you sure you want to discard them?",
             conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
         ): return
-        self._ignore_change = False
         self._PostEvent(close=True)
 
 
