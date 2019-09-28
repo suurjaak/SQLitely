@@ -843,7 +843,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             menu.Bind(wx.EVT_MENU, self.on_open_database,    id=item_open.GetId())
             menu.Bind(wx.EVT_MENU, self.on_add_from_folder,  id=item_import.GetId())
             menu.Bind(wx.EVT_MENU, self.on_detect_databases, id=item_detect.GetId())
-            menu.Bind(wx.EVT_MENU, self.on_detect_databases, id=item_detect.GetId())
+            menu.Bind(wx.EVT_MENU, self.on_remove_missing,   id=item_missing.GetId())
             menu.Bind(wx.EVT_MENU, self.on_clear_databases,  id=item_clear.GetId())
 
             menu.AppendItem(item_new)
