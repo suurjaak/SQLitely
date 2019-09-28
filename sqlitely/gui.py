@@ -5718,6 +5718,7 @@ class DataObjectPage(wx.PyPanel):
         sizer.Add(grid, proportion=1, flag=wx.GROW)
         sizer.Add(label_help, border=5, flag=wx.TOP | wx.BOTTOM)
         self._Populate()
+        self._grid.SetFocus()
 
 
     def Close(self, force=False):
@@ -5864,6 +5865,7 @@ class DataObjectPage(wx.PyPanel):
         self._grid.SetGridCursor(0, self._grid.GetGridCursorCol())
         self._grid.Scroll(self._grid.GetScrollPos(wx.HORIZONTAL), 0)
         self._grid.Refresh()
+        self._grid.SetGridCursor(0, 0)
         # Refresh scrollbars; without CallAfter wx 2.8 can crash
         wx.CallAfter(self.Layout)
         self._OnChange()
