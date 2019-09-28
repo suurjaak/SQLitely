@@ -6025,6 +6025,12 @@ class SchemaObjectPage(wx.PyPanel):
         "FOREIGN KEY": {"type": "FOREIGN KEY", "key": [], "columns": []},
         "CHECK":       {"type": "CHECK"},
     }
+    DEFAULTS = {
+        "table":   {"name": "new_table", "columns": [{"name": "new_column"}]},
+        "index":   {"name": "new_index"},
+        "trigger": {"name": "new_trigger"},
+        "view":    {"name": "new_view"},
+    }
 
 
     def __init__(self, parent, page, db, item, id=wx.ID_ANY, pos=wx.DefaultPosition,
@@ -6036,14 +6042,19 @@ class SchemaObjectPage(wx.PyPanel):
         ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
         ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
 
-        item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
         self._page     = page
         self._db       = db
         self._category = item["type"]
-        self._item     = copy.deepcopy(item)
-        self._original = copy.deepcopy(item)
         self._newmode  = "name" not in item
         self._editmode = self._newmode
+
+        if self._newmode:
+            item = dict(item, meta=dict(copy.deepcopy(self.DEFAULTS[item["type"]]),
+                                        **item.get("meta", {})))
+        item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
+        self._item     = copy.deepcopy(item)
+        self._original = copy.deepcopy(item)
+
         self._ctrls    = {}  # {}
         self._buttons  = {}  # {name: wx.Button}
         self._sizers   = {}  # {child sizer: parent sizer}
