@@ -313,7 +313,10 @@ class FormDialog(wx.Dialog):
             ColourManager.Manage(x, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
         self.Populate(props, data, edit)
         self.MinSize = (440, panel_wrap.Size[1] + 20)
-        if not self._editmode: self.Fit()
+        if not self._editmode:
+            self.SetEscapeId(wx.OK)
+            self.Fit()
+            button_cancel.Hide()
         self.CenterOnParent()
 
 
@@ -358,7 +361,7 @@ class FormDialog(wx.Dialog):
     def _GetValue(self, field, path=()):
         """Returns field data value."""
         ptr = self._data
-        for x in path: ptr = ptr.get(x, {})
+        for x in path: ptr = ptr.get(x, {}) if isinstance(ptr, dict) else ptr[x]
         return ptr.get(field["name"])
 
 
@@ -366,7 +369,7 @@ class FormDialog(wx.Dialog):
         """Sets field data value."""
         ptr = parent = self._data
         for x in path:
-            ptr = ptr.get(x)
+            ptr = ptr.get(x, {}) if isinstance(ptr, dict) else ptr[x]
             if ptr is None: ptr = parent[x] = {}
             parent = ptr
         ptr[field["name"]] = value
@@ -404,7 +407,8 @@ class FormDialog(wx.Dialog):
 
     def _AddField(self, field, path=()):
         """Adds field controls to dialog."""
-        if not self._editmode and self._GetValue(field, path) is None: return
+        callback = field["type"] if callable(field.get("type")) else None
+        if not callback and not self._editmode and self._GetValue(field, path) is None: return
         MAXCOL = 8
         parent, sizer = self._panel, self._panel.Sizer
         level, fpath = len(path), path + (field["name"], )
@@ -419,7 +423,8 @@ class FormDialog(wx.Dialog):
             self._BindHandler(self._OnToggleField, toggle, field, path, toggle)
             col += 2
 
-        if not field.get("toggle") or any(field.get(x) for x in ["type", "choices", "component"]):
+        if callback: callback(self, field, parent, self._data)
+        elif not field.get("toggle") or any(field.get(x) for x in ["type", "choices", "component"]):
             ctrls = self._MakeControls(field, path)
             for i, c in enumerate(ctrls):
                 colspan = 2 if isinstance(c, wx.StaticText) else MAXCOL - level - col

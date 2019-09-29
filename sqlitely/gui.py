@@ -7146,7 +7146,7 @@ class SchemaObjectPage(wx.PyPanel):
     def _AddRowIndex(self, path, i, col, insert=False, focus=False):
         """Adds a new row of controls for index columns."""
         first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
-        data, meta, rowkey = self._item, self._item.get("meta") or {}, wx.NewId()
+        meta, rowkey = self._item.get("meta") or {}, wx.NewId()
         table = self._db.get_category("table", meta["table"]) \
                 if meta.get("table") else {}
         tablecols = [x["name"] for x in table.get("columns") or ()]
@@ -7216,7 +7216,7 @@ class SchemaObjectPage(wx.PyPanel):
     def _AddRowTrigger(self, path, i, value, insert=False, focus=False):
         """Adds a new row of controls for trigger columns."""
         first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
-        data, meta, rowkey = self._item, self._item.get("meta") or {}, wx.NewId()
+        meta, rowkey = self._item.get("meta") or {}, wx.NewId()
         if "INSTEAD OF" == meta.get("upon"):
             self._ctrls["label_table"].Label = "&View:"
             self._ctrls["table"].SetItems(self._views)
@@ -7645,9 +7645,124 @@ class SchemaObjectPage(wx.PyPanel):
         ]
 
         if data["type"] in (grammar.SQL.PRIMARY_KEY, grammar.SQL.UNIQUE): return [
-            {"name": "columns",  "label": "Indexed column", "type": list, "choices": get_table_cols},
+            {"name": "columns",  "label": "Index",
+             "type": (lambda *a, **kw: self._CreateDialogConstraints(*a, **kw))},
             {"name": "conflict", "label": "ON CONFLICT", "choices": self.CONFLICT},
         ]
+
+
+    def _CreateDialogConstraints(self, dialog, field, parent, data):
+        """Populates FormDialog with primary key / unique constraints."""
+
+        def on_add(event=None):
+            data["key"].append({"name": ""})
+            populate_rows(focus=True)
+
+        def on_move(index, direction, event=None):
+            index2, ptr = index + direction, data["key"]
+            ptr[index], ptr[index2] = ptr[index2], ptr[index]
+            populate_rows()
+
+        def on_remove(index, event=None):
+            del data["key"][index]
+            populate_rows()
+
+        def populate_rows(focus=False):
+            """"""
+            dialog.Freeze()
+            self._EmptyControl(panel_columns)
+            for i, col in enumerate(data.get("key") or ()): add_row(i, col, focus)
+            dialog.Layout()
+            dialog.Thaw()
+
+        def size_dialog():
+            w = 530 if dialog._editmode else 460
+            dialog.Size = dialog.MinSize = (w, dialog.Size[1])
+
+
+        tablecols = [x["name"] for x in self._item["meta"].get("columns") or ()]
+
+        panel_wrapper = wx.Panel(parent, style=wx.BORDER_STATIC)
+        sizer_wrapper = panel_wrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
+
+        sizer_columnstop = wx.FlexGridSizer(cols=3, hgap=10)
+        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+
+        panel_columns = wx.lib.scrolledpanel.ScrolledPanel(panel_wrapper)
+        panel_columns.Sizer = wx.FlexGridSizer(cols=4, vgap=4, hgap=10)
+        panel_columns.Sizer.AddGrowableCol(3)
+
+        button_add_column = wx.Button(panel_wrapper, label="&Add column")
+
+        sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Column",  size=(250, -1)))
+        sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Collate", size=( 80, -1)))
+        sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Order",   size=( 60, -1)))
+
+        sizer_wrapper.Add(sizer_columnstop, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
+        sizer_wrapper.Add(panel_columns, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.GROW)
+        sizer_wrapper.Add(button_add_column, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.ALIGN_RIGHT)
+
+        parent.Sizer.Add(panel_wrapper, border=10, pos=(dialog._rows, 0), span=(1, 12), flag=wx.BOTTOM)
+
+        if not dialog._editmode: button_add_column.Hide()
+        panel_columns.MinSize = (-1, 60)
+        panel_columns.SetupScrolling(scroll_x=False)
+        dialog._BindHandler(on_add, button_add_column)
+        wx.CallAfter(size_dialog)
+
+        def add_row(i, col, focus=False):
+            """Adds a new row of controls for key column."""
+            first, last = not i, (i == len(data["key"]) - 1)
+
+            sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+
+            ctrl_index = wx.ComboBox(panel_columns, choices=tablecols,
+                style=wx.CB_DROPDOWN | wx.CB_READONLY)
+            list_collate  = wx.ComboBox(panel_columns, choices=self.COLLATE, style=wx.CB_DROPDOWN)
+            list_order    = wx.ComboBox(panel_columns, choices=self.ORDER, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+            button_up     = wx.Button(panel_columns, label=u"\u2191", size=(20, -1))
+            button_down   = wx.Button(panel_columns, label=u"\u2193", size=(20, -1))
+            button_remove = wx.Button(panel_columns, label=u"\u2715", size=(20, -1))
+
+            ctrl_index.MinSize =   (250, -1)
+            list_collate.MinSize = ( 80, -1)
+            list_order.MinSize =   ( 60, -1)
+            if first: button_up.Enable(False)
+            if last:  button_down.Enable(False)
+            button_up.ToolTipString     = "Move one step higher"
+            button_down.ToolTipString   = "Move one step lower"
+            button_remove.ToolTipString = "Remove"                    
+
+            ctrl_index.Value   = col.get("name") or ""
+            list_collate.Value = col.get("collate") or ""
+            list_order.Value   = col.get("order") or ""
+
+            sizer_buttons.Add(button_up)
+            sizer_buttons.Add(button_down)
+            sizer_buttons.Add(button_remove)
+
+            panel_columns.Sizer.Add(ctrl_index)
+            panel_columns.Sizer.Add(list_collate)
+            panel_columns.Sizer.Add(list_order)
+            panel_columns.Sizer.Add(sizer_buttons, border=5, flag=wx.RIGHT | wx.ALIGN_RIGHT)
+
+            if dialog._editmode:
+                path = ["key", i]
+                dialog._BindHandler(dialog._OnChange, ctrl_index,   {"name": "name"},   path)
+                dialog._BindHandler(dialog._OnChange, list_collate, {"name": "collate"}, path)
+                dialog._BindHandler(dialog._OnChange, list_order,   {"name": "order"},   path)
+                dialog._BindHandler(on_move,   button_up,     i, -1)
+                dialog._BindHandler(on_move,   button_down,   i, +1)
+                dialog._BindHandler(on_remove, button_remove, i)
+            else:
+                ctrl_index.Enable(False)
+                list_collate.Enable(False)
+                list_order.Enable(False)
+                sizer_buttons.ShowItems(False)
+            if focus: ctrl_index.SetFocus()
+
+        wx_accel.accelerate(panel_wrapper)
+        populate_rows()
 
 
     def _PostEvent(self, **kwargs):

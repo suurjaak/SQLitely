@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    28.09.2019
+@modified    29.09.2019
 ------------------------------------------------------------------------------
 """
 
@@ -90,12 +90,11 @@ copy rows from existing to new, drop existing, rename new to existing. Steps:
 ALTER_TABLE_COMPLEX = """<%
 CATEGORIES = ["index", "trigger", "view"]
 %>
-
 %if data["fks"]:
 PRAGMA foreign_keys = off;{{ LF() }}
 {{ LF() }}
-%endif
 
+%endif
 SAVEPOINT alter_table;{{ LF() }}
 {{ LF() }}
 
@@ -156,8 +155,8 @@ DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
 
 RELEASE SAVEPOINT alter_table;{{ LF() }}
 {{ LF() }}
-
 %if data["fks"]:
+
 PRAGMA foreign_keys = on;{{ LF() }}
 %endif
 """
@@ -431,7 +430,7 @@ TABLE_CONSTRAINT = """
   (
   {{ GLUE() }}
     %for j, col in enumerate(data.get("key") or []):
-  {{ Q(col["name"]) if col.get("name") else WS(col["expr"]) if col.get("expr") else "" }}
+  {{ Q(col["name"]) if col.get("name") else "" }}
         %if col.get("collate") is not None:
   COLLATE {{ col["collate"] }}
         %endif

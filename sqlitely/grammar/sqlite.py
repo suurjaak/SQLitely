@@ -570,7 +570,7 @@ class Parser(object):
             ?name:      constraint name
 
           # for PRIMARY KEY | UNIQUE:
-            ?key:       [{?name, ?expr, ?collate, ?order}, ]
+            ?key:       [{name, ?collate, ?order}, ]
             ?conflict:  ROLLBACK | ABORT | FAIL | IGNORE | REPLACE
 
           # for CHECK:
@@ -598,11 +598,10 @@ class Parser(object):
 
         if ctx.K_PRIMARY() and ctx.K_KEY() or ctx.K_UNIQUE():
             result["type"] = SQL.UNIQUE if ctx.K_UNIQUE() else SQL.PRIMARY_KEY
-            result["key"] = [] # {?name: column, ?expr: "expr", ?collate: name, ?asc|desc}
+            result["key"] = [] # {name: column, ?collate: name, ?asc|desc}
             for c in ctx.indexed_column():
                 col = {}
-                if c.column_name(): col["name"] = self.u(c.column_name)
-                else: col["expr"] = self.r(c.expr())
+                col["name"] = self.u(c.column_name)
 
                 if c.K_COLLATE(): col["collate"] = self.u(c.collation_name).upper()
                 order = c.K_ASC() or c.K_DESC()
