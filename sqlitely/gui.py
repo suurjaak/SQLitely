@@ -2527,34 +2527,52 @@ class DatabasePage(wx.Panel):
         self.edit_info_path.Value = "<temporary file>" if self.db.temporary \
                                     else self.db.filename
 
-        button_vacuum = self.button_vacuum = \
-            wx.Button(parent=panel1c, label="Vacuum")
-        button_check = self.button_check_integrity = \
-            wx.Button(parent=panel1c, label="Check for corruption")
-        button_refresh = self.button_refresh_fileinfo = \
-            wx.Button(parent=panel1c, label="Refresh")
-        button_vacuum.Enabled = button_check.Enabled = button_refresh.Enabled = False
-        button_vacuum.SetToolTipString("Rebuild the database file, repacking "
-                                       "it into a minimal amount of disk space.")
-        button_check.SetToolTipString("Check database integrity for "
-                                      "corruption and recovery.")
-        button_check.Enable(not self.db.temporary)
 
-        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_buttons.Add(button_vacuum)
+        button_fks      = self.button_check_fks       = wx.Button(panel1c, label="Check foreign keys")
+        button_check    = self.button_check_integrity = wx.Button(panel1c, label="Check for corruption")
+        button_optimize = self.button_optimize        = wx.Button(panel1c, label="Optimize")
+
+        button_vacuum      = self.button_vacuum       = wx.Button(panel1c, label="Vacuum")
+        button_open_folder = self.button_open_folder  = wx.Button(panel1c, label="Open directory")
+        button_refresh     = self.button_refresh_info = wx.Button(panel1c, label="Refresh")
+        button_fks.Enabled = button_check.Enabled = button_optimize.Enabled = False
+        button_vacuum.Enabled = button_open_folder.Enabled = button_refresh.Enabled = False
+        button_fks.SetToolTipString("Check for foreign key violations")
+        button_check.SetToolTipString("Check database integrity for "
+                                      "corruption and recovery")
+        button_optimize.SetToolTipString("Attempt to optimize the database, "
+                                         "running ANALYZE on tables")
+        button_vacuum.SetToolTipString("Rebuild the database file, repacking "
+                                       "it into a minimal amount of disk space")
+        button_fks.SetToolTipString("Open database file directory")
+        button_refresh.SetToolTipString("Refresh file information")
+
+        sizer_buttons = wx.FlexGridSizer(cols=5, vgap=5)
+        sizer_buttons.AddGrowableCol(1)
+        sizer_buttons.AddGrowableCol(3)
+
+        sizer_buttons.Add(button_fks, flag=wx.GROW)
         sizer_buttons.AddStretchSpacer()
-        sizer_buttons.Add(button_check)
+        sizer_buttons.Add(button_check, flag=wx.GROW)
         sizer_buttons.AddStretchSpacer()
-        sizer_buttons.Add(button_refresh, border=10,
-                       flag=wx.ALIGN_RIGHT | wx.RIGHT)
-        self.Bind(wx.EVT_BUTTON, self.on_vacuum, button_vacuum)
+        sizer_buttons.Add(button_optimize, flag=wx.GROW)
+        sizer_buttons.Add(button_vacuum, flag=wx.GROW)
+        sizer_buttons.AddStretchSpacer()
+        sizer_buttons.Add(button_open_folder, flag=wx.GROW)
+        sizer_buttons.AddStretchSpacer()
+        sizer_buttons.Add(button_refresh, flag=wx.GROW)
+        self.Bind(wx.EVT_BUTTON, self.on_check_fks, button_fks)
         self.Bind(wx.EVT_BUTTON, self.on_check_integrity, button_check)
+        self.Bind(wx.EVT_BUTTON, self.on_optimize, button_optimize)
+        self.Bind(wx.EVT_BUTTON, self.on_vacuum, button_vacuum)
+        self.Bind(wx.EVT_BUTTON, lambda e: util.start_file(os.path.split(self.db.filename)[0]),
+                  button_open_folder)
         self.Bind(wx.EVT_BUTTON, lambda e: self.update_info_panel(),
                   button_refresh)
 
         sizer_info.AddGrowableCol(1, proportion=1)
         sizer_file.Add(sizer_info, proportion=1, border=10, flag=wx.LEFT | wx.GROW)
-        sizer_file.Add(sizer_buttons, border=10, flag=wx.LEFT | wx.BOTTOM | wx.GROW)
+        sizer_file.Add(sizer_buttons, border=10, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer1.Add(label_file, border=5, flag=wx.ALL)
         sizer1.Add(panel1c, border=6, proportion=1, flag=wx.TOP | wx.GROW)
 
@@ -2835,6 +2853,53 @@ class DatabasePage(wx.Panel):
         self.update_page_header()
 
 
+    def on_check_fks(self, event=None):
+        """
+        Handler for checking foreign key violations, pops open dialog with
+        violation results.
+        """
+        rows = self.db.execute("PRAGMA foreign_key_check").fetchall()
+        if not rows:
+            wx.MessageBox("No foreign key violations detected.",
+                          conf.Title, wx.OK | wx.ICON_INFORMATION)
+            return
+
+        # {table: {parent: {fkid: [rowid, ]}}}
+        data = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+        fks  = {} # {table: {fkid: (fkcol, parent, pkcol)}}
+        for row in rows:
+            data[row["table"]][row["parent"]][row["fkid"]].append(row["rowid"])
+        for table in data:
+            fks[table] = {x["id"]: (x["from"], x["table"], x["to"])
+                         for x in self.db.execute("PRAGMA foreign_key_list(%s)" %
+                         grammar.quote(table)).fetchall()}
+        lines = []
+        for table in sorted(data, key=lambda x: x.lower()):
+            for parent in data[table]:
+                for fkid, rowids in data[table][parent].items():
+                    fk, _, pk = fks[table][fkid]
+                    args = tuple(map(grammar.quote, (table, fk, parent, pk))) + (util.plural("row", rowids),)
+                    line = "%s.%s REFERENCING %s.%s: %s" % args
+                    if any(rowids): # NULL values: table WITHOUT ROWID
+                        vals = [x[fk] for x in self.db.execute(
+                            "SELECT %s FROM %s WHERE rowid IN (%s)" %
+                            (grammar.quote(fk), grammar.quote(table), ", ".join(map(str, rowids)))
+                        ).fetchall()]
+                        if vals: line += "\nKeys: (%s)" % ", ".join(map(unicode, sorted(vals)))
+                    lines.append(line)
+
+        msg = "Detected %s in %s:\n\n%s" % (
+              util.plural("foreign key violation", rows), util.plural("table", data), "\n\n".join(lines))
+        wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
+
+
+    def on_optimize(self, event=None):
+        """
+        Handler for running optimize on database.
+        """
+        self.db.execute("PRAGMA optimize")
+
+
     def on_check_integrity(self, event=None):
         """
         Handler for checking database integrity, offers to save a fixed
@@ -2861,7 +2926,7 @@ class DatabasePage(wx.Panel):
                   "Recover as much as possible to a new database?" % \
                   (self.db, err)
             if wx.YES == wx.MessageBox(msg, conf.Title,
-                                       wx.ICON_INFORMATION | wx.YES | wx.NO):
+                                       wx.ICON_WARNING | wx.YES | wx.NO):
                 directory, filename = os.path.split(self.db.filename)
                 base = os.path.splitext(filename)[0]
                 self.dialog_savefile.Directory = directory
@@ -3005,9 +3070,10 @@ class DatabasePage(wx.Panel):
             getattr(self, "edit_info_%s" % name).MinSize = (-1, -1)
         self.edit_info_path.ContainingSizer.Layout()
 
-        self.button_vacuum.Enabled = True
-        self.button_check_integrity.Enabled = not self.db.temporary
-        self.button_refresh_fileinfo.Enabled = True
+        self.button_vacuum.Enabled = self.button_check_fks.Enabled = True
+        self.button_optimize.Enabled = self.button_check_integrity.Enabled = True
+        self.button_refresh_info.Enabled = True
+        self.button_open_folder.Enabled = not self.db.temporary
 
 
     def on_refresh_data(self, event):
@@ -6258,7 +6324,7 @@ class SchemaObjectPage(wx.PyPanel):
         self._ignore_change = False
         self._has_alter     = False
         self._show_alter    = False
-        self._fks_on        = db.execute("PRAGMA foreign_keys").fetchone()["foreign_keys"]
+        self._fks_on        = db.execute("PRAGMA foreign_keys", log=False).fetchone()["foreign_keys"]
         self._backup        = None # State variables copy for RestoreBackup
         self._types    = self._GetColumnTypes()
         self._tables   = [x["name"] for x in db.get_category("table").values()]
