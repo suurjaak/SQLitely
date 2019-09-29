@@ -59,7 +59,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    26.09.2019
+@modified    29.09.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -2039,7 +2039,11 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
 
 class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
-    """A StyledTextCtrl configured for SQLite syntax highlighting."""
+    """
+    A StyledTextCtrl configured for SQLite syntax highlighting.
+    
+    Supports single-line mode with SQLiteTextCtrl(singleline=True)
+    """
 
     """SQLite reserved keywords."""
     KEYWORDS = map(unicode, sorted([
@@ -2082,6 +2086,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
 
     def __init__(self, *args, **kwargs):
+        self.singleline = kwargs.pop("singleline", False)
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
         self.autocomps_added = set(["sqlite_master"])
         # All autocomps: added + KEYWORDS
@@ -2101,9 +2106,14 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.AutoCompSetIgnoreCase(True)
 
         self.SetStyleSpecs()
+
         self.Bind(wx.EVT_KEY_DOWN,           self.OnKeyDown)
+        self.Bind(wx.EVT_SET_FOCUS,          self.OnFocus)
         self.Bind(wx.EVT_KILL_FOCUS,         self.OnKillFocus)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
+        if self.singleline:
+            self.Bind(wx.EVT_CHAR_HOOK,      self.OnChar)
+            self.SetCaretLineVisible(False)
 
 
     def SetStyleSpecs(self):
@@ -2158,9 +2168,9 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.autocomps_added.update(map(unicode, words))
         # A case-insensitive autocomp has to be sorted, will not work
         # properly otherwise. UserList would support arbitrarily sorting.
-        self.autocomps_total = sorted(
-            list(self.autocomps_added) + map(unicode, self.KEYWORDS), cmp=self.stricmp
-        )
+        self.autocomps_total = sorted(list(self.autocomps_added) + 
+                                      map(unicode, self.KEYWORDS),
+                                      cmp=self.stricmp)
 
 
     def AutoCompAddSubWords(self, word, subwords):
@@ -2187,9 +2197,19 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.autocomps_subwords.clear()
 
 
+    def OnFocus(self, event):
+        """Handler for control getting focus, shows caret."""
+        event.Skip()
+        self.SetCaretStyle(wx.stc.STC_CARETSTYLE_LINE)
+        if not self.singleline: self.SetCaretLineVisible(True)
+
+
     def OnKillFocus(self, event):
-        """Handler for control losing focus, hides autocomplete."""
+        """Handler for control losing focus, hides autocomplete and caret."""
+        event.Skip()
         self.AutoCompCancel()
+        self.SetCaretStyle(wx.stc.STC_CARETSTYLE_INVISIBLE)
+        self.SetCaretLineVisible(False)
 
 
     def OnSysColourChange(self, event):
@@ -2198,11 +2218,22 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.SetStyleSpecs()
 
 
+    def OnChar(self, event):
+        """Swallows tab/enter presses if single line mode, propagates tab."""
+        if self.AutoCompActive() \
+        or event.KeyCode not in (wx.WXK_RETURN, wx.WXK_TAB): return event.Skip()
+        if wx.WXK_TAB == event.KeyCode:
+            direction = wx.NavigationKeyEvent.IsBackward  if event.ShiftDown() \
+                        else wx.NavigationKeyEvent.IsForward
+            self.Navigate(direction)
+
+
     def OnKeyDown(self, event):
         """
         Shows autocomplete if user is entering a known word, or pressed
         Ctrl-Space. Added autocomplete words are listed first, SQL keywords
         second.
+        Forwards pressing Enter/Tab to parent if single-line mode.
         """
         skip = True
         if self.CallTipActive():

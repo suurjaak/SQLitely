@@ -6593,7 +6593,7 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_flags.AddSpacer((100, -1))
         sizer_flags.Add(check_exists)
 
-        sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Column",  size=(200, -1)))
+        sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Column",  size=(250, -1)))
         sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Collate", size=( 80, -1)))
         sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Order",   size=( 60, -1)))
 
@@ -6901,7 +6901,7 @@ class SchemaObjectPage(wx.PyPanel):
 
         text_name     = wx.TextCtrl(panel)
         list_type     = wx.ComboBox(panel, choices=self._types, style=wx.CB_DROPDOWN)
-        text_default  = wx.TextCtrl(panel)
+        text_default  = controls.SQLiteTextCtrl(panel, singleline=True)
 
         check_pk      = wx.CheckBox(panel)
         check_autoinc = wx.CheckBox(panel)
@@ -6919,7 +6919,7 @@ class SchemaObjectPage(wx.PyPanel):
 
         text_name.MinSize    = (150, -1)
         list_type.MinSize    = (100, -1)
-        text_default.MinSize = (100, -1)
+        text_default.MinSize = (100, text_name.Size[1])
         check_autoinc._toggle = lambda: "disable" if self._editmode and col.get("pk") is None else ""
         button_open._toggle = "skip"
         button_remove._toggle = "show"
@@ -7158,14 +7158,14 @@ class SchemaObjectPage(wx.PyPanel):
             ctrl_index = wx.ComboBox(panel, choices=tablecols,
                 style=wx.CB_DROPDOWN | wx.CB_READONLY)
         else:
-            ctrl_index = wx.TextCtrl(panel)
+            ctrl_index = controls.SQLiteTextCtrl(panel, singleline=True)
         list_collate  = wx.ComboBox(panel, choices=self.COLLATE, style=wx.CB_DROPDOWN)
         list_order    = wx.ComboBox(panel, choices=self.ORDER, style=wx.CB_DROPDOWN | wx.CB_READONLY)
         button_up     = wx.Button(panel, label=u"\u2191", size=(20, -1))
         button_down   = wx.Button(panel, label=u"\u2193", size=(20, -1))
         button_remove = wx.Button(panel, label=u"\u2715", size=(20, -1))
 
-        ctrl_index.MinSize =   (200, -1)
+        ctrl_index.MinSize =   (250, -1 if "name" in col else list_collate.Size[1])
         list_collate.MinSize = ( 80, -1)
         list_order.MinSize =   ( 60, -1)
         button_remove._toggle = "show"
@@ -7280,12 +7280,12 @@ class SchemaObjectPage(wx.PyPanel):
         panel = self._panel_columns
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
 
-        text_column = wx.TextCtrl(panel)
+        text_column = controls.SQLiteTextCtrl(panel, singleline=True)
         button_up     = wx.Button(panel, label=u"\u2191", size=(20, -1))
         button_down   = wx.Button(panel, label=u"\u2193", size=(20, -1))
         button_remove = wx.Button(panel, label=u"\u2715", size=(20, -1))
 
-        text_column.MinSize = (200, -1)
+        text_column.MinSize = (200, button_up.Size[1])
         button_remove._toggle = "show"
         button_up._toggle   = self._GetMoveButtonToggle(button_up,   -1)
         button_down._toggle = self._GetMoveButtonToggle(button_down, +1)
@@ -7595,7 +7595,7 @@ class SchemaObjectPage(wx.PyPanel):
         if "columns" == path[0]: return [
             {"name": "name",    "label": "Name"},
             {"name": "type",    "label": "Type", "choices": self._types, "choicesedit": True},
-            {"name": "default", "label": "Default"},
+            {"name": "default", "label": "Default", "component": controls.SQLiteTextCtrl},
             {"name": "pk", "label": "PRIMARY KEY", "toggle": True, "children": [
                 {"name": "autoincrement", "label": "AUTOINCREMENT", "type": bool},
                 {"name": "order", "label": "Order", "toggle": True, "choices": self.ORDER,
