@@ -1843,9 +1843,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if db:
                 guibase.status("Opening database %s." % db, flash=True)
                 tab_title = self.get_unique_tab_title(db.name)
-                self.db_datas.setdefault(filename, {})["title"] = tab_title
+                self.db_datas.setdefault(db.filename, {})["title"] = tab_title
                 page = DatabasePage(self.notebook, tab_title, db, self.memoryfs)
-                conf.DBsOpen[filename] = db
+                conf.DBsOpen[db.filename] = db
                 self.db_pages[page] = db
                 self.UpdateAccelerators()
                 conf.save()
