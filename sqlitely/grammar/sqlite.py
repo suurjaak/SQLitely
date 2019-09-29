@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    25.09.2019
+@modified    20.09.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -891,7 +891,7 @@ class Generator(object):
         if subcollection:
             container = root[collection][index]
             islast = (subindex == len(container[subcollection]) - 1)
-        elif "columns" == collection and SQL.CREATE_TABLE == self._category:
+        elif "columns" == collection:
             islast = not root.get("constraints") and \
                      (index == len(root[collection]) - 1)
         else:
