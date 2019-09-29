@@ -5216,7 +5216,7 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
             else:
                 if not isinstance(value, basestring):
                     value = "" if value is None else str(value)
-                is_unfiltered &= value.find(filter_value.lower()) >= 0
+                is_unfiltered &= filter_value.lower() in value.lower()
         return not is_unfiltered
 
 
