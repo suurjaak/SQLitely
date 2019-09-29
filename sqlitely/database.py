@@ -504,7 +504,7 @@ class Database(object):
             try: self.connection.close()
             except Exception: pass
             self.connection = None
-        self.filename = filename
+        self.filename = self.name = filename
         self.open()
 
 

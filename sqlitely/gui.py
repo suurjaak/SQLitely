@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.09.2019
+@modified    29.09.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -24,6 +24,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import textwrap
 import urllib
 import webbrowser
@@ -753,12 +754,35 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for notification from DatabasePage, updates UI."""
         idx = self.notebook.GetPageIndex(event.source)
         ready, modified = (getattr(event, x, None) for x in ("ready", "modified"))
-        if ready: self.update_notebook_header()
+        rename = getattr(event, "rename", None)
 
-        if modified is not None:
+        if rename:
+            self.dbs.pop(event.filename1, None)
+            self.dbs[event.filename2] = event.source.db
+
+            if event.temporary: self.db_datas.pop(event.filename1, None)
+            self.update_database_list(event.filename2)
+            for i in range(1, self.list_db.GetItemCount()):
+                fn = self.list_db.GetItemText(i)
+                if fn in (event.filename1, event.filename2):
+                    self.list_db.Select(i, on=(fn == event.filename2))
+            if event.filename2 in conf.RecentFiles: # Remove earlier position
+                idx = conf.RecentFiles.index(event.filename2)
+                try: self.history_file.RemoveFileFromHistory(idx)
+                except Exception: pass
+            self.history_file.AddFileToHistory(event.filename2)
+            util.add_unique(conf.RecentFiles, event.filename2, -1,
+                            conf.MaxRecentFiles)
+            conf.save()
+
+
+        if ready or rename: self.update_notebook_header()
+
+        if rename or modified is not None:
             suffix = "*" if modified else ""
             title1 = self.db_datas[event.source.db.filename].get("title") \
                      or self.get_unique_tab_title(event.source.db.name)
+            self.db_datas[event.source.db.filename]["title"] = title1
             title2 = title1 + suffix
             if self.notebook.GetPageText(idx) != title2:
                 self.notebook.SetPageText(idx, title2)
@@ -1213,9 +1237,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         commits unsaved changes.
         """
         page = self.notebook.GetCurrentPage()
-        if not isinstance(page, DatabasePage): return
-        if page.db.temporary: self.on_save_active_database_as()
-        else: self.save_page_database(page)
+        if isinstance(page, DatabasePage): page.save_database()
 
 
     def on_save_active_database_as(self, event=None):
@@ -1224,83 +1246,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         opens a save as dialog, copies file and commits unsaved changes.
         """
         page = self.notebook.GetCurrentPage()
-        if not isinstance(page, DatabasePage): return
-        self.save_page_database_as(page)
-
-
-    def save_page_database_as(self, page):
-        """
-        Opens file dialog and saves database to selected file,
-        returns success.
-        """
-        db = page.db
-        exts = ";".join("*" + x for x in conf.DBExtensions)
-        wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
-        title = "Save %s as.." % os.path.split(db.name)[-1]
-        dialog = wx.FileDialog(self,
-            message=title, wildcard=wildcard,
-            defaultDir="" if db.temporary else os.path.split(db.filename)[0],
-            defaultFile="" if db.temporary else os.path.basename(db.filename),
-            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
-        )
-        if wx.ID_OK != dialog.ShowModal(): return
-
-        filename2 = dialog.GetPath()
-        if filename2 != db.filename and filename2 in self.dbs: return wx.MessageBox(
-            "%s is already open in %s." % (filename2, conf.Title),
-            conf.Title, wx.OK | wx.ICON_WARNING
-        )
-        return self.save_page_database(page, filename2)
-
-
-    def save_page_database(self, page, filename2=None):
-        """Saves the database, under a new name if specified, returns success."""
-        db = page.db
-        filename1, filename2 = db.filename, filename2 or db.filename
-        file_existed = os.path.exists(filename2)
-        try:
-            if filename1 != filename2:
-                shutil.copy(filename1, filename2)
-                db.reopen(filename2)
-        except Exception as e:
-            logger.exception("Error saving %s as %s.", db.name, filename2)
-            db.reopen(filename1)
-            page.reload_grids()
-            return
-
-        success = not page.get_unsaved() or page.save_unsaved()
-
-        if not success:
-            if filename1 != filename2:
-                db.reopen(filename1)
-                page.reload_grids()
-                try: db.temporary and not file_existed and os.unlink(filename2)
-                except Exception: pass
-            return
-
-        db.name, db.temporary, was_temporary = filename2, False, db.temporary
-        if filename1 != filename2:
-            self.dbs.pop(filename1, None)
-            self.dbs[filename2] = db
-
-            if was_temporary: self.db_datas.pop(filename1, None)
-            self.update_database_list(filename2)
-            self.on_database_page_event(DatabasePageEvent(source=page, modified=False, ready=True))
-            for i in range(1, self.list_db.GetItemCount()):
-                fn = self.list_db.GetItemText(i)
-                if fn in (filename1, filename2):
-                    self.list_db.Select(i, on=(fn == filename2))
-            if filename2 in conf.RecentFiles: # Remove earlier position
-                idx = conf.RecentFiles.index(filename2)
-                try: self.history_file.RemoveFileFromHistory(idx)
-                except Exception: pass
-            self.history_file.AddFileToHistory(filename2)
-            util.add_unique(conf.RecentFiles, filename2, -1,
-                            conf.MaxRecentFiles)
-            conf.save()
-            page.reload_grids()
-            page.load_data()
-        return True
+        if isinstance(page, DatabasePage): page.save_database(rename=True)
 
 
     def on_remove_database(self, event):
@@ -1709,8 +1655,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             )
             if wx.CANCEL == resp: return
             for page in unsaved_pages if wx.YES == resp else ():
-                if not self.save_page_database_as(page) if page.db.temporary \
-                else not page.save_unsaved(): return
+                if not page.save_database(): return
 
         for page, db in self.db_pages.items():
             if not page: continue # continue for page, if dead object
@@ -1777,8 +1722,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                                  wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION)
             if wx.CANCEL == resp: return event.Veto()
             if wx.YES == resp:
-                if not self.save_page_database_as(page) if page.db.temporary \
-                else not page.save_unsaved(): return event.Veto()
+                if not page.save_database(): return event.Veto()
 
         if page.notebook.Selection and not page.db.temporary:
             conf.LastActivePage[page.db.filename] = page.notebook.Selection
@@ -1799,6 +1743,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if page.db.name in self.dbs:
                 del self.dbs[page.db.name]
             page.db.close()
+            conf.DBsOpen.pop(page.db.filename, None)
             self.db_datas.get(page.db.filename, {}).pop("title", None)
             logger.info("Closed database %s.", page.db)
         # Remove any dangling references
@@ -1898,8 +1843,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if db:
                 guibase.status("Opening database %s." % db, flash=True)
                 tab_title = self.get_unique_tab_title(db.name)
-                self.db_datas.setdefault(db.filename, {})["title"] = tab_title
+                self.db_datas.setdefault(filename, {})["title"] = tab_title
                 page = DatabasePage(self.notebook, tab_title, db, self.memoryfs)
+                conf.DBsOpen[filename] = db
                 self.db_pages[page] = db
                 self.UpdateAccelerators()
                 conf.save()
@@ -3450,49 +3396,127 @@ class DatabasePage(wx.Panel):
                 for y in x.values() if y.IsChanged()]
 
 
-    def save_unsaved(self):
-        """
-        Saves unsaved changes in data and schema pages, and PRAGMA settings,
-        returns success.
-        """
-        result, anyresult = True, False
+    def save_database(self, rename=False):
+        """Saves the database, under a new name if specified, returns success."""
+        is_temporary = self.db.temporary
+        filename1, filename2, tempname = self.db.filename, self.db.filename, None
 
-        self.save_underway = True
+        if is_temporary or rename:
+            exts = ";".join("*" + x for x in conf.DBExtensions)
+            wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
+            title = "Save %s as.." % os.path.split(self.db.name)[-1]
+            dialog = wx.FileDialog(self,
+                message=title, wildcard=wildcard,
+                defaultDir="" if is_temporary else os.path.split(self.db.filename)[0],
+                defaultFile=os.path.basename(self.db.name),
+                style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
+            )
+            if wx.ID_OK != dialog.ShowModal(): return
+
+            filename2 = dialog.GetPath()
+            if filename1 != filename2 and filename2 in conf.DBsOpen: return wx.MessageBox(
+                "%s is already open in %s." % (filename2, conf.Title),
+                conf.Title, wx.OK | wx.ICON_WARNING
+            )
+        rename = (filename1 != filename2)
+
+        if rename:
+            # Use a tertiary file in case something fails
+            fh, tempname = tempfile.mkstemp(".db")
+            os.close(fh)
+
+        file_existed = os.path.exists(filename2)
+
         try:
-            for page in self.get_unsaved_grids():
-                result = page.Save()
-                if not result: break # for page
-                anyresult = True
+            if rename:
+                shutil.copy(filename1, tempname)
+                self.db.reopen(tempname)
+        except Exception as e:
+            logger.exception("Error saving %s as %s.", self.db, filename2)
+            self.db.reopen(filename1)
+            self.reload_grids(pending=True)
+            try: os.unlink(tempname)
+            except Exception: pass
+            wx.MessageBox("Error saving %s as %s:\n\n" % 
+                          (filename1, filename2, util.format_exc(e)),
+                          conf.Title, wx.OK | wx.ICON_ERROR)
+            return
 
-            for page in self.get_unsaved_schemas() if result else ():
-                result = page.Save()
-                if not result: break # for page
-                anyresult = True
-
-            if result and self.pragma_changes:
-                result = self.on_pragma_save()
-
+        success, error = True, None
+        self.save_underway = True
+        schemas_saved = {} # {category: {key: page}}
+        try:
+            for dct in self.data_pages, self.schema_pages:
+                for category, key, page in ((c, k, p) for c, m in dct.items()
+                                            for k, p in m.items()):
+                    if not page.IsChanged(): continue # for category
+                    success = page.Save(backup=True)
+                    if not success: break # for category
+                    if isinstance(page, SchemaObjectPage):
+                        schemas_saved.setdefault(category, {})[key] = page
+                if not success: break # for group
+                        
+            if success and self.pragma_changes:
+                success = self.on_pragma_save()
         except Exception as e:
             logger.exception("Error saving changes in %s.", self.db)
+            error = "Error saving changes:\n\n%s" % util.format_exc(e)
             try: self.db.execute("ROLLBACK")
             except Exception: pass
-            wx.MessageBox("Error saving changes:\n\n%s" % util.format_exc(e),
-                          conf.Title, wx.OK | wx.ICON_ERROR)
-
         self.save_underway = False
-        if anyresult:
+
+        if success and rename:
+            try:
+                shutil.copy(tempname, filename2)
+                self.db.reopen(filename2)
+            except Exception as e:
+                error = "Error saving %s as %s:\n\n" % util.format_exc(e)
+                logger.exception("Error saving temporary file %s as %s.",
+                                 tempname, filename2)
+            
+        if not success and rename:
+            self.db.reopen(filename1)
+
+        if success or not rename:
             self.db.populate_schema(count=True, parse=True)
             self.load_tree_data()
             self.load_tree_schema()
             self.on_update_stc_schema()
             self.update_autocomp()
+            if success: self.reload_grids()
 
-        return result
+        if not success and rename:
+            self.db.reopen(filename1)
+            for category, key, page in ((c, k, p) for c, m in schemas_saved.items()
+                                        for k, p in m.items()):
+                pagedict = getattr(self, group)
+                pagedict[category][key] = pagedict[category].pop(page.Name)
+                page.RestoreBackup()
+
+            self.reload_grids(pending=True)
+
+        try: tempname and os.unlink(tempname)
+        except Exception: pass
+
+        if not success:
+            if error: wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+            return
+            
+        self.db.name, self.db.temporary = filename2, False
+        if rename:
+            evt = DatabasePageEvent(source=self, rename=True, temporary=is_temporary,
+                                    filename1=filename1, filename2=filename2)
+            wx.PostEvent(self.TopLevelParent, evt)
+            self.load_data()
+        return True
 
 
-    def reload_grids(self):
-        """Reloads all grids in data and SQL tabs."""
-        for p in self.data_pages["table"].values(): p.Reload()
+    def reload_grids(self, pending=False):
+        """
+        Reloads all grids in data and SQL tabs,
+        optionally retaining pending data changes.
+        """
+        for p in self.data_pages["table"].values(): p.Reload(pending=pending)
         for p in self.sql_pages.values():           p.Reload()
 
 
@@ -4603,16 +4627,17 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
         self.sql = sql
         self.category = category
         self.name = name
+        self.id_counter = 0
         # ID here is a unique value identifying rows in this object,
         # no relation to table data
-        self.idx_all = [] # An ordered list of row identifiers in rows_all
-        self.rows_all = {} # Unfiltered, unsorted rows {id: row, }
+        self.idx_all = []      # An ordered list of row identifiers in rows_all
+        self.rows_all = {}     # Unfiltered, unsorted rows {id: row, }
         self.rows_current = [] # Currently shown (filtered/sorted) rows
         self.rowids = {} # SQLite table rowids, used for UPDATE and DELETE
         self.idx_changed = set() # set of indexes for changed rows in rows_all
-        self.rows_backup = {} # For changed rows {id: original_row, }
-        self.idx_new = [] # Unsaved added row indexes
-        self.rows_deleted = {} # Uncommitted deleted rows {id: deleted_row, }
+        self.rows_backup = {}    # For changed rows {id: original_row, }
+        self.idx_new = []        # Unsaved added row indexes
+        self.rows_deleted = {}   # Uncommitted deleted rows {id: deleted_row, }
         self.rowid_name = None
         self.row_count = 0
         self.iterator_index = -1
@@ -4704,7 +4729,7 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
             except Exception:
                 pass
             if rowdata:
-                idx = id(rowdata)
+                idx = self._make_id(rowdata)
                 if not self.is_query and self.rowid_name in rowdata:
                     self.rowids[idx] = rowdata[self.rowid_name]
                     del rowdata[self.rowid_name]
@@ -4830,8 +4855,82 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
 
     def IsChanged(self):
         """Returns whether there is uncommitted changed data in this grid."""
-        lengths = map(len, [self.idx_changed, self.idx_new, self.rows_deleted])
-        return any(lengths)
+        return any(map(len, [self.idx_changed, self.idx_new, self.rows_deleted]))
+
+
+    def GetChanges(self):
+        """
+        Returns {?"new": [{row}], ?"changed": [], ?"deleted": []},
+        usable for SetChanges().
+        """
+        result = {}
+        if self.idx_new:
+            result["new"] = [self.rows_all[x] for x in self.idx_new]
+        if self.idx_changed:
+            result["changed"] = [self.rows_all[x] for x in self.idx_changed]
+        if self.rows_deleted:
+            result["deleted"] = self.rows_deleted.values()
+        return copy.deepcopy(result)
+
+
+    def SetChanges(self, changes):
+        """Applies changes to grid, as returned from GetChanges()."""
+        if not changes: return
+        rows_before = rows_after = self.row_count
+        self.SeekToRow(self.row_count)
+
+        if changes.get("changed"):
+            self.idx_changed = set(x["__id__"] for x in changes["changed"])
+            for row in changes["changed"]:
+                myid = row["__id__"]
+                if myid in self.rows_all:
+                    self.rows_backup[myid] = copy.deepcopy(self.rows_all[myid])
+                    self.rows_all[myid].update(row)
+
+        if changes.get("deleted"):
+            rowmap = {x["__id__"]: x for x in changes["deleted"]}
+            idxs = {r["__id__"]: i for i, r in enumerate(self.rows_current)
+                    if r["__id__"] in rowmap}
+            for idx in sorted(idxs.values(), reverse=True):
+                del self.rows_current[idx]
+            self.rows_deleted = {x: rowmap[x] for x in idxs}
+            rows_after -= len(idxs)
+
+        if changes.get("new"):
+            for row in reversed(changes["new"]):
+                idx = row["__id__"]
+                self.idx_all.insert(0, idx)
+                self.rows_current.insert(0, row)
+                self.rows_all[idx] = row
+                self.idx_new.append(idx)
+            rows_after += len(changes["new"])
+
+        self.row_count = rows_after
+        self.NotifyViewChange(rows_before)
+
+
+    def GetFilterSort(self):
+        """
+        Returns current filter and sort state,
+        as {?"sort": {col index: direction}, ?"filter": {col index: value}}.
+        """
+        result = {}
+        if self.sort_column: result["sort"]   = {self.sort_column: self.sort_ascending}
+        if self.filters:     result["filter"] = dict(self.filters)
+        return result
+
+
+    def SetFilterSort(self, state):
+        """
+        Sets current filter and sort state, as returned from GetFilterSort().
+        as {?"sort": {col index: direction}, ?"filter": {col index: value}}.
+        """
+        if not state: return
+        if "sort" in state:
+            self.sort_column, self.sort_ascending = state["sort"].items()[0]
+        if "filter" in state:
+            self.filters = state["filter"]
+        self.Filter()
 
 
     def GetChangedInfo(self):
@@ -4884,7 +4983,7 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
         for _ in range(numRows):
             # Construct empty dict from column names
             rowdata = dict((col["name"], None) for col in self.columns)
-            idx = id(rowdata)
+            idx = self._make_id(rowdata)
             rowdata["__id__"] = idx
             rowdata["__changed__"] = False
             rowdata["__new__"] = True
@@ -4942,7 +5041,6 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
                         rows_now - rows_before]
             if args:
                 self.View.ProcessTableMessage(wx.grid.GridTableMessage(*args))
-
 
 
     def AddFilter(self, col, val):
@@ -5120,6 +5218,13 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
                     value = "" if value is None else str(value)
                 is_unfiltered &= value.find(filter_value.lower()) >= 0
         return not is_unfiltered
+
+
+    def _make_id(self, row):
+        """Returns unique identifier for row."""
+        self.id_counter += 1
+        return self.id_counter
+        
 
 
 
@@ -5669,6 +5774,7 @@ class DataObjectPage(wx.PyPanel):
         self._db       = db
         self._category = item["type"]
         self._item     = copy.deepcopy(item)
+        self._backup   = None # Pending changes for Reload(pending=True)
         self._ignore_change = False
         self._hovered_cell  = None # (row, col)
 
@@ -5736,6 +5842,11 @@ class DataObjectPage(wx.PyPanel):
         self._grid.SetFocus()
 
 
+    def GetName(self):
+        return self._item["name"]
+    Name = property(GetName)
+
+
     def Close(self, force=False):
         """Closes the page, asking for confirmation if modified and not force."""
         if force: self._ignore_change = True
@@ -5771,10 +5882,16 @@ class DataObjectPage(wx.PyPanel):
                 break # for i
 
 
-    def Save(self):
-        """Saves unsaved changes, if any, returns success."""
+    def Save(self, backup=False):
+        """
+        Saves unsaved changes, if any, returns success.
+
+        @param   backup  back up unsaved changes for Reload(pending=True)
+        """
         info = self._grid.Table.GetChangedInfo()
         if not info: return True
+
+        self._backup = self._grid.Table.GetChanges() if backup else None
 
         logger.info("Committing %s in table %s (%s).", info,
                     grammar.quote(self._item["name"]), self._db)
@@ -5786,14 +5903,13 @@ class DataObjectPage(wx.PyPanel):
         return True
 
 
-    def GetName(self):
-        return self._item["name"]
-    Name = property(GetName)
+    def Reload(self, pending=False):
+        """
+        Reloads current data grid, making a new query.
 
-
-    def Reload(self):
-        """Reloads current data grid."""
-        self._OnRefresh()
+        @param   pending  retain unsaved pending changes
+        """
+        self._OnRefresh(pending=pending)
 
 
     def _Populate(self):
@@ -5910,6 +6026,7 @@ class DataObjectPage(wx.PyPanel):
                     grammar.quote(self._item["name"]), self._db)
         if not self._grid.Table.SaveChanges(): return
 
+        self._backup = None
         self._OnChange()
         # Refresh cell colours; without CallLater wx 2.8 can crash
         wx.CallLater(0, self._grid.ForceRefresh)
@@ -5927,12 +6044,17 @@ class DataObjectPage(wx.PyPanel):
         # Refresh scrollbars and colours; without CallAfter wx 2.8 can crash
         wx.CallLater(0, lambda: (self._grid.ContainingSizer.Layout(),
                                  self._grid.ForceRefresh()))
+        self._backup = None
         self._OnChange()
 
 
-    def _OnRefresh(self, event=None):
-        """Handler for refreshing grid data, asks for confirmation if changed."""
-        if self.IsChanged() and wx.OK != wx.MessageBox(
+    def _OnRefresh(self, event=None, pending=False):
+        """
+        Handler for refreshing grid data, asks for confirmation if changed.
+        
+        @param   pending  retain unsaved pending changes
+        """
+        if not pending and self.IsChanged() and wx.OK != wx.MessageBox(
             "There are unsaved changes (%s).\n\n"
             "Are you sure you want to discard them?" % 
             self._grid.Table.GetChangedInfo(), 
@@ -5941,12 +6063,18 @@ class DataObjectPage(wx.PyPanel):
 
         scrollpos = map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
         cursorpos = [self._grid.GridCursorRow, self._grid.GridCursorCol]
+        state = self._grid.Table.GetFilterSort()
         self._grid.Freeze()
         self._grid.Table = None # Reset grid data to empty
         self._Populate()
+
+        if pending: self._grid.Table.SetChanges(self._backup)
+        else: self._backup = None
+
+        self._grid.Table.SetFilterSort(state)
         self._grid.Scroll(*scrollpos)
         maxpos = self._grid.GetNumberRows() - 1, self._grid.GetNumberCols() - 1
-        cursorpos = [min(x) for x in zip(cursorpos, maxpos)]
+        cursorpos = [max(0, min(x)) for x in zip(cursorpos, maxpos)]
         self._grid.SetGridCursor(*cursorpos)
         self._grid.Thaw()
         self._OnChange()
@@ -6131,6 +6259,7 @@ class SchemaObjectPage(wx.PyPanel):
         self._has_alter     = False
         self._show_alter    = False
         self._fks_on        = db.execute("PRAGMA foreign_keys").fetchone()["foreign_keys"]
+        self._backup        = None # State variables copy for RestoreBackup
         self._types    = self._GetColumnTypes()
         self._tables   = [x["name"] for x in db.get_category("table").values()]
         self._views    = [x["name"] for x in db.get_category("view").values()]
@@ -6243,9 +6372,29 @@ class SchemaObjectPage(wx.PyPanel):
         return result
 
 
-    def Save(self):
-        """Saves unsaved changes, if any, returns success."""
-        return self._OnSave()
+    def Save(self, backup=False):
+        """
+        Saves unsaved changes, if any, returns success.
+
+        @param   backup  back up unsaved changes for RestoreBackup
+        """
+        VARS = ["_newmode", "_editmode", "_item", "_original", "_has_alter",
+                "_types", "_tables", "_views"]
+        myvars = {x: copy.deepcopy(getattr(self, x)) for x in VARS} if backup else None
+        result = self._OnSave()
+        if result and backup: self._backup = myvars
+        return result
+
+
+    def RestoreBackup(self):
+        """
+        Restores page state from before last successful .Save(backup=True), if any.
+        """
+        if not self._backup: return            
+        for k, v in self._backup.items(): setattr(self, k, v)
+        self._Populate()
+        self._ToggleControls(self._editmode)
+        self._PostEvent(modified=True)
 
 
     def _AssignColumnIDs(self, meta):
