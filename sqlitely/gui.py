@@ -1940,12 +1940,11 @@ class DatabasePage(wx.Panel):
         ColourManager.Manage(edit_title, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
         sizer_header.Add(label_title, border=5, flag=wx.RIGHT | wx.TOP)
         sizer_header.Add(edit_title, proportion=1, border=5, flag=wx.TOP | wx.GROW)
-        sizer_header.AddStretchSpacer()
 
 
         self.label_search = wx.StaticText(self, -1, "&Search in messages:")
         sizer_header.Add(self.label_search, border=5,
-                         flag=wx.RIGHT | wx.TOP )
+                         flag=wx.RIGHT | wx.TOP | wx.ALIGN_RIGHT)
         edit_search = self.edit_searchall = controls.TextCtrlAutoComplete(
             self, description=conf.SearchDescription,
             size=(300, -1), style=wx.TE_PROCESS_ENTER)
