@@ -6825,15 +6825,6 @@ class SchemaObjectPage(wx.PyPanel):
         stc_body   = self._ctrls["body"] = controls.SQLiteTextCtrl(panel,
             size=(-1, 40),
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
-        # Add table/view/column names to SQL editor autocomplete
-        for category in ("table", "view"):
-            for item in self._db.get_category(category).values():
-                myname = grammar.quote(item["name"])
-                stc_body.AutoCompAddWords([myname])
-                if not item.get("columns"): continue # for item
-                fields = [grammar.quote(c["name"]) for c in item["columns"]]
-                stc_body.AutoCompAddSubWords(myname, fields)
-
         label_body.ToolTipString = "Trigger body SQL"
 
         label_when = wx.StaticText(panel, label="WHEN:")
@@ -7552,6 +7543,7 @@ class SchemaObjectPage(wx.PyPanel):
                 else:
                     try: c.SetEditable(edit)
                     except Exception: c.Enable(edit)
+        self._PopulateAutoComp()
         if "table" == self._category:
             self._ctrls["alter"].Show(edit and self._has_alter)
             self._ctrls["alter"].ContainingSizer.Layout()
@@ -7559,6 +7551,39 @@ class SchemaObjectPage(wx.PyPanel):
             c.Layout()
         self.Layout()
         self.Thaw()
+
+
+    def _PopulateAutoComp(self):
+        """Populate SQLiteTextCtrl autocomplete."""
+        if not self._editmode: return
+            
+        words, subwords, singlewords = [], {}, []
+
+        for category in ("table", "view"):
+            for item in self._db.get_category(category).values():
+                if self._category in ("trigger", "view"):
+                    myname = grammar.quote(item["name"])
+                    words.append(myname)
+                if not item.get("columns"): continue # for item
+                ww = [grammar.quote(c["name"]) for c in item["columns"]]
+
+                if "table" == self._category \
+                and item["name"] == self._original.get("name") \
+                or self._category in ("index", "trigger") \
+                and item["name"] == self._item["meta"].get("table"):
+                    singlewords = ww
+                if self._category in ("trigger", "view"): subwords[myname] = ww
+
+        for c in self._ctrls.values():
+            if not isinstance(c, controls.SQLiteTextCtrl): continue # for c
+            c.AutoCompClearAdded()
+            if c is self._ctrls.get("when"):
+                for w in "OLD", "NEW": c.AutoCompAddSubWords(w, singlewords)
+            elif not words or c.IsSingleLine(): c.AutoCompAddWords(singlewords)
+            elif words:
+                c.AutoCompAddWords(words)
+                for w, ww in subwords.items(): c.AutoCompAddSubWords(w, ww)
+
 
 
     def _PopulateSQL(self):
@@ -8096,12 +8121,20 @@ class SchemaObjectPage(wx.PyPanel):
         data  = util.get(self._item["meta"], path)
         props = self._GetFormDialogProps(path, data)
 
-        # TODO needs more work if pk / unique
+        words = []
+        for category in ("table", "view") if self._editmode else ():
+            for item in self._db.get_category(category).values():
+                if not item.get("columns"): continue # for item
+                if "table" == self._category and item["name"] == self._original.get("name") \
+                or "index" == self._category and item["name"] == self._item["meta"].get("table"):
+                    words = [grammar.quote(c["name"]) for c in item["columns"]]
+                    break
 
         title = "Table column"
         if "constraints" == path[0]:
             title = "%s constraint" % data["type"]
-        dlg = controls.FormDialog(self.TopLevelParent, title, props, data, self._editmode)
+        dlg = controls.FormDialog(self.TopLevelParent, title, props, data,
+                                  self._editmode, autocomp=words)
         wx_accel.accelerate(dlg)
         if wx.OK != dlg.ShowModal() or not self._editmode: return
         data2 = dlg.GetData()
@@ -8143,6 +8176,7 @@ class SchemaObjectPage(wx.PyPanel):
             and grammar.SQL.UPDATE in (value0, value):
                 rebuild = True
                 meta.pop("columns", None), meta.pop("table", None)
+            if ["table"] == path: self._PopulateAutoComp()
         elif "table" == self._category:
             if "constraints" == path[0] and "table" == path[-1]:
                 # Foreign table changed, clear foreign cols
@@ -8169,6 +8203,7 @@ class SchemaObjectPage(wx.PyPanel):
         elif ["table"] == path:
             rebuild = meta.get("columns")
             meta.pop("columns", None)
+                
 
         self._Populate() if rebuild else self._PopulateSQL()
         self._PostEvent(modified=True)
@@ -8219,8 +8254,6 @@ class SchemaObjectPage(wx.PyPanel):
             if err: return
             meta, err = grammar.parse(sql)
             if err: return
-
-            # TODO ega järjekorra muutmine pekki ei keera midagi?
 
             for i, c in enumerate(self._item["meta"]["columns"]):
                 meta["columns"][i]["__id__"] = c["__id__"]

@@ -255,34 +255,36 @@ class FormDialog(wx.Dialog):
     Uses ComboBox for fields with choices.
     Uses two ListBoxes for list fields.
 
-    fields = [{
-      name:          field name
-      ?type:         (bool | list | anything) if field has direct content,
-                     or callback(dialog, field, panel, data) making controls
-      ?label:        field label if not using name
-      ?help:         field tooltip
-      ?path:         [data path, if, more, complex, nesting]
-      ?choices:      [value, ] or callback(field, path, data) returning list
-      ?choicesedit   true if value not limited to given choices
-      ?component     specific wx component to use
-      ?toggle:       if true, field is toggle-able and children hidden when off
-      ?children:     [{field}, ]
-      ?link:         "name" of linked field, cleared and repopulated on change
-      ?tb:           [{type, ?help}] for SQLiteTextCtrl component, adds toolbar,
-                     supported toolbar buttons "open" and "paste"
+    @param   props  [{
+       name:          field name
+       ?type:         (bool | list | anything) if field has direct content,
+                      or callback(dialog, field, panel, data) making controls
+       ?label:        field label if not using name
+       ?help:         field tooltip
+       ?path:         [data path, if, more, complex, nesting]
+       ?choices:      [value, ] or callback(field, path, data) returning list
+       ?choicesedit   true if value not limited to given choices
+       ?component     specific wx component to use
+       ?toggle:       if true, field is toggle-able and children hidden when off
+       ?children:     [{field}, ]
+       ?link:         "name" of linked field, cleared and repopulated on change
+       ?tb:           [{type, ?help}] for SQLiteTextCtrl component, adds toolbar,
+                      supported toolbar buttons "open" and "paste"
     }]
+    @param   autocomp  list of words to add to SQLiteTextCtrl autocomplete
     """
 
-    def __init__(self, parent, title, props=None, data=None, edit=None):
+    def __init__(self, parent, title, props=None, data=None, edit=None, autocomp=None):
         wx.Dialog.__init__(self, parent=parent, title=title,
                           style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER)
         self._ignore_change = False
         self._editmode = True
-        self._comps   = collections.defaultdict(list) # {(path): [wx component, ]}
-        self._toggles = {} # {(path): wx.CheckBox, }
-        self._props   = []
-        self._data    = {}
-        self._rows    = 0
+        self._comps    = collections.defaultdict(list) # {(path): [wx component, ]}
+        self._autocomp = autocomp
+        self._toggles  = {} # {(path): wx.CheckBox, }
+        self._props    = []
+        self._data     = {}
+        self._rows     = 0
 
         panel_wrap  = wx.lib.scrolledpanel.ScrolledPanel(self)
         panel_items = self._panel = wx.Panel(panel_wrap)
@@ -459,7 +461,11 @@ class FormDialog(wx.Dialog):
                     self._OnToggleField(field, path, c)
                     c.Enable(self._editmode)
                     continue # for i, c
-                if isinstance(c, wx.stc.StyledTextCtrl): c.SetText(value or "")
+                if isinstance(c, wx.stc.StyledTextCtrl):
+                    c.SetText(value or "")
+                    if self._autocomp and isinstance(c, SQLiteTextCtrl):
+                        c.AutoCompClearAdded()
+                        c.AutoCompAddWords(self._autocomp)
                 elif isinstance(c, wx.CheckBox): c.Value = bool(value) 
                 else:
                     if isinstance(c, wx.ComboBox): c.SetItems(choices)
@@ -2211,6 +2217,11 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         result = super(SQLiteTextCtrl, self).Enable(enable)
         self.SetStyleSpecs()
         return result
+
+
+    def IsSingleLine(self):
+        """Returns whether the control is in single-line mode."""
+        return self.singleline
 
 
     def OnFocus(self, event):
