@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    29.09.2019
+@modified    01.10.2019
 ------------------------------------------------------------------------------
 """
 
@@ -352,8 +352,7 @@ ON
 
 {{ LF() }}BEGIN{{ LF() }}
 %if data.get("body"):
-  {{ WS(re.sub(r"([^;])(\s*)$", r"\\1;\\2", data["body"])) }}
-  {{ LF() }}
+  {{ WS(data["body"]) }}{{ LF() }}
 %endif
 END
 """
