@@ -59,7 +59,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    29.09.2019
+@modified    01.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -2125,9 +2125,11 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         """Sets STC style colours."""
         fgcolour, bgcolour, highcolour = (
             wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
-            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW,
+            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW 
+                      if self.Enabled else wx.SYS_COLOUR_BTNFACE,
                       wx.SYS_COLOUR_HOTLIGHT)
         )
+            
 
         self.SetCaretForeground(fgcolour)
         self.SetCaretLineBackground("#00FFFF")
@@ -2200,6 +2202,14 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.autocomps_added &= set(["sqlite_master"])
         del self.autocomps_total[:]
         self.autocomps_subwords.clear()
+
+
+    def Enable(self, enable=True):
+        """Enables or disables the control, updating display."""
+        if self.Enabled == enable: return False
+        result = super(SQLiteTextCtrl, self).Enable(enable)
+        self.SetStyleSpecs()
+        return result
 
 
     def OnFocus(self, event):
