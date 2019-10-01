@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.09.2019
+@modified    01.10.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -64,10 +64,10 @@ logger = logging.getLogger(__name__)
 
 
 """Custom application events for worker results."""
-WorkerEvent,          EVT_WORKER           = wx.lib.newevent.NewEvent()
-DetectionWorkerEvent, EVT_DETECTION_WORKER = wx.lib.newevent.NewEvent()
-ImportFolderEvent,    EVT_FOLDER_WORKER    = wx.lib.newevent.NewEvent()
-OpenDatabaseEvent,    EVT_OPEN_DATABASE    = wx.lib.newevent.NewEvent()
+SearchEvent,       EVT_SEARCH        = wx.lib.newevent.NewEvent()
+DetectionEvent,    EVT_DETECTION     = wx.lib.newevent.NewEvent()
+AddFolderEvent,    EVT_ADD_FOLDER    = wx.lib.newevent.NewEvent()
+OpenDatabaseEvent, EVT_OPEN_DATABASE = wx.lib.newevent.NewCommandEvent()
 
 
 class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
@@ -162,8 +162,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             workers.DetectDatabaseThread(self.on_detect_databases_callback)
         self.worker_folder = \
             workers.ImportFolderThread(self.on_add_from_folder_callback)
-        self.Bind(EVT_DETECTION_WORKER, self.on_detect_databases_result)
-        self.Bind(EVT_FOLDER_WORKER, self.on_add_from_folder_result)
+        self.Bind(EVT_DETECTION, self.on_detect_databases_result)
+        self.Bind(EVT_ADD_FOLDER, self.on_add_from_folder_result)
         self.Bind(EVT_OPEN_DATABASE, self.on_open_database_event)
         self.Bind(EVT_DATABASE_PAGE, self.on_database_page_event)
 
@@ -1497,7 +1497,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def on_detect_databases_callback(self, result):
         """Callback for DetectDatabaseThread, posts the data to self."""
         if self: # Check if instance is still valid (i.e. not destroyed by wx)
-            wx.PostEvent(self, DetectionWorkerEvent(result=result))
+            wx.PostEvent(self, DetectionEvent(result=result))
 
 
     def on_detect_databases_result(self, event):
@@ -1541,7 +1541,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def on_add_from_folder_callback(self, result):
         """Callback for ImportFolderThread, posts the data to self."""
         if self: # Check if instance is still valid (i.e. not destroyed by wx)
-            wx.PostEvent(self, ImportFolderEvent(result=result))
+            wx.PostEvent(self, AddFolderEvent(result=result))
 
 
     def on_add_from_folder_result(self, event):
@@ -1888,8 +1888,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
 
 
-DatabasePageEvent, EVT_DATABASE_PAGE = wx.lib.newevent.NewEvent()
-AnalyzerEvent,     EVT_ANALYZER      = wx.lib.newevent.NewEvent()
+DatabasePageEvent, EVT_DATABASE_PAGE = wx.lib.newevent.NewCommandEvent()
 
 class DatabasePage(wx.Panel):
     """
@@ -1924,7 +1923,7 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.on_sys_colour_change)
 
         # Create search structures and threads
-        self.Bind(EVT_WORKER, self.on_searchall_result)
+        self.Bind(EVT_SEARCH, self.on_searchall_result)
         self.workers_search = {} # {search ID: workers.SearchThread, }
         self.search_data_contact = {"id": None} # Current contacts search data
 
@@ -3112,7 +3111,7 @@ class DatabasePage(wx.Panel):
                               + "\n- ".join(copyerrors)) if copyerrors else ""
                         err = err[:500] + ".." if len(err) > 500 else err
                         guibase.status("Recovery to %s complete." % newfile, flash=True)
-                        wx.PostEvent(self.TopLevelParent, OpenDatabaseEvent(file=newfile))
+                        wx.PostEvent(self, OpenDatabaseEvent(-1, file=newfile))
                         wx.MessageBox("Recovery to %s complete.%s" %
                                       (newfile, err), conf.Title,
                                       wx.ICON_INFORMATION)
@@ -3483,7 +3482,7 @@ class DatabasePage(wx.Panel):
     def on_searchall_callback(self, result):
         """Callback function for SearchThread, posts the data to self."""
         if self: # Check if instance is still valid (i.e. not destroyed by wx)
-            wx.PostEvent(self, WorkerEvent(result=result))
+            wx.PostEvent(self, SearchEvent(result=result))
 
 
     def on_searchall(self, event):
@@ -3730,9 +3729,9 @@ class DatabasePage(wx.Panel):
             
         self.db.name, self.db.temporary = filename2, False
         if rename:
-            evt = DatabasePageEvent(source=self, rename=True, temporary=is_temporary,
+            evt = DatabasePageEvent(-1, source=self, rename=True, temporary=is_temporary,
                                     filename1=filename1, filename2=filename2)
-            wx.PostEvent(self.TopLevelParent, evt)
+            wx.PostEvent(self, evt)
             self.load_data()
         return True
 
@@ -3748,8 +3747,7 @@ class DatabasePage(wx.Panel):
 
     def update_page_header(self):
         """Mark database as changed/pristine in the parent notebook tabs."""
-        wx.PostEvent(self.TopLevelParent,
-                     DatabasePageEvent(source=self, modified=self.get_unsaved()))
+        wx.PostEvent(self, DatabasePageEvent(-1, source=self, modified=self.get_unsaved()))
 
 
     def on_change_tree_data(self, event):
@@ -3775,7 +3773,7 @@ class DatabasePage(wx.Panel):
     def add_data_page(self, data):
         """Opens a data object page for specified object data."""
         title = "%s %s" % (data["type"].capitalize(), grammar.quote(data["name"]))
-        p = DataObjectPage(self.notebook_schema, self, self.db, data)
+        p = DataObjectPage(self.notebook_schema, self.db, data)
         self.data_pages[data["type"]][data.get("name") or id(p)] = p
         self.notebook_data.InsertPage(0, page=p, text=title, select=True)
         self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
@@ -3789,7 +3787,7 @@ class DatabasePage(wx.Panel):
             if not self.sql_pages: self.sql_page_counter = 1
             if self.sql_page_counter > 1:
                 name += " (%s)" % self.sql_page_counter
-        p = SQLPage(self.notebook_schema, self, self.db)
+        p = SQLPage(self.notebook_schema, self.db)
         p.SetText(text)
         self.sql_pages[name] = p
         self.notebook_sql.InsertPage(0, page=p, text=name, select=True)
@@ -4224,7 +4222,7 @@ class DatabasePage(wx.Panel):
             title = "%s %s" % (data["type"].capitalize(), grammar.quote(data["name"]))
         else:
             title = "* New %s *" % data["type"]
-        p = SchemaObjectPage(self.notebook_schema, self, self.db, data)
+        p = SchemaObjectPage(self.notebook_schema, self.db, data)
         self.schema_pages[data["type"]][data.get("name") or id(p)] = p
         self.notebook_schema.InsertPage(0, page=p, text=title, select=True)
         self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
@@ -4585,7 +4583,7 @@ class DatabasePage(wx.Panel):
             extra = "" if len(tables1) > 1 or same_name \
                     else " as %s" % grammar.quote(tables2[0], force=True)
             guibase.status("Exported %s to %s%s.", t, filename2, extra, flash=True)
-            wx.PostEvent(self.TopLevelParent, OpenDatabaseEvent(file=filename2))
+            wx.PostEvent(self, OpenDatabaseEvent(-1, file=filename2))
 
 
     def load_data(self):
@@ -4834,7 +4832,7 @@ class DatabasePage(wx.Panel):
         """Updates page tab header with option to close page."""
         if not self: return
         self.ready_to_close = True
-        wx.PostEvent(self.TopLevelParent, DatabasePageEvent(source=self, ready=True))
+        wx.PostEvent(self, DatabasePageEvent(-1, source=self, ready=True))
 
 
 
@@ -5499,7 +5497,7 @@ class SQLPage(wx.PyPanel):
     Component for running SQL queries and seeing results in a grid.
     """
 
-    def __init__(self, parent, page, db, id=wx.ID_ANY, pos=wx.DefaultPosition,
+    def __init__(self, parent, db, id=wx.ID_ANY, pos=wx.DefaultPosition,
                  size=wx.DefaultSize):
         """
         @param   page  target to send EVT_SCHEMA_PAGE events to
@@ -5508,7 +5506,6 @@ class SQLPage(wx.PyPanel):
         ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
         ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
 
-        self._page     = page
         self._db       = db
         self._hovered_cell  = None # (row, col)
 
@@ -5982,23 +5979,19 @@ class SQLPage(wx.PyPanel):
 
 
 
-DataPageEvent, EVT_DATA_PAGE = wx.lib.newevent.NewEvent()
+DataPageEvent, EVT_DATA_PAGE = wx.lib.newevent.NewCommandEvent()
 
 class DataObjectPage(wx.PyPanel):
     """
     Component for viewing and editing data objects like tables and views.
     """
 
-    def __init__(self, parent, page, db, item, id=wx.ID_ANY, pos=wx.DefaultPosition,
+    def __init__(self, parent, db, item, id=wx.ID_ANY, pos=wx.DefaultPosition,
                  size=wx.DefaultSize):
-        """
-        @param   page  target to send EVT_SCHEMA_PAGE events to
-        """
         wx.PyPanel.__init__(self, parent, pos=pos, size=size)
         ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
         ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
 
-        self._page     = page
         self._db       = db
         self._category = item["type"]
         self._item     = copy.deepcopy(item)
@@ -6151,8 +6144,8 @@ class DataObjectPage(wx.PyPanel):
 
 
     def _PostEvent(self, **kwargs):
-        """Posts an EVT_DATA_PAGE event to parent page."""
-        wx.PostEvent(self._page, DataPageEvent(source=self, item=self._item, **kwargs))
+        """Posts an EVT_DATA_PAGE event to parent."""
+        wx.PostEvent(self, DataPageEvent(-1, source=self, item=self._item, **kwargs))
 
 
     def _OnChange(self, event=None):
@@ -6425,7 +6418,7 @@ class DataObjectPage(wx.PyPanel):
 
 
 
-SchemaPageEvent, EVT_SCHEMA_PAGE = wx.lib.newevent.NewEvent()
+SchemaPageEvent, EVT_SCHEMA_PAGE = wx.lib.newevent.NewCommandEvent()
 
 class SchemaObjectPage(wx.PyPanel):
     """
@@ -6455,16 +6448,12 @@ class SchemaObjectPage(wx.PyPanel):
     }
 
 
-    def __init__(self, parent, page, db, item, id=wx.ID_ANY, pos=wx.DefaultPosition,
+    def __init__(self, parent, db, item, id=wx.ID_ANY, pos=wx.DefaultPosition,
                  size=wx.DefaultSize):
-        """
-        @param   page  target to send EVT_SCHEMA_PAGE events to
-        """
         wx.PyPanel.__init__(self, parent, pos=pos, size=size)
         ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
         ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
 
-        self._page     = page
         self._db       = db
         self._category = item["type"]
         self._newmode  = "name" not in item
@@ -7928,8 +7917,8 @@ class SchemaObjectPage(wx.PyPanel):
 
 
     def _PostEvent(self, **kwargs):
-        """Posts an EVT_SCHEMA_PAGE event to parent page."""
-        wx.PostEvent(self._page, SchemaPageEvent(source=self, item=self._item, **kwargs))
+        """Posts an EVT_SCHEMA_PAGE event to parent."""
+        wx.PostEvent(self, SchemaPageEvent(-1, source=self, item=self._item, **kwargs))
 
 
     def _AddSizer(self, parentsizer, childsizer, *args, **kwargs):

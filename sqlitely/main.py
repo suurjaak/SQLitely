@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.09.2019
+@modified    01.10.2019
 ------------------------------------------------------------------------------
 """
 import argparse
@@ -102,7 +102,7 @@ def run_gui(filenames):
 
     window.run_console("self = wx.GetApp().GetTopWindow() # Application main window instance")
     for f in filter(os.path.isfile, filenames):
-        wx.CallAfter(wx.PostEvent, window, gui.OpenDatabaseEvent(file=f))
+        wx.CallAfter(wx.PostEvent, window, gui.OpenDatabaseEvent(-1, file=f))
     app.MainLoop()
 
 
