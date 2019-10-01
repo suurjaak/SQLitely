@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.09.2019
+@modified    01.10.2019
 ------------------------------------------------------------------------------
 """
 import logging
@@ -336,9 +336,9 @@ class AnalyzerThread(WorkerThread):
     @param   path  database file path to analyze
     @return        {?error: str,
                     ?data: {"table": [{name, size, size_total, ?index: [], ?size_index}],
-                            "index": [{name, size, table}]}}
+                            "index": [{name, size, table}]},
+                            "filesize": int}
     """
-    KEYS = {"name": "name", "tblname": "table", "compressed_size": "size"}
 
     def run(self):
         self._is_running = True
@@ -385,7 +385,7 @@ class AnalyzerThread(WorkerThread):
                 self.postback({"error": error})
             else:
                 tablemap = {} # {name: {}}
-                data = {"table": [], "index": []}
+                data = {"table": [], "index": [], "filesize": filesize}
                 for row in rows:
                     category = "index" if row["is_index"] else "table"
                     item = {"name": row["name"], "size": row["compressed_size"]}

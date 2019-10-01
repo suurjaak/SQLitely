@@ -2701,7 +2701,8 @@ class DatabasePage(wx.Panel):
     def on_copy_statistics(self, event=None):
         """Handler for copying database statistics to clipboard."""
         if wx.TheClipboard.Open():
-            ns = {"db_filename": self.db.name, "db_filesize": self.db.filesize}
+            ns = {"db_filename": self.db.name,
+                  "db_filesize": self.statistics["data"]["filesize"]}
             content = step.Template(templates.DATA_STATISTICS_TXT, strip=False).expand(
                 dict(ns, **self.statistics)
             )
@@ -2727,7 +2728,7 @@ class DatabasePage(wx.Panel):
         filename = dialog.GetPath()
         try:
             ns = {"title": "Database statistics", "db_filename": self.db.name,
-                  "db_filesize": self.db.filesize}
+                  "db_filesize": self.statistics["data"]["filesize"]}
             content = step.Template(templates.DATA_STATISTICS_HTML, escape=True).expand(
                 dict(ns, **self.statistics)
             )
