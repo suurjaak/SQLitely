@@ -2708,6 +2708,7 @@ class DatabasePage(wx.Panel):
             )
             d = wx.TextDataObject(content)
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+            guibase.status("Copied database statistics to clipboard", flash=True)
 
 
     def on_save_statistics(self, event=None):
@@ -3549,6 +3550,7 @@ class DatabasePage(wx.Panel):
         if wx.TheClipboard.Open():
             d = wx.TextDataObject(stc.Text)
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+            guibase.status("Copied SQL to clipboard", flash=True)
 
 
     def on_save_sql(self, stc, event):
@@ -5929,6 +5931,7 @@ class SQLPage(wx.PyPanel):
         if wx.TheClipboard.Open():
             d = wx.TextDataObject(self._stc.Text)
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+            guibase.status("Copied SQL to clipboard", flash=True)
 
 
     def _OnLoadSQL(self, event):
@@ -8256,6 +8259,7 @@ class SchemaObjectPage(wx.PyPanel):
         if wx.TheClipboard.Open():
             d = wx.TextDataObject(self._ctrls["sql"].GetText())
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+            guibase.status("Copied SQL to clipboard", flash=True)
 
 
     def _OnSaveSQL(self, event=None):
