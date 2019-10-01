@@ -1663,10 +1663,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 conf.LastActivePage[db.filename] = active_idx
             elif page.db.filename in conf.LastActivePage:
                 del conf.LastActivePage[page.db.filename]
-            page.save_page_conf()
-            for worker in page.workers_search.values(): worker.stop()
-            page.worker_analyzer.stop()
-            page.worker_checksum.stop()
+            page.on_close()
             db.close()
         self.worker_detection.stop()
         self.worker_folder.stop()
@@ -1730,10 +1727,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         elif page.db.filename in conf.LastActivePage:
             del conf.LastActivePage[page.db.filename]
 
-        for worker in page.workers_search.values(): worker.stop()
-        page.worker_analyzer.stop()
-        page.worker_checksum.stop()
-        page.save_page_conf()
+        page.on_close()
 
         if page in self.db_pages:
             del self.db_pages[page]
@@ -3162,8 +3156,15 @@ class DatabasePage(wx.Panel):
             self.update_info_panel()
 
 
-    def save_page_conf(self):
-        """Saves page last configuration like search text and results."""
+    def on_close(self):
+        """
+        Stops worker threads, saves page last configuration 
+        like search text and results.
+        """
+        for worker in self.workers_search.values(): worker.stop()
+        self.worker_analyzer.stop()
+        self.worker_checksum.stop()
+
         if self.db.temporary: return
 
         # Save search box state
