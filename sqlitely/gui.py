@@ -64,10 +64,10 @@ logger = logging.getLogger(__name__)
 
 
 """Custom application events for worker results."""
-WorkerEvent, EVT_WORKER = wx.lib.newevent.NewEvent()
+WorkerEvent,          EVT_WORKER           = wx.lib.newevent.NewEvent()
 DetectionWorkerEvent, EVT_DETECTION_WORKER = wx.lib.newevent.NewEvent()
-ImportFolderEvent, EVT_FOLDER_WORKER = wx.lib.newevent.NewEvent()
-OpenDatabaseEvent, EVT_OPEN_DATABASE = wx.lib.newevent.NewEvent()
+ImportFolderEvent,    EVT_FOLDER_WORKER    = wx.lib.newevent.NewEvent()
+OpenDatabaseEvent,    EVT_OPEN_DATABASE    = wx.lib.newevent.NewEvent()
 
 
 class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
@@ -1666,6 +1666,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 del conf.LastActivePage[page.db.filename]
             page.save_page_conf()
             for worker in page.workers_search.values(): worker.stop()
+            page.worker_analyzer.stop()
             db.close()
         self.worker_detection.stop()
         self.worker_folder.stop()
@@ -1730,6 +1731,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             del conf.LastActivePage[page.db.filename]
 
         for worker in page.workers_search.values(): worker.stop()
+        page.worker_analyzer.stop()
         page.save_page_conf()
 
         if page in self.db_pages:
@@ -1887,6 +1889,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
 
 DatabasePageEvent, EVT_DATABASE_PAGE = wx.lib.newevent.NewEvent()
+AnalyzerEvent,     EVT_ANALYZER      = wx.lib.newevent.NewEvent()
 
 class DatabasePage(wx.Panel):
     """
@@ -1904,6 +1907,7 @@ class DatabasePage(wx.Panel):
         self.db.register_consumer(self)
         self.ignore_unsaved = False
         self.save_underway  = False
+        self.statistics = {} # {?error: message, ?data: {..}}
         self.pragma         = db.get_pragma_values() # {pragma_name: value}
         self.pragma_changes = {}    # {pragma_name: value}
         self.pragma_ctrls   = {}    # {pragma_name: wx control}
@@ -1923,6 +1927,8 @@ class DatabasePage(wx.Panel):
         self.Bind(EVT_WORKER, self.on_searchall_result)
         self.workers_search = {} # {search ID: workers.SearchThread, }
         self.search_data_contact = {"id": None} # Current contacts search data
+
+        self.worker_analyzer = workers.AnalyzerThread(self.on_analyzer_result)
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -2016,6 +2022,7 @@ class DatabasePage(wx.Panel):
             wx.CallAfter(self.split_panels)
 
 
+
     def create_page_search(self, notebook):
         """Creates a page for searching the database."""
         page = self.page_search = wx.Panel(parent=notebook)
@@ -2090,7 +2097,7 @@ class DatabasePage(wx.Panel):
         self.data_pages = defaultdict(dict) # {category: {name: DataObjectPage}}
 
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
-        splitter = self.splitter_tables = wx.SplitterWindow(
+        splitter = self.splitter_data = wx.SplitterWindow(
             parent=page, style=wx.BORDER_NONE
         )
         splitter.SetMinimumPaneSize(100)
@@ -2488,15 +2495,19 @@ class DatabasePage(wx.Panel):
 
     def create_page_info(self, notebook):
         """Creates a page for seeing general database information."""
-        page = self.page_info = wx.lib.scrolledpanel.ScrolledPanel(notebook)
+        page = self.page_info = wx.Panel(notebook)
         self.pageorder[page] = len(self.pageorder)
         notebook.AddPage(page, "Information")
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        panel1, panel2 = wx.Panel(parent=page), wx.Panel(parent=page)
-        panel1c, panel2c = wx.Panel(parent=panel1), wx.Panel(parent=panel2)
+        splitter = self.splitter_info = wx.SplitterWindow(
+            page, style=wx.BORDER_NONE
+        )
+        splitter.SetMinimumPaneSize(300)
+
+        panel1, panel2 = wx.Panel(splitter), wx.Panel(splitter)
+        panel1c = wx.Panel(parent=panel1)
         ColourManager.Manage(panel1c, "BackgroundColour", "BgColour")
-        ColourManager.Manage(panel2c, "BackgroundColour", "BgColour")
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -2526,7 +2537,6 @@ class DatabasePage(wx.Panel):
             setattr(self, name, valuetext)
         self.edit_info_path.Value = "<temporary file>" if self.db.temporary \
                                     else self.db.filename
-
 
         button_fks      = self.button_check_fks       = wx.Button(panel1c, label="Check foreign keys")
         button_check    = self.button_check_integrity = wx.Button(panel1c, label="Check for corruption")
@@ -2576,45 +2586,65 @@ class DatabasePage(wx.Panel):
         sizer1.Add(label_file, border=5, flag=wx.ALL)
         sizer1.Add(panel1c, border=6, proportion=1, flag=wx.TOP | wx.GROW)
 
-        sizer_schematop = wx.BoxSizer(wx.HORIZONTAL)
-        label_schema = wx.StaticText(parent=panel2, label="Database schema")
-        label_schema.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
-                                  wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
+        nb = self.notebook_info = wx.Notebook(panel2)
+        panel_stats, panel_schema = wx.Panel(nb), wx.Panel(nb)
+        panel_stats.Sizer  = wx.BoxSizer(wx.VERTICAL)
+        panel_schema.Sizer = wx.BoxSizer(wx.VERTICAL)
 
-        tb = self.tb_sql = wx.ToolBar(parent=panel2,
-                                      style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = images.ToolbarRefresh.Bitmap
         bmp2 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR,
                                         (16, 16))
         bmp3 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR,
                                         (16, 16))
-        tb.SetToolBitmapSize(bmp1.Size)
-        tb.AddLabelTool(wx.ID_REFRESH, "", bitmap=bmp1, shortHelp="Refresh schema SQL")
-        tb.AddLabelTool(wx.ID_COPY,    "", bitmap=bmp2, shortHelp="Copy schema SQL to clipboard")
-        tb.AddLabelTool(wx.ID_SAVE,    "", bitmap=bmp3, shortHelp="Save schema SQL to file")
-        tb.Realize()
-        tb.Bind(wx.EVT_TOOL, self.on_update_stc_schema, id=wx.ID_REFRESH)
-        tb.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_schema, e), id=wx.ID_COPY)
-        tb.Bind(wx.EVT_TOOL, lambda e: self.on_save_sql(self.stc_schema, e), id=wx.ID_SAVE)
+        tb_stats = self.tb_stats = wx.ToolBar(panel_stats,
+                                      style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        tb_stats.SetToolBitmapSize(bmp1.Size)
+        tb_stats.AddLabelTool(wx.ID_REFRESH, "", bitmap=bmp1, shortHelp="Refresh statistics")
+        tb_stats.AddLabelTool(wx.ID_COPY,    "", bitmap=bmp2, shortHelp="Copy statistics to clipboard as text")
+        tb_stats.AddLabelTool(wx.ID_SAVE,    "", bitmap=bmp3, shortHelp="Save statistics HTML to file")
+        tb_stats.Realize()
+        tb_stats.EnableTool(wx.ID_COPY, False)
+        tb_stats.EnableTool(wx.ID_SAVE, False)
+        tb_stats.Bind(wx.EVT_TOOL, self.on_update_statistics, id=wx.ID_REFRESH)
+        tb_stats.Bind(wx.EVT_TOOL, self.on_copy_statistics,   id=wx.ID_COPY)
+        tb_stats.Bind(wx.EVT_TOOL, self.on_save_statistics,   id=wx.ID_SAVE)
 
-        sizer_stc = panel2c.Sizer = wx.BoxSizer(wx.VERTICAL)
-        stc = self.stc_schema = controls.SQLiteTextCtrl(parent=panel2c,
+        html_stats = self.html_stats = wx.html.HtmlWindow(panel_stats)
+        html_stats.Bind(wx.EVT_SCROLLWIN, self.on_scroll_html_stats)
+        html_stats.Bind(wx.EVT_SIZE,      self.on_size_html_stats)
+
+        tb_sql = self.tb_sql = wx.ToolBar(panel_schema,
+                                      style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        tb_sql.SetToolBitmapSize(bmp1.Size)
+        tb_sql.AddLabelTool(wx.ID_REFRESH, "", bitmap=bmp1, shortHelp="Refresh schema SQL")
+        tb_sql.AddLabelTool(wx.ID_COPY,    "", bitmap=bmp2, shortHelp="Copy schema SQL to clipboard")
+        tb_sql.AddLabelTool(wx.ID_SAVE,    "", bitmap=bmp3, shortHelp="Save schema SQL to file")
+        tb_sql.Realize()
+        tb_sql.EnableTool(wx.ID_COPY, False)
+        tb_sql.EnableTool(wx.ID_SAVE, False)
+        tb_sql.Bind(wx.EVT_TOOL, self.on_update_stc_schema, id=wx.ID_REFRESH)
+        tb_sql.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_schema, e), id=wx.ID_COPY)
+        tb_sql.Bind(wx.EVT_TOOL, lambda e: self.on_save_sql(self.stc_schema, e), id=wx.ID_SAVE)
+
+        stc = self.stc_schema = controls.SQLiteTextCtrl(panel_schema,
             style=wx.BORDER_STATIC)
         stc.SetText("Parsing..")
         stc.SetReadOnly(True)
 
-        sizer_schematop.Add(label_schema)
-        sizer_schematop.AddStretchSpacer()
-        sizer_schematop.Add(tb, flag=wx.ALIGN_RIGHT)
-        sizer_stc.Add(stc, proportion=1, flag=wx.GROW)
-        sizer2.Add(sizer_schematop, border=5, flag=wx.TOP | wx.RIGHT | wx.GROW)
-        sizer2.Add(panel2c, proportion=1, border=5, flag=wx.TOP | wx.GROW)
+        panel_stats.Sizer.Add(tb_stats, border=5, flag=wx.ALL)
+        panel_stats.Sizer.Add(html_stats, proportion=1, flag=wx.GROW)
 
-        sizer.Add(panel1, proportion=1, border=5,
-                  flag=wx.LEFT  | wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
-        sizer.Add(panel2, proportion=1, border=5,
-                  flag=wx.RIGHT | wx.TOP | wx.BOTTOM | wx.GROW)
-        page.SetupScrolling()
+        panel_schema.Sizer.Add(tb_sql, border=5, flag=wx.ALL)
+        panel_schema.Sizer.Add(stc, proportion=1, flag=wx.GROW)
+
+        nb.AddPage(panel_stats,  "Statistics")
+        nb.AddPage(panel_schema, "Schema")
+        sizer2.Add(nb, proportion=1, flag=wx.GROW)
+
+        sizer.Add(splitter, border=5, proportion=1, flag=wx.ALL | wx.GROW)
+        splitter.SplitVertically(panel1, panel2, self.Size[0] / 2 - 60)
+
+        self.populate_statistics()
 
 
     def on_sys_colour_change(self, event):
@@ -2626,6 +2656,7 @@ class DatabasePage(wx.Panel):
             self.label_html.ForegroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
             default = step.Template(templates.SEARCH_WELCOME_HTML).expand()
             self.html_searchall.SetDefaultPage(default)
+            self.populate_statistics()
         wx.CallAfter(dorefresh) # Postpone to allow conf update
 
 
@@ -2642,12 +2673,141 @@ class DatabasePage(wx.Panel):
 
     def on_update_stc_schema(self, event=None):
         """Handler for clicking to refresh database schema SQL."""
-        self.db.populate_schema(parse=True)
         scrollpos = self.stc_schema.GetScrollPos(wx.VERTICAL)
+
+        self.stc_schema.SetReadOnly(False)
+        self.stc_schema.SetText("Parsing..")
+        self.stc_schema.SetReadOnly(True)
+        self.tb_sql.EnableTool(wx.ID_COPY, False)
+        self.tb_sql.EnableTool(wx.ID_SAVE, False)
+
+        self.db.populate_schema(parse=True)
         self.stc_schema.SetReadOnly(False)
         self.stc_schema.SetText(self.db.get_sql())
         self.stc_schema.SetReadOnly(True)
         self.stc_schema.ScrollToLine(scrollpos)
+        self.tb_sql.EnableTool(wx.ID_COPY, True)
+        self.tb_sql.EnableTool(wx.ID_SAVE, True)
+
+
+    def on_update_statistics(self, event=None):
+        """
+        Handler for refreshing database statistics, sets loading-content
+        and tasks worker.
+        """
+        self.statistics = {}
+        self.populate_statistics()
+        self.worker_analyzer.work(self.db.filename)
+
+
+    def on_copy_statistics(self, event=None):
+        """Handler for copying database statistics to clipboard."""
+        if wx.TheClipboard.Open():
+            ns = {"db_filename": self.db.name, "db_filesize": self.db.filesize}
+            content = step.Template(templates.DATA_STATISTICS_TXT, strip=False).expand(
+                dict(ns, **self.statistics)
+            )
+            d = wx.TextDataObject(content)
+            wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+
+
+    def on_save_statistics(self, event=None):
+        """
+        Handler for saving database statistics to file, pops open file dialog
+        and saves content.
+        """
+        filename = os.path.splitext(os.path.basename(self.db.name))[0]
+        filename = filename.rstrip() + " statistics"
+        dialog = wx.FileDialog(
+            parent=self, message="Save statistics as", defaultFile=filename,
+            wildcard="HTML file (*.html)|*.html|All files|*.*",
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        filename = dialog.GetPath()
+        try:
+            ns = {"title": "Database statistics", "db_filename": self.db.name,
+                  "db_filesize": self.db.filesize}
+            content = step.Template(templates.DATA_STATISTICS_HTML, escape=True).expand(
+                dict(ns, **self.statistics)
+            )
+            with open(filename, "wb") as f:
+                f.write(content.encode("utf-8"))
+            util.start_file(filename)
+        except Exception as e:
+            msg = "Error saving statistics to %s." % filename
+            logger.exception(msg); guibase.status(msg, flash=True)
+            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+
+
+    def on_analyzer_result(self, result):
+        """
+        Handler for getting results from analyzer thread, populates statistics.
+        """
+        self.statistics = result
+        self.populate_statistics()
+
+
+    def on_size_html_stats(self, event):
+        """
+        Handler for sizing html_stats, sets new scroll position based
+        previously stored one (HtmlWindow loses its scroll position on resize).
+        """
+        html = self.html_stats
+        if hasattr(html, "_last_scroll_pos"):
+            for i in range(2):
+                orient = wx.VERTICAL if i else wx.HORIZONTAL
+                # Division can be > 1 on first resizings, bound it to 1.
+                ratio = min(1, util.safedivf(html._last_scroll_pos[i],
+                    html._last_scroll_range[i]
+                ))
+                html._last_scroll_pos[i] = ratio * html.GetScrollRange(orient)
+            # Execute scroll later as something resets it after this handler
+            scroll_func = lambda: html and html.Scroll(*html._last_scroll_pos)
+            wx.CallLater(50, scroll_func)
+        event.Skip() # Allow event to propagate wx handler
+
+
+    def on_scroll_html_stats(self, event):
+        """
+        Handler for scrolling the HTML stats, stores scroll position
+        (HtmlWindow loses it on resize).
+        """
+        wx.CallAfter(self.store_html_stats_scroll)
+        event.Skip() # Allow event to propagate wx handler
+
+
+    def store_html_stats_scroll(self):
+        """
+        Stores the statistics HTML scroll position, needed for getting around
+        its quirky scroll updating.
+        """
+        if not self:
+            return
+        self.html_stats._last_scroll_pos = [
+            self.html_stats.GetScrollPos(wx.HORIZONTAL),
+            self.html_stats.GetScrollPos(wx.VERTICAL)
+        ]
+        self.html_stats._last_scroll_range = [
+            self.html_stats.GetScrollRange(wx.HORIZONTAL),
+            self.html_stats.GetScrollRange(wx.VERTICAL)
+        ]
+
+
+    def populate_statistics(self):
+        """Populates statistics HTML window."""
+        previous_scrollpos = getattr(self.html_stats, "_last_scroll_pos", None)
+        html = step.Template(templates.STATISTICS_HTML, escape=True).expand(dict(self.statistics))
+        self.html_stats.Freeze()
+        self.html_stats.SetPage(html)
+        self.html_stats.BackgroundColour = conf.BgColour
+        if previous_scrollpos:
+            self.html_stats.Scroll(*previous_scrollpos)
+        self.html_stats.Thaw()
+        self.tb_stats.EnableTool(wx.ID_COPY, "data" in self.statistics)
+        self.tb_stats.EnableTool(wx.ID_SAVE, "data" in self.statistics)
 
 
     def on_pragma_change(self, event):
@@ -3023,10 +3183,10 @@ class DatabasePage(wx.Panel):
         """
         if not self:
             return
-        sash_pos = self.Size[1] / 3
-        panel1, panel2 = self.splitter_tables.Children
-        self.splitter_tables.Unsplit()
-        self.splitter_tables.SplitVertically(panel1, panel2, 270)
+        for splitter in self.splitter_data, self.splitter_schema, self.splitter_info:
+            panel1, panel2 = splitter.Children
+            splitter.Unsplit()
+            splitter.SplitVertically(panel1, panel2, 270)
         wx.CallLater(1000, lambda: self and
                      (self.tree_data.SetColumnWidth(0, -1),
                       self.tree_data.SetColumnWidth(1, -1)))
@@ -3399,7 +3559,7 @@ class DatabasePage(wx.Panel):
         filename = os.path.splitext(os.path.basename(self.db.name))[0]
         if stc is self.stc_pragma: filename += " PRAGMA"
         dialog = wx.FileDialog(
-            parent=self, message="Save as", defaultFile=filename,
+            parent=self, message="Save SQL as", defaultFile=filename,
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
             style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
         )
@@ -4119,6 +4279,7 @@ class DatabasePage(wx.Panel):
             self.load_tree_data()
             self.update_autocomp()
             self.on_update_stc_schema()
+            self.on_update_statistics()
 
 
     def on_change_sql_page(self, event):
@@ -4469,6 +4630,7 @@ class DatabasePage(wx.Panel):
         self.load_tree_data()
         self.load_tree_schema()
         self.update_autocomp()
+        self.worker_analyzer.work(self.db.filename)
 
 
     def get_tree_expanded_state(self, tree, root):

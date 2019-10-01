@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.09.2019
+@modified    30.09.2019
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -22,16 +22,18 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev100"
-VersionDate = "29.09.2019"
+Version = "1.0.dev101"
+VersionDate = "30.09.2019"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
     ApplicationDirectory = os.path.dirname(sys.executable)
     ResourceDirectory = os.path.join(getattr(sys, "_MEIPASS", ""), "media")
+    BinDirectory = os.path.join(getattr(sys, "_MEIPASS", ""), "bin")
 else:
-    ApplicationDirectory = os.path.dirname(__file__)
+    ApplicationDirectory = os.path.realpath(os.path.dirname(__file__))
     ResourceDirectory = os.path.join(ApplicationDirectory, "media")
+    BinDirectory = os.path.join(ApplicationDirectory, "bin")
 
 """Name of file where FileDirectives are kept."""
 ConfigFile = "%s.ini" % os.path.join(ApplicationDirectory, "etc", Title.lower())
@@ -48,7 +50,8 @@ OptionalFileDirectives = [
     "DBExtensions", "ExportDbTemplate", "LogSQL", "MinWindowSize",
     "MaxConsoleHistory", "MaxHistoryInitialMessages", "MaxRecentFiles",
     "MaxSearchHistory", "MaxSearchTableRows", "PopupUnexpectedErrors",
-    "SearchResultsChunk", "StatusFlashLength", "UpdateCheckInterval",
+    "SearchResultsChunk", "StatisticsPlotWidth", "StatusFlashLength",
+    "UpdateCheckInterval",
 ]
 OptionalFileDirectiveDefaults = {}
 
@@ -115,6 +118,12 @@ WindowSize = (1080, 710)
 
 """Currently opened databases, as {filename: db}."""
 DBsOpen = {}
+
+"""Path to SQLite analyzer tool."""
+DBAnalyzer = os.path.join(BinDirectory, "sqlite3_analyzer" + (
+    ".exe" if "win32"  == sys.platform else 
+    "_osx" if "darwin" == sys.platform else "_linux"
+))
 
 """Whether logging to log window is enabled."""
 LogEnabled = True
@@ -223,6 +232,18 @@ GridRowInsertedColour = "#88DDFF"
 
 """Colour set to table/list cells that have been changed."""
 GridCellChangedColour = "#FF7777"
+
+"""Width of the database statistics plots, in pixels."""
+StatisticsPlotWidth = 200
+
+"""Colour for tables plot in database statistics."""
+PlotTableColour = "#3399FF"
+
+"""Colour for indexes plot in database statistics."""
+PlotIndexColour = "#1DAB48"
+
+"""Background colour for plots in database statistics."""
+PlotBgColour = "#DDDDDD"
 
 """Duration of "flashed" status message on StatusBar, in seconds."""
 StatusFlashLength = 20

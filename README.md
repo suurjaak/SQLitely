@@ -3,15 +3,19 @@ SQLitely 1.0
 
 SQLitely is an SQLite database tool, written in Python.
 
-You can open SQLite databases and work with their contents:
+It can:
 
-- search the database, either from table data or database metadata
-- view and export data in various formats
-- change, add or delete table data
-- edit database schema
+- detect and manage SQLite databases in bulk
+- create new databases
+- create and modify tables, indexes, triggers and views
+- free-form search over all database tables
+- view and export tables and metadata in various formats
+- view table and index size statistics
+- copy tables from one database to another
+- modify table data
 - execute direct SQL queries
-- see and edit PRAGMA directives
-- vacuum database, fix database corruption
+- manage database PRAGMA directives
+- fix database corruption
 
 Downloads, help texts, and more screenshots at
 http://suurjaak.github.io/SQLitely.
@@ -22,24 +26,28 @@ http://suurjaak.github.io/SQLitely.
 Using The Program
 -----------------
 
-SQLitely offers a convenient way for performing complex ALTER TABLE operations.
+SQLitely offers a convenient way for complex ALTER TABLE operations.
 Columns and constraints can be changed, reordered, added, dropped;
-encapsulating the multiple steps that SQLite requires for table modifications
-while retaining existing table data.
+the program automatically performs the multiple steps required for SQLite table
+modifications while retaining existing data (creating a temporary table,
+copying data, dropping old table, and renaming temporary table as old).
+Additionally, when renaming tables or columns, all related tables, indexes,
+triggers and views are altered automatically.
 
-Searching an opened database supports a simple Google-like
+SQLitely can search over all columns of all tables with a simple Google-like
 [query syntax](http://suurjaak.github.io/SQLitely/help.html).
-You can use keywords to search from specific tables and columns only
+Keywords can search from specific tables and columns only
 (`table:foo`, `column:bar`), or from certain dates only 
 (`date:2012`, `date:2010..2013-06`). Search supports 
 wildcards, exact phrases, grouping, excluding, and either-or queries.
 
-SQLitely can be minimized to tray, clicking the tray icon opens 
-a search popup.
+SQLitely can show disk space usage for each table and index,
+in bytes and overall percentage. (Depending on the size of the database,
+this analysis can take a while.)
 
-The program itself is stand-alone, can work from any directory, and does not 
-need additional installation, Windows installers have been provided for 
-convenience. The installed program can be copied to a USB stick and used
+Windows installers have been provided for convenience. The program itself 
+is stand-alone, can work from any directory, and does not need additional
+installation. The installed program can be copied to a USB stick and used
 elsewhere, same goes for the source code.
 
 SQLitely has been tested under Windows 7, Windows Vista, Windows XP and
@@ -47,7 +55,7 @@ Ubuntu Linux. In source code form, it should run wherever Python and the
 required Python packages are installed.
 
 If running from pip installation, run `sqlitely` from the command-line. 
-If running from straight source code, launch `sqlitely.sh` where shell 
+If running straight from source code, launch `sqlitely.sh` where shell 
 scripts are supported, or `sqlitely.bat` under Windows, or open 
 a terminal and run `python -m sqlitely.main` in SQLitely directory.
 
@@ -69,14 +77,13 @@ Source Dependencies
 
 If running from source code, SQLitely needs Python 2.7,
 and the following 3rd-party Python packages:
-* wxPython 2.9+ (http://wxpython.org/)
-The following are also listed in `requirements.txt` for pip:
 * antlr4-python2-runtime (https://pypi.org/project/antlr4-python2-runtime/)
 * pyparsing (https://pypi.org/project/pyparsing/)
+* wxPython 2.9+ (https://wxpython.org/)
 * XlsxWriter (https://pypi.python.org/pypi/XlsxWriter)
 
-If other Python libraries are not available, the program will function 
-regardless, only with lesser service - like lacking Excel export or full 
+If pyparsing or XlsxWriter are not available, the program will function
+regardless, only with lesser service - lacking Excel export or full
 search syntax.
 
 SQLitely can also run under wxPython 2.8.12+, with some layout quirks.
@@ -86,26 +93,29 @@ Python 2.6 will need the argparse library. Python 3 is yet unsupported.
 Attribution
 -----------
 
+Includes sqlite_analyzer, a command-line utility for table space analysis,
+(c) 2000, D. Richard Hipp, https://www.sqlite.org.
+
 Includes a modified version of step, Simple Template Engine for Python,
-(c) 2012, Daniele Mazzocchio (https://github.com/dotpy/step).
+(c) 2012, Daniele Mazzocchio, https://github.com/dotpy/step.
 
 Includes a modified version of SQLite.g4 from antlr4-grammars,
-(c) 2014, Bart Kiers 
-(https://github.com/antlr/grammars-v4/blob/master/sqlite/SQLite.g4).
+(c) 2014, Bart Kiers,
+https://github.com/antlr/grammars-v4/blob/master/sqlite/SQLite.g4.
 
 SQL lexer and parser generated with ANTLR v4.7.2,
-(c) 2012 The ANTLR Project (https://github.com/antlr/antlr4).
+(c) 2012 The ANTLR Project, https://github.com/antlr/antlr4.
 
 Includes several icons from Fugue Icons,
-(c) 2010 Yusuke Kamiyamane, http://p.yusukekamiyamane.com/
+(c) 2010 Yusuke Kamiyamane, https://p.yusukekamiyamane.com.
 
 Includes fonts Carlito Regular and Carlito bold,
-https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts
+https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts.
 
-Binaries compiled with PyInstaller, http://www.pyinstaller.org
+Binaries compiled with PyInstaller, https://www.pyinstaller.org.
 
 Installers created with Nullsoft Scriptable Install System,
-http://nsis.sourceforge.net/
+https://nsis.sourceforge.net/.
 
 
 License
@@ -113,4 +123,4 @@ License
 
 Copyright (c) 2019 by Erki Suurjaak.
 Released as free open source software under the MIT License,
-see [LICENSE.md](LICENSE.md) for full details.
+see [LICENSE.md](LICENSE.md) for full license text.

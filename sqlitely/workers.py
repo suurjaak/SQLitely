@@ -8,12 +8,15 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.09.2019
+@modified    30.09.2019
 ------------------------------------------------------------------------------
 """
 import logging
+import os
 import Queue
 import re
+import sqlite3
+import subprocess
 import threading
 import traceback
 
@@ -98,6 +101,8 @@ class SearchThread(WorkerThread):
     """
     Search background thread, searches the database on demand, yielding
     results back to main thread in chunks.
+
+    @param   dict  {text, db, table}
     """
 
 
@@ -268,6 +273,8 @@ class DetectDatabaseThread(WorkerThread):
     """
     SQLite database detection background thread, goes through potential
     directories and yields database filenames back to main thread one by one.
+
+    @param   bool  whether to run detection
     """
 
     def run(self):
@@ -296,6 +303,8 @@ class ImportFolderThread(WorkerThread):
     """
     SQLite database import background thread, goes through given folder
     and yields database filenames back to main thread one by one.
+
+    @param   path  directory path to import
     """
 
     def run(self):
@@ -315,4 +324,82 @@ class ImportFolderThread(WorkerThread):
 
             if not self._drop_results:
                 self.postback({"done": True, "count": len(all_filenames), "folder": path})
+            self._is_working = False
+
+
+
+class AnalyzerThread(WorkerThread):
+    """
+    SQLite analyzer background thread, invokes the stand-alone analyzer tool
+    and sends retrieved statistics to main thread.
+
+    @param   path  database file path to analyze
+    @return        {?error: str,
+                    ?data: {"table": [{name, size, size_total, ?index: [], ?size_index}],
+                            "index": [{name, size, table}]}}
+    """
+    KEYS = {"name": "name", "tblname": "table", "compressed_size": "size"}
+
+    def run(self):
+        self._is_running = True
+        while self._is_running:
+            path = self._queue.get()
+            if not path: continue # while
+
+            self._is_working, self._drop_results = True, False
+            filesize, output, rows, error = 0, "", [], None
+
+            if os.path.exists(path): filesize = os.path.getsize(path)
+            else: error = "File does not exist."
+
+            try:
+                if filesize:
+                    try: mypath = util.shortpath(path) if "nt" == os.name else path
+                    except Exception: mypath = path
+                    args = [conf.DBAnalyzer, mypath]
+                    logger.info('Invoking external command "%s".', " ".join(args))
+                    output = subprocess.check_output(args, shell=True, stderr=subprocess.STDOUT)
+            except Exception as e:
+                logger.exception("Error getting statistics for %s: %s.", path, e.output)
+                error = getattr(e, "output", None)
+                if error: error = error.split("\n")[0].strip()
+                else: error = util.format_exc(e)
+
+            try:
+                if output:
+                    db = sqlite3.connect(":memory:")
+                    db.row_factory = sqlite3.Row
+                    db.executescript(output)
+                    rows = db.execute("SELECT * FROM space_used "
+                                      "WHERE name NOT LIKE 'sqlite_%' "
+                                      "ORDER BY compressed_size DESC").fetchall()
+                    db.close()
+            except Exception as e:
+                logger.exception("Error processing statistics for %s.", path)
+                error = util.format_exc(e)
+            if not rows and not error:
+                error = "Database is empty."
+
+            if self._drop_results: continue # while
+            if error:
+                self.postback({"error": error})
+            else:
+                tablemap = {} # {name: {}}
+                data = {"table": [], "index": []}
+                for row in rows:
+                    category = "index" if row["is_index"] else "table"
+                    item = {"name": row["name"], "size": row["compressed_size"]}
+                    if "table" == category: tablemap[row["name"]] = item
+                    else:
+                        item["table"] = row["tblname"]
+                        tablemap[row["tblname"]].setdefault("index", []).append(item)
+                    data[category].append(item)
+                for item in data["table"]:
+                    size_index = sum(x["size"] for x in item["index"]) \
+                                 if "index" in item else None
+                    item["size_total"] = item["size"] + (size_index or 0)
+                    if size_index is not None: item["size_index"] = size_index
+                        
+                        
+                self.postback({"data": data})
             self._is_working = False

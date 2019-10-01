@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.09.2019
+@modified    30.09.2019
 ------------------------------------------------------------------------------
 """
 import re
@@ -458,7 +458,8 @@ from sqlitely import conf
 <img src="memory:{{conf.Title.lower()}}.png" /></td><td width="10"></td><td valign="center">
 <b>{{conf.Title}} version {{conf.Version}}</b>, {{conf.VersionDate}}.<br /><br />
 
-{{conf.Title}} is written in Python, released as free open source software
+
+{{conf.Title}} is an SQLite database manager, released as free open source software
 under the MIT License.
 </td></tr></table><br /><br />
 
@@ -470,28 +471,34 @@ under the MIT License.
 
 {{conf.Title}} has been built using the following open source software:
 <ul>
-  <li>wxPython{{" %s" % getattr(wx, "__version__", "") if getattr(sys, 'frozen', False) else ""}},
-      <a href="http://wxpython.org"><font color="{{conf.LinkColour}}">wxpython.org</font></a></li>
   <li>ANTLR4,
       <a href="https://www.antlr.org/"><font color="{{conf.LinkColour}}">antlr.org</font></a></li>
   <li>pyparsing,
       <a href="https://pypi.org/project/pyparsing/"><font color="{{conf.LinkColour}}">pypi.org/project/pyparsing</font></a></li>
+  <li>Python,
+      <a href="https://www.python.org/"><font color="{{conf.LinkColour}}">python.org</font></a></li>
+  <li>SQLite,
+      <a href="https://www.sqlite.org/"><font color="{{conf.LinkColour}}">sqlite.org</font></a></li>
   <li>step, Simple Template Engine for Python,
       <a href="https://github.com/dotpy/step"><font color="{{conf.LinkColour}}">github.com/dotpy/step</font></a></li>
+  <li>wxPython{{" %s" % getattr(wx, "__version__", "") if getattr(sys, 'frozen', False) else ""}},
+      <a href="http://wxpython.org"><font color="{{conf.LinkColour}}">wxpython.org</font></a></li>
   <li>XlsxWriter,
       <a href="https://github.com/jmcnamara/XlsxWriter"><font color="{{conf.LinkColour}}">
           github.com/jmcnamara/XlsxWriter</font></a></li>
-%if getattr(sys, 'frozen', False):
-  <li>Python 2, <a href="http://www.python.org"><font color="{{conf.LinkColour}}">python.org</font></a></li>
-  <li>PyInstaller, <a href="http://www.pyinstaller.org">
-      <font color="{{conf.LinkColour}}">pyinstaller.org</font></a></li>
-%endif
 </ul><br /><br />
+%if getattr(sys, 'frozen', False):
+Installer and binary executable created with:
+<ul>
+  <li>Nullsoft Scriptable Install System, <a href="https://nsis.sourceforge.net/"><font color="{{conf.LinkColour}}">nsis.sourceforge.net</font></a></li>
+  <li>PyInstaller, <a href="https://www.pyinstaller.org"><font color="{{conf.LinkColour}}">pyinstaller.org</font></a></li>
+</ul><br /><br />
+%endif
 
 
 
 Several icons from Fugue Icons, &copy; 2010 Yusuke Kamiyamane<br />
-<a href="http://p.yusukekamiyamane.com/"><font color="{{conf.LinkColour}}">p.yusukekamiyamane.com</font></a>
+<a href="https://p.yusukekamiyamane.com/"><font color="{{conf.LinkColour}}">p.yusukekamiyamane.com</font></a>
 <br /><br />
 Includes fonts Carlito Regular and Carlito bold,
 <a href="https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts"><font color="{{conf.LinkColour}}">fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts</font></a>
@@ -789,4 +796,504 @@ if "nt" == os.name: # In Windows, wx.HtmlWindow shows link whitespace quirkily
 For searching from specific tables, add "table:name", and from specific columns, add "column:name".
 &nbsp;&nbsp;<a href=\"page:#help\"><font color="{{conf.LinkColour}}">{{helplink}}</font></a>.
 </font>
+"""
+
+
+"""
+Database statistics HTML.
+
+@param   error  error message, if any
+@param   data   {"table": [{name, size, size_total, ?size_index, ?index: []}],
+                 "index": [{name, size, table}]}
+"""
+STATISTICS_HTML = """<%
+from sqlitely.lib.vendor.step import Template
+from sqlitely.lib import util
+from sqlitely import conf, templates
+%>
+<font face="{{conf.HtmlFontName}}" size="2" color="{{conf.FgColour}}">
+
+%if isdef("error"):
+    {{ error }}
+
+
+%elif isdef("data"):
+<%
+index_total = sum(x["size"] for x in data["index"])
+total = index_total + sum(x["size"] for x in data["table"])
+%>
+
+<font color="{{conf.PlotTableColour}}" size="4"><b>Table sizes</b></font>
+<table cellpadding="0" cellspacing="4">
+  <tr>
+    <th></th>
+    <th align="left">Name</th>
+    <th align="left">Size</th>
+    <th align="left">Bytes</th>
+  </tr>
+    %for item in sorted(data["table"], key=lambda x: (-x["size"], x["name"].lower())):
+  <tr>
+    <td>{{! Template(templates.STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size"], total=total)) }}</td>
+    <td nowrap="">{{ item["name"] }}</td>
+    <td align="right" nowrap="">{{ util.format_bytes(item["size"]) }}</td>
+    <td align="right" nowrap="">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
+  </tr>
+    %endfor
+</table>
+
+    %if data["index"]:
+
+<br /><br />
+<font color="{{conf.PlotTableColour}}" size="4"><b>Table sizes with indexes</b></font>
+<table cellpadding="0" cellspacing="4">
+  <tr>
+    <th></th>
+    <th align="left">Name</th>
+    <th align="left">Size</th>
+    <th align="left">Bytes</th>
+  </tr>
+        %for item in sorted(data["table"], key=lambda x: (-x["size_total"], x["name"].lower())):
+  <tr>
+    <td>{{! Template(templates.STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size_total"], total=total)) }}</td>
+    <td nowrap="">{{ item["name"] }}</td>
+    <td align="right" nowrap="">{{ util.format_bytes(item["size_total"]) }}</td>
+    <td align="right" nowrap="">{{ util.format_bytes(item["size_total"], max_units=False, with_units=False) }}</td>
+  </tr>
+        %endfor
+</table>
+
+<br /><br />
+<font color="{{conf.PlotIndexColour}}" size="4"><b>Table index sizes</b></font>
+<table cellpadding="0" cellspacing="4">
+  <tr>
+    <th></th>
+    <th align="left">Name</th>
+    <th align="left">Size</th>
+    <th align="left">Bytes</th>
+    <th align="left" nowrap="">Index Ratio</th>
+  </tr>
+        %for item in sorted([x for x in data["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower())):
+  <tr>
+    <td>{{! Template(templates.STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size_index"], total=total)) }}</td>
+    <td nowrap="">{{ item["name"] }} ({{ len(item["index"]) }})</td>
+    <td align="left" nowrap="">{{ util.format_bytes(item["size_index"]) }}</td>
+    <td align="right" nowrap="">{{ util.format_bytes(item["size_index"], max_units=False, with_units=False) }}</td>
+    <td align="right">{{ int(round(100 * util.safedivf(item["size_index"], index_total))) }}%</td>
+  </tr>
+        %endfor
+</table>
+
+<br /><br />
+<font color="{{conf.PlotIndexColour}}" size="4"><b>Index sizes</b></font>
+<table cellpadding="0" cellspacing="4">
+  <tr>
+    <th></th>
+    <th align="left">Name</th>
+    <th align="left">Table</th>
+    <th align="left">Size</th>
+    <th align="left">Bytes</th>
+    <th align="left" nowrap="">Index Ratio</th>
+  </tr>
+        %for item in sorted(data["index"], key=lambda x: (-x["size"], x["name"].lower())):
+  <tr>
+    <td>{{! Template(templates.STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size"], total=total)) }}</td>
+    <td nowrap="">{{ item["name"] }}</td>
+    <td nowrap="">{{ item["table"] }}</td>
+    <td align="right" nowrap="">{{ util.format_bytes(item["size"]) }}</td>
+    <td align="right" nowrap="">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
+    <td align="right">{{ int(round(100 * util.safedivf(item["size"], index_total))) }}%</td>
+  </tr>
+        %endfor
+</table>
+
+    %endif
+
+
+%else:
+    Analyzing..
+%endif
+
+</font>
+"""
+
+
+"""
+Database statistics row plot.
+
+@param   category  "table" or "index"
+@param   size      item size
+@param   total     total size
+"""
+STATISTICS_ROW_PLOT_HTML = """<%
+from sqlitely.lib import util
+from sqlitely import conf
+
+ratio = util.safedivf(size, total)
+if 0.99 <= ratio < 1: ratio = 0.99
+percent = int(round(100 * ratio))
+text_cell1 = "&nbsp;%d%%&nbsp;" % round(percent) if (round(percent) > 30) else ""
+text_cell2 = "" if text_cell1 else "&nbsp;%d%%&nbsp;" % percent
+fgcolour = conf.PlotTableColour if "table" == category else conf.PlotIndexColour
+
+%>
+<table cellpadding="0" cellspacing="0" width="{{ conf.StatisticsPlotWidth }}"><tr>
+  <td bgcolor="{{ fgcolour }}"
+      width="{{ int(round(ratio * conf.StatisticsPlotWidth)) }}" align="center">
+%if text_cell1:
+    <font color="#FFFFFF" size="2"><b>{{! text_cell1 }}</b></font>
+%endif
+  </td>
+  <td bgcolor="{{ conf.PlotBgColour }}" width="{{ int(round((1 - ratio) * conf.StatisticsPlotWidth)) }}" align="center">
+%if text_cell2:
+    <font color="{{ fgcolour }}" size="2"><b>{{! text_cell2 }}</b></font>
+%endif
+  </td>
+</tr></table>
+"""
+
+
+"""
+HTML statistics export template.
+
+@param   title        export title
+@param   db_filename  database filename
+@param   db_filesize  database size in bytes
+@param   data         {"table": [{name, size, size_total, ?size_index, ?index: []}],
+                       "index": [{name, size, table}]}
+"""
+DATA_STATISTICS_HTML = """<%
+import datetime
+from sqlitely.lib.vendor.step import Template
+from sqlitely.lib import util
+from sqlitely import conf, images, templates
+%><!DOCTYPE HTML><html lang="en">
+<head>
+  <meta http-equiv='Content-Type' content='text/html;charset=utf-8' />
+  <meta name="Author" content="{{conf.Title}}">
+  <title>{{title}}</title>
+  <link rel="shortcut icon" type="image/png" href="data:image/ico;base64,{{!images.Icon16x16_8bit.data}}"/>
+  <style>
+    body {
+      background: #8CBEFF;
+      font-family: Tahoma;
+      font-size: 11px;
+      margin: 0;
+    }
+    #title { font-size: 1.1em; font-weight: bold; color: #3399FF; }
+    table#header_table {
+      width: 100%;
+    }
+    #content_wrapper {
+      max-width: calc(100vw - 40px);
+      overflow-x: auto;
+      padding: 0 30px 10px 30px;
+    }
+    table#body_table {
+      margin-left: auto;
+      margin-right: auto;
+      border-spacing: 0px 10px;
+      padding: 0 10px;
+    }
+    table#body_table > tbody > tr > td {
+      background: white;
+      min-width: 800px;
+      font-family: Tahoma;
+      font-size: 11px;
+      border-radius: 10px;
+      padding: 10px;
+    }
+    h2 { margin-bottom: 5px; margin-top: 20px; }
+    td { text-align: left; white-space: nowrap; }
+    th { text-align: left; white-space: nowrap; }
+    td.right { text-align: right; }
+    .table { color: {{ conf.PlotTableColour }}; }
+    .index { color: {{ conf.PlotIndexColour }}; }
+    table.plot {
+      border-collapse: collapse;
+      font-weight: bold;
+      text-align: center;
+      width: {{ conf.StatisticsPlotWidth }}px;
+    }
+    table.plot.table td {
+      color: #FFFFFF;
+      text-align: center;
+    }
+    table.plot.table td:first-child {
+      background-color: {{ conf.PlotTableColour }};
+    }
+    table.plot.index td:first-child {
+      background-color: {{ conf.PlotIndexColour }};
+    }
+    table.plot td:last-child {
+      background-color: {{ conf.PlotBgColour }};
+    }
+    table.plot.table td:last-child {
+      color: {{ conf.PlotTableColour }};
+    }
+    table.plot.index td:last-child {
+      color: {{ conf.PlotIndexColour }};
+    }
+    #footer {
+      text-align: center;
+      padding-bottom: 10px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+<table id="body_table">
+<%
+index_total = sum(x["size"] for x in data["index"])
+table_total = sum(x["size"] for x in data["table"])
+total = index_total + sum(x["size"] for x in data["table"])
+%>
+<tr><td><table id="header_table">
+  <tr>
+    <td>
+      <div id="title">{{title}}</div><br />
+      Source: <b>{{db_filename}}</b>.<br />
+      Source size: <b>{{ util.format_bytes(db_filesize) }}</b> ({{ util.format_bytes(db_filesize, max_units=False) }}).<br />
+%if data["table"]:
+      <b>{{ util.plural("table", data["table"]) }}</b>, {{ util.format_bytes(table_total) }}.<br />
+%endif
+%if data["index"]:
+      <b>{{ util.plural("index", data["index"]) }}</b>, {{ util.format_bytes(index_total) }}.<br />
+%endif
+    </td>
+  </tr></table>
+</td></tr><tr><td>
+
+<div id="content_wrapper">
+
+  <h2 class="table">Table sizes</h2>
+  <table class="stats">
+    <tr>
+      <th></th>
+      <th>Name</th>
+      <th>Size</th>
+      <th>Bytes</th>
+    </tr>
+%for item in sorted(data["table"], key=lambda x: (-x["size"], x["name"].lower())):
+    <tr>
+      <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size"], total=total)) }}</td>
+      <td>{{ item["name"] }}</td>
+      <td class="right">{{ util.format_bytes(item["size"]) }}</td>
+      <td class="right">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
+    </tr>
+%endfor
+  </table>
+
+
+%if data["index"]:
+
+<h2 class="table">Table sizes with indexes</h2>
+<table class="stats">
+  <tr>
+    <th></th>
+    <th>Name</th>
+    <th>Size</th>
+    <th>Bytes</th>
+  </tr>
+    %for item in sorted(data["table"], key=lambda x: (-x["size_total"], x["name"].lower())):
+  <tr>
+    <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size_total"], total=total)) }}</td>
+    <td>{{ item["name"] }}</td>
+    <td class="right">{{ util.format_bytes(item["size_total"]) }}</td>
+    <td class="right">{{ util.format_bytes(item["size_total"], max_units=False, with_units=False) }}</td>
+  </tr>
+    %endfor
+</table>
+
+<h2 class="index">Table index sizes</h2>
+<table class="stats">
+  <tr>
+    <th></th>
+    <th>Name</th>
+    <th>Size</th>
+    <th>Bytes</th>
+    <th>Index Ratio</th>
+  </tr>
+    %for item in sorted([x for x in data["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower())):
+  <tr>
+    <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size_index"], total=total)) }}</td>
+    <td>{{ item["name"] }} ({{ len(item["index"]) }})</td>
+    <td class="right">{{ util.format_bytes(item["size_index"]) }}</td>
+    <td class="right">{{ util.format_bytes(item["size_index"], max_units=False, with_units=False) }}</td>
+    <td class="right">{{ int(round(100 * util.safedivf(item["size_index"], index_total))) }}%</td>
+  </tr>
+    %endfor
+</table>
+
+<h2 class="index">Index sizes</h2>
+<table class="stats">
+  <tr>
+    <th></th>
+    <th>Name</th>
+    <th>Table</th>
+    <th>Size</th>
+    <th>Bytes</th>
+    <th>Index Ratio</th>
+  </tr>
+    %for item in sorted(data["index"], key=lambda x: (-x["size"], x["name"].lower())):
+  <tr>
+    <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size"], total=total)) }}</td>
+    <td>{{ item["name"] }}</td>
+    <td>{{ item["table"] }}</td>
+    <td class="right">{{ util.format_bytes(item["size"]) }}</td>
+    <td class="right">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
+    <td class="right">{{ int(round(100 * util.safedivf(item["size"], index_total))) }}%</td>
+  </tr>
+    %endfor
+</table>
+
+%endif
+
+
+</div>
+</td></tr></table>
+<div id="footer">Exported with {{conf.Title}} on {{datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}}.</div>
+</body>
+</html>
+"""
+
+
+"""
+Database statistics row plot.
+
+@param   category  "table" or "index"
+@param   size      item size
+@param   total     total size
+"""
+DATA_STATISTICS_ROW_PLOT_HTML = """<%
+from sqlitely.lib import util
+
+ratio = util.safedivf(size, total)
+if 0.99 <= ratio < 1: ratio = 0.99
+percent = int(round(100 * ratio))
+text_cell1 = "&nbsp;%d%%&nbsp;" % round(percent) if (round(percent) > 30) else ""
+text_cell2 = "" if text_cell1 else "&nbsp;%d%%&nbsp;" % percent
+
+%>
+<table class="plot {{ category }}"><tr>
+  <td style="width: {{ percent }}%;">{{! text_cell1 }}</td>
+  <td style="width: {{ 100 - percent }}%;">{{! text_cell2 }}</td>
+</tr></table>
+"""
+
+
+"""
+Database statistics text.
+
+@param   db_filename  database filename
+@param   db_filesize  database size in bytes
+@param   data         {"table": [{name, size, size_total, ?size_index, ?index: []}],
+                       "index": [{name, size, table}]}
+"""
+DATA_STATISTICS_TXT = """<%
+from sqlitely.lib.vendor.step import Template
+from sqlitely.lib import util
+from sqlitely import templates
+
+index_total = sum(x["size"] for x in data["index"])
+table_total = sum(x["size"] for x in data["table"])
+total = index_total + sum(x["size"] for x in data["table"])
+%>
+Source: {{db_filename}}.
+Size: {{ util.format_bytes(db_filesize) }} ({{ util.format_bytes(db_filesize, max_units=False) }}).
+
+<%
+items = sorted(data["table"], key=lambda x: (-x["size"], x["name"].lower()))
+cols = ["Name", "Size", "Bytes"]
+vals = {x["name"]: (
+    x["name"],
+    util.format_bytes(x["size"]),
+    util.format_bytes(x["size"], max_units=False, with_units=False),
+) for x in items}
+justs  = {0: 1, 1: 0, 2: 0}
+%>
+{{! Template(templates.DATA_STATISTICS_TABLE_TXT, strip=False).expand(dict(title="Table sizes", items=items, sizecol="size", cols=cols, vals=vals, justs=justs, total=total)) }}
+%if data["index"]:
+<%
+
+items = sorted(data["table"], key=lambda x: (-x["size_total"], x["name"].lower()))
+cols = ["Name", "Size", "Bytes"]
+vals = {x["name"]: (
+    x["name"],
+    util.format_bytes(x["size_total"]),
+    util.format_bytes(x["size_total"], max_units=False, with_units=False),
+) for x in items}
+justs  = {0: 1, 1: 0, 2: 0}
+%>
+
+{{! Template(templates.DATA_STATISTICS_TABLE_TXT, strip=False).expand(dict(title="Table sizes with indexes", items=items, sizecol="size_total", cols=cols, vals=vals, justs=justs, total=total)) }}
+<%
+
+items = sorted([x for x in data["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower()))
+cols = ["Name", "Size", "Bytes", "Index Ratio"]
+vals = {x["name"]: (
+    "%s (%s)" % (x["name"], len(x["index"])),
+    util.format_bytes(x["size_index"]),
+    util.format_bytes(x["size_index"], max_units=False, with_units=False),
+    "%s%%" % int(round(100 * util.safedivf(x["size_index"], index_total))),
+) for x in items}
+justs  = {0: 1, 1: 0, 2: 0, 3: 0}
+%>
+
+{{! Template(templates.DATA_STATISTICS_TABLE_TXT, strip=False).expand(dict(title="Table index sizes", items=items, sizecol="size_index", cols=cols, vals=vals, justs=justs, total=total)) }}
+<%
+
+items = sorted(data["index"], key=lambda x: (-x["size"], x["name"].lower()))
+cols = ["Name", "Table", "Size", "Bytes", "Index Ratio"]
+vals = {x["name"]: (
+    x["name"],
+    x["table"],
+    util.format_bytes(x["size"]),
+    util.format_bytes(x["size"], max_units=False, with_units=False),
+    "%s%%" % int(round(100 * util.safedivf(x["size"], index_total))),
+) for x in items}
+justs  = {0: 1, 1: 1, 2: 0, 3: 0, 4: 0}
+%>
+
+{{! Template(templates.DATA_STATISTICS_TABLE_TXT, strip=False).expand(dict(title="Index sizes", items=items, sizecol="size", cols=cols, vals=vals, justs=justs, total=total)) }}
+%endif
+"""
+
+
+"""
+Database statistics table section.
+
+@param   title    section title
+@param   items    section item rows
+@param   sizecol  name of item column containing size
+@param   cols     [col1, ]
+@param   vals     {row name: [row val1, ], }
+@param   justs    {col index: ljust or rjust}
+@param   total    total size to set ratio of
+"""
+DATA_STATISTICS_TABLE_TXT = """<%
+from sqlitely.lib import util
+
+PLOT_WIDTH, PAD, X = 30, 2, "="
+
+def plot(size):
+    ratio = util.safedivf(size, total)
+    if 0.99 <= ratio < 1: ratio = 0.99
+    bar = X * int(PLOT_WIDTH * ratio)
+    pad = " " * (PLOT_WIDTH - len(bar))
+    pc = " %s%% " % int(round(100 * ratio))
+    if len(bar) - len(pc) > 3:
+        bar = pc.center(len(bar), bar[0])
+    else:
+        pad = pc.center(len(pad), pad[0])
+    return bar + pad
+
+widths = {i: max([len(x[i]) for x in vals.values()] + 
+                 [len(cols[i])])
+          for i in range(len(cols))}
+%>
+{{ title }}
+{{ (" " * PAD).join([" " * (PLOT_WIDTH + 2)] + [x.ljust(widths[i]) for i, x in enumerate(cols)]) }}
+%for item in items:
+[{{ plot(item[sizecol]) }}]{{ (" " * PAD) }}{{ (" " * PAD).join((x.ljust if justs[i] else x.rjust)(widths[i]) for i, x in enumerate(vals[item["name"]])) }}
+%endfor
 """

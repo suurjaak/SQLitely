@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.09.2019
+@modified    30.09.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -54,17 +54,17 @@ def unprint(s, escape=True):
     return re.sub(r"[\x00-\x1f]", repl, s)
 
 
-def format_bytes(size, precision=2, max_units=True):
+def format_bytes(size, precision=2, max_units=True, with_units=True):
     """
     Returns a formatted byte size (e.g. "421.45 MB" or "421,451,273 bytes").
 
-    @param   precision  number of decimals to leave after converting to
-                        maximum units
-    @param   max_units  whether to convert value to corresponding maximum
-                        unit, or leave as bytes and add thousand separators
+    @param   precision   number of decimals to leave after converting to
+                         maximum units
+    @param   max_units   whether to convert value to corresponding maximum
+                         unit, or leave as bytes and add thousand separators
+    @param   with_units  whether to include units in result
     """
-    formatted = "0 bytes"
-    size = int(size)
+    size, formatted, unit = int(size), "0", "bytes"
     if size:
         byteunit = "byte" if 1 == size else "bytes"
         if max_units:
@@ -72,12 +72,12 @@ def format_bytes(size, precision=2, max_units=True):
             log = min(len(UNITS) - 1, math.floor(math.log(size, 1024)))
             formatted = "%.*f" % (precision, size / math.pow(1024, log))
             formatted = formatted.rstrip("0").rstrip(".")
-            formatted += " " + UNITS[int(log)]
+            unit = UNITS[int(log)]
         else:
             formatted = "".join([x + ("," if i and not i % 3 else "")
                                  for i, x in enumerate(str(size)[::-1])][::-1])
-            formatted += " " + byteunit
-    return formatted
+            unit = byteunit
+    return formatted + ((" " + unit) if with_units else "")
 
 
 def format_seconds(seconds, insert=""):
@@ -403,6 +403,22 @@ def longpath(path):
                 result = os.path.join(buf.value, tail)
     except Exception: pass
     return result
+
+
+def shortpath(path):
+    """Returns the path in short Windows form (PROGRA~1 not "Program Files")."""
+    if isinstance(path, str): return path        
+    import ctypes.wintypes
+
+    ctypes.windll.kernel32.GetShortPathNameW.argtypes = [
+        ctypes.wintypes.LPCWSTR, # lpszLongPath
+        ctypes.wintypes.LPWSTR, # lpszShortPath
+        ctypes.wintypes.DWORD # cchBuffer
+    ]
+    ctypes.windll.kernel32.GetShortPathNameW.restype = ctypes.wintypes.DWORD
+    buf = ctypes.create_unicode_buffer(path)
+    ctypes.windll.kernel32.GetShortPathNameW(path, buf, len(buf))
+    return buf.value
 
 
 def win32_unicode_argv():
