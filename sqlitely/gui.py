@@ -3239,7 +3239,6 @@ class DatabasePage(wx.Panel):
     def on_refresh_data(self, event):
         """Refreshes the data tree."""
         self.load_tree_data(refresh=True)
-        self.update_autocomp()
 
 
     def on_rightclick_searchall(self, event):
@@ -3705,11 +3704,7 @@ class DatabasePage(wx.Panel):
             self.db.reopen(filename1)
 
         if success or not rename:
-            self.db.populate_schema(count=True, parse=True)
-            self.load_tree_data()
-            self.load_tree_schema()
-            self.on_update_stc_schema()
-            self.update_autocomp()
+            self.reload_schema(count=True, parse=True)
             if success: self.reload_grids()
 
         if not success and rename:
@@ -4000,11 +3995,7 @@ class DatabasePage(wx.Panel):
                     if page: page.Close(force=True)
                     page = self.data_pages.get(x["type"], {}).get(x["name"])
                     if page: page.Close(force=True)
-                self.db.populate_schema(count=True)
-                self.load_tree_schema()
-                self.load_tree_data()
-                self.on_update_stc_schema()
-                self.update_autocomp()
+                self.reload_schema(count=True)
 
         menu = wx.Menu()
         boldfont = self.Font
@@ -4271,15 +4262,11 @@ class DatabasePage(wx.Panel):
                     self.schema_pages[category][name] = p
                     break # for k, p
         if updated and not self.save_underway:
-            self.db.populate_schema(count=True, parse=True)
+            self.reload_schema(count=True, parse=True)
+            self.on_update_statistics()
             if name not in self.db.schema[category] \
             and name in self.data_pages.get(category, {}):
                 self.data_pages[category][name].Close(force=True)
-            self.load_tree_schema()
-            self.load_tree_data()
-            self.update_autocomp()
-            self.on_update_stc_schema()
-            self.on_update_statistics()
 
 
     def on_change_sql_page(self, event):
@@ -4616,21 +4603,17 @@ class DatabasePage(wx.Panel):
         wx.CallLater(100, self.update_tabheader)
         wx.CallLater(200, self.load_tree_data)
         wx.CallLater(500, self.update_info_panel, False)
-        wx.CallLater(1000, self.load_later_data)
+        wx.CallLater(1000, self.reload_schema, count=True, parse=True)
+        self.worker_analyzer.work(self.db.filename)
 
 
-    def load_later_data(self):
-        """
-        Loads later data from the databases, like full database schema SQL,
-        full row counts, and full schema.
-        """
-        if not self: return
-        self.db.populate_schema(count=True, parse=True)
-        self.on_update_stc_schema()
+    def reload_schema(self, count=False, parse=False):
+        """Reloads database schema and refreshes relevant controls"""
+        self.db.populate_schema(count=count, parse=parse)
         self.load_tree_data()
         self.load_tree_schema()
+        self.on_update_stc_schema()
         self.update_autocomp()
-        self.worker_analyzer.work(self.db.filename)
 
 
     def get_tree_state(self, tree, root):
