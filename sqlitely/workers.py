@@ -11,6 +11,7 @@ Released under the MIT License.
 @modified    01.10.2019
 ------------------------------------------------------------------------------
 """
+import hashlib
 import logging
 import os
 import Queue
@@ -402,4 +403,45 @@ class AnalyzerThread(WorkerThread):
                         
                         
                 self.postback({"data": data})
+            self._is_working = False
+
+
+
+class ChecksumThread(WorkerThread):
+    """
+    Checksum calculator background thread, goes through database file
+    and computes MD5 and SHA-1 hashes.
+
+    @param   path  database file path to analyze
+    @return        {?"error": str, ?"sha1": str, ?"md5": str}
+    """
+
+    def run(self):
+        BLOCKSIZE = 1048576
+
+        self._is_running = True
+        while self._is_running:
+            path = self._queue.get()
+            if not path: continue # while
+
+            self._is_working, self._drop_results = True, False
+            error = ""
+
+            if not error:
+                sha1, md5 = hashlib.sha1(), hashlib.md5()
+                try:
+                    with open(path, "rb") as f:
+                        buf = f.read(BLOCKSIZE)
+                        while len(buf):
+                            sha1.update(buf), md5.update(buf)
+                            buf = f.read(BLOCKSIZE)
+                            if not self._is_working: break # while len
+                except Exception as e:
+                    logger.exception("Error calculating checksum for %s.", path)
+                    error = util.format_exc(e)
+
+            if self._drop_results: continue # while
+            if error: self.postback({"error": error})
+            elif self._is_working:
+                self.postback({"sha1": sha1.hexdigest(), "md5": md5.hexdigest()})
             self._is_working = False

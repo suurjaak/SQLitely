@@ -17,7 +17,6 @@ from collections import defaultdict, Counter, OrderedDict
 import copy
 import datetime
 import functools
-import hashlib
 import inspect
 import logging
 import os
@@ -1667,6 +1666,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             page.save_page_conf()
             for worker in page.workers_search.values(): worker.stop()
             page.worker_analyzer.stop()
+            page.worker_checksum.stop()
             db.close()
         self.worker_detection.stop()
         self.worker_folder.stop()
@@ -1732,6 +1732,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         for worker in page.workers_search.values(): worker.stop()
         page.worker_analyzer.stop()
+        page.worker_checksum.stop()
         page.save_page_conf()
 
         if page in self.db_pages:
@@ -1928,6 +1929,7 @@ class DatabasePage(wx.Panel):
         self.search_data_contact = {"id": None} # Current contacts search data
 
         self.worker_analyzer = workers.AnalyzerThread(self.on_analyzer_result)
+        self.worker_checksum = workers.ChecksumThread(self.on_checksum_result)
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -2750,6 +2752,21 @@ class DatabasePage(wx.Panel):
         self.populate_statistics()
 
 
+    def on_checksum_result(self, result):
+        """
+        Handler for getting results from checksum thread, populates information.
+        """
+        if "error" in result:
+            self.edit_info_sha1.Value = result["error"]
+            self.edit_info_md5.Value  = result["error"]
+        else:
+            self.edit_info_sha1.Value = result["sha1"]
+            self.edit_info_md5.Value  = result["md5"]
+        self.edit_info_sha1.MinSize = (-1, -1)
+        self.edit_info_md5.MinSize  = (-1, -1)
+        self.edit_info_md5.ContainingSizer.Layout()
+
+
     def on_size_html_stats(self, event):
         """
         Handler for sizing html_stats, sets new scroll position based
@@ -3197,7 +3214,7 @@ class DatabasePage(wx.Panel):
         if reload:
             self.db.populate_schema()
             self.db.update_fileinfo()
-        for name in ["size", "created", "modified", "sha1", "md5"]:
+        for name in ["size", "created", "modified"]:
             getattr(self, "edit_info_%s" % name).Value = ""
 
         self.edit_info_path.Value = "<temporary file>" if self.db.temporary \
@@ -3212,21 +3229,13 @@ class DatabasePage(wx.Panel):
             self.db.date_created.strftime("%Y-%m-%d %H:%M:%S")
         self.edit_info_modified.Value = \
             self.db.last_modified.strftime("%Y-%m-%d %H:%M:%S")
-        BLOCKSIZE = 1048576
-        if not self.db.temporary or self.db.filesize:
-            sha1, md5 = hashlib.sha1(), hashlib.md5()
-            try:
-                with open(self.db.filename, "rb") as f:
-                    buf = f.read(BLOCKSIZE)
-                    while len(buf):
-                        sha1.update(buf), md5.update(buf)
-                        buf = f.read(BLOCKSIZE)
-                self.edit_info_sha1.Value = sha1.hexdigest()
-                self.edit_info_md5.Value = md5.hexdigest()
-            except Exception as e:
-                self.edit_info_sha1.Value = self.edit_info_md5.Value = util.format_exc(e)
 
-        for name in ["size", "created", "modified", "sha1", "md5", "path"]:
+        if not self.db.temporary or self.db.filesize:
+            self.edit_info_sha1.Value = "Analyzing.."
+            self.edit_info_md5.Value  = "Analyzing.."
+            self.worker_checksum.work(self.db.filename)
+
+        for name in ["size", "created", "modified", "path", "sha1", "md5"]:
             getattr(self, "edit_info_%s" % name).MinSize = (-1, -1)
         self.edit_info_path.ContainingSizer.Layout()
 
