@@ -257,7 +257,8 @@ class FormDialog(wx.Dialog):
 
     fields = [{
       name:          field name
-      ?type:         (bool | list | anything) if field has direct content
+      ?type:         (bool | list | anything) if field has direct content,
+                     or callback(dialog, field, panel, data) making controls
       ?label:        field label if not using name
       ?help:         field tooltip
       ?path:         [data path, if, more, complex, nesting]
@@ -407,7 +408,8 @@ class FormDialog(wx.Dialog):
 
     def _AddField(self, field, path=()):
         """Adds field controls to dialog."""
-        callback = field["type"] if callable(field.get("type")) else None
+        callback = field["type"] if callable(field.get("type")) \
+                   and field["type"] not in (bool, list) else None
         if not callback and not self._editmode and self._GetValue(field, path) is None: return
         MAXCOL = 8
         parent, sizer = self._panel, self._panel.Sizer
@@ -464,8 +466,7 @@ class FormDialog(wx.Dialog):
                     if isinstance(value, (list, tuple)): value = "".join(value)                        
                     c.Value = "" if value is None else value
 
-                if isinstance(c, (wx.TextCtrl, wx.stc.StyledTextCtrl)):
-                    c.SetEditable(self._editmode)
+                if isinstance(c, wx.TextCtrl): c.SetEditable(self._editmode)
                 else: c.Enable(self._editmode)
 
         for f in field.get("children") or (): self._PopulateField(f, fpath)
