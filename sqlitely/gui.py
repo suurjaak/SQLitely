@@ -4633,42 +4633,51 @@ class DatabasePage(wx.Panel):
         self.worker_analyzer.work(self.db.filename)
 
 
-    def get_tree_expanded_state(self, tree, root):
-        """Returns {data, children: [{data, children}]} for expanded nodes."""
+    def get_tree_state(self, tree, root):
+        """
+        Returns ({data, children: [{data, children}]} for expanded nodes,
+                 {selected item data}).
+        """
         item = tree.GetNext(root) if tree.IsExpanded(root) else None
-        result = {"data": tree.GetItemPyData(root)} if item else None
+        state, sel = {"data": tree.GetItemPyData(root)} if item else None, None
         while item and item.IsOk():
             if tree.IsExpanded(item):
-                childstate = self.get_tree_expanded_state(tree, item)
-                result.setdefault("children", []).append(childstate)
+                childstate, _ = self.get_tree_state(tree, item)
+                state.setdefault("children", []).append(childstate)
             item = tree.GetNextSibling(item)
-        return result
+        if root == tree.RootItem:
+            item = tree.GetSelection()
+            sel = tree.GetItemPyData(item) if item and item.IsOk() else None
+        return state, sel
 
 
-    def set_tree_expanded_state(self, tree, root, state):
+    def set_tree_state(self, tree, root, state):
         """Sets tree expanded state."""
-        if not state: return
+        state, sel = state
+        if not state and not sel: return
 
-        tree.Expand(root)
-        if not state.get("children"): return
+        key_match = lambda x, y, k: x.get(k) and x[k] == y.get(k)
+        has_match = lambda x, y: x == y or (
+            key_match(y, x, "category") if "category" == y.get("type")
+            else key_match(y, x, "type") and key_match(y, x, "name")
+        )
+
+        if state: tree.Expand(root)
         item = tree.GetNext(root)
         while item and item.IsOk():
             mydata = tree.GetItemPyData(item)
-            mystate = next((x for x in state["children"] if x["data"] == mydata
-                            or (isinstance(mydata, dict) and isinstance(x["data"], dict)
-                            and ("category" == mydata.get("type")
-                                 and mydata.get("category") == x["data"].get("category")
-                                 or "category" != mydata.get("type") and mydata.get("type")
-                                 and mydata.get("name") == x["data"].get("name")
-                            ))), None)
-            if mystate: self.set_tree_expanded_state(tree, item, mystate)
+            if sel and has_match(sel, mydata):
+                tree.SelectItem(item)
+            mystate = next((x for x in state["children"] if has_match(x["data"], mydata)), None) \
+                      if state and "children" in state else None
+            if mystate: self.set_tree_state(tree, item, (mystate, sel))
             item = tree.GetNextSibling(item)
 
 
     def load_tree_data(self, refresh=False):
         """Loads table and view data into data tree."""
         tree = self.tree_data
-        expandeds = self.get_tree_expanded_state(tree, tree.RootItem)
+        expandeds = self.get_tree_state(tree, tree.RootItem)
         tree.DeleteAllItems()
         tree.AddRoot("Loading data..")
         try:
@@ -4714,13 +4723,13 @@ class DatabasePage(wx.Panel):
         for top in tops: tree.Expand(top)
         tree.SetColumnWidth(1, 100)
         tree.SetColumnWidth(0, tree.Size[0] - 130)
-        self.set_tree_expanded_state(tree, tree.RootItem, expandeds)
+        self.set_tree_state(tree, tree.RootItem, expandeds)
 
 
     def load_tree_schema(self, refresh=False):
         """Loads database schema into schema tree."""
         tree = self.tree_schema
-        expandeds = self.get_tree_expanded_state(tree, tree.RootItem)
+        expandeds = self.get_tree_state(tree, tree.RootItem)
         tree.DeleteAllItems()
         tree.AddRoot("Loading schema..")
         try:
@@ -4813,7 +4822,7 @@ class DatabasePage(wx.Panel):
         tree.SetColumnWidth(1, 150)
         tree.Expand(root)
         for top in tops: tree.Expand(top)
-        self.set_tree_expanded_state(tree, tree.RootItem, expandeds)
+        self.set_tree_state(tree, tree.RootItem, expandeds)
 
 
     def update_autocomp(self):
