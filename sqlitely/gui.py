@@ -2331,6 +2331,7 @@ class DatabasePage(wx.Panel):
                 self.on_close_sql_page)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_DROPPED,
                 self.on_dragdrop_sql_page)
+        nb.Bind(wx.EVT_CHAR_HOOK, self.on_key_sql_page)
         self.register_notebook_hotkeys(nb)
 
 
@@ -4351,6 +4352,28 @@ class DatabasePage(wx.Panel):
             nb.RemovePage(i)
             delattr(self, "_ignore_adder_close")
             nb.AddPage(p, text="+")
+
+
+    def on_key_sql_page(self, event):
+        """
+        Handler for keypress in SQL notebook,
+        skips adder-tab on Ctrl+PageUp|PageDown|Tab navigation.
+        """
+        if not event.ControlDown() \
+        or event.KeyCode not in [wx.WXK_PAGEUP, wx.WXK_PAGEDOWN, wx.WXK_TAB]:
+            return event.Skip()
+
+        nb = self.notebook_sql
+        direction = 1 if event.KeyCode in [wx.WXK_PAGEDOWN, wx.WXK_TAB] else -1
+        if event.ShiftDown() and wx.WXK_TAB == event.KeyCode: direction = -1
+        cur, count = nb.GetSelection(), nb.GetPageCount()
+        index2 = cur + direction
+        if index2 < 0: index2 = count - 1
+        if "+" != nb.GetPageText(index2):
+            event.Skip()
+        elif count > 2:
+            # Skip adder-tab and select next tab
+            nb.SetSelection(0 if cur else count - 2)
 
 
     def on_close_sql_page(self, event):
