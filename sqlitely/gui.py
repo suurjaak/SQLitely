@@ -2857,6 +2857,7 @@ class DatabasePage(wx.Panel):
         if previous_scrollpos:
             self.html_stats.Scroll(*previous_scrollpos)
         self.html_stats.Thaw()
+        self.tb_stats.EnableTool(wx.ID_REFRESH, bool(self.statistics))
         self.tb_stats.EnableTool(wx.ID_COPY, "data" in self.statistics)
         self.tb_stats.EnableTool(wx.ID_SAVE, "data" in self.statistics)
 
