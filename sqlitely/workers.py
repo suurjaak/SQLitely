@@ -44,6 +44,7 @@ class WorkerThread(threading.Thread):
         @param   callback  function to call with result chunks
         """
         threading.Thread.__init__(self)
+        self.daemon = True
         self._callback = callback
         self._is_running   = False # Flag whether thread is running
         self._is_working   = False # Flag whether thread is currently working
@@ -341,6 +342,26 @@ class AnalyzerThread(WorkerThread):
                             "filesize": int}
     """
 
+    def __init__(self, callback):
+        """
+        @param   callback  function to call with result chunks
+        """
+        super(AnalyzerThread, self).__init__(callback)
+        self._process = None # subprocess.Popen
+
+
+    def stop(self):
+        """Stops the worker thread."""
+        self._is_running = False
+        self._is_working = False
+        self._drop_results = True
+        if self._process:
+            try: self._process.kill()
+            except Exception: e
+        self._process = None
+        self._queue.put(None) # To wake up thread waiting on queue
+
+
     def run(self):
         self._is_running = True
         while self._is_running:
@@ -359,12 +380,22 @@ class AnalyzerThread(WorkerThread):
                     except Exception: mypath = path
                     args = [conf.DBAnalyzer, mypath]
                     logger.info('Invoking external command "%s".', " ".join(args))
-                    output = subprocess.check_output(args, shell=True, stderr=subprocess.STDOUT)
+                    startupinfo = subprocess.STARTUPINFO()
+                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    self._process = subprocess.Popen(args, startupinfo=startupinfo,
+                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                    output, error = self._process.communicate()
             except Exception as e:
-                logger.exception("Error getting statistics for %s: %s.", path, e.output)
-                error = getattr(e, "output", None)
+                if self._process:
+                    try:
+                        self._process.kill()
+                        output, error = self._process.communicate()
+                    except Exception: pass                    
+                error = error or getattr(e, "output", None)
                 if error: error = error.split("\n")[0].strip()
                 else: error = util.format_exc(e)
+                logger.exception("Error getting statistics for %s: %s.", path, error)
+            self._process = None
 
             try:
                 if output:
