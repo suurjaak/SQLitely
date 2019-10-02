@@ -84,6 +84,7 @@ def export_data(make_iterable, filename, title, db, columns,
     tmpfile, tmpname = None, None # Temporary file for exported rows
     try:
         with open(filename, "w") as f:
+            if category and name: db.lock(category, name, make_iterable)
 
             if is_csv or is_xlsx:
                 if is_csv:
@@ -174,6 +175,8 @@ def export_data(make_iterable, filename, title, db, columns,
         if tmpfile:    util.try_until(tmpfile.close)
         if tmpname:    util.try_until(lambda: os.unlink(tmpname))
         if not result: util.try_until(lambda: os.unlink(filename))
+        if category and name: db.unlock(category, name, make_iterable)
+            
     return result
 
 

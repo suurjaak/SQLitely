@@ -4042,18 +4042,30 @@ class DatabasePage(wx.Panel):
                 conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
             ): return
 
-            if "table" == items[0]["type"] and any(x.get("count") for x in items) \
-            and wx.OK != wx.MessageBox(
-                "Are you REALLY sure you want to delete the %s?\n\n"
-                "%s currently %s %s." %
-                (itemtext, "They" if len(items) > 1 else "It",
-                 "contain" if len(items) > 1 else "contains",
-                 util.plural("row", sum(x.get("count") or 0 for x in items))),
-                conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
-            ): return
+            if "table" == items[0]["type"] and any(x.get("count") for x in items):
+
+                # TODO siin võiks ümardada kui mõni on is_count_estimated.
+                count = sum(x.get("count") or 0 for x in items)
+                is_estimated = any(x.get("is_count_estimated") for x in items)
+                if is_estimated: count = int(math.ceil(count / 100.) * 100)
+                if wx.OK != wx.MessageBox(
+                    "Are you REALLY sure you want to delete the %s?\n\n"
+                    "%s currently %s %s%s." %
+                    (itemtext, "They" if len(items) > 1 else "It",
+                     "contain" if len(items) > 1 else "contains",
+                     "~" if is_estimated else "",
+                     util.plural("row", count)),
+                    conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+                ): return
             deleteds = []
             try:
                 for x in items:
+                    if self.db.is_locked(x["type"], x["name"]):
+                        wx.MessageBox("%s %s is currently locked, cannot delete." % 
+                                      (x["type"].capitalize(),
+                                      grammar.quote(x["name"], force=True)),
+                                      conf.Title, wx.OK | wx.ICON_WARNING)
+                        continue # for x
                     self.db.execute("DROP %s %s" % (x["type"].upper(), grammar.quote(x["name"])))
                     deleteds += [x]
             finally:
@@ -6491,7 +6503,7 @@ class DataObjectPage(wx.PyPanel):
         """
         if not self or not self._export: return
 
-        export, self._export = self._export, None
+        export, self._export = self._export, {}
         self.Freeze()
         for x in self.Children: x.Show()
         self._panel_progress.Hide()
@@ -8780,6 +8792,15 @@ class SchemaObjectPage(wx.PyPanel):
                           conf.Title, wx.OK | wx.ICON_WARNING)
             return
 
+        if not self._newmode \
+        and self._db.is_locked(self._category, self._item["name"]):
+            wx.MessageBox("%s %s is currently locked, cannot alter." % 
+                          (self._category.capitalize(),
+                          grammar.quote(self._item["name"], force=True)),
+                          conf.Title, wx.OK | wx.ICON_WARNING)
+            return
+
+
         sql, drop = self._item["sql"] + ";", not self._newmode
         oldname = None if self._newmode else grammar.quote(self._item["name"])
         if "table" == self._category and self._has_alter:
@@ -8833,6 +8854,13 @@ class SchemaObjectPage(wx.PyPanel):
              util.plural("row", self._item["count"])),
             conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
         ): return
+
+        if self._db.is_locked(self._category, self._item["name"]):
+            wx.MessageBox("%s %s is currently locked, cannot delete." % 
+                          (self._category.capitalize(),
+                          grammar.quote(self._item["name"], force=True)),
+                          conf.Title, wx.OK | wx.ICON_WARNING)
+            return
 
         self._db.execute("DROP %s %s" % (self._category, grammar.quote(self._item["name"])))
         self._editmode = False

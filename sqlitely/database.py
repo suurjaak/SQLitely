@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.10.2019
+@modified    02.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -454,12 +454,14 @@ class Database(object):
         self.last_modified = None
         self.compile_options = []
         self.consumers = set() # Registered objects using this database
+        # {category: {name.lower(): set()}}
+        self.locks = defaultdict(lambda: defaultdict(set))
         # {"table|index|view|trigger":
         #   {name.lower():
         #     {name: str, sql: str, table: str, ?columns: [], ?count: int,
         #      ?meta: {full metadata}}}}
-        self.connection = None
         self.schema = defaultdict(OrderedDict)
+        self.connection = None
         self.open()
 
 
@@ -582,7 +584,28 @@ class Database(object):
 
     def has_consumers(self):
         """Returns whether the database has currently registered consumers."""
-        return len(self.consumers) > 0
+        return len(self.consumers) > 0 \
+               or any(x.values() for x in self.locks.values())
+
+
+    def lock(self, category, name, key):
+        """Locks a schema object for altering or deleting."""
+        category, name = category.lower(), name.lower()
+        self.locks[category][name].add(key)
+
+
+    def unlock(self, category, name, key):
+        """Unlocks a schema object for altering or deleting."""
+        category, name = category.lower(), name.lower()
+        self.locks[category][name].discard(key)
+        if not self.locks[category][name]: self.locks[category].pop(name)
+        if not self.locks[category]:       self.locks.pop(category)
+
+
+    def is_locked(self, category, name):
+        """Returns whether there are currently locks on schema object."""
+        category, name = category.lower(), name.lower()
+        return category in self.locks and self.locks[category].get(name)
 
 
     def has_rowid(self, table):
