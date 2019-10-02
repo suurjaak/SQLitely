@@ -19,6 +19,7 @@ import datetime
 import functools
 import inspect
 import logging
+import math
 import os
 import re
 import shutil
@@ -1913,7 +1914,6 @@ class DatabasePage(wx.Panel):
         self.memoryfs = memoryfs
         parent_notebook.InsertPage(1, self, title)
         busy = controls.BusyPanel(self, 'Loading "%s".' % db.name)
-        self.counter = lambda x={"c": 0}: x.update(c=1+x["c"]) or x["c"]
         ColourManager.Manage(self, "BackgroundColour", "WidgetColour")
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.on_sys_colour_change)
 
@@ -3504,7 +3504,7 @@ class DatabasePage(wx.Panel):
             guibase.status('Searching for "%s" in %s.',
                            text, self.db, flash=True)
             html = self.html_searchall
-            data = {"id": self.counter(), "db": self.db, "text": text, "map": {},
+            data = {"id": wx.NewId(), "db": self.db, "text": text, "map": {},
                     "width": html.Size.width * 5/9, "table": "",
                     "partial_html": ""}
             if conf.SearchInNames:
@@ -4608,7 +4608,7 @@ class DatabasePage(wx.Panel):
             title = last_search.get("title", "")
             html = last_search.get("content", "")
             info = last_search.get("info")
-            tabid = self.counter() if 0 != last_search.get("id") else 0
+            tabid = wx.NewId() if 0 != last_search.get("id") else 0
             self.html_searchall.InsertTab(0, title, tabid, html, info)
         wx.CallLater(100, self.update_tabheader)
         wx.CallLater(200, self.load_tree_data)
@@ -4703,7 +4703,13 @@ class DatabasePage(wx.Panel):
                 tree.SetItemPyData(child, itemdata)
 
                 if "count" in item:
-                    t = "ERROR" if item["count"] is None else util.plural("row", item["count"])
+                    t = "ERROR" 
+                    if item["count"] is None: t = "ERROR"
+                    else:
+                        count = item["count"]
+                        if item.get("is_count_estimated"):
+                            t = "~" + util.plural("row", int(math.ceil(count / 100.) * 100))
+                        else: t = util.plural("row", count)
                 else: t = "" if "view" == category else "Counting.."
                 tree.SetItemText(child, t, 1)
 
@@ -4863,7 +4869,7 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
         self.idx_all = []      # An ordered list of row identifiers in rows_all
         self.rows_all = {}     # Unfiltered, unsorted rows {id: row, }
         self.rows_current = [] # Currently shown (filtered/sorted) rows
-        self.rowids = {} # SQLite table rowids, used for UPDATE and DELETE
+        self.rowids = {}       # SQLite table rowids, for UPDATE and DELETE
         self.idx_changed = set() # set of indexes for changed rows in rows_all
         self.rows_backup = {}    # For changed rows {id: original_row, }
         self.idx_new = []        # Unsaved added row indexes
@@ -4871,10 +4877,11 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
         self.rowid_name = None
         self.row_count = 0
         self.iterator_index = -1
-        self.sort_ascending = True
+        self.is_seek = False    # Whether row count is fully known
         self.sort_column = None # Index of column currently sorted by
+        self.sort_ascending = True
         self.filters = {} # {col index: value, }
-        self.attrs = {} # {"new": wx.grid.GridCellAttr, }
+        self.attrs = {}   # {"new": wx.grid.GridCellAttr, }
 
         if not self.is_query:
             if "table" == category and db.has_rowid(name): self.rowid_name = "rowid"
@@ -4893,6 +4900,7 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
             TYPES = dict((v, k) for k, vv in {"INTEGER": (int, long, bool),
                          "REAL": (float,)}.items() for v in vv)
             # Seek ahead on rows and get column information from first values
+            self.is_seek = True
             try: self.SeekToRow(self.SEEK_CHUNK_LENGTH - 1)
             except Exception: pass
             if self.rows_current:
@@ -4901,16 +4909,14 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
                     col["type"] = TYPES.get(type(value), col.get("type", ""))
         else:
             self.columns = self.db.get_category(category, name)["columns"]
-            try:
-                res = self.db.execute("SELECT COUNT(*) AS count FROM %s"
-                                      % grammar.quote(self.name)).fetchone()
-                self.row_count = res["count"]
-            except Exception:
-                logger.exception("Error getting row count for %s in %s",
-                                 grammar.quote(name), db)
-                self.SeekAhead(to_end=True)
-                self.row_count = self.iterator_index + 1
-                self.NotifyViewChange(0)
+            data = self.db.get_count(self.name)
+            if data.get("is_count_estimated") or data.get("count") is None:
+                self.is_seek = True
+                try: self.SeekToRow(self.SEEK_CHUNK_LENGTH - 1)
+                except Exception:
+                    logger.exception("Error seeking on %s.", grammar.quote(self.name))
+            else:
+                self.row_count = data["count"]
 
 
     def GetColLabelValue(self, col):
@@ -4927,25 +4933,21 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
 
 
     def GetNumberRows(self):
-        result = self.row_count
-        if self.filters:
-            result = len(self.rows_current)
-        return result
+        return len(self.rows_current) if self.filters else self.row_count
 
 
     def GetNumberCols(self):
         return len(self.columns)
 
 
-    def SeekAhead(self, to_end=False):
+    def SeekAhead(self, end=False):
         """
         Seeks ahead on the query cursor, by the chunk length or until the end.
 
-        @param   to_end  if True, retrieves all rows
+        @param   end  if True, retrieves all rows
         """
         seek_count = self.row_count + self.SEEK_CHUNK_LENGTH - 1
-        if to_end:
-            seek_count = sys.maxsize
+        if end: seek_count = sys.maxsize
         self.SeekToRow(seek_count)
 
 
@@ -4954,26 +4956,25 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
         rows_before = len(self.rows_all)
         while self.row_iterator and (self.iterator_index < row):
             rowdata = None
-            try:
-                rowdata = self.row_iterator.next()
-            except Exception:
-                pass
+            try: rowdata = self.row_iterator.next()
+            except Exception: pass
             if rowdata:
-                idx = self._make_id(rowdata)
+                myid = self._MakeRowID(rowdata)
                 if not self.is_query and self.rowid_name in rowdata:
-                    self.rowids[idx] = rowdata[self.rowid_name]
+                    self.rowids[myid] = rowdata[self.rowid_name]
                     del rowdata[self.rowid_name]
-                rowdata["__id__"] = idx
+                rowdata["__id__"] = myid
                 rowdata["__changed__"] = False
                 rowdata["__new__"] = False
                 rowdata["__deleted__"] = False
-                self.rows_all[idx] = rowdata
-                self.rows_current.append(rowdata)
-                self.idx_all.append(idx)
+                self.rows_all[myid] = rowdata
+                if not self._IsRowFiltered(rowdata):
+                    self.rows_current.append(rowdata)
+                self.idx_all.append(myid)
                 self.iterator_index += 1
             else:
                 self.row_iterator = None
-        if self.is_query:
+        if self.is_seek:
             if (self.row_count != self.iterator_index + 1):
                 self.row_count = self.iterator_index + 1
                 self.NotifyViewChange(rows_before)
@@ -5010,34 +5011,21 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
         or a cursor producing all rows from database if category grid,
         both in current sort order and matching current filter.
         """
-        if self.is_query:
-            self.SeekAhead(True)
+        if not self.row_iterator: # All values retrieved
             return iter(self.rows_current)
 
-        sql, args = "SELECT * FROM %s" % grammar.quote(self.name), {}
+        # TODO muudetud-lisatud-kustutatud asjad on veel eraldi teema.
 
-        where, order = "", ""
-        if self.filters:
-            col_data, col_vals = [], {}
-            for i, v in self.filters.items():
-                col_data.append(self.columns[i])
-                col_vals[self.columns[i]["name"]] = v
-            args = self.db.make_args(col_data, col_vals)
+        def generator(res):
+            row = next(res)
+            while row:
+                while row and self._IsRowFiltered(row): row = next(res)
+                if row: yield row
+                row = next(res)
 
-            for col, key in zip(col_data, args):
-                op = "="
-                if self.db.get_affinity(col) not in ("INTEGER", "REAL"):
-                    op, args[key] = "LIKE", "%" + args[key] + "%"
-                part = "%s %s :%s" % (grammar.quote(col["name"]), op, key)
-                where += (" AND " if where else "WHERE ") + part
-        if self.sort_column is not None: order = "ORDER BY %s%s" % (
-            grammar.quote(self.columns[self.sort_column]["name"]),
-            "" if self.sort_ascending else " DESC"
-        )
-        if where: sql += " " + where
-        if order: sql += " " + order
-
-        return self.db.execute(sql, args)
+        sql = self.sql if self.is_query \
+              else "SELECT * FROM %s" % grammar.quote(self.name)
+        return generator(self.db.execute(self.sql))
 
 
     def SetValue(self, row, col, val):
@@ -5107,7 +5095,11 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
         """Applies changes to grid, as returned from GetChanges()."""
         if not changes: return
         rows_before = rows_after = self.row_count
-        self.SeekToRow(self.row_count)
+
+        max_index = 0
+        for k in (k for k in ("changed", "deleted") if k in changes):
+            max_index = max(max_index, max(x["__id__"] for x in changes[k]))
+        self.SeekToRow(max_index)
 
         if changes.get("changed"):
             self.idx_changed = set(x["__id__"] for x in changes["changed"])
@@ -5213,7 +5205,7 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
         for _ in range(numRows):
             # Construct empty dict from column names
             rowdata = dict((col["name"], None) for col in self.columns)
-            idx = self._make_id(rowdata)
+            idx = self._MakeRowID(rowdata)
             rowdata["__id__"] = idx
             rowdata["__changed__"] = False
             rowdata["__new__"] = True
@@ -5324,12 +5316,10 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
         """
         Filters the grid table with the currently added filters.
         """
-        self.SeekToRow(self.row_count - 1)
         rows_before = len(self.rows_current)
         del self.rows_current[:]
-        for idx in self.idx_all:
-            row = self.rows_all[idx]
-            if not row["__deleted__"] and not self._is_row_filtered(row):
+        for idx, row in sorted(self.rows_all.items()):
+            if not row["__deleted__"] and not self._IsRowFiltered(row):
                 self.rows_current.append(row)
         if self.sort_column is not None:
             pass #if self.View: self.View.Fit()
@@ -5350,7 +5340,7 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
             bval = bval.lower() if hasattr(bval, "lower") else bval
             return cmp(aval, bval)
 
-        self.SeekToRow(self.row_count - 1)
+        self.SeekAhead(end=True)
         self.sort_ascending = not self.sort_ascending
         self.sort_column = col
         mycmp = cmp
@@ -5425,14 +5415,14 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
         for idx, row in self.rows_deleted.items():
             row["__deleted__"] = False
             del self.rows_deleted[idx]
-            if not self._is_row_filtered(row):
+            if not self._IsRowFiltered(row):
                 self.rows_current.append(row)
             self.row_count += 1
         self.NotifyViewChange(rows_before)
         if self.View: self.View.Refresh()
 
 
-    def _is_row_filtered(self, rowdata):
+    def _IsRowFiltered(self, rowdata):
         """
         Returns whether the row is filtered out by the current filtering
         criteria, if any.
@@ -5450,7 +5440,7 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
         return not is_unfiltered
 
 
-    def _make_id(self, row):
+    def _MakeRowID(self, row):
         """Returns unique identifier for row."""
         self.id_counter += 1
         return self.id_counter
@@ -5694,8 +5684,6 @@ class SQLPage(wx.PyPanel):
         """
         if not self._grid.Table: return
 
-        self._grid.Table.SeekAhead(True)
-
         title = "SQL query"
         dialog = wx.FileDialog(self, defaultDir=os.getcwd(),
             message="Save query as",
@@ -5715,7 +5703,7 @@ class SQLPage(wx.PyPanel):
             make_iterable = self._grid.Table.GetRowIterator
             export.export_data(make_iterable, filename, title, self._db,
                                self._grid.Table.columns,
-                               sql_query=self._grid.Table.sql)
+                               query=self._grid.Table.sql)
             guibase.status('Exported "%s".', filename, log=True, flash=True)
             util.start_file(filename)
         except Exception as e:
@@ -5772,7 +5760,7 @@ class SQLPage(wx.PyPanel):
         self._grid.Scroll(scroll_hor, scroll_ver)
 
 
-    def _OnResetView(self, event):
+    def _OnResetView(self, event=None):
         """
         Handler for clicking to remove sorting and filtering,
         resets the grid and its view.
@@ -5787,17 +5775,14 @@ class SQLPage(wx.PyPanel):
         Handler for scrolling the grid, seeks ahead if nearing the end of
         retrieved rows.
         """
-        SEEKAHEAD_POS_RATIO = 0.8
         event.Skip()
+        SEEKAHEAD_POS_RATIO = 0.8
 
         def seekahead():
             scrollpos = self._grid.GetScrollPos(wx.VERTICAL)
             scrollrange = self._grid.GetScrollRange(wx.VERTICAL)
             if scrollpos > scrollrange * SEEKAHEAD_POS_RATIO:
-                scrollpage = self._grid.GetScrollPageSize(wx.VERTICAL)
-                to_end = (scrollpos + scrollpage == scrollrange)
-                # Seek to end if scrolled to the very bottom
-                self._grid.Table.SeekAhead(to_end)
+                self._grid.Table.SeekAhead()
 
         wx.CallLater(50, seekahead) # Give scroll position time to update
 
@@ -6053,6 +6038,10 @@ class DataObjectPage(wx.PyPanel):
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK, self._OnSort)
         grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK, self._OnFilter)
         grid.Bind(wx.grid.EVT_GRID_CELL_CHANGE,       self._OnChange)
+        grid.Bind(wx.EVT_SCROLLWIN,                   self._OnGridScroll)
+        grid.Bind(wx.EVT_SCROLL_THUMBRELEASE,         self._OnGridScroll)
+        grid.Bind(wx.EVT_SCROLL_CHANGED,              self._OnGridScroll)
+        grid.Bind(wx.EVT_KEY_DOWN,                    self._OnGridScroll)
         grid.GridWindow.Bind(wx.EVT_MOTION,           self._OnGridMouse)
         grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,        self._OnGridKey)
 
@@ -6420,6 +6409,25 @@ class DataObjectPage(wx.PyPanel):
         or event.EventObject.ToolTip.Tip != tip:
             event.EventObject.SetToolTipString(tip)
         self._hovered_cell = (row, col)
+
+
+
+    def _OnGridScroll(self, event):
+        """
+        Handler for scrolling the grid, seeks ahead if nearing the end of
+        retrieved rows.
+        """
+        event.Skip()
+        SEEKAHEAD_POS_RATIO = 0.8
+
+        def seekahead():
+            scrollpos = self._grid.GetScrollPos(wx.VERTICAL)
+            scrollrange = self._grid.GetScrollRange(wx.VERTICAL)
+            scrollpage = self._grid.GetScrollPageSize(wx.VERTICAL)
+            if scrollpos + scrollpage > scrollrange * SEEKAHEAD_POS_RATIO:
+                self._grid.Table.SeekAhead()
+
+        wx.CallLater(50, seekahead) # Give scroll position time to update
 
 
 

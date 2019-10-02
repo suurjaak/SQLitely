@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.09.2019
+@modified    01.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -728,15 +728,40 @@ class Database(object):
 
                 # Retrieve table row counts
                 if "table" == mycategory and count:
-                    sql = "SELECT COUNT(*) AS count FROM %s" % grammar.quote(opts["name"])
-                    try:
-                        opts["count"] = self.execute(sql, log=False).fetchone()["count"]
-                    except Exception:
-                        opts["count"] = None
-                        logger.exception("Error fetching COUNT for table %s.",
-                                         grammar.quote(opts["name"]))
+                    opts.update(self.get_count(opts["name"]))
                 elif "table" == mycategory and opts0 and "count" in opts0:
                     opts["count"] = opts0["count"]
+                    if "is_count_estimated" in opts0:
+                        opts["is_count_estimated"] = opts0["is_count_estimated"]
+                        
+
+
+    def get_count(self, table):
+        """
+        Returns {"count": int, ?"is_count_estimated": bool}.
+        Uses MAX(ROWID) to estimate row count and skips COUNT(*) if likely
+        to take too long (file over half a gigabyte).
+
+        TODO äkki teeks SIZE_LIMIT konfitavaks? hmm. vast jah.
+
+        """
+        SIZE_LIMIT, TABLE_LIMIT = 5E8, 1E3
+        result, do_full = {"count": None}, False
+        tpl = "SELECT %%s AS count FROM %s LIMIT 1" % grammar.quote(table)
+        try:
+            result = self.execute(tpl % "MAX(ROWID)", log=False).fetchone()
+            result["is_count_estimated"] = True
+            if self.filesize < SIZE_LIMIT or result["count"] < TABLE_LIMIT:
+                do_full = True
+        except Exception: do_full = self.filesize < SIZE_LIMIT
+
+        try:
+            if do_full:
+                result = self.execute(tpl % "COUNT(*)", log=False).fetchone()
+        except Exception:
+            logger.exception("Error fetching COUNT for table %s.",
+                             grammar.quote(table))
+        return result
 
 
     def get_category(self, category, name=None, table=None):
