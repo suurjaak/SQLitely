@@ -868,7 +868,7 @@ class Database(object):
             for afftype in types:
                 if afftype.startswith(mytype) or mytype.startswith(afftype):
                     return aff
-        return "BLOB"    
+        return "BLOB"
 
 
     @staticmethod

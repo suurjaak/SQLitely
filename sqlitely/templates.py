@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.09.2019
+@modified    02.10.2019
 ------------------------------------------------------------------------------
 """
 import re
@@ -210,7 +210,13 @@ for chunk in data_buffer:
 
 
 
-"""HTML data export template for the rows part."""
+"""
+HTML data export template for the rows part.
+
+@param   rows       iterable
+@param   namespace  {"row_count"}
+@param   ?progress  callback(count) returning whether to cancel, if any
+"""
 DATA_ROWS_HTML = """
 %for i, row in enumerate(rows):
 <%
@@ -221,6 +227,10 @@ namespace["row_count"] += 1
   <td>{{"" if row[col] is None else row[col]}}</td>
 %endfor
 </tr>
+<%
+if not i % 100 and isdef("progress") and not progress(count=i):
+    break # for i, row
+%>
 %endfor
 """
 
@@ -274,13 +284,20 @@ for chunk in data_buffer:
 
 
 
-"""TXT SQL insert statements export template for the rows part."""
+"""
+TXT SQL insert statements export template for the rows part.
+
+@param   rows       iterable
+@param   columns    [name, ]
+@param   namespace  {"row_count"}
+@param   ?progress  callback(count) returning whether to cancel, if any
+"""
 DATA_ROWS_SQL = """<%
 from sqlitely import grammar, templates
 
 str_cols = ", ".join(map(grammar.quote, columns))
 %>
-%for row in rows:
+%for i, row in enumerate(rows):
 <%
 values = []
 namespace["row_count"] += 1
@@ -308,6 +325,10 @@ values.append(value)
 %>
 %endfor
 INSERT INTO {{name}} ({{str_cols}}) VALUES ({{", ".join(values)}});
+<%
+if not i % 100 and isdef("progress") and not progress(count=i):
+    break # for i, row
+%>
 %endfor
 """
 
@@ -353,12 +374,21 @@ for chunk in data_buffer:
 
 
 
-"""TXT data export template for the rows part."""
+"""
+TXT data export template for the rows part.
+
+@param   rows          iterable
+@param   columns       [name, ]
+@param   namespace     {"row_count"}
+@param   columnjusts   {name: ljust or rjust}
+@param   columnwidths  {col: character width}
+@param   ?progress     callback(count) returning whether to cancel, if any
+"""
 DATA_ROWS_TXT = """<%
 from sqlitely import templates
 
 %>
-%for row in rows:
+%for i, row in enumerate(rows):
 <%
 values = []
 namespace["row_count"] += 1
@@ -373,6 +403,10 @@ values.append((value.ljust if columnjusts[col] else value.rjust)(columnwidths[co
 %>
 %endfor
 | {{" | ".join(values)}} |
+<%
+if not i % 100 and isdef("progress") and not progress(count=i):
+    break # for i, row
+%>
 %endfor
 """
 

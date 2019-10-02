@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.10.2019
+@modified    02.10.2019
 ------------------------------------------------------------------------------
 """
 import hashlib
@@ -96,6 +96,28 @@ class WorkerThread(threading.Thread):
         """Allows UI to respond to user input."""
         try: wx.YieldIfNeeded()
         except Exception: pass
+
+
+    def run(self):
+        """Generic runner, expects a callable to invoke."""
+        self._is_running = True
+        while self._is_running:
+            func = self._queue.get()
+            if not func: continue # while self._is_running
+
+            result, error = None, None
+
+            self._is_working, self._drop_results = True, False
+            try: result = func()
+            except Exception as e:
+                if self._is_running:
+                    logger.exception("Error running %s.", func)
+                    error = util.format_exc(e)
+
+            if self._drop_results: continue # while
+            if error: self.postback({"error": error})
+            else:     self.postback({"done": True, "result": result})
+            self._is_working = False
 
 
 

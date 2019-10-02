@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.09.2019
+@modified    02.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -119,9 +119,12 @@ def plural(word, items=None, with_items=True):
                          or None to get just the plural of the word
              with_items  if False, count is omitted from final result
     """
-    count = items or 0
-    suffix = "es" if "x" == word[-1].lower() else "s"
-    if hasattr(items, "__len__"): count = len(items)
+    count   = len(items) if hasattr(items, "__len__") else items or 0
+    isupper = word[-1:].isupper()
+    suffix = "es" if word[-1:].lower() in "xyz" else "s"
+    if count != 1 and "y" == word[-1:].lower():
+        word = word[:-1] + ("I" if isupper else "i")
+    if isupper: suffix = suffix.upper()
     result = word + ("" if 1 == count else suffix)
     if with_items and items is not None:
         result = "%s %s" % (count, result)

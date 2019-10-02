@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.09.2019
+@modified    02.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -56,7 +56,8 @@ QUERY_WILDCARD = ("HTML document (*.html)|*.html|Text document (*.txt)|*.txt|"
 QUERY_EXTS = ["html", "txt", "xlsx", "csv"] if xlsxwriter else ["html", "txt", "csv"]
 
 
-def export_data(make_iterable, filename, title, db, columns, query="", category="", name=""):
+def export_data(make_iterable, filename, title, db, columns,
+                query="", category="", name="", progress=None):
     """
     Exports database data to file.
 
@@ -69,6 +70,8 @@ def export_data(make_iterable, filename, title, db, columns, query="", category=
     @param   query           the SQL query producing the data, if any
     @param   category        category producing the data, if any, "table" or "view"
     @param   name            name of the table or view producing the data, if any
+    @param   progress        callback(count) to report progress,
+                             returning false if export should cancel
     """
     result = False
     f = None
@@ -100,7 +103,7 @@ def export_data(make_iterable, filename, title, db, columns, query="", category=
                     writer.writerow(*a)
                 writer.writerow(*([header, "bold"] if is_xlsx else [header]))
                 writer.set_header(False) if is_xlsx else 0
-                for row in make_iterable():
+                for i, row in enumerate(make_iterable()):
                     values = []
                     for col in columns:
                         val = "" if row[col] is None else row[col]
@@ -109,7 +112,9 @@ def export_data(make_iterable, filename, title, db, columns, query="", category=
                             val = val.encode("latin1", "replace")
                         values.append(val)
                     writer.writerow(values)
-                writer.close() if is_xlsx else 0
+                    if not i % 100 and progress and not progress(count=i):
+                        break # for i, row
+                if is_xlsx: writer.close()
             else:
                 namespace = {
                     "db_filename": db.name,
@@ -121,13 +126,14 @@ def export_data(make_iterable, filename, title, db, columns, query="", category=
                     "category":    category,
                     "name":        name,
                     "app":         conf.Title,
+                    "progress":    progress,
                 }
                 namespace["namespace"] = namespace # To update row_count
 
                 if is_txt: # Run through rows once, to populate text-justify options
                     widths = {c: len(c) for c in columns}
                     justs  = {c: True   for c in columns}
-                    for row in make_iterable():
+                    for i, row in enumerate(make_iterable()):
                         for col in columns:
                             v = row[col]
                             if isinstance(v, (int, long, float)): justs[col] = False
@@ -135,8 +141,10 @@ def export_data(make_iterable, filename, title, db, columns, query="", category=
                                 else v if isinstance(v, basestring) else str(v)
                             v = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(v))
                             widths[col] = max(widths[col], len(v))
+                        if not i % 100 and progress and not progress(): return
                     namespace["columnwidths"] = widths # {col: char length}
                     namespace["columnjusts"]  = justs  # {col: True if ljust}
+                if progress and not progress(): return
 
                 # Write out data to temporary file first, to populate row count.
                 tmpname = util.unique_path("%s.rows" % filename)
@@ -145,6 +153,8 @@ def export_data(make_iterable, filename, title, db, columns, query="", category=
                            templates.DATA_ROWS_SQL if is_sql else templates.DATA_ROWS_TXT,
                            strip=False, escape=is_html)
                 template.stream(tmpfile, namespace)
+
+                if progress and not progress(): return
 
                 if name:
                     # Add CREATE statement.
@@ -159,10 +169,11 @@ def export_data(make_iterable, filename, title, db, columns, query="", category=
                            strip=False, escape=is_html)
                 template.stream(f, namespace)
 
-            result = True
+            result = progress() if progress else True
     finally:
-        if tmpfile: util.try_until(tmpfile.close)
-        if tmpname: util.try_until(lambda: os.unlink(tmpname))
+        if tmpfile:    util.try_until(tmpfile.close)
+        if tmpname:    util.try_until(lambda: os.unlink(tmpname))
+        if not result: util.try_until(lambda: os.unlink(filename))
     return result
 
 

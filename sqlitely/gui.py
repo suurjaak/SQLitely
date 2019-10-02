@@ -1320,15 +1320,25 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
         ): return
 
-        unsaved_pages = {}
+        unsaved_pages, ongoing_pages = {}, {}
         for page, db in self.db_pages.items():
-            if db.filename in self.dbs_selected and page and page.get_unsaved():
-                unsaved_pages[page] = db.filename
+            if db.filename in self.dbs_selected and page:
+                if page.get_unsaved():
+                    unsaved_pages[page] = db.filename
+                if page.get_ongoing():
+                    ongoing_pages[page] = db.filename
         if unsaved_pages:
             if wx.OK != wx.MessageBox(
                 "There are unsaved changes in files\n(%s).\n\n"
                 "Are you sure you want to discard them?" %
                 "\n".join(textwrap.wrap(", ".join(sorted(unsaved_pages.values())))),
+                conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            ): return
+        if ongoing_pages:
+            if wx.OK != wx.MessageBox(
+                "There are ongoing exports in files\n(%s).\n\n"
+                "Are you sure you want to cancel them?" %
+                "\n".join(textwrap.wrap(", ".join(sorted(ongoing_pages.values())))),
                 conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
             ): return
 
@@ -1338,7 +1348,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 page = next((k for k, v in self.db_pages.items()
                              if v.filename == filename), None)
                 if page:
-                    page.set_ignore_unsaved()
                     self.notebook.DeletePage(self.notebook.GetPageIndex(page))
 
                 os.unlink(filename)
@@ -1642,10 +1651,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         Handler on application exit, asks about unsaved changes, if any.
         """
-        unsaved_pages = {} # {DatabasePage: filename, }
+        unsaved_pages, ongoing_pages = {}, {} # {DatabasePage: filename, }
         for page, db in self.db_pages.items():
-            if page and page.get_unsaved():
+            if not page: continue # for page, db
+            if page.get_unsaved():
                 unsaved_pages[page] = db.name
+            if page.get_ongoing():
+                ongoing_pages[page] = db.name
+
         if unsaved_pages:
             resp = wx.MessageBox(
                 "There are unsaved changes in files\n(%s).\n\n"
@@ -1656,6 +1669,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if wx.CANCEL == resp: return
             for page in unsaved_pages if wx.YES == resp else ():
                 if not page.save_database(): return
+
+        if ongoing_pages:
+            if wx.OK != wx.MessageBox(
+                "There are ongoing exports in files\n(%s).\n\n"
+                "Are you sure you want to cancel them?" %
+                "\n".join(textwrap.wrap(", ".join(sorted(ongoing_pages.values())))),
+                conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            ): return
 
         for page, db in self.db_pages.items():
             if not page: continue # continue for page, if dead object
@@ -1699,7 +1720,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         elif (not isinstance(page, DatabasePage) or not page.ready_to_close):
             return event.Veto()
 
-        # Remove page from MainWindow data structures
         unsaved = page.get_unsaved()
         if unsaved:
             if unsaved.pop("temporary", None) and not unsaved:
@@ -1723,6 +1743,27 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if wx.YES == resp:
                 if not page.save_database(): return event.Veto()
 
+        ongoing = page.get_ongoing()
+        if ongoing:
+            infos = []
+            for category in "table", "view":
+                if category in ongoing:
+                    info = ", ".join(sorted(ongoing[category], key=lambda x: x.lower()))
+                    title = util.plural(category, ongoing[category], with_items=False)
+                    info = "%s %s" % (title, info)
+                    if len(ongoing) > 1:
+                        info = "%s (%s)" % (util.plural(category, ongoing[category]), info)
+                    infos.append(info)
+            if "sql" in ongoing:
+                infos.append(util.plural("SQL query", ongoing["sql"]))
+
+            if wx.OK != wx.MessageBox(
+                "There are ongoing exports in %s:\n\n%s.\n\n"
+                "Are you sure you want to cancel them?" % (page.db, ", ".join(infos)),
+                conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            ): return event.Veto()
+
+        # Remove page from MainWindow data structures
         if page.notebook.Selection and not page.db.temporary:
             conf.LastActivePage[page.db.filename] = page.notebook.Selection
         elif page.db.filename in conf.LastActivePage:
@@ -1900,7 +1941,6 @@ class DatabasePage(wx.Panel):
         self.ready_to_close = False
         self.db = db
         self.db.register_consumer(self)
-        self.ignore_unsaved = False
         self.save_underway  = False
         self.statistics = {} # {?error: message, ?data: {..}}
         self.pragma         = db.get_pragma_values() # {pragma_name: value}
@@ -1910,7 +1950,6 @@ class DatabasePage(wx.Panel):
         self.pragma_edit = False    # Whether in PRAGMA edit mode
         self.pragma_fullsql = False # Whether show SQL for all PRAGMAs, changed or not
         self.pragma_filter = ""     # Current PRAGMA filter
-        self.last_sql = ""          # Last executed SQL
         self.memoryfs = memoryfs
         parent_notebook.InsertPage(1, self, title)
         busy = controls.BusyPanel(self, 'Loading "%s".' % db.name)
@@ -3164,6 +3203,12 @@ class DatabasePage(wx.Panel):
         for worker in self.workers_search.values(): worker.stop()
         self.worker_analyzer.stop()
         self.worker_checksum.stop()
+        for p in (p for x in self.data_pages.values() for p in x.values()):
+            p.Close(force=True)
+        for p in (p for x in self.schema_pages.values() for p in x.values()):
+            p.Close(force=True)
+        for p in self.sql_pages.values():
+            p.Close(force=True)
 
         if self.db.temporary: return
 
@@ -3589,9 +3634,20 @@ class DatabasePage(wx.Panel):
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
-    def set_ignore_unsaved(self, ignore=True):
-        """Sets page to ignore unsaved changes on close."""
-        self.ignore_unsaved = True
+    def get_ongoing(self):
+        """
+        Returns whether page has ongoing exports,
+        as {?"table": [], ?"view": [], ?"sql": []}.
+        """
+        result = {}
+        for category in self.data_pages:
+            for p in self.data_pages[category].values():
+                if p.IsExporting():
+                    result.setdefault(category, []).append(p.Name)
+        for p in self.sql_pages.values():
+            if p.IsExporting():
+                result.setdefault("sql", []).append(p.SQL)
+        return result
 
 
     def get_unsaved(self):
@@ -3601,7 +3657,8 @@ class DatabasePage(wx.Panel):
             ?"schema": True, ?"temporary"? True}.
         """
         result = {}
-        if self.ignore_unsaved or not hasattr(self, "data_pages"): return result
+        if not hasattr(self, "data_pages"): # Closed before fully created
+            return result
 
         if self.pragma_changes: result["pragma"] = list(self.pragma_changes)
         grids = self.get_unsaved_grids()
@@ -4234,12 +4291,7 @@ class DatabasePage(wx.Panel):
     def on_close_schema_page(self, event):
         """Handler for closing a schema object page."""
         page = self.notebook_schema.GetPage(event.GetSelection())
-        if page.IsChanged():
-            if wx.OK != wx.MessageBox(
-                "There are unsaved changes, "
-                "are you sure you want to discard them?",
-                conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
-            ): return event.Veto()
+        if not page.Close(): return event.Veto()
 
         for c, k, p in ((c, k, p) for c, m in self.schema_pages.items() for k, p in m.items()):
             if p is page:
@@ -4284,6 +4336,7 @@ class DatabasePage(wx.Panel):
         if "+" == self.notebook_sql.GetPageText(self.notebook_sql.GetSelection()):
             self.notebook_sql.Freeze() # Avoid flicker from changing tab
             self.add_sql_page()
+            self.update_autocomp()
             wx.CallAfter(self.notebook_sql.Thaw)
 
 
@@ -4305,9 +4358,10 @@ class DatabasePage(wx.Panel):
         if "+" == self.notebook_sql.GetPageText(event.GetSelection()):
             if not getattr(self, "_ignore_adder_close", False): event.Veto()
             return
-        self.notebook_sql.Freeze() # Avoid flicker when closing last
         page = self.notebook_sql.GetPage(event.GetSelection())
+        if not page.Close(): return event.Veto()
 
+        self.notebook_sql.Freeze() # Avoid flicker when closing last
         for k, p in self.sql_pages.items():
             if p is page:
                 self.sql_pages.pop(k)
@@ -4319,12 +4373,7 @@ class DatabasePage(wx.Panel):
     def on_close_data_page(self, event):
         """Handler for closing data object page."""
         page = self.notebook_data.GetPage(event.GetSelection())
-        if page.IsChanged():
-            if wx.OK != wx.MessageBox(
-                "There are unsaved changes, "
-                "are you sure you want to discard them?",
-                conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
-            ): return event.Veto()
+        if not page.Close(): return event.Veto()
 
         for c, k, p in ((c, k, p) for c, m in self.data_pages.items() for k, p in m.items()):
             if p is page:
@@ -5501,14 +5550,17 @@ class SQLPage(wx.PyPanel):
         ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
 
         self._db       = db
-        self._hovered_cell  = None # (row, col)
+        self._last_sql = "" # Last executed SQL
+        self._export = {}   # Current export options, if any
+        self._hovered_cell = None # (row, col)
+        self._worker = workers.WorkerThread(self._OnExportWorker)
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         splitter = wx.SplitterWindow(parent=self, style=wx.BORDER_NONE)
         splitter.SetMinimumPaneSize(100)
 
-        panel1 = wx.Panel(parent=splitter)
+        panel1 = self._panel1 = wx.Panel(parent=splitter)
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
 
@@ -5525,13 +5577,14 @@ class SQLPage(wx.PyPanel):
         stc = self._stc = controls.SQLiteTextCtrl(panel1,
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
 
-        panel2 = wx.Panel(parent=splitter)
+        panel2 = self._panel2 = wx.Panel(parent=splitter)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         label_help_stc = wx.StaticText(panel2, label=
             "Alt-Enter/Ctrl-Enter runs the query contained in currently selected "
             "text or on the current line. Ctrl-Space shows autocompletion list.")
         ColourManager.Manage(label_help_stc, "ForegroundColour", "DisabledColour")
+
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
         button_sql    = wx.Button(panel2, label="Execute S&QL")
         button_script = wx.Button(panel2, label="Execute scrip&t")
@@ -5557,6 +5610,15 @@ class SQLPage(wx.PyPanel):
             label="Double-click on column header to sort, right click to filter.")
         ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
 
+        progress = self._panel_progress = wx.Panel(panel2)
+        sizer_progress = progress.Sizer = wx.BoxSizer(wx.VERTICAL)
+        self._progress_title = wx.StaticText(progress)
+        self._progress_gauge = wx.Gauge(progress, range=100, size=(300,-1),
+                                        style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
+        self._progress_text = wx.StaticText(progress)
+        button_cancel = self._progress_cancel = wx.Button(progress, label="Cancel")
+        progress.Hide()
+
         self.Bind(wx.EVT_TOOL,     self._OnCopySQL,       id=wx.ID_COPY)
         self.Bind(wx.EVT_TOOL,     self._OnLoadSQL,       id=wx.ID_OPEN)
         self.Bind(wx.EVT_TOOL,     self._OnSaveSQL,       id=wx.ID_SAVE)
@@ -5565,6 +5627,7 @@ class SQLPage(wx.PyPanel):
         self.Bind(wx.EVT_BUTTON,   self._OnResetView,     button_reset)
         self.Bind(wx.EVT_BUTTON,   self._OnExport,        button_export)
         self.Bind(wx.EVT_BUTTON,   self._OnGridClose,     button_close)
+        self.Bind(wx.EVT_BUTTON,   self._OnExportCancel,  button_cancel)
         stc.Bind(wx.EVT_KEY_DOWN,                         self._OnSTCKey)
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,     self._OnSort)
         grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,     self._OnFilter)
@@ -5586,15 +5649,29 @@ class SQLPage(wx.PyPanel):
         sizer_buttons.Add(button_export, border=5, flag=wx.RIGHT | wx.ALIGN_RIGHT)
         sizer_buttons.Add(button_close, flag=wx.ALIGN_RIGHT)
 
+        sizer_progress.AddStretchSpacer()
+        sizer_progress.Add(self._progress_title,  border=5, flag=wx.ALIGN_CENTER | wx.BOTTOM)
+        sizer_progress.Add(self._progress_gauge,  border=5, flag=wx.ALIGN_CENTER | wx.BOTTOM)
+        sizer_progress.Add(self._progress_text,   border=5, flag=wx.ALIGN_CENTER | wx.BOTTOM)
+        sizer_progress.Add(self._progress_cancel, flag=wx.ALIGN_CENTER)
+        sizer_progress.AddStretchSpacer()
+
         sizer2.Add(label_help_stc, border=5, flag=wx.BOTTOM | wx.GROW)
         sizer2.Add(sizer_buttons, border=5, flag=wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer2.Add(grid, proportion=1, flag=wx.GROW)
         sizer2.Add(label_help, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
+        sizer2.Add(progress, proportion=1, flag=wx.ALIGN_CENTER_HORIZONTAL | wx.GROW)
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
         label_help.Hide()
         self.Layout()
         wx.CallAfter(lambda: splitter.SplitHorizontally(panel1, panel2, sashPosition=self.Size[1] * 2/5))
+
+
+    def GetSQL(self):
+        """Returns last run SQL query."""
+        return self._last_sql
+    SQL = property(GetSQL)
 
 
     def GetText(self):
@@ -5645,7 +5722,7 @@ class SQLPage(wx.PyPanel):
             # Jiggle size by 1 pixel to refresh scrollbars
             self._grid.Size = size[0], size[1]-1
             self._grid.Size = size[0], size[1]
-            self.last_sql = sql
+            self._last_sql = sql
             self._grid.SetColMinimalAcceptableWidth(100)
             if grid_data:
                 col_range = range(grid_data.GetNumberCols())
@@ -5677,6 +5754,28 @@ class SQLPage(wx.PyPanel):
         self._grid.Thaw()
 
 
+    def Close(self, force=False):
+        """
+        Closes the page, asking for confirmation if export underway.
+        Returns whether page closed.
+        """
+        if self._export and not force and wx.OK != wx.MessageBox(
+            "Export is currently underway, "
+            "are you sure you want to cancel it?",
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+        ): return
+        elif self._export:
+            self._OnExportCancel()
+
+        self._worker.stop()
+        return True
+
+
+    def IsExporting(self):
+        """Returns whether export is currently underway."""
+        return bool(self._export)
+
+
     def _OnExport(self, event=None):
         """
         Handler for clicking to export grid contents to file, allows the
@@ -5697,23 +5796,86 @@ class SQLPage(wx.PyPanel):
         extname = export.QUERY_EXTS[dialog.FilterIndex]
         if not filename.lower().endswith(".%s" % extname):
             filename += ".%s" % extname
-        busy = controls.BusyPanel(self, 'Exporting "%s".' % filename)
-        guibase.status('Exporting "%s".', filename)
         try:
             make_iterable = self._grid.Table.GetRowIterator
-            export.export_data(make_iterable, filename, title, self._db,
-                               self._grid.Table.columns,
-                               query=self._grid.Table.sql)
-            guibase.status('Exported "%s".', filename, log=True, flash=True)
-            util.start_file(filename)
+            exporter = functools.partial(export.export_data,
+                make_iterable, filename, title, self._db, self._grid.Table.columns,
+                query=self._grid.Table.sql, progress=self._OnExportProgress
+            )
+            self._export = {"filename": filename, "count": 0}
+            self._worker.work(exporter)
+            guibase.status('Exporting "%s".', filename, log=True, flash=True)
+
+            self._progress_title.Label = 'Exporting to "%s".' % filename
+            self._progress_gauge.Pulse()
+            self._progress_text.Label  = ""
+            for x in self._panel2.Children: x.Hide()
+            self._panel_progress.Show()
+            self._panel2.Layout()
         except Exception as e:
             msg = "Error saving %s."
             logger.exception(msg, filename)
             guibase.status(msg, flash=True)
             error = "Error saving %s:\n\n%s" % (filename, util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
-        finally:
-            busy.Close()
+
+
+    def _OnExportCancel(self, event=None):
+        """
+        Handler for cancelling export, restores page controls.
+        """
+        if not self or not self._export: return
+
+        if event and wx.OK != wx.MessageBox(
+            "Export is currently underway, are you sure you want to cancel it?",
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+        ): return
+            
+        self._OnExportResult()
+
+
+    def _OnExportProgress(self, count=None):
+        """
+        Handler for export progress report, updates progress bar.
+        Returns true if export should continue.
+        """
+        if not self or not self._export: return
+
+        if count is not None:
+            self._panel_progress.Freeze()
+            self._progress_text.Label = util.plural("row", count)
+            self._panel_progress.Layout()
+            self._panel_progress.Thaw()
+        return True
+
+
+    def _OnExportWorker(self, result):
+        """
+        Handler for export worker report, invokes _OnExportResult in callafter.
+        """
+        wx.CallAfter(self._OnExportResult, result)
+
+
+    def _OnExportResult(self, result=None):
+        """
+        Handler for export result, shows error or success, opens file on success.
+        """
+        if not self or not self._export: return
+
+        export, self._export = self._export, None
+        self.Freeze()
+        for x in self._panel2.Children: x.Show()
+        self._panel_progress.Hide()
+        self.Layout()
+        self.Thaw()
+
+        if not result: return
+        elif "error" in result:
+            error = "Error saving %s:\n\n%s" % (export["filename"], result["error"])
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+        elif "done" in result:
+            guibase.status('Exported "%s".', export["filename"], log=True, flash=True)
+            util.start_file(export["filename"])
 
 
     def _OnFilter(self, event):
@@ -5854,6 +6016,7 @@ class SQLPage(wx.PyPanel):
         Handler for pressing a key in STC, listens for Alt-Enter and
         executes the currently selected line, or currently active line.
         """
+        if self._export: return            
         event.Skip() # Allow to propagate to other handlers
         stc = event.GetEventObject()
         if (event.AltDown() or event.ControlDown()) and wx.WXK_RETURN == event.KeyCode:
@@ -5867,6 +6030,7 @@ class SQLPage(wx.PyPanel):
         whole contents, displays its results, if any, and commits changes
         done, if any.
         """
+        if self._export: return            
         sql = (self._stc.SelectedText or self._stc.Text).strip()
         if sql: self.ExecuteSQL(sql)
 
@@ -5876,12 +6040,14 @@ class SQLPage(wx.PyPanel):
         Handler for clicking to run multiple SQL statements, runs the selected
         text or whole contents as an SQL script.
         """
+        if self._export: return            
         sql = (self._stc.SelectedText or self._stc.Text).strip()
         if not sql: return
             
         try:
             logger.info('Executing SQL script "%s".', sql)
             self._db.connection.executescript(sql)
+            self._last_sql = sql
             self._grid.SetTable(None)
             self._grid.CreateGrid(1, 1)
             self._grid.SetColLabelValue(0, "Affected rows")
@@ -5988,6 +6154,8 @@ class DataObjectPage(wx.PyPanel):
         self._backup   = None # Pending changes for Reload(pending=True)
         self._ignore_change = False
         self._hovered_cell  = None # (row, col)
+        self._export = {} # Current export options, if any
+        self._worker = workers.WorkerThread(self._OnExportWorker)
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_header       = wx.BoxSizer(wx.HORIZONTAL)
@@ -6028,31 +6196,49 @@ class DataObjectPage(wx.PyPanel):
         label_help = wx.StaticText(self, label="Double-click on column header to sort, right click to filter.")
         ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
 
-        self.Bind(wx.EVT_TOOL,   self._OnInsert,    id=wx.ID_ADD)
-        self.Bind(wx.EVT_TOOL,   self._OnDelete,    id=wx.ID_DELETE)
-        self.Bind(wx.EVT_TOOL,   self._OnRefresh,   id=wx.ID_REFRESH)
-        self.Bind(wx.EVT_TOOL,   self._OnCommit,    id=wx.ID_SAVE)
-        self.Bind(wx.EVT_TOOL,   self._OnRollback,  id=wx.ID_UNDO)
-        self.Bind(wx.EVT_BUTTON, self._OnResetView, button_reset)
-        self.Bind(wx.EVT_BUTTON, self._OnExport,    button_export)
-        grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK, self._OnSort)
-        grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK, self._OnFilter)
-        grid.Bind(wx.grid.EVT_GRID_CELL_CHANGE,       self._OnChange)
-        grid.Bind(wx.EVT_SCROLLWIN,                   self._OnGridScroll)
-        grid.Bind(wx.EVT_SCROLL_THUMBRELEASE,         self._OnGridScroll)
-        grid.Bind(wx.EVT_SCROLL_CHANGED,              self._OnGridScroll)
-        grid.Bind(wx.EVT_KEY_DOWN,                    self._OnGridScroll)
-        grid.GridWindow.Bind(wx.EVT_MOTION,           self._OnGridMouse)
-        grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,        self._OnGridKey)
+        progress = self._panel_progress = wx.Panel(self)
+        sizer_progress = progress.Sizer = wx.BoxSizer(wx.VERTICAL)
+        self._progress_title = wx.StaticText(progress)
+        self._progress_gauge = wx.Gauge(progress, range=100, size=(300,-1),
+                                        style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
+        self._progress_text = wx.StaticText(progress)
+        button_cancel = self._progress_cancel = wx.Button(progress, label="Cancel")
+        progress.Hide()
+
+        self.Bind(wx.EVT_TOOL,   self._OnInsert,       id=wx.ID_ADD)
+        self.Bind(wx.EVT_TOOL,   self._OnDelete,       id=wx.ID_DELETE)
+        self.Bind(wx.EVT_TOOL,   self._OnRefresh,      id=wx.ID_REFRESH)
+        self.Bind(wx.EVT_TOOL,   self._OnCommit,       id=wx.ID_SAVE)
+        self.Bind(wx.EVT_TOOL,   self._OnRollback,     id=wx.ID_UNDO)
+        self.Bind(wx.EVT_BUTTON, self._OnResetView,    button_reset)
+        self.Bind(wx.EVT_BUTTON, self._OnExport,       button_export)
+        self.Bind(wx.EVT_BUTTON, self._OnExportCancel, button_cancel)
+        grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,  self._OnSort)
+        grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,  self._OnFilter)
+        grid.Bind(wx.grid.EVT_GRID_CELL_CHANGE,        self._OnChange)
+        grid.Bind(wx.EVT_SCROLLWIN,                    self._OnGridScroll)
+        grid.Bind(wx.EVT_SCROLL_THUMBRELEASE,          self._OnGridScroll)
+        grid.Bind(wx.EVT_SCROLL_CHANGED,               self._OnGridScroll)
+        grid.Bind(wx.EVT_KEY_DOWN,                     self._OnGridScroll)
+        grid.GridWindow.Bind(wx.EVT_MOTION,            self._OnGridMouse)
+        grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,         self._OnGridKey)
 
         sizer_header.Add(tb)
         sizer_header.AddStretchSpacer()
         sizer_header.Add(button_reset, border=5, flag=wx.RIGHT)
         sizer_header.Add(button_export)
 
+        sizer_progress.AddStretchSpacer()
+        sizer_progress.Add(self._progress_title,  border=5, flag=wx.ALIGN_CENTER | wx.BOTTOM)
+        sizer_progress.Add(self._progress_gauge,  border=5, flag=wx.ALIGN_CENTER | wx.BOTTOM)
+        sizer_progress.Add(self._progress_text,   border=5, flag=wx.ALIGN_CENTER | wx.BOTTOM)
+        sizer_progress.Add(self._progress_cancel, flag=wx.ALIGN_CENTER)
+        sizer_progress.AddStretchSpacer()
+
         sizer.Add(sizer_header, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer.Add(grid, proportion=1, flag=wx.GROW)
         sizer.Add(label_help, border=5, flag=wx.TOP | wx.BOTTOM)
+        sizer.Add(progress, proportion=1, flag=wx.ALIGN_CENTER_HORIZONTAL | wx.GROW)
         self._Populate()
         self._grid.SetFocus()
 
@@ -6063,14 +6249,24 @@ class DataObjectPage(wx.PyPanel):
 
 
     def Close(self, force=False):
-        """Closes the page, asking for confirmation if modified and not force."""
-        if force: self._ignore_change = True
-        self._OnClose()
+        """
+        Closes the page, asking for confirmation if modified and not force.
+        Returns whether page closed.
+        """
+        if force:
+            self._ignore_change = True
+            self._export.clear()
+        return self._OnClose()
 
 
     def IsChanged(self):
         """Returns whether there are unsaved changes."""
         return not self._ignore_change and self._grid.Table.IsChanged()
+
+
+    def IsExporting(self):
+        """Returns whether export is currently underway."""
+        return bool(self._export)
 
 
     def ScrollToRow(self, row):
@@ -6151,13 +6347,26 @@ class DataObjectPage(wx.PyPanel):
 
 
     def _OnClose(self, event=None):
-        """Handler for clicking to close the item, sends message to parent."""
+        """
+        Handler for clicking to close the item, sends message to parent.
+        Returns whether page closed.
+        """
+        if self._export and wx.OK != wx.MessageBox(
+            "Export is currently underway, "
+            "are you sure you want to cancel it?",
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+        ): return
+        elif self._export:
+            self._OnExportCancel()
+
         if self.IsChanged() and wx.OK != wx.MessageBox(
             "There are unsaved changes, "
             "are you sure you want to discard them?",
             conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
         ): return
+        self._worker.stop()
         self._PostEvent(close=True)
+        return True
 
 
     def _OnExport(self, event=None):
@@ -6183,23 +6392,96 @@ class DataObjectPage(wx.PyPanel):
         extname = EXTS[dialog.FilterIndex]
         if not filename.lower().endswith(".%s" % extname):
             filename += ".%s" % extname
-        busy = controls.BusyPanel(self, 'Exporting "%s".' % filename)
-        guibase.status('Exporting "%s".', filename)
         try:
             make_iterable = self._grid.Table.GetRowIterator
-            export.export_data(make_iterable, filename, title, self._db,
-                               self._grid.Table.columns, category=self._category,
-                               name=self._item["name"])
-            guibase.status('Exported "%s".', filename, log=True, flash=True)
-            util.start_file(filename)
+            exporter = functools.partial(export.export_data, make_iterable, filename,
+                title, self._db, self._grid.Table.columns,
+                progress=self._OnExportProgress,
+                category=self._category, name=self._item["name"]
+            )
+            self._export = {"filename": filename, "count": 0,
+                            "total": self._item.get("count")}
+            self._worker.work(exporter)
+            guibase.status('Exporting to "%s".', filename, log=True, flash=True)
+
+            self._progress_title.Label = 'Exporting to "%s".' % filename
+            if self._export["total"] is None: self._progress_gauge.Pulse()
+            else: self._progress_gauge.Value = 0
+            self._progress_text.Label  = ""
+            for x in self.Children: x.Hide()
+            self._panel_progress.Show()
+            self.Layout()
         except Exception as e:
             msg = "Error saving %s."
             logger.exception(msg, filename)
             guibase.status(msg, flash=True)
             error = "Error saving %s:\n\n%s" % (filename, util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
-        finally:
-            busy.Close()
+
+
+    def _OnExportCancel(self, event=None):
+        """
+        Handler for cancelling export, restores page controls.
+        """
+        if not self or not self._export: return
+
+        if event and wx.OK != wx.MessageBox(
+            "Export is currently underway, are you sure you want to cancel it?",
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+        ): return
+            
+        self._OnExportResult()
+
+
+    def _OnExportProgress(self, count=None):
+        """
+        Handler for export progress report, updates progress bar.
+        Returns true if export should continue.
+        """
+        if not self or not self._export: return
+
+        if count is not None:
+            self._panel_progress.Freeze()
+            total = self._export["total"]
+            if total is None:
+                text = util.plural("row", count)
+            else:
+                percent = int(100 * util.safedivf(count, total))
+                text = "%s%% (%s of %s)" % (percent, util.plural("row", count), total)
+                self._progress_gauge.Value = percent
+            self._progress_text.Label = text
+            self._panel_progress.Layout()
+            self._panel_progress.Thaw()
+        return True
+
+
+    def _OnExportWorker(self, result):
+        """
+        Handler for export worker report, invokes _OnExportResult in callafter.
+        """
+        wx.CallAfter(self._OnExportResult, result)
+
+
+    def _OnExportResult(self, result=None):
+        """
+        Handler for export result, shows error or success, opens file on success.
+        """
+        if not self or not self._export: return
+
+        export, self._export = self._export, None
+        self.Freeze()
+        for x in self.Children: x.Show()
+        self._panel_progress.Hide()
+        self.Layout()
+        self.Thaw()
+
+        if not result: return
+        elif "error" in result:
+            error = "Error saving %s:\n\n%s" % (export["filename"], result["error"])
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+        elif "done" in result:
+            guibase.status('Exported "%s".', export["filename"], log=True, flash=True)
+            util.start_file(export["filename"])
 
 
     def _OnInsert(self, event):
@@ -6589,9 +6871,12 @@ class SchemaObjectPage(wx.PyPanel):
 
 
     def Close(self, force=False):
-        """Closes the page, asking for confirmation if modified and not force."""
+        """
+        Closes the page, asking for confirmation if modified and not force.
+        Returns whether page closed.
+        """
         if force: self._editmode = self._newmode = False
-        self._OnClose()
+        return self._OnClose()
 
 
     def IsChanged(self):
@@ -8423,7 +8708,10 @@ class SchemaObjectPage(wx.PyPanel):
 
 
     def _OnClose(self, event=None):
-        """Handler for clicking to close the item, sends message to parent."""
+        """
+        Handler for clicking to close the item, confirms discarding changes if any,
+        sends message to parent. Returns whether page closed.
+        """
         if self._editmode and self.IsChanged() and wx.OK != wx.MessageBox(
             "There are unsaved changes, "
             "are you sure you want to discard them?",
@@ -8431,6 +8719,7 @@ class SchemaObjectPage(wx.PyPanel):
         ): return
         self._editmode = self._newmode = False
         self._PostEvent(close=True)
+        return True
 
 
     def _OnSave(self, event=None):
