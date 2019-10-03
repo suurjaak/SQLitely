@@ -5762,8 +5762,8 @@ class SQLPage(wx.PyPanel):
                 # SELECT statement: populate grid with rows
                 grid_data = SQLiteGridBase(self._db, sql=sql)
                 self._grid.Table = grid_data
-                self._button_reset.Enabled = True
-                self._button_export.Enabled = True
+                self._button_reset.Enabled = bool(grid_data.columns)
+                self._button_export.Enabled = bool(grid_data.columns)
             else:
                 # Assume action query
                 affected_rows = self._db.execute_action(sql)
@@ -5773,8 +5773,8 @@ class SQLPage(wx.PyPanel):
                 self._grid.SetCellValue(0, 0, str(affected_rows))
                 self._button_reset.Enabled = False
                 self._button_export.Enabled = False
-            self._button_close.Enabled = True
-            self._label_help.Show()
+            self._button_close.Enabled = bool(grid_data.columns)
+            self._label_help.Show(bool(grid_data.columns))
             self._label_help.ContainingSizer.Layout()
             guibase.status('Executed SQL "%s" (%s).', sql, self._db,
                            log=True, flash=True)
@@ -5945,10 +5945,10 @@ class SQLPage(wx.PyPanel):
         change the column filter.
         """
         row, col = event.GetRow(), event.GetCol()
-        # Remember scroll positions, as grid update loses them
+        grid_data = self._grid.Table
+        if not grid_data or not grid_data.columns: return
         if row >= 0: return # Only react to clicks in the header
 
-        grid_data = self._grid.Table
         current_filter = unicode(grid_data.filters[col]) \
                          if col in grid_data.filters else ""
         name = grammar.quote(grid_data.columns[col]["name"], force=True)
