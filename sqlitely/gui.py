@@ -2131,9 +2131,12 @@ class DatabasePage(wx.Panel):
 
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
         splitter = self.splitter_data = wx.SplitterWindow(
-            parent=page, style=wx.BORDER_NONE
+            page, style=wx.BORDER_NONE
         )
         splitter.SetMinimumPaneSize(100)
+
+        panel_export = self.panel_data_export = ExportProgressPanel(page, self._on_close_data_export)
+        panel_export.Hide()
 
         panel1 = wx.Panel(parent=splitter)
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2188,6 +2191,7 @@ class DatabasePage(wx.Panel):
         sizer2.Add(nb, proportion=1, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
+        sizer.Add(panel_export, proportion=1, flag=wx.GROW)
         splitter.SplitVertically(panel1, panel2, 400)
 
         self.Bind(EVT_DATA_PAGE, self.on_data_page_event)
@@ -3226,6 +3230,7 @@ class DatabasePage(wx.Panel):
         for worker in self.workers_search.values(): worker.stop()
         self.worker_analyzer.stop()
         self.worker_checksum.stop()
+        self.panel_data_export.Stop()
         for p in (p for x in self.data_pages.values() for p in x.values()):
             p.Close(force=True)
         for p in (p for x in self.schema_pages.values() for p in x.values()):
@@ -3664,6 +3669,8 @@ class DatabasePage(wx.Panel):
         as {?"table": [], ?"view": [], ?"sql": []}.
         """
         result = {}
+        for opts in self.panel_data_export.GetIncomplete():
+            result.setdefault(opts["category"], []).append(opts["name"])
         for category in self.data_pages:
             for p in self.data_pages[category].values():
                 if p.IsExporting():
@@ -3840,6 +3847,7 @@ class DatabasePage(wx.Panel):
 
     def on_change_tree_data(self, event):
         """Handler for activating a schema item, loads object."""
+        if not self.splitter_data.Shown: return
         item, tree = event.GetItem(), self.tree_schema
         if not item or not item.IsOk(): return
         data = tree.GetItemPyData(item) or {}
@@ -4066,8 +4074,6 @@ class DatabasePage(wx.Panel):
             ): return
 
             if "table" == items[0]["type"] and any(x.get("count") for x in items):
-
-                # TODO siin võiks ümardada kui mõni on is_count_estimated.
                 count = sum(x.get("count") or 0 for x in items)
                 is_estimated = any(x.get("is_count_estimated") for x in items)
                 if is_estimated: count = int(math.ceil(count / 100.) * 100)
@@ -4462,6 +4468,15 @@ class DatabasePage(wx.Panel):
             self.load_tree_data()
 
 
+    def _on_close_data_export(self):
+        """Hides export panel."""
+        self.Freeze()
+        self.splitter_data.Show()
+        self.panel_data_export.Hide()
+        self.Layout()
+        self.Thaw()
+        
+
     def on_export_data_file(self, category, items, event=None):
         """
         Handler for exporting one or more tables/views to file, opens file dialog
@@ -4505,29 +4520,29 @@ class DatabasePage(wx.Panel):
                 conf.Title, wx.YES | wx.NO | wx.ICON_WARNING
             ): return
 
-        for name, filename in zip(items, filenames):
+        exports = []
+        for i, (name, filename) in enumerate(zip(items, filenames)):
             if not filename.lower().endswith(".%s" % extname):
                 filename += ".%s" % extname
-            busy = controls.BusyPanel(self, 'Exporting %s.' % filename)
-            guibase.status('Exporting %s.', filename)
-            try:
-                sql = "SELECT * FROM %s" % grammar.quote(name)
-                make_iterable = functools.partial(self.db.execute, sql)
-                export.export_data(make_iterable, filename,
-                    "%s %s" % (category.capitalize(), grammar.quote(name, force=True)),
-                    self.db, self.db.get_category(category, name)["columns"],
-                    category=category, name=name
-                )
-                guibase.status("Exported %s.", filename, log=True, flash=True)
-                util.start_file(filename)
-            except Exception as e:
-                msg = "Error saving %s." % filename
-                logger.exception(msg); guibase.status(msg, flash=True)
-                error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-                wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
-                break # for name, filename
-            finally:
-                busy.Close()
+            item = self.db.get_category(category, name)
+            sql = "SELECT * FROM %s" % grammar.quote(name)
+            make_iterable = functools.partial(self.db.execute, sql)
+            exporter = functools.partial(export.export_data, make_iterable, filename,
+                "%s %s" % (category.capitalize(), grammar.quote(name, force=True)),
+                self.db, item["columns"], category=category, name=name,
+                progress=functools.partial(self.panel_data_export.OnProgress, i)
+            )
+            exports.append({"filename": filename, "callable": exporter,
+                            "category": category, "name": item["name"],
+                            "total": item.get("count"),
+                            "is_total_estimated": item.get("is_count_estimated")})
+
+        self.Freeze()
+        self.splitter_data.Hide()
+        self.panel_data_export.Show()
+        self.panel_data_export.Export(exports)
+        self.Layout()
+        self.Thaw()
 
 
     def on_export_data_base(self, tables, data=True, event=None):
@@ -5611,7 +5626,6 @@ class SQLPage(wx.PyPanel):
         self._last_sql = "" # Last executed SQL
         self._export = {}   # Current export options, if any
         self._hovered_cell = None # (row, col)
-        self._worker = workers.WorkerThread(self._OnExportWorker)
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -5668,14 +5682,8 @@ class SQLPage(wx.PyPanel):
             label="Double-click on column header to sort, right click to filter.")
         ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
 
-        progress = self._panel_progress = wx.Panel(panel2)
-        sizer_progress = progress.Sizer = wx.BoxSizer(wx.VERTICAL)
-        self._progress_title = wx.StaticText(progress)
-        self._progress_gauge = wx.Gauge(progress, range=100, size=(300,-1),
-                                        style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
-        self._progress_text = wx.StaticText(progress)
-        button_cancel = self._progress_cancel = wx.Button(progress, label="Cancel")
-        progress.Hide()
+        panel_export = self._export = ExportProgressPanel(panel2, self._OnExportClose)
+        panel_export.Hide()
 
         self.Bind(wx.EVT_TOOL,     self._OnCopySQL,       id=wx.ID_COPY)
         self.Bind(wx.EVT_TOOL,     self._OnLoadSQL,       id=wx.ID_OPEN)
@@ -5685,7 +5693,6 @@ class SQLPage(wx.PyPanel):
         self.Bind(wx.EVT_BUTTON,   self._OnResetView,     button_reset)
         self.Bind(wx.EVT_BUTTON,   self._OnExport,        button_export)
         self.Bind(wx.EVT_BUTTON,   self._OnGridClose,     button_close)
-        self.Bind(wx.EVT_BUTTON,   self._OnExportCancel,  button_cancel)
         stc.Bind(wx.EVT_KEY_DOWN,                         self._OnSTCKey)
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,     self._OnSort)
         grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,     self._OnFilter)
@@ -5707,18 +5714,11 @@ class SQLPage(wx.PyPanel):
         sizer_buttons.Add(button_export, border=5, flag=wx.RIGHT | wx.ALIGN_RIGHT)
         sizer_buttons.Add(button_close, flag=wx.ALIGN_RIGHT)
 
-        sizer_progress.AddStretchSpacer()
-        sizer_progress.Add(self._progress_title,  border=5, flag=wx.ALIGN_CENTER | wx.BOTTOM)
-        sizer_progress.Add(self._progress_gauge,  border=5, flag=wx.ALIGN_CENTER | wx.BOTTOM)
-        sizer_progress.Add(self._progress_text,   border=5, flag=wx.ALIGN_CENTER | wx.BOTTOM)
-        sizer_progress.Add(self._progress_cancel, flag=wx.ALIGN_CENTER)
-        sizer_progress.AddStretchSpacer()
-
         sizer2.Add(label_help_stc, border=5, flag=wx.BOTTOM | wx.GROW)
         sizer2.Add(sizer_buttons, border=5, flag=wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer2.Add(grid, proportion=1, flag=wx.GROW)
         sizer2.Add(label_help, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
-        sizer2.Add(progress, proportion=1, flag=wx.ALIGN_CENTER_HORIZONTAL | wx.GROW)
+        sizer2.Add(panel_export, proportion=1, flag=wx.ALIGN_CENTER_HORIZONTAL | wx.GROW)
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
         label_help.Hide()
@@ -5817,21 +5817,19 @@ class SQLPage(wx.PyPanel):
         Closes the page, asking for confirmation if export underway.
         Returns whether page closed.
         """
-        if self._export and not force and wx.OK != wx.MessageBox(
+        if self._export.IsExporting() and not force and wx.OK != wx.MessageBox(
             "Export is currently underway, "
             "are you sure you want to cancel it?",
             conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
         ): return
-        elif self._export:
-            self._OnExportCancel()
+        self._export.Stop()
 
-        self._worker.stop()
         return True
 
 
     def IsExporting(self):
         """Returns whether export is currently underway."""
-        return bool(self._export)
+        return self._export.IsExporting()
 
 
     def _OnExport(self, event=None):
@@ -5858,18 +5856,15 @@ class SQLPage(wx.PyPanel):
             make_iterable = self._grid.Table.GetRowIterator
             exporter = functools.partial(export.export_data,
                 make_iterable, filename, title, self._db, self._grid.Table.columns,
-                query=self._grid.Table.sql, progress=self._OnExportProgress
+                query=self._grid.Table.sql, progress=self._export.OnProgress
             )
-            self._export = {"filename": filename, "count": 0}
-            self._worker.work(exporter)
-            guibase.status('Exporting "%s".', filename, log=True, flash=True)
-
-            self._progress_title.Label = 'Exporting to "%s".' % filename
-            self._progress_gauge.Pulse()
-            self._progress_text.Label  = ""
+            opts = {"filename": filename, "callable": exporter}
+            self.Freeze()
             for x in self._panel2.Children: x.Hide()
-            self._panel_progress.Show()
+            self._export.Show()
+            self._export.Export(opts)
             self._panel2.Layout()
+            self.Thaw()
         except Exception as e:
             msg = "Error saving %s."
             logger.exception(msg, filename)
@@ -5878,62 +5873,13 @@ class SQLPage(wx.PyPanel):
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
-    def _OnExportCancel(self, event=None):
-        """
-        Handler for cancelling export, restores page controls.
-        """
-        if not self or not self._export: return
-
-        if event and wx.OK != wx.MessageBox(
-            "Export is currently underway, are you sure you want to cancel it?",
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
-        ): return
-            
-        self._OnExportResult()
-
-
-    def _OnExportProgress(self, count=None):
-        """
-        Handler for export progress report, updates progress bar.
-        Returns true if export should continue.
-        """
-        if not self or not self._export: return
-
-        if count is not None:
-            self._panel_progress.Freeze()
-            self._progress_text.Label = util.plural("row", count)
-            self._panel_progress.Layout()
-            self._panel_progress.Thaw()
-        return True
-
-
-    def _OnExportWorker(self, result):
-        """
-        Handler for export worker report, invokes _OnExportResult in callafter.
-        """
-        wx.CallAfter(self._OnExportResult, result)
-
-
-    def _OnExportResult(self, result=None):
-        """
-        Handler for export result, shows error or success, opens file on success.
-        """
-        if not self or not self._export: return
-
-        export, self._export = self._export, None
+    def _OnExportClose(self):
+        """Handler for closing export panel."""
         self.Freeze()
         for x in self._panel2.Children: x.Show()
-        self._panel_progress.Hide()
+        self._export.Hide()
         self.Layout()
         self.Thaw()
-
-        if not result: return
-        elif "error" in result:
-            error = "Error saving %s:\n\n%s" % (export["filename"], result["error"])
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
-        elif "done" in result:
-            guibase.status('Exported "%s".', export["filename"], log=True, flash=True)
-            util.start_file(export["filename"])
 
 
     def _OnFilter(self, event):
@@ -6074,7 +6020,7 @@ class SQLPage(wx.PyPanel):
         Handler for pressing a key in STC, listens for Alt-Enter and
         executes the currently selected line, or currently active line.
         """
-        if self._export: return            
+        if self._export.Shown: return
         event.Skip() # Allow to propagate to other handlers
         stc = event.GetEventObject()
         if (event.AltDown() or event.ControlDown()) and wx.WXK_RETURN == event.KeyCode:
@@ -6088,7 +6034,7 @@ class SQLPage(wx.PyPanel):
         whole contents, displays its results, if any, and commits changes
         done, if any.
         """
-        if self._export: return            
+        if self._export.Shown: return            
         sql = (self._stc.SelectedText or self._stc.Text).strip()
         if sql: self.ExecuteSQL(sql)
 
@@ -6098,7 +6044,7 @@ class SQLPage(wx.PyPanel):
         Handler for clicking to run multiple SQL statements, runs the selected
         text or whole contents as an SQL script.
         """
-        if self._export: return            
+        if self._export.Shown: return            
         sql = (self._stc.SelectedText or self._stc.Text).strip()
         if not sql: return
             
@@ -6212,8 +6158,6 @@ class DataObjectPage(wx.PyPanel):
         self._backup   = None # Pending changes for Reload(pending=True)
         self._ignore_change = False
         self._hovered_cell  = None # (row, col)
-        self._export = {} # Current export options, if any
-        self._worker = workers.WorkerThread(self._OnExportWorker)
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_header       = wx.BoxSizer(wx.HORIZONTAL)
@@ -6254,14 +6198,8 @@ class DataObjectPage(wx.PyPanel):
         label_help = wx.StaticText(self, label="Double-click on column header to sort, right click to filter.")
         ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
 
-        progress = self._panel_progress = wx.Panel(self)
-        sizer_progress = progress.Sizer = wx.BoxSizer(wx.VERTICAL)
-        self._progress_title = wx.StaticText(progress)
-        self._progress_gauge = wx.Gauge(progress, range=100, size=(300,-1),
-                                        style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
-        self._progress_text = wx.StaticText(progress)
-        button_cancel = self._progress_cancel = wx.Button(progress, label="Cancel")
-        progress.Hide()
+        panel_export = self._export = ExportProgressPanel(self, self._OnExportClose)
+        panel_export.Hide()
 
         self.Bind(wx.EVT_TOOL,   self._OnInsert,       id=wx.ID_ADD)
         self.Bind(wx.EVT_TOOL,   self._OnDelete,       id=wx.ID_DELETE)
@@ -6270,7 +6208,6 @@ class DataObjectPage(wx.PyPanel):
         self.Bind(wx.EVT_TOOL,   self._OnRollback,     id=wx.ID_UNDO)
         self.Bind(wx.EVT_BUTTON, self._OnResetView,    button_reset)
         self.Bind(wx.EVT_BUTTON, self._OnExport,       button_export)
-        self.Bind(wx.EVT_BUTTON, self._OnExportCancel, button_cancel)
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,  self._OnSort)
         grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,  self._OnFilter)
         grid.Bind(wx.grid.EVT_GRID_CELL_CHANGE,        self._OnChange)
@@ -6286,17 +6223,10 @@ class DataObjectPage(wx.PyPanel):
         sizer_header.Add(button_reset, border=5, flag=wx.RIGHT)
         sizer_header.Add(button_export)
 
-        sizer_progress.AddStretchSpacer()
-        sizer_progress.Add(self._progress_title,  border=5, flag=wx.ALIGN_CENTER | wx.BOTTOM)
-        sizer_progress.Add(self._progress_gauge,  border=5, flag=wx.ALIGN_CENTER | wx.BOTTOM)
-        sizer_progress.Add(self._progress_text,   border=5, flag=wx.ALIGN_CENTER | wx.BOTTOM)
-        sizer_progress.Add(self._progress_cancel, flag=wx.ALIGN_CENTER)
-        sizer_progress.AddStretchSpacer()
-
         sizer.Add(sizer_header, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer.Add(grid, proportion=1, flag=wx.GROW)
         sizer.Add(label_help, border=5, flag=wx.TOP | wx.BOTTOM)
-        sizer.Add(progress, proportion=1, flag=wx.ALIGN_CENTER_HORIZONTAL | wx.GROW)
+        sizer.Add(panel_export, proportion=1, flag=wx.ALIGN_CENTER_HORIZONTAL | wx.GROW)
         self._Populate()
         self._grid.SetFocus()
 
@@ -6313,7 +6243,7 @@ class DataObjectPage(wx.PyPanel):
         """
         if force:
             self._ignore_change = True
-            self._export.clear()
+            self._export.Stop()
         return self._OnClose()
 
 
@@ -6324,7 +6254,7 @@ class DataObjectPage(wx.PyPanel):
 
     def IsExporting(self):
         """Returns whether export is currently underway."""
-        return bool(self._export)
+        return self._export.IsExporting()
 
 
     def ScrollToRow(self, row):
@@ -6409,20 +6339,21 @@ class DataObjectPage(wx.PyPanel):
         Handler for clicking to close the item, sends message to parent.
         Returns whether page closed.
         """
-        if self._export and wx.OK != wx.MessageBox(
+        if self._export.IsExporting() and wx.OK != wx.MessageBox(
             "Export is currently underway, "
             "are you sure you want to cancel it?",
             conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
         ): return
-        elif self._export:
-            self._OnExportCancel()
+        if self._export.IsExporting():
+            self._export.Stop()
+            self._export.Hide()
+            self.Layout()
 
         if self.IsChanged() and wx.OK != wx.MessageBox(
             "There are unsaved changes, "
             "are you sure you want to discard them?",
             conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
         ): return
-        self._worker.stop()
         self._PostEvent(close=True)
         return True
 
@@ -6454,21 +6385,19 @@ class DataObjectPage(wx.PyPanel):
             make_iterable = self._grid.Table.GetRowIterator
             exporter = functools.partial(export.export_data, make_iterable, filename,
                 title, self._db, self._grid.Table.columns,
-                progress=self._OnExportProgress,
+                progress=self._export.OnProgress,
                 category=self._category, name=self._item["name"]
             )
-            self._export = {"filename": filename, "count": 0,
-                            "total": self._item.get("count")}
-            self._worker.work(exporter)
-            guibase.status('Exporting to "%s".', filename, log=True, flash=True)
+            opts = {"filename": filename, "callable": exporter,
+                    "total": self._item.get("count"),
+                    "is_total_estimated": self._item.get("is_count_estimated")}
 
-            self._progress_title.Label = 'Exporting to "%s".' % filename
-            if self._export["total"] is None: self._progress_gauge.Pulse()
-            else: self._progress_gauge.Value = 0
-            self._progress_text.Label  = ""
+            self.Freeze()
             for x in self.Children: x.Hide()
-            self._panel_progress.Show()
+            self._export.Show()
+            self._export.Export(opts)
             self.Layout()
+            self.Thaw()
         except Exception as e:
             msg = "Error saving %s."
             logger.exception(msg, filename)
@@ -6477,69 +6406,15 @@ class DataObjectPage(wx.PyPanel):
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
-    def _OnExportCancel(self, event=None):
+    def _OnExportClose(self):
         """
-        Handler for cancelling export, restores page controls.
+        Handler for closing export panel.
         """
-        if not self or not self._export: return
-
-        if event and wx.OK != wx.MessageBox(
-            "Export is currently underway, are you sure you want to cancel it?",
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
-        ): return
-            
-        self._OnExportResult()
-
-
-    def _OnExportProgress(self, count=None):
-        """
-        Handler for export progress report, updates progress bar.
-        Returns true if export should continue.
-        """
-        if not self or not self._export: return
-
-        if count is not None:
-            self._panel_progress.Freeze()
-            total = self._export["total"]
-            if total is None:
-                text = util.plural("row", count)
-            else:
-                percent = int(100 * util.safedivf(count, total))
-                text = "%s%% (%s of %s)" % (percent, util.plural("row", count), total)
-                self._progress_gauge.Value = percent
-            self._progress_text.Label = text
-            self._panel_progress.Layout()
-            self._panel_progress.Thaw()
-        return True
-
-
-    def _OnExportWorker(self, result):
-        """
-        Handler for export worker report, invokes _OnExportResult in callafter.
-        """
-        wx.CallAfter(self._OnExportResult, result)
-
-
-    def _OnExportResult(self, result=None):
-        """
-        Handler for export result, shows error or success, opens file on success.
-        """
-        if not self or not self._export: return
-
-        export, self._export = self._export, {}
         self.Freeze()
         for x in self.Children: x.Show()
-        self._panel_progress.Hide()
+        self._export.Hide()
         self.Layout()
         self.Thaw()
-
-        if not result: return
-        elif "error" in result:
-            error = "Error saving %s:\n\n%s" % (export["filename"], result["error"])
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
-        elif "done" in result:
-            guibase.status('Exported "%s".', export["filename"], log=True, flash=True)
-            util.start_file(export["filename"])
 
 
     def _OnInsert(self, event):
@@ -8888,3 +8763,250 @@ class SchemaObjectPage(wx.PyPanel):
         self._db.execute("DROP %s %s" % (self._category, grammar.quote(self._item["name"])))
         self._editmode = False
         self._PostEvent(close=True, updated=True)
+
+
+
+class ExportProgressPanel(wx.PyPanel):
+    """
+    Panel for running exports and showing their progress.
+    """
+
+    def __init__(self, parent, onclose):
+        wx.PyPanel.__init__(self, parent)
+
+        self._exports = []   # [{filename, callable, pending, count, ?total, ?is_total_estimated}]
+        self._ctrls   = []   # [{title, gauge, text, cancel, open, folder}]
+        self._current = None # Current export index
+        self._onclose = onclose
+        self._worker = workers.WorkerThread(self._OnWorker)
+
+        sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
+        panel_exports = self._panel = wx.lib.scrolledpanel.ScrolledPanel(self)
+        panel_exports.Sizer = wx.BoxSizer(wx.VERTICAL)
+        panel_exports.SetupScrolling(scroll_x=False)
+
+        button_close  = self._button_close  = wx.Button(self, label="Close")
+
+        self.Bind(wx.EVT_BUTTON, self._OnClose, button_close)
+
+        sizer.AddStretchSpacer()
+        sizer.Add(panel_exports, proportion=5, flag=wx.ALIGN_CENTER | wx.GROW)
+        sizer.AddStretchSpacer(0)
+        sizer.Add(button_close, border=16, flag=wx.ALL | wx.ALIGN_RIGHT)
+
+
+    def Export(self, exports):
+        """
+        Run export.
+
+        @param   exports  [{filename, callable, ?total, ?is_total_estimated}]
+        """
+        if isinstance(exports, dict): exports = [exports]
+        self._exports = [dict(x, count=0, pending=True) for x in exports]
+        self._Populate()
+        self._RunNext()
+
+
+    def IsExporting(self):
+        """Returns whether export is currently underway."""
+        return self._worker.is_working()
+
+
+    def GetIncomplete(self):
+        """Returns a list of running and pending exports."""
+        return [x for x in self._exports if x["pending"]]
+        
+
+    def OnProgress(self, index=0, count=None):
+        """
+        Handler for export progress report, updates progress bar.
+        Returns true if export should continue.
+        """
+        if not self or not self._exports: return
+
+        opts, ctrls = (x[index] for x in (self._exports, self._ctrls))
+
+        if opts["pending"] and count is not None:
+            ctrls["text"].Parent.Freeze()
+            total = opts.get("total")
+            if total is None:
+                text = util.plural("row", count)
+            else:
+                percent = int(100 * util.safedivf(count, total))
+                if opts.get("is_total_estimated"):
+                    total = int(math.ceil(total / 100.) * 100)
+                text = "%s%% (%s of %s%s)" % (percent, util.plural("row", count),
+                       "~" if opts.get("is_total_estimated") else "", total)
+                ctrls["gauge"].Value = percent
+            ctrls["text"].Label = text
+            ctrls["text"].Parent.Layout()
+            ctrls["text"].Parent.Thaw()
+            opts["count"] = count
+
+        return opts["pending"]
+
+
+    def Stop(self):
+        """Stops running exports, if any."""
+        self._worker.stop_work(drop_results=True)
+        self._exports = []
+        self._current = None
+
+
+    def _Populate(self):
+        """
+        Populates export rows, clearing previous content if any.
+        """
+        self._ctrls = []
+
+        self.Freeze()
+        panel = self._panel
+        while panel.Sizer.Children: panel.Sizer.Remove(0)
+        for c in panel.Children: c.Destroy()
+
+        for i, opts in enumerate(self._exports):
+            ctrls = {}
+            sizer = wx.BoxSizer(wx.VERTICAL)
+            sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+            parent = wx.Panel(panel)
+            parent.Sizer = wx.BoxSizer(wx.VERTICAL)
+
+            title  = ctrls["title"]  = wx.StaticText(parent, label='Export to "%s"' % opts["filename"])
+            gauge  = ctrls["gauge"]  = wx.Gauge(parent, range=100, size=(300,-1),
+                                        style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
+            text   = ctrls["text"]   = wx.StaticText(parent)
+            cancel = ctrls["cancel"] = wx.Button(panel, label="Cancel")
+            open   = ctrls["open"]   = wx.Button(panel, label="Open")
+            folder = ctrls["folder"] = wx.Button(panel, label="Open directory")
+            open.Hide(), folder.Hide()
+
+            sizer_buttons.AddStretchSpacer()
+            sizer_buttons.Add(cancel)
+            sizer_buttons.Add(open,   border=5, flag=wx.LEFT)
+            sizer_buttons.Add(folder, border=5, flag=wx.LEFT)
+            sizer_buttons.AddStretchSpacer()
+
+            parent.Sizer.Add(title, flag=wx.ALIGN_CENTER)
+            parent.Sizer.Add(gauge, flag=wx.ALIGN_CENTER)
+            parent.Sizer.Add(text,  flag=wx.ALIGN_CENTER)
+
+            sizer.Add(parent, flag=wx.ALIGN_CENTER)
+            sizer.Add(sizer_buttons, border=5, flag=wx.TOP | wx.ALIGN_CENTER)
+
+            panel.Sizer.Add(sizer, border=10, flag=wx.ALL | wx.ALIGN_CENTER | wx.GROW)
+
+            self.Bind(wx.EVT_BUTTON, functools.partial(self._OnCancel, i), cancel)
+            self.Bind(wx.EVT_BUTTON, functools.partial(self._OnOpen,   i), open)
+            self.Bind(wx.EVT_BUTTON, functools.partial(self._OnFolder, i), folder)
+
+            self._ctrls.append(ctrls)
+
+        self.Layout()
+        self.Thaw()
+
+
+    def _RunNext(self):
+        """Starts next pending export, if any."""
+        index = next((i for i, x in enumerate(self._exports)
+                      if x["pending"]), None)
+        if index is None: return
+
+        opts, self._current = self._exports[index], index
+        guibase.status('Exporting "%s".', opts["filename"], log=True, flash=True)
+        self.Freeze()
+        self._ctrls[index]["title"].Label = 'Exporting "%s".' % opts["filename"]
+        self._ctrls[index]["gauge"].Pulse()
+        self._ctrls[index]["text"].Label = "0%"
+        self.Layout()
+        self.Thaw()
+        self._worker.work(opts["callable"])
+
+
+    def _OnClose(self, event=None):
+        """Confirms with popup if exports underway, notifies parent."""
+        if self._worker.is_working() and wx.OK != wx.MessageBox(
+            "Export is currently underway, are you sure you want to cancel it?",
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+        ): return
+            
+        self._worker.stop_work(drop_results=True)
+        self._exports = []
+        self._current = None
+        self._Populate()
+        self._onclose()
+
+
+    def _OnCancel(self, index, event=None):
+        """Handler for cancelling an export, starts next if any."""
+        if not self or not self._exports: return
+
+        if index == self._current:
+            msg = "Export is currently underway, are you sure you want to cancel it?"
+        else:
+            msg = "Are you sure you want to cancel this export?"
+        if wx.OK != wx.MessageBox(
+            msg, conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+        ): return
+
+        if self._exports[index]["pending"]: self._OnResult(self._exports[index])
+
+
+    def _OnResult(self, result):
+        """
+        Handler for export result, shows error if any, starts next if any.
+        Cancels export if no "done" or "error" in result.
+
+        @param   result  {callable, ?done, ?error}
+        """
+        if not self or not self._exports: return
+
+        index = next((i for i, x in enumerate(self._exports)
+                      if x["callable"] == result["callable"]), None)
+        if index is None: return
+
+        self.Freeze()
+        opts, ctrls = (x[index] for x in (self._exports, self._ctrls))
+        if "error" in result:
+            self._current = None
+            if opts["pending"]: ctrls["text"] = result["error"]
+            if opts["pending"] and len(self._exports) > 1:
+                error = "Error saving %s:\n\n%s" % (opts["filename"], result["error"])
+                wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+        elif "done" in result:
+            guibase.status('Exported "%s".', opts["filename"], log=True, flash=True)
+            if opts["pending"]:
+                ctrls["gauge"].Value = 100
+                ctrls["title"].Label = 'Exported "%s".' % opts["filename"]
+                ctrls["text"].Label = util.plural("row", opts["count"])
+                ctrls["open"].Show()
+                ctrls["folder"].Show()
+            self._current = None
+        else: # User cancel
+            ctrls["title"].Label = 'Export to "%s".' % opts["filename"]
+            ctrls["text"].Label = "Cancelled"
+            if index == self._current:
+                self._worker.stop_work(drop_results=True)
+                self._current = None
+
+        ctrls["cancel"].Hide()
+        ctrls["gauge"].Value = ctrls["gauge"].Value # Stop pulse
+        opts["pending"] = False
+
+        if self._current is None: wx.CallAfter(self._RunNext)
+        self.Layout()
+        self.Thaw()
+
+
+    def _OnOpen(self, index, event=None):
+        """Handler for opening export file."""
+        util.start_file(self._exports[index]["filename"])
+
+
+    def _OnFolder(self, index, event=None):
+        """Handler for opening export file directory."""
+        util.start_file(os.path.split(self._exports[index]["filename"])[0])
+
+
+    def _OnWorker(self, result):
+        """Handler for export worker report, invokes _OnResult in a callafter."""
+        wx.CallAfter(self._OnResult, result)

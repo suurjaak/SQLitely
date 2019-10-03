@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.10.2019
+@modified    03.10.2019
 ------------------------------------------------------------------------------
 """
 import hashlib
@@ -116,7 +116,8 @@ class WorkerThread(threading.Thread):
 
             if self._drop_results: continue # while
             if error: self.postback({"error": error})
-            else:     self.postback({"done": True, "result": result})
+            else:
+                self.postback({"done": True, "result": result, "callable": func})
             self._is_working = False
 
 

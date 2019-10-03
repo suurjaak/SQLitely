@@ -85,6 +85,7 @@ def export_data(make_iterable, filename, title, db, columns,
     try:
         with open(filename, "w") as f:
             if category and name: db.lock(category, name, make_iterable)
+            count = 0
 
             if is_csv or is_xlsx:
                 if is_csv:
@@ -113,6 +114,7 @@ def export_data(make_iterable, filename, title, db, columns,
                             val = val.encode("latin1", "replace")
                         values.append(val)
                     writer.writerow(values)
+                    count = i
                     if not i % 100 and progress and not progress(count=i):
                         break # for i, row
                 if is_xlsx: writer.close()
@@ -169,14 +171,15 @@ def export_data(make_iterable, filename, title, db, columns,
                            templates.DATA_SQL if is_sql else templates.DATA_TXT,
                            strip=False, escape=is_html)
                 template.stream(f, namespace)
+                count = namespace["row_count"]
 
-            result = progress() if progress else True
+            result = progress(count=count) if progress else True
     finally:
         if tmpfile:    util.try_until(tmpfile.close)
         if tmpname:    util.try_until(lambda: os.unlink(tmpname))
         if not result: util.try_until(lambda: os.unlink(filename))
         if category and name: db.unlock(category, name, make_iterable)
-            
+
     return result
 
 
