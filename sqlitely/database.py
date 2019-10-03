@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.10.2019
+@modified    03.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -602,10 +602,14 @@ class Database(object):
         if not self.locks[category]:       self.locks.pop(category)
 
 
-    def is_locked(self, category, name):
-        """Returns whether there are currently locks on schema object."""
-        category, name = category.lower(), name.lower()
-        return category in self.locks and self.locks[category].get(name)
+    def is_locked(self, category=None, name=None):
+        """
+        Returns whether there are currently locks on specified schema object,
+        or any category object, or any object.
+        """
+        category, name = (x.lower() if x else x for x in (category, name))
+        return self.locks[category].get(name) if name and category in self.locks \
+               else self.locks.get(category) if not name and category else self.locks
 
 
     def has_rowid(self, table):

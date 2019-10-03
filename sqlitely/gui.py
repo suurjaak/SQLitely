@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.10.2019
+@modified    03.10.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2588,7 +2588,7 @@ class DatabasePage(wx.Panel):
                                          "running ANALYZE on tables")
         button_vacuum.SetToolTipString("Rebuild the database file, repacking "
                                        "it into a minimal amount of disk space")
-        button_fks.SetToolTipString("Open database file directory")
+        button_open_folder.SetToolTipString("Open database file directory")
         button_refresh.SetToolTipString("Refresh file information")
 
         sizer_buttons = wx.FlexGridSizer(cols=5, vgap=5)
@@ -3197,6 +3197,11 @@ class DatabasePage(wx.Panel):
         """
         Handler for vacuuming the database.
         """
+        if self.db.is_locked(): return wx.MessageBox(
+            "Database is currently locked, cannot vacuum.",
+            conf.Title, wx.OK | wx.ICON_INFORMATION
+        )
+
         msg = "Vacuuming %s." % self.db.name
         guibase.status(msg, log=True, flash=True)
         busy = controls.BusyPanel(self, msg)
