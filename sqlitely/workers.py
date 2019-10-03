@@ -384,6 +384,18 @@ class AnalyzerThread(WorkerThread):
         self._queue.put(None) # To wake up thread waiting on queue
 
 
+    def stop_work(self, drop_results=False):
+        """
+        Signals to stop the currently ongoing work, if any.
+        """
+        self._is_working = False
+        self._drop_results = drop_results
+        if self._process:
+            try: self._process.kill()
+            except Exception: e
+        self._process = None
+
+
     def run(self):
         self._is_running = True
         while self._is_running:
@@ -431,7 +443,7 @@ class AnalyzerThread(WorkerThread):
             except Exception as e:
                 logger.exception("Error processing statistics for %s.", path)
                 error = util.format_exc(e)
-            if not rows and not error:
+            if not rows and not error and self._is_working:
                 error = "Database is empty."
 
             if self._drop_results: continue # while

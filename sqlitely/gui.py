@@ -2630,18 +2630,21 @@ class DatabasePage(wx.Panel):
                                         (16, 16))
         bmp3 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR,
                                         (16, 16))
+        bmp4 = images.ToolbarStopped.Bitmap
         tb_stats = self.tb_stats = wx.ToolBar(panel_stats,
                                       style=wx.TB_FLAT | wx.TB_NODIVIDER)
         tb_stats.SetToolBitmapSize(bmp1.Size)
         tb_stats.AddLabelTool(wx.ID_REFRESH, "", bitmap=bmp1, shortHelp="Refresh statistics")
         tb_stats.AddLabelTool(wx.ID_COPY,    "", bitmap=bmp2, shortHelp="Copy statistics to clipboard as text")
         tb_stats.AddLabelTool(wx.ID_SAVE,    "", bitmap=bmp3, shortHelp="Save statistics HTML to file")
+        tb_stats.AddLabelTool(wx.ID_STOP,    "", bitmap=bmp4, shortHelp="Stop statistics analysis")
         tb_stats.Realize()
         tb_stats.EnableTool(wx.ID_COPY, False)
         tb_stats.EnableTool(wx.ID_SAVE, False)
         tb_stats.Bind(wx.EVT_TOOL, self.on_update_statistics, id=wx.ID_REFRESH)
         tb_stats.Bind(wx.EVT_TOOL, self.on_copy_statistics,   id=wx.ID_COPY)
         tb_stats.Bind(wx.EVT_TOOL, self.on_save_statistics,   id=wx.ID_SAVE)
+        tb_stats.Bind(wx.EVT_TOOL, self.on_stop_statistics,   id=wx.ID_STOP)
 
         html_stats = self.html_stats = wx.html.HtmlWindow(panel_stats)
         html_stats.Bind(wx.EVT_SCROLLWIN, self.on_scroll_html_stats)
@@ -2778,6 +2781,20 @@ class DatabasePage(wx.Panel):
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
+    def on_stop_statistics(self, event=None):
+        """Stops current analyzer work."""
+        if not self.worker_analyzer.is_working(): return
+
+        self.worker_analyzer.stop_work(drop_results=True)
+        self.html_stats.SetPage("")
+        self.html_stats.BackgroundColour = conf.BgColour
+        self.tb_stats.EnableTool(wx.ID_REFRESH, True)
+        self.tb_stats.EnableTool(wx.ID_COPY, False)
+        self.tb_stats.EnableTool(wx.ID_SAVE, False)
+        self.tb_stats.SetToolNormalBitmap(wx.ID_STOP,
+                                          images.ToolbarStopped.Bitmap)
+
+
     def on_analyzer_result(self, result):
         """
         Handler for getting results from analyzer thread, populates statistics.
@@ -2860,6 +2877,9 @@ class DatabasePage(wx.Panel):
         self.tb_stats.EnableTool(wx.ID_REFRESH, bool(self.statistics))
         self.tb_stats.EnableTool(wx.ID_COPY, "data" in self.statistics)
         self.tb_stats.EnableTool(wx.ID_SAVE, "data" in self.statistics)
+        bmp = images.ToolbarStopped.Bitmap if self.worker_analyzer.is_working() \
+              else images.ToolbarStop.Bitmap
+        self.tb_stats.SetToolNormalBitmap(wx.ID_STOP, bmp)
 
 
     def on_pragma_change(self, event):
