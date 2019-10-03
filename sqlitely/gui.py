@@ -2138,8 +2138,6 @@ class DatabasePage(wx.Panel):
         panel1 = wx.Panel(parent=splitter)
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_topleft = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_topleft.Add(wx.StaticText(parent=panel1, label="Data:"),
-                          flag=wx.ALIGN_CENTER_VERTICAL)
         button_refresh = self.button_refresh_data = \
             wx.Button(panel1, label="Refresh")
         sizer_topleft.AddStretchSpacer()
@@ -2247,8 +2245,6 @@ class DatabasePage(wx.Panel):
 
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_topleft = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_topleft.Add(wx.StaticText(parent=panel1, label="Schema:"),
-                          flag=wx.ALIGN_CENTER_VERTICAL)
         sizer_topleft.AddStretchSpacer()
         sizer_topleft.Add(button_refresh)
         sizer_topleft.Add(button_new, border=5, flag=wx.LEFT)
