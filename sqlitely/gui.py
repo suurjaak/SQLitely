@@ -3299,7 +3299,8 @@ class DatabasePage(wx.Panel):
         self.edit_info_modified.Value = \
             self.db.last_modified.strftime("%Y-%m-%d %H:%M:%S")
 
-        if not self.db.temporary or self.db.filesize:
+        if (not self.db.temporary or self.db.filesize) \
+        and not self.worker_checksum.is_working():
             self.edit_info_sha1.Value = "Analyzing.."
             self.edit_info_md5.Value  = "Analyzing.."
             self.worker_checksum.work(self.db.filename)
