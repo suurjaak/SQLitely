@@ -4478,6 +4478,9 @@ class DatabasePage(wx.Panel):
 
     def on_data_page_event(self, event):
         """Handler for a message from DataObjectPage."""
+        if getattr(event, "export_db", False):
+            return self.on_export_data_base(event.tables, selects=event.selects)
+
         idx = self.notebook_data.GetPageIndex(event.source)
         close, modified, updated = (getattr(event, x, None)
                                     for x in ("close", "modified", "updated"))
@@ -4570,16 +4573,18 @@ class DatabasePage(wx.Panel):
         self.Thaw()
 
 
-    def on_export_data_base(self, tables, data=True, event=None):
+    def on_export_data_base(self, tables, data=True, selects=None, event=None):
         """
         Handler for exporting one or more tables to another database,
         opens file dialog and performs direct copy.
         By default copies both structure and data.
+
+        @param   selects  {table name: SELECT SQL if not using default}
         """
         exts = ";".join("*" + x for x in conf.DBExtensions)
         wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
         dialog = wx.FileDialog(
-            parent=self, message="Select database to export tables to",
+            parent=self, message="Select database to export to",
             defaultFile="", wildcard=wildcard,
             style=wx.FD_OPEN | wx.RESIZE_BORDER
         )
@@ -4672,8 +4677,15 @@ class DatabasePage(wx.Panel):
                     logger.info("Creating table %s in %s, using %s.",
                                 grammar.quote(table2, force=True), filename2, create_sql)
                     self.db.execute(create_sql)
-                    if data: self.db.execute(insert_sql % (grammar.quote(table2),
-                                             grammar.quote(table)))
+                    if data:
+                        if selects and table in selects:
+                            logger.info("selcets be %s", selects) # TODO remove
+                            myinsert_sql = "INSERT INTO main2.%s %s" % (
+                                           grammar.quote(table2), selects[table])
+                        else:
+                            myinsert_sql = insert_sql % (grammar.quote(table2),
+                                                         grammar.quote(table))
+                        self.db.execute(myinsert_sql)
 
                     # Copy table indexes and triggers
                     for category in "index", "trigger":
@@ -5172,6 +5184,38 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
         sql = self.sql if self.is_query \
               else "SELECT * FROM %s" % grammar.quote(self.name)
         return generator(self.db.execute(self.sql))
+
+
+    def GetSQL(self, sort=False, filter=False, schema=None):
+        """
+        Returns the SQL statement for current table or query, optionally
+        with current sort and filter settings.
+        """
+        result = self.sql if self.is_query else \
+                 "SELECT * FROM %s%s" % ((grammar.quote(schema) + ".") if schema else "",
+                                         grammar.quote(self.name))
+        where, order = "", ""
+
+        if filter and self.filters:
+            part = ""
+            for col, filter_value in self.filters.items():
+                column_data = self.columns[col]
+                if self.db.get_affinity(column_data["type"]) in ("INTEGER", "REAL"):
+                    part = "%s = %s" % (column_data["name"], filter_value)
+                else:
+                    v = grammar.quote(filter_value, force=True)[1:-1]
+                    part = '%s LIKE "%%%s%%"' % (column_data["name"], v)
+                if part: where += (" AND " if where else "WHERE ") + part
+
+        if sort and self.sort_column is not None:
+            order = "ORDER BY %s%s" % (
+                grammar.quote(self.columns[self.sort_column]["name"]),
+                "" if self.sort_ascending else " DESC"
+            )
+
+        if where: result += " " + where
+        if order: result += " " + order
+        return result
 
 
     def SetValue(self, row, col, val):
@@ -6217,10 +6261,13 @@ class DataObjectPage(wx.PyPanel):
             tb.EnableTool(wx.ID_DELETE, False)
         tb.Realize()
 
-        button_reset  = wx.Button(self, label="&Reset filter/sort")
-        button_export = wx.Button(self, label="&Export to file")
-        button_reset.ToolTipString  = "Reset all applied sorting and filtering"
-        button_export.ToolTipString = "Export rows to a file"
+        button_reset     = wx.Button(self, label="&Reset filter/sort")
+        button_export    = wx.Button(self, label="&Export to file")
+        button_export_db = wx.Button(self, label="Export to &database")
+        button_reset.ToolTipString     = "Reset all applied sorting and filtering"
+        button_export.ToolTipString    = "Export to file"
+        button_export_db.ToolTipString = "Export to another database"
+        button_export_db.Show("table" == self._category)
 
         grid = self._grid = wx.grid.Grid(self)
         grid.ToolTipString = "Double click on column header to sort, right click to filter."
@@ -6242,6 +6289,7 @@ class DataObjectPage(wx.PyPanel):
         self.Bind(wx.EVT_TOOL,   self._OnRollback,     id=wx.ID_UNDO)
         self.Bind(wx.EVT_BUTTON, self._OnResetView,    button_reset)
         self.Bind(wx.EVT_BUTTON, self._OnExport,       button_export)
+        self.Bind(wx.EVT_BUTTON, self._OnExportToDB,   button_export_db)
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,  self._OnSort)
         grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,  self._OnFilter)
         grid.Bind(wx.grid.EVT_GRID_CELL_CHANGE,        self._OnChange)
@@ -6254,8 +6302,9 @@ class DataObjectPage(wx.PyPanel):
 
         sizer_header.Add(tb)
         sizer_header.AddStretchSpacer()
-        sizer_header.Add(button_reset, border=5, flag=wx.RIGHT)
-        sizer_header.Add(button_export)
+        sizer_header.Add(button_reset)
+        sizer_header.Add(button_export, border=5, flag=wx.LEFT)
+        sizer_header.Add(button_export_db, border=5, flag=wx.LEFT)
 
         sizer.Add(sizer_header, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer.Add(grid, proportion=1, flag=wx.GROW)
@@ -6390,6 +6439,13 @@ class DataObjectPage(wx.PyPanel):
         ): return
         self._PostEvent(close=True)
         return True
+
+
+    def _OnExportToDB(self, event=None):
+        """Handler for exporting table grid contents to another database."""
+        tables = [self._item["name"]]
+        selects = {self._item["name"]: self._grid.Table.GetSQL(sort=True, filter=True)}
+        self._PostEvent(export_db=True, tables=tables, selects=selects)
 
 
     def _OnExport(self, event=None):
@@ -6662,6 +6718,7 @@ class DataObjectPage(wx.PyPanel):
         Handler for scrolling the grid, seeks ahead if nearing the end of
         retrieved rows.
         """
+        if not self: return
         event.Skip()
         SEEKAHEAD_POS_RATIO = 0.8
 
