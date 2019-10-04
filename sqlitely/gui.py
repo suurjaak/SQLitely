@@ -4072,6 +4072,21 @@ class DatabasePage(wx.Panel):
                     newdata["meta"]["table"] = data["name"]
             self.add_schema_page(newdata)
             tree.Expand(item)
+        def copy_related(*_, **__):
+            sqls = [self.db.get_sql(data["type"], data["name"])]
+            relateds = self.db.get_related(data["type"], data["name"])
+            for category, items in relateds.items():
+                for item in items:
+                    sqls.append(self.db.get_sql(category, item["name"]))
+                    if "table" == category:
+                        for x in self.db.get_category("index", table=item["name"]).values() \
+                        if "index" != data["type"] else ():
+                            sqls.append(self.db.get_sql("index", x["name"]))
+                        for x in self.db.get_category("trigger", table=item["name"]).values() \
+                        if "trigger" != data["type"] else ():
+                            if x["meta"]["table"].lower() != item["name"].lower(): continue
+                            sqls.append(self.db.get_sql("trigger", x["name"]))
+            clipboard_copy("\n".join(sqls))
         def delete_items(items, *_, **__):
             extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
                     if "table" == items[0]["type"] else ""
@@ -4231,6 +4246,7 @@ class DatabasePage(wx.Panel):
             item_open_data = wx.MenuItem(menu, -1, "Open %s &data" % data["type"])
             item_copy      = wx.MenuItem(menu, -1, "&Copy name")
             item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s &SQL" % data["type"])
+            item_copy_rel  = wx.MenuItem(menu, -1, "Copy all &related SQL")
             item_delete    = wx.MenuItem(menu, -1, 'Delete %s' % data["type"])
 
             item_name.Font = boldfont
@@ -4243,6 +4259,7 @@ class DatabasePage(wx.Panel):
                       id=item_copy.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
                       functools.partial(self.db.get_sql, **sqlkws)), id=item_copy_sql.GetId())
+            menu.Bind(wx.EVT_MENU, copy_related, id=item_copy_rel.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, delete_items, [data]),
                       id=item_delete.GetId())
 
@@ -4252,6 +4269,7 @@ class DatabasePage(wx.Panel):
             menu.AppendItem(item_open_data)
             menu.AppendItem(item_copy)
             menu.AppendItem(item_copy_sql)
+            menu.AppendItem(item_copy_rel)
 
             if "table" == data["type"]:
                 item_database_meta = wx.MenuItem(menu, -1, 'Export %s str&ucture to another database' % data["type"])
@@ -4886,7 +4904,8 @@ class DatabasePage(wx.Panel):
                 itemdata = dict(item, parent=categorydata)
                 child = tree.AppendItem(top, util.unprint(item["name"]))
                 tree.SetItemPyData(child, itemdata)
-                columns, childtext,  = None, ""
+                columns, childtext = None, ""
+                relateds = self.db.get_related(category, item["name"])
 
                 if "table" == category:
                     columns = item.get("columns") or []
@@ -4922,18 +4941,7 @@ class DatabasePage(wx.Panel):
                         tree.SetItemText(subchild, col.get("type", ""), 1)
                         tree.SetItemPyData(subchild, dict(col, parent=itemdata, type="column"))
                 for subcategory in subcategories:
-                    subitems = []
-                    if "table" == category:
-                         subitems = self.db.get_category(subcategory, table=item["name"]).values()
-                    else:
-                        itemmap = {}
-                        if "view" == category:
-                             itemmap.update(self.db.get_category(subcategory, table=item["name"]))
-                        if item["meta"].get("__tables__"):
-                            subitems = filter(bool, (self.db.get_category(subcategory, x)
-                                                     for x in item["meta"]["__tables__"]))
-                            itemmap.update({x["name"].lower(): x for x in subitems})
-                            subitems = [v for k, v in sorted(itemmap.items())]
+                    subitems = relateds.get(subcategory, [])
                     if not subitems and not emptysubs: continue # for subcategory
 
                     t = util.plural(subcategory).capitalize()

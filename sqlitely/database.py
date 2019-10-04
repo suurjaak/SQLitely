@@ -762,7 +762,6 @@ class Database(object):
                         opts["is_count_estimated"] = opts0["is_count_estimated"]
                         
 
-
     def get_count(self, table):
         """
         Returns {"count": int, ?"is_count_estimated": bool}.
@@ -820,6 +819,33 @@ class Database(object):
                 continue # for myname, opts
             result[myname] = opts
         return copy.deepcopy(result)
+
+
+    def get_related(self, category, name):
+        """
+        Returns database objects related to specified object in any way,
+        like triggers selecting from a view, as {category: [{item}, ]}.
+        """
+        result = {}
+        SUBCATEGORIES = {"table":   ["index", "trigger", "view"],
+                         "index":   ["table"],
+                         "trigger": ["table", "view"],
+                         "view":    ["table", "trigger", "view"]}
+        category, name = category.lower(), name.lower()
+        if category not in SUBCATEGORIES: return ""
+        item = self.get_category(category, name)
+
+        for subcategory in SUBCATEGORIES.get(category, []):
+            itemmap = {}
+            if category in ("table", "view"):
+                itemmap.update(self.get_category(subcategory, table=name))
+            items = filter(bool, (self.get_category(subcategory, x)
+                                  for x in item["meta"]["__tables__"]))
+            itemmap.update({x["name"].lower(): x for x in items})
+            if itemmap:
+                result[subcategory] = [v for k, v in sorted(itemmap.items())
+                                       if category != subcategory or k != name]
+        return result
 
 
     def get_sql(self, category=None, name=None, column=None, indent="  ",
