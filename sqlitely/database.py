@@ -462,14 +462,14 @@ class Database(object):
         #      ?meta: {full metadata}}}}
         self.schema = defaultdict(OrderedDict)
         self.connection = None
-        self.open()
+        self.open(log_error=log_error)
 
 
     def __str__(self):
         return self.name
 
 
-    def open(self):
+    def open(self, log_error=True):
         """Opens the database."""
         try:
             self.connection = sqlite3.connect(self.filename,
@@ -810,7 +810,7 @@ class Database(object):
             result = self.schema.get(category, {}).get(name)
             if table and "table" in result and result["table"].lower() not in table:
                 result = None
-            return result
+            return copy.deepcopy(result)
 
         result = OrderedDict()
         for myname, opts in self.schema.get(category, {}).items():
@@ -819,7 +819,7 @@ class Database(object):
             or table & set(opts["meta"].get("__tables__", []))):
                 continue # for myname, opts
             result[myname] = opts
-        return result
+        return copy.deepcopy(result)
 
 
     def get_sql(self, category=None, name=None, column=None, indent="  ",
