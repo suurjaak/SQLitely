@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.10.2019
+@modified    04.10.2019
 ------------------------------------------------------------------------------
 """
 import hashlib
@@ -430,6 +430,10 @@ class AnalyzerThread(WorkerThread):
                 if error: error = error.split("\n")[0].strip()
                 else: error = util.format_exc(e)
                 logger.exception("Error getting statistics for %s: %s.", path, error)
+            else:
+                if not output.strip().startswith("/**"):
+                    output, error = "", output.split("\n")[0].strip()
+                    logger.info("Error getting statistics for %s: %s.", path, error)
             self._process = None
 
             try:
