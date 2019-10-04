@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.10.2019
+@modified    04.10.2019
 ------------------------------------------------------------------------------
 """
 import re
@@ -19,7 +19,7 @@ import re
 #from sqlitely.lib import util
 
 """Regex for matching unprintable characters (\x00 etc)."""
-SAFEBYTE_RGX = re.compile(r"[\x00-\x1f,\x7f-\xa0]")
+SAFEBYTE_RGX = re.compile(r"[\x00-\x1f\x7f-\xa0]")
 
 """Replacer callback for unprintable characters (\x00 etc)."""
 SAFEBYTE_REPL = lambda m: m.group(0).encode("unicode-escape")

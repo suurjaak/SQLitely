@@ -59,7 +59,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    01.10.2019
+@modified    04.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -2094,7 +2094,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     AUTOCOMP_LEN = 2
     FONT_FACE = "Courier New" if os.name == "nt" else "Courier"
     """Regex for matching unprintable characters (\x00 etc)."""
-    SAFEBYTE_RGX = re.compile(r"[\x00-\x20,\x7f-\xa0]")
+    SAFEBYTE_RGX = re.compile(r"[\x00-\x20\x7f-\xa0]")
 
 
     def __init__(self, *args, **kwargs):
