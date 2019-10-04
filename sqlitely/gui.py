@@ -4886,12 +4886,11 @@ class DatabasePage(wx.Panel):
                 itemdata = dict(item, parent=categorydata)
                 child = tree.AppendItem(top, util.unprint(item["name"]))
                 tree.SetItemPyData(child, itemdata)
-                columns, subcategories, childtext = None, [], ""
+                columns, childtext,  = None, ""
 
-                subcategories = ["table"]
                 if "table" == category:
                     columns = item.get("columns") or []
-                    subcategories = ["index", "trigger", "view"]
+                    subcategories, emptysubs = ["index", "trigger", "view"], True
                 elif "index" == category:
                     childtext = "ON " + grammar.quote(item["meta"]["table"])
                     columns = copy.deepcopy(item["meta"].get("columns") or [])
@@ -4901,13 +4900,16 @@ class DatabasePage(wx.Panel):
                             tcol = next((x for x in table["columns"]
                                          if x["name"] == col["name"]), None)
                             if tcol: col["type"] = tcol.get("type", "")
+                    subcategories, emptysubs = ["table"], True
                 elif "trigger" == category:
                     childtext = " ".join(filter(bool, (item["meta"].get("upon"), item["meta"]["action"],
                                                        "ON", grammar.quote(item["meta"]["table"]))))
+                    subcategories, emptysubs = ["table", "view"], False
                 elif "view" == category:
                     childtext = "ON " + ", ".join(grammar.quote(x)
                         for x in item["meta"].get("__tables__") or [])
                     columns = item.get("columns") or []
+                    subcategories, emptysubs = ["table", "trigger", "view"], False
 
                 tree.SetItemText(child, childtext, 1)
 
@@ -4923,9 +4925,16 @@ class DatabasePage(wx.Panel):
                     subitems = []
                     if "table" == category:
                          subitems = self.db.get_category(subcategory, table=item["name"]).values()
-                    elif item["meta"].get("__tables__"):
-                         subitems = filter(bool, (self.db.get_category(subcategory, x)
-                                                  for x in item["meta"]["__tables__"]))
+                    else:
+                        itemmap = {}
+                        if "view" == category:
+                             itemmap.update(self.db.get_category(subcategory, table=item["name"]))
+                        if item["meta"].get("__tables__"):
+                            subitems = filter(bool, (self.db.get_category(subcategory, x)
+                                                     for x in item["meta"]["__tables__"]))
+                            itemmap.update({x["name"].lower(): x for x in subitems})
+                            subitems = [v for k, v in sorted(itemmap.items())]
+                    if not subitems and not emptysubs: continue # for subcategory
 
                     t = util.plural(subcategory).capitalize()
                     if subitems: t += " (%s)" % len(subitems)
