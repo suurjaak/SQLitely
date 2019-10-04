@@ -4011,7 +4011,7 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, category, names),
                      id=item_file.GetId())
             if item_database:
-                menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, names, True),
+                menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, names, True, None),
                          id=item_database.GetId())
 
         if tree.HasChildren(item):
@@ -4178,7 +4178,7 @@ class DatabasePage(wx.Panel):
 
                 if "table" == data["category"]:
                     item_database_meta = wx.MenuItem(menu, -1, "Export all %s str&uctures to another database" % data["category"])
-                    menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, names, False),
+                    menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, names, False, None),
                              id=item_database_meta.GetId())
                     menu.AppendItem(item_database_meta)
 
@@ -4273,7 +4273,7 @@ class DatabasePage(wx.Panel):
 
             if "table" == data["type"]:
                 item_database_meta = wx.MenuItem(menu, -1, 'Export %s str&ucture to another database' % data["type"])
-                menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, [data["name"]], False),
+                menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, [data["name"]], False, None),
                          id=item_database_meta.GetId())
                 menu.AppendItem(item_database_meta)
 
@@ -4607,6 +4607,7 @@ class DatabasePage(wx.Panel):
                     '- keep same name to overwrite table %(table2)s,\n'
                     '- enter another name to export table %(table)s as,\n'
                     '- or set blank to skip table %(table)s.')
+        fks_on = self.db.execute("PRAGMA foreign_keys").fetchone()["foreign_keys"]
         insert_sql, success = "INSERT INTO main2.%s SELECT * FROM main.%s", False
         db1_tables = set(self.db.get_category("table"))
         try:
@@ -4662,14 +4663,16 @@ class DatabasePage(wx.Panel):
                     tables1.append(table); tables2.append(table2)
                     tables2_lower.append(t2_lower)
 
+            renames = {"schema": "main2",
+                       "table": {a: b for a, b in zip(tables1, tables2) if a != b}}
+
+            if fks_on: self.db.execute("PRAGMA foreign_keys = off")
             for table, table2 in zip(tables1, tables2):
                 t1_lower, t2_lower = table.lower(), table2.lower()
                 extra = "" if t1_lower == t2_lower \
                         else " as %s" % grammar.quote(table2, force=True)
 
-                create_sql = self.db.get_sql("table", table,
-                    transform={"renames": {"schema": "main2", "table": {table: table2}}},
-                )
+                create_sql = self.db.get_sql("table", table, transform={"renames": renames})
                 try:
                     if t2_lower in db2_tables_lower:
                         logger.info("Dropping table %s in %s.", grammar.quote(table2), filename2)
@@ -4703,9 +4706,9 @@ class DatabasePage(wx.Panel):
                             while name in items2:
                                 name, counter = "%s_%s" % (base, counter), counter + 1
                             items2.append(name)
-                            item_sql, err = grammar.transform(item["sql"], renames={
-                                category: name, "table": table2, "schema": "main2",
-                            })
+                            item_sql, err = grammar.transform(item["sql"], renames=dict(
+                                {category: name}, **renames
+                            ))
                             if err: raise Exception(err)
                             logger.info("Creating %s %s on table %s in %s, using %s.",
                                         category, grammar.quote(name, force=True),
@@ -4732,6 +4735,8 @@ class DatabasePage(wx.Panel):
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         finally:
             try: self.db.execute("DETACH DATABASE main2")
+            except Exception: pass
+            try: fks_on and self.db.execute("PRAGMA foreign_keys = on")
             except Exception: pass
 
         if success and tables1:
