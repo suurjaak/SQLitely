@@ -2639,7 +2639,7 @@ class DatabasePage(wx.Panel):
         tb_stats.SetToolBitmapSize(bmp1.Size)
         tb_stats.AddLabelTool(wx.ID_REFRESH, "", bitmap=bmp1, shortHelp="Refresh statistics")
         tb_stats.AddLabelTool(wx.ID_COPY,    "", bitmap=bmp2, shortHelp="Copy statistics to clipboard as text")
-        tb_stats.AddLabelTool(wx.ID_SAVE,    "", bitmap=bmp3, shortHelp="Save statistics HTML to file")
+        tb_stats.AddLabelTool(wx.ID_SAVE,    "", bitmap=bmp3, shortHelp="Save statistics as HTML")
         tb_stats.AddLabelTool(wx.ID_STOP,    "", bitmap=bmp4, shortHelp="Stop statistics analysis")
         tb_stats.Realize()
         tb_stats.EnableTool(wx.ID_COPY, False)
