@@ -262,17 +262,18 @@ import datetime
 from sqlitely.lib import util
 from sqlitely import conf
 
-%>-- {{title}}.
--- Source: {{db_filename}}.
--- Exported with {{conf.Title}} on {{datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}}.
--- {{row_count}} {{util.plural("row", row_count, with_items=False)}}.
+%>-- {{ title }}.
+-- Source: {{ db_filename }}.
+-- Exported with {{ conf.Title }} on {{ datetime.datetime.now().strftime("%d.%m.%Y %H:%M") }}.
+-- {{row_count}} {{ util.plural("row", row_count, with_items=False) }}.
 %if sql:
 --
--- SQL: {{sql}};
+-- SQL: {{ sql.replace("\\n", "\\n--      ") }};
+--
 %endif
-%if name:
+%if isdef("create_sql") and create_sql:
 
-{{create_sql}};
+{{ create_sql }};
 %endif
 
 

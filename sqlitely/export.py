@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.10.2019
+@modified    04.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -29,6 +29,7 @@ except ImportError:
 from . lib import util
 from . lib.vendor import step
 from . import conf
+from . import grammar
 from . import templates
 
 
@@ -44,16 +45,12 @@ except Exception: # Fall back to a simple mono-spaced calculation if no PIL
 """FileDialog wildcard strings, matching extensions lists and default names."""
 XLSX_WILDCARD = "Excel workbook (*.xlsx)|*.xlsx|" if xlsxwriter else ""
 
-TABLE_WILDCARD = ("HTML document (*.html)|*.html|"
-                  "Text document (*.txt)|*.txt|"
-                  "SQL INSERT statements (*.sql)|*.sql|"
-                  "%sCSV spreadsheet (*.csv)|*.csv" % XLSX_WILDCARD)
-TABLE_EXTS = ["html", "txt", "sql", "xlsx", "csv"] if xlsxwriter \
-             else ["html", "txt", "sql", "csv"]
-
-QUERY_WILDCARD = ("HTML document (*.html)|*.html|Text document (*.txt)|*.txt|"
-                  "%sCSV spreadsheet (*.csv)|*.csv" % XLSX_WILDCARD)
-QUERY_EXTS = ["html", "txt", "xlsx", "csv"] if xlsxwriter else ["html", "txt", "csv"]
+WILDCARD = ("HTML document (*.html)|*.html|"
+            "Text document (*.txt)|*.txt|"
+            "SQL INSERT statements (*.sql)|*.sql|"
+            "%sCSV spreadsheet (*.csv)|*.csv" % XLSX_WILDCARD)
+EXTS = ["html", "txt", "sql", "xlsx", "csv"] if xlsxwriter \
+        else ["html", "txt", "sql", "csv"]
 
 
 def export_data(make_iterable, filename, title, db, columns,
@@ -80,7 +77,7 @@ def export_data(make_iterable, filename, title, db, columns,
     is_sql  = filename.lower().endswith(".sql")
     is_txt  = filename.lower().endswith(".txt")
     is_xlsx = filename.lower().endswith(".xlsx")
-    columns = [c if isinstance(c, basestring) else c["name"] for c in columns]
+    colnames = [c if isinstance(c, basestring) else c["name"] for c in columns]
     tmpfile, tmpname = None, None # Temporary file for exported rows
     try:
         with open(filename, "w") as f:
@@ -95,11 +92,11 @@ def export_data(make_iterable, filename, title, db, columns,
                     if query:
                         flat = query.replace("\r", " ").replace("\n", " ")
                         query = flat.encode("latin1", "replace")
-                    header = [c.encode("latin1", "replace") for c in columns]
+                    header = [c.encode("latin1", "replace") for c in colnames]
                 else:
                     writer = xlsx_writer(filename, name or "SQL Query")
                     writer.set_header(True)
-                    header = columns
+                    header = colnames
                 if query:
                     a = [[query]] + (["bold", 0, False] if is_xlsx else [])
                     writer.writerow(*a)
@@ -107,7 +104,7 @@ def export_data(make_iterable, filename, title, db, columns,
                 writer.set_header(False) if is_xlsx else 0
                 for i, row in enumerate(make_iterable()):
                     values = []
-                    for col in columns:
+                    for col in colnames:
                         val = "" if row[col] is None else row[col]
                         if is_csv:
                             val = val if isinstance(val, unicode) else str(val)
@@ -122,7 +119,7 @@ def export_data(make_iterable, filename, title, db, columns,
                 namespace = {
                     "db_filename": db.name,
                     "title":       title,
-                    "columns":     columns,
+                    "columns":     colnames,
                     "rows":        make_iterable(),
                     "row_count":   0,
                     "sql":         query,
@@ -134,10 +131,10 @@ def export_data(make_iterable, filename, title, db, columns,
                 namespace["namespace"] = namespace # To update row_count
 
                 if is_txt: # Run through rows once, to populate text-justify options
-                    widths = {c: len(c) for c in columns}
-                    justs  = {c: True   for c in columns}
+                    widths = {c: len(c) for c in colnames}
+                    justs  = {c: True   for c in colnames}
                     for i, row in enumerate(make_iterable()):
-                        for col in columns:
+                        for col in colnames:
                             v = row[col]
                             if isinstance(v, (int, long, float)): justs[col] = False
                             v = "" if v is None \
@@ -159,8 +156,13 @@ def export_data(make_iterable, filename, title, db, columns,
 
                 if progress and not progress(): return
 
-                if name:
-                    # Add CREATE statement.
+                if is_sql and "table" != category:
+                    # Add CREATE statement for saving view AS table
+                    meta = {"__type__": grammar.SQL.CREATE_TABLE, "name": name,
+                            "columns": columns}
+                    namespace["create_sql"], _ = grammar.generate(meta)
+                elif name:
+                    # Add CREATE statement
                     transform = {"exists": True} if is_sql else None
                     create_sql = db.get_sql(category, name, transform=transform)
                     namespace["create_sql"] = create_sql

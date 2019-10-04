@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.10.2019
+@modified    04.10.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4482,10 +4482,6 @@ class DatabasePage(wx.Panel):
         Handler for exporting one or more tables/views to file, opens file dialog
         and performs export.
         """
-        WILDCARD, EXTS = export.TABLE_WILDCARD, export.TABLE_EXTS
-        if "view" == category:
-            WILDCARD, EXTS = export.QUERY_WILDCARD, export.QUERY_EXTS
-
         if len(items) == 1:
             filename = "%s %s" % (category.capitalize(), items[0])
             self.dialog_savefile.Filename = util.safe_filename(filename)
@@ -4495,11 +4491,11 @@ class DatabasePage(wx.Panel):
             self.dialog_savefile.Filename = "Filename will be ignored"
             self.dialog_savefile.Message = "Choose directory where to save files"
             self.dialog_savefile.WindowStyle ^= wx.FD_OVERWRITE_PROMPT
-        self.dialog_savefile.Wildcard = WILDCARD
+        self.dialog_savefile.Wildcard = export.WILDCARD
         if wx.ID_OK != self.dialog_savefile.ShowModal(): return
 
         wx.YieldIfNeeded() # Allow dialog to disappear
-        extname = EXTS[self.dialog_savefile.FilterIndex]
+        extname = export.EXTS[self.dialog_savefile.FilterIndex]
         path = self.dialog_savefile.GetPath()
         filenames = [path]
         if len(items) > 1:
@@ -5770,8 +5766,8 @@ class SQLPage(wx.PyPanel):
                 self._grid.SetCellValue(0, 0, str(affected_rows))
                 self._button_reset.Enabled = False
                 self._button_export.Enabled = False
-            self._button_close.Enabled = bool(grid_data.columns)
-            self._label_help.Show(bool(grid_data.columns))
+            self._button_close.Enabled = bool(grid_data and grid_data.columns)
+            self._label_help.Show(bool(grid_data and grid_data.columns))
             self._label_help.ContainingSizer.Layout()
             guibase.status('Executed SQL "%s" (%s).', sql, self._db,
                            log=True, flash=True)
@@ -5843,20 +5839,30 @@ class SQLPage(wx.PyPanel):
         dialog = wx.FileDialog(self, defaultDir=os.getcwd(),
             message="Save query as",
             defaultFile=util.safe_filename(title),
-            wildcard=export.QUERY_WILDCARD,
+            wildcard=export.WILDCARD,
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
         filename = dialog.GetPath()
-        extname = export.QUERY_EXTS[dialog.FilterIndex]
+        extname = export.EXTS[dialog.FilterIndex]
         if not filename.lower().endswith(".%s" % extname):
             filename += ".%s" % extname
         try:
             make_iterable = self._grid.Table.GetRowIterator
+            name = ""
+            if "sql" == extname:
+                dlg = wx.TextEntryDialog(self,
+                    "Enter table name for SQL INSERT statements:",
+                    conf.Title, style=wx.OK | wx.CANCEL
+                )
+                if wx.ID_OK != dlg.ShowModal(): return
+                name = dlg.GetValue().strip()
+                if not name: return
             exporter = functools.partial(export.export_data,
                 make_iterable, filename, title, self._db, self._grid.Table.columns,
-                query=self._grid.Table.sql, progress=self._export.OnProgress
+                query=self._grid.Table.sql, name=name,
+                progress=self._export.OnProgress
             )
             opts = {"filename": filename, "callable": exporter}
             self.Freeze()
@@ -6363,30 +6369,26 @@ class DataObjectPage(wx.PyPanel):
         Handler for clicking to export grid contents to file, allows the
         user to select filename and type and creates the file.
         """
-        WILDCARD, EXTS = export.TABLE_WILDCARD, export.TABLE_EXTS
-        if "view" == self._category:
-            WILDCARD, EXTS = export.QUERY_WILDCARD, export.QUERY_EXTS
-
         title = "%s %s" % (self._category.capitalize(),
                            grammar.quote(self._item["name"], force=True))
         dialog = wx.FileDialog(self, defaultDir=os.getcwd(),
             message="Save %s as" % self._category,
             defaultFile=util.safe_filename(title),
-            wildcard=WILDCARD,
+            wildcard=export.WILDCARD,
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
         filename = dialog.GetPath()
-        extname = EXTS[dialog.FilterIndex]
+        extname = export.EXTS[dialog.FilterIndex]
         if not filename.lower().endswith(".%s" % extname):
             filename += ".%s" % extname
         try:
             make_iterable = self._grid.Table.GetRowIterator
             exporter = functools.partial(export.export_data, make_iterable, filename,
                 title, self._db, self._grid.Table.columns,
+                category=self._category, name=self._item["name"],
                 progress=self._export.OnProgress,
-                category=self._category, name=self._item["name"]
             )
             opts = {"filename": filename, "callable": exporter,
                     "total": self._item.get("count"),
