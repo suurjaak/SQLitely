@@ -2546,7 +2546,7 @@ class DatabasePage(wx.Panel):
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         sizer_file = panel1c.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_info = wx.FlexGridSizer(cols=2, vgap=3, hgap=10)
+        sizer_info = wx.GridBagSizer(vgap=3, hgap=10)
         label_file = wx.StaticText(parent=panel1, label="Database information")
         label_file.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                   wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
@@ -2555,22 +2555,25 @@ class DatabasePage(wx.Panel):
                  "edit_info_modified", "edit_info_sha1", "edit_info_md5", ]
         labels = ["Full path", "File size", "Created", "Last modified",
                   "SHA-1 checksum", "MD5 checksum",  ]
-        for name, label in zip(names, labels):
-            if not name and not label:
-                sizer_info.AddSpacer(20), sizer_info.AddSpacer(20)
-                continue # for name, label
-            labeltext = wx.StaticText(parent=panel1c, label="%s:" % label,
+        for i, (name, label) in enumerate(zip(names, labels)):
+            labeltext = wx.StaticText(panel1c, label="%s:" % label,
                                       name=name+"_label")
             ColourManager.Manage(labeltext, "ForegroundColour", "DisabledColour")
-            valuetext = wx.TextCtrl(parent=panel1c, value="Analyzing..", name=name,
+            valuetext = wx.TextCtrl(panel1c, value="Analyzing..", name=name,
                 style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH | wx.TE_NO_VSCROLL)
             valuetext.MinSize = (-1, 35)
             valuetext.SetEditable(False)
-            sizer_info.Add(labeltext, border=5, flag=wx.LEFT | wx.TOP)
-            sizer_info.Add(valuetext, border=5, flag=wx.TOP | wx.GROW)
+            sizer_info.Add(labeltext, pos=(i, 0), border=5, flag=wx.LEFT | wx.TOP)
+            sizer_info.Add(valuetext, pos=(i, 1), span=(1, 1 if "checksum" in label else 2),
+                           border=5, flag=wx.TOP | wx.GROW)
             setattr(self, name, valuetext)
+        button_checksum_stop = self.button_checksum_stop = wx.Button(panel1c, label="Stop")
+        sizer_info.Add(button_checksum_stop, pos=(len(names) - 2, 2), span=(2, 1),
+                       border=10, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         self.edit_info_path.Value = "<temporary file>" if self.db.temporary \
                                     else self.db.filename
+
+        self.Bind(wx.EVT_BUTTON, self.on_checksum_stop, button_checksum_stop)
 
         button_fks      = self.button_check_fks       = wx.Button(panel1c, label="Check foreign keys")
         button_check    = self.button_check_integrity = wx.Button(panel1c, label="Check for corruption")
@@ -2815,6 +2818,7 @@ class DatabasePage(wx.Panel):
             self.edit_info_md5.Value  = result["md5"]
         self.edit_info_sha1.MinSize = (-1, -1)
         self.edit_info_md5.MinSize  = (-1, -1)
+        self.button_checksum_stop.Hide()
         self.edit_info_md5.ContainingSizer.Layout()
 
 
@@ -3308,6 +3312,7 @@ class DatabasePage(wx.Panel):
         and not self.worker_checksum.is_working():
             self.edit_info_sha1.Value = "Analyzing.."
             self.edit_info_md5.Value  = "Analyzing.."
+            self.button_checksum_stop.Show()
             self.worker_checksum.work(self.db.filename)
 
         for name in ["size", "created", "modified", "path", "sha1", "md5"]:
@@ -3318,6 +3323,12 @@ class DatabasePage(wx.Panel):
         self.button_optimize.Enabled = self.button_check_integrity.Enabled = True
         self.button_refresh_info.Enabled = True
         self.button_open_folder.Enabled = not self.db.temporary
+
+
+    def on_checksum_stop(self, event=None):
+        """Stops current checksum analysis."""
+        self.worker_checksum.stop_work(drop_results=True)
+        self.on_checksum_result({"sha1": "Cancelled", "md5": "Cancelled"})
 
 
     def on_refresh_data(self, event):
