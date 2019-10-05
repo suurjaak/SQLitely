@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.10.2019
+@modified    05.10.2019
 ------------------------------------------------------------------------------
 """
 import re
@@ -25,7 +25,18 @@ SAFEBYTE_RGX = re.compile(r"[\x00-\x1f\x7f-\xa0]")
 SAFEBYTE_REPL = lambda m: m.group(0).encode("unicode-escape")
 
 
-"""HTML data export template."""
+"""
+HTML data export template.
+
+@param   db_filename  database path or temporary name
+@param   title        export title
+@param   columns      [name, ]
+@param   data_buffer  iterable yielding rows data in text chunks
+@param   row_count    number of rows
+@param   sql          SQL query giving export data, if any
+@param   create_sql   CREATE SQL statement for export object, if any
+@param   category     export object category ("table" etc), if any
+"""
 DATA_HTML = """<%
 import datetime
 from sqlitely import conf, grammar, images
@@ -33,9 +44,9 @@ from sqlitely.lib import util
 %><!DOCTYPE HTML><html lang="en">
 <head>
   <meta http-equiv='Content-Type' content='text/html;charset=utf-8' />
-  <meta name="Author" content="{{conf.Title}}">
-  <title>{{title}}</title>
-  <link rel="shortcut icon" type="image/png" href="data:image/ico;base64,{{!images.Icon16x16_8bit.data}}"/>
+  <meta name="Author" content="{{ conf.Title }}">
+  <title>{{ title }}</title>
+  <link rel="shortcut icon" type="image/png" href="data:image/ico;base64,{{! images.Icon16x16_8bit.data }}"/>
   <style>
     * { font-family: Tahoma; font-size: 11px; }
     body {
@@ -174,12 +185,12 @@ from sqlitely.lib import util
 <tr><td><table id="header_table">
   <tr>
     <td>
-      <div id="title">{{title}}</div><br />
-      <b>SQL:</b> <span id="sql">{{sql or create_sql}}</span>
+      <div id="title">{{ title }}</div><br />
+      <b>SQL:</b> <span id="sql">{{ sql or create_sql }}</span>
       <a id="toggle" title="Toggle full SQL" onclick="document.getElementById('sql').classList.toggle('clip')">...</a>
       <br />
-      Source: <b>{{db_filename}}</b>.<br />
-      <b>{{row_count}}</b> {{util.plural("row", row_count, with_items=False)}}{{" in results" if sql else ""}}.<br />
+      Source: <b>{{ db_filename }}</b>.<br />
+      <b>{{ row_count }}</b> {{ util.plural("row", row_count, with_items=False) }}{{ " in results" if sql else "" }}.<br />
     </td>
   </tr></table>
   <script> document.getElementById('sql').classList.add('clip'); </script>
@@ -193,7 +204,7 @@ from sqlitely.lib import util
   <tr>
     <th class="index asc"><a class="sort asc" title="Sort by index" onclick="onSort(0)">#</a></th>
 %for i, col in enumerate(columns):
-    <th><a class="sort" title="Sort by {{grammar.quote(col)}}" onclick="onSort({{i + 1}})">{{col}}</a></th>
+    <th><a class="sort" title="Sort by {{ grammar.quote(col) }}" onclick="onSort({{ i + 1 }})">{{ col }}</a></th>
 %endfor
   </tr>
 <%
@@ -203,7 +214,7 @@ for chunk in data_buffer:
   </table>
 </div>
 </td></tr></table>
-<div id="footer">Exported with {{conf.Title}} on {{datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}}.</div>
+<div id="footer">Exported with {{ conf.Title }} on {{ datetime.datetime.now().strftime("%d.%m.%Y %H:%M") }}.</div>
 </body>
 </html>
 """
@@ -214,6 +225,7 @@ for chunk in data_buffer:
 HTML data export template for the rows part.
 
 @param   rows       iterable
+@param   columns    [name, ]
 @param   namespace  {"row_count"}
 @param   ?progress  callback(count) returning whether to cancel, if any
 """
@@ -222,9 +234,9 @@ DATA_ROWS_HTML = """
 <%
 namespace["row_count"] += 1
 %><tr>
-  <td class="index">{{i + 1}}</td>
+  <td class="index">{{ i + 1 }}</td>
 %for col in columns:
-  <td>{{"" if row[col] is None else row[col]}}</td>
+  <td>{{ "" if row[col] is None else row[col] }}</td>
 %endfor
 </tr>
 <%
@@ -235,28 +247,43 @@ if not i % 100 and isdef("progress") and not progress(count=i):
 """
 
 
-"""TXT SQL create statements export template."""
+"""
+TXT SQL create statements export template.
+
+@param   title         SQL export title
+@param   ?db_filename  database path or temporary name
+@param   sql           SQL statements string
+"""
 CREATE_SQL = """<%
 import datetime
 from sqlitely import conf
 
 %>--
 %if isdef("title") and title:
--- {{title}}
+-- {{ title }}
 %endif
 %if isdef("db_filename") and db_filename:
--- Source: {{db_filename}}.
+-- Source: {{ db_filename }}.
 %endif
--- Exported with {{conf.Title}} on {{datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}}.
+-- Exported with {{ conf.Title }} on {{ datetime.datetime.now().strftime("%d.%m.%Y %H:%M") }}.
 --
 
 
-{{sql}}
+{{ sql }}
 """
 
 
 
-"""TXT SQL insert statements export template."""
+"""
+TXT SQL insert statements export template.
+
+@param   title        export title
+@param   db_filename  database path or temporary name
+@param   row_count    number of rows
+@param   sql          SQL query giving export data, if any
+@param   create_sql   CREATE SQL statement for export object, if any
+@param   data_buffer  iterable yielding rows data in text chunks
+"""
 DATA_SQL = """<%
 import datetime
 from sqlitely.lib import util
@@ -265,7 +292,7 @@ from sqlitely import conf
 %>-- {{ title }}.
 -- Source: {{ db_filename }}.
 -- Exported with {{ conf.Title }} on {{ datetime.datetime.now().strftime("%d.%m.%Y %H:%M") }}.
--- {{row_count}} {{ util.plural("row", row_count, with_items=False) }}.
+-- {{ row_count }} {{ util.plural("row", row_count, with_items=False) }}.
 %if sql:
 --
 -- SQL: {{ sql.replace("\\n", "\\n--      ") }};
@@ -291,6 +318,7 @@ TXT SQL insert statements export template for the rows part.
 @param   rows       iterable
 @param   columns    [name, ]
 @param   namespace  {"row_count"}
+@param   name       table name
 @param   ?progress  callback(count) returning whether to cancel, if any
 """
 DATA_ROWS_SQL = """<%
@@ -325,7 +353,7 @@ else:
 values.append(value)
 %>
 %endfor
-INSERT INTO {{name}} ({{str_cols}}) VALUES ({{", ".join(values)}});
+INSERT INTO {{ name }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
 <%
 if not i % 100 and isdef("progress") and not progress(count=i):
     break # for i, row
@@ -335,23 +363,35 @@ if not i % 100 and isdef("progress") and not progress(count=i):
 
 
 
-"""TXT data export template."""
+"""
+TXT data export template.
+
+@param   db_filename   database path or temporary name
+@param   title         export title
+@param   columns       [name, ]
+@param   data_buffer   iterable yielding rows data in text chunks
+@param   row_count     number of rows
+@param   sql           SQL query giving export data, if any
+@param   create_sql    CREATE SQL statement for export object, if any
+@param   columnjusts   {col name: True if ljust}
+@param   columnwidths  {col name: char length}
+"""
 DATA_TXT = """<%
 import datetime
 from sqlitely.lib import util
 from sqlitely import conf
 
-%>{{title}}.
-Source: {{db_filename}}.
-Exported with {{conf.Title}} on {{datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}}.
-{{row_count}} {{util.plural("row", row_count, with_items=False)}}.
+%>{{ title }}.
+Source: {{ db_filename }}.
+Exported with {{ conf.Title }} on {{ datetime.datetime.now().strftime("%d.%m.%Y %H:%M") }}.
+{{ row_count }} {{ util.plural("row", row_count, with_items=False) }}.
 %if sql:
 
-SQL: {{sql}}
+SQL: {{ sql }}
 %endif
 %if name:
 
-{{create_sql.rstrip(";")}};
+{{ create_sql.rstrip(";") }};
 %endif
 
 <%
@@ -363,14 +403,14 @@ header = "| " + " | ".join(headers) + " |"
 %>
 
 
-{{hr}}
-{{header}}
-{{hr}}
+{{ hr }}
+{{ header }}
+{{ hr }}
 <%
 for chunk in data_buffer:
     echo(chunk)
 %>
-{{hr}}
+{{ hr }}
 """
 
 
@@ -381,8 +421,8 @@ TXT data export template for the rows part.
 @param   rows          iterable
 @param   columns       [name, ]
 @param   namespace     {"row_count"}
-@param   columnjusts   {name: ljust or rjust}
-@param   columnwidths  {col: character width}
+@param   columnjusts   {col name: ljust or rjust}
+@param   columnwidths  {col name: character width}
 @param   ?progress     callback(count) returning whether to cancel, if any
 """
 DATA_ROWS_TXT = """<%
@@ -403,7 +443,7 @@ value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
 values.append((value.ljust if columnjusts[col] else value.rjust)(columnwidths[col]))
 %>
 %endfor
-| {{" | ".join(values)}} |
+| {{ " | ".join(values) }} |
 <%
 if not i % 100 and isdef("progress") and not progress(count=i):
     break # for i, row
@@ -413,23 +453,36 @@ if not i % 100 and isdef("progress") and not progress(count=i):
 
 
 
-"""HTML template for search results header."""
+"""
+HTML template for search results header.
+
+@param   text      search query
+@param   fromtext  search target
+"""
 SEARCH_HEADER_HTML = """<%
 from sqlitely import conf
 %>
-<font size="2" face="{{conf.HtmlFontName}}" color="{{conf.FgColour}}">
-Results for "{{text}}" from {{fromtext}}:
+<font size="2" face="{{ conf.HtmlFontName }}" color="{{ conf.FgColour }}">
+Results for "{{ text }}" from {{ fromtext }}:
 <br /><br />
 """
 
 
-"""HTML template for SQL search results."""
+"""
+HTML template for SQL search results.
+
+@param   category         schema category
+@param   item             schema item
+@param   pattern_replace  regex for matching search words
+"""
 SEARCH_ROW_META_HTML = """<%
 from sqlitely import conf, grammar
+
+wrap_b = lambda x: "<b>%s</b>" % x.group(0)
 %>
 {{ category.capitalize() }}
 %if "table" == category:
-  <a href="table:{{ item["name"]}} "><font color="{{ conf.LinkColour }}">{{! pattern_replace.sub(wrap_b, escape(grammar.quote(item["name"]))) }}</font></a>:
+  <a href="table:{{ item["name"] }}"><font color="{{ conf.LinkColour }}">{{! pattern_replace.sub(wrap_b, escape(grammar.quote(item["name"]))) }}</font></a>:
 %else:
   {{! pattern_replace.sub(wrap_b, escape(grammar.quote(item["name"]))) }}:
 %endif
@@ -438,32 +491,45 @@ from sqlitely import conf, grammar
 """
 
 
-"""HTML template for table search results header, start of HTML table."""
+"""
+HTML template for table search results header, start of HTML table.
+
+@param   table  schema table object
+"""
 SEARCH_ROW_TABLE_HEADER_HTML = """<%
 from sqlitely import conf, grammar
 %>
-<font color="{{conf.FgColour}}">
-<br /><br /><b><a name="{{table["name"]}}">Table {{grammar.quote(table["name"])}}:</a></b><br />
+<font color="{{ conf.FgColour }}">
+<br /><br /><b><a name="{{ table["name"] }}">Table {{ grammar.quote(table["name"]) }}:</a></b><br />
 <table border="1" cellpadding="4" cellspacing="0" width="1000">
 <tr>
 <th>#</th>
 %for col in table["columns"]:
-<th>{{col["name"]}}</th>
+<th>{{ col["name"] }}</th>
 %endfor
 </tr>
 """
 
 
-"""HTML template for search result of DB table row, HTML table row."""
+"""
+HTML template for search result of DB table row, HTML table row.
+
+@param   table            schema table object
+@param   row              matching table row
+@param   count            search result index
+@param   keywords         {"table": [], "column": [], ..}
+@param   pattern_replace  regex for matching search words
+"""
 SEARCH_ROW_TABLE_HTML = """<%
 from sqlitely import conf, templates
 
 match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
+wrap_b = lambda x: "<b>%s</b>" % x.group(0)
 %>
 <tr>
 <td align="right" valign="top">
-  <a href="table:{{table["name"]}}:{{count}}">
-    <font color="{{conf.LinkColour}}">{{count}}</font>
+  <a href="table:{{ table["name"] }}:{{ count }}">
+    <font color="{{ conf.LinkColour }}">{{ count }}</font>
   </a>
 </td>
 %for col in table["columns"]:
@@ -477,7 +543,7 @@ if not (keywords.get("column") and not match_kw("column", col)) \
 and not (keywords.get("-column") and match_kw("-column", col)):
     value = pattern_replace.sub(wrap_b, value)
 %>
-<td valign="top"><font color="{{conf.FgColour}}">{{!value}}</font></td>
+<td valign="top"><font color="{{ conf.FgColour }}">{{! value }}</font></td>
 %endfor
 </tr>
 """
@@ -488,59 +554,59 @@ ABOUT_HTML = """<%
 import sys, wx
 from sqlitely import conf
 %>
-<font size="2" face="{{conf.HtmlFontName}}" color="{{conf.FgColour}}">
+<font size="2" face="{{ conf.HtmlFontName }}" color="{{ conf.FgColour }}">
 <table cellpadding="0" cellspacing="0"><tr><td valign="top">
-<img src="memory:{{conf.Title.lower()}}.png" /></td><td width="10"></td><td valign="center">
-<b>{{conf.Title}} version {{conf.Version}}</b>, {{conf.VersionDate}}.<br /><br />
+<img src="memory:{{ conf.Title.lower() }}.png" /></td><td width="10"></td><td valign="center">
+<b>{{ conf.Title }} version {{ conf.Version }}</b>, {{ conf.VersionDate }}.<br /><br />
 
 
-{{conf.Title}} is an SQLite database manager, released as free open source software
+{{ conf.Title }} is an SQLite database manager, released as free open source software
 under the MIT License.
 </td></tr></table><br /><br />
 
 
 &copy; 2019, Erki Suurjaak.
-<a href="{{conf.HomeUrl}}"><font color="{{conf.LinkColour}}">{{conf.HomeUrl.replace("https://", "").replace("http://", "")}}</font></a><br /><br /><br />
+<a href="{{ conf.HomeUrl }}"><font color="{{ conf.LinkColour }}">{{ conf.HomeUrl.replace("https://", "").replace("http://", "") }}</font></a><br /><br /><br />
 
 
 
-{{conf.Title}} has been built using the following open source software:
+{{ conf.Title }} has been built using the following open source software:
 <ul>
   <li>ANTLR4,
-      <a href="https://www.antlr.org/"><font color="{{conf.LinkColour}}">antlr.org</font></a></li>
+      <a href="https://www.antlr.org/"><font color="{{ conf.LinkColour }}">antlr.org</font></a></li>
   <li>pyparsing,
-      <a href="https://pypi.org/project/pyparsing/"><font color="{{conf.LinkColour}}">pypi.org/project/pyparsing</font></a></li>
+      <a href="https://pypi.org/project/pyparsing/"><font color="{{ conf.LinkColour }}">pypi.org/project/pyparsing</font></a></li>
   <li>Python,
-      <a href="https://www.python.org/"><font color="{{conf.LinkColour}}">python.org</font></a></li>
+      <a href="https://www.python.org/"><font color="{{ conf.LinkColour }}">python.org</font></a></li>
   <li>SQLite,
-      <a href="https://www.sqlite.org/"><font color="{{conf.LinkColour}}">sqlite.org</font></a></li>
+      <a href="https://www.sqlite.org/"><font color="{{ conf.LinkColour }}">sqlite.org</font></a></li>
   <li>step, Simple Template Engine for Python,
-      <a href="https://github.com/dotpy/step"><font color="{{conf.LinkColour}}">github.com/dotpy/step</font></a></li>
-  <li>wxPython{{" %s" % getattr(wx, "__version__", "") if getattr(sys, 'frozen', False) else ""}},
-      <a href="http://wxpython.org"><font color="{{conf.LinkColour}}">wxpython.org</font></a></li>
+      <a href="https://github.com/dotpy/step"><font color="{{ conf.LinkColour }}">github.com/dotpy/step</font></a></li>
+  <li>wxPython{{ " %s" % getattr(wx, "__version__", "") if getattr(sys, 'frozen', False) else "" }},
+      <a href="http://wxpython.org"><font color="{{ conf.LinkColour }}">wxpython.org</font></a></li>
   <li>XlsxWriter,
-      <a href="https://github.com/jmcnamara/XlsxWriter"><font color="{{conf.LinkColour}}">
+      <a href="https://github.com/jmcnamara/XlsxWriter"><font color="{{ conf.LinkColour }}">
           github.com/jmcnamara/XlsxWriter</font></a></li>
 </ul><br /><br />
 %if getattr(sys, 'frozen', False):
 Installer and binary executable created with:
 <ul>
-  <li>Nullsoft Scriptable Install System, <a href="https://nsis.sourceforge.net/"><font color="{{conf.LinkColour}}">nsis.sourceforge.net</font></a></li>
-  <li>PyInstaller, <a href="https://www.pyinstaller.org"><font color="{{conf.LinkColour}}">pyinstaller.org</font></a></li>
+  <li>Nullsoft Scriptable Install System, <a href="https://nsis.sourceforge.net/"><font color="{{ conf.LinkColour }}">nsis.sourceforge.net</font></a></li>
+  <li>PyInstaller, <a href="https://www.pyinstaller.org"><font color="{{ conf.LinkColour }}">pyinstaller.org</font></a></li>
 </ul><br /><br />
 %endif
 
 
 
 Several icons from Fugue Icons, &copy; 2010 Yusuke Kamiyamane<br />
-<a href="https://p.yusukekamiyamane.com/"><font color="{{conf.LinkColour}}">p.yusukekamiyamane.com</font></a>
+<a href="https://p.yusukekamiyamane.com/"><font color="{{ conf.LinkColour }}">p.yusukekamiyamane.com</font></a>
 <br /><br />
 Includes fonts Carlito Regular and Carlito bold,
-<a href="https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts"><font color="{{conf.LinkColour}}">fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts</font></a>
+<a href="https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts"><font color="{{ conf.LinkColour }}">fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts</font></a>
 %if getattr(sys, 'frozen', False):
 <br /><br />
 Installer created with Nullsoft Scriptable Install System,
-<a href="http://nsis.sourceforge.net/"><font color="{{conf.LinkColour}}">nsis.sourceforge.net</font></a>
+<a href="http://nsis.sourceforge.net/"><font color="{{ conf.LinkColour }}">nsis.sourceforge.net</font></a>
 %endif
 
 </font>
@@ -552,16 +618,16 @@ Installer created with Nullsoft Scriptable Install System,
 SEARCH_WELCOME_HTML = """<%
 from sqlitely import conf
 %>
-<font face="{{conf.HtmlFontName}}" size="2" color="{{conf.FgColour}}">
+<font face="{{ conf.HtmlFontName }}" size="2" color="{{ conf.FgColour }}">
 <center>
-<h5><font color="{{conf.TitleColour}}">Overview</font></h5>
+<h5><font color="{{ conf.TitleColour }}">Overview</font></h5>
 <table cellpadding="0" cellspacing="5">
 <tr>
   <td valign="top">
     <a href="page:#search"><img src="memory:HelpSearch.png" /></a>
   </td><td valign="center">
     Search from table data over entire database,<br />
-    using a simple Google-like <a href="page:#help"><font color="{{conf.LinkColour}}">syntax</font></a>.<br /><br />
+    using a simple Google-like <a href="page:#help"><font color="{{ conf.LinkColour }}">syntax</font></a>.<br /><br />
     Or search in database metadata:<br />
     table and column names and definitions.
   </td><td width="30"></td>
@@ -574,9 +640,9 @@ from sqlitely import conf
 </tr>
 <tr>
   <td align="center">
-    <br /><a href="page:#search"><b><font color="{{conf.FgColour}}">Search</font></b></a><br /><br />
+    <br /><a href="page:#search"><b><font color="{{ conf.FgColour }}">Search</font></b></a><br /><br />
   </td><td></td><td></td><td align="center">
-    <br /><a href="page:data"><b><font color="{{conf.FgColour}}">Data</font></b></a><br /><br />
+    <br /><a href="page:data"><b><font color="{{ conf.FgColour }}">Data</font></b></a><br /><br />
   </td>
 </tr>
 <tr>
@@ -594,9 +660,9 @@ from sqlitely import conf
 </tr>
 <tr>
   <td align="center">
-    <br /><a href="page:schema"><b><font color="{{conf.FgColour}}">Schema</font></b></a><br /><br />
+    <br /><a href="page:schema"><b><font color="{{ conf.FgColour }}">Schema</font></b></a><br /><br />
   </td><td></td><td></td><td align="center">
-    <br /><a href="page:sql"><b><font color="{{conf.FgColour}}">SQL</font></b></a><br /><br />
+    <br /><a href="page:sql"><b><font color="{{ conf.FgColour }}">SQL</font></b></a><br /><br />
   </td>
 </tr>
 
@@ -616,9 +682,9 @@ from sqlitely import conf
 </tr>
 <tr>
   <td align="center">
-    <br /><a href="page:pragma"><b><font color="{{conf.FgColour}}">Pragma</font></b></a><br /><br />
+    <br /><a href="page:pragma"><b><font color="{{ conf.FgColour }}">Pragma</font></b></a><br /><br />
   </td><td></td><td></td><td align="center">
-    <br /><a href="page:info"><b><font color="{{conf.FgColour}}">Information</font></b></a><br /><br />
+    <br /><a href="page:info"><b><font color="{{ conf.FgColour }}">Information</font></b></a><br /><br />
   </td>
 </tr>
 </table>
@@ -635,51 +701,51 @@ try:
 except ImportError:
     pyparsing = None
 %>
-<font size="2" face="{{conf.HtmlFontName}}" color="{{conf.FgColour}}">
+<font size="2" face="{{ conf.HtmlFontName }}" color="{{ conf.FgColour }}">
 %if not pyparsing:
 <b><font color="red">Search syntax currently limited:</font></b>&nbsp;&nbsp;pyparsing not installed.<br /><br /><br />
 %endif
-{{conf.Title}} supports a Google-like syntax for searching the database:<br /><br />
+{{ conf.Title }} supports a Google-like syntax for searching the database:<br /><br />
 <table><tr><td width="500">
-  <table border="0" cellpadding="5" cellspacing="1" bgcolor="{{conf.HelpBorderColour}}"
+  <table border="0" cellpadding="5" cellspacing="1" bgcolor="{{ conf.HelpBorderColour }}"
    valign="top" width="500">
   <tr>
-    <td bgcolor="{{conf.BgColour}}" width="150">
+    <td bgcolor="{{ conf.BgColour }}" width="150">
       <b>Search for exact word or phrase</b><br /><br />
-      <font color="{{conf.HelpCodeColour}}"><code>"do re mi"</code></font>
+      <font color="{{ conf.HelpCodeColour }}"><code>"do re mi"</code></font>
       <br />
     </td>
-    <td bgcolor="{{conf.BgColour}}">
+    <td bgcolor="{{ conf.BgColour }}">
       <br /><br />
-      Use quotes (<font color="{{conf.HelpCodeColour}}"><code>"</code></font>) to search for
+      Use quotes (<font color="{{ conf.HelpCodeColour }}"><code>"</code></font>) to search for
       an exact phrase or word. Quoted text is searched exactly as entered,
       leaving whitespace as-is and ignoring any wildcard characters.
       <br />
     </td>
   </tr>
   <tr>
-    <td bgcolor="{{conf.BgColour}}" width="150">
+    <td bgcolor="{{ conf.BgColour }}" width="150">
       <b>Search for either word</b><br /><br />
-      <font color="{{conf.HelpCodeColour}}"><code>this OR that</code></font>
+      <font color="{{ conf.HelpCodeColour }}"><code>this OR that</code></font>
       <br />
     </td>
-    <td bgcolor="{{conf.BgColour}}">
+    <td bgcolor="{{ conf.BgColour }}">
       <br /><br />
       To find results containing at least one of several words,
-      include <font color="{{conf.HelpCodeColour}}"><code>OR</code></font> between the words.
-      <font color="{{conf.HelpCodeColour}}"><code>OR</code></font> works also
+      include <font color="{{ conf.HelpCodeColour }}"><code>OR</code></font> between the words.
+      <font color="{{ conf.HelpCodeColour }}"><code>OR</code></font> works also
       for phrases and grouped words (but not keywords).
       <br />
     </td>
   </tr>
   <tr>
-    <td bgcolor="{{conf.BgColour}}" width="150">
+    <td bgcolor="{{ conf.BgColour }}" width="150">
       <b>Group words together</b><br /><br />
-      <font color="{{conf.HelpCodeColour}}"><code>(these two) OR this<br/>
+      <font color="{{ conf.HelpCodeColour }}"><code>(these two) OR this<br/>
       -(none of these)</code></font>
       <br />
     </td>
-    <td bgcolor="{{conf.BgColour}}">
+    <td bgcolor="{{ conf.BgColour }}">
       <br /><br />
       Surround words with round brackets to group them for <code>OR</code>
       queries or for excluding from results.
@@ -687,88 +753,88 @@ except ImportError:
     </td>
   </tr>
   <tr>
-    <td bgcolor="{{conf.BgColour}}" width="150">
+    <td bgcolor="{{ conf.BgColour }}" width="150">
       <b>Search for partially matching text</b><br /><br />
-      <font color="{{conf.HelpCodeColour}}"><code>bas*ball</code></font>
+      <font color="{{ conf.HelpCodeColour }}"><code>bas*ball</code></font>
       <br />
     </td>
-    <td bgcolor="{{conf.BgColour}}">
+    <td bgcolor="{{ conf.BgColour }}">
       <br /><br />
-      Use an asterisk (<font color="{{conf.HelpCodeColour}}"><code>*</code></font>) to make a
+      Use an asterisk (<font color="{{ conf.HelpCodeColour }}"><code>*</code></font>) to make a
       wildcard query: the wildcard will match any text between its front and
       rear characters (including other words and whitespace).
       <br />
     </td>
   </tr>
   <tr>
-    <td bgcolor="{{conf.BgColour}}" width="150">
+    <td bgcolor="{{ conf.BgColour }}" width="150">
       <b>Exclude words or keywords</b><br /><br />
-      <font color="{{conf.HelpCodeColour}}"><code>-notthisword<br />-"not this phrase"<br />
+      <font color="{{ conf.HelpCodeColour }}"><code>-notthisword<br />-"not this phrase"<br />
       -(none of these)<br/>-table:notthistable<br/>
       -date:2013</code></font>
       <br />
     </td>
-    <td bgcolor="{{conf.BgColour}}">
+    <td bgcolor="{{ conf.BgColour }}">
       <br /><br />
       To exclude certain results, add a dash
-      (<font color="{{conf.HelpCodeColour}}"><code>-</code></font>) in front of words,
+      (<font color="{{ conf.HelpCodeColour }}"><code>-</code></font>) in front of words,
       phrases, grouped words or keywords.
     </td>
   </tr>
   <tr>
-    <td bgcolor="{{conf.BgColour}}" width="150">
+    <td bgcolor="{{ conf.BgColour }}" width="150">
       <b>Search specific tables</b><br /><br />
-      <font color="{{conf.HelpCodeColour}}"><code>table:fromthistable<br />
+      <font color="{{ conf.HelpCodeColour }}"><code>table:fromthistable<br />
       -table:notfromthistable</code></font>
       <br />
     </td>
-    <td bgcolor="{{conf.BgColour}}">
+    <td bgcolor="{{ conf.BgColour }}">
       <br /><br />
-      Use the keyword <font color="{{conf.HelpCodeColour}}"><code>table:name</code></font>
+      Use the keyword <font color="{{ conf.HelpCodeColour }}"><code>table:name</code></font>
       to constrain results to specific tables only.<br /><br />
       Search from more than one table by adding more
-      <font color="{{conf.HelpCodeColour}}"><code>table:</code></font> keywords, or exclude certain
-      tables by adding a <font color="{{conf.HelpCodeColour}}"><code>-table:</code></font> keyword.
+      <font color="{{ conf.HelpCodeColour }}"><code>table:</code></font> keywords, or exclude certain
+      tables by adding a <font color="{{ conf.HelpCodeColour }}"><code>-table:</code></font> keyword.
       <br />
     </td>
   </tr>
   <tr>
-    <td bgcolor="{{conf.BgColour}}" width="150">
+    <td bgcolor="{{ conf.BgColour }}" width="150">
       <b>Search specific columns</b><br /><br />
-      <font color="{{conf.HelpCodeColour}}"><code>column:fromthiscolumn<br />
+      <font color="{{ conf.HelpCodeColour }}"><code>column:fromthiscolumn<br />
       -column:notfromthiscolumn</code></font>
       <br />
     </td>
-    <td bgcolor="{{conf.BgColour}}">
+    <td bgcolor="{{ conf.BgColour }}">
       <br /><br />
-      Use the keyword <font color="{{conf.HelpCodeColour}}"><code>column:name</code></font>
+      Use the keyword <font color="{{ conf.HelpCodeColour }}"><code>column:name</code></font>
       to constrain results to specific columns only.<br /><br />
       Search from more than one column by adding more
-      <font color="{{conf.HelpCodeColour}}"><code>column:</code></font> keywords, or exclude certain
-      columns by adding a <font color="{{conf.HelpCodeColour}}"><code>-column:</code></font> keyword.
+      <font color="{{ conf.HelpCodeColour }}"><code>column:</code></font> keywords, or exclude certain
+      columns by adding a <font color="{{ conf.HelpCodeColour }}"><code>-column:</code></font> keyword.
       <br />
     </td>
   </tr>
   <tr>
-    <td bgcolor="{{conf.BgColour}}" width="150">
+    <td bgcolor="{{ conf.BgColour }}" width="150">
       <b>Search from specific time periods</b><br /><br />
-      <font color="{{conf.HelpCodeColour}}"><code>date:2008<br />date:2009-01<br />
+      <font color="{{ conf.HelpCodeColour }}"><code>date:2008<br />date:2009-01<br />
       date:2005-12-24..2007</code></font>
       <br />
     </td>
-    <td bgcolor="{{conf.BgColour}}">
+    <td bgcolor="{{ conf.BgColour }}">
       <br /><br />
       To find rows from specific time periods (where row has DATE/DATETIME columns), use the keyword
-      <font color="{{conf.HelpCodeColour}}"><code>date:period</code></font> or
-      <font color="{{conf.HelpCodeColour}}"><code>date:periodstart..periodend</code></font>.
+      <font color="{{ conf.HelpCodeColour }}"><code>date:period</code></font> or
+      <font color="{{ conf.HelpCodeColour }}"><code>date:periodstart..periodend</code></font>.
       For the latter, either start or end can be omitted.<br /><br />
       A date period can be year, year-month, or year-month-day. Additionally,
-      <font color="{{conf.HelpCodeColour}}"><code>date:period</code></font> can use a wildcard
+      <font color="{{ conf.HelpCodeColour }}"><code>date:period</code></font> can use a wildcard
       in place of any part, so
-      <font color="{{conf.HelpCodeColour}}"><code>date:*-12-24</code></font> would search for
+      <font color="{{ conf.HelpCodeColour }}"><code>date:*-12-24</code></font> would search for
       all rows having a timestamp from the 24th of December.<br /><br />
       Search from a more narrowly defined period by adding more
-      <font color="{{conf.HelpCodeColour}}"><code>date:</code></font> keywords.
+      <font color="{{ conf.HelpCodeColour }}"><code>date:</code></font> keywords.
       <br />
     </td>
   </tr>
@@ -781,28 +847,28 @@ except ImportError:
   <ul>
     <li>search for "flickr.com" in columns named "url":
         <br /><br />
-        <font color="{{conf.HelpCodeColour}}">
+        <font color="{{ conf.HelpCodeColour }}">
         <code>flickr.com column:url</code></font><br />
     </li>
     <li>search for "foo bar" up to 2011:<br /><br />
-        <font color="{{conf.HelpCodeColour}}"><code>"foo bar" date:..2011</code></font>
+        <font color="{{ conf.HelpCodeColour }}"><code>"foo bar" date:..2011</code></font>
         <br />
     </li>
     <li>search for either "John" and "my side" or "Stark" and "your side":
         <br /><br />
-        <font color="{{conf.HelpCodeColour}}">
+        <font color="{{ conf.HelpCodeColour }}">
         <code>(john "my side") OR (stark "your side")</code></font><br />
     </li>
     <li>search for either "barbecue" or "grill" in 2012,
         except from June to August:<br /><br />
-        <font color="{{conf.HelpCodeColour}}">
+        <font color="{{ conf.HelpCodeColour }}">
         <code>barbecue OR grill date:2012 -date:2012-06..2012-08</code>
         </font><br />
     </li>
     <li>search for "TPS report" but not "my TPS report"
         on the first day of the month in 2012:
         <br /><br />
-        <font color="{{conf.HelpCodeColour}}">
+        <font color="{{ conf.HelpCodeColour }}">
         <code>"tps report" -"my tps report" date:2012-*-1</code>
         </font><br />
     </li>
@@ -826,10 +892,11 @@ from sqlitely import conf
 helplink = "Search help"
 if "nt" == os.name: # In Windows, wx.HtmlWindow shows link whitespace quirkily
     helplink = helplink.replace(" ", "_")
+
 %>
-<font size="2" face="{{conf.HtmlFontName}}" color="{{conf.DisabledColour}}">
+<font size="2" face="{{ conf.HtmlFontName }}" color="{{ conf.DisabledColour }}">
 For searching from specific tables, add "table:name", and from specific columns, add "column:name".
-&nbsp;&nbsp;<a href=\"page:#help\"><font color="{{conf.LinkColour}}">{{helplink}}</font></a>.
+&nbsp;&nbsp;<a href=\"page:#help\"><font color="{{ conf.LinkColour }}">{{ helplink }}</font></a>.
 </font>
 """
 
@@ -846,7 +913,7 @@ from sqlitely.lib.vendor.step import Template
 from sqlitely.lib import util
 from sqlitely import conf, templates
 %>
-<font face="{{conf.HtmlFontName}}" size="2" color="{{conf.FgColour}}">
+<font face="{{ conf.HtmlFontName }}" size="2" color="{{ conf.FgColour }}">
 
 %if isdef("error"):
     {{ error }}
@@ -858,7 +925,7 @@ index_total = sum(x["size"] for x in data["index"])
 total = index_total + sum(x["size"] for x in data["table"])
 %>
 
-<font color="{{conf.PlotTableColour}}" size="4"><b>Table sizes</b></font>
+<font color="{{ conf.PlotTableColour }}" size="4"><b>Table sizes</b></font>
 <table cellpadding="0" cellspacing="4">
   <tr>
     <th></th>
@@ -879,7 +946,7 @@ total = index_total + sum(x["size"] for x in data["table"])
     %if data["index"]:
 
 <br /><br />
-<font color="{{conf.PlotTableColour}}" size="4"><b>Table sizes with indexes</b></font>
+<font color="{{ conf.PlotTableColour }}" size="4"><b>Table sizes with indexes</b></font>
 <table cellpadding="0" cellspacing="4">
   <tr>
     <th></th>
@@ -898,7 +965,7 @@ total = index_total + sum(x["size"] for x in data["table"])
 </table>
 
 <br /><br />
-<font color="{{conf.PlotIndexColour}}" size="4"><b>Table index sizes</b></font>
+<font color="{{ conf.PlotIndexColour }}" size="4"><b>Table index sizes</b></font>
 <table cellpadding="0" cellspacing="4">
   <tr>
     <th></th>
@@ -919,7 +986,7 @@ total = index_total + sum(x["size"] for x in data["table"])
 </table>
 
 <br /><br />
-<font color="{{conf.PlotIndexColour}}" size="4"><b>Index sizes</b></font>
+<font color="{{ conf.PlotIndexColour }}" size="4"><b>Index sizes</b></font>
 <table cellpadding="0" cellspacing="4">
   <tr>
     <th></th>
@@ -1004,9 +1071,9 @@ from sqlitely import conf, images, templates
 %><!DOCTYPE HTML><html lang="en">
 <head>
   <meta http-equiv='Content-Type' content='text/html;charset=utf-8' />
-  <meta name="Author" content="{{conf.Title}}">
-  <title>{{title}}</title>
-  <link rel="shortcut icon" type="image/png" href="data:image/ico;base64,{{!images.Icon16x16_8bit.data}}"/>
+  <meta name="Author" content="{{ conf.Title }}">
+  <title>{{ title }}</title>
+  <link rel="shortcut icon" type="image/png" href="data:image/ico;base64,{{! images.Icon16x16_8bit.data }}"/>
   <style>
     body {
       background: #8CBEFF;
@@ -1085,8 +1152,8 @@ total = index_total + sum(x["size"] for x in data["table"])
 <tr><td><table id="header_table">
   <tr>
     <td>
-      <div id="title">{{title}}</div><br />
-      Source: <b>{{db_filename}}</b>.<br />
+      <div id="title">{{ title }}</div><br />
+      Source: <b>{{ db_filename }}</b>.<br />
       Source size: <b>{{ util.format_bytes(db_filesize) }}</b> ({{ util.format_bytes(db_filesize, max_units=False) }}).<br />
 %if data["table"]:
       <b>{{ util.plural("table", data["table"]) }}</b>, {{ util.format_bytes(table_total) }}.<br />
@@ -1186,7 +1253,7 @@ total = index_total + sum(x["size"] for x in data["table"])
 
 </div>
 </td></tr></table>
-<div id="footer">Exported with {{conf.Title}} on {{datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}}.</div>
+<div id="footer">Exported with {{ conf.Title }} on {{ datetime.datetime.now().strftime("%d.%m.%Y %H:%M") }}.</div>
 </body>
 </html>
 """
@@ -1233,7 +1300,7 @@ index_total = sum(x["size"] for x in data["index"])
 table_total = sum(x["size"] for x in data["table"])
 total = index_total + sum(x["size"] for x in data["table"])
 %>
-Source: {{db_filename}}.
+Source: {{ db_filename }}.
 Size: {{ util.format_bytes(db_filesize) }} ({{ util.format_bytes(db_filesize, max_units=False) }}).
 
 <%

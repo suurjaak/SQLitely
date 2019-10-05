@@ -22,13 +22,15 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    01.10.2019
+@modified    05.10.2019
 ------------------------------------------------------------------------------
 """
 
 
 
 """
+Simple ALTER TABLE.
+
 @param   data {
              name: table name,
              ?rename: {?table: new table name, ?column: {old name: new name}},

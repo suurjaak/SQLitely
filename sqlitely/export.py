@@ -125,7 +125,6 @@ def export_data(make_iterable, filename, title, db, columns,
                     "sql":         query,
                     "category":    category,
                     "name":        name,
-                    "app":         conf.Title,
                     "progress":    progress,
                 }
                 namespace["namespace"] = namespace # To update row_count

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.10.2019
+@modified    05.10.2019
 ------------------------------------------------------------------------------
 """
 import hashlib
@@ -152,7 +152,6 @@ class SearchThread(WorkerThread):
                 TEMPLATES = {"meta":  templates.SEARCH_ROW_META_HTML,
                              "table": templates.SEARCH_ROW_TABLE_HEADER_HTML,
                              "row":   templates.SEARCH_ROW_TABLE_HTML}
-                wrap_b = lambda x: "<b>%s</b>" % x.group(0)
                 FACTORY = lambda x: step.Template(TEMPLATES[x], escape=True)
                 logger.info('Searching "%(text)s" in %(table)s (%(db)s).' % search)
                 self._is_working, self._drop_results = True, False
@@ -172,7 +171,7 @@ class SearchThread(WorkerThread):
                 pattern_replace = re.compile(patt, re.IGNORECASE)
                 infotext = search["table"]
 
-                # Find from database CREATE SQL
+                # Find from database metadata
                 if self._is_working and "meta" == search["table"] \
                 and match_words:
                     infotext = "database CREATE SQL"
@@ -186,10 +185,12 @@ class SearchThread(WorkerThread):
 
                             count += 1
                             result_count += 1
-                            result["output"] += template_meta.expand(locals())
+                            ns = dict(category=category, item=item,
+                                      pattern_replace=pattern_replace)
+                            result["output"] += template_meta.expand(ns)
                             if "table" == category:
                                 key = "table:%s" % item["name"]
-                                result["map"][key] = {"table": item["name"]}
+                                result["map"][key] = {"table": item["name"], "page": "schema"}
                             if not count % conf.SearchResultsChunk \
                             and not self._drop_results:
                                 result["count"] = result_count
@@ -228,12 +229,14 @@ class SearchThread(WorkerThread):
                                     + namepre + table["name"] + namesuf
                         if not row:
                             continue # for table
-                        result["output"] = template_table.expand(locals())
+                        result["output"] = template_table.expand(table=table)
                         count = 0
                         while row:
                             count += 1
                             result_count += 1
-                            result["output"] += template_row.expand(locals())
+                            ns = dict(table=table, row=row, keywords=keywords,
+                                      count=count, pattern_replace=pattern_replace)
+                            result["output"] += template_row.expand(ns)
                             key = "table:%s:%s" % (table["name"], count)
                             result["map"][key] = {"table": table["name"],
                                                   "row": row}

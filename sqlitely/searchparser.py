@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.10.2019
+@modified    05.10.2019
 """
 import calendar
 import collections

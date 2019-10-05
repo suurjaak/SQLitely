@@ -3436,27 +3436,32 @@ class DatabasePage(wx.Panel):
                         filename
                     wx.MessageBox(e, conf.Title, wx.OK | wx.ICON_INFORMATION)
             elif table_name:
-                tableitem = None
+                tableitem, tree, page = None, self.tree_data, self.page_data
+                on_evt = self.on_change_tree_data
+                if "schema" == link_data.get("page"):
+                    tree, page = self.tree_schema, self.page_schema
+                    on_evt = self.on_change_tree_schema
+
                 table_name = table_name.lower()
-                item = self.tree_data.GetNext(self.tree_data.GetNext(self.tree_data.RootItem))
+                item = tree.GetNext(tree.GetNext(tree.RootItem))
                 tablemap = self.db.get_category("table")
                 while table_name in tablemap and item and item.IsOk():
-                    data = self.tree_data.GetItemPyData(item)
+                    data = tree.GetItemPyData(item)
                     if isinstance(data, dict) and "table" == data.get("type") \
                     and data["name"].lower() == table_name:
                         tableitem = item
                         break # while table_name
-                    item = self.tree_data.GetNextSibling(item)
+                    item = tree.GetNextSibling(item)
                 if tableitem:
-                    self.notebook.SetSelection(self.pageorder[self.page_data])
+                    self.notebook.SetSelection(self.pageorder[page])
                     wx.YieldIfNeeded()
                     # Only way to create state change in wx.gizmos.TreeListCtrl
                     class HackEvent(object):
                         def __init__(self, item): self._item = item
                         def GetItem(self):        return self._item
-                    self.on_change_tree_data(HackEvent(tableitem))
-                    if self.tree_data.Selection != tableitem:
-                        self.tree_data.SelectItem(tableitem)
+                    on_evt(HackEvent(tableitem))
+                    if tree.Selection != tableitem:
+                        tree.SelectItem(tableitem)
                         wx.YieldIfNeeded()
 
                     if row: # Scroll to matching row
