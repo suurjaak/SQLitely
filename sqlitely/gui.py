@@ -5094,6 +5094,11 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
     def GetNumberCols(self): return len(self.columns)
 
 
+    def IsComplete(self):
+        """Returns whether all rows have been retrieved."""
+        return not self.row_iterator
+
+
     def SeekAhead(self, end=False):
         """Seeks ahead on the query cursor, by chunk length or everything."""
         seek_count = len(self.rows_current) + self.SEEK_CHUNK_LENGTH - 1
@@ -6462,15 +6467,17 @@ class DataObjectPage(wx.PyPanel):
         if not filename.lower().endswith(".%s" % extname):
             filename += ".%s" % extname
         try:
-            make_iterable = self._grid.Table.GetRowIterator
-            exporter = functools.partial(export.export_data, make_iterable, filename,
-                title, self._db, self._grid.Table.columns,
+            grid = self._grid.Table
+            exporter = functools.partial(export.export_data, grid.GetRowIterator,
+                filename, title, self._db, grid.columns,
                 category=self._category, name=self._item["name"],
                 progress=self._export.OnProgress,
             )
-            opts = {"filename": filename, "callable": exporter,
-                    "total": self._item.get("count"),
-                    "is_total_estimated": self._item.get("is_count_estimated")}
+            opts = {"filename": filename, "callable": exporter}
+            opts.update({"total": grid.GetNumberRows()} if grid.IsComplete() else {
+                "total": self._item.get("count"),
+                "is_total_estimated": self._item.get("is_count_estimated"),
+            } if "filter" not in grid.GetFilterSort() else {})
 
             self.Freeze()
             for x in self.Children: x.Hide()
