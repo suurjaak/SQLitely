@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.10.2019
+@modified    05.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -200,7 +200,7 @@ def unique_path(pathname):
 
 def start_file(filepath):
     """
-    Tries to open the specified file in the operating system.
+    Tries to open the specified file or directory in the operating system.
 
     @return  (success, error message)
     """
@@ -218,8 +218,17 @@ def start_file(filepath):
         elif "posix" == os.name:
             subprocess.call(("xdg-open", filepath))
     except Exception as e:
-        success, error = False, repr(e)
+        success, error = False, format_exc(e)
     return success, error
+
+
+def select_file(filepath):
+    """
+    Tries to open the file directory and select file.
+    Falls back to opening directory only (select is Windows-only).
+    """
+    try: subprocess.Popen('explorer /select, "%s"' % filepath)
+    except Exception: start_file(os.path.split(filepath)[0])
 
 
 def is_os_64bit():

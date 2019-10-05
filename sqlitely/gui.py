@@ -894,7 +894,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 d = wx.TextDataObject("\n".join(files))
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
         def open_folder(*a, **kw):
-            for f in files: util.start_file(os.path.split(f)[0])
+            for f in files: util.select_file(f)
 
         name = os.path.split(files[0])[-1] if len(files) == 1 \
                else util.plural("file", files)
@@ -2580,7 +2580,7 @@ class DatabasePage(wx.Panel):
         button_optimize = self.button_optimize        = wx.Button(panel1c, label="Optimize")
 
         button_vacuum      = self.button_vacuum       = wx.Button(panel1c, label="Vacuum")
-        button_open_folder = self.button_open_folder  = wx.Button(panel1c, label="Open directory")
+        button_open_folder = self.button_open_folder  = wx.Button(panel1c, label="Show in folder")
         button_refresh     = self.button_refresh_info = wx.Button(panel1c, label="Refresh")
         button_fks.Enabled = button_check.Enabled = button_optimize.Enabled = False
         button_vacuum.Enabled = button_open_folder.Enabled = button_refresh.Enabled = False
@@ -2612,7 +2612,7 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_BUTTON, self.on_check_integrity, button_check)
         self.Bind(wx.EVT_BUTTON, self.on_optimize, button_optimize)
         self.Bind(wx.EVT_BUTTON, self.on_vacuum, button_vacuum)
-        self.Bind(wx.EVT_BUTTON, lambda e: util.start_file(os.path.split(self.db.filename)[0]),
+        self.Bind(wx.EVT_BUTTON, lambda e: util.select_file(self.db.filename),
                   button_open_folder)
         self.Bind(wx.EVT_BUTTON, lambda e: self.update_info_panel(),
                   button_refresh)
@@ -8967,7 +8967,7 @@ class ExportProgressPanel(wx.PyPanel):
             text   = ctrls["text"]   = wx.StaticText(parent)
             cancel = ctrls["cancel"] = wx.Button(panel, label="Cancel")
             open   = ctrls["open"]   = wx.Button(panel, label="Open")
-            folder = ctrls["folder"] = wx.Button(panel, label="Open directory")
+            folder = ctrls["folder"] = wx.Button(panel, label="Show in folder")
             open.Hide(), folder.Hide()
 
             sizer_buttons.AddStretchSpacer()
@@ -9094,7 +9094,7 @@ class ExportProgressPanel(wx.PyPanel):
 
     def _OnFolder(self, index, event=None):
         """Handler for opening export file directory."""
-        util.start_file(os.path.split(self._exports[index]["filename"])[0])
+        util.select_file(self._exports[index]["filename"])
 
 
     def _OnWorker(self, result):
