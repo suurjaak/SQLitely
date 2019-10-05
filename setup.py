@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Setup.py for SQLitely. 
+Setup.py for SQLitely.
 
 ------------------------------------------------------------------------------
 This file is part of SQLitely - an SQLite database tool.

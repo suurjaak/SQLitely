@@ -419,7 +419,7 @@ def longpath(path):
 
 def shortpath(path):
     """Returns the path in short Windows form (PROGRA~1 not "Program Files")."""
-    if isinstance(path, str): return path        
+    if isinstance(path, str): return path
     import ctypes.wintypes
 
     ctypes.windll.kernel32.GetShortPathNameW.argtypes = [

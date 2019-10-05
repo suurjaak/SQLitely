@@ -760,7 +760,7 @@ class Database(object):
                     opts["count"] = opts0["count"]
                     if "is_count_estimated" in opts0:
                         opts["is_count_estimated"] = opts0["is_count_estimated"]
-                        
+
 
     def get_count(self, table):
         """
@@ -887,7 +887,7 @@ class Database(object):
                                 if c["name"].lower() == column.lower()), None)
                     if not col: continue # for myname, opts
                     chunk, err = grammar.generate(dict(col, __type__="column"), indent=False)
-                    if err: raise Exception(err)                        
+                    if err: raise Exception(err)
                     break # for myname, opts
 
                 sql = opts["sql"]
@@ -895,7 +895,7 @@ class Database(object):
                        if transform and x in transform}
                 if not opts.get("meta") or kws or indent != "  ":
                     sql, err = grammar.transform(sql, indent=indent, **kws)
-                    if err: raise Exception(err)                        
+                    if err: raise Exception(err)
                 chunk += sql + (";\n\n" if not names or len(names) < 2 else "")
             result += ("\n\n" if result else "") + chunk
 
@@ -913,7 +913,7 @@ class Database(object):
         mytype = col.get("type") if isinstance(col, dict) else col
         if not mytype or not isinstance(mytype, basestring): return "BLOB"
 
-        mytype = mytype.upper()            
+        mytype = mytype.upper()
         for aff, types in Database.AFFINITY.items(): # Exact match
             if mytype in types:
                 return aff

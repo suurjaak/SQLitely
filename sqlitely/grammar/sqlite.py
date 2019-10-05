@@ -204,7 +204,7 @@ class ErrorListener(object):
     def getErrors(self, stack=False):
         if not stack: return "\n\n".join(self._errors)
         return "%s\n%s" % ("\n\n".join(self._errors), "".join(self._stack))
-        
+
 
 
 class Parser(object):
@@ -896,7 +896,7 @@ class Generator(object):
                      (index == len(root[collection]) - 1)
         else:
             islast = (index == len(root[collection]) - 1)
-            
+
         val = "" if islast else ", "
         return self.token(val, "CM") if val else ""
 

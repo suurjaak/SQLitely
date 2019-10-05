@@ -466,10 +466,10 @@ class FormDialog(wx.Dialog):
                     if self._autocomp and isinstance(c, SQLiteTextCtrl):
                         c.AutoCompClearAdded()
                         c.AutoCompAddWords(self._autocomp)
-                elif isinstance(c, wx.CheckBox): c.Value = bool(value) 
+                elif isinstance(c, wx.CheckBox): c.Value = bool(value)
                 else:
                     if isinstance(c, wx.ComboBox): c.SetItems(choices)
-                    if isinstance(value, (list, tuple)): value = "".join(value)                        
+                    if isinstance(value, (list, tuple)): value = "".join(value)
                     c.Value = "" if value is None else value
 
                 if isinstance(c, wx.TextCtrl): c.SetEditable(self._editmode)
@@ -552,7 +552,7 @@ class FormDialog(wx.Dialog):
             sizer_top.Add(mylabel, border=5, flag=wx.BOTTOM | wx.ALIGN_BOTTOM)
             sizer_top.AddStretchSpacer()
             sizer_top.Add(tb, flag=wx.ALIGN_BOTTOM)
-            
+
             sizer_stc.Add(sizer_top, flag=wx.GROW)
             sizer_stc.Add(ctrl, proportion=1, flag=wx.GROW)
 
@@ -2053,7 +2053,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     """
     A StyledTextCtrl configured for SQLite syntax highlighting.
-    
+
     Supports single-line mode with SQLiteTextCtrl(singleline=True)
     """
 
@@ -2136,7 +2136,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
                       if self.Enabled else wx.SYS_COLOUR_BTNFACE,
                       wx.SYS_COLOUR_HOTLIGHT)
         )
-            
+
 
         self.SetCaretForeground(fgcolour)
         self.SetCaretLineBackground("#00FFFF")

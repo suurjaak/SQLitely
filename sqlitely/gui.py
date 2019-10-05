@@ -2376,7 +2376,7 @@ class DatabasePage(wx.Panel):
             )
             if opts.get("read")  is False: description += "\n\nWrite-only."
             if opts.get("write") is False: description += "\n\nRead-only."
-                
+
             ctrl_name, label_name = "pragma_%s" % name, "pragma_%s_label" % name
 
             label = wx.StaticText(panel_pragma, label=opts["label"], name=label_name)
@@ -2969,7 +2969,7 @@ class DatabasePage(wx.Panel):
         """Handler for filtering PRAGMA list, shows/hides components."""
         search = event.String.strip()
         if search == self.pragma_filter: return
-            
+
         patterns = map(re.escape, search.split())
         values = dict(self.pragma, **self.pragma_changes)
         show_deprecated = False
@@ -3795,7 +3795,7 @@ class DatabasePage(wx.Panel):
                     if isinstance(page, SchemaObjectPage):
                         schemas_saved.setdefault(category, {})[key] = page
                 if not success: break # for group
-                        
+
             if success and self.pragma_changes:
                 success = self.on_pragma_save()
         except Exception as e:
@@ -3813,7 +3813,7 @@ class DatabasePage(wx.Panel):
                 error = "Error saving %s as %s:\n\n" % util.format_exc(e)
                 logger.exception("Error saving temporary file %s as %s.",
                                  tempname, filename2)
-            
+
         if not success and rename:
             self.db.reopen(filename1)
 
@@ -3837,7 +3837,7 @@ class DatabasePage(wx.Panel):
         if not success:
             if error: wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
             return
-            
+
         self.db.name, self.db.temporary = filename2, False
         if rename:
             evt = DatabasePageEvent(-1, source=self, rename=True, temporary=is_temporary,
@@ -4098,7 +4098,7 @@ class DatabasePage(wx.Panel):
             itemtext = util.plural(items[0]["type"], items)
             if len(items) == 1:
                 itemtext = " ".join((items[0]["type"], grammar.quote(items[0]["name"], force=True)))
-                
+
             if wx.OK != wx.MessageBox(
                 "Are you sure you want to delete the %s?%s" % (itemtext, extra),
                 conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
@@ -4316,7 +4316,7 @@ class DatabasePage(wx.Panel):
 
     def on_schema_create(self, event):
         """Opens popup menu for CREATE options."""
-        
+
         def create_object(category, *_, **__):
             newdata = {"type": category,
                        "meta": {"__type__": "CREATE %s" % category.upper()}}
@@ -4544,7 +4544,7 @@ class DatabasePage(wx.Panel):
         self.panel_data_export.Hide()
         self.Layout()
         self.Thaw()
-        
+
 
     def on_export_data_file(self, category, items, event=None):
         """
@@ -5662,7 +5662,7 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
                 if not isinstance(value, basestring):
                     value = "" if value is None else str(value)
                 is_filtered = filter_value.lower() not in value.lower()
-            if is_filtered: break # for col                
+            if is_filtered: break # for col
         return is_filtered
 
 
@@ -5670,7 +5670,6 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
         """Returns unique identifier for row."""
         self.id_counter += 1
         return self.id_counter
-        
 
 
 
@@ -6149,7 +6148,7 @@ class SQLPage(wx.PyPanel):
         whole contents, displays its results, if any, and commits changes
         done, if any.
         """
-        if self._export.Shown: return            
+        if self._export.Shown: return
         sql = (self._stc.SelectedText or self._stc.Text).strip()
         if sql: self.ExecuteSQL(sql)
 
@@ -6159,10 +6158,10 @@ class SQLPage(wx.PyPanel):
         Handler for clicking to run multiple SQL statements, runs the selected
         text or whole contents as an SQL script.
         """
-        if self._export.Shown: return            
+        if self._export.Shown: return
         sql = (self._stc.SelectedText or self._stc.Text).strip()
         if not sql: return
-            
+
         try:
             logger.info('Executing SQL script "%s".', sql)
             self._db.connection.executescript(sql)
@@ -6386,7 +6385,7 @@ class DataObjectPage(wx.PyPanel):
         row_id = [row[c] for c in id_fields]
         for i in range(self._grid.Table.GetNumberRows()):
             row2 = self._grid.Table.GetRowData(i)
-            if not row2: break # for i                
+            if not row2: break # for i
 
             row2_id = [row2[c] for c in id_fields]
             if row_id == row2_id:
@@ -6606,7 +6605,7 @@ class DataObjectPage(wx.PyPanel):
     def _OnRefresh(self, event=None, pending=False):
         """
         Handler for refreshing grid data, asks for confirmation if changed.
-        
+
         @param   pending  retain unsaved pending changes
         """
         if not pending and self.IsChanged() and wx.OK != wx.MessageBox(
@@ -6928,7 +6927,7 @@ class SchemaObjectPage(wx.PyPanel):
         splitter.SetMinimumPaneSize(100)
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
         splitter.SplitHorizontally(panel1, panel2, splitter.Size[1] - 200)
-        if self._newmode: edit_name.SetFocus(), edit_name.SelectAll()            
+        if self._newmode: edit_name.SetFocus(), edit_name.SelectAll()
 
 
     def Close(self, force=False):
@@ -6966,7 +6965,7 @@ class SchemaObjectPage(wx.PyPanel):
         """
         Restores page state from before last successful .Save(backup=True), if any.
         """
-        if not self._backup: return            
+        if not self._backup: return
         for k, v in self._backup.items(): setattr(self, k, v)
         self._Populate()
         self._ToggleControls(self._editmode)
@@ -7029,7 +7028,7 @@ class SchemaObjectPage(wx.PyPanel):
             label = wx.StaticText(panel_columnwrapper, label=l, size=(14, -1))
             label.ToolTipString = t
             sizer_columnflags.Add(label)
-            
+
         sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Name",    size=(150, -1)), border=7, flag=wx.LEFT)
         sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Type",    size=(100, -1)))
         sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Default", size=(100, -1)))
@@ -7431,7 +7430,7 @@ class SchemaObjectPage(wx.PyPanel):
         button_open.ToolTipString   = "Open advanced options"
         button_up.ToolTipString     = "Move one step higher"
         button_down.ToolTipString   = "Move one step lower"
-        button_remove.ToolTipString = "Remove"                    
+        button_remove.ToolTipString = "Remove"
 
         text_name.Value     = col.get("name") or ""
         list_type.Value     = col.get("type") or ""
@@ -7617,7 +7616,7 @@ class SchemaObjectPage(wx.PyPanel):
         if last:  button_down.Enable(False)
         button_up.ToolTipString     = "Move one step higher"
         button_down.ToolTipString   = "Move one step lower"
-        button_remove.ToolTipString = "Remove"                    
+        button_remove.ToolTipString = "Remove"
 
         sizer_buttons.Add(button_up)
         sizer_buttons.Add(button_down)
@@ -7676,7 +7675,7 @@ class SchemaObjectPage(wx.PyPanel):
         if last:  button_down.Enable(False)
         button_up.ToolTipString     = "Move one step higher"
         button_down.ToolTipString   = "Move one step lower"
-        button_remove.ToolTipString = "Remove"                    
+        button_remove.ToolTipString = "Remove"
 
         ctrl_index.Value   = col.get("name") or col.get("expr") or ""
         list_collate.Value = col.get("collate") or ""
@@ -7747,7 +7746,7 @@ class SchemaObjectPage(wx.PyPanel):
         if last:  button_down.Enable(False)
         button_up.ToolTipString     = "Move one step higher"
         button_down.ToolTipString   = "Move one step lower"
-        button_remove.ToolTipString = "Remove"                    
+        button_remove.ToolTipString = "Remove"
 
         list_column.Value = value
 
@@ -7794,7 +7793,7 @@ class SchemaObjectPage(wx.PyPanel):
         if last:  button_down.Enable(False)
         button_up.ToolTipString     = "Move one step higher"
         button_down.ToolTipString   = "Move one step lower"
-        button_remove.ToolTipString = "Remove"                    
+        button_remove.ToolTipString = "Remove"
 
         text_column.Value = value
 
@@ -7884,7 +7883,7 @@ class SchemaObjectPage(wx.PyPanel):
             action = getattr(c, "_toggle", None) or []
             if callable(action): action = action() or []
             if   "skip"    in action: continue # for c
-            if "disable" in action: c.Enable(not edit)                
+            if "disable" in action: c.Enable(not edit)
             if "disable" not in action:
                 if isinstance(c, (wx.ComboBox, wx.stc.StyledTextCtrl)): c.Enable(edit)
                 else:
@@ -7903,7 +7902,7 @@ class SchemaObjectPage(wx.PyPanel):
     def _PopulateAutoComp(self):
         """Populate SQLiteTextCtrl autocomplete."""
         if not self._editmode: return
-            
+
         words, subwords, singlewords = [], {}, []
 
         for category in ("table", "view"):
@@ -8111,11 +8110,11 @@ class SchemaObjectPage(wx.PyPanel):
             if x.IsWindow() : result.append(x.GetWindow())
             elif x.IsSizer(): result.extend(self._GetSizerChildren(x.GetSizer()))
         return result
-        
+
 
     def _GetFormDialogProps(self, path, data):
         """Returns (title, field properties) for table column or constraint FormDialog."""
-        
+
         def get_foreign_cols(data):
             result = []
             if data and data.get("table"):
@@ -8266,7 +8265,7 @@ class SchemaObjectPage(wx.PyPanel):
             if last:  button_down.Enable(False)
             button_up.ToolTipString     = "Move one step higher"
             button_down.ToolTipString   = "Move one step lower"
-            button_remove.ToolTipString = "Remove"                    
+            button_remove.ToolTipString = "Remove"
 
             ctrl_index.Value   = col.get("name") or ""
             list_collate.Value = col.get("collate") or ""
@@ -8315,7 +8314,7 @@ class SchemaObjectPage(wx.PyPanel):
         index = kwargs.pop("insert", None)
         if index is None: parentsizer.Add(childsizer, *args, **kwargs)
         else: parentsizer.Insert(index, childsizer, *args, **kwargs)
-        self._sizers[childsizer] = parentsizer        
+        self._sizers[childsizer] = parentsizer
 
 
     def _RemoveSizer(self, sizer):
@@ -8546,11 +8545,11 @@ class SchemaObjectPage(wx.PyPanel):
 
                 if self._col_updater: self._col_updater.Stop()
                 self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
-                
+
         elif ["table"] == path:
             rebuild = meta.get("columns")
             meta.pop("columns", None)
-                
+
 
         self._Populate() if rebuild else self._PopulateSQL()
         self._PostEvent(modified=True)
@@ -8695,7 +8694,7 @@ class SchemaObjectPage(wx.PyPanel):
         if wx.OK != dlg.ShowModal(): return
         sql = dlg.GetData().get("sql", "").strip()
         if not sql: return
-            
+
         logger.info("Importing %s definition from SQL:\n\n%s", self._category, sql)
         meta, err = grammar.parse(sql, self._category)
         if not meta:
@@ -8865,7 +8864,7 @@ class SchemaObjectPage(wx.PyPanel):
     def _OnDelete(self, event=None):
         """Handler for clicking to delete the item, asks for confirmation."""
         extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
-                if "table" == self._category else ""                    
+                if "table" == self._category else ""
         if wx.OK != wx.MessageBox(
             "Are you sure you want to delete the %s %s?%s" %
             (self._category, grammar.quote(self._item["name"], force=True), extra),
@@ -8943,7 +8942,7 @@ class ExportProgressPanel(wx.PyPanel):
     def GetIncomplete(self):
         """Returns a list of running and pending exports."""
         return [x for x in self._exports if x["pending"]]
-        
+
 
     def OnProgress(self, index=0, count=None):
         """
@@ -9056,7 +9055,7 @@ class ExportProgressPanel(wx.PyPanel):
             "Export is currently underway, are you sure you want to cancel it?",
             conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
         ): return
-            
+
         self._worker.stop_work(drop_results=True)
         self._exports = []
         self._current = None

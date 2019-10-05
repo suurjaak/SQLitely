@@ -425,7 +425,7 @@ class AnalyzerThread(WorkerThread):
                     try:
                         self._process.kill()
                         output, error = self._process.communicate()
-                    except Exception: pass                    
+                    except Exception: pass
                 error = error or getattr(e, "output", None)
                 if error: error = error.split("\n")[0].strip()
                 else: error = util.format_exc(e)
@@ -470,8 +470,8 @@ class AnalyzerThread(WorkerThread):
                                  if "index" in item else None
                     item["size_total"] = item["size"] + (size_index or 0)
                     if size_index is not None: item["size_index"] = size_index
-                        
-                        
+
+
                 self.postback({"data": data})
             self._is_working = False
 
