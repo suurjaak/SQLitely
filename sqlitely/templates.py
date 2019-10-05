@@ -481,11 +481,7 @@ from sqlitely import conf, grammar
 wrap_b = lambda x: "<b>%s</b>" % x.group(0)
 %>
 {{ category.capitalize() }}
-%if "table" == category:
-  <a href="table:{{ item["name"] }}"><font color="{{ conf.LinkColour }}">{{! pattern_replace.sub(wrap_b, escape(grammar.quote(item["name"]))) }}</font></a>:
-%else:
-  {{! pattern_replace.sub(wrap_b, escape(grammar.quote(item["name"]))) }}:
-%endif
+<a href="{{ category }}:{{ item["name"] }}"><font color="{{ conf.LinkColour }}">{{! pattern_replace.sub(wrap_b, escape(grammar.quote(item["name"]))) }}</font></a>:
 <pre><font size="2">{{! pattern_replace.sub(wrap_b, escape(item["sql"])).replace(" ", "&nbsp;") }}</font></pre>
 <br /><br />
 """

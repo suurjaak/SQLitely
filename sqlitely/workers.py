@@ -188,9 +188,11 @@ class SearchThread(WorkerThread):
                             ns = dict(category=category, item=item,
                                       pattern_replace=pattern_replace)
                             result["output"] += template_meta.expand(ns)
-                            if "table" == category:
-                                key = "table:%s" % item["name"]
-                                result["map"][key] = {"table": item["name"], "page": "schema"}
+                            result["map"][":".join((category, item["name"]))] = {
+                                "category": category,
+                                "page":     "schema",
+                                category:   item["name"],
+                            }
                             if not count % conf.SearchResultsChunk \
                             and not self._drop_results:
                                 result["count"] = result_count

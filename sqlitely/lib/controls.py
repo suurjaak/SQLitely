@@ -53,6 +53,9 @@ Stand-alone GUI components for wx:
   on 09.02.2006 in wxPython-users thread "TextCtrlAutoComplete",
   http://wxpython-users.1045709.n5.nabble.com/TextCtrlAutoComplete-td2348906.html
 
+- TreeListCtrl(wx.gizmos.TreeListCtrls):
+  A tree control with a more convenient API.
+
 ------------------------------------------------------------------------------
 This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
@@ -70,6 +73,7 @@ import os
 import re
 
 import wx
+import wx.gizmos
 import wx.html
 import wx.lib.agw.flatnotebook
 import wx.lib.agw.gradientbutton
@@ -2934,3 +2938,85 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         self._ignore_textchange = True
         return wx.TextCtrl.SetValue(self, value)
     Value = property(GetValue, SetValue)
+
+
+
+class TreeListCtrl(wx.gizmos.TreeListCtrl):
+    """
+    A tree control with a more convenient API.
+    Events should be registered directly via self.Bind,
+    not via parent.Bind(source=self).
+    """
+
+    class DummyEvent(object):
+        """Event to feed to directly invoked handlers."""
+        def __init__(self, item): self._item = item
+        def GetItem(self):        return self._item
+
+
+    def __init__(self, parent, id=wx.ID_ANY, pos=wx.DefaultPosition,
+                 size=wx.DefaultSize, style=wx.TR_DEFAULT_STYLE,
+                 validator=wx.DefaultValidator,
+                 name=wx.gizmos.TreeListCtrlNameStr):
+        super(TreeListCtrl, self).__init__(parent, id, pos, size, style,
+                                             validator, name)
+        self._handlers = collections.defaultdict(list) # {event type: [handler, ]}
+
+
+    def Bind(self, event, handler, source=None, id=wx.ID_ANY, id2=wx.ID_ANY):
+        """
+        Binds an event to event handler,
+        registering handler for FindAndActivateItem if wx.EVT_TREE_ITEM_ACTIVATED.
+        """
+        if handler not in self._handlers[event]:
+            self._handlers[event].append(handler)
+        super(TreeListCtrl, self).Bind(event, handler, source, id, id2)
+
+
+    def FindAndActivateItem(self, match=None, expand=False, **kwargs):
+        """
+        Selects tree item where match returns true for item data, and invokes
+        handlers registered for wx.EVT_TREE_ITEM_ACTIVATED. Expands all item
+        parents.
+
+        @param    match   callback(data associated with item): bool
+                          or {key: value} to match in associated data dict
+        @param    expand  expand matched item
+        @param    kwargs  additional keyword arguments to match in data
+        @return           success
+        """
+        fmatch = match if callable(match) else bool
+        dmatch = dict(match if isinstance(match, dict) else {}, **kwargs)
+        mymatch = match if callable(match) and not dmatch else lambda x: (
+                  fmatch(x) and isinstance(x, dict) 
+                  and all(x.get(k) == dmatch.get(k) for k in dmatch))
+
+        item, myitem = self.GetNext(self.RootItem), None
+        while item and item.IsOk():
+            if mymatch(self.GetItemPyData(item)): myitem, item = item, None
+            item = item and self.GetNext(item)
+
+        if myitem:
+            parent = self.GetItemParent(myitem)
+            while parent and parent.IsOk():
+                parent, _ = self.GetItemParent(parent), self.Expand(parent)
+
+            self.SelectItem(myitem)
+            if expand: self.Expand(myitem)
+            evt = self.DummyEvent(myitem)
+            for f in self._handlers.get(wx.EVT_TREE_ITEM_ACTIVATED): f(evt)
+        return bool(myitem)
+
+
+    def ToggleItem(self, item):
+        """
+        Toggles item and all children expanded if any collapsed,
+        else toggles all collapsed.
+        """
+        items, it = [item], self.GetNext(item)
+        while it and it.IsOk():
+            items.append(it)
+            it = self.GetNextSibling(it)
+        if all(self.IsExpanded(x) or not self.HasChildren(x) for x in items):
+            for x in items: self.Collapse(x)
+        else: self.ExpandAll(item)
