@@ -3293,8 +3293,8 @@ class DatabasePage(wx.Panel):
         if reload:
             self.db.populate_schema()
             self.db.update_fileinfo()
-        for name in ["size", "created", "modified"]:
-            getattr(self, "edit_info_%s" % name).Value = ""
+        for name in ["edit_info_size", "edit_info_created", "edit_info_modified"]:
+            getattr(self, name).Value = ""
 
         self.edit_info_path.Value = "<temporary file>" if self.db.temporary \
                                     else self.db.filename
@@ -3316,8 +3316,9 @@ class DatabasePage(wx.Panel):
             self.button_checksum_stop.Show()
             self.worker_checksum.work(self.db.filename)
 
-        for name in ["size", "created", "modified", "path", "sha1", "md5"]:
-            getattr(self, "edit_info_%s" % name).MinSize = (-1, -1)
+        for name in ["edit_info_size", "edit_info_created", "edit_info_modified",
+                     "edit_info_path", "edit_info_sha1", "edit_info_md5"]:
+            getattr(self, name).MinSize = (-1, -1)
         self.edit_info_path.ContainingSizer.Layout()
 
         self.button_vacuum.Enabled = self.button_check_fks.Enabled = True
