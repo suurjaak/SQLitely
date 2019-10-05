@@ -2296,6 +2296,7 @@ class DatabasePage(wx.Panel):
         notebook.AddPage(page, "SQL")
 
         self.sql_pages = defaultdict(dict) # {name: SQLPage}
+        self.sql_pages_closed = [] # [(name, content)]
         self.sql_page_counter = 0
 
         sizer = page.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2314,8 +2315,7 @@ class DatabasePage(wx.Panel):
         try: nb._pages.GetSingleLineBorderColour = nb.GetActiveTabColour
         except Exception: pass # Hack to get uniform background colour
 
-        for x in conf.SQLWindowTexts.get(self.db.filename, []):
-            name, text = x.items()[0]
+        for name, text in conf.SQLWindowTexts.get(self.db.filename, [])[::-1]:
             self.add_sql_page(name, text)
         if self.sql_pages:
             self.sql_page_counter = max(
@@ -2331,6 +2331,8 @@ class DatabasePage(wx.Panel):
                 self.on_close_sql_page)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_DROPPED,
                 self.on_dragdrop_sql_page)
+        nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
+                self.on_rclick_sql_page)
         nb.Bind(wx.EVT_CHAR_HOOK, self.on_key_sql_page)
         self.register_notebook_hotkeys(nb)
 
@@ -3239,6 +3241,8 @@ class DatabasePage(wx.Panel):
             p.Close(force=True)
         for p in (p for x in self.schema_pages.values() for p in x.values()):
             p.Close(force=True)
+        sql_order = [self.notebook_sql.GetPageText(i)
+                     for i in range(self.notebook_sql.GetPageCount() - 1)]
         for p in self.sql_pages.values():
             p.Close(force=True)
 
@@ -3265,7 +3269,8 @@ class DatabasePage(wx.Panel):
             del conf.LastSearchResults[self.db.filename]
 
         # Save page SQL windows content, if changed from previous value
-        sqls = [{k: v.GetText()} for k, v in self.sql_pages.items() if v.GetText()]
+        sqls = [(k, self.sql_pages[k].Text) for k in sql_order
+                if self.sql_pages[k].Text.strip()]
         if sqls != conf.SQLWindowTexts.get(self.db.filename):
             if sqls: conf.SQLWindowTexts[self.db.filename] = sqls
             else: conf.SQLWindowTexts.pop(self.db.filename, None)
@@ -3888,14 +3893,14 @@ class DatabasePage(wx.Panel):
 
     def add_sql_page(self, name="", text=""):
         """Opens an SQL page with specified text."""
-        self.sql_page_counter += 1
-        if not name:
+        if not name or name in self.sql_pages:
             name = "SQL"
             if not self.sql_pages: self.sql_page_counter = 1
-            if self.sql_page_counter > 1:
+            while name in self.sql_pages:
+                self.sql_page_counter += 1
                 name += " (%s)" % self.sql_page_counter
         p = SQLPage(self.notebook_schema, self.db)
-        p.SetText(text)
+        p.Text = text
         self.sql_pages[name] = p
         self.notebook_sql.InsertPage(0, page=p, text=name, select=True)
         self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
@@ -4424,11 +4429,42 @@ class DatabasePage(wx.Panel):
             nb.AddPage(p, text="+")
 
 
+    def on_rclick_sql_page(self, event=None):
+        """Handler for right-click on notebook header, opens closed tabs menu."""
+        if not self.sql_pages_closed: return
+
+        pp = self.sql_pages_closed
+        def reopen(index, *_, **__):
+            self.add_sql_page(*pp[index])
+            del pp[index]
+
+        menu, menu_recent = wx.Menu(), wx.Menu()
+
+        item_last = wx.MenuItem(menu, -1, '&Reopen "%s"' % pp[-1][0])
+        menu.Bind(wx.EVT_MENU, functools.partial(reopen, -1), id=item_last.GetId())
+
+        menu.AppendItem(item_last)
+        item_recent = menu.AppendMenu(-1, "Recent &tabs", submenu=menu_recent)
+
+        for i, (name, _) in enumerate(pp):
+            item = wx.MenuItem(menu_recent, -1, name)
+            menu.Bind(wx.EVT_MENU, functools.partial(reopen, i), id=item.GetId())
+            menu_recent.AppendItem(item)
+
+        self.notebook_sql.PopupMenu(menu)
+
+
     def on_key_sql_page(self, event):
         """
         Handler for keypress in SQL notebook,
-        skips adder-tab on Ctrl+PageUp|PageDown|Tab navigation.
+        skips adder-tab on Ctrl+PageUp|PageDown|Tab navigation,
+        reopens last closed tab on Ctrl+Shift+T.
         """
+        if event.ControlDown() and event.ShiftDown() and ord('T') == event.KeyCode:
+            if self.sql_pages_closed:
+                self.add_sql_page(*self.sql_pages_closed[-1])
+                del self.sql_pages_closed[-1]
+
         if not event.ControlDown() \
         or event.KeyCode not in [wx.WXK_PAGEUP, wx.WXK_PAGEDOWN, wx.WXK_TAB]:
             return event.Skip()
@@ -4457,6 +4493,7 @@ class DatabasePage(wx.Panel):
         self.notebook_sql.Freeze() # Avoid flicker when closing last
         for k, p in self.sql_pages.items():
             if p is page:
+                if p.Text.strip(): self.sql_pages_closed.append((k, p.Text))
                 self.sql_pages.pop(k)
                 break # for k, p
         self.TopLevelParent.UpdateAccelerators() # Remove panel accelerators
@@ -5808,6 +5845,7 @@ class SQLPage(wx.PyPanel):
         """Sets the contents of the SQL window."""
         self._stc.SetText(text)
         self._stc.EmptyUndoBuffer() # So that undo does not clear the STC
+    Text = property(GetText, SetText)
 
 
     def SetAutoComp(self, words=[], subwords={}):
