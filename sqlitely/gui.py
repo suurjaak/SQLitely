@@ -406,63 +406,63 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu.Append(menu_file, "&File")
 
         menu_new_database = self.menu_new_database = menu_file.Append(
-            id=wx.ID_ANY, text="&New database\tCtrl-N",
+            id=-1, text="&New database\tCtrl-N",
             help="Create a new SQLite database"
         )
         menu_open_database = self.menu_open_database = menu_file.Append(
-            id=wx.ID_ANY, text="&Open database...\tCtrl-O",
+            id=-1, text="&Open database...\tCtrl-O",
             help="Choose a database file to open"
         )
         menu_save_database = self.menu_save_database = menu_file.Append(
-            id=wx.ID_ANY, text="&Save",
+            id=-1, text="&Save",
             help="Save changes to the active database"
         )
         menu_save_database_as = self.menu_save_database_as = menu_file.Append(
-            id=wx.ID_ANY, text="Save &as...",
+            id=-1, text="Save &as...",
             help="Save the active database under a new name"
         )
         menu_save_database.Enable(False)
         menu_save_database_as.Enable(False)
         menu_recent = self.menu_recent = wx.Menu()
-        menu_file.AppendMenu(id=wx.ID_ANY, text="&Recent files",
+        menu_file.AppendMenu(id=-1, text="&Recent files",
             submenu=menu_recent, help="Recently opened databases")
         menu_file.AppendSeparator()
         menu_options = self.menu_options = \
-            menu_file.Append(id=wx.ID_ANY, text="Advanced opt&ions",
+            menu_file.Append(id=-1, text="Advanced opt&ions",
                 help="Edit advanced program options")
         menu_iconize = self.menu_iconize = \
-            menu_file.Append(id=wx.ID_ANY, text="Minimize to &tray",
+            menu_file.Append(id=-1, text="Minimize to &tray",
                 help="Minimize %s window to notification area" % conf.Title)
         menu_exit = self.menu_exit = \
-            menu_file.Append(id=wx.ID_ANY, text="E&xit\tAlt-X", help="Exit")
+            menu_file.Append(id=-1, text="E&xit\tAlt-X", help="Exit")
 
         menu_help = wx.Menu()
         menu.Append(menu_help, "&Help")
 
-        menu_update = self.menu_update = menu_help.Append(id=wx.ID_ANY,
+        menu_update = self.menu_update = menu_help.Append(id=-1,
             text="Check for &updates",
             help="Check whether a new version of %s is available" % conf.Title)
-        menu_homepage = self.menu_homepage = menu_help.Append(id=wx.ID_ANY,
+        menu_homepage = self.menu_homepage = menu_help.Append(id=-1,
             text="Go to &homepage",
             help="Open the %s homepage, %s" % (conf.Title, conf.HomeUrl))
         menu_help.AppendSeparator()
-        menu_log = self.menu_log = menu_help.Append(id=wx.ID_ANY,
+        menu_log = self.menu_log = menu_help.Append(id=-1,
             kind=wx.ITEM_CHECK, text="Show &log window",
             help="Show/hide the log messages window")
-        menu_console = self.menu_console = menu_help.Append(id=wx.ID_ANY,
+        menu_console = self.menu_console = menu_help.Append(id=-1,
             kind=wx.ITEM_CHECK, text="Show Python &console\tCtrl-E",
             help="Show/hide a Python shell environment window")
         menu_help.AppendSeparator()
-        menu_tray = self.menu_tray = menu_help.Append(id=wx.ID_ANY,
+        menu_tray = self.menu_tray = menu_help.Append(id=-1,
             kind=wx.ITEM_CHECK, text="Display &icon in notification area",
             help="Show/hide %s icon in system tray" % conf.Title)
         menu_autoupdate_check = self.menu_autoupdate_check = menu_help.Append(
-            id=wx.ID_ANY, kind=wx.ITEM_CHECK,
+            id=-1, kind=wx.ITEM_CHECK,
             text="Automatic up&date check",
             help="Automatically check for program updates periodically")
         menu_help.AppendSeparator()
         menu_about = self.menu_about = menu_help.Append(
-            id=wx.ID_ANY, text="&About %s" % conf.Title,
+            id=-1, text="&About %s" % conf.Title,
             help="Show program information and copyright")
 
         self.history_file = wx.FileHistory(conf.MaxRecentFiles)
