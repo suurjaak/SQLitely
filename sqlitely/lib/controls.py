@@ -59,7 +59,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    04.10.2019
+@modified    05.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -101,7 +101,7 @@ class BusyPanel(wx.Window):
         wx.Window.__init__(self, parent)
         self.Hide()
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
-        label = self._label = wx.StaticText(parent=self, label=label)
+        label = self._label = wx.StaticText(self, label=label)
         self.BackgroundColour = self.BACKGROUND_COLOUR
         label.ForegroundColour = self.FOREGROUND_COLOUR
         sizer.Add(label, border=15, flag=wx.ALL | wx.ALIGN_CENTER_HORIZONTAL)
@@ -275,7 +275,7 @@ class FormDialog(wx.Dialog):
     """
 
     def __init__(self, parent, title, props=None, data=None, edit=None, autocomp=None):
-        wx.Dialog.__init__(self, parent=parent, title=title,
+        wx.Dialog.__init__(self, parent, title=title,
                           style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER)
         self._ignore_change = False
         self._editmode = True
@@ -535,7 +535,7 @@ class FormDialog(wx.Dialog):
             sizer_stc = wx.BoxSizer(wx.VERTICAL)
 
             mylabel = wx.StaticText(parent, label=label, name=accname + "_label")
-            tb = wx.ToolBar(parent=parent, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+            tb = wx.ToolBar(parent, style=wx.TB_FLAT | wx.TB_NODIVIDER)
             ctrl = field["component"](parent)
 
             OPTS = {"open":  {"id": wx.ID_OPEN,  "bmp": wx.ART_FILE_OPEN, "handler": self._OnOpenFile},
@@ -704,7 +704,7 @@ class FormDialog(wx.Dialog):
     def _OnOpenFile(self, field, path, event=None):
         """Handler for opening file dialog and loading file contents to STC field."""
         dialog = wx.FileDialog(
-            parent=self, message="Open file", defaultFile="",
+            self, message="Open file", defaultFile="",
             style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
@@ -737,7 +737,7 @@ class NonModalOKDialog(wx.Dialog):
     """A simple non-modal dialog with an OK button, stays on top of parent."""
 
     def __init__(self, parent, title, message):
-        wx.Dialog.__init__(self, parent=parent, title=title,
+        wx.Dialog.__init__(self, parent, title=title,
                            style=wx.CAPTION | wx.CLOSE_BOX |
                                  wx.FRAME_FLOAT_ON_PARENT)
 
@@ -1114,7 +1114,7 @@ class ProgressWindow(wx.Dialog):
 
     def __init__(self, parent, title, message="", maximum=100, cancel=True,
                  style=wx.CAPTION | wx.CLOSE_BOX | wx.FRAME_FLOAT_ON_PARENT):
-        wx.Dialog.__init__(self, parent=parent, title=title, style=style)
+        wx.Dialog.__init__(self, parent, title=title, style=style)
         self._is_cancelled = False
 
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -1178,7 +1178,7 @@ class PropertyDialog(wx.Dialog):
     COLOUR_ERROR = wx.RED
 
     def __init__(self, parent, title):
-        wx.Dialog.__init__(self, parent=parent, title=title,
+        wx.Dialog.__init__(self, parent, title=title,
                           style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER)
         self.properties = [] # [(name, type, orig_val, default, label, ctrl), ]
 
@@ -2341,14 +2341,14 @@ class TabbedHtmlWindow(wx.PyPanel):
 
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
         notebook = self._notebook = wx.lib.agw.flatnotebook.FlatNotebook(
-            parent=self, size=(-1, 27),
+            self, size=(-1, 27),
             agwStyle=wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
                      wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
                      wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
                      wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
                      wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
                      wx.lib.agw.flatnotebook.FNB_VC8)
-        self._html = wx.html.HtmlWindow(parent=self, style=style, name=name)
+        self._html = wx.html.HtmlWindow(self, style=style, name=name)
 
         self.Sizer.Add(notebook, flag=wx.GROW)
         self.Sizer.Add(self._html, proportion=1, flag=wx.GROW)
@@ -2471,7 +2471,7 @@ class TabbedHtmlWindow(wx.PyPanel):
 
     def _CreateTab(self, index, title):
         """Creates a new tab in the tab container at specified index."""
-        p = wx.Panel(parent=self, size=(0,0))
+        p = wx.Panel(self, size=(0,0))
         p.Hide() # Dummy empty window as notebook needs something to hold
         self._notebook.InsertPage(index, page=p, text=title, select=True)
 

@@ -117,7 +117,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.frame_console.SetIcons(icons)
 
         notebook = self.notebook = wx.lib.agw.flatnotebook.FlatNotebook(
-            parent=panel, style=wx.NB_TOP,
+            panel, style=wx.NB_TOP,
             agwStyle=wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
                      wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
                      wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
@@ -145,12 +145,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.create_menu()
 
         self.dialog_selectfolder = wx.DirDialog(
-            parent=self,
-            message="Choose a directory where to search for databases",
+            self, message="Choose a directory where to search for databases",
             defaultPath=os.getcwd(),
             style=wx.DD_DIR_MUST_EXIST | wx.RESIZE_BORDER)
         self.dialog_savefile = wx.FileDialog(
-            parent=self, defaultDir=os.getcwd(), defaultFile="",
+            self, defaultDir=os.getcwd(), defaultFile="",
             style=wx.FD_SAVE | wx.RESIZE_BORDER)
 
         # Memory file system for showing images in wx.HtmlWindow
@@ -257,7 +256,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         label_count = self.label_count = wx.StaticText(page)
         edit_filter = self.edit_filter = controls.SearchCtrl(page, "Filter list")
-        list_db = self.list_db = controls.SortableUltimateListCtrl(parent=page,
+        list_db = self.list_db = controls.SortableUltimateListCtrl(page,
             agwStyle=wx.LC_REPORT | wx.BORDER_NONE)
         list_db.MinSize = 400, -1 # Maximize-restore would resize width to 100
 
@@ -311,7 +310,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.button_missing.Hide(); self.button_clear.Hide()
 
         # Create detail page labels, values and buttons
-        label_db = self.label_db = wx.TextCtrl(parent=panel_detail, value="",
+        label_db = self.label_db = wx.TextCtrl(panel_detail, value="",
             style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH)
         label_db.Font = wx.Font(12, wx.FONTFAMILY_SWISS,
             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
@@ -322,8 +321,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         LABELS = [("path", "Location"), ("size", "Size"),
                   ("modified", "Last modified"), ("tables", "Tables")]
         for field, title in LABELS:
-            lbltext = wx.StaticText(parent=panel_detail, label="%s:" % title)
-            valtext = wx.TextCtrl(parent=panel_detail, value="", size=(300, 35),
+            lbltext = wx.StaticText(panel_detail, label="%s:" % title)
+            valtext = wx.TextCtrl(panel_detail, value="", size=(300, 35),
                 style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH | wx.TE_NO_VSCROLL)
             ColourManager.Manage(valtext, "BackgroundColour", "WidgetColour")
             ColourManager.Manage(valtext, "ForegroundColour", wx.SYS_COLOUR_WINDOWTEXT)
@@ -1454,7 +1453,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         exts = ";".join("*" + x for x in conf.DBExtensions)
         wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
         dialog = wx.FileDialog(
-            parent=self, message="Open", defaultFile="", wildcard=wildcard,
+            self, message="Open", defaultFile="", wildcard=wildcard,
             style=wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE | wx.FD_OPEN | wx.RESIZE_BORDER
         )
         if wx.ID_OK == dialog.ShowModal():
@@ -1934,7 +1933,7 @@ class DatabasePage(wx.Panel):
     """
 
     def __init__(self, parent_notebook, title, db, memoryfs):
-        wx.Panel.__init__(self, parent=parent_notebook)
+        wx.Panel.__init__(self, parent_notebook)
         self.parent_notebook = parent_notebook
 
         self.pageorder = {} # {page: notebook index, }
@@ -1967,8 +1966,8 @@ class DatabasePage(wx.Panel):
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
-        label_title = self.label_title = wx.StaticText(parent=self, label="Database")
-        edit_title = self.edit_title = wx.TextCtrl(parent=self,
+        label_title = self.label_title = wx.StaticText(self, label="Database")
+        edit_title = self.edit_title = wx.TextCtrl(self,
             style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH | wx.TE_NO_VSCROLL)
         edit_title.SetEditable(False)
         ColourManager.Manage(edit_title, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
@@ -1984,8 +1983,7 @@ class DatabasePage(wx.Panel):
             self, description=conf.SearchDescription,
             size=(300, -1), style=wx.TE_PROCESS_ENTER)
         self.Bind(wx.EVT_TEXT_ENTER, self.on_searchall, edit_search)
-        tb = self.tb_search = wx.ToolBar(parent=self,
-                                         style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        tb = self.tb_search = wx.ToolBar(self, style=wx.TB_FLAT | wx.TB_NODIVIDER)
 
         bmp = wx.ArtProvider.GetBitmap(wx.ART_GO_FORWARD, wx.ART_TOOLBAR,
                                        (16, 16))
@@ -2006,7 +2004,7 @@ class DatabasePage(wx.Panel):
             # wx 2.8 + Python below 2.7.3: labelbook can partly cover tab area
             bookstyle |= wx.lib.agw.fmresources.INB_FIT_LABELTEXT
         notebook = self.notebook = wx.lib.agw.labelbook.FlatImageBook(
-            parent=self, agwStyle=bookstyle, style=wx.BORDER_STATIC)
+            self, agwStyle=bookstyle, style=wx.BORDER_STATIC)
 
         self.create_page_search(notebook)
         self.create_page_data(notebook)
@@ -2025,9 +2023,7 @@ class DatabasePage(wx.Panel):
         sizer.Add(notebook, proportion=1, border=5, flag=wx.GROW | wx.ALL)
 
         self.dialog_savefile = wx.FileDialog(
-            parent=self,
-            defaultDir=os.getcwd(),
-            defaultFile="",
+            self, defaultDir=os.getcwd(), defaultFile="",
             style=wx.FD_SAVE | wx.RESIZE_BORDER)
 
         self.TopLevelParent.page_db_latest = self
@@ -2058,7 +2054,7 @@ class DatabasePage(wx.Panel):
 
     def create_page_search(self, notebook):
         """Creates a page for searching the database."""
-        page = self.page_search = wx.Panel(parent=notebook)
+        page = self.page_search = wx.Panel(notebook)
         self.pageorder[page] = len(self.pageorder)
         notebook.AddPage(page, "Search")
         sizer = page.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2073,7 +2069,7 @@ class DatabasePage(wx.Panel):
         label_html.ForegroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
 
         tb = self.tb_search_settings = \
-            wx.ToolBar(parent=page, style=wx.TB_FLAT | wx.TB_NODIVIDER | wx.TB_HORZ_TEXT)
+            wx.ToolBar(page, style=wx.TB_FLAT | wx.TB_NODIVIDER | wx.TB_HORZ_TEXT)
         tb.SetToolBitmapSize((24, 24))
         tb.AddRadioLabelTool(wx.ID_STATIC, "Data", bitmap=images.ToolbarTables.Bitmap,
             shortHelp="Search in all columns of all database tables")
@@ -2097,7 +2093,7 @@ class DatabasePage(wx.Panel):
         if conf.SearchInNames:
             self.label_search.Label = "&Search in database CREATE SQL:"
 
-        html = self.html_searchall = controls.TabbedHtmlWindow(parent=page)
+        html = self.html_searchall = controls.TabbedHtmlWindow(page)
         default = step.Template(templates.SEARCH_WELCOME_HTML).expand()
         html.SetDefaultPage(default)
         html.SetDeleteCallback(self.on_delete_tab_callback)
@@ -2123,7 +2119,7 @@ class DatabasePage(wx.Panel):
 
     def create_page_data(self, notebook):
         """Creates a page for listing and browsing tables and views."""
-        page = self.page_data = wx.Panel(parent=notebook)
+        page = self.page_data = wx.Panel(notebook)
         self.pageorder[page] = len(self.pageorder)
         notebook.AddPage(page, "Data")
 
@@ -2138,7 +2134,7 @@ class DatabasePage(wx.Panel):
         panel_export = self.panel_data_export = ExportProgressPanel(page, self._on_close_data_export)
         panel_export.Hide()
 
-        panel1 = wx.Panel(parent=splitter)
+        panel1 = wx.Panel(splitter)
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_topleft = wx.BoxSizer(wx.HORIZONTAL)
         button_refresh = self.button_refresh_data = \
@@ -2146,7 +2142,7 @@ class DatabasePage(wx.Panel):
         sizer_topleft.AddStretchSpacer()
         sizer_topleft.Add(button_refresh)
         tree = self.tree_data = wx.gizmos.TreeListCtrl(
-            parent=panel1,
+            panel1,
             style=wx.TR_DEFAULT_STYLE
             #| wx.TR_HAS_BUTTONS
             #| wx.TR_TWIST_BUTTONS
@@ -2171,11 +2167,11 @@ class DatabasePage(wx.Panel):
         sizer1.Add(tree, proportion=1,
                    border=5, flag=wx.GROW | wx.LEFT | wx.TOP | wx.BOTTOM)
 
-        panel2 = wx.Panel(parent=splitter)
+        panel2 = wx.Panel(splitter)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         nb = self.notebook_data = wx.lib.agw.flatnotebook.FlatNotebook(
-            parent=panel2, size=(-1, 27),
+            panel2, size=(-1, 27),
             agwStyle=wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
                      wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
                      wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
@@ -2202,7 +2198,7 @@ class DatabasePage(wx.Panel):
 
     def create_page_schema(self, notebook):
         """Creates a page for browsing and modifying schema."""
-        page = self.page_schema = wx.Panel(parent=notebook)
+        page = self.page_schema = wx.Panel(notebook)
         self.pageorder[page] = len(self.pageorder)
         notebook.AddPage(page, "Schema")
 
@@ -2210,15 +2206,15 @@ class DatabasePage(wx.Panel):
 
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
         splitter = self.splitter_schema = wx.SplitterWindow(
-            parent=page, style=wx.BORDER_NONE
+            page, style=wx.BORDER_NONE
         )
         splitter.SetMinimumPaneSize(100)
 
-        panel1 = wx.Panel(parent=splitter)
+        panel1 = wx.Panel(splitter)
         button_refresh = wx.Button(panel1, label="Refresh")
         button_new = wx.Button(panel1, label="Create ne&w ..")
         tree = self.tree_schema = wx.gizmos.TreeListCtrl(
-            parent=panel1,
+            panel1,
             style=wx.TR_DEFAULT_STYLE
             #| wx.TR_HAS_BUTTONS
             #| wx.TR_TWIST_BUTTONS
@@ -2257,11 +2253,11 @@ class DatabasePage(wx.Panel):
         sizer1.Add(tree, proportion=1,
                    border=5, flag=wx.GROW | wx.LEFT | wx.TOP | wx.BOTTOM)
 
-        panel2 = wx.Panel(parent=splitter)
+        panel2 = wx.Panel(splitter)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         nb = self.notebook_schema = wx.lib.agw.flatnotebook.FlatNotebook(
-            parent=panel2, size=(-1, 27),
+            panel2, size=(-1, 27),
             agwStyle=wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
                      wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
                      wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
@@ -2291,7 +2287,7 @@ class DatabasePage(wx.Panel):
 
     def create_page_sql(self, notebook):
         """Creates a page for executing arbitrary SQL."""
-        page = self.page_sql = wx.Panel(parent=notebook)
+        page = self.page_sql = wx.Panel(notebook)
         self.pageorder[page] = len(self.pageorder)
         notebook.AddPage(page, "SQL")
 
@@ -2302,7 +2298,7 @@ class DatabasePage(wx.Panel):
         sizer = page.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         nb = self.notebook_sql = wx.lib.agw.flatnotebook.FlatNotebook(
-            parent=page, size=(-1, 27),
+            page, size=(-1, 27),
             agwStyle=wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
                      wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
                      wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
@@ -2339,7 +2335,7 @@ class DatabasePage(wx.Panel):
 
     def create_page_pragma(self, notebook):
         """Creates a page for database PRAGMA settings."""
-        page = self.page_pragma = wx.Panel(parent=notebook)
+        page = self.page_pragma = wx.Panel(notebook)
         self.pageorder[page] = len(self.pageorder)
         notebook.AddPage(page, "Pragma")
         sizer = page.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2542,14 +2538,14 @@ class DatabasePage(wx.Panel):
         splitter.SetMinimumPaneSize(300)
 
         panel1, panel2 = wx.Panel(splitter), wx.Panel(splitter)
-        panel1c = wx.Panel(parent=panel1)
+        panel1c = wx.Panel(panel1)
         ColourManager.Manage(panel1c, "BackgroundColour", "BgColour")
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         sizer_file = panel1c.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_info = wx.GridBagSizer(vgap=3, hgap=10)
-        label_file = wx.StaticText(parent=panel1, label="Database information")
+        label_file = wx.StaticText(panel1, label="Database information")
         label_file.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                   wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
 
@@ -2763,7 +2759,7 @@ class DatabasePage(wx.Panel):
         filename = os.path.splitext(os.path.basename(self.db.name))[0]
         filename = filename.rstrip() + " statistics"
         dialog = wx.FileDialog(
-            parent=self, message="Save statistics as", defaultFile=filename,
+            self, message="Save statistics as", defaultFile=filename,
             wildcard="HTML file (*.html)|*.html|All files|*.*",
             style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
         )
@@ -3659,7 +3655,7 @@ class DatabasePage(wx.Panel):
         filename = os.path.splitext(os.path.basename(self.db.name))[0]
         if stc is self.stc_pragma: filename += " PRAGMA"
         dialog = wx.FileDialog(
-            parent=self, message="Save SQL as", defaultFile=filename,
+            self, message="Save SQL as", defaultFile=filename,
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
             style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
         )
@@ -4621,7 +4617,7 @@ class DatabasePage(wx.Panel):
         exts = ";".join("*" + x for x in conf.DBExtensions)
         wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
         dialog = wx.FileDialog(
-            parent=self, message="Select database to export to",
+            self, message="Select database to export to",
             defaultFile="", wildcard=wildcard,
             style=wx.FD_OPEN | wx.RESIZE_BORDER
         )
@@ -5732,10 +5728,10 @@ class SQLPage(wx.PyPanel):
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
-        splitter = wx.SplitterWindow(parent=self, style=wx.BORDER_NONE)
+        splitter = wx.SplitterWindow(self, style=wx.BORDER_NONE)
         splitter.SetMinimumPaneSize(100)
 
-        panel1 = self._panel1 = wx.Panel(parent=splitter)
+        panel1 = self._panel1 = wx.Panel(splitter)
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
 
@@ -5752,7 +5748,7 @@ class SQLPage(wx.PyPanel):
         stc = self._stc = controls.SQLiteTextCtrl(panel1,
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
 
-        panel2 = self._panel2 = wx.Panel(parent=splitter)
+        panel2 = self._panel2 = wx.Panel(splitter)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         label_help_stc = wx.StaticText(panel2, label=
@@ -5775,7 +5771,7 @@ class SQLPage(wx.PyPanel):
 
         button_reset.Enabled = button_export.Enabled = button_close.Enabled = False
 
-        grid = self._grid = wx.grid.Grid(parent=panel2)
+        grid = self._grid = wx.grid.Grid(panel2)
         ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
         ColourManager.Manage(grid, "LabelBackgroundColour",       wx.SYS_COLOUR_BTNFACE)
@@ -6842,7 +6838,7 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_buttons      = wx.BoxSizer(wx.HORIZONTAL)
         sizer_sql_header   = wx.BoxSizer(wx.HORIZONTAL)
 
-        splitter = wx.SplitterWindow(parent=self, style=wx.BORDER_NONE)
+        splitter = wx.SplitterWindow(self, style=wx.BORDER_NONE)
         panel1, panel2 = wx.Panel(splitter), wx.Panel(splitter)
         panel1.Sizer, panel2.Sizer = wx.BoxSizer(wx.VERTICAL), wx.BoxSizer(wx.VERTICAL)
 
@@ -6863,7 +6859,7 @@ class SchemaObjectPage(wx.PyPanel):
             check_alter.ToolTipString = "Show SQL statements used for performing table change"
             check_alter.Shown = self._has_alter = not self._newmode
 
-        tb = wx.ToolBar(parent=panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        tb = wx.ToolBar(panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
         bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
         tb.SetToolBitmapSize(bmp1.Size)
@@ -8660,7 +8656,7 @@ class SchemaObjectPage(wx.PyPanel):
             action, name = "ALTER", self._original["name"]
         filename = " ".join((action, category, name))
         dialog = wx.FileDialog(
-            parent=self, message="Save as", defaultFile=filename,
+            self, message="Save as", defaultFile=filename,
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
             style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
         )
