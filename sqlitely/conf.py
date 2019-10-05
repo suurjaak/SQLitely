@@ -76,7 +76,7 @@ LastActivePage = {}
 LastSearchResults = {}
 
 """Files selected in the database lists on last run."""
-LastSelectedFiles = ["", ""]
+LastSelectedFiles = []
 
 """Contents of Recent Files menu."""
 RecentFiles = []
@@ -160,17 +160,11 @@ LastUpdateCheck = None
 """Maximum length of a tab title, overflow will be cut on the left."""
 MaxTabTitleLength = 60
 
-"""Maximum number of messages to show in search results."""
-MaxSearchMessages = 500
-
 """Maximum number of table rows to show in search results."""
 MaxSearchTableRows = 500
 
 """Number of search results to yield in one chunk from search thread."""
 SearchResultsChunk = 50
-
-"""Number of contact search results to yield in one chunk."""
-SearchContactsChunk = 10
 
 """Name of font used in HTML content."""
 HtmlFontName = "Tahoma"

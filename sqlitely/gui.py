@@ -9007,6 +9007,7 @@ class ExportProgressPanel(wx.PyPanel):
             cancel = ctrls["cancel"] = wx.Button(panel, label="Cancel")
             open   = ctrls["open"]   = wx.Button(panel, label="Open")
             folder = ctrls["folder"] = wx.Button(panel, label="Show in folder")
+            gauge.SetForegroundColour(conf.GaugeColour)
             open.Hide(), folder.Hide()
 
             sizer_buttons.AddStretchSpacer()
