@@ -234,13 +234,18 @@ class SearchQueryParser(object):
         to parameters dictionary.
         """
         result = ""
+        match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
+
         for keyword, words in keywords.items():
             kw_sql = ""
             for word in words:
                 sql = ""
                 if keyword.endswith("date"): # date:2002..2003-11-21
                     datecols = [c for c in (item or {}).get("columns", [])
-                                if c["type"] in ("DATE", "DATETIME")]
+                        if c.get("type") in ("DATE", "DATETIME")
+                        and (not keywords.get("column")  or match_kw("column", c))
+                        and (not keywords.get("-column") or not match_kw("-column", c))
+                    ]
                     if not datecols:
                         kw_sql += (" OR " if kw_sql else "") + "1 = 0"
                         break # for word
