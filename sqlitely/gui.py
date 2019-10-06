@@ -5090,7 +5090,7 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
     def SeekToRow(self, row):
         """Seeks ahead on the row iterator to the specified row."""
         rows_before = self.GetNumberRows()
-        while self.row_iterator and row > len(self.rows_current):
+        while self.row_iterator and row >= len(self.rows_current):
             rowdata = None
             try: rowdata = self.row_iterator.next()
             except Exception: pass
