@@ -4900,7 +4900,8 @@ class DatabasePage(wx.Panel):
             if has_sql:
                 menu.AppendItem(item_copy_sql)
         elif "columns" == data["type"]:
-            names = [x["name"] for x in data["parent"]["columns"]]
+            cols = data["parent"].get("columns") or data["parent"]["meta"]["columns"]
+            names = [x["name"] for x in cols]
             item_copy     = wx.MenuItem(menu, -1, "&Copy column names")
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, lambda: "\n".join(map(grammar.quote, names))),
                       id=item_copy.GetId())
