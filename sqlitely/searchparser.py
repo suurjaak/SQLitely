@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.10.2019
+@modified    06.10.2019
 """
 import calendar
 import collections
@@ -187,8 +187,7 @@ class SearchQueryParser(object):
                 or (keywords.get("-column") and match_kw("-column", col)):
                     continue # for col
 
-                result_col = "%s.%s LIKE :column_like%s" % \
-                             (grammar.quote(item["name"]), grammar.quote(col["name"]), i)
+                result_col = "%s LIKE :column_like%s" % (grammar.quote(col["name"]), i)
                 if len(safe) > len(parseresult):
                     result_col += " ESCAPE '%s'" % ESCAPE_CHAR
                 result += (" OR " if result else "") + result_col
