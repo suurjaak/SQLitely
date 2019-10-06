@@ -441,7 +441,7 @@ class AnalyzerThread(WorkerThread):
                 else: error = util.format_exc(e)
                 logger.exception("Error getting statistics for %s: %s.", path, error)
             else:
-                if not output.strip().startswith("/**"):
+                if output and not output.strip().startswith("/**"):
                     output, error = "", output.split("\n")[0].strip()
                     logger.info("Error getting statistics for %s: %s.", path, error)
             self._process = None
