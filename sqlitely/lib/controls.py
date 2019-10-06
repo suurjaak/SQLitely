@@ -312,15 +312,18 @@ class FormDialog(wx.Dialog):
         sizer_buttons.Add(button_cancel, border=10, flag=wx.LEFT)
 
         panel_wrap.SetupScrolling(scroll_x=False)
-        self.Sizer.Add(panel_wrap, border=15, proportion=1, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
+        self.Sizer.Add(panel_wrap, border=15, proportion=1, flag=wx.LEFT | wx.TOP | wx.GROW)
         self.Sizer.Add(sizer_buttons, border=5, flag=wx.ALL | wx.ALIGN_CENTER_HORIZONTAL)
 
         for x in self, panel_wrap, panel_items:
             ColourManager.Manage(x, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
             ColourManager.Manage(x, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
         self.Populate(props, data, edit)
-        self.MinSize = (440, panel_wrap.Size[1] + 20)
-        if not self._editmode:
+
+        if self._editmode:
+            self.MinSize = (440, panel_items.Size[1] + 80)
+        else:
+            self.MinSize = (440, panel_items.Size[1] + 10)
             self.SetEscapeId(wx.OK)
             self.Fit()
             button_cancel.Hide()
@@ -2218,7 +2221,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     def Enable(self, enable=True):
         """Enables or disables the control, updating display."""
         if self.Enabled == enable: return False
-        result = super(SQLiteTextCtrl, self).Enable(enable)
+        result = super(self.__class__, self).Enable(enable)
         self.SetStyleSpecs()
         return result
 
