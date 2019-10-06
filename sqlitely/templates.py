@@ -58,7 +58,7 @@ from sqlitely.lib import util
       width: 100%;
     }
     #content_wrapper {
-      max-width: calc(100vw - 40px);
+      max-width: calc(100vw - 60px);
       overflow-x: auto;
     }
     table#body_table {
@@ -155,16 +155,18 @@ from sqlitely.lib import util
       var words = String(search).split(/\s/g).filter(Boolean);
       var regexes = words.map(function(word) { return new RegExp(escapeRegExp(word), "i"); });
       var table = document.getElementById("content_table");
+      table.classList.add("hidden");
       var rowlist = table.getElementsByTagName("tr");
       for (var i = 1, ll = rowlist.length; i < ll; i++) {
+        var show = !search;
         var tr = rowlist[i];
-        var show = false;
-        for (var j = 0, cc = tr.childElementCount; j < cc; j++) {
+        for (var j = 0, cc = tr.childElementCount; j < cc && !show; j++) {
           var text = tr.children[j].innerText;
           if (regexes.every(function(rgx) { return text.match(rgx); })) { show = true; break; };
         };
         tr.classList[show ? "remove" : "add"]("hidden");
       };
+      table.classList.remove("hidden");
     };
 
     /** Escapes special characters in a string for RegExp. */
@@ -1099,7 +1101,7 @@ from sqlitely import conf, images, templates
       width: 100%;
     }
     #content_wrapper {
-      max-width: calc(100vw - 40px);
+      max-width: calc(100vw - 60px);
       overflow-x: auto;
       padding: 0 30px 10px 30px;
     }
