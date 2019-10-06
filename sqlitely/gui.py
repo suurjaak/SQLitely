@@ -1966,17 +1966,9 @@ class DatabasePage(wx.Panel):
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
-        label_title = self.label_title = wx.StaticText(self, label="Database")
-        edit_title = self.edit_title = wx.TextCtrl(self,
-            style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH | wx.TE_NO_VSCROLL)
-        edit_title.SetEditable(False)
-        ColourManager.Manage(edit_title, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
-        ColourManager.Manage(edit_title, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
-        sizer_header.Add(label_title, border=5, flag=wx.RIGHT | wx.TOP)
-        sizer_header.Add(edit_title, proportion=1, border=5, flag=wx.TOP | wx.GROW)
+        sizer_header.AddStretchSpacer()
 
-
-        self.label_search = wx.StaticText(self, -1, "&Search in messages:")
+        self.label_search = wx.StaticText(self, -1, "&Search in data:")
         sizer_header.Add(self.label_search, border=5,
                          flag=wx.RIGHT | wx.TOP | wx.ALIGN_RIGHT)
         edit_search = self.edit_searchall = controls.TextCtrlAutoComplete(
@@ -4313,12 +4305,6 @@ class DatabasePage(wx.Panel):
 
     def load_data(self):
         """Loads data from our Database."""
-        if self.db.temporary:
-            self.label_title.Shown = self.edit_title.Shown = False
-        else:
-            self.label_title.Shown = self.edit_title.Shown = True
-            self.edit_title.Value = self.db.name
-        self.edit_title.ContainingSizer.Layout()
 
         # Restore last search text, if any
         if conf.SearchHistory and conf.SearchHistory[-1] != "":
