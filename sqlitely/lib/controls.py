@@ -712,6 +712,7 @@ class FormDialog(wx.Dialog):
         """Handler for opening file dialog and loading file contents to STC field."""
         dialog = wx.FileDialog(
             self, message="Open file", defaultFile="",
+            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
             style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
