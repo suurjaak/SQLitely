@@ -62,7 +62,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    05.10.2019
+@modified    06.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -2346,8 +2346,7 @@ class TabbedHtmlWindow(wx.PyPanel):
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
         notebook = self._notebook = wx.lib.agw.flatnotebook.FlatNotebook(
             self, size=(-1, 27),
-            agwStyle=wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
-                     wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
+            agwStyle=wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
                      wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
                      wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
                      wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
@@ -2414,7 +2413,6 @@ class TabbedHtmlWindow(wx.PyPanel):
                 pass # CallLater fails if not called from the main thread
 
 
-
     def _OnScroll(self, event):
         """
         Handler for scrolling the window, stores scroll position
@@ -2462,9 +2460,10 @@ class TabbedHtmlWindow(wx.PyPanel):
                 nb.SetPageText(0, "")  # reuse as default empty tab
                 event.Veto()
                 self._SetPage(self._default_page)
-                # Default empty tab has no closing X: remove X from tab style
+                # Hide dropdown selector, remove X from tab style.
                 style = nb.GetAGWWindowStyleFlag()
-                style ^= wx.lib.agw.flatnotebook.FNB_X_ON_TAB
+                style ^= wx.lib.agw.flatnotebook.FNB_X_ON_TAB | \
+                         wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST
                 nb.SetAGWWindowStyleFlag(style)
             else:
                 index = min(nb.GetSelection(), nb.GetPageCount() - 2)
@@ -2510,9 +2509,10 @@ class TabbedHtmlWindow(wx.PyPanel):
             self._CreateTab(index, tab["title"])
         else: # First real tab: fill the default empty one
             self._notebook.SetPageText(0, tab["title"])
-            # Default empty tab had no closing X: add X to tab style
+            # Hide dropdown selector, remove X from tab style.
             style = self._notebook.GetAGWWindowStyleFlag()
-            style |= wx.lib.agw.flatnotebook.FNB_X_ON_TAB
+            style |= wx.lib.agw.flatnotebook.FNB_X_ON_TAB | \
+                     wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST
             self._notebook.SetAGWWindowStyleFlag(style)
 
         self._html.Freeze()

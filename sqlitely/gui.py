@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.10.2019
+@modified    06.10.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3508,7 +3508,7 @@ class DatabasePage(wx.Panel):
         Handler for double-clicking a search tab header, sets the search box
         value to tab text.
         """
-        text = event.Data.get("info", {}).get("text")
+        text = event.Data and (event.Data.get("info") or {}).get("text")
         if text:
             self.edit_searchall.Value = text
             self.edit_searchall.SetFocus()
