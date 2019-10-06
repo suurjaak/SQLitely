@@ -493,7 +493,7 @@ HTML template for data search results header; start of HTML table.
 @param   category  schema category
 @param   item      schema category object
 """
-SEARCH_ROW_TABLE_HEADER_HTML = """<%
+SEARCH_ROW_DATA_HEADER_HTML = """<%
 from sqlitely import conf, grammar
 %>
 <font color="{{ conf.FgColour }}">
@@ -518,7 +518,7 @@ HTML template for search result of data row; HTML table row.
 @param   keywords         {"column": [], ..}
 @param   pattern_replace  regex for matching search words
 """
-SEARCH_ROW_TABLE_HTML = """<%
+SEARCH_ROW_DATA_HTML = """<%
 from sqlitely import conf, templates
 
 match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
@@ -890,9 +890,7 @@ except ImportError:
   </ul>
 
   <br /><br />
-  All search text is case-insensitive. <br />
-  Keywords are case-sensitive
-  (<code>OR</code>, <code>table:</code>, <code>column:</code>, <code>date:</code>). <br />
+  All search texts and keywords are case-insensitive. <br />
   Keywords are global and cannot be grouped.
 
 </td></tr></table>

@@ -130,6 +130,10 @@ class SearchThread(WorkerThread):
     @param   dict  {text, db, table}
     """
 
+    def __init__(self, callback):
+        super(self.__class__, self).__init__(callback)
+        self.parser = searchparser.SearchQueryParser()
+
 
     def match_all(self, text, words):
         """Returns whether the text contains all the specified words."""
@@ -138,169 +142,172 @@ class SearchThread(WorkerThread):
         return result
 
 
+    def match_any(self, text, words):
+        """Returns whether the text contains any of the specified words."""
+        text_lower = text.lower()
+        result = any(w in text_lower for w in words)
+        return result
+
+
+    def make_replacer(self, words):
+        """Returns word/phrase matcher regex."""
+
+        # Turn wildcard characters * into regex-compatible .*
+        words_re = [".*".join(re.escape(step.escape_html(x))
+                              for w in words for x in
+                              ([w] if " " in w else w.split("*")))]
+        patterns = "(%s)" % "|".join(words_re)
+        # For replacing matching words with <b>words</b>
+        pattern_replace = re.compile(patterns, re.IGNORECASE)
+        return pattern_replace
+
+
+    def search_meta(self, search):
+        """Searches database metadata, yielding (infotext, result)."""
+        infotext = "database metadata"
+        _, _, words, kws = self.parser.Parse(search["text"])
+        pattern_replace = self.make_replacer(words)
+        tpl = step.Template(templates.SEARCH_ROW_META_HTML, escape=True)
+        result = {"output": "", "map": {}, "search": search, "count": 0}
+
+        for category in database.Database.CATEGORIES if words else ():
+            othercats = set(database.Database.CATEGORIES) - set([category])
+            if category not in kws and othercats & set(kws):
+                continue # for category
+
+            for item in search["db"].get_category(category).values():
+                if (category in kws 
+                and not self.match_any(item["name"], kws[category])
+                or "-" + category in kws 
+                and self.match_any(item["name"], kws["-" + category])):
+                    continue # for item
+
+                matches = self.match_all(item["sql"], words)
+                if not self._is_working: break # for item
+                if not matches: continue # for item
+
+                result["count"] += 1
+                ns = dict(category=category, item=item,
+                          pattern_replace=pattern_replace)
+                result["output"] += tpl.expand(ns)
+                key = "%s:%s" % (category, item["name"])
+                result["map"][key] = {"category": category, "page": "schema",
+                                      "name": item["name"]}
+                if not result["count"] % conf.SearchResultsChunk:
+                    yield "", result
+                    result = dict(result, output="", map={})
+            if not self._is_working: break # for category
+        yield infotext, result
+
+
+    def search_data(self, search):
+        """Searches database data, yielding (infotext, result)."""
+        infotext = ""
+        _, _, words, kws = self.parser.Parse(search["text"])
+        pattern_replace = self.make_replacer(words)
+        tpl_item = step.Template(templates.SEARCH_ROW_DATA_HEADER_HTML, escape=True)
+        tpl_row  = step.Template(templates.SEARCH_ROW_DATA_HTML, escape=True)
+        result = {"output": "", "map": {}, "search": search, "count": 0}
+
+        for category in "table", "view":
+            if category not in kws \
+            and ("table" if "view" == category else "table") in kws:
+                continue # for category
+
+            mytexts = []
+            for item in search["db"].get_category(category).values():
+                sql, params, _, _ = self.parser.Parse(search["text"], item)
+                if not self._is_working: break # for item
+                if not sql: continue # for item
+
+                cursor = search["db"].execute(sql, params)
+                row = cursor.fetchone()
+                if not row:
+                    mytexts.append(step.escape_html(item["name"]))
+                    continue # for item
+
+                result["output"] = tpl_item.expand(category=category, item=item)
+                count = 0
+                while row:
+                    result["count"], count = result["count"] + 1, count + 1
+
+                    ns = dict(category=category, item=item, row=row,
+                              keywords=kws, count=count,
+                              pattern_replace=pattern_replace)
+                    result["output"] += tpl_row.expand(ns)
+                    key = "%s:%s:%s" % (category, item["name"], count)
+                    result["map"][key] = {"category": category,
+                                          "name": item["name"],
+                                          "row": row}
+                    if not result["count"] % conf.SearchResultsChunk:
+                        yield "", result
+                        result = dict(result, output="", map={})
+
+                    if not self._is_working \
+                    or result["count"] >= conf.MaxSearchResults:
+                        break # while row
+
+                    row = cursor.fetchone()
+
+                if not self._drop_results:
+                    result["output"] += "</table></font>"
+                    yield "", result
+                    result = dict(result, output="", map={})
+
+                mytexts.append("<b>%s</b> (<a href='#%s'><font color='%s'>%s</font></a>)" % (
+                    step.escape_html(item["name"]), step.escape_html(item["name"]),
+                    conf.LinkColour, util.plural("result", count)
+                ))
+                if not self._is_working \
+                or result["count"] >= conf.MaxSearchResults:
+                    break # for item
+
+            infotext += "%s%s: %s" % ("; " if infotext else "",
+                util.plural(category, mytexts, with_items=False),
+                ", ".join(mytexts))
+            if not self._is_working or result["count"] >= conf.MaxSearchResults:
+                break # for category
+        if infotext:
+            infotext += "; %s in total" % util.plural("result", result["count"])
+        yield infotext, result
+
+
     def run(self):
         self._is_running = True
-        # For identifying "table:xxx" and "column:xxx" keywords
-        query_parser = searchparser.SearchQueryParser()
-        result = None
         while self._is_running:
             try:
                 search = self._queue.get()
-                if not search:
-                    continue # while self._is_running
+                if not search: continue # while self._is_running
 
-                TEMPLATES = {"meta": templates.SEARCH_ROW_META_HTML,
-                             "data": templates.SEARCH_ROW_TABLE_HEADER_HTML,
-                             "row":  templates.SEARCH_ROW_TABLE_HTML}
-                FACTORY = lambda x: step.Template(TEMPLATES[x], escape=True)
-                logger.info('Searching "%(text)s" in %(source)s (%(db)s).' % search)
+                logger.info('Searching "%(text)s" in %(source)s (%(db)s).', search)
                 self._is_working, self._drop_results = True, False
-
-                # {"output": text with results, "map": link data map}
-                # map data: {"table:name:index": {"table": "name", "row": {}}, }
-                result_type, result_count, count = None, 0, 0
-                result = {"output": "", "map": {},
-                          "search": search, "count": 0}
-                _, _, match_words, _ = query_parser.Parse(search["text"])
-
-                # Turn wildcard characters * into regex-compatible .*
-                match_words_re = [".*".join(re.escape(step.escape_html(x))
-                                  for w in match_words for x in w.split("*"))]
-                patt = "(%s)" % "|".join(match_words_re)
-                # For replacing matching words with <b>words</b>
-                pattern_replace = re.compile(patt, re.IGNORECASE)
                 infotext = search["source"]
+                result = {"output": "", "map": {}, "search": search, "count": 0}
 
-                # Find from database metadata
-                if self._is_working and "meta" == search["source"] \
-                and match_words:
-                    infotext = "database metadata"
-                    count = 0
-                    template_meta = FACTORY("meta")
+                searcher = self.search_meta if "meta" == search["source"] \
+                           else self.search_data
+                for infotext, result in searcher(search):
+                    if not self._drop_results: self.postback(result)
+                    if not self._is_working: break # for result
 
-                    for category in database.Database.CATEGORIES:
-                        for item in search["db"].get_category(category).values():
-                            matches = self.match_all(item["sql"], match_words)
-                            if not matches: continue # for item
+                if not result["count"]: final_text = "No matches found."
+                else: final_text = "Finished searching %s." % infotext
 
-                            count += 1
-                            result_count += 1
-                            ns = dict(category=category, item=item,
-                                      pattern_replace=pattern_replace)
-                            result["output"] += template_meta.expand(ns)
-                            result["map"][":".join((category, item["name"]))] = {
-                                "category": category, "page": "schema",
-                                "name": item["name"],
-                            }
-                            if not count % conf.SearchResultsChunk \
-                            and not self._drop_results:
-                                result["count"] = result_count
-                                self.postback(result)
-                                result = {"output": "", "map": {},
-                                          "search": search, "count": 0}
-                            if not self._is_working:
-                                break # for item
-                        if not self._is_working:
-                            break # for category
-                if result["output"] and not self._drop_results:
-                    result["count"] = result_count
-                    self.postback(result)
-                    result = {"output": "", "map": {},
-                              "search": search, "count": 0}
+                if not self._is_working: final_text += " Stopped by user."
+                elif "data" == search["source"] \
+                and result["count"] >= conf.MaxSearchResults:
+                    final_text += " Stopped at limit %s." % conf.MaxSearchResults
 
-
-                # Find from database data
-                if self._is_working and "data" == search["source"]:
-                    infotext, result_type = "", "row"
-                    template_item, template_row = FACTORY("data"), FACTORY("row")
-                    for category in "table", "view":
-                        mytexts = []
-                        for item in search["db"].get_category(category).values():
-                            mytext = ""
-                            sql, params, words, keywords = \
-                                query_parser.Parse(search["text"], item)
-                            if not sql:
-                                continue # for item
-                            cursor = search["db"].execute(sql, params)
-                            row = cursor.fetchone()
-                            namepre, namesuf = ("<b>", "</b>") if row else ("", "")
-                            countpre, countsuf = (("<a href='#%s'><font color='%s'>" %
-                                (step.escape_html(item["name"]), conf.LinkColour),
-                                "</font></a>")) if row else ("", "")
-                            mytext = namepre + item["name"] + namesuf
-                            if not row:
-                                mytexts.append(mytext)
-                                continue # for item
-                            result["output"] = template_item.expand(category=category, item=item)
-                            count = 0
-                            while row:
-                                count += 1
-                                result_count += 1
-                                ns = dict(category=category, item=item, row=row,
-                                          keywords=keywords, count=count,
-                                          pattern_replace=pattern_replace)
-                                result["output"] += template_row.expand(ns)
-                                key = "%s:%s:%s" % (category, item["name"], count)
-                                result["map"][key] = {"category": category,
-                                                      "name": item["name"],
-                                                      "row": row}
-                                if not count % conf.SearchResultsChunk \
-                                and not self._drop_results:
-                                    result["count"] = result_count
-                                    self.postback(result)
-                                    result = {"output": "", "map": {},
-                                              "search": search, "count": 0}
-                                if not self._is_working \
-                                or result_count >= conf.MaxSearchDataRows:
-                                    break # while row
-                                row = cursor.fetchone()
-                            if not self._drop_results:
-                                result["output"] += "</table></font>"
-                                result["count"] = result_count
-                                self.postback(result)
-                                result = {"output": "", "map": {},
-                                          "search": search, "count": 0}
-                            mytext += " (%s%s%s)" % (countpre,
-                                      util.plural("result", count), countsuf)
-                            mytexts.append(mytext)
-                            if not self._is_working \
-                            or result_count >= conf.MaxSearchDataRows:
-                                break # for item
-                        infotext += "%s%s: %s" % ("; " if infotext else "",
-                            util.plural(category, mytexts, with_items=False),
-                            ", ".join(mytexts))
-                        if not self._is_working \
-                        or result_count >= conf.MaxSearchDataRows:
-                            break # for category
-                    if infotext:
-                        infotext += "; %s in total" % util.plural("result", result_count)
-
-
-                final_text = "No matches found."
-                if self._drop_results:
-                    result["output"] = ""
-                if result_count:
-                    final_text = "Finished searching %s." % infotext
-
-                if not self._is_working:
-                    final_text += " Stopped by user."
-                elif "row" == result_type \
-                and count >= conf.MaxSearchDataRows:
-                    final_text += " Stopped at %s limit %s." % \
-                                  (result_type, conf.MaxSearchDataRows)
-
-                result["output"] += "</table><br /><br />%s</font>" % final_text
-                result["done"] = True
-                result["count"] = result_count
+                result = dict(result, done=True,
+                              output="</table><br /><br />%s</font>" % final_text)
                 self.postback(result)
                 logger.info("Search found %s results.", result["count"])
                 self._is_working = False
             except Exception as e:
-                if not result:
-                    result = {}
                 result["done"], result["error"] = True, traceback.format_exc()
                 result["error_short"] = util.format_exc(e)
                 self.postback(result)
+                self._is_working = False
 
 
 
@@ -390,7 +397,7 @@ class AnalyzerThread(WorkerThread):
         self._drop_results = True
         if self._process:
             try: self._process.kill()
-            except Exception: e
+            except Exception: pass
         self._process = None
         self._queue.put(None) # To wake up thread waiting on queue
 
@@ -403,7 +410,7 @@ class AnalyzerThread(WorkerThread):
         self._drop_results = drop_results
         if self._process:
             try: self._process.kill()
-            except Exception: e
+            except Exception: pass
         self._process = None
 
 

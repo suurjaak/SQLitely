@@ -28,6 +28,7 @@ Released under the MIT License.
 import calendar
 import collections
 import datetime
+import logging
 import re
 import string
 import warnings
@@ -42,6 +43,8 @@ except ImportError:
 
 from . lib import util
 from . import grammar
+
+logger = logging.getLogger(__name__)
 
 
 ALLWORDCHARS = re.sub("[\x00-\x1f\x7f-\xa0]", "", u"".join(
@@ -121,13 +124,14 @@ class SearchQueryParser(object):
             parse_results = self._grammar.parseString(query, parseAll=True)
         except Exception:
             # Grammar parsing failed: do a naive parsing into keywords and words
+            logger.exception('Failed to use grammar to parse search query "%s".', query)
             split_words = query.split()
 
             for word in split_words[:]:
                 if self.PATTERN_KEYWORD.match(word):
                     _, negation, key, value, _ = self.PATTERN_KEYWORD.split(word)
                     key = negation + key
-                    keywords[key.lower()].append(value)
+                    keywords[key.lower()].append(value.lower())
                     split_words.remove(word)
             try:
                 parse_results = ParseResults(split_words)

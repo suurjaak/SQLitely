@@ -22,7 +22,7 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev124"
+Version = "1.0.dev125"
 VersionDate = "06.10.2019"
 
 if getattr(sys, "frozen", False):
@@ -49,7 +49,7 @@ FileDirectives = ["ConsoleHistoryCommands", "DBFiles", "DBSort",
 OptionalFileDirectives = [
     "DBExtensions", "ExportDbTemplate", "LogSQL", "MinWindowSize",
     "MaxConsoleHistory", "MaxHistoryInitialMessages", "MaxRecentFiles",
-    "MaxSearchHistory", "MaxSearchDataRows", "PopupUnexpectedErrors",
+    "MaxSearchHistory", "MaxSearchResults", "PopupUnexpectedErrors",
     "SearchResultsChunk", "StatisticsPlotWidth", "StatusFlashLength",
     "UpdateCheckInterval",
 ]
@@ -160,8 +160,8 @@ LastUpdateCheck = None
 """Maximum length of a tab title, overflow will be cut on the left."""
 MaxTabTitleLength = 60
 
-"""Maximum number of data rows to show in search results."""
-MaxSearchDataRows = 500
+"""Maximum number of results to show in search results."""
+MaxSearchResults = 500
 
 """Number of search results to yield in one chunk from search thread."""
 SearchResultsChunk = 50
