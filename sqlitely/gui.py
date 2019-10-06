@@ -6864,7 +6864,6 @@ class SchemaObjectPage(wx.PyPanel):
         self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(self.Layout))
 
         self._Populate()
-        self._ToggleControls(self._editmode)
         if "sql" not in self._original and "sql" in self._item:
             self._original["sql"] = self._item["sql"]
 
@@ -6912,7 +6911,6 @@ class SchemaObjectPage(wx.PyPanel):
         if not self._backup: return
         for k, v in self._backup.items(): setattr(self, k, v)
         self._Populate()
-        self._ToggleControls(self._editmode)
         self._PostEvent(modified=True)
 
 
@@ -7032,6 +7030,9 @@ class SchemaObjectPage(wx.PyPanel):
 
         button_add_column = self._buttons["add_column"] = wx.Button(panel_wrapper, label="&Add column")
         button_add_expr =   self._buttons["add_expr"] =   wx.Button(panel_wrapper, label="Add ex&pression")
+        button_add_column._toggle = button_add_expr._toggle = lambda: (
+            "disable" if not self._item["meta"].get("table") else ""
+        )
 
         label_where = wx.StaticText(panel, label="WHE&RE:")
         stc_where   = self._ctrls["where"] = controls.SQLiteTextCtrl(panel,
@@ -7240,6 +7241,7 @@ class SchemaObjectPage(wx.PyPanel):
 
         self._PopulateSQL()
         self._ignore_change = False
+        self._ToggleControls(self._editmode)
         self.Layout()
         self.Thaw()
 
@@ -7875,7 +7877,6 @@ class SchemaObjectPage(wx.PyPanel):
                 for w, ww in subwords.items(): c.AutoCompAddSubWords(w, ww)
 
 
-
     def _PopulateSQL(self):
         """Populates CREATE SQL window."""
         sql, _ = grammar.generate(self._item["meta"])
@@ -8489,11 +8490,9 @@ class SchemaObjectPage(wx.PyPanel):
 
                 if self._col_updater: self._col_updater.Stop()
                 self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
-
         elif ["table"] == path:
-            rebuild = meta.get("columns")
+            rebuild = meta.get("columns") or "index" == self._category
             meta.pop("columns", None)
-
 
         self._Populate() if rebuild else self._PopulateSQL()
         self._PostEvent(modified=True)
@@ -8651,7 +8650,6 @@ class SchemaObjectPage(wx.PyPanel):
 
         self._item.update(sql=sql, meta=self._AssignColumnIDs(meta))
         self._Populate()
-        self._ToggleControls(self._editmode)
 
 
     def _OnRefresh(self, event=None):
@@ -8673,9 +8671,7 @@ class SchemaObjectPage(wx.PyPanel):
             item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
             self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
 
-        if any(prevs[x] == getattr(self, x) for x in prevs):
-            self._Populate()
-            self._ToggleControls(self._editmode)
+        if any(prevs[x] == getattr(self, x) for x in prevs): self._Populate()
 
 
     def _OnSaveOrEdit(self, event=None):
