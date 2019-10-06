@@ -3293,6 +3293,10 @@ class DatabasePage(wx.Panel):
             self.edit_info_md5.Value  = "Analyzing.."
             self.button_checksum_stop.Show()
             self.worker_checksum.work(self.db.filename)
+        elif not self.worker_checksum.is_working():
+            self.edit_info_sha1.Value = ""
+            self.edit_info_md5.Value  = ""
+            self.button_checksum_stop.Hide()
 
         for name in ["edit_info_size", "edit_info_created", "edit_info_modified",
                      "edit_info_path", "edit_info_sha1", "edit_info_md5"]:
