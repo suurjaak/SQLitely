@@ -227,6 +227,8 @@ def select_file(filepath):
     Tries to open the file directory and select file.
     Falls back to opening directory only (select is Windows-only).
     """
+    if not os.path.exists(filepath):
+        return start_file(os.path.split(filepath)[0])
     try: subprocess.Popen('explorer /select, "%s"' % filepath)
     except Exception: start_file(os.path.split(filepath)[0])
 
