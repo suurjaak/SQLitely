@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.10.2019
+@modified    06.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -415,7 +415,9 @@ class Database(object):
         "label": "Writable schema",
         "type": bool,
         "short": "Writable sqlite_master",
-        "description": "If enabled, the sqlite_master table can be changed using ordinary UPDATE, INSERT, and DELETE statements, for the duration of the current session. WARNING: misuse can easily result in a corrupt database file.",
+        "description": """If enabled, the sqlite_master table can be changed using ordinary UPDATE, INSERT, and DELETE statements, for the duration of the current session. 
+
+WARNING: misuse can easily result in a corrupt database file.""",
       },
     }
     """Additional PRAGMA directives not usable as settings."""
