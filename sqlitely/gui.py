@@ -6252,11 +6252,11 @@ class DataObjectPage(wx.PyPanel):
         tb.Realize()
 
         button_reset     = wx.Button(self, label="&Reset filter/sort")
-        button_export    = wx.Button(self, label="&Export to file")
         button_export_db = wx.Button(self, label="Export to &database")
+        button_export    = wx.Button(self, label="&Export to file")
         button_reset.ToolTipString     = "Reset all applied sorting and filtering"
-        button_export.ToolTipString    = "Export to file"
         button_export_db.ToolTipString = "Export to another database"
+        button_export.ToolTipString    = "Export to file"
         button_export_db.Show("table" == self._category)
 
         grid = self._grid = wx.grid.Grid(self)
@@ -6278,8 +6278,8 @@ class DataObjectPage(wx.PyPanel):
         self.Bind(wx.EVT_TOOL,   self._OnCommit,       id=wx.ID_SAVE)
         self.Bind(wx.EVT_TOOL,   self._OnRollback,     id=wx.ID_UNDO)
         self.Bind(wx.EVT_BUTTON, self._OnResetView,    button_reset)
-        self.Bind(wx.EVT_BUTTON, self._OnExport,       button_export)
         self.Bind(wx.EVT_BUTTON, self._OnExportToDB,   button_export_db)
+        self.Bind(wx.EVT_BUTTON, self._OnExport,       button_export)
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,  self._OnSort)
         grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,  self._OnFilter)
         grid.Bind(wx.grid.EVT_GRID_CELL_CHANGE,        self._OnChange)
@@ -6293,8 +6293,8 @@ class DataObjectPage(wx.PyPanel):
         sizer_header.Add(tb)
         sizer_header.AddStretchSpacer()
         sizer_header.Add(button_reset)
-        sizer_header.Add(button_export, border=5, flag=wx.LEFT)
         sizer_header.Add(button_export_db, border=5, flag=wx.LEFT)
+        sizer_header.Add(button_export, border=5, flag=wx.LEFT)
 
         sizer.Add(sizer_header, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer.Add(grid, proportion=1, flag=wx.GROW)
