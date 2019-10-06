@@ -472,7 +472,7 @@ Results for "{{ text }}" from {{ fromtext }}:
 HTML template for SQL search results.
 
 @param   category         schema category
-@param   item             schema item
+@param   item             schema category object
 @param   pattern_replace  regex for matching search words
 """
 SEARCH_ROW_META_HTML = """<%
@@ -488,19 +488,20 @@ wrap_b = lambda x: "<b>%s</b>" % x.group(0)
 
 
 """
-HTML template for table search results header, start of HTML table.
+HTML template for data search results header; start of HTML table.
 
-@param   table  schema table object
+@param   category  schema category
+@param   item      schema category object
 """
 SEARCH_ROW_TABLE_HEADER_HTML = """<%
 from sqlitely import conf, grammar
 %>
 <font color="{{ conf.FgColour }}">
-<br /><br /><b><a name="{{ table["name"] }}">Table {{ grammar.quote(table["name"]) }}:</a></b><br />
+<br /><br /><b><a name="{{ item["name"] }}">{{ category.capitalize() }} {{ grammar.quote(item["name"]) }}:</a></b><br />
 <table border="1" cellpadding="4" cellspacing="0" width="1000">
 <tr>
 <th>#</th>
-%for col in table["columns"]:
+%for col in item["columns"]:
 <th>{{ col["name"] }}</th>
 %endfor
 </tr>
@@ -508,12 +509,13 @@ from sqlitely import conf, grammar
 
 
 """
-HTML template for search result of DB table row, HTML table row.
+HTML template for search result of data row; HTML table row.
 
-@param   table            schema table object
-@param   row              matching table row
+@param   category         schema category
+@param   item             schema category object
+@param   row              matching row
 @param   count            search result index
-@param   keywords         {"table": [], "column": [], ..}
+@param   keywords         {"column": [], ..}
 @param   pattern_replace  regex for matching search words
 """
 SEARCH_ROW_TABLE_HTML = """<%
@@ -524,11 +526,11 @@ wrap_b = lambda x: "<b>%s</b>" % x.group(0)
 %>
 <tr>
 <td align="right" valign="top">
-  <a href="table:{{ table["name"] }}:{{ count }}">
+  <a href="{{ category }}:{{ item["name"] }}:{{ count }}">
     <font color="{{ conf.LinkColour }}">{{ count }}</font>
   </a>
 </td>
-%for col in table["columns"]:
+%for col in item["columns"]:
 <%
 value = row[col["name"]]
 value = value if value is not None else ""
@@ -623,7 +625,7 @@ from sqlitely import conf
     <a href="page:#search"><img src="memory:HelpSearch.png" /></a>
   </td><td valign="center">
     Search from table data over entire database,<br />
-    using a simple Google-like <a href="page:#help"><font color="{{ conf.LinkColour }}">syntax</font></a>.<br /><br />
+    using a simple <a href="page:#help"><font color="{{ conf.LinkColour }}">syntax</font></a>.<br /><br />
     Or search in database metadata:<br />
     table and column names and definitions.
   </td><td width="30"></td>
@@ -701,10 +703,22 @@ except ImportError:
 %if not pyparsing:
 <b><font color="red">Search syntax currently limited:</font></b>&nbsp;&nbsp;pyparsing not installed.<br /><br /><br />
 %endif
-{{ conf.Title }} supports a Google-like syntax for searching the database:<br /><br />
+{{ conf.Title }} supports a simple syntax for searching the database:<br /><br />
 <table><tr><td width="500">
   <table border="0" cellpadding="5" cellspacing="1" bgcolor="{{ conf.HelpBorderColour }}"
    valign="top" width="500">
+  <tr>
+    <td bgcolor="{{ conf.BgColour }}" width="150">
+      <b>Search for all words</b><br /><br />
+      <font color="{{ conf.HelpCodeColour }}"><code>this alsothis andthis</code></font>
+      <br />
+    </td>
+    <td bgcolor="{{ conf.BgColour }}">
+      <br /><br />
+      Row is matched if for all words a match is found in at least one column.
+      <br />
+    </td>
+  </tr>
   <tr>
     <td bgcolor="{{ conf.BgColour }}" width="150">
       <b>Search for exact word or phrase</b><br /><br />
@@ -781,16 +795,21 @@ except ImportError:
     <td bgcolor="{{ conf.BgColour }}" width="150">
       <b>Search specific tables</b><br /><br />
       <font color="{{ conf.HelpCodeColour }}"><code>table:fromthistable<br />
-      -table:notfromthistable</code></font>
+      view:fromthisview<br />
+      -table:notfromthistable<br />
+      -view:notfromthisview</code></font>
       <br />
     </td>
     <td bgcolor="{{ conf.BgColour }}">
       <br /><br />
       Use the keyword <font color="{{ conf.HelpCodeColour }}"><code>table:name</code></font>
-      to constrain results to specific tables only.<br /><br />
-      Search from more than one table by adding more
-      <font color="{{ conf.HelpCodeColour }}"><code>table:</code></font> keywords, or exclude certain
-      tables by adding a <font color="{{ conf.HelpCodeColour }}"><code>-table:</code></font> keyword.
+      or <font color="{{ conf.HelpCodeColour }}"><code>view:name</code></font>
+      to constrain results to specific tables and views only.<br /><br />
+      Search from more than one source by adding more
+      <font color="{{ conf.HelpCodeColour }}"><code>table:</code></font> or
+      <font color="{{ conf.HelpCodeColour }}"><code>view:</code></font> keywords, or exclude certain
+      sources by adding a <font color="{{ conf.HelpCodeColour }}"><code>-table:</code></font> 
+      or <font color="{{ conf.HelpCodeColour }}"><code>-view:</code></font> keyword.
       <br />
     </td>
   </tr>
@@ -855,10 +874,10 @@ except ImportError:
         <font color="{{ conf.HelpCodeColour }}">
         <code>(john "my side") OR (stark "your side")</code></font><br />
     </li>
-    <li>search for either "barbecue" or "grill" in 2012,
+    <li>search for either "birthday" or "cake" in 2012,
         except from June to August:<br /><br />
         <font color="{{ conf.HelpCodeColour }}">
-        <code>barbecue OR grill date:2012 -date:2012-06..2012-08</code>
+        <code>birthday OR cake date:2012 -date:2012-06..2012-08</code>
         </font><br />
     </li>
     <li>search for "TPS report" but not "my TPS report"

@@ -2072,7 +2072,7 @@ class DatabasePage(wx.Panel):
             wx.ToolBar(page, style=wx.TB_FLAT | wx.TB_NODIVIDER | wx.TB_HORZ_TEXT)
         tb.SetToolBitmapSize((24, 24))
         tb.AddRadioLabelTool(wx.ID_STATIC, "Data", bitmap=images.ToolbarTables.Bitmap,
-            shortHelp="Search in all columns of all database tables")
+            shortHelp="Search in all columns of all database tables and views")
         tb.AddRadioLabelTool(wx.ID_INDEX, "Meta", bitmap=images.ToolbarTitle.Bitmap,
             shortHelp="Search in database CREATE SQL")
         tb.AddSeparator()
@@ -2081,17 +2081,17 @@ class DatabasePage(wx.Panel):
         tb.AddSimpleTool(wx.ID_STOP, bitmap=images.ToolbarStopped.Bitmap,
             shortHelpString="Stop current search, if any")
         tb.Realize()
-        tb.ToggleTool(wx.ID_INDEX, conf.SearchInNames)
-        tb.ToggleTool(wx.ID_STATIC, conf.SearchInTables)
+        tb.ToggleTool(wx.ID_INDEX, conf.SearchInMeta)
+        tb.ToggleTool(wx.ID_STATIC, conf.SearchInData)
         tb.ToggleTool(wx.ID_NEW, conf.SearchUseNewTab)
         self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_INDEX)
         self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_STATIC)
         self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_NEW)
         self.Bind(wx.EVT_TOOL, self.on_searchall_stop, id=wx.ID_STOP)
 
-        self.label_search.Label = "&Search in table data:"
-        if conf.SearchInNames:
-            self.label_search.Label = "&Search in database CREATE SQL:"
+        self.label_search.Label = "&Search in data:"
+        if conf.SearchInMeta:
+            self.label_search.Label = "&Search in meta:"
 
         html = self.html_searchall = controls.TabbedHtmlWindow(page)
         default = step.Template(templates.SEARCH_WELCOME_HTML).expand()
@@ -3422,15 +3422,16 @@ class DatabasePage(wx.Panel):
         elif link_data:
             # Go to specific data/schema page object
             category, row = link_data.get("category"), link_data.get("row")
-            item = self.db.get_category(category, link_data[category])
+            item = self.db.get_category(category, link_data["name"])
+            logger.info("linkdata %s", link_data) # TODO remove
             if not item: return
 
             tree, page = self.tree_data, self.page_data
+            match = dict(type=category, name=item["name"])
             if "schema" == link_data.get("page"):
                 tree, page = self.tree_schema, self.page_schema
-            if tree.FindAndActivateItem(type=category, name=item["name"],
-                level=category, expand=(tree is self.tree_schema)
-            ):
+                match.update(level=category)
+            if tree.FindAndActivateItem(match, expand=(tree is self.tree_schema)):
                 self.notebook.SetSelection(self.pageorder[page])
                 wx.YieldIfNeeded()
                 if row: # Scroll to matching row
@@ -3462,13 +3463,13 @@ class DatabasePage(wx.Panel):
         """Handler for toggling new tab setting in search toolbar."""
         """Handler for toggling a setting in search toolbar."""
         if wx.ID_INDEX == event.Id:
-            conf.SearchInNames = True
-            conf.SearchInTables = False
-            self.label_search.Label = "&Search in database CREATE SQL:"
+            conf.SearchInMeta = True
+            conf.SearchInData = False
+            self.label_search.Label = "&Search in meta:"
         elif wx.ID_STATIC == event.Id:
-            conf.SearchInTables = True
-            conf.SearchInNames = False
-            self.label_search.Label = "&Search in table data:"
+            conf.SearchInData = True
+            conf.SearchInMeta = False
+            self.label_search.Label = "&Search in data:"
         self.label_search.ContainingSizer.Layout()
         if wx.ID_NEW == event.Id:
             conf.SearchUseNewTab = event.EventObject.GetToolState(event.Id)
@@ -3565,14 +3566,13 @@ class DatabasePage(wx.Panel):
                            text, self.db, flash=True)
             html = self.html_searchall
             data = {"id": wx.NewId(), "db": self.db, "text": text, "map": {},
-                    "width": html.Size.width * 5/9, "table": "",
-                    "partial_html": ""}
-            if conf.SearchInNames:
-                data["table"] = "meta"
-                fromtext = "database CREATE SQL"
-            elif conf.SearchInTables:
-                data["table"] = "tables"
-                fromtext = "tables"
+                    "width": html.Size.width * 5/9, "partial_html": ""}
+            if conf.SearchInMeta:
+                data["source"] = "meta"
+                fromtext = "database metadata"
+            elif conf.SearchInData:
+                data["source"] = "data"
+                fromtext = "database data"
             # Partially assembled HTML for current results
             template = step.Template(templates.SEARCH_HEADER_HTML, escape=True)
             data["partial_html"] = template.expand(locals())

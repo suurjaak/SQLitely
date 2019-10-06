@@ -22,7 +22,7 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev122"
+Version = "1.0.dev123"
 VersionDate = "05.10.2019"
 
 if getattr(sys, "frozen", False):
@@ -41,15 +41,15 @@ ConfigFile = "%s.ini" % os.path.join(ApplicationDirectory, "etc", Title.lower())
 """List of attribute names that can be saved to and loaded from ConfigFile."""
 FileDirectives = ["ConsoleHistoryCommands", "DBFiles", "DBSort",
     "LastActivePage", "LastSearchResults", "LastSelectedFiles",
-    "LastUpdateCheck", "RecentFiles", "SearchHistory", "SearchInNames",
-    "SearchInTables", "SearchUseNewTab", "SQLWindowTexts", "TrayIconEnabled",
+    "LastUpdateCheck", "RecentFiles", "SearchHistory", "SearchInMeta",
+    "SearchInData", "SearchUseNewTab", "SQLWindowTexts", "TrayIconEnabled",
     "UpdateCheckAutomatic", "WindowIconized", "WindowPosition", "WindowSize",
 ]
 """List of attributes saved if changed from default, user-modifiable."""
 OptionalFileDirectives = [
     "DBExtensions", "ExportDbTemplate", "LogSQL", "MinWindowSize",
     "MaxConsoleHistory", "MaxHistoryInitialMessages", "MaxRecentFiles",
-    "MaxSearchHistory", "MaxSearchTableRows", "PopupUnexpectedErrors",
+    "MaxSearchHistory", "MaxSearchDataRows", "PopupUnexpectedErrors",
     "SearchResultsChunk", "StatisticsPlotWidth", "StatusFlashLength",
     "UpdateCheckInterval",
 ]
@@ -90,11 +90,11 @@ SearchHistory = []
 """Whether to create a new tab for each search or reuse current."""
 SearchUseNewTab = True
 
-"""Whether to search in table and column names."""
-SearchInNames = False
+"""Whether to search in database CREATE SQL."""
+SearchInMeta = False
 
-"""Whether to search in all columns of all tables."""
-SearchInTables = True
+"""Whether to search in all columns of all tables and views."""
+SearchInData = True
 
 """Texts in SQL window, loaded on reopening a database {filename: [(name, text), ], }."""
 SQLWindowTexts = {}
@@ -160,8 +160,8 @@ LastUpdateCheck = None
 """Maximum length of a tab title, overflow will be cut on the left."""
 MaxTabTitleLength = 60
 
-"""Maximum number of table rows to show in search results."""
-MaxSearchTableRows = 500
+"""Maximum number of data rows to show in search results."""
+MaxSearchDataRows = 500
 
 """Number of search results to yield in one chunk from search thread."""
 SearchResultsChunk = 50

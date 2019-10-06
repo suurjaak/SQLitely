@@ -149,11 +149,11 @@ class SearchThread(WorkerThread):
                 if not search:
                     continue # while self._is_running
 
-                TEMPLATES = {"meta":  templates.SEARCH_ROW_META_HTML,
-                             "table": templates.SEARCH_ROW_TABLE_HEADER_HTML,
-                             "row":   templates.SEARCH_ROW_TABLE_HTML}
+                TEMPLATES = {"meta": templates.SEARCH_ROW_META_HTML,
+                             "data": templates.SEARCH_ROW_TABLE_HEADER_HTML,
+                             "row":  templates.SEARCH_ROW_TABLE_HTML}
                 FACTORY = lambda x: step.Template(TEMPLATES[x], escape=True)
-                logger.info('Searching "%(text)s" in %(table)s (%(db)s).' % search)
+                logger.info('Searching "%(text)s" in %(source)s (%(db)s).' % search)
                 self._is_working, self._drop_results = True, False
 
                 # {"output": text with results, "map": link data map}
@@ -169,12 +169,12 @@ class SearchThread(WorkerThread):
                 patt = "(%s)" % "|".join(match_words_re)
                 # For replacing matching words with <b>words</b>
                 pattern_replace = re.compile(patt, re.IGNORECASE)
-                infotext = search["table"]
+                infotext = search["source"]
 
                 # Find from database metadata
-                if self._is_working and "meta" == search["table"] \
+                if self._is_working and "meta" == search["source"] \
                 and match_words:
-                    infotext = "database CREATE SQL"
+                    infotext = "database metadata"
                     count = 0
                     template_meta = FACTORY("meta")
 
@@ -189,9 +189,8 @@ class SearchThread(WorkerThread):
                                       pattern_replace=pattern_replace)
                             result["output"] += template_meta.expand(ns)
                             result["map"][":".join((category, item["name"]))] = {
-                                "category": category,
-                                "page":     "schema",
-                                category:   item["name"],
+                                "category": category, "page": "schema",
+                                "name": item["name"],
                             }
                             if not count % conf.SearchResultsChunk \
                             and not self._drop_results:
@@ -210,65 +209,71 @@ class SearchThread(WorkerThread):
                               "search": search, "count": 0}
 
 
-                # Find from table content
-                if self._is_working and "tables" == search["table"]:
-                    infotext, result_type = "", "table row"
-                    # Search over all fields of all tables.
-                    template_table = FACTORY("table")
-                    template_row = FACTORY("row")
-                    for table in search["db"].get_category("table").values():
-                        sql, params, words, keywords = \
-                            query_parser.Parse(search["text"], table)
-                        if not sql:
-                            continue # for table
-                        cursor = search["db"].execute(sql, params)
-                        row = cursor.fetchone()
-                        namepre, namesuf = ("<b>", "</b>") if row else ("", "")
-                        countpre, countsuf = (("<a href='#%s'><font color='%s'>" %
-                            (step.escape_html(table["name"]), conf.LinkColour),
-                            "</font></a>")) if row else ("", "")
-                        infotext += (", " if infotext else "") \
-                                    + namepre + table["name"] + namesuf
-                        if not row:
-                            continue # for table
-                        result["output"] = template_table.expand(table=table)
-                        count = 0
-                        while row:
-                            count += 1
-                            result_count += 1
-                            ns = dict(table=table, row=row, keywords=keywords,
-                                      count=count, pattern_replace=pattern_replace)
-                            result["output"] += template_row.expand(ns)
-                            key = "table:%s:%s" % (table["name"], count)
-                            result["map"][key] = {"table": table["name"],
-                                                  "row": row}
-                            if not count % conf.SearchResultsChunk \
-                            and not self._drop_results:
+                # Find from database data
+                if self._is_working and "data" == search["source"]:
+                    infotext, result_type = "", "row"
+                    template_item, template_row = FACTORY("data"), FACTORY("row")
+                    for category in "table", "view":
+                        mytexts = []
+                        for item in search["db"].get_category(category).values():
+                            mytext = ""
+                            sql, params, words, keywords = \
+                                query_parser.Parse(search["text"], item)
+                            if not sql:
+                                continue # for item
+                            cursor = search["db"].execute(sql, params)
+                            row = cursor.fetchone()
+                            namepre, namesuf = ("<b>", "</b>") if row else ("", "")
+                            countpre, countsuf = (("<a href='#%s'><font color='%s'>" %
+                                (step.escape_html(item["name"]), conf.LinkColour),
+                                "</font></a>")) if row else ("", "")
+                            mytext = namepre + item["name"] + namesuf
+                            if not row:
+                                mytexts.append(mytext)
+                                continue # for item
+                            result["output"] = template_item.expand(category=category, item=item)
+                            count = 0
+                            while row:
+                                count += 1
+                                result_count += 1
+                                ns = dict(category=category, item=item, row=row,
+                                          keywords=keywords, count=count,
+                                          pattern_replace=pattern_replace)
+                                result["output"] += template_row.expand(ns)
+                                key = "%s:%s:%s" % (category, item["name"], count)
+                                result["map"][key] = {"category": category,
+                                                      "name": item["name"],
+                                                      "row": row}
+                                if not count % conf.SearchResultsChunk \
+                                and not self._drop_results:
+                                    result["count"] = result_count
+                                    self.postback(result)
+                                    result = {"output": "", "map": {},
+                                              "search": search, "count": 0}
+                                if not self._is_working \
+                                or result_count >= conf.MaxSearchDataRows:
+                                    break # while row
+                                row = cursor.fetchone()
+                            if not self._drop_results:
+                                result["output"] += "</table></font>"
                                 result["count"] = result_count
                                 self.postback(result)
                                 result = {"output": "", "map": {},
                                           "search": search, "count": 0}
+                            mytext += " (%s%s%s)" % (countpre,
+                                      util.plural("result", count), countsuf)
+                            mytexts.append(mytext)
                             if not self._is_working \
-                            or result_count >= conf.MaxSearchTableRows:
-                                break # while row
-                            row = cursor.fetchone()
-                        if not self._drop_results:
-                            result["output"] += "</table></font>"
-                            result["count"] = result_count
-                            self.postback(result)
-                            result = {"output": "", "map": {},
-                                      "search": search, "count": 0}
-                        infotext += " (%s%s%s)" % (countpre,
-                                    util.plural("result", count), countsuf)
+                            or result_count >= conf.MaxSearchDataRows:
+                                break # for item
+                        infotext += "%s%s: %s" % ("; " if infotext else "",
+                            util.plural(category, mytexts, with_items=False),
+                            ", ".join(mytexts))
                         if not self._is_working \
-                        or result_count >= conf.MaxSearchTableRows:
-                            break # for table
-                    single_table = ("," not in infotext)
-                    infotext = "table%s: %s" % \
-                               ("" if single_table else "s", infotext)
-                    if not single_table:
-                        infotext += "; %s in total" % \
-                                    util.plural("result", result_count)
+                        or result_count >= conf.MaxSearchDataRows:
+                            break # for category
+                    if infotext:
+                        infotext += "; %s in total" % util.plural("result", result_count)
 
 
                 final_text = "No matches found."
@@ -279,10 +284,10 @@ class SearchThread(WorkerThread):
 
                 if not self._is_working:
                     final_text += " Stopped by user."
-                elif "table row" == result_type \
-                and count >= conf.MaxSearchTableRows:
+                elif "row" == result_type \
+                and count >= conf.MaxSearchDataRows:
                     final_text += " Stopped at %s limit %s." % \
-                                  (result_type, conf.MaxSearchTableRows)
+                                  (result_type, conf.MaxSearchDataRows)
 
                 result["output"] += "</table><br /><br />%s</font>" % final_text
                 result["done"] = True

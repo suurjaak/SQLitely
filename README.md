@@ -8,9 +8,9 @@ It can:
 - detect and manage SQLite databases in bulk
 - create new databases
 - create and modify tables, indexes, triggers and views
-- free-form search over all database tables
-- view and export tables and metadata in various formats
-- view table and index size statistics
+- free-form search over all database data and metadata
+- view and export data and metadata in various formats
+- view database table and index size statistics
 - copy tables from one database to another
 - modify table data
 - execute direct SQL queries
@@ -34,7 +34,7 @@ copying data, dropping old table, and renaming temporary table as old).
 Additionally, when renaming tables or columns, all related tables, indexes,
 triggers and views are altered automatically.
 
-SQLitely can search over all columns of all tables with a simple Google-like
+SQLitely can search over all columns of all tables with a simple
 [query syntax](http://suurjaak.github.io/SQLitely/help.html).
 Keywords can search from specific tables and columns only
 (`table:foo`, `column:bar`), or from certain dates only 
