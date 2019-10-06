@@ -712,7 +712,7 @@ except ImportError:
   <tr>
     <td bgcolor="{{ conf.BgColour }}" width="150">
       <b>Search for all words</b><br /><br />
-      <font color="{{ conf.HelpCodeColour }}"><code>this alsothis andthis</code></font>
+      <font color="{{ conf.HelpCodeColour }}"><code>this andthis alsothis</code></font>
       <br />
     </td>
     <td bgcolor="{{ conf.BgColour }}">
@@ -893,7 +893,7 @@ except ImportError:
 
   <br /><br />
   All search texts and keywords are case-insensitive. <br />
-  Keywords are global and cannot be grouped.
+  Keywords are global, even when in (grouped words).
 
 </td></tr></table>
 </font>

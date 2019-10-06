@@ -45,10 +45,9 @@ SQLitely can show disk space usage for each table and index,
 in bytes and overall percentage. (Depending on the size of the database,
 this analysis can take a while.)
 
-Windows installers have been provided for convenience. The program itself 
-is stand-alone, can work from any directory, and does not need additional
-installation. The installed program can be copied to a USB stick and used
-elsewhere, same goes for the source code.
+Fixing database corruption: SQLitely will copy as much data as possible
+over into a new database.
+
 
 SQLitely has been tested under Windows 7, Windows Vista, Windows XP and
 Ubuntu Linux. In source code form, it should run wherever Python and the
@@ -70,6 +69,11 @@ Mac/Linux/other: install Python, wxPython, pip, and run
 `pip install sqlitely`
 
 The pip installation will add the `sqlitely` command to path.
+
+Windows installers have been provided for convenience. The program itself 
+is stand-alone, can work from any directory, and does not need additional
+installation. The installed program can be copied to a USB stick and used
+elsewhere, same goes for the source code.
 
 
 Source Dependencies
