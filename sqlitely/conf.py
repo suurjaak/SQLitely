@@ -22,7 +22,7 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev126"
+Version = "1.0.dev127"
 VersionDate = "07.10.2019"
 
 if getattr(sys, "frozen", False):
@@ -48,10 +48,10 @@ FileDirectives = ["ConsoleHistoryCommands", "DBFiles", "DBSort",
 """List of attributes saved if changed from default, user-modifiable."""
 OptionalFileDirectives = [
     "DBExtensions", "ExportDbTemplate", "LogSQL", "MinWindowSize",
-    "MaxConsoleHistory", "MaxHistoryInitialMessages", "MaxRecentFiles",
-    "MaxSearchHistory", "MaxSearchResults", "PopupUnexpectedErrors",
-    "SearchResultsChunk", "StatisticsPlotWidth", "StatusFlashLength",
-    "UpdateCheckInterval",
+    "MaxConsoleHistory", "MaxDBSizeForFullCount", "MaxTableRowIDForFullCount",
+    "MaxHistoryInitialMessages", "MaxRecentFiles", "MaxSearchHistory",
+    "MaxSearchResults", "PopupUnexpectedErrors", "SearchResultsChunk",
+    "StatisticsPlotWidth", "StatusFlashLength", "UpdateCheckInterval",
 ]
 OptionalFileDirectiveDefaults = {}
 
@@ -77,6 +77,12 @@ LastSearchResults = {}
 
 """Files selected in the database lists on last run."""
 LastSelectedFiles = []
+
+"""Maximum database file size for doing full COUNT(*) instead of estimating from MAX(ROWID)."""
+MaxDBSizeForFullCount = 500000000
+
+"""Maximum table ROWID for doing full COUNT(*) if database size over MaxDBSizeForFullCount."""
+MaxTableRowIDForFullCount = 1000
 
 """Contents of Recent Files menu."""
 RecentFiles = []

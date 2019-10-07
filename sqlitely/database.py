@@ -769,19 +769,16 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Returns {"count": int, ?"is_count_estimated": bool}.
         Uses MAX(ROWID) to estimate row count and skips COUNT(*) if likely
         to take too long (file over half a gigabyte).
-
-        TODO äkki teeks SIZE_LIMIT konfitavaks? hmm. vast jah.
-
         """
-        SIZE_LIMIT, TABLE_LIMIT = 5E8, 1E3
         result, do_full = {"count": None}, False
         tpl = "SELECT %%s AS count FROM %s LIMIT 1" % grammar.quote(table)
         try:
             result = self.execute(tpl % "MAX(ROWID)", log=False).fetchone()
             result["is_count_estimated"] = True
-            if self.filesize < SIZE_LIMIT or result["count"] < TABLE_LIMIT:
+            if self.filesize < conf.MaxDBSizeForFullCount \
+            or result["count"] < conf.MaxTableRowIDForFullCount:
                 do_full = True
-        except Exception: do_full = self.filesize < SIZE_LIMIT
+        except Exception: do_full = self.filesize < conf.MaxDBSizeForFullCount
 
         try:
             if do_full:
