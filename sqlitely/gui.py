@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.10.2019
+@modified    07.10.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3419,7 +3419,6 @@ class DatabasePage(wx.Panel):
             # Go to specific data/schema page object
             category, row = link_data.get("category"), link_data.get("row")
             item = self.db.get_category(category, link_data["name"])
-            logger.info("linkdata %s", link_data) # TODO remove
             if not item: return
 
             tree, page = self.tree_data, self.page_data
@@ -4257,19 +4256,19 @@ class DatabasePage(wx.Panel):
                             "WHERE type = ? AND sql != '' AND name NOT LIKE 'sqlite_%'", [category]
                         ).fetchall()]
                         for item in items:
-                            name = base = item["name"]; counter = 2
+                            name2 = base = item["name"]; counter = 2
                             if t1_lower != t2_lower:
-                                name = base = re.sub(re.escape(table), re.sub(r"\W", "", table2),
-                                                     name, count=1, flags=re.I | re.U)
-                            while name in items2:
-                                name, counter = "%s_%s" % (base, counter), counter + 1
-                            items2.append(name)
+                                name2 = base = re.sub(re.escape(table), re.sub(r"\W", "", table2),
+                                                      name2, count=1, flags=re.I | re.U)
+                            while name2 in items2:
+                                name2, counter = "%s_%s" % (base, counter), counter + 1
+                            items2.append(name2)
                             item_sql, err = grammar.transform(item["sql"], renames=dict(
-                                {category: name}, **renames
+                                {category: {item["name"]: name2}}, **renames
                             ))
                             if err: raise Exception(err)
                             logger.info("Creating %s %s on table %s in %s, using %s.",
-                                        category, grammar.quote(name, force=True),
+                                        category, grammar.quote(name2, force=True),
                                         grammar.quote(table2, force=True),
                                         filename2, item_sql)
                             self.db.execute(item_sql)
@@ -7959,8 +7958,8 @@ class SchemaObjectPage(wx.PyPanel):
             def make_tempname(name):
                 tempname, counter = "%s_temp" % name.lower(), 2
                 while tempname in tables_existing:
-                    counter += 1
                     tempname = "%s_temp_%s" % (name.lower(), counter)
+                    counter += 1
                 tables_existing.append(tempname)
                 return tempname
 
@@ -7978,15 +7977,15 @@ class SchemaObjectPage(wx.PyPanel):
 
             renames = {"table":  {old["name"]: new["name"]}
                                  if old["name"] != new["name"] else {},
-                       "column": {colmap1[c2["__id__"]]["name"]: c2["name"]
-                                  for c2 in cols2 if c2["__id__"] in colmap1
-                                  and colmap1[c2["__id__"]]["name"] != c2["name"]}}
-            for k, v in renames.items(): renames.pop(k) if not v else None
-            for category in "table", "index", "trigger", "view":
-                if not renames and category in ("view", "table"):
-                    continue # for category
+                       "column": {new["name"]: {
+                                      colmap1[c2["__id__"]]["name"]: c2["name"]
+                                      for c2 in cols2 if c2["__id__"] in colmap1
+                                      and colmap1[c2["__id__"]]["name"] != c2["name"]}}}
+            for k, v in renames.items():
+                if not v or not any(x.values() for x in v.values()): renames.pop(k)
+            for category in database.Database.CATEGORIES if renames else ():
                 for item in self._db.get_category(category, table=old["name"]).values():
-                    if "table" == category and item["name"] == old["name"]:
+                    if category == self._category and item["name"] == old["name"]:
                         continue # for item
 
                     mytempname = make_tempname(item["name"])
@@ -8525,7 +8524,7 @@ class SchemaObjectPage(wx.PyPanel):
                         if name in cnstr.get("columns", []):
                             cnstr["columns"] = [x for x in cnstr["columns"] if x != name]
                             changed = keychanged = True
-                        if cnstr.get("table") == self._item.get("name") \
+                        if cnstr.get("table") == self._item["meta"].get("name") \
                         and name in cnstr.get("key", []):
                             cnstr["key"] = [x for x in cnstr["key"] if x != name]
                             changed = True
@@ -8539,7 +8538,8 @@ class SchemaObjectPage(wx.PyPanel):
         if not changed and not renames: return
 
         if renames:
-            sql, err = grammar.transform(self._item["sql"], renames={"column": renames})
+            sql, err = grammar.transform(self._item["sql"], renames={"column":
+                                         {self._item["meta"].get("name", ""): renames}})
             if err: return
             meta, err = grammar.parse(sql)
             if err: return

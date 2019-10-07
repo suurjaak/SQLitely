@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.10.2019
+@modified    07.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -865,9 +865,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
         @param   transform  {"flags":   flags to toggle, like {"exists": True},
                              "renames": renames to perform in SQL statement body,
                                         supported types "schema" (top-level rename only),
-                                        "table", "index", "trigger", "view".
-                                        Renames all items of specified category, unless
-                                        given nested value like {"table": {"old": "new"}}
+                                        "table", "index", "trigger", "view", "column".
+                                        Schema renames as {"schema": s2} or {"schema": {s1: s2}},
+                                        category renames as {category: {v1: v2}},
+                                        column renames as {"columns": {table or view: {c1: c2}}},
+                                        where category value should be the renamed value if
+                                        the same transform is renaming the category as well.
                             }
         """
         result = ""

@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    05.10.2019
+@modified    07.10.2019
 ------------------------------------------------------------------------------
 """
 
@@ -451,6 +451,7 @@ TABLE_CONSTRAINT = """
 %if "FOREIGN KEY" == data.get("type"):
   {{ GLUE() }}{{ WS(" ") }}
   (
+    {{ GLUE() }}
     %for j, c in enumerate(data.get("columns") or []):
     {{ Q(c) }}{{ CM("constraints", i, "columns", j, root=root) }}
     %endfor
@@ -460,6 +461,7 @@ TABLE_CONSTRAINT = """
     %if data.get("key"):
   {{ GLUE() }}{{ WS(" ") }}
   (
+  {{ GLUE() }}
         %for j, c in enumerate(data["key"]):
   {{ Q(c) if c else "" }}{{ CM("constraints", i, "key", j, root=root) }}
         %endfor
