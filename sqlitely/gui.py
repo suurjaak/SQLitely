@@ -7932,6 +7932,10 @@ class SchemaObjectPage(wx.PyPanel):
                           for c in cols2]
             can_simple = (cols1_sqls == cols2_sqls) # Column definition changed
 
+        if can_simple and old["name"] != new["name"] and not self._db.has_full_rename_table():
+            can_simple = all(x["meta"]["table"].lower() == old["name"].lower()
+                             for c in ("trigger", "view")
+                             for x in self._db.get_category(c, table=old["name"]).values())
 
         if can_simple:
             # Possible to use just simple ALTER TABLE statements
@@ -7972,7 +7976,8 @@ class SchemaObjectPage(wx.PyPanel):
                                       for c2 in cols2 if c2["__id__"] in colmap1
                                       and colmap1[c2["__id__"]]["name"] != c2["name"]}}}
             for k, v in renames.items():
-                if not v or not any(x.values() for x in v.values()): renames.pop(k)
+                if not v or not any(x.values() for x in v.values()
+                                    if isinstance(x, dict)): renames.pop(k)
 
             for category in database.Database.CATEGORIES:
                 for item in self._db.get_category(category, table=old["name"]).values():

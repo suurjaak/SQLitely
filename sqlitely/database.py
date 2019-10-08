@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.10.2019
+@modified    08.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -627,6 +627,14 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def has_rename_column(self):
         """Returns whether SQLite supports renaming columns (from version 3.25)."""
+        return sqlite3.sqlite_version_info >= (3, 25)
+
+
+    def has_full_rename_table(self):
+        """
+        Returns whether SQLite supports cascading table rename
+        to triggers/views referring the table (from version 3.25).
+        """
         return sqlite3.sqlite_version_info >= (3, 25)
 
 
