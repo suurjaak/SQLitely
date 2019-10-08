@@ -4471,7 +4471,7 @@ class DatabasePage(wx.Panel):
 
                 if "table" == category:
                     columns = item.get("columns") or []
-                    subcategories, emptysubs = ["index", "trigger", "view"], True
+                    subcategories, emptysubs = ["table", "index", "trigger", "view"], True
                 elif "index" == category:
                     childtext = "ON " + grammar.quote(item["meta"]["table"])
                     columns = copy.deepcopy(item["meta"].get("columns") or [])
@@ -4504,7 +4504,8 @@ class DatabasePage(wx.Panel):
                         tree.SetItemPyData(subchild, dict(col, parent=itemdata, type="column", level=item["name"]))
                 for subcategory in subcategories:
                     subitems = relateds.get(subcategory, [])
-                    if not subitems and not emptysubs: continue # for subcategory
+                    if not subitems and (not emptysubs or category == subcategory):
+                        continue # for subcategory
 
                     t = util.plural(subcategory).capitalize()
                     if subitems: t += " (%s)" % len(subitems)
@@ -4718,10 +4719,14 @@ class DatabasePage(wx.Panel):
             newdata = {"type": category,
                        "meta": {"__type__": "CREATE %s" % category.upper()}}
             if category in ("index", "trigger"):
-                if data.get("parent") and "table" == data["parent"]["type"]:
-                    newdata["meta"]["table"] = data["parent"]["name"]
-                elif "table" == data["type"]:
+                if "table" == data["type"]:
                     newdata["meta"]["table"] = data["name"]
+                elif data.get("parent") and "table" == data["parent"]["type"]:
+                    newdata["meta"]["table"] = data["parent"]["name"]
+                elif "trigger" == category and \
+                data.get("parent") and "view" == data["parent"]["type"]:
+                    newdata["meta"]["table"] = data["parent"]["name"]
+                    newdata["meta"]["upon"] = grammar.SQL.INSTEAD_OF
             self.add_schema_page(newdata)
             tree.Expand(item)
         def copy_related(*_, **__):

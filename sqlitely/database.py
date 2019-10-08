@@ -834,7 +834,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         like triggers selecting from a view, as {category: [{item}, ]}.
         """
         result = {}
-        SUBCATEGORIES = {"table":   ["index", "trigger", "view"],
+        SUBCATEGORIES = {"table":   ["table", "index", "trigger", "view"],
                          "index":   ["table"],
                          "trigger": ["table", "view"],
                          "view":    ["table", "trigger", "view"]}
