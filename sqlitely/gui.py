@@ -4448,6 +4448,19 @@ class DatabasePage(wx.Panel):
             logger.exception(msg)
             return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
 
+        def is_indirect_item(item, subitem):
+            result = False
+            if item["type"] in ["trigger"] and subitem["type"] in ["table", "view"] \
+            and item["meta"]["table"].lower() != subitem["name"].lower():
+                result = True
+            elif item["type"] in ["table", "view"] and subitem["type"] in ["trigger"] \
+            and subitem["meta"]["table"].lower() != item["name"].lower():
+                result = True
+            return result
+
+        italicfont = tree.Font
+        italicfont.SetStyle(wx.FONTSTYLE_ITALIC)
+
         tree.DeleteAllItems()
         root = tree.AddRoot("SQLITE")
         tree.SetItemPyData(root, {"type": "schema"})
@@ -4507,7 +4520,10 @@ class DatabasePage(wx.Panel):
                     if not subitems and (not emptysubs or category == subcategory):
                         continue # for subcategory
 
+                    subitems.sort(key=lambda x: (is_indirect_item(item, x), x["name"].lower()))
                     t = util.plural(subcategory).capitalize()
+                    if "table" == category == subcategory:
+                        t = "Related tables"
                     if subitems: t += " (%s)" % len(subitems)
                     categchild = tree.AppendItem(child, t)
                     subcategorydata = {"type": "category", "category": subcategory, "items": subitems, "parent": itemdata}
@@ -4524,6 +4540,8 @@ class DatabasePage(wx.Panel):
                         elif "trigger" == subcategory:
                             t = " ".join(filter(bool, (subitem["meta"].get("upon"), subitem["meta"]["action"])))
                         tree.SetItemText(subchild, t, 1)
+                        if is_indirect_item(item, subitem): tree.SetItemFont(subchild, italicfont)
+                            
 
             tree.Collapse(top)
         tree.SetColumnWidth(0, tree.Size[0] - 180)
