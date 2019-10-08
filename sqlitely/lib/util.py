@@ -292,16 +292,16 @@ def add_unique(lst, item, direction=1, maxlen=sys.maxint):
     return lst
 
 
-def make_unique(value, existing, suffix="_temp"):
+def make_unique(value, existing, suffix="_%s", counter=2):
     """
-    Returns a unique string, appending suffix or suffix_2 etc as necessary.
+    Returns a unique string, appending suffix % counter as necessary.
 
-    @param   existing  collection of existing strings to use
+    @param   existing  collection of existing strings to check
     """
-    unique, counter = "%s%s" % (value, suffix), 2
-    while unique in existing:
-        unique, counter = "%s%s_%s" % (value, suffix, counter), counter + 1
-    return unique
+    result = value
+    while result in existing:
+        result, counter = value + suffix % counter, counter + 1
+    return result
 
 
 def get(collection, *path, **kwargs):

@@ -1912,14 +1912,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         if len(title) > conf.MaxTabTitleLength:
             title = "..%s" % title[-conf.MaxTabTitleLength:]
-        unique = title_base = title
         all_titles = [self.notebook.GetPageText(i)
                       for i in range(self.notebook.GetPageCount())]
-        i = 2 # Start counter from 1
-        while unique in all_titles:
-            unique = "%s (%d)" % (title_base, i)
-            i += 1
-        return unique
+        return util.make_unique(title, all_titles, suffix=" (%s)")
 
 
 
@@ -4091,10 +4086,8 @@ class DatabasePage(wx.Panel):
             path, _ = os.path.split(path)
             filenames, names_unique = [], []
             for t in items:
-                name = base = util.safe_filename("%s %s" % (category.capitalize(),  t))
-                counter = 2
-                while name in names_unique:
-                    name, counter = "%s (%s)" % (base, counter), counter + 1
+                name = util.safe_filename("%s %s" % (category.capitalize(),  t))
+                name = util.make_unique(name, names_unique, suffix=" (%s)")
                 filenames.append(os.path.join(path, name + "." + extname))
                 names_unique.append(name)
 
@@ -4258,12 +4251,11 @@ class DatabasePage(wx.Panel):
                             if item["meta"]["table"].lower() != t1_lower:
                                 continue # for item
 
-                            name2 = base = item["name"]; counter = 2
+                            name2 = item["name"]
                             if t1_lower != t2_lower:
-                                name2 = base = re.sub(re.escape(table), re.sub(r"\W", "", table2),
-                                                      name2, count=1, flags=re.I | re.U)
-                            while name2 in items2:
-                                name2, counter = "%s_%s" % (base, counter), counter + 1
+                                name2 = re.sub(re.escape(table), re.sub(r"\W", "", table2),
+                                               name2, count=1, flags=re.I | re.U)
+                            name2 = util.make_unique(name2, items2)
                             items2.append(name2)
                             item_sql, err = grammar.transform(item["sql"], renames=dict(
                                 {category: {item["name"]: name2}}, **renames
