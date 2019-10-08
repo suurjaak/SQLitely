@@ -62,7 +62,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    07.10.2019
+@modified    08.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -350,9 +350,7 @@ class FormDialog(wx.Dialog):
 
         for f in self._props: self._PopulateField(f)
         self._panel.Sizer.AddGrowableCol(6, 1)
-        if len(self._comps) == 1:
-            self._panel.Sizer.AddGrowableRow(0, 1)
-            self.Sizer.Children[1].SetFlag(wx.BOTTOM | wx.ALIGN_CENTER_HORIZONTAL)
+        if len(self._comps) == 1: self._panel.Sizer.AddGrowableRow(0, 1)
         self._ignore_change = False
         self.Layout()
 
