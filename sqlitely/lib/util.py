@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.10.2019
+@modified    07.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -290,6 +290,18 @@ def add_unique(lst, item, direction=1, maxlen=sys.maxint):
     if len(lst) > maxlen:
         lst[:] = lst[:maxlen] if direction < 0 else lst[-maxlen:]
     return lst
+
+
+def make_unique(value, existing, suffix="_temp"):
+    """
+    Returns a unique string, appending suffix or suffix_2 etc as necessary.
+
+    @param   existing  collection of existing strings to use
+    """
+    unique, counter = "%s%s" % (value, suffix), 2
+    while unique in existing:
+        unique, counter = "%s%s_%s" % (value, suffix, counter), counter + 1
+    return unique
 
 
 def get(collection, *path, **kwargs):

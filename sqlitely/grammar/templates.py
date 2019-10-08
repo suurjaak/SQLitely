@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    07.10.2019
+@modified    08.10.2019
 ------------------------------------------------------------------------------
 """
 
@@ -32,25 +32,37 @@ Released under the MIT License.
 Simple ALTER TABLE.
 
 @param   data {
-             name: table name,
-             ?rename: {?table: new table name, ?column: {old name: new name}},
-             ?add: {column data},
+             name:      table old name,
+             name2:     table new name if renamed else old name,
+             ?columns:  [(column name in old, column name in new)]
+             ?add:      [{column data}],
          }
 """
 ALTER_TABLE = """
-ALTER TABLE {{ Q(data["name"]) }}
+SAVEPOINT alter_table;{{ LF() }}
 
-%if data.get("rename") and data["rename"].get("table"):
-  RENAME TO {{ Q(data["rename"]["table"]) }}
-
-%elif data.get("rename") and data["rename"].get("column"):
-  RENAME COLUMN {{ Q(data["rename"]["column"].keys()[0]) }} TO {{ Q(data["rename"]["column"].values()[0]) }}
-
-%elif data.get("add"):
-  ADD COLUMN{{ WS(" ") }}
-  {{ Template(templates.COLUMN_DEFINITION, strip=True, collapse=True).expand(dict(locals(), data=data["add"])) }}
-
+%if data["name"] != data["name2"]:
+{{ LF() }}
+ALTER TABLE {{ Q(data["name"]) }} RENAME TO {{ Q(data["name2"]) }};{{ LF() }}
 %endif
+
+%for i, (c1, c2) in enumerate(data.get("columns", [])):
+    %if not i:
+{{ LF() }}
+    %endif
+ALTER TABLE {{ Q(data["name"]) }} RENAME COLUMN {{ Q(c1) }} TO {{ Q(c2) }};{{ LF() }}
+%endfor
+
+%for i, c in enumerate(data.get("add", [])):
+    %if not i:
+{{ LF() }}
+    %endif
+ALTER TABLE {{ Q(data["name"]) }} ADD COLUMN{{ WS(" ") }}
+  {{ Template(templates.COLUMN_DEFINITION, strip=True, collapse=True).expand(dict(locals(), data=c)) }};{{ LF() }}
+%endfor
+
+{{ LF() }}
+RELEASE SAVEPOINT alter_table;{{ LF() }}
 """
 
 
@@ -71,8 +83,8 @@ copy rows from existing to new, drop existing, rename new to existing. Steps:
     - DROP TABLE related_name
     - ALTER TABLE related_tempname RENAME TO related_name
     - CREATE indexes-triggers for related_name
- 7. DROP all related indexes-triggers-views
- 9. CREATE indexes-triggers-views
+ 7. DROP all related indexes-views-triggers
+ 9. CREATE indexes-views-triggers
 10. COMMIT TRANSACTION
 11. PRAGMA foreign_keys = on
 
@@ -90,7 +102,8 @@ copy rows from existing to new, drop existing, rename new to existing. Steps:
          }
 """
 ALTER_TABLE_COMPLEX = """<%
-CATEGORIES = ["index", "trigger", "view"]
+CATEGORIES = ["index", "view", "trigger"]
+
 %>
 %if data["fks"]:
 PRAGMA foreign_keys = off;{{ LF() }}
@@ -161,6 +174,121 @@ RELEASE SAVEPOINT alter_table;{{ LF() }}
 
 PRAGMA foreign_keys = on;{{ LF() }}
 %endif
+"""
+
+
+
+"""
+ALTER INDEX: re-create index.
+
+1. BEGIN TRANSACTION
+2. DROP INDEX oldname
+3. CREATE INDEX newname
+4. COMMIT TRANSACTION
+
+@param   data {
+             name:      index old name,
+             name2:     index new name if renamed else old name,
+             meta:      {index CREATE metainfo, using new name}
+         }
+"""
+ALTER_INDEX = """
+SAVEPOINT alter_index;{{ LF() }}
+{{ LF() }}
+
+DROP INDEX {{ Q(data["name"]) }};{{ LF() }}
+{{ LF() }}
+
+{{ Template(templates.CREATE_INDEX).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
+{{ LF() }}
+
+RELEASE SAVEPOINT alter_index;{{ LF() }}
+{{ LF() }}
+"""
+
+
+
+"""
+ALTER TRIGGER: re-create trigger.
+
+1. BEGIN TRANSACTION
+2. DROP TRIGGER oldname
+3. CREATE TRIGGER newname
+4. COMMIT TRANSACTION
+
+@param   data {
+             name:      trigger old name,
+             name2:     trigger new name if renamed else old name,
+             meta:      {trigger CREATE metainfo, using new name}
+         }
+"""
+ALTER_TRIGGER = """
+SAVEPOINT alter_trigger;{{ LF() }}
+{{ LF() }}
+
+DROP TRIGGER {{ Q(data["name"]) }};{{ LF() }}
+{{ LF() }}
+
+{{ Template(templates.CREATE_TRIGGER).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
+{{ LF() }}
+
+RELEASE SAVEPOINT alter_trigger;{{ LF() }}
+{{ LF() }}
+"""
+
+
+
+"""
+ALTER VIEW: re-create view, re-create triggers and other views using this view.
+
+1. BEGIN TRANSACTION
+2. DROP VIEW oldname
+3. DROP all related triggers-views
+4. CREATE VIEW newname
+5. CREATE triggers-views
+6. COMMIT TRANSACTION
+
+@param   data {
+             name:      view old name,
+             name2:     view new name if renamed else old name,
+             meta:      {view CREATE metainfo, using new name}
+             ?trigger:  [{related trigger {name, sql}, using new names}, ]
+             ?view:     [{related view {name, sql}, using new names}, ]
+         }
+"""
+ALTER_VIEW = """<%
+CATEGORIES = ["view", "trigger"]
+
+%>
+SAVEPOINT alter_view;{{ LF() }}
+{{ LF() }}
+
+DROP VIEW {{ Q(data["name"]) }};{{ LF() }}
+{{ LF() }}
+
+%for category in CATEGORIES:
+    %for x in data.get(category) or []:
+DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
+    %endfor
+%endfor
+%if any(data.get(x) for x in CATEGORIES):
+{{ LF() }}
+%endif
+
+{{ Template(templates.CREATE_VIEW).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
+{{ LF() }}
+
+%for category in CATEGORIES:
+    %for x in data.get(category) or []:
+{{ WS(x["sql"]) }};{{ LF() }}
+    %endfor
+%endfor
+%if any(data.get(x) for x in CATEGORIES):
+{{ LF() }}
+%endif
+
+RELEASE SAVEPOINT alter_view;{{ LF() }}
+{{ LF() }}
 """
 
 
@@ -295,7 +423,7 @@ TABLE
 
 %for i, c in enumerate(data.get("constraints") or []):
   {{ PRE() }}
-  {{ Template(templates.TABLE_CONSTRAINT, strip=True, collapse=True).expand(dict(locals(), data=c)) }}
+  {{ Template(templates.TABLE_CONSTRAINT, strip=True, collapse=True).expand(dict(locals(), data=c, i=i)) }}
   {{ CM("constraints", i, root=root) }}
   {{ LF() }}
 %endfor
@@ -380,7 +508,7 @@ VIEW
   {{ GLUE() }}{{ WS(" ") }}(
   {{ LF() or GLUE() }}
     %for i, c in enumerate(data["columns"]):
-  {{ PRE() }}{{ Q(c) }}
+  {{ PRE() }}{{ Q(c["name"]) }}
   {{ CM("columns", i, root=root) }}
   {{ LF() }}
     %endfor
@@ -412,9 +540,12 @@ USING {{ data["module"]["name"] }}
 
 
 """
-@param   i     constraint index
+@param   ?i     constraint index
 """
-TABLE_CONSTRAINT = """
+TABLE_CONSTRAINT = """<%
+if not isdef("i"): i = 0
+
+%>
 
 {{ GLUE() }}
 %if data.get("name"):

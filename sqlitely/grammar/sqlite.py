@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    07.10.2019
+@modified    08.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -74,7 +74,7 @@ def transform(sql, flags=None, renames=None, indent="  "):
                       "table", "index", "trigger", "view", "column".
                       Schema renames as {"schema": s2} or {"schema": {s1: s2}},
                       category renames as {category: {v1: v2}},
-                      column renames as {"columns": {table or view: {c1: c2}}},
+                      column renames as {"column": {table or view: {c1: c2}}},
                       where category value should be the renamed value if
                       the same transform is renaming the category as well.
     @param   indent   indentation level to use. If falsy,
@@ -235,7 +235,7 @@ class Parser(object):
         SQL.CREATE_VIRTUAL_TABLE:  lambda self, ctx: self.build_create_virtual_table(ctx),
     }
     RENAME_CTXS = {"index": CTX.INDEX_NAME, "trigger": CTX.TRIGGER_NAME,
-                   "view":  CTX.VIEW_NAME,  "column":  CTX.COLUMN_NAME,
+                   "view":  (CTX.VIEW_NAME, CTX.TABLE_NAME), "column":  CTX.COLUMN_NAME,
                    "table": (CTX.TABLE_NAME, CTX.FOREIGN_TABLE)}
     CATEGORIES = {"index":   SQL.CREATE_INDEX,   "table": SQL.CREATE_TABLE,
                   "trigger": SQL.CREATE_TRIGGER, "view":  SQL.CREATE_VIEW,
@@ -261,7 +261,7 @@ class Parser(object):
                            "table", "index", "trigger", "view", "column".
                            Schema renames as {"schema": s2} or {"schema": {s1: s2}},
                            category renames as {category: {v1: v2}},
-                           column renames as {"columns": {table or view: {c1: c2}}},
+                           column renames as {"column": {table or view: {c1: c2}}},
                            where category value should be the renamed value if
                            the same transform is renaming the category as well.
         @return            ({..}, None) or (None, error)
@@ -469,7 +469,7 @@ class Parser(object):
         if ctx.K_EXISTS(): result["exists"]  = True
 
         cols = ctx.column_name()
-        if cols: result["columns"] =  [self.u(x) for x in cols]
+        if cols: result["columns"] =  [{"name": self.u(x)} for x in cols]
         result["select"] = self.r(ctx.select_stmt())
 
         return result
@@ -813,6 +813,9 @@ class Generator(object):
         SQL.CONSTRAINT:            templates.TABLE_CONSTRAINT,
         SQL.ALTER_TABLE:           templates.ALTER_TABLE,
         "COMPLEX ALTER TABLE":     templates.ALTER_TABLE_COMPLEX,
+        "ALTER INDEX":             templates.ALTER_INDEX,
+        "ALTER TRIGGER":           templates.ALTER_TRIGGER,
+        "ALTER VIEW":              templates.ALTER_VIEW,
         SQL.CREATE_INDEX:          templates.CREATE_INDEX,
         SQL.CREATE_TABLE:          templates.CREATE_TABLE,
         SQL.CREATE_TRIGGER:        templates.CREATE_TRIGGER,
@@ -947,6 +950,10 @@ class Generator(object):
         """
         islast = True
         root = root or self._data
+        if collection not in root \
+        or subcollection and subcollection not in root[collection][index]:
+            return ""
+
         if subcollection:
             container = root[collection][index]
             islast = (subindex == len(container[subcollection]) - 1)
@@ -1016,6 +1023,7 @@ def test():
         WHEN 1 NOT IN (SELECT mytablecol2 FROM mytable)
           BEGIN
             SELECT mytablecol1, mytablecol2, "mytable col3" FROM mytable;
+            SELECT myviewcol1, myviewcol2 FROM myview;
             UPDATE "my täble2" SET mytable2col1 = NEW.mytablecol1 WHERE mytable2col2 = OLD.mytablecol2;
             INSERT INTO mytable2 (mytable2col1) VALUES (42);
             DELETE FROM mytable2 WHERE mytable2col2 != old.mytablecol2;
@@ -1037,6 +1045,8 @@ def test():
             AS SELECT mytablecol1, mytablecol2, "mytable col3" FROM mytable
                UNION
                SELECT mytable2col1, mytable2col2, "mytable2 col3" FROM mytable2
+               UNION
+               SELECT myview2col1, myview2col2, "myview2 col3" FROM myview2
         ''',
 
 
@@ -1052,10 +1062,12 @@ def test():
                "trigger": {u"mytriggér": u"renämed mytriggér"},
                "index":   {"myindex":  u"renämed myindex"},
                "view":    {"myview": u"renämed myview"},
+               "view":    {"myview2": u"renämed myview2"},
                "column":  {
                            "renamed mytable":   {"mytablecol1": u"renamed mytablecol1", "mytable col2": "renamed mytable col2", "mytablecol2": "renamed mytablecol2", "mytablecol3": "renamed mytablecol3", "mytable col3": "renamed mytable col3", "mytablekey": "renamed mytablekey", "mytablefk2": "renamed mytablefk2"},
                            "renamed mytable2":  {"mytable2col1": u"renamed mytable2col1", "mytable2col2": u"renamed mytable2col2", "mytable2key": "renamed mytable2key", "mytablefk2": "renamed mytablefk2"},
                            u"renämed myview":   {"myviewcol1": "renamed myviewcol1", "myview col3": "renamed myview col3"},
+                           u"renämed myview2":  {"myview2col1": "renamed myview2col1", "myview2 col3": "renamed myview2 col3"},
                },
                "schema":  u"renämed schéma"}
     for sql1 in TEST_STATEMENTS:

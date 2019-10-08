@@ -1158,7 +1158,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         wx.CallLater(100, self.panel_db_detail.Layout)
 
 
-
     def on_clear_databases(self, event):
         """Handler for clicking to clear the database list."""
         if (self.list_db.GetItemCount() > 1) and wx.OK == wx.MessageBox(
@@ -4256,6 +4255,9 @@ class DatabasePage(wx.Panel):
                             "WHERE type = ? AND sql != '' AND name NOT LIKE 'sqlite_%'", [category]
                         ).fetchall()]
                         for item in items:
+                            if item["meta"]["table"].lower() != t1_lower:
+                                continue # for item
+
                             name2 = base = item["name"]; counter = 2
                             if t1_lower != t2_lower:
                                 name2 = base = re.sub(re.escape(table), re.sub(r"\W", "", table2),
@@ -4804,7 +4806,7 @@ class DatabasePage(wx.Panel):
                           id=item_copy_sql.GetId())
                 menu.AppendItem(item_copy_sql)
 
-            menu.AppendMenu(id=-1, text="Create &new ..", submenu=submenu)
+            menu.AppendMenu(id=-1, text="Create ne&w ..", submenu=submenu)
             for category in database.Database.CATEGORIES:
                 key = next((x for x in category if x not in keys), category[0])
                 keys.append(key)
@@ -4828,7 +4830,7 @@ class DatabasePage(wx.Panel):
                 menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
                           functools.partial(self.db.get_sql, **sqlkws)), id=item_copy_sql.GetId())
 
-            item_create = wx.MenuItem(menu, -1, "Create &new %s" % data["category"])
+            item_create = wx.MenuItem(menu, -1, "Create ne&w %s" % data["category"])
 
             if names:
                 menu.AppendItem(item_copy)
@@ -4943,7 +4945,7 @@ class DatabasePage(wx.Panel):
 
             if "table" == data["type"]:
                 submenu, keys = wx.Menu(), []
-                menu.AppendMenu(id=-1, text="Create &new ..", submenu=submenu)
+                menu.AppendMenu(id=-1, text="Create ne&w ..", submenu=submenu)
                 for category in database.Database.CATEGORIES:
                     key = next((x for x in category if x not in keys), category[0])
                     keys.append(key)
@@ -6801,10 +6803,9 @@ class SchemaObjectPage(wx.PyPanel):
         label_stc = self._label_sql = wx.StaticText(panel2, label="CREATE SQL:")
         check_alter = None
 
-        if "table" == item["type"]:
-            check_alter = self._ctrls["alter"] = wx.CheckBox(panel2, label="Show A&LTER SQL")
-            check_alter.ToolTipString = "Show SQL statements used for performing table change"
-            check_alter.Shown = self._has_alter = not self._newmode
+        check_alter = self._ctrls["alter"] = wx.CheckBox(panel2, label="Show A&LTER SQL")
+        check_alter.ToolTipString = "Show SQL statements used for performing schema change"
+        check_alter.Shown = self._has_alter = not self._newmode
 
         tb = wx.ToolBar(panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
@@ -6839,9 +6840,8 @@ class SchemaObjectPage(wx.PyPanel):
 
         sizer_sql_header.Add(label_stc, flag=wx.ALIGN_BOTTOM)
         sizer_sql_header.AddStretchSpacer()
-        if check_alter:
-            sizer_sql_header.Add(check_alter, border=1, flag=wx.BOTTOM | wx.ALIGN_BOTTOM)
-            sizer_sql_header.AddStretchSpacer()
+        sizer_sql_header.Add(check_alter, border=1, flag=wx.BOTTOM | wx.ALIGN_BOTTOM)
+        sizer_sql_header.AddStretchSpacer()
         sizer_sql_header.Add(tb, border=5, flag=wx.TOP | wx.ALIGN_RIGHT)
 
         panel1.Sizer.Add(sizer_name,       border=10, flag=wx.TOP | wx.RIGHT | wx.GROW)
@@ -6852,14 +6852,14 @@ class SchemaObjectPage(wx.PyPanel):
 
         tb.Bind(wx.EVT_TOOL, self._OnCopySQL, id=wx.ID_COPY)
         tb.Bind(wx.EVT_TOOL, self._OnSaveSQL, id=wx.ID_SAVE)
-        self.Bind(wx.EVT_BUTTON, self._OnSaveOrEdit, button_edit)
-        self.Bind(wx.EVT_BUTTON, self._OnRefresh,    button_refresh)
-        self.Bind(wx.EVT_BUTTON, self._OnImportSQL,  button_import)
-        self.Bind(wx.EVT_BUTTON, self._OnToggleEdit, button_cancel)
-        self.Bind(wx.EVT_BUTTON, self._OnDelete,     button_delete)
-        self.Bind(wx.EVT_BUTTON, self._OnClose,      button_close)
+        self.Bind(wx.EVT_BUTTON,   self._OnSaveOrEdit,     button_edit)
+        self.Bind(wx.EVT_BUTTON,   self._OnRefresh,        button_refresh)
+        self.Bind(wx.EVT_BUTTON,   self._OnImportSQL,      button_import)
+        self.Bind(wx.EVT_BUTTON,   self._OnToggleEdit,     button_cancel)
+        self.Bind(wx.EVT_BUTTON,   self._OnDelete,         button_delete)
+        self.Bind(wx.EVT_BUTTON,   self._OnClose,          button_close)
+        self.Bind(wx.EVT_CHECKBOX, self._OnToggleAlterSQL, check_alter)
         self._BindDataHandler(self._OnChange, edit_name, ["name"])
-        if check_alter: self.Bind(wx.EVT_CHECKBOX, self._OnToggleAlterSQL, check_alter)
         self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(self.Layout))
 
         self._Populate()
@@ -6870,6 +6870,7 @@ class SchemaObjectPage(wx.PyPanel):
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
         splitter.SplitHorizontally(panel1, panel2, splitter.Size[1] - 200)
         if self._newmode: edit_name.SetFocus(), edit_name.SelectAll()
+        else: button_edit.SetFocus()
 
 
     def Close(self, force=False):
@@ -6916,7 +6917,7 @@ class SchemaObjectPage(wx.PyPanel):
     def _AssignColumnIDs(self, meta):
         """Populates table meta coluns with __id__ fields."""
         result, counts = copy.deepcopy(meta), Counter()
-        if grammar.SQL.CREATE_TABLE == result["__type__"]:
+        if result["__type__"] in (grammar.SQL.CREATE_TABLE, grammar.SQL.CREATE_VIEW):
             for c in result.get("columns", []):
                 name = c.get("name", "").lower()
                 c["__id__"] = "%s_%s" % (name, counts[name])
@@ -7719,7 +7720,7 @@ class SchemaObjectPage(wx.PyPanel):
         if focus: list_column.SetFocus()
 
 
-    def _AddRowView(self, path, i, value, insert=False, focus=False):
+    def _AddRowView(self, path, i, column, insert=False, focus=False):
         """Adds a new row of controls for view columns."""
         first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
         panel = self._panel_columns
@@ -7740,7 +7741,7 @@ class SchemaObjectPage(wx.PyPanel):
         button_down.ToolTipString   = "Move one step lower"
         button_remove.ToolTipString = "Remove"
 
-        text_column.Value = value
+        text_column.Value = column.get("name") or ""
 
         sizer_buttons.Add(button_up)
         sizer_buttons.Add(button_down)
@@ -7754,7 +7755,7 @@ class SchemaObjectPage(wx.PyPanel):
             panel.Sizer.Add(text_column)
             self._AddSizer(panel.Sizer, sizer_buttons, flag=wx.ALIGN_RIGHT)
 
-        self._BindDataHandler(self._OnChange,     text_column,   ["columns", text_column])
+        self._BindDataHandler(self._OnChange,     text_column,   ["columns", text_column, "name"])
         self._BindDataHandler(self._OnMoveItem,   button_up,     ["columns", button_up],   -1)
         self._BindDataHandler(self._OnMoveItem,   button_down,   ["columns", button_down], +1)
         self._BindDataHandler(self._OnRemoveItem, button_remove, ["columns", button_remove])
@@ -7835,9 +7836,8 @@ class SchemaObjectPage(wx.PyPanel):
                     try: c.SetEditable(edit)
                     except Exception: c.Enable(edit)
         self._PopulateAutoComp()
-        if "table" == self._category:
-            self._ctrls["alter"].Show(edit and self._has_alter)
-            self._ctrls["alter"].ContainingSizer.Layout()
+        self._ctrls["alter"].Show(edit and self._has_alter)
+        self._ctrls["alter"].ContainingSizer.Layout()
         for c in (c for n, c in vars(self).items() if n.startswith("_panel_")):
             c.Layout()
         self.Layout()
@@ -7891,12 +7891,21 @@ class SchemaObjectPage(wx.PyPanel):
 
     def _GetAlterSQL(self):
         """
-        Returns ALTER SQL for table changes.
+        Returns ALTER SQL for carrying out schema changes.
         """
+        if   "table"   == self._category: return self._GetAlterTableSQL()
+        elif "index"   == self._category: return self._GetAlterIndexSQL()
+        elif "trigger" == self._category: return self._GetAlterTriggerSQL()
+        elif "view"    == self._category: return self._GetAlterViewSQL()
+
+
+    def _GetAlterTableSQL(self):
+        """Returns SQL for carrying out table change."""
         result = ""
-        old, new = self._original["meta"], self._item["meta"]
+        if self._original["sql"] == self._item["sql"]: return result
 
         can_simple = True
+        old, new = self._original["meta"], self._item["meta"]
         cols1, cols2 = (x.get("columns", []) for x in (old, new))
         colmap1 = {c["__id__"]: c for c in cols1}
         colmap2 = {c["__id__"]: c for c in cols2}
@@ -7934,39 +7943,28 @@ class SchemaObjectPage(wx.PyPanel):
 
         if can_simple:
             # Possible to use just simple ALTER TABLE statements
-            sqls, base = [], dict(name=old["name"], __type__="ALTER TABLE")
+            args = {"name": old["name"], "name2": new["name"],
+                    "__type__": grammar.SQL.ALTER_TABLE}
 
             for c2 in cols2:
                 c1 = colmap1.get(c2["__id__"])
                 if c1 and c1["name"] != c2["name"]:
-                    args = dict(rename={"column": {c1["name"]: c2["name"]}}, **base)
-                    sqls.append(grammar.generate(args)[0])
+                    args.setdefault("columns", []).append((c1["name"], c2["name"]))
 
             for c2 in cols2:
                 c1 = colmap1.get(c2["__id__"])
-                if not c1:
-                    sqls.append(grammar.generate(dict(add=c2, **base))[0])
-
-            if old["name"] != new["name"]:
-                args = dict(rename={"table": new["name"]}, **base)
-                sqls.append(grammar.generate(args)[0])
-            result = ";\n\n".join(sqls) + (";" if sqls else "")
-
+                if c2["__id__"] not in colmap1:
+                    args.setdefault("add", []).append(c2)
         else:
             # Need to re-create table, first under temporary name to copy data.
-            tables_existing = list(self._db.schema["table"])
-            def make_tempname(name):
-                tempname, counter = "%s_temp" % name.lower(), 2
-                while tempname in tables_existing:
-                    tempname = "%s_temp_%s" % (name.lower(), counter)
-                    counter += 1
-                tables_existing.append(tempname)
-                return tempname
+            names_existing = set(sum((list(self._db.schema[x])
+                                      for x in database.Database.CATEGORIES), []))
 
-            tempname = make_tempname(new["name"])
+            tempname = util.make_unique(new["name"], names_existing)
+            names_existing.add(tempname)
             meta = copy.deepcopy(self._item["meta"])
             util.walk(meta, (lambda x, *_: isinstance(x, dict)
-                             and x.get("table") == old["name"]
+                             and x.get("table", "").lower() == old["name"].lower()
                              and x.update(table=tempname))) # Rename in constraints
             meta["name"] = tempname
 
@@ -7983,28 +7981,111 @@ class SchemaObjectPage(wx.PyPanel):
                                       and colmap1[c2["__id__"]]["name"] != c2["name"]}}}
             for k, v in renames.items():
                 if not v or not any(x.values() for x in v.values()): renames.pop(k)
-            for category in database.Database.CATEGORIES if renames else ():
-                for item in self._db.get_category(category, table=old["name"]).values():
-                    if category == self._category and item["name"] == old["name"]:
-                        continue # for item
 
-                    mytempname = make_tempname(item["name"])
-                    myrenames = dict(renames)
-                    myrenames.setdefault("table", {})[item["name"]] = mytempname
+            for category in database.Database.CATEGORIES:
+                for item in self._db.get_category(category, table=old["name"]).values():
+                    is_our_item = item["meta"].get("table", "").lower() == old["name"].lower()
+                    if category == self._category and item["name"] == old["name"] \
+                    or not renames and not is_our_item: continue # for item
+
+                    sql, _ = grammar.transform(item["sql"], renames=renames)
+                    if sql == item["sql"] and not is_our_item: continue # for item
+
+                    if "table" == category:
+                        mytempname = util.make_unique(item["name"], names_existing)
+                        names_existing.add(mytempname)
+                        myrenames = dict(renames)
+                        myrenames.setdefault("table", {})[item["name"]] = mytempname
+                        myitem = dict(item, tempname=mytempname)
+                    else:
+                        myitem, myrenames = dict(item), renames
                     sql, _ = grammar.transform(item["sql"], renames=myrenames)
-                    myitem = dict(item, sql=sql, tempname=mytempname)
+                    myitem.update(sql=sql)
                     args.setdefault(category, []).append(myitem)
 
-                    for subcategory in ("index", "trigger") if "table" == category else ():
-                        # Re-create table indexes and triggers
+                    for subcategory in ("index", "trigger") if category in ("table", "view") else ():
+                        # Re-create table indexes and triggers, and view triggers
                         for subitem in self._db.get_category(subcategory, table=item["name"]).values():
-                            if subitem["meta"]["table"].lower() == item["name"].lower():
-                                sql, _ = grammar.transform(subitem["sql"], renames=renames) \
-                                         if renames else subitem["sql"]
-                                args.setdefault(subcategory, []).append(dict(subitem, sql=sql))
+                            if subitem["meta"]["table"].lower() != item["name"].lower() \
+                            or "view" == category and "trigger" == subcategory \
+                            and grammar.SQL.INSTEAD_OF != item["meta"].get("upon"):
+                                continue # for subitem
 
-            result, _ = grammar.generate(args)
+                            sql, _ = grammar.transform(subitem["sql"], renames=renames) \
+                                     if renames else subitem["sql"]
+                            args.setdefault(subcategory, []).append(dict(subitem, sql=sql))
 
+        result, _ = grammar.generate(args)
+        return result
+
+
+    def _GetAlterIndexSQL(self):
+        """Returns SQL for carrying out index change."""
+        result = ""
+        if self._original["sql"] == self._item["sql"]: return result
+
+        old, new = self._original["meta"], self._item["meta"]
+        args = {"name": old["name"], "name2": new["name"],
+                "meta": new, "__type__": "ALTER INDEX"}
+        result, _ = grammar.generate(args)
+        return result
+
+
+    def _GetAlterTriggerSQL(self):
+        """Returns SQL for carrying out triggre change."""
+        result = ""
+        if self._original["sql"] == self._item["sql"]: return result
+
+        old, new = self._original["meta"], self._item["meta"]
+        args = {"name": old["name"], "name2": new["name"],
+                "meta": new, "__type__": "ALTER TRIGGER"}
+        result, _ = grammar.generate(args)
+        return result
+
+
+    def _GetAlterViewSQL(self):
+        """Returns SQL for carrying out view change."""
+        result = ""
+        if self._original["sql"] == self._item["sql"]: return result
+
+        renames = {}
+        old, new = self._original["meta"], self._item["meta"]
+        cols1, cols2 = (x.get("columns", []) for x in (old, new))
+        colmap1 = {c["__id__"]: c for c in cols1}
+        colmap2 = {c["__id__"]: c for c in cols2}
+
+        if old["name"] != new["name"]:
+            renames["view"] = {old["name"]: new["name"]}
+        for myid in set(colmap1) & set(colmap2):
+            c1, c2 = colmap1[myid], colmap2[myid]
+            if c1["name"] != c2["name"]:
+                renames.setdefault("column", {}).setdefault(new["name"], {})
+                renames["column"][new["name"]][c1["name"]] = c2["name"]
+
+        args = {"name": old["name"], "name2": new["name"],
+                "meta": new, "__type__": "ALTER VIEW"}
+
+        for category in ("trigger", "view"):
+            for item in self._db.get_category(category, table=old["name"]).values():
+                is_view_trigger = "trigger" == category \
+                                  and item["meta"]["table"].lower() == old["name"].lower() \
+                                  and grammar.SQL.INSTEAD_OF == item.get("upon")
+                if not renames and not is_view_trigger: continue # for item
+
+                sql, _ = grammar.transform(item["sql"], renames=renames)
+                if sql == item["sql"] and not is_view_trigger: continue # for item
+                    
+                args.setdefault(category, []).append(dict(item, sql=sql))
+                if "view" != category: continue 
+
+                # Re-create view triggers
+                for subitem in self._db.get_category("trigger", table=item["name"]).values():
+                    if subitem["meta"]["table"].lower() == item["name"].lower() \
+                    and grammar.SQL.INSTEAD_OF == subitem["meta"].get("upon"):
+                        sql, _ = grammar.transform(subitem["sql"], renames=renames)
+                        args.setdefault(subcategory, []).append(dict(subitem, sql=sql))
+
+        result, _ = grammar.generate(args)
         return result
 
 
@@ -8350,14 +8431,15 @@ class SchemaObjectPage(wx.PyPanel):
             ptr = ptr.get(p)
             if ptr is None: ptr = parent[p] = {} if i < len(path) - 1 else []
             parent = ptr
-        if "table" == self._category and "columns" == path[-1]:
+        if self._category in ("table", "view") and ["columns"] == path:
             value = dict(value, __id__=wx.NewId())
         ptr.append(copy.deepcopy(value))
-        panel = self._panel_columns if "columns" == path[-1] else self._panel_constraints
+        panel = self._panel_columns if ["columns"] == path else self._panel_constraints
         self.Freeze()
         self._AddRow(path, len(ptr) - 1, value, focus=True)
         self._PopulateSQL()
         self._ToggleControls(self._editmode)
+        panel.ContainingSizer.Layout()
         self.Layout()
         self.Thaw()
         self._PostEvent(modified=True)
@@ -8580,7 +8662,8 @@ class SchemaObjectPage(wx.PyPanel):
     def _OnToggleAlterSQL(self, event=None):
         """Toggles showing ALTER SQL statement instead of CREATE SQL."""
         self._show_alter = not self._show_alter
-        self._label_sql.Label = "ALTER TABLE SQL:" if self._show_alter else "CREATE SQL:"
+        self._label_sql.Label = ("ALTER %s SQL:" % self._category.upper()) \
+                                if self._show_alter else "CREATE SQL:"
         self._ctrls["alter"].Value = self._show_alter
         self._PopulateSQL()
 
@@ -8644,9 +8727,7 @@ class SchemaObjectPage(wx.PyPanel):
             return wx.MessageBox("Failed to parse SQL.\n\n%s" % err,
                                  conf.Title, wx.OK | wx.ICON_ERROR)
 
-        if "table" == self._category:
-            if self._show_alter: self._OnToggleAlterSQL()
-            self._has_alter = False
+        if self._show_alter: self._OnToggleAlterSQL()
 
         self._item.update(sql=sql, meta=self._AssignColumnIDs(meta))
         self._Populate()
@@ -8696,7 +8777,6 @@ class SchemaObjectPage(wx.PyPanel):
             return
 
         if self._editmode:
-            self._has_alter = ("table" == self._category)
             self._ToggleControls(self._editmode)
         else:
             if self._show_alter: self._OnToggleAlterSQL()
@@ -8765,25 +8845,19 @@ class SchemaObjectPage(wx.PyPanel):
                           conf.Title, wx.OK | wx.ICON_WARNING)
             return
 
+        sql = self._item["sql"] if self._newmode else self._GetAlterSQL()
 
-        sql, drop = self._item["sql"] + ";", not self._newmode
-        oldname = None if self._newmode else grammar.quote(self._item["name"])
-        if "table" == self._category and self._has_alter:
-            # Do ALTER TABLE if table has any content
-            if self._db.execute("SELECT 1 FROM %s LIMIT 1" % oldname).fetchone():
-                sql, drop = self._GetAlterSQL(), False
+        if wx.OK != wx.MessageBox(
+            "Execute the following schema change?\n\n%s" % sql.strip(),
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+        ): return
+            
 
-        fullsql = sql
-        if oldname:
-            fullsql = "SAVEPOINT save;\n\n%s%s\n\nRELEASE SAVEPOINT save;" % \
-                      ("DROP %s %s;\n\n" % (self._category.upper(), oldname)
-                       if drop else "", sql)
-
-        logger.info("Executing schema SQL:\n\n%s", fullsql)
-        try: self._db.connection.executescript(fullsql)
+        logger.info("Executing schema SQL:\n\n%s", sql)
+        try: self._db.connection.executescript(sql)
         except Exception as e:
             logger.exception("Error executing SQL.")
-            try: oldname and self._db.execute("ROLLBACK")
+            try: self._db.execute("ROLLBACK")
             except Exception: pass
             try: self._fks_on and self._db.execute("PRAGMA foreign_keys = on")
             except Exception: pass
@@ -8795,7 +8869,7 @@ class SchemaObjectPage(wx.PyPanel):
         self._original = copy.deepcopy(self._item)
         self._newmode = self._editmode = False
         if self._show_alter: self._OnToggleAlterSQL()
-        self._has_alter = ("table" == self._category)
+        self._has_alter = True
         self._ToggleControls(self._editmode)
         self._PostEvent(updated=True)
         return True
