@@ -3950,7 +3950,14 @@ class DatabasePage(wx.Panel):
 
         pp = self.sql_pages_closed
         def reopen(index, *_, **__):
-            self.add_sql_page(*pp[index])
+            title, text = pp[index]
+            t, p = self.sql_pages.items()[0] if len(self.sql_pages) == 1 else None
+            if p and "SQL" == t and not p.Text and not p.CanUndoRedo():
+                # Reuse empty default tab
+                p.Text = text
+                self.sql_pages[title] = self.sql_pages.pop(t)
+                self.notebook_sql.SetPageText(0, title)
+            else: self.add_sql_page(title, text)
             del pp[index]
 
         menu, menu_recent = wx.Menu(), wx.Menu()
@@ -5796,6 +5803,11 @@ class SQLPage(wx.PyPanel):
         self._stc.SetText(text)
         self._stc.EmptyUndoBuffer() # So that undo does not clear the STC
     Text = property(GetText, SetText)
+
+
+    def CanUndoRedo(self):
+        """Returns whether STC has undo or redo actions."""
+        return self._stc.CanUndo() or self._stc.CanRedo()
 
 
     def SetAutoComp(self, words=[], subwords={}):
