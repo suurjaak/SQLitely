@@ -7019,6 +7019,7 @@ class SchemaObjectPage(wx.PyPanel):
         self.Bind(wx.EVT_BUTTON, self._OnAddConstraint, button_add_constraint)
 
         panel_columns.SetupScrolling()
+        panel_constraints.SetupScrolling()
         return panel
 
 
@@ -8377,7 +8378,7 @@ class SchemaObjectPage(wx.PyPanel):
             label, count = path[0].capitalize(), len(self._item["meta"].get(path[0]) or ())
             if count: label = "%s (%s)" % (label, count)
             self._notebook_table.SetPageText(0 if ["columns"] == path else 1, label)
-        self._panel_category.Layout()
+        panel.ContainingSizer.Layout()
 
 
     def _RemoveRow(self, path, index):
@@ -8386,14 +8387,14 @@ class SchemaObjectPage(wx.PyPanel):
         """
         buttonmap = {v: k for k, v in self._buttons.items()}
         ctrlmap   = {v: k for k, v in self._ctrls.items()}
-        parent = self._panel_columns if "columns" == path[-1] else self._panel_constraints
-        comps, cols = [], parent.Sizer.Cols
+        panel = self._panel_columns if "columns" == path[-1] else self._panel_constraints
+        comps, cols = [], panel.Sizer.Cols
         for i in range(cols * index, cols * index + cols)[::-1]:
-            sizeritem = parent.Sizer.Children[i]
+            sizeritem = panel.Sizer.Children[i]
             if sizeritem.IsWindow(): comps.append(sizeritem.GetWindow())
             elif sizeritem.IsSizer():
                 comps.extend(self._GetSizerChildren(sizeritem.GetSizer()))
-            parent.Sizer.Remove(i)
+            panel.Sizer.Remove(i)
         for c in comps:
             if c in buttonmap: self._buttons.pop(buttonmap.pop(c))
             elif c in ctrlmap: self._ctrls  .pop(ctrlmap.pop(c))
@@ -8403,7 +8404,7 @@ class SchemaObjectPage(wx.PyPanel):
             label, count = path[0].capitalize(), len(self._item["meta"].get(path[0]) or ())
             if count: label = "%s (%s)" % (label, count)
             self._notebook_table.SetPageText(0 if ["columns"] == path else 1, label)
-        parent.Layout()
+        panel.ContainingSizer.Layout()
 
 
     def _OnAddConstraint(self, event):
@@ -8421,9 +8422,7 @@ class SchemaObjectPage(wx.PyPanel):
             label, count = "Constraints", len(self._item["meta"].get("constraints") or ())
             if count: label = "%s (%s)" % (label, count)
             self._notebook_table.SetPageText(1, label)
-
-            self._panel_constraints.Layout()
-            self._panel_category.Layout()
+            self._panel_constraints.ContainingSizer.Layout()
 
         menu = wx.Menu()
         for ctype in self.TABLECONSTRAINT:
