@@ -8828,6 +8828,8 @@ class SchemaObjectPage(wx.PyPanel):
                 errors += ["Table is required."]
         if "trigger" == self._category and not meta.get("body"):
             errors += ["Body is required."]
+        if "trigger" == self._category and not meta.get("action"):
+            errors += ["Action is required."]
         if "view"    == self._category and not meta.get("select"):
             errors += ["Select is required."]
         if "table"   == self._category and not meta.get("columns"):
