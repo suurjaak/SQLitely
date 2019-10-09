@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.10.2019
+@modified    09.10.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4240,17 +4240,12 @@ class DatabasePage(wx.Panel):
                         self.db.execute(myinsert_sql)
 
                     # Copy table indexes and triggers
-                    for category in "index", "trigger":
-
-                        items = self.db.get_category(category, table=table).values()
+                    for category, items in self.db.get_related("table", table, associated=True).items():
                         items2 = [x["name"] for x in self.db.execute(
                             "SELECT name FROM main2.sqlite_master "
                             "WHERE type = ? AND sql != '' AND name NOT LIKE 'sqlite_%'", [category]
                         ).fetchall()]
                         for item in items:
-                            if item["meta"]["table"].lower() != t1_lower:
-                                continue # for item
-
                             name2 = item["name"]
                             if t1_lower != t2_lower:
                                 name2 = re.sub(re.escape(table), re.sub(r"\W", "", table2),
@@ -4448,15 +4443,10 @@ class DatabasePage(wx.Panel):
             logger.exception(msg)
             return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
 
-        def is_indirect_item(item, subitem):
-            result = False
-            if item["type"] in ["trigger"] and subitem["type"] in ["table", "view"] \
-            and item["meta"]["table"].lower() != subitem["name"].lower():
-                result = True
-            elif item["type"] in ["table", "view"] and subitem["type"] in ["trigger"] \
-            and subitem["meta"]["table"].lower() != item["name"].lower():
-                result = True
-            return result
+        def is_indirect_item(a, b):
+            trg = next((x for x in (a, b) if x["type"] == "trigger"), None)
+            tbv = next((x for x in (a, b) if x["type"] in ("table", "view")), None)
+            return trg and tbv and trg["meta"]["table"].lower() != tbv["name"].lower()
 
         italicfont = tree.Font
         italicfont.SetStyle(wx.FONTSTYLE_ITALIC)
@@ -4539,9 +4529,10 @@ class DatabasePage(wx.Panel):
                             t = ", ".join(x.get("name", x.get("expr")) for x in subitem["meta"]["columns"])
                         elif "trigger" == subcategory:
                             t = " ".join(filter(bool, (subitem["meta"].get("upon"), subitem["meta"]["action"])))
+                            if is_indirect_item(item, subitem):
+                                t += " ON %s" % grammar.quote(subitem["meta"]["table"])
                         tree.SetItemText(subchild, t, 1)
                         if is_indirect_item(item, subitem): tree.SetItemFont(subchild, italicfont)
-                            
 
             tree.Collapse(top)
         tree.SetColumnWidth(0, tree.Size[0] - 180)
@@ -4748,20 +4739,20 @@ class DatabasePage(wx.Panel):
             self.add_schema_page(newdata)
             tree.Expand(item)
         def copy_related(*_, **__):
-            sqls = [self.db.get_sql(data["type"], data["name"])]
-            relateds = self.db.get_related(data["type"], data["name"])
-            for category, items in relateds.items():
-                for item in items:
-                    sqls.append(self.db.get_sql(category, item["name"]))
-                    if "table" == category:
-                        for x in self.db.get_category("index", table=item["name"]).values() \
-                        if "index" != data["type"] else ():
-                            sqls.append(self.db.get_sql("index", x["name"]))
-                        for x in self.db.get_category("trigger", table=item["name"]).values() \
-                        if "trigger" != data["type"] else ():
-                            if x["meta"]["table"].lower() != item["name"].lower(): continue
-                            sqls.append(self.db.get_sql("trigger", x["name"]))
-            clipboard_copy("\n".join(sqls))
+            sqls = OrderedDict({data["name"]: self.db.get_sql(data["type"], data["name"])})
+
+            def collect(relateds):
+                for category, item in ((c, v) for c, vv in relateds.items() for v in vv):
+                    sqls[item["name"]] = item["sql"]
+                    if category not in ("table", "view"): continue # for item
+                    subrelateds = self.db.get_related("table", item["name"], associated=True)
+                    for subcategory, subitems in subrelateds.items():
+                        for subitem in subitems:
+                            sqls[subitem["name"]] = subitem["sql"]
+
+            collect(self.db.get_related(data["type"], data["name"], associated=True))
+            collect(self.db.get_related(data["type"], data["name"]))
+            clipboard_copy("\n\n".join(x.rstrip(";") + ";" for x in sqls.values()) + "\n\n")
         def delete_items(items, *_, **__):
             extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
                     if "table" == items[0]["type"] else ""
@@ -7956,9 +7947,7 @@ class SchemaObjectPage(wx.PyPanel):
             can_simple = (cols1_sqls == cols2_sqls) # Column definition changed
 
         if can_simple and old["name"] != new["name"] and not self._db.has_full_rename_table():
-            can_simple = all(x["meta"]["table"].lower() == old["name"].lower()
-                             for c in ("trigger", "view")
-                             for x in self._db.get_category(c, table=old["name"]).values())
+            can_simple = bool(self._db.get_related("table", old["name"], associated=False))
 
         if can_simple:
             # Possible to use just simple ALTER TABLE statements
@@ -8002,12 +7991,9 @@ class SchemaObjectPage(wx.PyPanel):
                 if not v or not any(x.values() for x in v.values()
                                     if isinstance(x, dict)): renames.pop(k)
 
-            for category in database.Database.CATEGORIES:
-                for item in self._db.get_category(category, table=old["name"]).values():
+            for category, items in self._db.get_related("table", old["name"], associated=not renames).items():
+                for item in items:
                     is_our_item = item["meta"].get("table", "").lower() == old["name"].lower()
-                    if category == self._category and item["name"] == old["name"] \
-                    or not renames and not is_our_item: continue # for item
-
                     sql, _ = grammar.transform(item["sql"], renames=renames)
                     if sql == item["sql"] and not is_our_item: continue # for item
 
@@ -8022,17 +8008,14 @@ class SchemaObjectPage(wx.PyPanel):
                     sql, _ = grammar.transform(item["sql"], renames=myrenames)
                     myitem.update(sql=sql)
                     args.setdefault(category, []).append(myitem)
+                    if category not in ("table", "view"): continue # for item
 
-                    for subcategory in ("index", "trigger") if category in ("table", "view") else ():
-                        # Re-create table indexes and triggers, and view triggers
-                        for subitem in self._db.get_category(subcategory, table=item["name"]).values():
-                            if subitem["meta"]["table"].lower() != item["name"].lower() \
-                            or "view" == category and "trigger" == subcategory \
-                            and grammar.SQL.INSTEAD_OF != item["meta"].get("upon"):
-                                continue # for subitem
-
+                    subrelateds = self._db.get_related(category, item["name"], associated=True)
+                    for subcategory, subitems in subrelateds.items():
+                        for subitem in subitems:
+                            # Re-create table indexes and triggers, and view triggers
                             sql, _ = grammar.transform(subitem["sql"], renames=renames) \
-                                     if renames else subitem["sql"]
+                                     if renames else (subitem["sql"], None)
                             args.setdefault(subcategory, []).append(dict(subitem, sql=sql))
 
         result, _ = grammar.generate(args)
@@ -8085,13 +8068,9 @@ class SchemaObjectPage(wx.PyPanel):
         args = {"name": old["name"], "name2": new["name"],
                 "meta": new, "__type__": "ALTER VIEW"}
 
-        for category in ("trigger", "view"):
-            for item in self._db.get_category(category, table=old["name"]).values():
-                is_view_trigger = "trigger" == category \
-                                  and item["meta"]["table"].lower() == old["name"].lower() \
-                                  and grammar.SQL.INSTEAD_OF == item.get("upon")
-                if not renames and not is_view_trigger: continue # for item
-
+        for category, items in self._db.get_related("view", old["name"], associated=not renames).items():
+            for item in items:
+                is_view_trigger = item["meta"]["table"].lower() == old["name"].lower()
                 sql, _ = grammar.transform(item["sql"], renames=renames)
                 if sql == item["sql"] and not is_view_trigger: continue # for item
                     
@@ -8099,11 +8078,9 @@ class SchemaObjectPage(wx.PyPanel):
                 if "view" != category: continue 
 
                 # Re-create view triggers
-                for subitem in self._db.get_category("trigger", table=item["name"]).values():
-                    if subitem["meta"]["table"].lower() == item["name"].lower() \
-                    and grammar.SQL.INSTEAD_OF == subitem["meta"].get("upon"):
-                        sql, _ = grammar.transform(subitem["sql"], renames=renames)
-                        args.setdefault(subcategory, []).append(dict(subitem, sql=sql))
+                for subitem in self._db.get_related("view", item["name"], associated=True).values():
+                    sql, _ = grammar.transform(subitem["sql"], renames=renames)
+                    args.setdefault(subcategory, []).append(dict(subitem, sql=sql))
 
         result, _ = grammar.generate(args)
         return result

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    08.10.2019
+@modified    09.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -292,7 +292,7 @@ class Parser(object):
         result = self.BUILDERS[name](self, ctx)
         result["__type__"] = name
         result["__tables__"] = self.recurse_collect(
-            [ctx], (CTX.TABLE_NAME, CTX.FOREIGN_TABLE)
+            [ctx], [CTX.FOREIGN_TABLE] if SQL.CREATE_TABLE == name else [CTX.TABLE_NAME]
         )
         if renames and "schema" in renames:
             if isinstance(renames["schema"], dict):

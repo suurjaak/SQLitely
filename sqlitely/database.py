@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.10.2019
+@modified    09.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -803,55 +803,54 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         @param   category  "table"|"index"|"trigger"|"view"
         @param   name      returns only this object
-        @param   table     specific table or view (or a list of tables/views)
-                           the object references in any way
         @result            OrderedDict({name_lower: {opts}}),
                            or {opts} if name or None if no object by such name
         """
         category, name = (x.lower() if x else x for x in (category, name))
-        table = [table] if isinstance(table, basestring) else table or []
-        table = set(x.lower() for x in table)
 
         if name is not None:
-            result = self.schema.get(category, {}).get(name)
-            if table and "table" in result and result["table"].lower() not in table:
-                result = None
-            return copy.deepcopy(result)
+            return copy.deepcopy(self.schema.get(category, {}).get(name))
 
         result = OrderedDict()
         for myname, opts in self.schema.get(category, {}).items():
-            if table and not ("table" in opts.get("meta", {})
-            and opts["meta"]["table"].lower() in table
-            or table & set(opts["meta"].get("__tables__", []))):
-                continue # for myname, opts
             result[myname] = opts
         return copy.deepcopy(result)
 
 
-    def get_related(self, category, name):
+    def get_related(self, category, name, associated=None):
         """
         Returns database objects related to specified object in any way,
         like triggers selecting from a view, as {category: [{item}, ]}.
+
+        @param   associated  if True, returns only directly associated items,
+                             like table's own indexes and triggers for table,
+                             view's own triggers for views,
+                             index's own table for index,
+                             and trigger's own tables and views for triggers;
+                             if False, returns only indirectly associated items,
+                             like views and triggers for tables and views
+                             that query them in view or trigger body,
+                             also foreign tables for tables
         """
-        result = {}
-        SUBCATEGORIES = {"table":   ["table", "index", "trigger", "view"],
+        result = OrderedDict()
+        category, name = category.lower(), name.lower()
+        SUBCATEGORIES = {"table":   ["table", "index", "view", "trigger"],
                          "index":   ["table"],
                          "trigger": ["table", "view"],
-                         "view":    ["table", "trigger", "view"]}
-        category, name = category.lower(), name.lower()
-        if category not in SUBCATEGORIES: return ""
+                         "view":    ["table", "view", "trigger"]}
         item = self.get_category(category, name)
+        if not item or category not in SUBCATEGORIES: return result
 
         for subcategory in SUBCATEGORIES.get(category, []):
-            itemmap = {}
-            if category in ("table", "view"):
-                itemmap.update(self.get_category(subcategory, table=name))
-            items = filter(bool, (self.get_category(subcategory, x)
-                                  for x in item["meta"]["__tables__"]))
-            itemmap.update({x["name"].lower(): x for x in items})
-            if itemmap:
-                result[subcategory] = [v for k, v in sorted(itemmap.items())
-                                       if category != subcategory or k != name]
+            for subname, subitem in self.schema[subcategory].items():
+                is_assoc = (subitem["meta"].get("table", "").lower() == name) \
+                           or (item["meta"].get("table", "").lower() == subname)
+                is_related = name in subitem["meta"]["__tables__"] \
+                             or subname in item["meta"]["__tables__"]
+                if not is_related or associated is not None and associated != is_assoc:
+                    continue # for subname, subitem
+
+                result.setdefault(subcategory, []).append(subitem)
         return result
 
 
@@ -878,7 +877,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                                         the same transform is renaming the category as well.
                             }
         """
-        result = ""
+        sqls = OrderedDict() # {category: []}
         category, column = (x.lower() if x else x for x in (category, column))
         names = [name.lower()] if isinstance(name, basestring) \
                 else [x.lower() for x in name] if isinstance(name, (list, tuple)) else []
@@ -887,7 +886,6 @@ WARNING: misuse can easily result in a corrupt database file.""",
             if category and category != mycategory \
             or not self.schema.get(mycategory): continue # for mycategory
 
-            chunk = ""
             for myname, opts in self.schema[mycategory].items():
                 if names and myname not in names:
                     continue # for myname, opts
@@ -896,9 +894,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     col = next((c for c in opts["columns"]
                                 if c["name"].lower() == column.lower()), None)
                     if not col: continue # for myname, opts
-                    chunk, err = grammar.generate(dict(col, __type__="column"), indent=False)
+                    sql, err = grammar.generate(dict(col, __type__="column"), indent=False)
                     if err: raise Exception(err)
-                    break # for myname, opts
+                    return sql
 
                 sql = opts["sql"]
                 kws = {x: transform[x] for x in ("flags", "renames")
@@ -906,10 +904,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if not opts.get("meta") or kws or indent != "  ":
                     sql, err = grammar.transform(sql, indent=indent, **kws)
                     if err: raise Exception(err)
-                chunk += sql + (";\n\n" if not names or len(names) < 2 else "")
-            result += ("\n\n" if result else "") + chunk
+                sqls.setdefault(category, []).append(sql)
 
-        return result
+        return "\n\n".join("\n\n".join(v + ";" for v in vv) for vv in sqls.values())
 
 
     @staticmethod
