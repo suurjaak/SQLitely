@@ -8621,29 +8621,29 @@ class SchemaObjectPage(wx.PyPanel):
                         if keychanged and not cnstr["columns"]: del constraints[i]
                 continue # for myid, opts
 
+            changed = changed or bool(opts.get("rename"))
             if name and opts.get("rename"):
                 renames[name] = opts["rename"]
 
+                for i, cnstr in list(enumerate(constraints))[::-1]:
+                    if cnstr["type"] in (grammar.SQL.PRIMARY_KEY, grammar.SQL.UNIQUE):
+                        for col in cnstr.get("key") or []:
+                            if col.get("name") == name:
+                                col["name"] = opts["rename"]
+
+                    elif cnstr["type"] in (grammar.SQL.FOREIGN_KEY, ):
+                        if name in cnstr.get("columns", []):
+                            cnstr["columns"] = [x if x != name else opts["rename"]
+                                                for x in cnstr["columns"]]
+
         self._col_updates = {}
         if not changed and not renames: return
-
-        if renames:
-            sql, err = grammar.transform(self._item["sql"], renames={"column":
-                                         {self._item["meta"].get("name", ""): renames}})
-            if err: return
-            meta, err = grammar.parse(sql)
-            if err: return
-
-            for i, c in enumerate(self._item["meta"]["columns"]):
-                meta["columns"][i]["__id__"] = c["__id__"]
-            self._item.update(sql=sql, meta=meta)
-            constraints = self._item["meta"].get("constraints") or []
 
         self.Freeze()
         self._EmptyControl(self._panel_constraints)
         for i, cnstr in enumerate(constraints):
             self._AddRowTableConstraint(["constraints"], i, cnstr)
-        self._panel_constraints.Layout()
+        self._panel_constraints.ContainingSizer.Layout()
         self._notebook_table.SetPageText(1, "Constraints" if not constraints
                                          else "Constraints (%s)" % len(constraints))
         self._PopulateSQL()
