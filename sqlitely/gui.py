@@ -8439,6 +8439,10 @@ class SchemaObjectPage(wx.PyPanel):
         for ctype in self.TABLECONSTRAINT:
             it = wx.MenuItem(menu, -1, ctype)
             menu.AppendItem(it)
+            if grammar.SQL.PRIMARY_KEY == ctype \
+            and any(grammar.SQL.PRIMARY_KEY == x["type"]
+                    for x in self._item["meta"].get("constraints") or []):
+                menu.Enable(it.GetId(), False)
             menu.Bind(wx.EVT_MENU, functools.partial(add_constraint, ctype), id=it.GetId())
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
 
