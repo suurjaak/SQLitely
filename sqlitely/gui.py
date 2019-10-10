@@ -901,7 +901,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu = wx.Menu()
         item_name    = wx.MenuItem(menu, -1, name)
         item_copy    = wx.MenuItem(menu, -1, "&Copy file path")
-        item_folder  = wx.MenuItem(menu, -1, "Open file &directory")
+        item_folder  = wx.MenuItem(menu, -1, "Show in &folder")
 
         boldfont = item_name.Font
         boldfont.SetWeight(wx.FONTWEIGHT_BOLD)
