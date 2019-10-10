@@ -6977,6 +6977,7 @@ class SchemaObjectPage(wx.PyPanel):
         panel_columns.Sizer.AddGrowableCol(3)
 
         button_add_column = self._buttons["add_column"] = wx.Button(panel_columnwrapper, label="&Add column")
+        button_add_column._toggle = "show"
 
         panel_constraintwrapper = wx.Panel(nb)
         sizer_constraintwrapper = panel_constraintwrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -6987,6 +6988,7 @@ class SchemaObjectPage(wx.PyPanel):
         panel_constraints.Sizer.AddGrowableCol(1)
 
         button_add_constraint = self._buttons["add_constraint"] = wx.Button(panel_constraintwrapper, label="&Add constraint")
+        button_add_constraint._toggle = "show"
 
         sizer_flags.Add(check_temp)
         sizer_flags.AddSpacer((100, -1))
@@ -7061,7 +7063,7 @@ class SchemaObjectPage(wx.PyPanel):
         button_add_column = self._buttons["add_column"] = wx.Button(panel_wrapper, label="&Add column")
         button_add_expr =   self._buttons["add_expr"] =   wx.Button(panel_wrapper, label="Add ex&pression")
         button_add_column._toggle = button_add_expr._toggle = lambda: (
-            "disable" if not self._item["meta"].get("table") else ""
+            "disable" if not self._item["meta"].get("table") else "show"
         )
 
         label_where = wx.StaticText(panel, label="WHE&RE:")
@@ -7221,6 +7223,7 @@ class SchemaObjectPage(wx.PyPanel):
         panel_columns.Sizer.AddGrowableCol(1)
 
         button_add_column = self._buttons["add_column"] = wx.Button(panel1, label="&Add column")
+        button_add_column._toggle = "show"
 
         label_body = wx.StaticText(panel2, label="Se&lect:")
         stc_body = self._ctrls["select"] = controls.SQLiteTextCtrl(panel2,
@@ -7869,7 +7872,7 @@ class SchemaObjectPage(wx.PyPanel):
         self._ctrls["alter"].Show(edit and self._has_alter)
         self._ctrls["alter"].ContainingSizer.Layout()
         for c in (c for n, c in vars(self).items() if n.startswith("_panel_")):
-            c.Layout()
+            c.ContainingSizer.Layout()
         self.Layout()
         self.Thaw()
 
