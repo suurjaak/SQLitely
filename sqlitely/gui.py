@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.10.2019
+@modified    10.10.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3064,7 +3064,10 @@ class DatabasePage(wx.Panel):
         Handler for checking foreign key violations, pops open dialog with
         violation results.
         """
+        msg = "Checking foreign keys of %s." % self.db.filename
+        guibase.status(msg, log=True, flash=True)
         rows = self.db.execute("PRAGMA foreign_key_check").fetchall()
+        guibase.status("")
         if not rows:
             wx.MessageBox("No foreign key violations detected.",
                           conf.Title, wx.OK | wx.ICON_INFORMATION)
@@ -3103,7 +3106,11 @@ class DatabasePage(wx.Panel):
         """
         Handler for running optimize on database.
         """
+        msg = "Running optimize on %s." % self.db.filename
+        guibase.status(msg, log=True, flash=True)
         self.db.execute("PRAGMA optimize")
+        guibase.status("")
+        wx.MessageBox("Optimize complete.", conf.Title, wx.OK | wx.ICON_INFORMATION)
 
 
     def on_check_integrity(self, event=None):
@@ -3176,6 +3183,7 @@ class DatabasePage(wx.Panel):
             conf.Title, wx.OK | wx.ICON_INFORMATION
         )
 
+        size1 = self.db.filesize
         msg = "Vacuuming %s." % self.db.name
         guibase.status(msg, log=True, flash=True)
         busy = controls.BusyPanel(self, msg)
@@ -3194,6 +3202,9 @@ class DatabasePage(wx.Panel):
             wx.MessageBox(err, conf.Title, wx.OK | wx.ICON_ERROR)
         else:
             self.update_info_panel()
+            wx.MessageBox("VACUUM complete.\n\nSize before: %s, size after: %s." %
+                tuple(util.format_bytes(x, max_units=False) for x in (size1, self.db.filesize)),
+                conf.Title, wx.OK | wx.ICON_INFORMATION)
 
 
     def on_close(self):
