@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.10.2019
+@modified    10.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -229,7 +229,7 @@ def select_file(filepath):
     """
     if not os.path.exists(filepath):
         return start_file(os.path.split(filepath)[0])
-    try: subprocess.Popen('explorer /select, "%s"' % filepath)
+    try: subprocess.Popen('explorer /select, "%s"' % shortpath(filepath))
     except Exception: start_file(os.path.split(filepath)[0])
 
 
