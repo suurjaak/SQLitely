@@ -4655,7 +4655,7 @@ class DatabasePage(wx.Panel):
             item_copy = wx.MenuItem(menu, -1, "&Copy name")
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, False),
                       id=item_name.GetId())
-            menu.Bind(wx.EVT_MENU, functools.partial(open_item, data["parent"]),
+            menu.Bind(wx.EVT_MENU, functools.partial(open_data, data["parent"]),
                       id=item_open.GetId())
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
                       id=item_copy.GetId())
