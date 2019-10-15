@@ -62,7 +62,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    08.10.2019
+@modified    15.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -2061,7 +2061,8 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     """
     A StyledTextCtrl configured for SQLite syntax highlighting.
 
-    Supports single-line mode with SQLiteTextCtrl(singleline=True)
+    Supports hiding caret line highlight when not focused (caretline_focus=True).
+    Supports singleline mode (singleline=True) - swallows Enter, propagates Tab.
     """
 
     """SQLite reserved keywords."""
@@ -2105,7 +2106,8 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
 
     def __init__(self, *args, **kwargs):
-        self.singleline = kwargs.pop("singleline", False)
+        self.caretline_focus = kwargs.pop("caretline_focus", None)
+        self.singleline      = kwargs.pop("singleline", None)
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
         self.autocomps_added = set(["sqlite_master"])
         # All autocomps: added + KEYWORDS
@@ -2130,9 +2132,9 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.EVT_SET_FOCUS,          self.OnFocus)
         self.Bind(wx.EVT_KILL_FOCUS,         self.OnKillFocus)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
-        if self.singleline:
-            self.Bind(wx.EVT_CHAR_HOOK,      self.OnChar)
-            self.SetCaretLineVisible(False)
+        self.Bind(wx.stc.EVT_STC_ZOOM,       self.OnZoom)
+        if self.caretline_focus: self.SetCaretLineVisible(False)
+        if self.singleline: self.Bind(wx.EVT_CHAR_HOOK, self.OnChar)
 
 
     def SetStyleSpecs(self):
@@ -2226,16 +2228,11 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         return result
 
 
-    def IsSingleLine(self):
-        """Returns whether the control is in single-line mode."""
-        return self.singleline
-
-
     def OnFocus(self, event):
         """Handler for control getting focus, shows caret."""
         event.Skip()
         self.SetCaretStyle(wx.stc.STC_CARETSTYLE_LINE)
-        if not self.singleline: self.SetCaretLineVisible(True)
+        if self.caretline_focus: self.SetCaretLineVisible(True)
 
 
     def OnKillFocus(self, event):
@@ -2243,7 +2240,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         event.Skip()
         self.AutoCompCancel()
         self.SetCaretStyle(wx.stc.STC_CARETSTYLE_INVISIBLE)
-        self.SetCaretLineVisible(False)
+        if self.caretline_focus: self.SetCaretLineVisible(False)
 
 
     def OnSysColourChange(self, event):
@@ -2252,14 +2249,23 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.SetStyleSpecs()
 
 
+    def OnZoom(self, event):
+        """Disable zoom."""
+        if self.Zoom: self.Zoom = 0
+
+
     def OnChar(self, event):
-        """Swallows tab/enter presses if single line mode, propagates tab."""
-        if self.AutoCompActive() \
-        or event.KeyCode not in (wx.WXK_RETURN, wx.WXK_TAB): return event.Skip()
-        if wx.WXK_TAB == event.KeyCode:
-            direction = wx.NavigationKeyEvent.IsBackward  if event.ShiftDown() \
-                        else wx.NavigationKeyEvent.IsForward
-            self.Navigate(direction)
+        """
+        Goes to next/previous control on Tab/Shift+Tab,
+        swallows Enter.
+        """
+        if self.AutoCompActive(): return event.Skip()
+        if wx.WXK_RETURN == event.KeyCode: return
+        if wx.WXK_TAB != event.KeyCode: return event.Skip()
+
+        direction = wx.NavigationKeyEvent.IsBackward if event.ShiftDown() \
+                    else wx.NavigationKeyEvent.IsForward
+        self.Parent.NavigateIn(direction)
 
 
     def OnKeyDown(self, event):
@@ -2267,7 +2273,6 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         Shows autocomplete if user is entering a known word, or pressed
         Ctrl-Space. Added autocomplete words are listed first, SQL keywords
         second.
-        Forwards pressing Enter/Tab to parent if single-line mode.
         """
         skip = True
         if self.CallTipActive():

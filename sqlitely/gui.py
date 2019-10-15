@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.10.2019
+@modified    15.10.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1315,7 +1315,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if len(self.dbs_selected) == 1: msg = self.dbs_selected[0]
         if wx.OK != wx.MessageBox(
             "Delete %s from disk?" % msg,
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
         ): return
 
         unsaved_pages, ongoing_pages = {}, {}
@@ -7253,8 +7253,8 @@ class SchemaObjectPage(wx.PyPanel):
         self._BindDataHandler(self._OnAddItem, button_add_column, ["columns"], "")
 
         panel_columns.SetupScrolling(scroll_x=False)
-        splitter.SetMinimumPaneSize(100)
-        splitter.SplitHorizontally(panel1, panel2, 100)
+        splitter.SetMinimumPaneSize(70)
+        splitter.SplitHorizontally(panel1, panel2, 70)
         return panel
 
 
@@ -7413,7 +7413,7 @@ class SchemaObjectPage(wx.PyPanel):
 
         text_name.Value     = col.get("name") or ""
         list_type.Value     = col.get("type") or ""
-        text_default.Value  = col.get("default") or ""
+        text_default.Text   = col.get("default") or ""
         check_pk.Value      = col.get("pk") is not None
         check_autoinc.Value = bool(col.get("pk", {}).get("autoincrement"))
         check_notnull.Value = col.get("notnull") is not None
