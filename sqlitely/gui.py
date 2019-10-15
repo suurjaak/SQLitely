@@ -6770,7 +6770,9 @@ class SchemaObjectPage(wx.PyPanel):
         "CHECK":       {"type": "CHECK"},
     }
     DEFAULTS = {
-        "table":   {"name": "new_table", "columns": [{"name": "new_column"}]},
+        "table":   {"name": "new_table", "columns": [
+            {"name": "id", "type": "INTEGER", "pk": {"autoincrement": True}}]
+        },
         "index":   {"name": "new_index"},
         "trigger": {"name": "new_trigger"},
         "view":    {"name": "new_view"},
