@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    09.10.2019
+@modified    19.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -414,7 +414,7 @@ class Parser(object):
           ?temporary:  True if TEMPORARY | TEMP
           ?exists:     True if IF NOT EXISTS
           ?upon:       BEFORE | AFTER | INSTEAD OF
-          ?columns:    [column_name, ] for UPDATE OF action
+          ?columns:    {"name": column_name}, ] for UPDATE OF action
           ?for:        True if FOR EACH ROW
           ?when:       trigger WHEN-clause SQL expression
         }.
@@ -434,7 +434,7 @@ class Parser(object):
         result["action"] = self.t(action)
 
         cols = ctx.column_name()
-        if cols: result["columns"] =  [self.u(x) for x in cols]
+        if cols: result["columns"] =  [{"name": self.u(x) for x in cols}]
 
         result["table"] = self.u(ctx.table_name)
 

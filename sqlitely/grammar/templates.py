@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    08.10.2019
+@modified    19.10.2019
 ------------------------------------------------------------------------------
 """
 
@@ -464,7 +464,7 @@ TRIGGER
 %if data.get("columns"):
   OF 
     %for i, c in enumerate(data["columns"]):
-  {{ Q(c) }}{{ CM("columns", i, root=root) }}
+  {{ Q(c["name"]) }}{{ CM("columns", i, root=root) }}
     %endfor
 %endif
 

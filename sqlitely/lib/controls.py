@@ -2227,6 +2227,10 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.SetStyleSpecs()
         return result
 
+    def IsSingleLine(self):
+        """Returns whether control is in single-line mode."""
+        return self.singleline
+
 
     def OnFocus(self, event):
         """Handler for control getting focus, shows caret."""
@@ -2260,7 +2264,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         swallows Enter.
         """
         if self.AutoCompActive(): return event.Skip()
-        if wx.WXK_RETURN == event.KeyCode: return
+        if event.KeyCode in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER): return
         if wx.WXK_TAB != event.KeyCode: return event.Skip()
 
         direction = wx.NavigationKeyEvent.IsBackward if event.ShiftDown() \

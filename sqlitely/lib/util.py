@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.10.2019
+@modified    15.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -332,7 +332,7 @@ def set(collection, value, *path):
     """
     Sets the value at specified collection path. If a path step does not exist,
     it is created as dict. Collection can be a nested structure of dicts and lists.
-    Returns collection.
+    Returns value.
     """
     if len(path) == 1 and isinstance(path[0], list): path = path[0]
     ptr = collection
@@ -347,7 +347,7 @@ def set(collection, value, *path):
             if p not in ptr: ptr[p] = {}
             ptr = ptr[p]
     ptr[path[-1]] = value
-    return collection
+    return value
 
 
 def walk(data, callback):

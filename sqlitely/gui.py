@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.10.2019
+@modified    19.10.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -6970,16 +6970,9 @@ class SchemaObjectPage(wx.PyPanel):
 
         panel_columnwrapper = wx.Panel(nb)
         sizer_columnwrapper = panel_columnwrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_columnstop    = wx.FlexGridSizer(cols=4, hgap=10)
+        sizer_columnstop    = wx.FlexGridSizer(cols=6)
         sizer_columnflags   = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_columnbuttons = wx.BoxSizer(wx.HORIZONTAL)
-
-        panel_columns = self._panel_columns = wx.lib.scrolledpanel.ScrolledPanel(panel_columnwrapper, style=wx.BORDER_STATIC)
-        panel_columns.Sizer = wx.FlexGridSizer(cols=5, vgap=4, hgap=10)
-        panel_columns.Sizer.AddGrowableCol(3)
-
-        button_add_column = self._buttons["add_column"] = wx.Button(panel_columnwrapper, label="&Add column")
-        button_add_column._toggle = "show"
+        panel_columnsgrid, sizer_columnbuttons = self._MakeColumnsGrid(panel_columnwrapper, cols=5)
 
         panel_constraintwrapper = wx.Panel(nb)
         sizer_constraintwrapper = panel_constraintwrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -7004,18 +6997,18 @@ class SchemaObjectPage(wx.PyPanel):
             label.ToolTipString = t
             sizer_columnflags.Add(label)
 
+        sizer_columnstop.AddSpacer((50, 0))
         sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Name",    size=(150, -1)), border=7, flag=wx.LEFT)
         sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Type",    size=(100, -1)))
         sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Default", size=(100, -1)))
-        sizer_columnstop.Add(sizer_columnflags)
+        sizer_columnstop.Add(sizer_columnflags, border=5, flag=wx.LEFT | wx.RIGHT)
+        sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Options", size=(50, -1)))
 
-        sizer_columnbuttons.AddStretchSpacer()
-        sizer_columnbuttons.Add(button_add_column)
         sizer_constraintbuttons.AddStretchSpacer()
         sizer_constraintbuttons.Add(button_add_constraint)
 
         sizer_columnwrapper.Add(sizer_columnstop, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
-        sizer_columnwrapper.Add(panel_columns, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
+        sizer_columnwrapper.Add(panel_columnsgrid, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
         sizer_columnwrapper.Add(sizer_columnbuttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
         sizer_constraintwrapper.Add(panel_constraints, border=5, proportion=1, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
@@ -7030,10 +7023,9 @@ class SchemaObjectPage(wx.PyPanel):
         self._BindDataHandler(self._OnChange,  check_temp,   ["temporary"])
         self._BindDataHandler(self._OnChange,  check_exists, ["exists"])
         self._BindDataHandler(self._OnChange,  check_rowid,  ["without"])
-        self._BindDataHandler(self._OnAddItem, button_add_column, ["columns"], {"name": ""})
         self.Bind(wx.EVT_BUTTON, self._OnAddConstraint, button_add_constraint)
 
-        panel_columns.SetupScrolling()
+        panel_columnsgrid.SetupScrolling()
         panel_constraints.SetupScrolling()
         return panel
 
@@ -7044,9 +7036,8 @@ class SchemaObjectPage(wx.PyPanel):
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_table   = wx.BoxSizer(wx.HORIZONTAL)
         sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
         sizer_where   = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_columnstop = wx.FlexGridSizer(cols=3, hgap=10)
+        sizer_columnstop = wx.FlexGridSizer(cols=4)
 
         label_table = wx.StaticText(panel, label="&Table:")
         list_table = self._ctrls["table"] = wx.ComboBox(panel,
@@ -7058,15 +7049,7 @@ class SchemaObjectPage(wx.PyPanel):
         panel_wrapper = wx.Panel(panel, style=wx.BORDER_STATIC)
         sizer_wrapper = panel_wrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
 
-        panel_columns = self._panel_columns = wx.lib.scrolledpanel.ScrolledPanel(panel_wrapper)
-        panel_columns.Sizer = wx.FlexGridSizer(cols=4, vgap=4, hgap=10)
-        panel_columns.Sizer.AddGrowableCol(3)
-
-        button_add_column = self._buttons["add_column"] = wx.Button(panel_wrapper, label="&Add column")
-        button_add_expr =   self._buttons["add_expr"] =   wx.Button(panel_wrapper, label="Add ex&pression")
-        button_add_column._toggle = button_add_expr._toggle = lambda: (
-            "disable" if not self._item["meta"].get("table") else "show"
-        )
+        panel_columnsgrid, sizer_columnbuttons = self._MakeColumnsGrid(panel_wrapper, cols=4)
 
         label_where = wx.StaticText(panel, label="WHE&RE:")
         stc_where   = self._ctrls["where"] = controls.SQLiteTextCtrl(panel,
@@ -7081,17 +7064,14 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_flags.AddSpacer((100, -1))
         sizer_flags.Add(check_exists)
 
-        sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Column",  size=(250, -1)))
+        sizer_columnstop.AddSpacer((50, 0))
+        sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Column or expression",  size=(250, -1)), border=5, flag=wx.LEFT)
         sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Collate", size=( 80, -1)))
         sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Order",   size=( 60, -1)))
 
-        sizer_buttons.AddStretchSpacer()
-        sizer_buttons.Add(button_add_column)
-        sizer_buttons.Add(button_add_expr)
-
         sizer_wrapper.Add(sizer_columnstop, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
-        sizer_wrapper.Add(panel_columns, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
-        sizer_wrapper.Add(sizer_buttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
+        sizer_wrapper.Add(panel_columnsgrid, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
+        sizer_wrapper.Add(sizer_columnbuttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
         sizer_where.Add(label_where, border=5, flag=wx.RIGHT)
         sizer_where.Add(stc_where, proportion=1, flag=wx.GROW)
@@ -7105,10 +7085,8 @@ class SchemaObjectPage(wx.PyPanel):
         self._BindDataHandler(self._OnChange,  check_unique, ["unique"])
         self._BindDataHandler(self._OnChange,  check_exists, ["exists"])
         self._BindDataHandler(self._OnChange,  stc_where,    ["where"])
-        self._BindDataHandler(self._OnAddItem, button_add_column, ["columns"], {"name": ""})
-        self._BindDataHandler(self._OnAddItem, button_add_expr,   ["columns"], {"expr": ""})
 
-        panel_columns.SetupScrolling()
+        panel_columnsgrid.SetupScrolling()
         return panel
 
 
@@ -7118,9 +7096,9 @@ class SchemaObjectPage(wx.PyPanel):
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_table   = wx.BoxSizer(wx.HORIZONTAL)
         sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
         sizer_body    = wx.BoxSizer(wx.HORIZONTAL)
         sizer_when    = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_columnstop = wx.FlexGridSizer(cols=2)
 
         label_table = self._ctrls["label_table"] = wx.StaticText(panel, label="&Table:")
         list_table = self._ctrls["table"] = wx.ComboBox(panel,
@@ -7137,26 +7115,26 @@ class SchemaObjectPage(wx.PyPanel):
         check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT &EXISTS")
         check_for    = self._ctrls["for"]       = wx.CheckBox(panel, label="FOR EACH &ROW")
 
-        panel_wrapper = wx.Panel(panel, style=wx.BORDER_STATIC)
-        sizer_wrapper = panel_wrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
+        splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
+        panel1, panel2 = wx.Panel(splitter, style=wx.BORDER_STATIC), wx.Panel(splitter)
+        panel1.Sizer, panel2.Sizer = wx.BoxSizer(wx.VERTICAL), wx.BoxSizer(wx.VERTICAL)
 
-        panel_columns = self._panel_columns = wx.lib.scrolledpanel.ScrolledPanel(panel_wrapper)
-        panel_columns.Sizer = wx.FlexGridSizer(cols=2, vgap=4, hgap=10)
-        panel_columns.Sizer.AddGrowableCol(1)
+        sizer_columnstop.AddSpacer((50, 0))
+        sizer_columnstop.Add(wx.StaticText(panel1, label="Column",  size=(200, -1)), border=5, flag=wx.LEFT)
 
-        button_add_column = self._buttons["add_column"] = wx.Button(panel_wrapper, label="&Add column")
+        panel_columnsgrid, sizer_columnbuttons = self._MakeColumnsGrid(panel1, cols=2)
 
-        label_body = wx.StaticText(panel, label="&Body:")
-        stc_body   = self._ctrls["body"] = controls.SQLiteTextCtrl(panel,
+        label_body = wx.StaticText(panel2, label="&Body:")
+        stc_body   = self._ctrls["body"] = controls.SQLiteTextCtrl(panel2,
             size=(-1, 40),
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
         label_body.ToolTipString = "Trigger body SQL"
 
-        label_when = wx.StaticText(panel, label="WHEN:")
-        stc_when   = self._ctrls["when"] = controls.SQLiteTextCtrl(panel,
-            size=(-1, 40),
+        label_when = wx.StaticText(panel2, label="WHEN:", name="trigger_when_label")
+        stc_when   = self._ctrls["when"] = controls.SQLiteTextCtrl(panel2,
+            size=(-1, 40), name="trigger_when",
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
-        label_when.ToolTipString = "Trigger WHEN expression"
+        label_when.ToolTipString = "Trigger WHEN expression, trigger executed only if WHEN is true"
 
         sizer_table.Add(label_table, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_table.Add(list_table, flag=wx.GROW)
@@ -7173,11 +7151,9 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_flags.AddSpacer((100, -1))
         sizer_flags.Add(check_for)
 
-        sizer_buttons.AddStretchSpacer()
-        sizer_buttons.Add(button_add_column)
-
-        sizer_wrapper.Add(panel_columns, border=5, proportion=1, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
-        sizer_wrapper.Add(sizer_buttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
+        panel1.Sizer.Add(sizer_columnstop, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
+        panel1.Sizer.Add(panel_columnsgrid, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
+        panel1.Sizer.Add(sizer_columnbuttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
         sizer_body.Add(label_body, border=5, flag=wx.RIGHT)
         sizer_body.Add(stc_body, proportion=1, flag=wx.GROW)
@@ -7185,11 +7161,12 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_when.Add(label_when, border=5, flag=wx.RIGHT)
         sizer_when.Add(stc_when, proportion=1, flag=wx.GROW)
 
+        panel2.Sizer.Add(sizer_body, proportion=3, border=5, flag=wx.TOP | wx.GROW)
+        panel2.Sizer.Add(sizer_when, border=5, flag=wx.TOP | wx.GROW)
+
         sizer.Add(sizer_table, border=5, flag=wx.TOP | wx.GROW)
         sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
-        sizer.Add(panel_wrapper, proportion=2, flag=wx.GROW)
-        sizer.Add(sizer_body, proportion=3, border=5, flag=wx.TOP | wx.GROW)
-        sizer.Add(sizer_when, proportion=1, border=5, flag=wx.TOP | wx.GROW)
+        sizer.Add(splitter, proportion=1, flag=wx.GROW)
 
         self._BindDataHandler(self._OnChange,  list_table,    ["table"])
         self._BindDataHandler(self._OnChange,  list_upon,     ["upon"])
@@ -7199,9 +7176,10 @@ class SchemaObjectPage(wx.PyPanel):
         self._BindDataHandler(self._OnChange,  check_for,     ["for"])
         self._BindDataHandler(self._OnChange,  stc_body,      ["body"])
         self._BindDataHandler(self._OnChange,  stc_when,      ["when"])
-        self._BindDataHandler(self._OnAddItem, button_add_column, ["columns"], "")
 
-        panel_columns.SetupScrolling(scroll_x=False)
+        panel_columnsgrid.SetupScrolling()
+        splitter.SetMinimumPaneSize(105)
+        splitter.SplitHorizontally(panel1, panel2, splitter.MinimumPaneSize)
         return panel
 
 
@@ -7210,22 +7188,20 @@ class SchemaObjectPage(wx.PyPanel):
         panel = wx.Panel(parent)
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
         sizer_select  = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_columnstop = wx.FlexGridSizer(cols=2)
 
         check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
         check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT &EXISTS")
 
-        splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
+        splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
         panel1, panel2 = wx.Panel(splitter, style=wx.BORDER_STATIC), wx.Panel(splitter)
         panel1.Sizer, panel2.Sizer = wx.BoxSizer(wx.VERTICAL), wx.BoxSizer(wx.HORIZONTAL)
 
-        panel_columns = self._panel_columns = wx.lib.scrolledpanel.ScrolledPanel(panel1)
-        panel_columns.Sizer = wx.FlexGridSizer(cols=2, vgap=4, hgap=10)
-        panel_columns.Sizer.AddGrowableCol(1)
+        sizer_columnstop.AddSpacer((50, 0))
+        sizer_columnstop.Add(wx.StaticText(panel1, label="Column",  size=(200, -1)), border=5, flag=wx.LEFT)
 
-        button_add_column = self._buttons["add_column"] = wx.Button(panel1, label="&Add column")
-        button_add_column._toggle = "show"
+        panel_columnsgrid, sizer_columnbuttons = self._MakeColumnsGrid(panel1, cols=2)
 
         label_body = wx.StaticText(panel2, label="Se&lect:")
         stc_body = self._ctrls["select"] = controls.SQLiteTextCtrl(panel2,
@@ -7237,11 +7213,9 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_flags.AddSpacer((100, -1))
         sizer_flags.Add(check_exists)
 
-        sizer_buttons.AddStretchSpacer()
-        sizer_buttons.Add(button_add_column)
-
-        panel1.Sizer.Add(panel_columns, border=5, proportion=1, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
-        panel1.Sizer.Add(sizer_buttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
+        panel1.Sizer.Add(sizer_columnstop, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
+        panel1.Sizer.Add(panel_columnsgrid, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
+        panel1.Sizer.Add(sizer_columnbuttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
         panel2.Sizer.Add(label_body, border=5, flag=wx.RIGHT)
         panel2.Sizer.Add(stc_body, proportion=1, flag=wx.GROW)
@@ -7252,12 +7226,78 @@ class SchemaObjectPage(wx.PyPanel):
         self._BindDataHandler(self._OnChange,  check_temp,   ["temporary"])
         self._BindDataHandler(self._OnChange,  check_exists, ["exists"])
         self._BindDataHandler(self._OnChange,  stc_body,     ["select"])
-        self._BindDataHandler(self._OnAddItem, button_add_column, ["columns"], "")
 
-        panel_columns.SetupScrolling(scroll_x=False)
-        splitter.SetMinimumPaneSize(70)
-        splitter.SplitHorizontally(panel1, panel2, 70)
+        splitter.SetMinimumPaneSize(105)
+        splitter.SplitHorizontally(panel1, panel2, splitter.MinimumPaneSize)
         return panel
+
+
+    def _MakeColumnsGrid(self, panel, cols):
+        """Returns panel columns grid-panel and column management buttons-sizer."""
+        pstyle = wx.BORDER_STATIC if "table" == self._category else 0
+        panel_columnsgrid = self._panel_columnsgrid = wx.lib.scrolledpanel.ScrolledPanel(panel, style=pstyle)
+        panel_columnsgrid.Sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_columnbuttons = wx.BoxSizer(wx.HORIZONTAL)
+
+        grid_columns = self._grid_columns = wx.grid.Grid(panel_columnsgrid)
+        grid_columns.DisableDragRowSize()
+        grid_columns.DisableDragColSize()
+        grid_columns.HideColLabels()
+        grid_columns.SetRowLabelSize(50)
+        grid_columns.SetDefaultRowSize(23)
+        grid_columns.SetCellHighlightPenWidth(0)
+        grid_columns.SetCellHighlightROPenWidth(0)
+        grid_columns.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
+        grid_columns.CreateGrid(0, 0, wx.grid.Grid.SelectRows)
+        ColourManager.Manage(grid_columns, "LabelBackgroundColour", wx.SYS_COLOUR_BTNFACE)
+        ColourManager.Manage(grid_columns, "LabelTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
+
+        panel_columns = self._panel_columns = wx.Panel(panel_columnsgrid)
+        panel_columns.Sizer = wx.FlexGridSizer(cols=cols)
+
+        button_add_column = self._buttons["add_column"]    = wx.Button(panel, label="&Add column")
+        button_add_expr   = None
+        if "index" == self._category:
+            button_add_expr = self._buttons["add_expr"] = wx.Button(panel, label="Add ex&pression")
+            button_add_expr.ToolTipString = "Add index expression"
+        button_move_up    = self._buttons["move_up"]       = wx.Button(panel, label="Move up")
+        button_move_down  = self._buttons["move_down"]     = wx.Button(panel, label="Move down")
+        button_remove_col = self._buttons["remove_column"] = wx.Button(panel, label="Remove column" if "table" == self._category else "Remove")
+        button_move_up.Enabled = button_move_down.Enabled = False
+        button_move_up.ToolTipString    = "Move row one step higher"
+        button_move_down.ToolTipString  = "Move row one step lower"
+        button_remove_col.ToolTipString = "Delete row"
+        button_add_column._toggle = "show"
+        if "index" == self._category:
+            button_add_column._toggle = button_add_expr._toggle = lambda: (
+                "disable" if not self._item["meta"].get("table") else "show"
+            )
+        button_move_up._toggle    = lambda: "show disable" if not grid_columns.NumberRows or grid_columns.GridCursorRow <= 0 else "show"
+        button_move_down._toggle  = lambda: "show disable" if not grid_columns.NumberRows or grid_columns.GridCursorRow == grid_columns.NumberRows - 1 else "show"
+        button_remove_col._toggle = lambda: "show disable" if not grid_columns.NumberRows else "show"
+
+        sizer_columnbuttons.AddStretchSpacer()
+        sizer_columnbuttons.Add(button_add_column, border=5, flag=wx.RIGHT)
+        if "index" == self._category:
+            sizer_columnbuttons.Add(button_add_expr, border=5, flag=wx.RIGHT)
+        sizer_columnbuttons.Add(button_move_up,    border=5, flag=wx.RIGHT)
+        sizer_columnbuttons.Add(button_move_down,  border=5, flag=wx.RIGHT)
+        sizer_columnbuttons.Add(button_remove_col)
+
+        panel_columnsgrid.Sizer.Add(grid_columns, flag=wx.GROW)
+        panel_columnsgrid.Sizer.Add(panel_columns, proportion=1, flag=wx.GROW)
+
+        self._BindDataHandler(self._OnAddItem,    button_add_column, ["columns"], {"name": ""})
+        if "index" == self._category:
+            self._BindDataHandler(self._OnAddItem, button_add_expr,  ["columns"], {"expr": ""})
+        self._BindDataHandler(self._OnMoveItem,   button_move_up,    ["columns"],   -1)
+        self._BindDataHandler(self._OnMoveItem,   button_move_down,  ["columns"], +1)
+        self._BindDataHandler(self._OnRemoveItem, button_remove_col, ["columns"])
+
+        self.Bind(wx.grid.EVT_GRID_SELECT_CELL,  self._OnSelectGridRow, grid_columns)
+        self.Bind(wx.grid.EVT_GRID_RANGE_SELECT, self._OnSelectGridRow, grid_columns)
+
+        return panel_columnsgrid, sizer_columnbuttons
 
 
     def _Populate(self):
@@ -7289,9 +7329,18 @@ class SchemaObjectPage(wx.PyPanel):
         self._ctrls["exists"].Value    = bool(meta.get("exists"))
         self._ctrls["without"].Value   = bool(meta.get("without"))
 
+        row, col = self._grid_columns.GridCursorRow, self._grid_columns.GridCursorCol
+        if self._grid_columns.NumberRows:
+            self._grid_columns.SetGridCursor(-1, col)
+            self._grid_columns.DeleteRows(0, self._grid_columns.NumberRows)
+        self._grid_columns.AppendRows(len(meta.get("columns") or ()))
+
         self._EmptyControl(self._panel_columns)
-        for i, col in enumerate(meta.get("columns") or ()):
-            self._AddRowTable(["columns"], i, col)
+        for i, coldata in enumerate(meta.get("columns") or ()):
+            self._AddRowTable(["columns"], i, coldata)
+        if self._grid_columns.NumberRows:
+            row = min(max(0, row), self._grid_columns.NumberRows - 1)
+            self._grid_columns.SetGridCursor(row, col)
         self._panel_columns.Layout()
 
         self._EmptyControl(self._panel_constraints)
@@ -7315,18 +7364,31 @@ class SchemaObjectPage(wx.PyPanel):
         self._ctrls["exists"].Value = bool(meta.get("exists"))
         self._ctrls["where"].SetText(meta.get("where") or "")
 
+        row, col = self._grid_columns.GridCursorRow, self._grid_columns.GridCursorCol
+        if self._grid_columns.NumberRows:
+            self._grid_columns.SetGridCursor(-1, col)
+            self._grid_columns.DeleteRows(0, self._grid_columns.NumberRows)
+        self._grid_columns.AppendRows(len(meta.get("columns") or ()))
+
         self._EmptyControl(self._panel_columns)
-        for i, col in enumerate(meta.get("columns") or ()):
-            self._AddRowIndex(["columns"], i, col)
+        for i, coldata in enumerate(meta.get("columns") or ()):
+            self._AddRowIndex(["columns"], i, coldata)
+        if self._grid_columns.NumberRows:
+            row = min(max(0, row), self._grid_columns.NumberRows - 1)
+            self._grid_columns.SetGridCursor(row, col)
 
 
     def _PopulateTrigger(self):
         """Populates panel with trigger-specific data."""
         data, meta = self._item, self._item.get("meta") or {}
 
+        row, col = self._grid_columns.GridCursorRow, self._grid_columns.GridCursorCol
+        if self._grid_columns.NumberRows:
+            self._grid_columns.SetGridCursor(-1, col)
+            self._grid_columns.DeleteRows(0, self._grid_columns.NumberRows)
+
         if grammar.SQL.INSTEAD_OF == meta.get("upon"):
             self._ctrls["label_table"].Label = "&View:"
-            self._item["meta"].pop("columns", None)
             self._ctrls["table"].SetItems(self._views)
         else:
             self._ctrls["label_table"].Label = "&Table:"
@@ -7341,16 +7403,22 @@ class SchemaObjectPage(wx.PyPanel):
         self._ctrls["body"].SetText(meta.get("body") or "")
         self._ctrls["when"].SetText(meta.get("when") or "")
 
-        panel = self._panel_columns
-        self._EmptyControl(panel)
+        self._EmptyControl(self._panel_columns)
+        p1, p2 = self._panel_splitter.Children
         if  grammar.SQL.UPDATE     == meta.get("action") \
         and grammar.SQL.INSTEAD_OF == meta.get("upon") \
         and self._db.has_view_columns():
-            panel.Parent.Show()
-            for i, col in enumerate(meta.get("columns") or ()):
-                self._AddRowTrigger(["columns"], i, col)
+            self._panel_splitter.SplitHorizontally(p1, p2, self._panel_splitter.MinimumPaneSize)
+            self._panel_columnsgrid.Parent.Show()
+            self._grid_columns.AppendRows(len(meta.get("columns") or ()))
+            for i, coldata in enumerate(meta.get("columns") or ()):
+                self._AddRowTrigger(["columns"], i, coldata)
+            if self._grid_columns.NumberRows:
+                row = min(max(0, row), self._grid_columns.NumberRows - 1)
+                self._grid_columns.SetGridCursor(row, col)
         else:
-            panel.Parent.Hide()
+            self._panel_splitter.Unsplit(p1)
+        self._PopulateAutoComp()
         self._panel_category.Layout()
 
 
@@ -7358,17 +7426,27 @@ class SchemaObjectPage(wx.PyPanel):
         """Populates panel with view-specific data."""
         data, meta = self._item, self._item.get("meta") or {}
 
+        row, col = self._grid_columns.GridCursorRow, self._grid_columns.GridCursorCol
+        if self._grid_columns.NumberRows:
+            self._grid_columns.SetGridCursor(-1, col)
+            self._grid_columns.DeleteRows(0, self._grid_columns.NumberRows)
+
         self._ctrls["temporary"].Value = bool(meta.get("temporary"))
         self._ctrls["exists"].Value = bool(meta.get("exists"))
         self._ctrls["select"].SetText(meta.get("select") or "")
 
-        panel = self._panel_columns
-        self._EmptyControl(panel)
-
+        self._EmptyControl(self._panel_columns)
+        p1, p2 = self._panel_splitter.Children
         if self._db.has_view_columns():
-            for i, col in enumerate(meta.get("columns") or ()):
-                self._AddRowView(["columns"], i, col)
-        else: panel.Parent.Hide()
+            self._panel_splitter.SplitHorizontally(p1, p2, self._panel_splitter.MinimumPaneSize)
+            self._grid_columns.AppendRows(len(meta.get("columns") or ()))
+            for i, coldata in enumerate(meta.get("columns") or ()):
+                self._AddRowView(["columns"], i, coldata)
+            if self._grid_columns.NumberRows:
+                row = min(max(0, row), self._grid_columns.NumberRows - 1)
+                self._grid_columns.SetGridCursor(row, col)
+        else:
+            self._panel_splitter.Unsplit(p1)
 
 
     def _AddRowTable(self, path, i, col, insert=False, focus=False):
@@ -7378,11 +7456,11 @@ class SchemaObjectPage(wx.PyPanel):
         panel = self._panel_columns
 
         sizer_flags = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
 
         text_name     = wx.TextCtrl(panel)
         list_type     = wx.ComboBox(panel, choices=self._types, style=wx.CB_DROPDOWN)
         text_default  = controls.SQLiteTextCtrl(panel, singleline=True)
+        text_default.SetCaretLineVisible(False)
 
         check_pk      = wx.CheckBox(panel)
         check_autoinc = wx.CheckBox(panel)
@@ -7393,25 +7471,13 @@ class SchemaObjectPage(wx.PyPanel):
         check_notnull.ToolTipString = grammar.SQL.NOT_NULL
         check_unique.ToolTipString  = grammar.SQL.UNIQUE
 
-        button_open   = wx.Button(panel, label=u"O", size=(20, -1))
-        button_up     = wx.Button(panel, label=u"\u2191", size=(20, -1))
-        button_down   = wx.Button(panel, label=u"\u2193", size=(20, -1))
-        button_remove = wx.Button(panel, label=u"\u2715", size=(20, -1))
+        button_open = wx.Button(panel, label="Open", size=(50, -1))
 
         text_name.MinSize    = (150, -1)
         list_type.MinSize    = (100, -1)
         text_default.MinSize = (100, text_name.Size[1])
-        check_autoinc._toggle = lambda: "disable" if self._editmode and col.get("pk") is None else ""
         button_open._toggle = "skip"
-        button_remove._toggle = "show"
-        button_up._toggle   = self._GetMoveButtonToggle(button_up,   -1)
-        button_down._toggle = self._GetMoveButtonToggle(button_down, +1)
-        if first: button_up.Enable(False)
-        if last: button_down.Enable(False)
         button_open.ToolTipString   = "Open advanced options"
-        button_up.ToolTipString     = "Move one step higher"
-        button_down.ToolTipString   = "Move one step lower"
-        button_remove.ToolTipString = "Remove"
 
         text_name.Value     = col.get("name") or ""
         list_type.Value     = col.get("type") or ""
@@ -7420,44 +7486,38 @@ class SchemaObjectPage(wx.PyPanel):
         check_autoinc.Value = bool(col.get("pk", {}).get("autoincrement"))
         check_notnull.Value = col.get("notnull") is not None
         check_unique.Value  = col.get("unique")  is not None
-        check_autoinc.Enable(check_pk.Value)
 
         sizer_flags.Add(check_pk)
         sizer_flags.Add(check_autoinc)
         sizer_flags.Add(check_notnull)
         sizer_flags.Add(check_unique)
 
-        sizer_buttons.Add(button_open)
-        sizer_buttons.Add(button_up)
-        sizer_buttons.Add(button_down)
-        sizer_buttons.Add(button_remove)
-
-        vertical = (wx.TOP if first else wx.BOTTOM if last else 0)
+        vertical = wx.ALIGN_CENTER_VERTICAL
         if insert:
             start = panel.Sizer.Cols * i
-            panel.Sizer.Insert(start,   text_name,     border=5, flag=vertical | wx.LEFT)
-            panel.Sizer.Insert(start+1, list_type,     border=5, flag=vertical)
-            panel.Sizer.Insert(start+2, text_default,  border=5, flag=vertical)
-            self._AddSizer(panel.Sizer, sizer_flags,   border=5, flag=vertical | wx.ALIGN_CENTER_VERTICAL,  insert=start+3)
-            self._AddSizer(panel.Sizer, sizer_buttons, border=5, flag=vertical | wx.RIGHT | wx.ALIGN_RIGHT, insert=start+4)
+            panel.Sizer.Insert(start,   text_name,    border=5, flag=vertical | wx.LEFT)
+            panel.Sizer.Insert(start+1, list_type,    border=5, flag=vertical)
+            panel.Sizer.Insert(start+2, text_default, border=5, flag=vertical)
+            self._AddSizer(panel.Sizer, sizer_flags,  border=5, flag=vertical | wx.LEFT | wx.RIGHT,  insert=start+3)
+            self._AddSizer(panel.Sizer, button_open,  border=5, flag=vertical | wx.LEFT | wx.RIGHT, insert=start+4)
         else:
             panel.Sizer.Add(text_name,     border=5, flag=vertical | wx.LEFT)
             panel.Sizer.Add(list_type,     border=5, flag=vertical)
             panel.Sizer.Add(text_default,  border=5, flag=vertical)
-            self._AddSizer(panel.Sizer, sizer_flags,   border=5, flag=vertical | wx.ALIGN_CENTER_VERTICAL)
-            self._AddSizer(panel.Sizer, sizer_buttons, border=5, flag=vertical | wx.RIGHT | wx.ALIGN_RIGHT)
+            self._AddSizer(panel.Sizer, sizer_flags, border=5, flag=vertical | wx.LEFT | wx.RIGHT)
+            self._AddSizer(panel.Sizer, button_open, border=5, flag=vertical | wx.LEFT | wx.RIGHT)
 
         self._BindDataHandler(self._OnChange,      text_name,     ["columns", text_name,    "name"])
         self._BindDataHandler(self._OnChange,      list_type,     ["columns", list_type,    "type"])
         self._BindDataHandler(self._OnChange,      text_default,  ["columns", text_default, "default"])
-        self._BindDataHandler(self._OnToggleColumnFlag, check_pk,      ["columns", check_pk,      "pk"],      rowkey)
-        self._BindDataHandler(self._OnToggleColumnFlag, check_notnull, ["columns", check_notnull, "notnull"], rowkey)
-        self._BindDataHandler(self._OnToggleColumnFlag, check_unique,  ["columns", check_unique,  "unique"],  rowkey)
-        self._BindDataHandler(self._OnChange,      check_autoinc, ["columns", check_autoinc, "pk", "autoincrement"])
+        self._BindDataHandler(self._OnToggleColumnFlag, check_pk,      ["columns", check_pk,      "pk"])
+        self._BindDataHandler(self._OnToggleColumnFlag, check_notnull, ["columns", check_notnull, "notnull"])
+        self._BindDataHandler(self._OnToggleColumnFlag, check_unique,  ["columns", check_unique,  "unique"])
+        self._BindDataHandler(self._OnToggleColumnFlag, check_autoinc, ["columns", check_autoinc, "pk", "autoincrement"])
         self._BindDataHandler(self._OnOpenItem,    button_open,   ["columns", button_open])
-        self._BindDataHandler(self._OnMoveItem,    button_up,     ["columns", button_up],   -1)
-        self._BindDataHandler(self._OnMoveItem,    button_down,   ["columns", button_down], +1)
-        self._BindDataHandler(self._OnRemoveItem,  button_remove, ["columns", button_remove])
+        for i, c in enumerate([text_name, list_type, text_default, check_pk,
+                               check_autoinc, check_notnull, check_unique, button_open]):
+            c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, i]))
 
         self._ctrls.update({"columns.name.%s"     % rowkey: text_name,
                             "columns.type.%s"     % rowkey: list_type,
@@ -7466,10 +7526,7 @@ class SchemaObjectPage(wx.PyPanel):
                             "columns.autoinc.%s"  % rowkey: check_autoinc,
                             "columns.notnull.%s"  % rowkey: check_notnull,
                             "columns.unique.%s"   % rowkey: check_unique, })
-        self._buttons.update({"columns.open.%s"   % rowkey: button_open,
-                              "columns.up.%s"     % rowkey: button_up,
-                              "columns.down.%s"   % rowkey: button_down,
-                              "columns.remove.%s" % rowkey: button_remove, })
+        self._buttons.update({"columns.open.%s"   % rowkey: button_open})
         if focus: text_name.SetFocus()
 
 
@@ -7633,125 +7690,79 @@ class SchemaObjectPage(wx.PyPanel):
         tablecols = [x["name"] for x in table.get("columns") or ()]
         panel = self._panel_columns
 
-        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
-
         if "name" in col:
             ctrl_index = wx.ComboBox(panel, choices=tablecols,
                 style=wx.CB_DROPDOWN | wx.CB_READONLY)
         else:
             ctrl_index = controls.SQLiteTextCtrl(panel, singleline=True)
+            ctrl_index.SetCaretLineVisible(False)
         list_collate  = wx.ComboBox(panel, choices=self.COLLATE, style=wx.CB_DROPDOWN)
         list_order    = wx.ComboBox(panel, choices=self.ORDER, style=wx.CB_DROPDOWN | wx.CB_READONLY)
-        button_up     = wx.Button(panel, label=u"\u2191", size=(20, -1))
-        button_down   = wx.Button(panel, label=u"\u2193", size=(20, -1))
-        button_remove = wx.Button(panel, label=u"\u2715", size=(20, -1))
 
         ctrl_index.MinSize =   (250, -1 if "name" in col else list_collate.Size[1])
         list_collate.MinSize = ( 80, -1)
         list_order.MinSize =   ( 60, -1)
-        button_remove._toggle = "show"
-        button_up._toggle   = self._GetMoveButtonToggle(button_up,   -1)
-        button_down._toggle = self._GetMoveButtonToggle(button_down, +1)
-        if first: button_up.Enable(False)
-        if last:  button_down.Enable(False)
-        button_up.ToolTipString     = "Move one step higher"
-        button_down.ToolTipString   = "Move one step lower"
-        button_remove.ToolTipString = "Remove"
 
         ctrl_index.Value   = col.get("name") or col.get("expr") or ""
         list_collate.Value = col.get("collate") or ""
         list_order.Value   = col.get("order") or ""
 
-        sizer_buttons.Add(button_up)
-        sizer_buttons.Add(button_down)
-        sizer_buttons.Add(button_remove)
-
+        vertical = wx.ALIGN_CENTER_VERTICAL
         if insert:
             start = panel.Sizer.Cols * i
-            panel.Sizer.Insert(start,   ctrl_index)
-            panel.Sizer.Insert(start+1, list_collate)
-            panel.Sizer.Insert(start+2, list_order)
-            self._AddSizer(panel.Sizer, sizer_buttons, flag=wx.ALIGN_RIGHT, insert=start+3)
+            panel.Sizer.Insert(start,   ctrl_index, border=5, flag=vertical | wx.LEFT)
+            panel.Sizer.Insert(start+1, list_collate, flag=vertical)
+            panel.Sizer.Insert(start+2, list_order, flag=vertical)
+            panel.Sizer.InsertSpacer(start+3, (0, 23))
         else:
-            panel.Sizer.Add(ctrl_index)
-            panel.Sizer.Add(list_collate)
-            panel.Sizer.Add(list_order)
-            self._AddSizer(panel.Sizer, sizer_buttons, flag=wx.ALIGN_RIGHT)
+            panel.Sizer.Add(ctrl_index, border=5, flag=vertical | wx.LEFT)
+            panel.Sizer.Add(list_collate, flag=vertical)
+            panel.Sizer.Add(list_order, flag=vertical)
+            panel.Sizer.AddSpacer((0, 23))
 
-        self._BindDataHandler(self._OnChange,     ctrl_index,    ["columns", ctrl_index,   "name" if "name" in col else "expr"])
-        self._BindDataHandler(self._OnChange,     list_collate,  ["columns", list_collate, "collate"])
-        self._BindDataHandler(self._OnChange,     list_order,    ["columns", list_order,   "order"])
-        self._BindDataHandler(self._OnMoveItem,   button_up,     ["columns", button_up],   -1)
-        self._BindDataHandler(self._OnMoveItem,   button_down,   ["columns", button_down], +1)
-        self._BindDataHandler(self._OnRemoveItem, button_remove, ["columns", button_remove])
+        self._BindDataHandler(self._OnChange, ctrl_index,   ["columns", ctrl_index,   "name" if "name" in col else "expr"])
+        self._BindDataHandler(self._OnChange, list_collate, ["columns", list_collate, "collate"])
+        self._BindDataHandler(self._OnChange, list_order,   ["columns", list_order,   "order"])
+        for i, c in enumerate([ctrl_index, list_collate, list_order]):
+            c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, i]))
 
         self._ctrls.update({"columns.index.%s"    % rowkey: ctrl_index,
                             "columns.collate.%s"  % rowkey: list_collate,
                             "columns.order.%s"    % rowkey: list_order, })
-        self._buttons.update({"columns.up.%s"     % rowkey: button_up,
-                              "columns.down.%s"   % rowkey: button_down,
-                              "columns.remove.%s" % rowkey: button_remove, })
         if focus: ctrl_index.SetFocus()
 
 
-    def _AddRowTrigger(self, path, i, value, insert=False, focus=False):
+    def _AddRowTrigger(self, path, i, col, insert=False, focus=False):
         """Adds a new row of controls for trigger columns."""
         first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
         meta, rowkey = self._item.get("meta") or {}, wx.NewId()
-        if "INSTEAD OF" == meta.get("upon"):
-            self._ctrls["label_table"].Label = "&View:"
-            self._ctrls["table"].SetItems(self._views)
+        if grammar.SQL.INSTEAD_OF == meta.get("upon"):
             table = self._db.get_category("view", meta["table"]) \
                     if meta.get("table") else {}
         else:
-            self._ctrls["label_table"].Label = "&Table:"
-            self._ctrls["table"].SetItems(self._tables)
             table = self._db.get_category("table", meta["table"]) \
                     if meta.get("table") else {}
         tablecols = [x["name"] for x in table.get("columns") or ()]
         panel = self._panel_columns
 
-        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
-
         list_column = wx.ComboBox(panel, choices=tablecols,
             style=wx.CB_DROPDOWN | wx.CB_READONLY)
-        button_up     = wx.Button(panel, label=u"\u2191", size=(20, -1))
-        button_down   = wx.Button(panel, label=u"\u2193", size=(20, -1))
-        button_remove = wx.Button(panel, label=u"\u2715", size=(20, -1))
-
         list_column.MinSize = (200, -1)
-        button_remove._toggle = "show"
-        button_up._toggle   = self._GetMoveButtonToggle(button_up,   -1)
-        button_down._toggle = self._GetMoveButtonToggle(button_down, +1)
-        if first: button_up.Enable(False)
-        if last:  button_down.Enable(False)
-        button_up.ToolTipString     = "Move one step higher"
-        button_down.ToolTipString   = "Move one step lower"
-        button_remove.ToolTipString = "Remove"
-
-        list_column.Value = value
-
-        sizer_buttons.Add(button_up)
-        sizer_buttons.Add(button_down)
-        sizer_buttons.Add(button_remove)
+        list_column.Value = col["name"]
 
         if insert:
             start = panel.Sizer.Cols * i
-            panel.Sizer.Insert(start, list_column)
-            self._AddSizer(panel.Sizer, sizer_buttons, flag=wx.ALIGN_RIGHT, insert=start+1)
+            panel.Sizer.Insert(start, list_column, border=5, flag=wx.LEFT)
+            panel.Sizer.InsertSpacer(start+1, (0, 23))
         else:
-            panel.Sizer.Add(list_column)
-            self._AddSizer(panel.Sizer, sizer_buttons, flag=wx.ALIGN_RIGHT)
+            panel.Sizer.Add(list_column, border=5, flag=wx.LEFT)
+            panel.Sizer.AddSpacer((0, 23))
 
-        self._BindDataHandler(self._OnChange,      list_column,   ["columns", list_column])
-        self._BindDataHandler(self._OnMoveItem,    button_up,     ["columns", button_up],   -1)
-        self._BindDataHandler(self._OnMoveItem,    button_down,   ["columns", button_down], +1)
-        self._BindDataHandler(self._OnRemoveItem,  button_remove, ["columns", button_remove])
+        self._BindDataHandler(self._OnChange, list_column, ["columns", list_column, "name"])
+        for i, c in enumerate([list_column]):
+            c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, i]))
 
-        self._ctrls.update({"columns.name.%s"     % rowkey: list_column})
-        self._buttons.update({"columns.up.%s"     % rowkey: button_up,
-                              "columns.down.%s"   % rowkey: button_down,
-                              "columns.remove.%s" % rowkey: button_remove})
+        self._ctrls.update({"columns.name.%s" % rowkey: list_column})
         if focus: list_column.SetFocus()
 
 
@@ -7759,46 +7770,25 @@ class SchemaObjectPage(wx.PyPanel):
         """Adds a new row of controls for view columns."""
         first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
         panel = self._panel_columns
-        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
 
         text_column = controls.SQLiteTextCtrl(panel, singleline=True)
-        button_up     = wx.Button(panel, label=u"\u2191", size=(20, -1))
-        button_down   = wx.Button(panel, label=u"\u2193", size=(20, -1))
-        button_remove = wx.Button(panel, label=u"\u2715", size=(20, -1))
-
-        text_column.MinSize = (200, button_up.Size[1])
-        button_remove._toggle = "show"
-        button_up._toggle   = self._GetMoveButtonToggle(button_up,   -1)
-        button_down._toggle = self._GetMoveButtonToggle(button_down, +1)
-        if first: button_up.Enable(False)
-        if last:  button_down.Enable(False)
-        button_up.ToolTipString     = "Move one step higher"
-        button_down.ToolTipString   = "Move one step lower"
-        button_remove.ToolTipString = "Remove"
-
+        text_column.SetCaretLineVisible(False)
+        text_column.MinSize = (200, 21)
         text_column.Value = column.get("name") or ""
-
-        sizer_buttons.Add(button_up)
-        sizer_buttons.Add(button_down)
-        sizer_buttons.Add(button_remove)
 
         if insert:
             start = panel.Sizer.Cols * i
-            panel.Sizer.Insert(start, text_column)
-            self._AddSizer(panel.Sizer, sizer_buttons, flag=wx.ALIGN_RIGHT, insert=start+1)
+            panel.Sizer.Insert(start, text_column, border=5, flag=wx.LEFT)
+            panel.Sizer.InsertSpacer(start+1, (0, 23))
         else:
-            panel.Sizer.Add(text_column)
-            self._AddSizer(panel.Sizer, sizer_buttons, flag=wx.ALIGN_RIGHT)
+            panel.Sizer.Add(text_column, border=5, flag=wx.LEFT)
+            panel.Sizer.AddSpacer((0, 23))
 
         self._BindDataHandler(self._OnChange,     text_column,   ["columns", text_column, "name"])
-        self._BindDataHandler(self._OnMoveItem,   button_up,     ["columns", button_up],   -1)
-        self._BindDataHandler(self._OnMoveItem,   button_down,   ["columns", button_down], +1)
-        self._BindDataHandler(self._OnRemoveItem, button_remove, ["columns", button_remove])
+        for i, c in enumerate([text_column]):
+            c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, i]))
 
         self._ctrls.update({"columns.name.%s"     % id(text_column): text_column})
-        self._buttons.update({"columns.up.%s"     % id(text_column): button_up,
-                              "columns.down.%s"   % id(text_column): button_down,
-                              "columns.remove.%s" % id(text_column): button_remove})
         if focus: text_column.SetFocus()
 
 
@@ -8380,6 +8370,7 @@ class SchemaObjectPage(wx.PyPanel):
     def _AddRow(self, path, i, value, insert=False, focus=False):
         """Adds a new row of controls for value at path index."""
         panel = self._panel_columns
+        if "constraints" != path[-1]: self._grid_columns.AppendRows(1)
         if "table" == self._category:
             adder = self._AddRowTable
             if "constraints" == path[-1]:
@@ -8416,6 +8407,10 @@ class SchemaObjectPage(wx.PyPanel):
             elif c in ctrlmap: self._ctrls  .pop(ctrlmap.pop(c))
             c.Destroy()
 
+        if "columns" == path[0]:
+            # Update columns grid
+            self._grid_columns.DeleteRows(index)
+            self._grid_columns.SetGridCursor(min(index, self._grid_columns.NumberRows - 1), -1)
         if "table" == self._category:
             label, count = path[0].capitalize(), len(self._item["meta"].get(path[0]) or ())
             if count: label = "%s (%s)" % (label, count)
@@ -8459,7 +8454,7 @@ class SchemaObjectPage(wx.PyPanel):
             ptr = ptr.get(p)
             if ptr is None: ptr = parent[p] = {} if i < len(path) - 1 else []
             parent = ptr
-        if self._category in ("table", "view") and ["columns"] == path:
+        if self._category in ("table", "trigger", "view") and ["columns"] == path:
             value = dict(value, __id__=wx.NewId())
         ptr.append(copy.deepcopy(value))
         panel = self._panel_columns if ["columns"] == path else self._panel_constraints
@@ -8475,7 +8470,9 @@ class SchemaObjectPage(wx.PyPanel):
 
     def _OnRemoveItem(self, path, event=None):
         """Removes item from object meta and item controls from panel at path."""
-        path, index = path[:-1], path[-1]
+        if "constraints" == path[0]:
+            path, index = path[:-1], path[-1]
+        else: index = self._grid_columns.GridCursorRow
         ptr = self._item["meta"]
         for i, p in enumerate(path): ptr = ptr.get(p)
         mydata = ptr[index]
@@ -8502,14 +8499,16 @@ class SchemaObjectPage(wx.PyPanel):
 
     def _OnMoveItem(self, path, direction, event=None):
         """Swaps the order of two meta items at path."""
-        path, index = path[:-1], path[-1]
+        index = self._grid_columns.GridCursorRow
         ptr = self._item["meta"]
         for i, p in enumerate(path): ptr = ptr.get(p)
         index2 = index + direction
         ptr[index], ptr[index2] = ptr[index2], ptr[index]
         self.Freeze()
+        col = self._grid_columns.GridCursorCol
         self._RemoveRow(path, index)
         self._AddRow(path, index2, ptr[index2], insert=True)
+        self._grid_columns.SetGridCursor(index2, col)
         self._PopulateSQL()
         self._ToggleControls(self._editmode)
         self.Thaw()
@@ -8573,10 +8572,13 @@ class SchemaObjectPage(wx.PyPanel):
             # Trigger special: INSTEAD OF UPDATE triggers on a view
             if ["upon"] == path and grammar.SQL.INSTEAD_OF in (value0, value) \
             or ["action"] == path and grammar.SQL.INSTEAD_OF == meta.get("upon") \
-            and grammar.SQL.UPDATE in (value0, value):
+            and grammar.SQL.UPDATE in (value0, value) \
+            or ["table"] == path and grammar.SQL.INSTEAD_OF == meta.get("upon") \
+            and grammar.SQL.UPDATE == meta.get("action"):
                 rebuild = True
-                meta.pop("columns", None), meta.pop("table", None)
-            if ["table"] == path: self._PopulateAutoComp()
+                meta.pop("columns", None)
+                if ["upon"] == path: meta.pop("table", None)
+            elif ["table"] == path: self._PopulateAutoComp()
         elif "table" == self._category:
             if "constraints" == path[0] and "table" == path[-1]:
                 # Foreign table changed, clear foreign cols
@@ -8605,6 +8607,54 @@ class SchemaObjectPage(wx.PyPanel):
 
         self._Populate() if rebuild else self._PopulateSQL()
         self._PostEvent(modified=True)
+
+
+    def _OnSelectGridRow(self, event):
+        """
+        Handler for selecting columns grid row, updates row labels,
+        sets focused control in row.
+        """
+        event.Skip()
+        if isinstance(event, wx.grid.GridRangeSelectEvent):
+            row = event.TopRow
+            col = self._grid_columns.GridCursorCol
+        else: row, col = event.Row, event.Col
+        row0, col0 = self._grid_columns.GridCursorRow, self._grid_columns.GridCursorCol
+        for i in range(self._grid_columns.NumberRows)   :
+            pref = u"\u25ba " if row == i else "" # Right-pointing pointer symbol
+            self._grid_columns.SetRowLabelValue(i, "%s%s  " % (pref, i + 1))
+        self._grid_columns.ForceRefresh()
+
+        if row >= 0 and self._grid_columns.NumberRows:
+            COLS = {"table": 8, "index": 3, "trigger": 1, "view": 1}
+            index, ctrl = (row * COLS[self._category]) + max(0, col), None
+            count = len(self._panel_columns.Children)
+            i, children = -1, list(self._panel_columns.Sizer.Children)
+            while children:
+                si = children.pop(0)
+                if si.Sizer:
+                    children[:0] = list(si.Sizer.Children)
+                    continue # while
+                if si.Window: i += 1
+                if i != index: continue
+                ctrl = si.Window
+                break # while
+            if ctrl and not ctrl.HasFocus():
+                ctrl.SetFocus()
+                if isinstance(ctrl, wx.ComboBox) and ctrl.IsEditable():
+                    ctrl.SelectAll()
+        self._buttons["move_up"].Enable(row > 0)
+        self._buttons["move_down"].Enable(0 <= row < self._grid_columns.NumberRows - 1)
+        self._buttons["remove_column"].Enable(row >= 0)
+
+
+    def _OnFocusColumn(self, path, event):
+        """
+        Handler for focusing a column row, updates grid header,
+        focuses a row control.
+        """
+        event.Skip()
+        self._grid_columns.SetGridCursor(*path)
 
 
     def _OnCascadeColumnUpdates(self):
@@ -8670,20 +8720,18 @@ class SchemaObjectPage(wx.PyPanel):
         self.Thaw()
 
 
-    def _OnToggleColumnFlag(self, path, rowkey, event):
+    def _OnToggleColumnFlag(self, path, event):
         """Toggles PRIMARY KEY / NOT NULL / UNIQUE flag."""
         path, flag = path[:-1], path[-1]
-        col = util.get(self._item["meta"], path)
+        data, value = util.get(self._item["meta"], path), event.EventObject.Value
+        if data is None: data = util.set(self._item["meta"], {}, path)            
 
-        check_autoinc = self._ctrls["columns.autoinc.%s" % rowkey]
-        if event.EventObject.Value:
-            col[flag] = {}
-            if "pk" == flag: check_autoinc.Enable()
-        else:
-            col.pop(flag, None)
-            if "pk" == flag:
-                check_autoinc.Enable(False)
-                check_autoinc.Value = False
+        if value: data[flag] = value if "autoincrement" == flag else {}
+        else: data.pop(flag, None)
+        if "pk" == flag and not value: # Clear autoincrement checkbox
+            event.EventObject.GetNextSibling().Value = False
+        elif "autoincrement" == flag and value: # Set PK checkbox
+            event.EventObject.GetPrevSibling().Value = True
         self._PopulateSQL()
 
 
@@ -8790,7 +8838,7 @@ class SchemaObjectPage(wx.PyPanel):
 
     def _OnToggleEdit(self, event=None):
         """Handler for toggling edit mode."""
-        is_changed =  self.IsChanged()
+        is_changed = self.IsChanged()
         if is_changed and wx.OK != wx.MessageBox(
             "There are unsaved changes, "
             "are you sure you want to discard them?",
@@ -8806,7 +8854,9 @@ class SchemaObjectPage(wx.PyPanel):
 
         if self._editmode:
             self._ToggleControls(self._editmode)
+            self._buttons["edit"].ToolTipString = "Confirm SQL and save to database schema"
         else:
+            self._buttons["edit"].ToolTipString = ""
             if self._show_alter: self._OnToggleAlterSQL()
             if is_changed: self._OnRefresh()
             else:
@@ -8897,10 +8947,10 @@ class SchemaObjectPage(wx.PyPanel):
 
         self._item.update(name=name, meta=self._AssignColumnIDs(meta2))
         self._original = copy.deepcopy(self._item)
-        self._newmode = self._editmode = False
         if self._show_alter: self._OnToggleAlterSQL()
         self._has_alter = True
-        self._ToggleControls(self._editmode)
+        self._newmode = False
+        self._OnToggleEdit()
         self._PostEvent(updated=True)
         return True
 
