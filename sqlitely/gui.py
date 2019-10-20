@@ -7577,8 +7577,9 @@ class SchemaObjectPage(wx.PyPanel):
         self._BindDataHandler(self._OnToggleColumnFlag, check_unique,  ["columns", check_unique,  "unique"])
         self._BindDataHandler(self._OnToggleColumnFlag, check_autoinc, ["columns", check_autoinc, "pk", "autoincrement"])
         self._BindDataHandler(self._OnOpenItem,    button_open,   ["columns", button_open])
-        for i, c in enumerate([text_name, list_type, text_default, check_pk,
-                               check_autoinc, check_notnull, check_unique, button_open]):
+        ctrls = [text_name, list_type, text_default, check_pk,
+                 check_autoinc, check_notnull, check_unique, button_open]
+        for i, c in enumerate(ctrls):
             c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, i]))
 
         self._ctrls.update({"columns.name.%s"    % rowkey: text_name,
@@ -7590,6 +7591,7 @@ class SchemaObjectPage(wx.PyPanel):
                             "columns.unique.%s"  % rowkey: check_unique, })
         self._buttons.update({"columns.open.%s"  % rowkey: button_open})
         if focus: text_name.SetFocus()
+        return ctrls
 
 
     def _AddRowTableConstraint(self, path, i, cnstr, insert=False, focus=False):
@@ -7713,6 +7715,7 @@ class SchemaObjectPage(wx.PyPanel):
 
         self._buttons.update({"constraints.open.%s"  % rowkey: button_open})
         if focus: ctrls[0].SetFocus()
+        return ctrls
 
 
     def _AddRowIndex(self, path, i, col, insert=False, focus=False):
@@ -7757,13 +7760,15 @@ class SchemaObjectPage(wx.PyPanel):
         self._BindDataHandler(self._OnChange, ctrl_index,   ["columns", ctrl_index,   "name" if "name" in col else "expr"])
         self._BindDataHandler(self._OnChange, list_collate, ["columns", list_collate, "collate"])
         self._BindDataHandler(self._OnChange, list_order,   ["columns", list_order,   "order"])
-        for i, c in enumerate([ctrl_index, list_collate, list_order]):
+        ctrls = [ctrl_index, list_collate, list_order]
+        for i, c in enumerate(ctrls):
             c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, i]))
 
         self._ctrls.update({"columns.index.%s"   % rowkey: ctrl_index,
                             "columns.collate.%s" % rowkey: list_collate,
                             "columns.order.%s"   % rowkey: list_order, })
         if focus: ctrl_index.SetFocus()
+        return ctrls
 
 
     def _AddRowTrigger(self, path, i, col, insert=False, focus=False):
@@ -7793,11 +7798,13 @@ class SchemaObjectPage(wx.PyPanel):
             panel.Sizer.AddSpacer((0, 23))
 
         self._BindDataHandler(self._OnChange, list_column, ["columns", list_column, "name"])
-        for i, c in enumerate([list_column]):
+        ctrls = [list_column]
+        for i, c in enumerate(ctrls):
             c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, i]))
 
         self._ctrls.update({"columns.name.%s" % rowkey: list_column})
         if focus: list_column.SetFocus()
+        return ctrls
 
 
     def _AddRowView(self, path, i, column, insert=False, focus=False):
@@ -7819,11 +7826,13 @@ class SchemaObjectPage(wx.PyPanel):
             panel.Sizer.AddSpacer((0, 23))
 
         self._BindDataHandler(self._OnChange, text_column, ["columns", text_column, "name"])
-        for i, c in enumerate([text_column]):
+        ctrls = [text_column]
+        for i, c in enumerate(ctrls):
             c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, i]))
 
         self._ctrls.update({"columns.name.%s" % id(text_column): text_column})
         if focus: text_column.SetFocus()
+        return ctrls
 
 
     def _BindDataHandler(self, handler, ctrl, path, *args):
@@ -8428,8 +8437,17 @@ class SchemaObjectPage(wx.PyPanel):
         elif "index"   == self._category: adder = self._AddRowIndex
         elif "trigger" == self._category: adder = self._AddRowTrigger
         elif "view"    == self._category: adder = self._AddRowView
-        adder(path, i, value, insert=insert, focus=focus)
+        ctrls = adder(path, i, value, insert=insert, focus=focus)
         panel.Layout()
+
+        if insert: # Restore tab order
+            si = panel.Sizer.GetItem(ctrls[-1])
+            children = list(panel.Sizer.Children)
+            nextsi = next((children[i+1] for i, c in enumerate(children[:-1])
+                           if c.Window is ctrls[-1]), None)
+            nextctrl = nextsi.Window if nextsi else None
+            for ctrl in ctrls if nextctrl else ():
+                ctrl.MoveBeforeInTabOrder(nextctrl)
 
         if "table" == self._category:
             label, count = path[0].capitalize(), len(self._item["meta"].get(path[0]) or ())
@@ -8482,7 +8500,6 @@ class SchemaObjectPage(wx.PyPanel):
             constraints.append(constraint)
             self._AddRow(["constraints"], len(constraints) - 1, constraint, focus=True)
             self._PopulateSQL()
-            self._panel_constraints.Parent.ContainingSizer.Layout()
 
         menu = wx.Menu()
         for ctype in self.TABLECONSTRAINT:
