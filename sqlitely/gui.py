@@ -8242,6 +8242,7 @@ class SchemaObjectPage(wx.PyPanel):
         ]
 
         if grammar.SQL.FOREIGN_KEY == data["type"]: return [
+            {"name": "name", "label": "Constraint name", "type": "text", "toggle": True},
             {"name": "columns", "label": "Local column", "type": list, "choices": get_table_cols},
             {"name": "table",   "label": "Foreign table", "choices": self._tables, "link": "key"},
             {"name": "key",     "label": "Foreign column", "type": list, "choices": get_foreign_cols},
@@ -8257,7 +8258,13 @@ class SchemaObjectPage(wx.PyPanel):
             ]},
         ]
 
+        if grammar.SQL.CHECK == data["type"]: return [
+            {"name": "name", "label": "Constraint name", "type": "text", "toggle": True},
+            {"name": "check", "label": "CHECK", "component": controls.SQLiteTextCtrl},
+        ]
+
         if data["type"] in (grammar.SQL.PRIMARY_KEY, grammar.SQL.UNIQUE): return [
+            {"name": "name", "label": "Constraint name", "type": "text", "toggle": True},
             {"name": "columns",  "label": "Index",
              "type": (lambda *a, **kw: self._CreateDialogConstraints(*a, **kw))},
             {"name": "conflict", "label": "ON CONFLICT", "choices": self.CONFLICT},

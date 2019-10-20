@@ -423,13 +423,19 @@ class FormDialog(wx.Dialog):
         level, fpath = len(path), path + (field["name"], )
 
         col = 0
-        if field.get("toggle"):
+        if field.get("toggle") and self._editmode:
             toggle = wx.CheckBox(parent, label=field["label"] if "label" in field else field["name"])
             if field.get("help"): toggle.SetToolTipString(field["help"])
             sizer.Add(toggle, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
             self._comps[fpath].append(toggle)
             self._toggles[fpath] = toggle
             self._BindHandler(self._OnToggleField, toggle, field, path, toggle)
+            col += 2
+        elif field.get("toggle"):
+            # Show ordinary label in view mode, checkbox goes very gray
+            label = wx.StaticText(parent, label=field["label"] if "label" in field else field["name"])
+            if field.get("help"): label.SetToolTipString(field["help"])
+            sizer.Add(label, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
             col += 2
 
         if callback: callback(self, field, parent, self._data)
