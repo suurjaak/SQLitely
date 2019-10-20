@@ -8482,8 +8482,9 @@ class SchemaObjectPage(wx.PyPanel):
             constraint = copy.deepcopy(self.TABLECONSTRAINT_DEFAULTS[ctype])
             constraints = self._item["meta"].setdefault("constraints", [])
             constraints.append(constraint)
-            self._AddRow(["constraints"], len(constraints) - 1, constraint, focus=True)
+            self._AddRow(["constraints"], len(constraints) - 1, constraint)
             self._PopulateSQL()
+            self._grid_constraints.GoToCell(self._grid_constraints.NumberRows - 1, 0)
 
         menu = wx.Menu()
         for ctype in self.TABLECONSTRAINT:
@@ -8509,10 +8510,10 @@ class SchemaObjectPage(wx.PyPanel):
         ptr.append(copy.deepcopy(value))
         panel = self._panel_columns if ["columns"] == path else self._panel_constraints
         self.Freeze()
-        self._AddRow(path, len(ptr) - 1, value, focus=True)
+        self._AddRow(path, len(ptr) - 1, value)
         self._PopulateSQL()
         self._ToggleControls(self._editmode)
-        panel.Parent.ContainingSizer.Layout()
+        self._grid_columns.GoToCell(self._grid_columns.NumberRows - 1, 0)
         self.Thaw()
         self._PostEvent(modified=True)
 
