@@ -7578,11 +7578,11 @@ class SchemaObjectPage(wx.PyPanel):
         self._BindDataHandler(self._OnChange,      text_name,    ["columns", text_name,    "name"])
         self._BindDataHandler(self._OnChange,      list_type,    ["columns", list_type,    "type"])
         self._BindDataHandler(self._OnChange,      text_default, ["columns", text_default, "default"])
+        self._BindDataHandler(self._OnOpenItem,    button_open,  ["columns", button_open])
         self._BindDataHandler(self._OnToggleColumnFlag, check_pk,      ["columns", check_pk,      "pk"])
         self._BindDataHandler(self._OnToggleColumnFlag, check_notnull, ["columns", check_notnull, "notnull"])
         self._BindDataHandler(self._OnToggleColumnFlag, check_unique,  ["columns", check_unique,  "unique"])
         self._BindDataHandler(self._OnToggleColumnFlag, check_autoinc, ["columns", check_autoinc, "pk", "autoincrement"])
-        self._BindDataHandler(self._OnOpenItem,    button_open,   ["columns", button_open])
         ctrls = [text_name, list_type, text_default, check_pk,
                  check_autoinc, check_notnull, check_unique, button_open]
         for i, c in enumerate(ctrls):
@@ -8455,6 +8455,7 @@ class SchemaObjectPage(wx.PyPanel):
             if count: label = "%s (%s)" % (label, count)
             self._notebook_table.SetPageText(0 if ["columns"] == path else 1, label)
         panel.Parent.ContainingSizer.Layout()
+        return ctrls
 
 
     def _RemoveRow(self, path, index):
@@ -8476,19 +8477,16 @@ class SchemaObjectPage(wx.PyPanel):
             elif c in ctrlmap: self._ctrls  .pop(ctrlmap.pop(c))
             c.Destroy()
 
-        if "columns" == path[0]:
-            # Update columns grid
-            self._grid_columns.DeleteRows(index)
-            self._grid_columns.SetGridCursor(min(index, self._grid_columns.NumberRows - 1), -1)
-        elif "constraints" == path[0]:
-            # Update constranits grid
-            self._grid_constraints.DeleteRows(index)
-            self._grid_constraints.SetGridCursor(min(index, self._grid_constraints.NumberRows - 1), -1)
+        grid = self._grid_constraints if "constraints" == path[0] \
+               else self._grid_columns
+        grid.DeleteRows(index)
+        grid.SetGridCursor(min(index, grid.NumberRows - 1), -1)
+
         if "table" == self._category:
             label, count = path[0].capitalize(), len(self._item["meta"].get(path[0]) or ())
             if count: label = "%s (%s)" % (label, count)
             self._notebook_table.SetPageText(0 if ["columns"] == path else 1, label)
-        panel.ContainingSizer.Layout()
+        panel.Parent.ContainingSizer.Layout()
 
 
     def _OnAddConstraint(self, event):
@@ -8577,8 +8575,8 @@ class SchemaObjectPage(wx.PyPanel):
         self._ignore_change = True
         col = grid.GridCursorCol
         self._RemoveRow(path, index)
-        self._ignore_change = False
         self._AddRow(path, index2, ptr[index2], insert=True)
+        self._ignore_change = False
         grid.SetGridCursor(index2, col)
         self._PopulateSQL()
         self._ToggleControls(self._editmode)
@@ -8613,8 +8611,13 @@ class SchemaObjectPage(wx.PyPanel):
         util.set(self._item["meta"], data2, path)
         self.Freeze()
         path2, index = path[:-1], path[-1]
+        grid = self._grid_constraints if "constraints" == path[0] \
+               else self._grid_columns
+        self._ignore_change = True
         self._RemoveRow(path2, index)
-        self._AddRow(path2, index, data2, insert=True)
+        ctrls = self._AddRow(path2, index, data2, insert=True)
+        self._ignore_change = False
+        ctrls[-1].SetFocus()
         self._PopulateSQL()
         self._ToggleControls(self._editmode)
         self.Thaw()
