@@ -584,7 +584,9 @@ class FormDialog(wx.Dialog):
 
             if field.get("component"):
                 ctrl = field["component"](parent)
-                if isinstance(ctrl, SQLiteTextCtrl): ctrl.MinSize = (-1, 60)
+                if isinstance(ctrl, SQLiteTextCtrl):
+                    ctrl.MinSize = (-1, 60)
+                    ctrl.Traversable = True
             elif bool is field.get("type"):
                 ctrl = wx.CheckBox(parent, label=label) if self._editmode \
                        else wx.StaticText(parent, label=label)
@@ -2245,6 +2247,14 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     def IsTraversable(self):
         """Returns whether control is in traversable mode."""
         return self.traversable
+
+
+    def SetTraversable(self, traversable):
+        """Sets control traversable mode."""
+        self.Unbind(wx.EVT_CHAR_HOOK, handler=self.OnChar)
+        self.traversable = traversable
+        if traversable: self.Bind(wx.EVT_CHAR_HOOK, self.OnChar)
+    Traversable = property(IsTraversable, SetTraversable)
 
 
     def OnFocus(self, event):
