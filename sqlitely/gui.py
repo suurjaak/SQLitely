@@ -6904,8 +6904,11 @@ class SchemaObjectPage(wx.PyPanel):
         splitter.SetMinimumPaneSize(100)
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
         splitter.SplitHorizontally(panel1, panel2, splitter.Size[1] - 200)
-        if self._newmode: edit_name.SetFocus(), edit_name.SelectAll()
-        else: button_edit.SetFocus()
+        def after():
+            if not self: return
+            if self._newmode: edit_name.SetFocus(), edit_name.SelectAll()
+            else: button_edit.SetFocus()
+        wx.CallLater(0, after)
 
 
     def Close(self, force=False):
