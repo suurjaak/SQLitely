@@ -7456,9 +7456,9 @@ class SchemaObjectPage(wx.PyPanel):
 
         self._EmptyControl(self._panel_columns)
         p1, p2 = self._panel_splitter.Children
-        if  grammar.SQL.UPDATE     == meta.get("action") \
-        and grammar.SQL.INSTEAD_OF == meta.get("upon") \
-        and self._db.has_view_columns():
+
+        if grammar.SQL.UPDATE == meta.get("action") \
+        and (self._editmode or meta.get("columns")):
             self._panel_splitter.SplitHorizontally(p1, p2, self._panel_splitter.MinimumPaneSize)
             self._panel_columnsgrid.Parent.Show()
             self._grid_columns.AppendRows(len(meta.get("columns") or ()))
@@ -7613,6 +7613,7 @@ class SchemaObjectPage(wx.PyPanel):
             self._BindDataHandler(self._OnChange, ctrl_cols,     ["constraints", ctrl_cols,     "key", 0, "name"])
 
             self._ctrls.update({"constraints.columns.%s"  % rowkey: ctrl_cols})
+            ctrls = [ctrl_cols]
 
         elif grammar.SQL.FOREIGN_KEY == cnstr["type"]:
             ftable = self._db.get_category("table", cnstr["table"]) if cnstr.get("table") else {}
@@ -7662,6 +7663,7 @@ class SchemaObjectPage(wx.PyPanel):
             self._ctrls.update({"constraints.columns.%s" % rowkey: ctrl_cols,
                                 "constraints.table.%s"   % rowkey: list_table,
                                 "constraints.keys.%s"    % rowkey: ctrl_keys})
+            ctrls = [ctrl_cols, list_table, ctrl_keys]
 
         elif grammar.SQL.CHECK == cnstr["type"]:
             stc_check = controls.SQLiteTextCtrl(panel, size=(-1, 40), traversable=True)
@@ -7676,6 +7678,7 @@ class SchemaObjectPage(wx.PyPanel):
             self._BindDataHandler(self._OnChange, stc_check, ["constraints", stc_check, "check"])
 
             self._ctrls.update({"constraints.check.%s" % rowkey: stc_check})
+            ctrls = [stc_check]
 
         button_open = wx.Button(panel, label="Open", size=(50, -1))
         button_open._toggle = "skip"
@@ -7691,11 +7694,6 @@ class SchemaObjectPage(wx.PyPanel):
             self._AddSizer(panel.Sizer, sizer_item,  proportion=1, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL | wx.GROW)
             self._AddSizer(panel.Sizer, button_open, border=5, flag=wx.LEFT | wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
 
-        ctrls, children = [], list(sizer_item.Children)
-        while children:
-            si = children.pop(0)
-            if si.Sizer: children[:0] = list(si.Sizer.Children)
-            elif si.Window: ctrls.append(si.Window)
         ctrls.append(button_open)
         for i, c in enumerate(ctrls):
             c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusConstraint, [c, i]))
@@ -7764,16 +7762,13 @@ class SchemaObjectPage(wx.PyPanel):
         """Adds a new row of controls for trigger columns."""
         first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
         meta, rowkey = self._item.get("meta") or {}, wx.NewId()
-        if grammar.SQL.INSTEAD_OF == meta.get("upon"):
-            table = self._db.get_category("view", meta["table"]) \
-                    if meta.get("table") else {}
-        else:
-            table = self._db.get_category("table", meta["table"]) \
-                    if meta.get("table") else {}
-        tablecols = [x["name"] for x in table.get("columns") or ()]
+        category = "view" if grammar.SQL.INSTEAD_OF == meta.get("upon") else "table"
+        table = self._db.get_category(category, meta["table"]) \
+                if meta.get("table") else {}
+        choicecols = [x["name"] for x in table.get("columns") or ()]
         panel = self._panel_columns
 
-        list_column = wx.ComboBox(panel, choices=tablecols,
+        list_column = wx.ComboBox(panel, choices=choicecols,
             style=wx.CB_DROPDOWN | wx.CB_READONLY)
         list_column.MinSize = (200, -1)
         list_column.Value = col["name"]
@@ -8553,20 +8548,20 @@ class SchemaObjectPage(wx.PyPanel):
 
     def _OnMoveItem(self, path, direction, event=None):
         """Swaps the order of two meta items at path."""
-        if "constraints" == path[0]:
-            index = self._grid_constraints.GridCursorRow
-        else: index = self._grid_columns.GridCursorRow
+        grid = self._grid_constraints if "constraints" == path[0] \
+               else self._grid_columns
+        index = grid.GridCursorRow
         ptr = self._item["meta"]
         for i, p in enumerate(path): ptr = ptr.get(p)
         index2 = index + direction
         ptr[index], ptr[index2] = ptr[index2], ptr[index]
         self.Freeze()
         self._ignore_change = True
-        col = self._grid_columns.GridCursorCol
+        col = grid.GridCursorCol
         self._RemoveRow(path, index)
         self._ignore_change = False
         self._AddRow(path, index2, ptr[index2], insert=True)
-        self._grid_constraints.SetGridCursor(index2, col)
+        grid.SetGridCursor(index2, col)
         self._PopulateSQL()
         self._ToggleControls(self._editmode)
         self.Thaw()
@@ -8628,11 +8623,10 @@ class SchemaObjectPage(wx.PyPanel):
 
         if "trigger" == self._category:
             # Trigger special: INSTEAD OF UPDATE triggers on a view
-            if ["upon"] == path and grammar.SQL.INSTEAD_OF in (value0, value) \
-            or ["action"] == path and grammar.SQL.INSTEAD_OF == meta.get("upon") \
-            and grammar.SQL.UPDATE in (value0, value) \
-            or ["table"] == path and grammar.SQL.INSTEAD_OF == meta.get("upon") \
-            and grammar.SQL.UPDATE == meta.get("action"):
+            if ["action"] == path and grammar.SQL.UPDATE in (value0, value) \
+            or ["upon"] == path and grammar.SQL.INSTEAD_OF in (value0, value) \
+            or ["table"] == path and (grammar.SQL.UPDATE == meta.get("action")
+            or grammar.SQL.INSTEAD_OF == meta.get("upon")):
                 rebuild = True
                 meta.pop("columns", None)
                 if ["upon"] == path: meta.pop("table", None)
@@ -8956,7 +8950,9 @@ class SchemaObjectPage(wx.PyPanel):
             else: self._panel_splitter.Unsplit(p1)
         elif "trigger" == self._category:
             p1, p2 = self._panel_splitter.Children
-            if self._item["meta"].get("columns") or (self._editmode and "UPDATE" == self._item["meta"]["action"]):
+            if self._item["meta"].get("columns") or (self._editmode 
+            and (grammar.SQL.INSTEAD_OF == self._item["meta"].get("upon")
+            or grammar.SQL.UPDATE == self._item["meta"].get("action"))):
                 self._panel_splitter.SplitHorizontally(p1, p2, self._panel_splitter.MinimumPaneSize)
             else: self._panel_splitter.Unsplit(p1)
 
