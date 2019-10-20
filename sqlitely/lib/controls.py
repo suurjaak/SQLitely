@@ -1399,14 +1399,15 @@ class ScrollingHtmlWindow(wx.html.HtmlWindow):
         Appends HTML fragment to currently displayed text, refreshes the window
         and restores scroll position.
         """
-        self.Freeze()
         p, r, s = self.GetScrollPos, self.GetScrollRange, self.GetScrollPageSize
-        pos, rng, size = (x(wx.VERTICAL) for x in [p, r, s])
-        result = super(ScrollingHtmlWindow, self).AppendToPage(source)
-        if size != s(wx.VERTICAL) or pos + size >= rng:
-            pos = r(wx.VERTICAL) # Keep scroll at bottom edge
-        self.Scroll(0, pos), self._OnScroll()
-        self.Thaw()
+        self.Freeze()
+        try:
+            pos, rng, size = (x(wx.VERTICAL) for x in [p, r, s])
+            result = super(ScrollingHtmlWindow, self).AppendToPage(source)
+            if size != s(wx.VERTICAL) or pos + size >= rng:
+                pos = r(wx.VERTICAL) # Keep scroll at bottom edge
+            self.Scroll(0, pos), self._OnScroll()
+        finally: self.Thaw()
         return result
 
 
@@ -1696,78 +1697,11 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             selected = self.GetNextSelected(selected)
 
         self.Freeze()
-        wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
-        self._PopulateTopRow()
-
-        # To map list item data ID to row, ListCtrl allows only integer per row
-        row_data_map = {} # {item_id: {row dict}, }
-        item_data_map = {} # {item_id: [row values], }
-        # For measuring by which to set column width: header or value
-        header_lengths = {} # {col_name: integer}
-        col_lengths = {} # {col_name: integer}
-        for col_name, col_label in self._columns:
-            col_lengths[col_name] = 0
-            # Keep space for sorting arrows.
-            width = self.GetTextExtent(col_label + "  ")[0] + self.COL_PADDING
-            header_lengths[col_name] = width
-        index = self.GetItemCount()
-        for item_id, row in self._id_rows:
-            if not self._RowMatchesFilter(row):
-                continue # continue for index, (item_id, row) in enumerate(..)
-            col_name = self._columns[0][0]
-            col_value = self._formatters[col_name](row, col_name)
-            col_lengths[col_name] = max(col_lengths[col_name],
-                                        self.GetTextExtent(col_value)[0] + self.COL_PADDING)
-
-            if item_id in self._id_images:
-                self.InsertImageStringItem(index, col_value, self._id_images[item_id])
-            else: self.InsertStringItem(index, col_value)
-
-            self.SetItemData(index, item_id)
-            item_data_map[item_id] = {0: row[col_name]}
-            row_data_map[item_id] = row
-            col_index = 1 # First was already inserted
-            for col_name, col_label in self._columns[col_index:]:
-                col_value = self._formatters[col_name](row, col_name)
-                col_width = self.GetTextExtent(col_value)[0] + self.COL_PADDING
-                col_lengths[col_name] = max(col_lengths[col_name], col_width)
-                self.SetStringItem(index, col_index, col_value)
-                item_data_map[item_id][col_index] = row.get(col_name)
-                col_index += 1
-            self.SetItemTextColour(index, self.ForegroundColour)
-            self.SetItemBackgroundColour(index, self.BackgroundColour)
-            index += 1
-        self._data_map = row_data_map
-        self.itemDataMap = item_data_map
-
-        if self._id_rows and not self._col_widths:
-            if self._col_maxwidth > 0:
-                for col_name, width in col_lengths.items():
-                    col_lengths[col_name] = min(width, self._col_maxwidth)
-                for col_name, width in header_lengths.items():
-                    header_lengths[col_name] = min(width, self._col_maxwidth)
-            for i, (col_name, col_label) in enumerate(self._columns):
-                col_width = max(col_lengths[col_name], header_lengths[col_name])
-                self.SetColumnWidth(i, col_width)
-                self._col_widths[i] = col_width
-        elif self._col_widths:
-            for col, width in self._col_widths.items():
-                self.SetColumnWidth(col, width)
-        if self.GetSortState()[0] >= 0:
-            self.SortListItems(*self.GetSortState())
-
-        if selected_ids: # Re-select the previously selected items
-            idindx = dict((self.GetItemData(i), i)
-                          for i in range(self.GetItemCount()))
-            for item_id in selected_ids:
-                if item_id not in idindx: continue # for item_id
-                self.Select(idindx[item_id])
-                if idindx[item_id] >= self.GetCountPerPage():
-                    lh = self.GetUserLineHeight()
-                    dy = (idindx[item_id] - self.GetCountPerPage() / 2) * lh
-                    self.ScrollList(0, dy)
-
-        self.Thaw()
+        try:
+            wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
+            self._PopulateTopRow()
+            self._PopulateRows(selected_ids)
+        finally: self.Thaw()
 
 
     def ResetColumnWidths(self):
@@ -1794,9 +1728,10 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         for item_id in self._id_images:
             if item_id >= 0: self._id_images.pop(item_id)
         self.Freeze()
-        result = wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
-        self._PopulateTopRow()
-        self.Thaw()
+        try:
+            result = wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
+            self._PopulateTopRow()
+        finally: self.Thaw()
         return result
 
 
@@ -1937,17 +1872,18 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         if not selecteds: # Dragged beyond last item
             idx, selecteds = self.GetItemCount() - 1, [start]
 
-        item_ids = map(self.GetItemData, selecteds)
-        datas    = map(self.GetItemMappedData, selecteds)
-        image_ids = map(self._id_images.get, item_ids)
+        datas     = map(self.GetItemMappedData, selecteds)
+        image_ids = map(self._id_images.get, map(self.GetItemData, selecteds))
 
         self.Freeze()
-        for x in selecteds[::-1]: self.DeleteItem(x)
-        for i, (item_id, data, imageIds) in enumerate(zip(item_ids, datas, image_ids)):
-            self.InsertRow(idx + i, data, self._ConvertImageIds(imageIds, reverse=True))
-            self.Select(idx + i)
-        self._drag_start = None
-        self.Thaw()
+        try:
+            for x in selecteds[::-1]: self.DeleteItem(x)
+            for i, (data, imageIds) in enumerate(zip(datas, image_ids)):
+                imageIds0 = self._ConvertImageIds(imageIds, reverse=True)
+                self.InsertRow(idx + i, data, imageIds0)
+                self.Select(idx + i)
+            self._drag_start = None
+        finally: self.Thaw()
 
 
     def OnDragStart(self, event):
@@ -2021,6 +1957,78 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                 width -= 16 # Space for scrollbar
             self.SetColumnWidth(0, width)
         if self.GetItemCount() == 1: wx.CallAfter(resize)
+
+
+    def _PopulateRows(self, selected_ids=()):
+        """Populates all rows, restoring previous selecteds if any"""
+
+        # To map list item data ID to row, ListCtrl allows only integer per row
+        row_data_map = {} # {item_id: {row dict}, }
+        item_data_map = {} # {item_id: [row values], }
+        # For measuring by which to set column width: header or value
+        header_lengths = {} # {col_name: integer}
+        col_lengths = {} # {col_name: integer}
+        for col_name, col_label in self._columns:
+            col_lengths[col_name] = 0
+            # Keep space for sorting arrows.
+            width = self.GetTextExtent(col_label + "  ")[0] + self.COL_PADDING
+            header_lengths[col_name] = width
+        index = self.GetItemCount()
+        for item_id, row in self._id_rows:
+            if not self._RowMatchesFilter(row):
+                continue # continue for index, (item_id, row) in enumerate(..)
+            col_name = self._columns[0][0]
+            col_value = self._formatters[col_name](row, col_name)
+            col_lengths[col_name] = max(col_lengths[col_name],
+                                        self.GetTextExtent(col_value)[0] + self.COL_PADDING)
+
+            if item_id in self._id_images:
+                self.InsertImageStringItem(index, col_value, self._id_images[item_id])
+            else: self.InsertStringItem(index, col_value)
+
+            self.SetItemData(index, item_id)
+            item_data_map[item_id] = {0: row[col_name]}
+            row_data_map[item_id] = row
+            col_index = 1 # First was already inserted
+            for col_name, col_label in self._columns[col_index:]:
+                col_value = self._formatters[col_name](row, col_name)
+                col_width = self.GetTextExtent(col_value)[0] + self.COL_PADDING
+                col_lengths[col_name] = max(col_lengths[col_name], col_width)
+                self.SetStringItem(index, col_index, col_value)
+                item_data_map[item_id][col_index] = row.get(col_name)
+                col_index += 1
+            self.SetItemTextColour(index, self.ForegroundColour)
+            self.SetItemBackgroundColour(index, self.BackgroundColour)
+            index += 1
+        self._data_map = row_data_map
+        self.itemDataMap = item_data_map
+
+        if self._id_rows and not self._col_widths:
+            if self._col_maxwidth > 0:
+                for col_name, width in col_lengths.items():
+                    col_lengths[col_name] = min(width, self._col_maxwidth)
+                for col_name, width in header_lengths.items():
+                    header_lengths[col_name] = min(width, self._col_maxwidth)
+            for i, (col_name, col_label) in enumerate(self._columns):
+                col_width = max(col_lengths[col_name], header_lengths[col_name])
+                self.SetColumnWidth(i, col_width)
+                self._col_widths[i] = col_width
+        elif self._col_widths:
+            for col, width in self._col_widths.items():
+                self.SetColumnWidth(col, width)
+        if self.GetSortState()[0] >= 0:
+            self.SortListItems(*self.GetSortState())
+
+        if selected_ids: # Re-select the previously selected items
+            idindx = dict((self.GetItemData(i), i)
+                          for i in range(self.GetItemCount()))
+            for item_id in selected_ids:
+                if item_id not in idindx: continue # for item_id
+                self.Select(idindx[item_id])
+                if idindx[item_id] >= self.GetCountPerPage():
+                    lh = self.GetUserLineHeight()
+                    dy = (idindx[item_id] - self.GetCountPerPage() / 2) * lh
+                    self.ScrollList(0, dy)
 
 
     def _RowMatchesFilter(self, row):
@@ -2554,8 +2562,8 @@ class TabbedHtmlWindow(wx.PyPanel):
             self._notebook.SetAGWWindowStyleFlag(style)
 
         self._html.Freeze()
-        self._SetPage(tab["content"])
-        self._html.Thaw()
+        try:     self._SetPage(tab["content"])
+        finally: self._html.Thaw()
 
 
     def GetTabDataByID(self, id):
@@ -2580,9 +2588,10 @@ class TabbedHtmlWindow(wx.PyPanel):
             self._notebook.Refresh()
             if self._tabs[self._notebook.GetSelection()] == tab:
                 self._html.Freeze()
-                self._SetPage(tab["content"])
-                self._html.Scroll(*tab["scrollpos"])
-                self._html.Thaw()
+                try:
+                    self._SetPage(tab["content"])
+                    self._html.Scroll(*tab["scrollpos"])
+                finally: self._html.Thaw()
 
 
     def SetActiveTab(self, index):
@@ -2590,9 +2599,10 @@ class TabbedHtmlWindow(wx.PyPanel):
         tab = self._tabs[index]
         self._notebook.SetSelection(index)
         self._html.Freeze()
-        self._SetPage(tab["content"])
-        self._html.Scroll(*tab["scrollpos"])
-        self._html.Thaw()
+        try:
+            self._SetPage(tab["content"])
+            self._html.Scroll(*tab["scrollpos"])
+        finally: self._html.Thaw()
 
 
     def SetActiveTabByID(self, id):
@@ -2601,9 +2611,10 @@ class TabbedHtmlWindow(wx.PyPanel):
         index = self._tabs.index(tab)
         self._notebook.SetSelection(index)
         self._html.Freeze()
-        self._SetPage(tab["content"])
-        self._html.Scroll(*tab["scrollpos"])
-        self._html.Thaw()
+        try:
+            self._SetPage(tab["content"])
+            self._html.Scroll(*tab["scrollpos"])
+        finally: self._html.Thaw()
 
 
     def GetActiveTabData(self):

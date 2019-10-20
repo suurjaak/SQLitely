@@ -653,22 +653,23 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for dragging notebook tabs, keeps main-tab first and log-tab last.
         """
         self.notebook.Freeze()
-        self._ignore_paging = True
-        cur_page = self.notebook.GetCurrentPage()
-        idx_main = self.notebook.GetPageIndex(self.page_main)
-        if idx_main > 0:
-            text = self.notebook.GetPageText(idx_main)
-            self.notebook.RemovePage(idx_main)
-            self.notebook.InsertPage(0, page=self.page_main, text=text)
-        idx_log = self.notebook.GetPageIndex(self.page_log)
-        if 0 <= idx_log < self.notebook.GetPageCount() - 1:
-            text = self.notebook.GetPageText(idx_log)
-            self.notebook.RemovePage(idx_log)
-            self.notebook.AddPage(page=self.page_log, text=text)
-        delattr(self, "_ignore_paging")
-        if self.notebook.GetCurrentPage() != cur_page:
-            self.notebook.SetSelection(self.notebook.GetPageIndex(cur_page))
-        self.notebook.Thaw()
+        try:
+            self._ignore_paging = True
+            cur_page = self.notebook.GetCurrentPage()
+            idx_main = self.notebook.GetPageIndex(self.page_main)
+            if idx_main > 0:
+                text = self.notebook.GetPageText(idx_main)
+                self.notebook.RemovePage(idx_main)
+                self.notebook.InsertPage(0, page=self.page_main, text=text)
+            idx_log = self.notebook.GetPageIndex(self.page_log)
+            if 0 <= idx_log < self.notebook.GetPageCount() - 1:
+                text = self.notebook.GetPageText(idx_log)
+                self.notebook.RemovePage(idx_log)
+                self.notebook.AddPage(page=self.page_log, text=text)
+            delattr(self, "_ignore_paging")
+            if self.notebook.GetCurrentPage() != cur_page:
+                self.notebook.SetSelection(self.notebook.GetPageIndex(cur_page))
+        finally: self.notebook.Thaw()
 
 
     def on_size(self, event):
@@ -2843,11 +2844,12 @@ class DatabasePage(wx.Panel):
         previous_scrollpos = getattr(self.html_stats, "_last_scroll_pos", None)
         html = step.Template(templates.STATISTICS_HTML, escape=True).expand(dict(self.statistics))
         self.html_stats.Freeze()
-        self.html_stats.SetPage(html)
-        self.html_stats.BackgroundColour = conf.BgColour
-        if previous_scrollpos:
-            self.html_stats.Scroll(*previous_scrollpos)
-        self.html_stats.Thaw()
+        try:
+            self.html_stats.SetPage(html)
+            self.html_stats.BackgroundColour = conf.BgColour
+            if previous_scrollpos:
+                self.html_stats.Scroll(*previous_scrollpos)
+        finally: self.html_stats.Thaw()
         self.tb_stats.EnableTool(wx.ID_REFRESH, bool(self.statistics))
         self.tb_stats.EnableTool(wx.ID_COPY, "data" in self.statistics)
         self.tb_stats.EnableTool(wx.ID_SAVE, "data" in self.statistics)
@@ -2886,36 +2888,36 @@ class DatabasePage(wx.Panel):
         """Populates PRAGMA SQL STC with PRAGMA values-"""
         scrollpos = self.stc_pragma.GetScrollPos(wx.VERTICAL)
         self.stc_pragma.Freeze()
-        self.stc_pragma.SetReadOnly(False)
-        self.stc_pragma.Text = ""
-        values = dict(self.pragma_changes)
-        if self.pragma_fullsql:
-            values = dict(self.pragma, **values)
-            for name, opts in database.Database.PRAGMA.items():
-                if opts.get("read") or opts.get("write") is False:
-                    values.pop(name, None)
+        try:
+            self.stc_pragma.SetReadOnly(False)
+            self.stc_pragma.Text = ""
+            values = dict(self.pragma_changes)
+            if self.pragma_fullsql:
+                values = dict(self.pragma, **values)
+                for name, opts in database.Database.PRAGMA.items():
+                    if opts.get("read") or opts.get("write") is False:
+                        values.pop(name, None)
 
-        lastopts = {}
-        for name, opts in sorted(database.Database.PRAGMA.items(),
-            key=lambda x: (bool(x[1].get("deprecated")), x[1]["label"])
-        ):
-            if name not in values:
+            lastopts = {}
+            sortkey = lambda x: (bool(x[1].get("deprecated")), x[1]["label"])
+            for name, opts in sorted(database.Database.PRAGMA.items(), key=sortkey):
+                if name not in values:
+                    lastopts = opts
+                    continue # for name, opts
+
+                if opts.get("deprecated") \
+                and bool(lastopts.get("deprecated")) != bool(opts.get("deprecated")):
+                    self.stc_pragma.Text += "-- DEPRECATED:\n\n"
+
+                value = values[name]
+                if isinstance(value, basestring):
+                    value = '"%s"' % value.replace('"', '""')
+                elif isinstance(value, bool): value = str(value).upper()
+                self.stc_pragma.Text += "PRAGMA %s = %s;\n\n" % (name, value)
                 lastopts = opts
-                continue # for name, opts
-
-            if opts.get("deprecated") \
-            and bool(lastopts.get("deprecated")) != bool(opts.get("deprecated")):
-                self.stc_pragma.Text += "-- DEPRECATED:\n\n"
-
-            value = values[name]
-            if isinstance(value, basestring):
-                value = '"%s"' % value.replace('"', '""')
-            elif isinstance(value, bool): value = str(value).upper()
-            self.stc_pragma.Text += "PRAGMA %s = %s;\n\n" % (name, value)
-            lastopts = opts
-        self.stc_pragma.SetReadOnly(True)
-        self.stc_pragma.ScrollToLine(scrollpos)
-        self.stc_pragma.Thaw()
+            self.stc_pragma.SetReadOnly(True)
+            self.stc_pragma.ScrollToLine(scrollpos)
+        finally: self.stc_pragma.Thaw()
         self.update_page_header()
 
 
@@ -2942,21 +2944,23 @@ class DatabasePage(wx.Panel):
         values = dict(self.pragma, **self.pragma_changes)
         show_deprecated = False
         self.page_pragma.Freeze()
-        for name, opts in database.Database.PRAGMA.items():
-            texts = [name, opts["label"], opts["short"],
-                     self.pragma_ctrls[name].ToolTipString]
-            for kv in opts.get("values", {}).items(): texts.extend(map(str, kv))
-            if name in values: texts.append(str(values[name]))
-            show = all(any(re.search(p, x, re.I | re.U) for x in texts)
-                       for p in patterns)
-            if opts.get("deprecated"): show_deprecated |= show
-            if self.pragma_ctrls[name].Shown == show: continue # for name
-            [x.Show(show) for x in self.pragma_items[name]]
-        if show_deprecated != self.label_deprecated.Shown:
-            self.label_deprecated.Show(show_deprecated)
-        self.pragma_filter = search
-        self.page_pragma.Layout()
-        self.page_pragma.Thaw()
+        try:
+            for name, opts in database.Database.PRAGMA.items():
+                texts = [name, opts["label"], opts["short"],
+                         self.pragma_ctrls[name].ToolTipString]
+                for kv in opts.get("values", {}).items():
+                    texts.extend(map(str, kv))
+                if name in values: texts.append(str(values[name]))
+                show = all(any(re.search(p, x, re.I | re.U) for x in texts)
+                           for p in patterns)
+                if opts.get("deprecated"): show_deprecated |= show
+                if self.pragma_ctrls[name].Shown == show: continue # for name
+                [x.Show(show) for x in self.pragma_items[name]]
+            if show_deprecated != self.label_deprecated.Shown:
+                self.label_deprecated.Show(show_deprecated)
+            self.pragma_filter = search
+            self.page_pragma.Layout()
+        finally: self.page_pragma.Thaw()
 
 
     def on_pragma_key(self, event):
@@ -3835,10 +3839,11 @@ class DatabasePage(wx.Panel):
         """Opens a data object page for specified object data."""
         title = "%s %s" % (data["type"].capitalize(), grammar.quote(data["name"]))
         self.notebook_data.Freeze()
-        p = DataObjectPage(self.notebook_data, self.db, data)
-        self.data_pages[data["type"]][data.get("name") or id(p)] = p
-        self.notebook_data.InsertPage(0, page=p, text=title, select=True)
-        self.notebook_data.Thaw()
+        try:
+            p = DataObjectPage(self.notebook_data, self.db, data)
+            self.data_pages[data["type"]][data.get("name") or id(p)] = p
+            self.notebook_data.InsertPage(0, page=p, text=title, select=True)
+        finally: self.notebook_data.Thaw()
         self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
         self.TopLevelParent.run_console(
             "subpage = page.notebook_data.GetPage(0) # Data object subtab")
@@ -3889,10 +3894,11 @@ class DatabasePage(wx.Panel):
         else:
             title = "* New %s *" % data["type"]
         self.notebook_schema.Freeze()
-        p = SchemaObjectPage(self.notebook_schema, self.db, data)
-        self.schema_pages[data["type"]][data.get("name") or id(p)] = p
-        self.notebook_schema.InsertPage(0, page=p, text=title, select=True)
-        self.notebook_schema.Thaw()
+        try:
+            p = SchemaObjectPage(self.notebook_schema, self.db, data)
+            self.schema_pages[data["type"]][data.get("name") or id(p)] = p
+            self.notebook_schema.InsertPage(0, page=p, text=title, select=True)
+        finally: self.notebook_schema.Thaw()
         self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
         self.TopLevelParent.run_console(
             "subpage = page.notebook_schema.GetPage(0) # Schema object subtab")
@@ -3945,9 +3951,10 @@ class DatabasePage(wx.Panel):
         """Handler for SQL notebook tab change, adds new window if adder-tab."""
         if "+" == self.notebook_sql.GetPageText(self.notebook_sql.GetSelection()):
             self.notebook_sql.Freeze() # Avoid flicker from changing tab
-            self.add_sql_page()
-            self.update_autocomp()
-            wx.CallAfter(self.notebook_sql.Thaw)
+            try:
+                self.add_sql_page()
+                self.update_autocomp()
+            finally: wx.CallAfter(self.notebook_sql.Thaw)
 
 
     def on_dragdrop_sql_page(self, event):
@@ -4032,13 +4039,14 @@ class DatabasePage(wx.Panel):
         if not page.Close(): return event.Veto()
 
         self.notebook_sql.Freeze() # Avoid flicker when closing last
-        for k, p in self.sql_pages.items():
-            if p is page:
-                if p.Text.strip(): self.sql_pages_closed.append((k, p.Text))
-                self.sql_pages.pop(k)
-                break # for k, p
-        self.TopLevelParent.UpdateAccelerators() # Remove panel accelerators
-        wx.CallAfter(self.notebook_sql.Thaw)
+        try:
+            for k, p in self.sql_pages.items():
+                if p is page:
+                    if p.Text.strip(): self.sql_pages_closed.append((k, p.Text))
+                    self.sql_pages.pop(k)
+                    break # for k, p
+            self.TopLevelParent.UpdateAccelerators() # Remove panel accelerators
+        finally: wx.CallAfter(self.notebook_sql.Thaw)
 
 
     def on_close_data_page(self, event):
@@ -4081,10 +4089,11 @@ class DatabasePage(wx.Panel):
     def _on_close_data_export(self):
         """Hides export panel."""
         self.Freeze()
-        self.splitter_data.Show()
-        self.panel_data_export.Hide()
-        self.Layout()
-        self.Thaw()
+        try:
+            self.splitter_data.Show()
+            self.panel_data_export.Hide()
+            self.Layout()
+        finally: self.Thaw()
 
 
     def on_export_data_file(self, category, items, event=None):
@@ -4142,11 +4151,12 @@ class DatabasePage(wx.Panel):
                             "is_total_estimated": item.get("is_count_estimated")})
 
         self.Freeze()
-        self.splitter_data.Hide()
-        self.panel_data_export.Show()
-        self.panel_data_export.Export(exports)
-        self.Layout()
-        self.Thaw()
+        try:
+            self.splitter_data.Hide()
+            self.panel_data_export.Show()
+            self.panel_data_export.Export(exports)
+            self.Layout()
+        finally: self.Thaw()
 
 
     def on_export_data_base(self, tables, data=True, selects=None, event=None):
@@ -5901,14 +5911,15 @@ class SQLPage(wx.PyPanel):
         scrollpos = map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
         cursorpos = [self._grid.GridCursorRow, self._grid.GridCursorCol]
         self._grid.Freeze()
-        grid_data = SQLiteGridBase(self._db, sql=self._grid.Table.sql)
-        self._grid.Table = None # Reset grid data to empty
-        self._grid.Table = grid_data
-        self._grid.Scroll(*scrollpos)
-        maxpos = self._grid.GetNumberRows() - 1, self._grid.GetNumberCols() - 1
-        cursorpos = [min(x) for x in zip(cursorpos, maxpos)]
-        self._grid.SetGridCursor(*cursorpos)
-        self._grid.Thaw()
+        try:
+            grid_data = SQLiteGridBase(self._db, sql=self._grid.Table.sql)
+            self._grid.Table = None # Reset grid data to empty
+            self._grid.Table = grid_data
+            self._grid.Scroll(*scrollpos)
+            maxpos = self._grid.GetNumberRows() - 1, self._grid.GetNumberCols() - 1
+            cursorpos = [min(x) for x in zip(cursorpos, maxpos)]
+            self._grid.SetGridCursor(*cursorpos)
+        finally; self._grid.Thaw()
 
 
     def Close(self, force=False):
@@ -5969,11 +5980,12 @@ class SQLPage(wx.PyPanel):
             )
             opts = {"filename": filename, "callable": exporter}
             self.Freeze()
-            for x in self._panel2.Children: x.Hide()
-            self._export.Show()
-            self._export.Export(opts)
-            self._panel2.Layout()
-            self.Thaw()
+            try:
+                for x in self._panel2.Children: x.Hide()
+                self._export.Show()
+                self._export.Export(opts)
+                self._panel2.Layout()
+            finally: self.Thaw()
         except Exception as e:
             msg = "Error saving %s."
             logger.exception(msg, filename)
@@ -5985,10 +5997,11 @@ class SQLPage(wx.PyPanel):
     def _OnExportClose(self):
         """Handler for closing export panel."""
         self.Freeze()
-        for x in self._panel2.Children: x.Show()
-        self._export.Hide()
-        self.Layout()
-        self.Thaw()
+        try:
+            for x in self._panel2.Children: x.Show()
+            self._export.Hide()
+            self.Layout()
+        finally: self.Thaw()
 
 
     def _OnFilter(self, event):
@@ -6512,11 +6525,12 @@ class DataObjectPage(wx.PyPanel):
             } if "filter" not in grid.GetFilterSort() else {})
 
             self.Freeze()
-            for x in self.Children: x.Hide()
-            self._export.Show()
-            self._export.Export(opts)
-            self.Layout()
-            self.Thaw()
+            try:
+                for x in self.Children: x.Hide()
+                self._export.Show()
+                self._export.Export(opts)
+                self.Layout()
+            finally: self.Thaw()
         except Exception as e:
             msg = "Error saving %s."
             logger.exception(msg, filename)
@@ -6530,10 +6544,11 @@ class DataObjectPage(wx.PyPanel):
         Handler for closing export panel.
         """
         self.Freeze()
-        for x in self.Children: x.Show()
-        self._export.Hide()
-        self.Layout()
-        self.Thaw()
+        trY:
+            for x in self.Children: x.Show()
+            self._export.Hide()
+            self.Layout()
+        finally: self.Thaw()
 
 
     def _OnInsert(self, event):
@@ -6614,18 +6629,19 @@ class DataObjectPage(wx.PyPanel):
         cursorpos = [self._grid.GridCursorRow, self._grid.GridCursorCol]
         state = self._grid.Table.GetFilterSort()
         self._grid.Freeze()
-        self._grid.Table = None # Reset grid data to empty
-        self._Populate()
+        try:
+            self._grid.Table = None # Reset grid data to empty
+            self._Populate()
 
-        if pending: self._grid.Table.SetChanges(self._backup)
-        else: self._backup = None
+            if pending: self._grid.Table.SetChanges(self._backup)
+            else: self._backup = None
 
-        self._grid.Table.SetFilterSort(state)
-        self._grid.Scroll(*scrollpos)
-        maxpos = self._grid.GetNumberRows() - 1, self._grid.GetNumberCols() - 1
-        cursorpos = [max(0, min(x)) for x in zip(cursorpos, maxpos)]
-        self._grid.SetGridCursor(*cursorpos)
-        self._grid.Thaw()
+            self._grid.Table.SetFilterSort(state)
+            self._grid.Scroll(*scrollpos)
+            maxpos = self._grid.GetNumberRows() - 1, self._grid.GetNumberCols() - 1
+            cursorpos = [max(0, min(x)) for x in zip(cursorpos, maxpos)]
+            self._grid.SetGridCursor(*cursorpos)
+        finally: self._grid.Thaw()
         self._OnChange()
 
 
@@ -7363,19 +7379,19 @@ class SchemaObjectPage(wx.PyPanel):
         data, meta = self._item, self._item.get("meta") or {}
         self._ignore_change = True
         self.Freeze()
+        try:
+            self._ctrls["name"].Value = meta.get("name") or ""
 
-        self._ctrls["name"].Value = meta.get("name") or ""
+            self._sizers.clear()
+            if   "table"   == data["type"]: self._PopulateTable()
+            elif "index"   == data["type"]: self._PopulateIndex()
+            elif "trigger" == data["type"]: self._PopulateTrigger()
+            elif "view"    == data["type"]: self._PopulateView()
 
-        self._sizers.clear()
-        if   "table"   == data["type"]: self._PopulateTable()
-        elif "index"   == data["type"]: self._PopulateIndex()
-        elif "trigger" == data["type"]: self._PopulateTrigger()
-        elif "view"    == data["type"]: self._PopulateView()
-
-        self._PopulateSQL()
-        self._ToggleControls(self._editmode)
-        self.Layout()
-        self.Thaw()
+            self._PopulateSQL()
+            self._ToggleControls(self._editmode)
+            self.Layout()
+        finally: self.Thaw()
         wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
 
 
@@ -7893,7 +7909,6 @@ class SchemaObjectPage(wx.PyPanel):
 
     def _ToggleControls(self, edit):
         """Toggles controls editable/readonly, updates buttons state."""
-        self.Freeze()
         for b in self._buttons.values():
             action = getattr(b, "_toggle", None) or []
             if callable(action): action = action() or []
@@ -7917,7 +7932,6 @@ class SchemaObjectPage(wx.PyPanel):
         for c in (c for n, c in vars(self).items() if n.startswith("_panel_")):
             c.ContainingSizer.Layout()
         self.Layout()
-        self.Thaw()
 
 
     def _PopulateAutoComp(self):
@@ -8303,10 +8317,12 @@ class SchemaObjectPage(wx.PyPanel):
         def populate_rows(focus=False):
             """"""
             dialog.Freeze()
-            self._EmptyControl(panel_columns)
-            for i, col in enumerate(data.get("key") or ()): add_row(i, col, focus)
-            dialog.Layout()
-            dialog.Thaw()
+            try:
+                self._EmptyControl(panel_columns)
+                for i, col in enumerate(data.get("key") or ()):
+                    add_row(i, col, focus)
+                dialog.Layout()
+            finally: dialog.Thaw()
 
         def size_dialog():
             w = 530 if dialog._editmode else 460
@@ -8498,18 +8514,20 @@ class SchemaObjectPage(wx.PyPanel):
             constraints = self._item["meta"].setdefault("constraints", [])
             constraints.append(constraint)
             self.Freeze()
-            self._AddRow(["constraints"], len(constraints) - 1, constraint)
-            self._PopulateSQL()
-            self._grid_constraints.GoToCell(self._grid_constraints.NumberRows - 1, 0)
-            self.Thaw()
+            try:
+                self._AddRow(["constraints"], len(constraints) - 1, constraint)
+                self._PopulateSQL()
+                self._grid_constraints.GoToCell(len(constraints) - 1, 0)
+            finally: self.Thaw()
 
         menu = wx.Menu()
         for ctype in self.TABLECONSTRAINT:
             it = wx.MenuItem(menu, -1, ctype)
             menu.AppendItem(it)
             if grammar.SQL.PRIMARY_KEY == ctype \
-            and any(grammar.SQL.PRIMARY_KEY == x["type"]
-                    for x in self._item["meta"].get("constraints") or []):
+            and (any(grammar.SQL.PRIMARY_KEY == x["type"]
+                    for x in self._item["meta"].get("constraints") or ())
+            or any(x.get("pk") for x in self._item["meta"].get("columns") or ())):
                 menu.Enable(it.GetId(), False)
             menu.Bind(wx.EVT_MENU, functools.partial(add_constraint, ctype), id=it.GetId())
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
@@ -8527,10 +8545,11 @@ class SchemaObjectPage(wx.PyPanel):
         ptr.append(copy.deepcopy(value))
         panel = self._panel_columns if ["columns"] == path else self._panel_constraints
         self.Freeze()
-        self._AddRow(path, len(ptr) - 1, value)
-        self._PopulateSQL()
-        self._grid_columns.GoToCell(self._grid_columns.NumberRows - 1, 0)
-        self.Thaw()
+        try:
+            self._AddRow(path, len(ptr) - 1, value)
+            self._PopulateSQL()
+            self._grid_columns.GoToCell(self._grid_columns.NumberRows - 1, 0)
+        finally: self.Thaw()
         self._PostEvent(modified=True)
 
 
@@ -8543,8 +8562,6 @@ class SchemaObjectPage(wx.PyPanel):
         for i, p in enumerate(path): ptr = ptr.get(p)
         mydata = ptr[index]
         ptr[index:index+1] = []
-        self.Freeze()
-        self._RemoveRow(path, index)
 
         if "table" == self._category and "columns" == path[0]:
             # Queue removing column from constraints
@@ -8556,9 +8573,12 @@ class SchemaObjectPage(wx.PyPanel):
             if self._col_updater: self._col_updater.Stop()
             self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
 
-        self._PopulateSQL()
-        self.Layout()
-        self.Thaw()
+        self.Freeze()
+        try:
+            self._RemoveRow(path, index)
+            self._PopulateSQL()
+            self.Layout()
+        finally: self.Thaw()
         self._PostEvent(modified=True)
 
 
@@ -8572,12 +8592,13 @@ class SchemaObjectPage(wx.PyPanel):
         index2 = index + direction
         ptr[index], ptr[index2] = ptr[index2], ptr[index]
         self.Freeze()
-        col = grid.GridCursorCol
-        self._RemoveRow(path, index)
-        self._AddRow(path, index2, ptr[index2], insert=True)
-        grid.SetGridCursor(index2, col)
-        self._PopulateSQL()
-        self.Thaw()
+        try:
+            col = grid.GridCursorCol
+            self._RemoveRow(path, index)
+            self._AddRow(path, index2, ptr[index2], insert=True)
+            grid.SetGridCursor(index2, col)
+            self._PopulateSQL()
+        finally: self.Thaw()
         self._PostEvent(modified=True)
 
 
@@ -8606,15 +8627,16 @@ class SchemaObjectPage(wx.PyPanel):
         if data == data2: return
 
         util.set(self._item["meta"], data2, path)
-        self.Freeze()
         path2, index = path[:-1], path[-1]
         grid = self._grid_constraints if "constraints" == path[0] \
                else self._grid_columns
-        self._RemoveRow(path2, index)
-        ctrls = self._AddRow(path2, index, data2, insert=True)
-        ctrls[-1].SetFocus()
-        self._PopulateSQL()
-        self.Thaw()
+        self.Freeze()
+        try:
+            self._RemoveRow(path2, index)
+            ctrls = self._AddRow(path2, index, data2, insert=True)
+            self._PopulateSQL()
+            ctrls[-1].SetFocus()
+        finally: self.Thaw()
         self._PostEvent(modified=True)
 
 
@@ -8653,9 +8675,10 @@ class SchemaObjectPage(wx.PyPanel):
                 data2 = util.get(meta, fkpath)
                 if data2.get("key"): data2["key"][:] = []
                 self.Freeze()
-                self._RemoveRow(path2, index)
-                self._AddRow(path2, index, data2, insert=True)
-                self.Thaw()
+                try:
+                    self._RemoveRow(path2, index)
+                    self._AddRow(path2, index, data2, insert=True)
+                finally: self.Thaw()
             elif "columns" == path[0] and "name" == path[-1]:
                 col = util.get(meta, path[:-1])
                 if value0 and not value: col["name_last"] = value0
@@ -8814,15 +8837,16 @@ class SchemaObjectPage(wx.PyPanel):
         if not changed and not renames: return
 
         self.Freeze()
-        self._EmptyControl(self._panel_constraints)
-        for i, cnstr in enumerate(constraints):
-            self._AddRowTableConstraint(["constraints"], i, cnstr)
-        self._panel_constraints.ContainingSizer.Layout()
-        self._notebook_table.SetPageText(1, "Constraints" if not constraints
-                                         else "Constraints (%s)" % len(constraints))
-        self._PopulateSQL()
+        try:
+            self._EmptyControl(self._panel_constraints)
+            for i, cnstr in enumerate(constraints):
+                self._AddRowTableConstraint(["constraints"], i, cnstr)
+            self._panel_constraints.ContainingSizer.Layout()
+            t = "Constraints" + ("(%s)" % len(constraints) if constraints else "")
+            self._notebook_table.SetPageText(1, t)
+            self._PopulateSQL()
+        finally: self.Thaw()
         wx.CallAfter(self._SizeConstraintsGrid)
-        self.Thaw()
 
 
     def _OnToggleColumnFlag(self, path, event):
@@ -8958,29 +8982,35 @@ class SchemaObjectPage(wx.PyPanel):
             self._PostEvent(close=True)
             return
 
-        if "view" == self._category:
-            p1, p2 = self._panel_splitter.Children
-            if self._db.has_view_columns() and (self._item["meta"].get("columns") or self._editmode):
-                self._panel_splitter.SplitHorizontally(p1, p2, self._panel_splitter.MinimumPaneSize)
-            else: self._panel_splitter.Unsplit(p1)
-        elif "trigger" == self._category:
-            p1, p2 = self._panel_splitter.Children
-            if self._item["meta"].get("columns") or (self._editmode 
-            and (grammar.SQL.INSTEAD_OF == self._item["meta"].get("upon")
-            or grammar.SQL.UPDATE == self._item["meta"].get("action"))):
-                self._panel_splitter.SplitHorizontally(p1, p2, self._panel_splitter.MinimumPaneSize)
-            else: self._panel_splitter.Unsplit(p1)
+        self.Freeze()
+        try:
+            # Show or hide view/trigger columns section where not relevant
+            if "view" == self._category:
+                splitter, p1, p2 = self._panel_splitter, self._panel_splitter.Children
+                if self._db.has_view_columns() \
+                and (self._item["meta"].get("columns") or self._editmode):
+                    splitter.SplitHorizontally(p1, p2, splitter.MinimumPaneSize)
+                else: splitter.Unsplit(p1)
+            elif "trigger" == self._category:
+                splitter, p1, p2 = self._panel_splitter, self._panel_splitter.Children
+                if self._item["meta"].get("columns") or (self._editmode 
+                and (grammar.SQL.INSTEAD_OF == self._item["meta"].get("upon")
+                or grammar.SQL.UPDATE == self._item["meta"].get("action"))):
+                    splitter.SplitHorizontally(p1, p2, splitter.MinimumPaneSize)
+                else: splitter.Unsplit(p1)
 
-        if self._editmode:
-            self._ToggleControls(self._editmode)
-            self._buttons["edit"].ToolTipString = "Validate and confirm SQL, and save to database schema"
-        else:
-            self._buttons["edit"].ToolTipString = ""
-            if self._show_alter: self._OnToggleAlterSQL()
-            if is_changed: self._OnRefresh()
-            else:
-                self._item = copy.deepcopy(self._original)
+            if self._editmode:
                 self._ToggleControls(self._editmode)
+                self._buttons["edit"].ToolTipString = "Validate and confirm SQL, " \
+                                                      "and save to database schema"
+            else:
+                self._buttons["edit"].ToolTipString = ""
+                if self._show_alter: self._OnToggleAlterSQL()
+                if is_changed: self._OnRefresh()
+                else:
+                    self._item = copy.deepcopy(self._original)
+                    self._ToggleControls(self._editmode)
+        finally: self.Thaw()
         self._PostEvent(modified=True)
 
 
