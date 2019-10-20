@@ -7610,23 +7610,15 @@ class SchemaObjectPage(wx.PyPanel):
                 ctrl_cols.SetEditable(False); ctrl_cols._toggle = "disable"
             else:
                 ctrl_cols  = wx.ComboBox(panel, choices=mycolumns, style=wx.CB_DROPDOWN | wx.CB_READONLY)
-            label_conflict = wx.StaticText(panel, label=grammar.SQL.ON_CONFLICT + ":")
-            list_conflict  = wx.ComboBox(panel, choices=self.CONFLICT, style=wx.CB_DROPDOWN | wx.CB_READONLY)
 
             ctrl_cols.MinSize = (150, -1)
             ctrl_cols.Value = ", ".join(kcols)
-            list_conflict.Value = cnstr.get("conflict") or ""
 
             sizer_item.Add(ctrl_cols, proportion=1, flag=wx.GROW)
-            sizer_item.Add(label_conflict, border=5, flag=wx.LEFT | wx.ALIGN_CENTER_VERTICAL)
-            sizer_item.Add(list_conflict,  border=5, flag=wx.LEFT)
 
-            label_conflict.Bind(wx.EVT_LEFT_UP, lambda e: list_conflict.SetFocus())
             self._BindDataHandler(self._OnChange, ctrl_cols,     ["constraints", ctrl_cols,     "key", 0, "name"])
-            self._BindDataHandler(self._OnChange, list_conflict, ["constraints", list_conflict, "conflict"])
 
-            self._ctrls.update({"constraints.columns.%s"  % rowkey: ctrl_cols,
-                                "constraints.conflict.%s" % rowkey: list_conflict})
+            self._ctrls.update({"constraints.columns.%s"  % rowkey: ctrl_cols})
 
         elif grammar.SQL.FOREIGN_KEY == cnstr["type"]:
             ftable = self._db.get_category("table", cnstr["table"]) if cnstr.get("table") else {}
