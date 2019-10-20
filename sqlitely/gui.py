@@ -8994,7 +8994,7 @@ class SchemaObjectPage(wx.PyPanel):
             errors += ["Action is required."]
         if "view"    == self._category and not meta.get("select"):
             errors += ["Select is required."]
-        if "table"   == self._category and not meta.get("columns"):
+        if self._category in ("table", "index") and not meta.get("columns"):
             errors += ["Columns are required."]
 
         if (self._newmode or name.lower() != self._item["name"].lower()) \
