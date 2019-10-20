@@ -6976,14 +6976,12 @@ class SchemaObjectPage(wx.PyPanel):
         nb = self._notebook_table = wx.Notebook(panel)
 
         panel_columnwrapper = wx.Panel(nb)
-        sizer_columnwrapper = panel_columnwrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_columnstop    = wx.FlexGridSizer(cols=6)
-        sizer_columnflags   = wx.BoxSizer(wx.HORIZONTAL)
-        panel_columnsgrid, sizer_columnbuttons = self._MakeColumnsGrid(panel_columnwrapper, cols=5)
+        panel_columnwrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
+        self._MakeColumnsGrid(panel_columnwrapper)
 
         panel_constraintwrapper = wx.Panel(nb)
-        sizer_constraintwrapper = panel_constraintwrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
-        panel_constraintsgrid, sizer_constraintbuttons = self._MakeConstraintsGrid(panel_constraintwrapper, cols=3)
+        panel_constraintwrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
+        self._MakeConstraintsGrid(panel_constraintwrapper)
 
         sizer_flags.Add(check_temp)
         sizer_flags.AddSpacer((100, -1))
@@ -6991,38 +6989,16 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_flags.AddSpacer((100, -1))
         sizer_flags.Add(check_rowid)
 
-        for l, t in [("P", grammar.SQL.PRIMARY_KEY), ("I", grammar.SQL.AUTOINCREMENT),
-                     ("N", grammar.SQL.NOT_NULL),    ("U", grammar.SQL.UNIQUE)]:
-            label = wx.StaticText(panel_columnwrapper, label=l, size=(14, -1))
-            label.ToolTipString = t
-            sizer_columnflags.Add(label)
-
-        sizer_columnstop.AddSpacer((50, 0))
-        sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Name",    size=(150, -1)), border=7, flag=wx.LEFT)
-        sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Type",    size=(100, -1)))
-        sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Default", size=(100, -1)))
-        sizer_columnstop.Add(sizer_columnflags, border=5, flag=wx.LEFT | wx.RIGHT)
-        sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Options", size=(50, -1)))
-
-        sizer_columnwrapper.Add(sizer_columnstop, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
-        sizer_columnwrapper.Add(panel_columnsgrid, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
-        sizer_columnwrapper.Add(sizer_columnbuttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
-
-        sizer_constraintwrapper.Add(panel_constraintsgrid, border=5, proportion=1, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
-        sizer_constraintwrapper.Add(sizer_constraintbuttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
-
         nb.AddPage(panel_columnwrapper,     "Columns")
         nb.AddPage(panel_constraintwrapper, "Constraints")
 
         sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
         sizer.Add(nb, proportion=1, border=5, flag=wx.TOP | wx.GROW)
 
-        self._BindDataHandler(self._OnChange,  check_temp,   ["temporary"])
-        self._BindDataHandler(self._OnChange,  check_exists, ["exists"])
-        self._BindDataHandler(self._OnChange,  check_rowid,  ["without"])
+        self._BindDataHandler(self._OnChange, check_temp,   ["temporary"])
+        self._BindDataHandler(self._OnChange, check_exists, ["exists"])
+        self._BindDataHandler(self._OnChange, check_rowid,  ["without"])
 
-        panel_columnsgrid.SetupScrolling()
-        panel_constraintsgrid.SetupScrolling()
         return panel
 
 
@@ -7030,10 +7006,9 @@ class SchemaObjectPage(wx.PyPanel):
         """Returns control panel for CREATE INDEX page."""
         panel = wx.Panel(parent)
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_table   = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_where   = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_columnstop = wx.FlexGridSizer(cols=4)
+        sizer_table = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_flags = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_where = wx.BoxSizer(wx.HORIZONTAL)
 
         label_table = wx.StaticText(panel, label="&Table:")
         list_table = self._ctrls["table"] = wx.ComboBox(panel,
@@ -7043,9 +7018,8 @@ class SchemaObjectPage(wx.PyPanel):
         check_exists = self._ctrls["exists"] = wx.CheckBox(panel, label="IF NOT &EXISTS")
 
         panel_wrapper = wx.Panel(panel, style=wx.BORDER_STATIC)
-        sizer_wrapper = panel_wrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
-
-        panel_columnsgrid, sizer_columnbuttons = self._MakeColumnsGrid(panel_wrapper, cols=4)
+        panel_wrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
+        self._MakeColumnsGrid(panel_wrapper)
 
         label_where = wx.StaticText(panel, label="WHE&RE:")
         stc_where   = self._ctrls["where"] = controls.SQLiteTextCtrl(panel,
@@ -7060,15 +7034,6 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_flags.AddSpacer((100, -1))
         sizer_flags.Add(check_exists)
 
-        sizer_columnstop.AddSpacer((50, 0))
-        sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Column or expression",  size=(250, -1)), border=5, flag=wx.LEFT)
-        sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Collate", size=( 80, -1)))
-        sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Order",   size=( 60, -1)))
-
-        sizer_wrapper.Add(sizer_columnstop, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
-        sizer_wrapper.Add(panel_columnsgrid, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
-        sizer_wrapper.Add(sizer_columnbuttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
-
         sizer_where.Add(label_where, border=5, flag=wx.RIGHT)
         sizer_where.Add(stc_where, proportion=1, flag=wx.GROW)
 
@@ -7077,12 +7042,11 @@ class SchemaObjectPage(wx.PyPanel):
         sizer.Add(panel_wrapper, proportion=1, flag=wx.GROW)
         sizer.Add(sizer_where, border=5, flag=wx.TOP | wx.GROW)
 
-        self._BindDataHandler(self._OnChange,  list_table,   ["table"])
-        self._BindDataHandler(self._OnChange,  check_unique, ["unique"])
-        self._BindDataHandler(self._OnChange,  check_exists, ["exists"])
-        self._BindDataHandler(self._OnChange,  stc_where,    ["where"])
+        self._BindDataHandler(self._OnChange, list_table,   ["table"])
+        self._BindDataHandler(self._OnChange, check_unique, ["unique"])
+        self._BindDataHandler(self._OnChange, check_exists, ["exists"])
+        self._BindDataHandler(self._OnChange, stc_where,    ["where"])
 
-        panel_columnsgrid.SetupScrolling()
         return panel
 
 
@@ -7090,11 +7054,10 @@ class SchemaObjectPage(wx.PyPanel):
         """Returns control panel for CREATE TRIGGER page."""
         panel = wx.Panel(parent)
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_table   = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_body    = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_when    = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_columnstop = wx.FlexGridSizer(cols=2)
+        sizer_table = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_flags = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_body  = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_when  = wx.BoxSizer(wx.HORIZONTAL)
 
         label_table = self._ctrls["label_table"] = wx.StaticText(panel, label="&Table:")
         list_table = self._ctrls["table"] = wx.ComboBox(panel,
@@ -7115,10 +7078,7 @@ class SchemaObjectPage(wx.PyPanel):
         panel1, panel2 = wx.Panel(splitter, style=wx.BORDER_STATIC), wx.Panel(splitter)
         panel1.Sizer, panel2.Sizer = wx.BoxSizer(wx.VERTICAL), wx.BoxSizer(wx.VERTICAL)
 
-        sizer_columnstop.AddSpacer((50, 0))
-        sizer_columnstop.Add(wx.StaticText(panel1, label="Column",  size=(200, -1)), border=5, flag=wx.LEFT)
-
-        panel_columnsgrid, sizer_columnbuttons = self._MakeColumnsGrid(panel1, cols=2)
+        self._MakeColumnsGrid(panel1)
 
         label_body = wx.StaticText(panel2, label="&Body:")
         stc_body   = self._ctrls["body"] = controls.SQLiteTextCtrl(panel2,
@@ -7147,10 +7107,6 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_flags.AddSpacer((100, -1))
         sizer_flags.Add(check_for)
 
-        panel1.Sizer.Add(sizer_columnstop, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
-        panel1.Sizer.Add(panel_columnsgrid, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
-        panel1.Sizer.Add(sizer_columnbuttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
-
         sizer_body.Add(label_body, border=5, flag=wx.RIGHT)
         sizer_body.Add(stc_body, proportion=1, flag=wx.GROW)
 
@@ -7164,16 +7120,15 @@ class SchemaObjectPage(wx.PyPanel):
         sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
 
-        self._BindDataHandler(self._OnChange,  list_table,    ["table"])
-        self._BindDataHandler(self._OnChange,  list_upon,     ["upon"])
-        self._BindDataHandler(self._OnChange,  list_action,   ["action"])
-        self._BindDataHandler(self._OnChange,  check_temp,    ["temporary"])
-        self._BindDataHandler(self._OnChange,  check_exists,  ["exists"])
-        self._BindDataHandler(self._OnChange,  check_for,     ["for"])
-        self._BindDataHandler(self._OnChange,  stc_body,      ["body"])
-        self._BindDataHandler(self._OnChange,  stc_when,      ["when"])
+        self._BindDataHandler(self._OnChange, list_table,   ["table"])
+        self._BindDataHandler(self._OnChange, list_upon,    ["upon"])
+        self._BindDataHandler(self._OnChange, list_action,  ["action"])
+        self._BindDataHandler(self._OnChange, check_temp,   ["temporary"])
+        self._BindDataHandler(self._OnChange, check_exists, ["exists"])
+        self._BindDataHandler(self._OnChange, check_for,    ["for"])
+        self._BindDataHandler(self._OnChange, stc_body,     ["body"])
+        self._BindDataHandler(self._OnChange, stc_when,     ["when"])
 
-        panel_columnsgrid.SetupScrolling()
         splitter.SetMinimumPaneSize(105)
         splitter.SplitHorizontally(panel1, panel2, splitter.MinimumPaneSize)
         return panel
@@ -7183,9 +7138,8 @@ class SchemaObjectPage(wx.PyPanel):
         """Returns control panel for CREATE VIEW page."""
         panel = wx.Panel(parent)
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_select  = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_columnstop = wx.FlexGridSizer(cols=2)
+        sizer_flags  = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_select = wx.BoxSizer(wx.HORIZONTAL)
 
         check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
         check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT &EXISTS")
@@ -7194,10 +7148,7 @@ class SchemaObjectPage(wx.PyPanel):
         panel1, panel2 = wx.Panel(splitter, style=wx.BORDER_STATIC), wx.Panel(splitter)
         panel1.Sizer, panel2.Sizer = wx.BoxSizer(wx.VERTICAL), wx.BoxSizer(wx.HORIZONTAL)
 
-        sizer_columnstop.AddSpacer((50, 0))
-        sizer_columnstop.Add(wx.StaticText(panel1, label="Column",  size=(200, -1)), border=5, flag=wx.LEFT)
-
-        panel_columnsgrid, sizer_columnbuttons = self._MakeColumnsGrid(panel1, cols=2)
+        self._MakeColumnsGrid(panel1)
 
         label_body = wx.StaticText(panel2, label="Se&lect:")
         stc_body = self._ctrls["select"] = controls.SQLiteTextCtrl(panel2,
@@ -7209,33 +7160,55 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_flags.AddSpacer((100, -1))
         sizer_flags.Add(check_exists)
 
-        panel1.Sizer.Add(sizer_columnstop, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
-        panel1.Sizer.Add(panel_columnsgrid, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
-        panel1.Sizer.Add(sizer_columnbuttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
-
         panel2.Sizer.Add(label_body, border=5, flag=wx.RIGHT)
         panel2.Sizer.Add(stc_body, proportion=1, flag=wx.GROW)
 
         sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
 
-        self._BindDataHandler(self._OnChange,  check_temp,   ["temporary"])
-        self._BindDataHandler(self._OnChange,  check_exists, ["exists"])
-        self._BindDataHandler(self._OnChange,  stc_body,     ["select"])
+        self._BindDataHandler(self._OnChange, check_temp,   ["temporary"])
+        self._BindDataHandler(self._OnChange, check_exists, ["exists"])
+        self._BindDataHandler(self._OnChange, stc_body,     ["select"])
 
         splitter.SetMinimumPaneSize(105)
         splitter.SplitHorizontally(panel1, panel2, splitter.MinimumPaneSize)
         return panel
 
 
-    def _MakeColumnsGrid(self, panel, cols):
-        """Returns panel columns grid-panel and column management buttons-sizer."""
-        pstyle = wx.BORDER_STATIC if "table" == self._category else 0
-        panel_columnsgrid = self._panel_columnsgrid = wx.lib.scrolledpanel.ScrolledPanel(panel, style=pstyle)
-        panel_columnsgrid.Sizer = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_columnbuttons = wx.BoxSizer(wx.HORIZONTAL)
+    def _MakeColumnsGrid(self, panel):
+        """Adds panel columns header, grid-panel and column management buttons-sizer."""
+        cols = {"table": 5, "index": 4, "trigger": 2, "view": 2}[self._category]
 
-        grid_columns = self._grid_columns = wx.grid.Grid(panel_columnsgrid)
+        sizer_headers = wx.FlexGridSizer(cols=cols+1)
+        pstyle = wx.BORDER_STATIC if "table" == self._category else 0
+        panel_grid = self._panel_columnsgrid = wx.lib.scrolledpanel.ScrolledPanel(panel, style=pstyle)
+        panel_grid.Sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+
+        sizer_headers.AddSpacer((50, 0))
+        if "table" == self._category:
+            sizer_columnflags = wx.BoxSizer(wx.HORIZONTAL)
+            for l, t in [("P", grammar.SQL.PRIMARY_KEY), ("I", grammar.SQL.AUTOINCREMENT),
+                         ("N", grammar.SQL.NOT_NULL),    ("U", grammar.SQL.UNIQUE)]:
+                label = wx.StaticText(panel, label=l, size=(14, -1))
+                label.ToolTipString = t
+                sizer_columnflags.Add(label)
+
+            sizer_headers.Add(wx.StaticText(panel, label="Name",    size=(150, -1)), border=7, flag=wx.LEFT)
+            sizer_headers.Add(wx.StaticText(panel, label="Type",    size=(100, -1)))
+            sizer_headers.Add(wx.StaticText(panel, label="Default", size=(100, -1)))
+            sizer_headers.Add(sizer_columnflags, border=5, flag=wx.LEFT | wx.RIGHT)
+            sizer_headers.Add(wx.StaticText(panel, label="Options", size=(50, -1)))
+        elif "index" == self._category:
+            sizer_headers.Add(wx.StaticText(panel, label="Column or expression",  size=(250, -1)), border=7, flag=wx.LEFT)
+            sizer_headers.Add(wx.StaticText(panel, label="Collate", size=( 80, -1)))
+            sizer_headers.Add(wx.StaticText(panel, label="Order",   size=( 60, -1)))
+        elif "trigger" == self._category:
+            sizer_headers.Add(wx.StaticText(panel, label="Column",  size=(200, -1)), border=7, flag=wx.LEFT)
+        elif "view" == self._category:
+            sizer_headers.Add(wx.StaticText(panel, label="Column",  size=(200, -1)), border=7, flag=wx.LEFT)
+
+        grid_columns = self._grid_columns = wx.grid.Grid(panel_grid)
         grid_columns.DisableDragRowSize()
         grid_columns.DisableDragColSize()
         grid_columns.HideColLabels()
@@ -7248,7 +7221,7 @@ class SchemaObjectPage(wx.PyPanel):
         ColourManager.Manage(grid_columns, "LabelBackgroundColour", wx.SYS_COLOUR_BTNFACE)
         ColourManager.Manage(grid_columns, "LabelTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
 
-        panel_columns = self._panel_columns = wx.Panel(panel_columnsgrid)
+        panel_columns = self._panel_columns = wx.Panel(panel_grid)
         panel_columns.Sizer = wx.FlexGridSizer(cols=cols)
 
         button_add_column = self._buttons["add_column"]    = wx.Button(panel, label="&Add column")
@@ -7272,32 +7245,36 @@ class SchemaObjectPage(wx.PyPanel):
         button_move_down._toggle  = lambda: "show disable" if not grid_columns.NumberRows or grid_columns.GridCursorRow == grid_columns.NumberRows - 1 else "show"
         button_remove_col._toggle = lambda: "show disable" if not grid_columns.NumberRows else "show"
 
-        sizer_columnbuttons.AddStretchSpacer()
-        sizer_columnbuttons.Add(button_add_column, border=5, flag=wx.RIGHT)
+        sizer_buttons.AddStretchSpacer()
+        sizer_buttons.Add(button_add_column, border=5, flag=wx.RIGHT)
         if "index" == self._category:
-            sizer_columnbuttons.Add(button_add_expr, border=5, flag=wx.RIGHT)
-        sizer_columnbuttons.Add(button_move_up,    border=5, flag=wx.RIGHT)
-        sizer_columnbuttons.Add(button_move_down,  border=5, flag=wx.RIGHT)
-        sizer_columnbuttons.Add(button_remove_col)
+            sizer_buttons.Add(button_add_expr, border=5, flag=wx.RIGHT)
+        sizer_buttons.Add(button_move_up,    border=5, flag=wx.RIGHT)
+        sizer_buttons.Add(button_move_down,  border=5, flag=wx.RIGHT)
+        sizer_buttons.Add(button_remove_col)
 
-        panel_columnsgrid.Sizer.Add(grid_columns, flag=wx.GROW)
-        panel_columnsgrid.Sizer.Add(panel_columns, proportion=1, flag=wx.GROW)
+        panel_grid.Sizer.Add(grid_columns, flag=wx.GROW)
+        panel_grid.Sizer.Add(panel_columns, proportion=1, flag=wx.GROW)
+
+        panel.Sizer.Add(sizer_headers, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
+        panel.Sizer.Add(panel_grid, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
+        panel.Sizer.Add(sizer_buttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
+
+        panel_grid.SetupScrolling()
 
         self._BindDataHandler(self._OnAddItem,    button_add_column, ["columns"], {"name": ""})
         if "index" == self._category:
             self._BindDataHandler(self._OnAddItem, button_add_expr,  ["columns"], {"expr": ""})
-        self._BindDataHandler(self._OnMoveItem,   button_move_up,    ["columns"],   -1)
+        self._BindDataHandler(self._OnMoveItem,   button_move_up,    ["columns"], -1)
         self._BindDataHandler(self._OnMoveItem,   button_move_down,  ["columns"], +1)
         self._BindDataHandler(self._OnRemoveItem, button_remove_col, ["columns"])
 
         self.Bind(wx.grid.EVT_GRID_SELECT_CELL,  self._OnSelectGridRow, grid_columns)
         self.Bind(wx.grid.EVT_GRID_RANGE_SELECT, self._OnSelectGridRow, grid_columns)
 
-        return panel_columnsgrid, sizer_columnbuttons
 
-
-    def _MakeConstraintsGrid(self, panel, cols):
-        """Returns panel constraints grid-panel and constraint management buttons-sizer."""
+    def _MakeConstraintsGrid(self, panel):
+        """Adds panel constraints grid-panel and constraint management buttons-sizer."""
         panel_constraintsgrid = self._panel_constraintsgrid = wx.lib.scrolledpanel.ScrolledPanel(panel, style=wx.BORDER_STATIC)
         panel_constraintsgrid.Sizer = wx.BoxSizer(wx.HORIZONTAL)
         sizer_constraintbuttons = wx.BoxSizer(wx.HORIZONTAL)
@@ -7316,7 +7293,7 @@ class SchemaObjectPage(wx.PyPanel):
         ColourManager.Manage(grid_constraints, "LabelTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
 
         panel_constraints = self._panel_constraints = wx.Panel(panel_constraintsgrid)
-        panel_constraints.Sizer = wx.FlexGridSizer(cols=cols)
+        panel_constraints.Sizer = wx.FlexGridSizer(cols=3)
         panel_constraints.Sizer.AddGrowableCol(1)
 
         button_add       = self._buttons["add_constraint"]      = wx.Button(panel, label="&Add constraint")
@@ -7341,6 +7318,11 @@ class SchemaObjectPage(wx.PyPanel):
         panel_constraintsgrid.Sizer.Add(grid_constraints, flag=wx.GROW)
         panel_constraintsgrid.Sizer.Add(panel_constraints, proportion=1, flag=wx.GROW)
 
+        panel.Sizer.Add(panel_constraintsgrid, border=5, proportion=1, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
+        panel.Sizer.Add(sizer_constraintbuttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
+
+        panel_constraintsgrid.SetupScrolling()
+
         self.Bind(wx.EVT_BUTTON, self._OnAddConstraint, button_add)
         self._BindDataHandler(self._OnMoveItem,   button_move_up,   ["constraints"], -1)
         self._BindDataHandler(self._OnMoveItem,   button_move_down, ["constraints"], +1)
@@ -7348,8 +7330,6 @@ class SchemaObjectPage(wx.PyPanel):
 
         self.Bind(wx.grid.EVT_GRID_SELECT_CELL,  self._OnSelectConstraintGridRow, grid_constraints)
         self.Bind(wx.grid.EVT_GRID_RANGE_SELECT, self._OnSelectConstraintGridRow, grid_constraints)
-
-        return panel_constraintsgrid, sizer_constraintbuttons
 
 
     def _Populate(self):
@@ -8964,7 +8944,7 @@ class SchemaObjectPage(wx.PyPanel):
 
         if self._editmode:
             self._ToggleControls(self._editmode)
-            self._buttons["edit"].ToolTipString = "Confirm SQL and save to database schema"
+            self._buttons["edit"].ToolTipString = "Validate and confirm SQL, and save to database schema"
         else:
             self._buttons["edit"].ToolTipString = ""
             if self._show_alter: self._OnToggleAlterSQL()
