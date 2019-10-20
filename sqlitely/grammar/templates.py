@@ -554,8 +554,8 @@ if not isdef("i"): i = 0
 
   {{ data.get("type") or "" }}
 
-%if "CHECK" == data.get("type") and data.get("check"):
-  ({{ WS(data["check"]) }})
+%if "CHECK" == data.get("type"):
+  ({{ WS(data.get("check") or "") }})
 %endif
 
 %if data.get("type") in ("PRIMARY KEY", "UNIQUE"):

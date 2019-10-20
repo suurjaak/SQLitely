@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.10.2019
+@modified    20.10.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3838,6 +3838,8 @@ class DatabasePage(wx.Panel):
         self.data_pages[data["type"]][data.get("name") or id(p)] = p
         self.notebook_data.InsertPage(0, page=p, text=title, select=True)
         self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
+        self.TopLevelParent.run_console(
+            "subpage = page.notebook_data.GetPage(0) # Data object subtab")
 
 
     def add_sql_page(self, name="", text=""):
@@ -3888,6 +3890,8 @@ class DatabasePage(wx.Panel):
         self.schema_pages[data["type"]][data.get("name") or id(p)] = p
         self.notebook_schema.InsertPage(0, page=p, text=title, select=True)
         self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
+        self.TopLevelParent.run_console(
+            "subpage = page.notebook_schema.GetPage(0) # Schema object subtab")
 
 
     def on_close_schema_page(self, event):
@@ -6976,14 +6980,7 @@ class SchemaObjectPage(wx.PyPanel):
 
         panel_constraintwrapper = wx.Panel(nb)
         sizer_constraintwrapper = panel_constraintwrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_constraintbuttons = wx.BoxSizer(wx.HORIZONTAL)
-
-        panel_constraints = self._panel_constraints = wx.lib.scrolledpanel.ScrolledPanel(panel_constraintwrapper, style=wx.BORDER_STATIC)
-        panel_constraints.Sizer = wx.FlexGridSizer(cols=3, vgap=4, hgap=10)
-        panel_constraints.Sizer.AddGrowableCol(1)
-
-        button_add_constraint = self._buttons["add_constraint"] = wx.Button(panel_constraintwrapper, label="&Add constraint")
-        button_add_constraint._toggle = "show"
+        panel_constraintsgrid, sizer_constraintbuttons = self._MakeConstraintsGrid(panel_constraintwrapper, cols=3)
 
         sizer_flags.Add(check_temp)
         sizer_flags.AddSpacer((100, -1))
@@ -7004,14 +7001,11 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_columnstop.Add(sizer_columnflags, border=5, flag=wx.LEFT | wx.RIGHT)
         sizer_columnstop.Add(wx.StaticText(panel_columnwrapper, label="Options", size=(50, -1)))
 
-        sizer_constraintbuttons.AddStretchSpacer()
-        sizer_constraintbuttons.Add(button_add_constraint)
-
         sizer_columnwrapper.Add(sizer_columnstop, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
         sizer_columnwrapper.Add(panel_columnsgrid, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
         sizer_columnwrapper.Add(sizer_columnbuttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
-        sizer_constraintwrapper.Add(panel_constraints, border=5, proportion=1, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
+        sizer_constraintwrapper.Add(panel_constraintsgrid, border=5, proportion=1, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
         sizer_constraintwrapper.Add(sizer_constraintbuttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
         nb.AddPage(panel_columnwrapper,     "Columns")
@@ -7023,10 +7017,9 @@ class SchemaObjectPage(wx.PyPanel):
         self._BindDataHandler(self._OnChange,  check_temp,   ["temporary"])
         self._BindDataHandler(self._OnChange,  check_exists, ["exists"])
         self._BindDataHandler(self._OnChange,  check_rowid,  ["without"])
-        self.Bind(wx.EVT_BUTTON, self._OnAddConstraint, button_add_constraint)
 
         panel_columnsgrid.SetupScrolling()
-        panel_constraints.SetupScrolling()
+        panel_constraintsgrid.SetupScrolling()
         return panel
 
 
@@ -7262,11 +7255,11 @@ class SchemaObjectPage(wx.PyPanel):
             button_add_expr.ToolTipString = "Add index expression"
         button_move_up    = self._buttons["move_up"]       = wx.Button(panel, label="Move up")
         button_move_down  = self._buttons["move_down"]     = wx.Button(panel, label="Move down")
-        button_remove_col = self._buttons["remove_column"] = wx.Button(panel, label="Remove column" if "table" == self._category else "Remove")
+        button_remove_col = self._buttons["remove_column"] = wx.Button(panel, label="Remove")
         button_move_up.Enabled = button_move_down.Enabled = False
-        button_move_up.ToolTipString    = "Move row one step higher"
-        button_move_down.ToolTipString  = "Move row one step lower"
-        button_remove_col.ToolTipString = "Delete row"
+        button_move_up.ToolTipString    = "Move item one step higher"
+        button_move_down.ToolTipString  = "Move item one step lower"
+        button_remove_col.ToolTipString = "Delete item"
         button_add_column._toggle = "show"
         if "index" == self._category:
             button_add_column._toggle = button_add_expr._toggle = lambda: (
@@ -7300,6 +7293,62 @@ class SchemaObjectPage(wx.PyPanel):
         return panel_columnsgrid, sizer_columnbuttons
 
 
+    def _MakeConstraintsGrid(self, panel, cols):
+        """Returns panel constraints grid-panel and constraint management buttons-sizer."""
+        panel_constraintsgrid = self._panel_constraintsgrid = wx.lib.scrolledpanel.ScrolledPanel(panel, style=wx.BORDER_STATIC)
+        panel_constraintsgrid.Sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_constraintbuttons = wx.BoxSizer(wx.HORIZONTAL)
+
+        grid_constraints = self._grid_constraints = wx.grid.Grid(panel_constraintsgrid)
+        grid_constraints.DisableDragRowSize()
+        grid_constraints.DisableDragColSize()
+        grid_constraints.HideColLabels()
+        grid_constraints.SetRowLabelSize(50)
+        grid_constraints.SetDefaultRowSize(23)
+        grid_constraints.SetCellHighlightPenWidth(0)
+        grid_constraints.SetCellHighlightROPenWidth(0)
+        grid_constraints.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
+        grid_constraints.CreateGrid(0, 0, wx.grid.Grid.SelectRows)
+        ColourManager.Manage(grid_constraints, "LabelBackgroundColour", wx.SYS_COLOUR_BTNFACE)
+        ColourManager.Manage(grid_constraints, "LabelTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
+
+        panel_constraints = self._panel_constraints = wx.Panel(panel_constraintsgrid)
+        panel_constraints.Sizer = wx.FlexGridSizer(cols=cols)
+        panel_constraints.Sizer.AddGrowableCol(1)
+
+        button_add       = self._buttons["add_constraint"]      = wx.Button(panel, label="&Add constraint")
+        button_move_up   = self._buttons["move_constraint_up"]  = wx.Button(panel, label="Move up")
+        button_move_down = self._buttons["move_constraint_down"] = wx.Button(panel, label="Move down")
+        button_remove    = self._buttons["remove_constraint"]   = wx.Button(panel, label="Remove")
+        button_move_up.Enabled = button_move_down.Enabled = False
+        button_move_up.ToolTipString    = "Move constraint one step higher"
+        button_move_down.ToolTipString  = "Move constraint one step lower"
+        button_remove.ToolTipString = "Delete constraint"
+        button_add._toggle = "show"
+        button_move_up._toggle    = lambda: "show disable" if not grid_constraints.NumberRows or grid_constraints.GridCursorRow <= 0 else "show"
+        button_move_down._toggle  = lambda: "show disable" if not grid_constraints.NumberRows or grid_constraints.GridCursorRow == grid_constraints.NumberRows - 1 else "show"
+        button_remove._toggle     = lambda: "show disable" if not grid_constraints.NumberRows else "show"
+
+        sizer_constraintbuttons.AddStretchSpacer()
+        sizer_constraintbuttons.Add(button_add, border=5, flag=wx.RIGHT)
+        sizer_constraintbuttons.Add(button_move_up,    border=5, flag=wx.RIGHT)
+        sizer_constraintbuttons.Add(button_move_down,  border=5, flag=wx.RIGHT)
+        sizer_constraintbuttons.Add(button_remove)
+
+        panel_constraintsgrid.Sizer.Add(grid_constraints, flag=wx.GROW)
+        panel_constraintsgrid.Sizer.Add(panel_constraints, proportion=1, flag=wx.GROW)
+
+        self.Bind(wx.EVT_BUTTON, self._OnAddConstraint, button_add)
+        self._BindDataHandler(self._OnMoveItem,   button_move_up,   ["constraints"], -1)
+        self._BindDataHandler(self._OnMoveItem,   button_move_down, ["constraints"], +1)
+        self._BindDataHandler(self._OnRemoveItem, button_remove,    ["constraints"])
+
+        self.Bind(wx.grid.EVT_GRID_SELECT_CELL,  self._OnSelectConstraintGridRow, grid_constraints)
+        self.Bind(wx.grid.EVT_GRID_RANGE_SELECT, self._OnSelectConstraintGridRow, grid_constraints)
+
+        return panel_constraintsgrid, sizer_constraintbuttons
+
+
     def _Populate(self):
         """Populates panel with item data."""
         data, meta = self._item, self._item.get("meta") or {}
@@ -7315,10 +7364,10 @@ class SchemaObjectPage(wx.PyPanel):
         elif "view"    == data["type"]: self._PopulateView()
 
         self._PopulateSQL()
-        self._ignore_change = False
         self._ToggleControls(self._editmode)
         self.Layout()
         self.Thaw()
+        wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
 
 
     def _PopulateTable(self):
@@ -7340,12 +7389,22 @@ class SchemaObjectPage(wx.PyPanel):
             self._AddRowTable(["columns"], i, coldata)
         if self._grid_columns.NumberRows:
             row = min(max(0, row), self._grid_columns.NumberRows - 1)
-            self._grid_columns.SetGridCursor(row, col)
+            wx.CallLater(0, self._grid_columns.SetGridCursor, row, col)
         self._panel_columns.Layout()
+
+        row, col = self._grid_constraints.GridCursorRow, self._grid_constraints.GridCursorCol
+        if self._grid_constraints.NumberRows:
+            self._grid_constraints.SetGridCursor(-1, col)
+            self._grid_constraints.DeleteRows(0, self._grid_constraints.NumberRows)
+        self._grid_constraints.AppendRows(len(meta.get("constraints") or ()))
 
         self._EmptyControl(self._panel_constraints)
         for i, cnstr in enumerate(meta.get("constraints") or ()):
             self._AddRowTableConstraint(["constraints"], i, cnstr)
+        if self._grid_constraints.NumberRows:
+            row = min(max(0, row), self._grid_constraints.NumberRows - 1)
+            wx.CallLater(0, self._grid_constraints.SetGridCursor, row, col)
+            wx.CallAfter(self._SizeConstraintsGrid)
         self._panel_constraints.Layout()
 
         lencol, lencnstr =  (len(meta.get(x) or ()) for x in ("columns", "constraints"))
@@ -7538,10 +7597,9 @@ class SchemaObjectPage(wx.PyPanel):
 
         mycolumns = [x["name"] for x in meta.get("columns") or () if x["name"]]
 
-        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_item    = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_item = wx.BoxSizer(wx.HORIZONTAL)
 
-        label_type = wx.StaticText(panel, label=cnstr["type"])
+        label_type = wx.StaticText(panel, label=cnstr["type"], name="constraint_%s_label" % rowkey)
 
         if grammar.SQL.PRIMARY_KEY == cnstr["type"] \
         or grammar.SQL.UNIQUE      == cnstr["type"]:
@@ -7554,28 +7612,21 @@ class SchemaObjectPage(wx.PyPanel):
                 ctrl_cols  = wx.ComboBox(panel, choices=mycolumns, style=wx.CB_DROPDOWN | wx.CB_READONLY)
             label_conflict = wx.StaticText(panel, label=grammar.SQL.ON_CONFLICT + ":")
             list_conflict  = wx.ComboBox(panel, choices=self.CONFLICT, style=wx.CB_DROPDOWN | wx.CB_READONLY)
-            button_open = wx.Button(panel, label="O", size=(20, -1))
 
             ctrl_cols.MinSize = (150, -1)
-            button_open._toggle = "skip"
-            button_open.ToolTipString   = "Open advanced options"
-
             ctrl_cols.Value = ", ".join(kcols)
+            ctrl_cols.Name = "constraint_%s" % rowkey
             list_conflict.Value = cnstr.get("conflict") or ""
 
-            sizer_item.Add(ctrl_cols)
+            sizer_item.Add(ctrl_cols, proportion=1, flag=wx.GROW)
             sizer_item.Add(label_conflict, border=5, flag=wx.LEFT | wx.ALIGN_CENTER_VERTICAL)
             sizer_item.Add(list_conflict,  border=5, flag=wx.LEFT)
 
-            sizer_buttons.Add(button_open)
-
             self._BindDataHandler(self._OnChange,   ctrl_cols,     ["constraints", ctrl_cols,     "key", 0, "name"])
             self._BindDataHandler(self._OnChange,   list_conflict, ["constraints", list_conflict, "conflict"])
-            self._BindDataHandler(self._OnOpenItem, button_open,   ["constraints", button_open])
 
             self._ctrls.update({"constraints.columns.%s"  % rowkey: ctrl_cols,
                                 "constraints.conflict.%s" % rowkey: list_conflict})
-            self._buttons.update({"constraints.open.%s"   % rowkey: button_open})
 
         elif grammar.SQL.FOREIGN_KEY == cnstr["type"]:
             ftable = self._db.get_category("table", cnstr["table"]) if cnstr.get("table") else {}
@@ -7583,7 +7634,8 @@ class SchemaObjectPage(wx.PyPanel):
             kcols  = cnstr.get("columns") or ()
             fkcols = cnstr.get("key")     or ()
 
-            sizer_foreign = wx.FlexGridSizer(cols=2, vgap=4, hgap=10)
+            sizer_foreign = wx.FlexGridSizer(cols=2, vgap=0, hgap=5)
+            sizer_foreign.AddGrowableCol(1)
 
             if len(kcols) > 1:
                 ctrl_cols  = wx.TextCtrl(panel)
@@ -7598,40 +7650,36 @@ class SchemaObjectPage(wx.PyPanel):
                 ctrl_keys.SetEditable(False); ctrl_keys._toggle = "disable"
             else:
                 ctrl_keys = wx.ComboBox(panel, choices=fcolumns, style=wx.CB_DROPDOWN | wx.CB_READONLY)
-            button_open = wx.Button(panel, label="O", size=(20, -1))
 
-            ctrl_cols.MinSize  = (150, -1)
-            list_table.MinSize = (150, -1)
-            ctrl_keys.MinSize  = (150, -1)
-            button_open._toggle = "skip"
-            button_open.ToolTipString   = "Open advanced options"
+            ctrl_cols.MinSize  = (125, -1)
+            list_table.MinSize = (125, -1)
+            ctrl_keys.MinSize  = (125, -1)
 
+            ctrl_cols.Name = "constraint_%s" % rowkey
             ctrl_cols.Value  = ", ".join(kcols)
             list_table.Value = cnstr.get("table") or ""
             ctrl_keys.Value  = ", ".join(fkcols)
 
             sizer_foreign.Add(label_table, flag=wx.ALIGN_CENTER_VERTICAL)
-            sizer_foreign.Add(list_table)
+            sizer_foreign.Add(list_table, flag=wx.GROW)
             sizer_foreign.Add(label_keys,  flag=wx.ALIGN_CENTER_VERTICAL)
-            sizer_foreign.Add(ctrl_keys)
+            sizer_foreign.Add(ctrl_keys, flag=wx.GROW)
 
-            sizer_item.Add(ctrl_cols, flag=wx.ALIGN_CENTER_VERTICAL)
-            self._AddSizer(sizer_item, sizer_foreign, border=5, flag=wx.LEFT)
-
-            sizer_buttons.Add(button_open)
+            sizer_item.Add(ctrl_cols, proportion=1, flag=wx.ALIGN_CENTER_VERTICAL)
+            self._AddSizer(sizer_item, sizer_foreign, proportion=1, border=5, flag=wx.LEFT)
 
             self._BindDataHandler(self._OnChange,   ctrl_cols,   ["constraints", ctrl_cols,  "columns"])
             self._BindDataHandler(self._OnChange,   list_table,  ["constraints", list_table, "table"])
             self._BindDataHandler(self._OnChange,   ctrl_keys,   ["constraints", ctrl_keys,  "key"])
-            self._BindDataHandler(self._OnOpenItem, button_open, ["constraints", button_open])
 
             self._ctrls.update({"constraints.columns.%s" % rowkey: ctrl_cols,
                                 "constraints.table.%s"   % rowkey: list_table,
                                 "constraints.keys.%s"    % rowkey: ctrl_keys})
-            self._buttons.update({"constraints.open.%s"  % rowkey: button_open})
 
         elif grammar.SQL.CHECK == cnstr["type"]:
             stc_check = controls.SQLiteTextCtrl(panel, size=(-1, 40))
+            stc_check.Name = "constraint_%s" % rowkey
+            stc_check.Text = cnstr.get("check") or ""
 
             label_type.ToolTipString = "Expression yielding a NUMERIC 0 on " \
                                        "constraint violation,\ncannot contain a subquery."
@@ -7643,41 +7691,31 @@ class SchemaObjectPage(wx.PyPanel):
             self._ctrls.update({"constraints.check.%s" % rowkey: stc_check})
 
 
-        button_up     = wx.Button(panel, label=u"\u2191", size=(20, -1))
-        button_down   = wx.Button(panel, label=u"\u2193", size=(20, -1))
-        button_remove = wx.Button(panel, label=u"\u2715", size=(20, -1))
+        button_open = wx.Button(panel, label="Open", size=(50, -1))
+        button_open._toggle = "skip"
+        button_open.ToolTipString   = "Open advanced options"
+        self._BindDataHandler(self._OnOpenItem, button_open, ["constraints", button_open])
 
-        button_remove._toggle = "show"
-        button_up._toggle   = self._GetMoveButtonToggle(button_up,   -1)
-        button_down._toggle = self._GetMoveButtonToggle(button_down, +1)
-        if first: button_up.Enable(False)
-        if last:  button_down.Enable(False)
-        button_up.ToolTipString     = "Move one step higher"
-        button_down.ToolTipString   = "Move one step lower"
-        button_remove.ToolTipString = "Remove"
-
-        sizer_buttons.Add(button_up)
-        sizer_buttons.Add(button_down)
-        sizer_buttons.Add(button_remove)
-
-        vertical = (wx.TOP if first else wx.BOTTOM if last else 0)
         if insert:
             start = panel.Sizer.Cols * i
-            panel.Sizer.Insert(start, label_type, border=5, flag=vertical | wx.LEFT  | wx.ALIGN_CENTER_VERTICAL)
-            self._AddSizer(panel.Sizer, sizer_item,     border=5, flag=vertical | wx.LEFT  | wx.ALIGN_CENTER_VERTICAL | wx.GROW, insert=start+1)
-            self._AddSizer(panel.Sizer, sizer_buttons,  border=5, flag=vertical | wx.RIGHT | wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL, insert=start+2)
+            panel.Sizer.Insert(start, label_type, border=5, flag=wx.LEFT  | wx.ALIGN_CENTER_VERTICAL)
+            self._AddSizer(panel.Sizer, sizer_item,  proportion=1, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL | wx.GROW, insert=start+1)
+            self._AddSizer(panel.Sizer, button_open, border=5, flag=wx.LEFT | wx.RIGHT | wx.ALIGN_CENTER_VERTICAL, insert=start+2)
         else:
-            panel.Sizer.Add(label_type, border=5, flag=vertical | wx.LEFT  | wx.ALIGN_CENTER_VERTICAL)
-            self._AddSizer(panel.Sizer, sizer_item,     border=5, flag=vertical | wx.LEFT  | wx.ALIGN_CENTER_VERTICAL | wx.GROW)
-            self._AddSizer(panel.Sizer, sizer_buttons,  border=5, flag=vertical | wx.RIGHT | wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
+            panel.Sizer.Add(label_type, border=5, flag=wx.LEFT  | wx.ALIGN_CENTER_VERTICAL)
+            self._AddSizer(panel.Sizer, sizer_item,  proportion=1, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL | wx.GROW)
+            self._AddSizer(panel.Sizer, button_open, border=5, flag=wx.LEFT | wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
 
-        self._BindDataHandler(self._OnMoveItem,   button_up,     ["constraints", button_up],   -1)
-        self._BindDataHandler(self._OnMoveItem,   button_down,   ["constraints", button_down], +1)
-        self._BindDataHandler(self._OnRemoveItem, button_remove, ["constraints", button_remove])
+        ctrls, children = [], list(sizer_item.Children)
+        while children:
+            si = children.pop(0)
+            if si.Sizer: children[:0] = list(si.Sizer.Children)
+            elif si.Window: ctrls.append(si.Window)
+        ctrls.append(button_open)
+        for i, c in enumerate(ctrls):
+            c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusConstraint, [c, i]))
 
-        self._buttons.update({"constraints.up.%s"     % rowkey: button_up,
-                              "constraints.down.%s"   % rowkey: button_down,
-                              "constraints.remove.%s" % rowkey: button_remove, })
+        self._buttons.update({"constraints.open.%s"  % rowkey: button_open})
         if focus: sizer_item.Children[0].Window.SetFocus()
 
 
@@ -7838,6 +7876,13 @@ class SchemaObjectPage(wx.PyPanel):
             if c in buttonmap: self._buttons.pop(buttonmap.pop(c))
             elif c in ctrlmap: self._ctrls  .pop(ctrlmap.pop(c))
             c.Destroy()
+
+
+    def _SizeConstraintsGrid(self):
+        """Sizes constraints grid rows to fit items."""
+        sizer = self._panel_constraints.Sizer
+        for i in range(self._grid_constraints.NumberRows):
+            self._grid_constraints.SetRowSize(i, sizer.Children[3 * i + 1].Size[1])
 
 
     def _ToggleControls(self, edit):
@@ -8374,7 +8419,9 @@ class SchemaObjectPage(wx.PyPanel):
         if "table" == self._category:
             adder = self._AddRowTable
             if "constraints" == path[-1]:
+                self._grid_constraints.AppendRows(1)
                 adder, panel = self._AddRowTableConstraint, self._panel_constraints
+                wx.CallAfter(self._SizeConstraintsGrid)
         elif "index"   == self._category: adder = self._AddRowIndex
         elif "trigger" == self._category: adder = self._AddRowTrigger
         elif "view"    == self._category: adder = self._AddRowView
@@ -8385,7 +8432,7 @@ class SchemaObjectPage(wx.PyPanel):
             label, count = path[0].capitalize(), len(self._item["meta"].get(path[0]) or ())
             if count: label = "%s (%s)" % (label, count)
             self._notebook_table.SetPageText(0 if ["columns"] == path else 1, label)
-        panel.ContainingSizer.Layout()
+        panel.Parent.ContainingSizer.Layout()
 
 
     def _RemoveRow(self, path, index):
@@ -8411,6 +8458,10 @@ class SchemaObjectPage(wx.PyPanel):
             # Update columns grid
             self._grid_columns.DeleteRows(index)
             self._grid_columns.SetGridCursor(min(index, self._grid_columns.NumberRows - 1), -1)
+        elif "constraints" == path[0]:
+            # Update constranits grid
+            self._grid_constraints.DeleteRows(index)
+            self._grid_constraints.SetGridCursor(min(index, self._grid_constraints.NumberRows - 1), -1)
         if "table" == self._category:
             label, count = path[0].capitalize(), len(self._item["meta"].get(path[0]) or ())
             if count: label = "%s (%s)" % (label, count)
@@ -8426,14 +8477,9 @@ class SchemaObjectPage(wx.PyPanel):
             constraint = copy.deepcopy(self.TABLECONSTRAINT_DEFAULTS[ctype])
             constraints = self._item["meta"].setdefault("constraints", [])
             constraints.append(constraint)
-            self._AddRowTableConstraint(["constraints"], len(constraints) - 1,
-                                        constraint, focus=True)
-            self._ToggleControls(self._editmode)
-
-            label, count = "Constraints", len(self._item["meta"].get("constraints") or ())
-            if count: label = "%s (%s)" % (label, count)
-            self._notebook_table.SetPageText(1, label)
-            self._panel_constraints.ContainingSizer.Layout()
+            self._AddRow(["constraints"], len(constraints) - 1, constraint, focus=True)
+            self._PopulateSQL()
+            self._panel_constraints.Parent.ContainingSizer.Layout()
 
         menu = wx.Menu()
         for ctype in self.TABLECONSTRAINT:
@@ -8454,7 +8500,7 @@ class SchemaObjectPage(wx.PyPanel):
             ptr = ptr.get(p)
             if ptr is None: ptr = parent[p] = {} if i < len(path) - 1 else []
             parent = ptr
-        if self._category in ("table", "trigger", "view") and ["columns"] == path:
+        if self._category in ("table", "view") and ["columns"] == path:
             value = dict(value, __id__=wx.NewId())
         ptr.append(copy.deepcopy(value))
         panel = self._panel_columns if ["columns"] == path else self._panel_constraints
@@ -8462,8 +8508,7 @@ class SchemaObjectPage(wx.PyPanel):
         self._AddRow(path, len(ptr) - 1, value, focus=True)
         self._PopulateSQL()
         self._ToggleControls(self._editmode)
-        panel.ContainingSizer.Layout()
-        self.Layout()
+        panel.Parent.ContainingSizer.Layout()
         self.Thaw()
         self._PostEvent(modified=True)
 
@@ -8471,7 +8516,7 @@ class SchemaObjectPage(wx.PyPanel):
     def _OnRemoveItem(self, path, event=None):
         """Removes item from object meta and item controls from panel at path."""
         if "constraints" == path[0]:
-            path, index = path[:-1], path[-1]
+            index = self._grid_constraints.GridCursorRow
         else: index = self._grid_columns.GridCursorRow
         ptr = self._item["meta"]
         for i, p in enumerate(path): ptr = ptr.get(p)
@@ -8499,16 +8544,20 @@ class SchemaObjectPage(wx.PyPanel):
 
     def _OnMoveItem(self, path, direction, event=None):
         """Swaps the order of two meta items at path."""
-        index = self._grid_columns.GridCursorRow
+        if "constraints" == path[0]:
+            index = self._grid_constraints.GridCursorRow
+        else: index = self._grid_columns.GridCursorRow
         ptr = self._item["meta"]
         for i, p in enumerate(path): ptr = ptr.get(p)
         index2 = index + direction
         ptr[index], ptr[index2] = ptr[index2], ptr[index]
         self.Freeze()
+        self._ignore_change = True
         col = self._grid_columns.GridCursorCol
         self._RemoveRow(path, index)
+        self._ignore_change = False
         self._AddRow(path, index2, ptr[index2], insert=True)
-        self._grid_columns.SetGridCursor(index2, col)
+        self._grid_constraints.SetGridCursor(index2, col)
         self._PopulateSQL()
         self._ToggleControls(self._editmode)
         self.Thaw()
@@ -8615,6 +8664,10 @@ class SchemaObjectPage(wx.PyPanel):
         sets focused control in row.
         """
         event.Skip()
+        if self._ignore_change or not self._grid_columns.NumberRows \
+        or isinstance(event, wx.grid.GridRangeSelectEvent) and not event.Selecting():
+            return
+
         if isinstance(event, wx.grid.GridRangeSelectEvent):
             row = event.TopRow
             col = self._grid_columns.GridCursorCol
@@ -8625,10 +8678,9 @@ class SchemaObjectPage(wx.PyPanel):
             self._grid_columns.SetRowLabelValue(i, "%s%s  " % (pref, i + 1))
         self._grid_columns.ForceRefresh()
 
-        if row >= 0 and self._grid_columns.NumberRows:
+        if row >= 0:
             COLS = {"table": 8, "index": 3, "trigger": 1, "view": 1}
             index, ctrl = (row * COLS[self._category]) + max(0, col), None
-            count = len(self._panel_columns.Children)
             i, children = -1, list(self._panel_columns.Sizer.Children)
             while children:
                 si = children.pop(0)
@@ -8648,6 +8700,36 @@ class SchemaObjectPage(wx.PyPanel):
         self._buttons["remove_column"].Enable(row >= 0)
 
 
+    def _OnSelectConstraintGridRow(self, event):
+        """Handler for selecting constraints grid row, updates row labels."""
+        event.Skip()
+        if self._ignore_change or not self._grid_constraints.NumberRows \
+        or isinstance(event, wx.grid.GridRangeSelectEvent) and not event.Selecting():
+            return
+
+        if isinstance(event, wx.grid.GridRangeSelectEvent):
+            row, col = event.TopRow, -1
+        else: row, col = event.Row, event.Col
+        row0, col0 = self._grid_constraints.GridCursorRow, self._grid_columns.GridCursorCol
+        for i in range(self._grid_constraints.NumberRows):
+            pref = u"\u25ba " if row == i else "" # Right-pointing pointer symbol
+            self._grid_constraints.SetRowLabelValue(i, "%s%s  " % (pref, i + 1))
+        self._grid_constraints.ForceRefresh()
+
+        COLS = self._panel_constraints.Sizer.Cols
+        if row >= 0 and col <= 0 and self._grid_constraints.NumberRows \
+        and row * COLS < len(self._panel_constraints.Sizer.Children):
+            subsizer = self._panel_constraints.Sizer.Children[COLS * row + 1].Sizer
+            ctrl = subsizer.Children[0].Window
+            if ctrl and ctrl.Enabled and not ctrl.HasFocus():
+                ctrl.SetFocus()
+                if isinstance(ctrl, wx.ComboBox) and ctrl.IsEditable():
+                    ctrl.SelectAll()
+        self._buttons["move_constraint_up"].Enable(row > 0)
+        self._buttons["move_constraint_down"].Enable(0 <= row < self._grid_constraints.NumberRows - 1)
+        self._buttons["remove_constraint"].Enable(row >= 0)
+
+
     def _OnFocusColumn(self, path, event):
         """
         Handler for focusing a column row, updates grid header,
@@ -8655,6 +8737,12 @@ class SchemaObjectPage(wx.PyPanel):
         """
         event.Skip()
         self._grid_columns.SetGridCursor(*path)
+
+
+    def _OnFocusConstraint(self, path, event):
+        """Handler for focusing a constraint row, updates grid header."""
+        event.Skip()
+        self._grid_constraints.SetGridCursor(*path)
 
 
     def _OnCascadeColumnUpdates(self):
@@ -8717,6 +8805,7 @@ class SchemaObjectPage(wx.PyPanel):
         self._notebook_table.SetPageText(1, "Constraints" if not constraints
                                          else "Constraints (%s)" % len(constraints))
         self._PopulateSQL()
+        wx.CallAfter(self._SizeConstraintsGrid)
         self.Thaw()
 
 
@@ -8828,7 +8917,8 @@ class SchemaObjectPage(wx.PyPanel):
             item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
             self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
 
-        if any(prevs[x] == getattr(self, x) for x in prevs): self._Populate()
+        if not event or any(prevs[x] == getattr(self, x) for x in prevs):
+            self._Populate()
 
 
     def _OnSaveOrEdit(self, event=None):
