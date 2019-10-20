@@ -3834,9 +3834,11 @@ class DatabasePage(wx.Panel):
     def add_data_page(self, data):
         """Opens a data object page for specified object data."""
         title = "%s %s" % (data["type"].capitalize(), grammar.quote(data["name"]))
-        p = DataObjectPage(self.notebook_schema, self.db, data)
+        self.notebook_data.Freeze()
+        p = DataObjectPage(self.notebook_data, self.db, data)
         self.data_pages[data["type"]][data.get("name") or id(p)] = p
         self.notebook_data.InsertPage(0, page=p, text=title, select=True)
+        self.notebook_data.Thaw()
         self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
         self.TopLevelParent.run_console(
             "subpage = page.notebook_data.GetPage(0) # Data object subtab")
@@ -3850,7 +3852,7 @@ class DatabasePage(wx.Panel):
             while name in self.sql_pages:
                 self.sql_page_counter += 1
                 name += " (%s)" % self.sql_page_counter
-        p = SQLPage(self.notebook_schema, self.db)
+        p = SQLPage(self.notebook_sql, self.db)
         p.Text = text
         self.sql_pages[name] = p
         self.notebook_sql.InsertPage(0, page=p, text=name, select=True)
@@ -3886,9 +3888,11 @@ class DatabasePage(wx.Panel):
             title = "%s %s" % (data["type"].capitalize(), grammar.quote(data["name"]))
         else:
             title = "* New %s *" % data["type"]
+        self.notebook_schema.Freeze()
         p = SchemaObjectPage(self.notebook_schema, self.db, data)
         self.schema_pages[data["type"]][data.get("name") or id(p)] = p
         self.notebook_schema.InsertPage(0, page=p, text=title, select=True)
+        self.notebook_schema.Thaw()
         self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
         self.TopLevelParent.run_console(
             "subpage = page.notebook_schema.GetPage(0) # Schema object subtab")
@@ -4497,6 +4501,7 @@ class DatabasePage(wx.Panel):
                 if "table" == category:
                     columns = item.get("columns") or []
                     subcategories, emptysubs = ["table", "index", "trigger", "view"], True
+                    childtext = util.plural("column", columns)
                 elif "index" == category:
                     childtext = "ON " + grammar.quote(item["meta"]["table"])
                     columns = copy.deepcopy(item["meta"].get("columns") or [])
@@ -4549,6 +4554,18 @@ class DatabasePage(wx.Panel):
                         t = ""
                         if "index" == subcategory:
                             t = ", ".join(x.get("name", x.get("expr")) for x in subitem["meta"]["columns"])
+                        elif "table" == category == subcategory:
+                            fks = [x["fk"]["key"] for x in subitem["meta"]["columns"]
+                                   if item["name"] == x.get("fk", {}).get("table")]
+                            for x in subitem["meta"].get("constraints") or ():
+                                if grammar.SQL.FOREIGN_KEY == x["type"] and item["name"] == x["table"]:
+                                    fks.extend(x["key"])
+                            fks += [x["name"] for x in item["meta"]["columns"]
+                                    if subitem["name"] == x.get("fk", {}).get("table")]
+                            for x in item["meta"].get("constraints") or ():
+                                if grammar.SQL.FOREIGN_KEY == x["type"] and subitem["name"] == x["table"]:
+                                    fks.extend(x["columns"])
+                            if fks: t = "REFERENCES " + ", ".join(sorted(set(fks)))
                         elif "trigger" == subcategory:
                             t = " ".join(filter(bool, (subitem["meta"].get("upon"), subitem["meta"]["action"])))
                             if is_indirect_item(item, subitem):
