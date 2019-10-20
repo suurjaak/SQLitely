@@ -2076,7 +2076,8 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     A StyledTextCtrl configured for SQLite syntax highlighting.
 
     Supports hiding caret line highlight when not focused (caretline_focus=True).
-    Supports singleline mode (singleline=True) - swallows Enter, propagates Tab.
+    Supports traversable mode (traversable=True) - propagates Tab, swallows Enter
+    if a single line visible.
     """
 
     """SQLite reserved keywords."""
@@ -2121,7 +2122,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
     def __init__(self, *args, **kwargs):
         self.caretline_focus = kwargs.pop("caretline_focus", None)
-        self.singleline      = kwargs.pop("singleline", None)
+        self.traversable      = kwargs.pop("traversable", None)
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
         self.autocomps_added = set(["sqlite_master"])
         # All autocomps: added + KEYWORDS
@@ -2148,7 +2149,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
         self.Bind(wx.stc.EVT_STC_ZOOM,       self.OnZoom)
         if self.caretline_focus: self.SetCaretLineVisible(False)
-        if self.singleline: self.Bind(wx.EVT_CHAR_HOOK, self.OnChar)
+        if self.traversable: self.Bind(wx.EVT_CHAR_HOOK, self.OnChar)
 
 
     def SetStyleSpecs(self):
@@ -2241,9 +2242,9 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.SetStyleSpecs()
         return result
 
-    def IsSingleLine(self):
-        """Returns whether control is in single-line mode."""
-        return self.singleline
+    def IsTraversable(self):
+        """Returns whether control is in traversable mode."""
+        return self.traversable
 
 
     def OnFocus(self, event):
@@ -2278,7 +2279,8 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         swallows Enter.
         """
         if self.AutoCompActive(): return event.Skip()
-        if event.KeyCode in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER): return
+        if event.KeyCode in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER) \
+        and self.LinesOnScreen() < 2: return
         if wx.WXK_TAB != event.KeyCode: return event.Skip()
 
         direction = wx.NavigationKeyEvent.IsBackward if event.ShiftDown() \

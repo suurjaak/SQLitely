@@ -7510,7 +7510,7 @@ class SchemaObjectPage(wx.PyPanel):
 
         text_name     = wx.TextCtrl(panel)
         list_type     = wx.ComboBox(panel, choices=self._types, style=wx.CB_DROPDOWN)
-        text_default  = controls.SQLiteTextCtrl(panel, singleline=True)
+        text_default  = controls.SQLiteTextCtrl(panel, traversable=True)
         text_default.SetCaretLineVisible(False)
 
         check_pk      = wx.CheckBox(panel)
@@ -7664,7 +7664,7 @@ class SchemaObjectPage(wx.PyPanel):
                                 "constraints.keys.%s"    % rowkey: ctrl_keys})
 
         elif grammar.SQL.CHECK == cnstr["type"]:
-            stc_check = controls.SQLiteTextCtrl(panel, size=(-1, 40))
+            stc_check = controls.SQLiteTextCtrl(panel, size=(-1, 40), traversable=True)
             stc_check.Text = cnstr.get("check") or ""
 
             stc_check.ToolTipString  = "Expression yielding a NUMERIC 0 on " \
@@ -7720,7 +7720,7 @@ class SchemaObjectPage(wx.PyPanel):
             ctrl_index = wx.ComboBox(panel, choices=tablecols,
                 style=wx.CB_DROPDOWN | wx.CB_READONLY)
         else:
-            ctrl_index = controls.SQLiteTextCtrl(panel, singleline=True)
+            ctrl_index = controls.SQLiteTextCtrl(panel, traversable=True)
             ctrl_index.SetCaretLineVisible(False)
         list_collate  = wx.ComboBox(panel, choices=self.COLLATE, style=wx.CB_DROPDOWN)
         list_order    = wx.ComboBox(panel, choices=self.ORDER, style=wx.CB_DROPDOWN | wx.CB_READONLY)
@@ -7801,7 +7801,7 @@ class SchemaObjectPage(wx.PyPanel):
         first, last = not i, (i == len(util.get(self._item["meta"], path)) - 1)
         panel = self._panel_columns
 
-        text_column = controls.SQLiteTextCtrl(panel, singleline=True)
+        text_column = controls.SQLiteTextCtrl(panel, traversable=True)
         text_column.SetCaretLineVisible(False)
         text_column.MinSize = (200, 21)
         text_column.Value = column.get("name") or ""
@@ -7934,7 +7934,7 @@ class SchemaObjectPage(wx.PyPanel):
             c.AutoCompClearAdded()
             if c is self._ctrls.get("when"):
                 for w in "OLD", "NEW": c.AutoCompAddSubWords(w, singlewords)
-            elif not words or c.IsSingleLine(): c.AutoCompAddWords(singlewords)
+            elif not words or c.IsTraversable(): c.AutoCompAddWords(singlewords)
             elif words:
                 c.AutoCompAddWords(words)
                 for w, ww in subwords.items(): c.AutoCompAddSubWords(w, ww)
