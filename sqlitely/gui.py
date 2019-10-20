@@ -8960,11 +8960,13 @@ class SchemaObjectPage(wx.PyPanel):
         Handler for clicking to close the item, confirms discarding changes if any,
         sends message to parent. Returns whether page closed.
         """
-        if self._editmode and self.IsChanged() and wx.OK != wx.MessageBox(
-            "There are unsaved changes, "
-            "are you sure you want to discard them?",
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
-        ): return
+        if self._editmode and self.IsChanged():
+            if self._newmode: msg = "Do you want to save the new %s?" % self._category
+            else: msg = "Do you want to save changes to %s %s?" % (
+                        self._category, grammar.quote(self._original["name"], force=True))
+            res = wx.MessageBox(msg, conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION)
+            if wx.CANCEL == res: return
+            if wx.YES == res and not self._OnSave(): return
         self._editmode = self._newmode = False
         self._PostEvent(close=True)
         return True
