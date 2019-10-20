@@ -7566,9 +7566,9 @@ class SchemaObjectPage(wx.PyPanel):
             self._AddSizer(panel.Sizer, sizer_flags, border=5, flag=vertical | wx.LEFT | wx.RIGHT)
             self._AddSizer(panel.Sizer, button_open, border=5, flag=vertical | wx.LEFT | wx.RIGHT)
 
-        self._BindDataHandler(self._OnChange,      text_name,     ["columns", text_name,    "name"])
-        self._BindDataHandler(self._OnChange,      list_type,     ["columns", list_type,    "type"])
-        self._BindDataHandler(self._OnChange,      text_default,  ["columns", text_default, "default"])
+        self._BindDataHandler(self._OnChange,      text_name,    ["columns", text_name,    "name"])
+        self._BindDataHandler(self._OnChange,      list_type,    ["columns", list_type,    "type"])
+        self._BindDataHandler(self._OnChange,      text_default, ["columns", text_default, "default"])
         self._BindDataHandler(self._OnToggleColumnFlag, check_pk,      ["columns", check_pk,      "pk"])
         self._BindDataHandler(self._OnToggleColumnFlag, check_notnull, ["columns", check_notnull, "notnull"])
         self._BindDataHandler(self._OnToggleColumnFlag, check_unique,  ["columns", check_unique,  "unique"])
@@ -7578,14 +7578,14 @@ class SchemaObjectPage(wx.PyPanel):
                                check_autoinc, check_notnull, check_unique, button_open]):
             c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, i]))
 
-        self._ctrls.update({"columns.name.%s"     % rowkey: text_name,
-                            "columns.type.%s"     % rowkey: list_type,
-                            "columns.default.%s"  % rowkey: text_default,
-                            "columns.pk.%s"       % rowkey: check_pk,
-                            "columns.autoinc.%s"  % rowkey: check_autoinc,
-                            "columns.notnull.%s"  % rowkey: check_notnull,
-                            "columns.unique.%s"   % rowkey: check_unique, })
-        self._buttons.update({"columns.open.%s"   % rowkey: button_open})
+        self._ctrls.update({"columns.name.%s"    % rowkey: text_name,
+                            "columns.type.%s"    % rowkey: list_type,
+                            "columns.default.%s" % rowkey: text_default,
+                            "columns.pk.%s"      % rowkey: check_pk,
+                            "columns.autoinc.%s" % rowkey: check_autoinc,
+                            "columns.notnull.%s" % rowkey: check_notnull,
+                            "columns.unique.%s"  % rowkey: check_unique, })
+        self._buttons.update({"columns.open.%s"  % rowkey: button_open})
         if focus: text_name.SetFocus()
 
 
@@ -7599,7 +7599,7 @@ class SchemaObjectPage(wx.PyPanel):
 
         sizer_item = wx.BoxSizer(wx.HORIZONTAL)
 
-        label_type = wx.StaticText(panel, label=cnstr["type"], name="constraint_%s_label" % rowkey)
+        label_type = wx.StaticText(panel, label=cnstr["type"])
 
         if grammar.SQL.PRIMARY_KEY == cnstr["type"] \
         or grammar.SQL.UNIQUE      == cnstr["type"]:
@@ -7615,15 +7615,15 @@ class SchemaObjectPage(wx.PyPanel):
 
             ctrl_cols.MinSize = (150, -1)
             ctrl_cols.Value = ", ".join(kcols)
-            ctrl_cols.Name = "constraint_%s" % rowkey
             list_conflict.Value = cnstr.get("conflict") or ""
 
             sizer_item.Add(ctrl_cols, proportion=1, flag=wx.GROW)
             sizer_item.Add(label_conflict, border=5, flag=wx.LEFT | wx.ALIGN_CENTER_VERTICAL)
             sizer_item.Add(list_conflict,  border=5, flag=wx.LEFT)
 
-            self._BindDataHandler(self._OnChange,   ctrl_cols,     ["constraints", ctrl_cols,     "key", 0, "name"])
-            self._BindDataHandler(self._OnChange,   list_conflict, ["constraints", list_conflict, "conflict"])
+            label_conflict.Bind(wx.EVT_LEFT_UP, lambda e: list_conflict.SetFocus())
+            self._BindDataHandler(self._OnChange, ctrl_cols,     ["constraints", ctrl_cols,     "key", 0, "name"])
+            self._BindDataHandler(self._OnChange, list_conflict, ["constraints", list_conflict, "conflict"])
 
             self._ctrls.update({"constraints.columns.%s"  % rowkey: ctrl_cols,
                                 "constraints.conflict.%s" % rowkey: list_conflict})
@@ -7655,7 +7655,6 @@ class SchemaObjectPage(wx.PyPanel):
             list_table.MinSize = (125, -1)
             ctrl_keys.MinSize  = (125, -1)
 
-            ctrl_cols.Name = "constraint_%s" % rowkey
             ctrl_cols.Value  = ", ".join(kcols)
             list_table.Value = cnstr.get("table") or ""
             ctrl_keys.Value  = ", ".join(fkcols)
@@ -7668,6 +7667,8 @@ class SchemaObjectPage(wx.PyPanel):
             sizer_item.Add(ctrl_cols, proportion=1, flag=wx.ALIGN_CENTER_VERTICAL)
             self._AddSizer(sizer_item, sizer_foreign, proportion=1, border=5, flag=wx.LEFT)
 
+            label_table.Bind(wx.EVT_LEFT_UP, lambda e: list_table.SetFocus())
+            label_keys.Bind (wx.EVT_LEFT_UP, lambda e: ctrl_keys.SetFocus())
             self._BindDataHandler(self._OnChange,   ctrl_cols,   ["constraints", ctrl_cols,  "columns"])
             self._BindDataHandler(self._OnChange,   list_table,  ["constraints", list_table, "table"])
             self._BindDataHandler(self._OnChange,   ctrl_keys,   ["constraints", ctrl_keys,  "key"])
@@ -7678,11 +7679,11 @@ class SchemaObjectPage(wx.PyPanel):
 
         elif grammar.SQL.CHECK == cnstr["type"]:
             stc_check = controls.SQLiteTextCtrl(panel, size=(-1, 40))
-            stc_check.Name = "constraint_%s" % rowkey
             stc_check.Text = cnstr.get("check") or ""
 
-            label_type.ToolTipString = "Expression yielding a NUMERIC 0 on " \
-                                       "constraint violation,\ncannot contain a subquery."
+            stc_check.ToolTipString  = "Expression yielding a NUMERIC 0 on " \
+                                        "constraint violation,\ncannot contain a subquery."
+            label_type.ToolTipString = stc_check.ToolTipString
 
             sizer_item.Add(stc_check, proportion=1)
 
@@ -7690,11 +7691,9 @@ class SchemaObjectPage(wx.PyPanel):
 
             self._ctrls.update({"constraints.check.%s" % rowkey: stc_check})
 
-
         button_open = wx.Button(panel, label="Open", size=(50, -1))
         button_open._toggle = "skip"
         button_open.ToolTipString   = "Open advanced options"
-        self._BindDataHandler(self._OnOpenItem, button_open, ["constraints", button_open])
 
         if insert:
             start = panel.Sizer.Cols * i
@@ -7714,9 +7713,11 @@ class SchemaObjectPage(wx.PyPanel):
         ctrls.append(button_open)
         for i, c in enumerate(ctrls):
             c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusConstraint, [c, i]))
+        label_type.Bind(wx.EVT_LEFT_UP, lambda e: ctrls[0].SetFocus())
+        self._BindDataHandler(self._OnOpenItem, button_open, ["constraints", button_open])
 
         self._buttons.update({"constraints.open.%s"  % rowkey: button_open})
-        if focus: sizer_item.Children[0].Window.SetFocus()
+        if focus: ctrls[0].SetFocus()
 
 
     def _AddRowIndex(self, path, i, col, insert=False, focus=False):
@@ -7764,9 +7765,9 @@ class SchemaObjectPage(wx.PyPanel):
         for i, c in enumerate([ctrl_index, list_collate, list_order]):
             c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, i]))
 
-        self._ctrls.update({"columns.index.%s"    % rowkey: ctrl_index,
-                            "columns.collate.%s"  % rowkey: list_collate,
-                            "columns.order.%s"    % rowkey: list_order, })
+        self._ctrls.update({"columns.index.%s"   % rowkey: ctrl_index,
+                            "columns.collate.%s" % rowkey: list_collate,
+                            "columns.order.%s"   % rowkey: list_order, })
         if focus: ctrl_index.SetFocus()
 
 
@@ -7822,11 +7823,11 @@ class SchemaObjectPage(wx.PyPanel):
             panel.Sizer.Add(text_column, border=5, flag=wx.LEFT)
             panel.Sizer.AddSpacer((0, 23))
 
-        self._BindDataHandler(self._OnChange,     text_column,   ["columns", text_column, "name"])
+        self._BindDataHandler(self._OnChange, text_column, ["columns", text_column, "name"])
         for i, c in enumerate([text_column]):
             c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, i]))
 
-        self._ctrls.update({"columns.name.%s"     % id(text_column): text_column})
+        self._ctrls.update({"columns.name.%s" % id(text_column): text_column})
         if focus: text_column.SetFocus()
 
 
