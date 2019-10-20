@@ -8441,7 +8441,7 @@ class SchemaObjectPage(wx.PyPanel):
         ctrls = adder(path, i, value, insert=insert, focus=focus)
         panel.Layout()
 
-        if insert: # Restore tab order
+        if insert: # Fix tab traversal, by default new controls are last in order
             si = panel.Sizer.GetItem(ctrls[-1])
             children = list(panel.Sizer.Children)
             nextsi = next((children[i+1] for i, c in enumerate(children[:-1])
@@ -8497,9 +8497,11 @@ class SchemaObjectPage(wx.PyPanel):
             constraint = copy.deepcopy(self.TABLECONSTRAINT_DEFAULTS[ctype])
             constraints = self._item["meta"].setdefault("constraints", [])
             constraints.append(constraint)
+            self.Freeze()
             self._AddRow(["constraints"], len(constraints) - 1, constraint)
             self._PopulateSQL()
             self._grid_constraints.GoToCell(self._grid_constraints.NumberRows - 1, 0)
+            self.Thaw()
 
         menu = wx.Menu()
         for ctype in self.TABLECONSTRAINT:
@@ -8527,7 +8529,6 @@ class SchemaObjectPage(wx.PyPanel):
         self.Freeze()
         self._AddRow(path, len(ptr) - 1, value)
         self._PopulateSQL()
-        self._ToggleControls(self._editmode)
         self._grid_columns.GoToCell(self._grid_columns.NumberRows - 1, 0)
         self.Thaw()
         self._PostEvent(modified=True)
@@ -8556,7 +8557,6 @@ class SchemaObjectPage(wx.PyPanel):
             self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
 
         self._PopulateSQL()
-        self._ToggleControls(self._editmode)
         self.Layout()
         self.Thaw()
         self._PostEvent(modified=True)
@@ -8572,14 +8572,11 @@ class SchemaObjectPage(wx.PyPanel):
         index2 = index + direction
         ptr[index], ptr[index2] = ptr[index2], ptr[index]
         self.Freeze()
-        self._ignore_change = True
         col = grid.GridCursorCol
         self._RemoveRow(path, index)
         self._AddRow(path, index2, ptr[index2], insert=True)
-        self._ignore_change = False
         grid.SetGridCursor(index2, col)
         self._PopulateSQL()
-        self._ToggleControls(self._editmode)
         self.Thaw()
         self._PostEvent(modified=True)
 
@@ -8613,13 +8610,10 @@ class SchemaObjectPage(wx.PyPanel):
         path2, index = path[:-1], path[-1]
         grid = self._grid_constraints if "constraints" == path[0] \
                else self._grid_columns
-        self._ignore_change = True
         self._RemoveRow(path2, index)
         ctrls = self._AddRow(path2, index, data2, insert=True)
-        self._ignore_change = False
         ctrls[-1].SetFocus()
         self._PopulateSQL()
-        self._ToggleControls(self._editmode)
         self.Thaw()
         self._PostEvent(modified=True)
 
