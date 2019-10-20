@@ -7488,7 +7488,7 @@ class SchemaObjectPage(wx.PyPanel):
 
         self._EmptyControl(self._panel_columns)
         p1, p2 = self._panel_splitter.Children
-        if self._db.has_view_columns():
+        if self._db.has_view_columns() and (meta.get("columns") or self._editmode):
             self._panel_splitter.SplitHorizontally(p1, p2, self._panel_splitter.MinimumPaneSize)
             self._grid_columns.AppendRows(len(meta.get("columns") or ()))
             for i, coldata in enumerate(meta.get("columns") or ()):
@@ -8924,7 +8924,7 @@ class SchemaObjectPage(wx.PyPanel):
             item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
             self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
 
-        if not event or any(prevs[x] == getattr(self, x) for x in prevs):
+        if not event or any(prevs[x] != getattr(self, x) for x in prevs):
             self._Populate()
 
 
@@ -8948,6 +8948,17 @@ class SchemaObjectPage(wx.PyPanel):
             self._newmode = False
             self._PostEvent(close=True)
             return
+
+        if "view" == self._category:
+            p1, p2 = self._panel_splitter.Children
+            if self._db.has_view_columns() and (self._item["meta"].get("columns") or self._editmode):
+                self._panel_splitter.SplitHorizontally(p1, p2, self._panel_splitter.MinimumPaneSize)
+            else: self._panel_splitter.Unsplit(p1)
+        elif "trigger" == self._category:
+            p1, p2 = self._panel_splitter.Children
+            if self._item["meta"].get("columns") or (self._editmode and "UPDATE" == self._item["meta"]["action"]):
+                self._panel_splitter.SplitHorizontally(p1, p2, self._panel_splitter.MinimumPaneSize)
+            else: self._panel_splitter.Unsplit(p1)
 
         if self._editmode:
             self._ToggleControls(self._editmode)
