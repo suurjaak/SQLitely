@@ -62,7 +62,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    15.10.2019
+@modified    20.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -453,12 +453,16 @@ class FormDialog(wx.Dialog):
         value = self._GetValue(field, path)
 
         ctrls = [x for x in self._comps[fpath]
-                 if not isinstance(x, (wx.Button, wx.StaticText, wx.Sizer))]
+                 if not isinstance(x, (wx.StaticText, wx.Sizer))]
         if list is field.get("type"):
             value = value or []
             listbox1, listbox2 = (x for x in ctrls if isinstance(x, wx.ListBox))
             listbox1.SetItems([x for x in choices if x not in value])
             listbox2.SetItems(value or [])
+            listbox1.Enable(self._editmode)
+            listbox2.Enable(self._editmode)
+            for c in ctrls:
+                if isinstance(c, wx.Button): c.Enable(self._editmode)
         else:
             for i, c in enumerate(ctrls):
                 if not i and isinstance(c, wx.CheckBox) and field.get("toggle"):
