@@ -369,6 +369,7 @@ class FormDialog(wx.Dialog):
     def _GetValue(self, field, path=()):
         """Returns field data value."""
         ptr = self._data
+        path = field.get("path") or path
         for x in path: ptr = ptr.get(x, {}) if isinstance(ptr, dict) else ptr[x]
         return ptr.get(field["name"])
 
@@ -376,8 +377,9 @@ class FormDialog(wx.Dialog):
     def _SetValue(self, field, value, path=()):
         """Sets field data value."""
         ptr = parent = self._data
+        path = field.get("path") or path
         for x in path:
-            ptr = ptr.get(x, {}) if isinstance(ptr, dict) else ptr[x]
+            ptr = ptr.get(x) if isinstance(ptr, dict) else ptr[x]
             if ptr is None: ptr = parent[x] = {}
             parent = ptr
         ptr[field["name"]] = value
@@ -386,6 +388,7 @@ class FormDialog(wx.Dialog):
     def _DelValue(self, field, path=()):
         """Deletes field data value."""
         ptr = self._data
+        path = field.get("path") or path
         for x in path: ptr = ptr.get(x, {})
         ptr.pop(field["name"], None)
 
@@ -428,7 +431,7 @@ class FormDialog(wx.Dialog):
             if field.get("help"): toggle.SetToolTipString(field["help"])
             sizer.Add(toggle, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
             self._comps[fpath].append(toggle)
-            self._toggles[fpath] = toggle
+            self._toggles[tuple(field.get("path") or fpath)] = toggle
             self._BindHandler(self._OnToggleField, toggle, field, path, toggle)
             col += 2
         elif field.get("toggle"):
@@ -583,7 +586,8 @@ class FormDialog(wx.Dialog):
                 ctrl = field["component"](parent)
                 if isinstance(ctrl, SQLiteTextCtrl): ctrl.MinSize = (-1, 60)
             elif bool is field.get("type"):
-                ctrl = wx.CheckBox(parent, label=label)
+                ctrl = wx.CheckBox(parent, label=label) if self._editmode \
+                       else wx.StaticText(parent, label=label)
             elif "choices" in field:
                 style = wx.CB_DROPDOWN | (0 if field.get("choicesedit") else wx.CB_READONLY)
                 ctrl = wx.ComboBox(parent, style=style)

@@ -6765,7 +6765,7 @@ class SchemaObjectPage(wx.PyPanel):
     MATCH      = ["SIMPLE", "FULL", "PARTIAL"]
     ON_ACTION  = ["SET NULL", "SET DEFAULT", "CASCADE", "RESTRICT", "NO ACTION"]
     CONFLICT   = ["", "ROLLBACK", "ABORT", "FAIL", "IGNORE", "REPLACE"]
-    DEFERRABLE = ["DEFERRED", "IMMEDIATE"]
+    DEFERRABLE = ["", "DEFERRED", "IMMEDIATE"]
     TABLECONSTRAINT = ["PRIMARY KEY", "FOREIGN KEY", "UNIQUE", "CHECK"]
     TABLECONSTRAINT_DEFAULTS = {
         "PRIMARY KEY": {"type": "PRIMARY KEY", "key": [{}]},
@@ -8224,8 +8224,8 @@ class SchemaObjectPage(wx.PyPanel):
             {"name": "fk", "label": "FOREIGN KEY", "toggle": True, "children": [
                 {"name": "table",  "label": "Foreign table", "choices": self._tables, "link": "key"},
                 {"name": "key",    "label": "Foreign column", "choices": get_foreign_cols},
-                {"name": "delete", "label": "ON DELETE", "toggle": True, "choices": self.ON_ACTION},
-                {"name": "update", "label": "ON UPDATE", "toggle": True, "choices": self.ON_ACTION},
+                {"name": "DELETE", "label": "ON DELETE", "toggle": True, "choices": self.ON_ACTION, "path": ["fk", "action"]},
+                {"name": "UPDATE", "label": "ON UPDATE", "toggle": True, "choices": self.ON_ACTION, "path": ["fk", "action"]},
                 {"name": "match",   "label": "MATCH", "toggle": True, "choices": self.MATCH,
                  "help": "Not enforced by SQLite."},
                 {"name": "defer",  "label": "DEFERRABLE", "toggle": True,
@@ -8246,8 +8246,8 @@ class SchemaObjectPage(wx.PyPanel):
             {"name": "columns", "label": "Local column", "type": list, "choices": get_table_cols},
             {"name": "table",   "label": "Foreign table", "choices": self._tables, "link": "key"},
             {"name": "key",     "label": "Foreign column", "type": list, "choices": get_foreign_cols},
-            {"name": "delete",  "label": "ON DELETE", "toggle": True, "choices": self.ON_ACTION},
-            {"name": "update",  "label": "ON UPDATE", "toggle": True, "choices": self.ON_ACTION},
+            {"name": "DELETE",  "label": "ON DELETE", "toggle": True, "choices": self.ON_ACTION, "path": ["action"]},
+            {"name": "UPDATE",  "label": "ON UPDATE", "toggle": True, "choices": self.ON_ACTION, "path": ["action"]},
             {"name": "match",   "label": "MATCH", "toggle": True, "choices": self.MATCH,
              "help": "Not enforced by SQLite."},
             {"name": "defer",   "label": "DEFERRABLE", "toggle": True,

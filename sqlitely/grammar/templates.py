@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    19.10.2019
+@modified    20.10.2019
 ------------------------------------------------------------------------------
 """
 
@@ -348,7 +348,7 @@ COLUMN_DEFINITION = """
         %if data["fk"].get("defer") is not None:
     {{ "NOT" if data["fk"]["defer"].get("not") else "" }}
     DEFERRABLE 
-            %if data["fk"].get("initial"):
+            %if data["fk"]["defer"].get("initial"):
     INITIALLY {{ data["fk"]["defer"]["initial"] }}
             %endif
         %endif
@@ -601,7 +601,7 @@ if not isdef("i"): i = 0
     %if data.get("defer") is not None:
     {{ "NOT" if data["defer"].get("not") else "" }}
     DEFERRABLE 
-        %if data.get("initial"):
+        %if data["defer"].get("initial"):
     INITIALLY {{ data["defer"]["initial"] }}
         %endif
     %endif
