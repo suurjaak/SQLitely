@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.10.2019
+@modified    21.10.2019
 ------------------------------------------------------------------------------
 """
 import re
@@ -94,7 +94,7 @@ from sqlitely.lib import util
     }
     #search { text-align: right; }
     td { text-align: left; vertical-align: top; }
-    td.index, th.index { color: gray; max-width: 50px; }
+    td.index, th.index { color: gray; width: 10px; }
     td.index { color: gray; text-align: right; }
     th { padding-left: 5px; padding-right: 5px; text-align: center; white-space: nowrap; }
     span#sql { display: inline; font-family: monospace; overflow: visible; white-space: pre-wrap; }
