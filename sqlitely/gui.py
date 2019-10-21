@@ -4421,6 +4421,7 @@ class DatabasePage(wx.Panel):
         for category in "table", "view":
             # Fill data tree with information on row counts and columns
             items = self.db.get_category(category).values()
+            if not items and "view" == category: continue # for category
             categorydata = {"type": "category", "category": category,
                             "items": [x["name"] for x in items]}
 
