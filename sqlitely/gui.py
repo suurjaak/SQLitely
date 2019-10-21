@@ -1185,7 +1185,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             m = "None of the selected files" if len(self.dbs_selected) > 1 \
                 else "The file \"%s\" does not" % self.dbs_selected[0]
             return wx.MessageBox("%s exist on this computer." % m, conf.Title,
-                                 wx.OK | wx.ICON_INFORMATION)
+                                 wx.OK | wx.ICON_ERROR)
 
         dialog = wx.DirDialog(self,
             message="Choose directory where to save databases",
@@ -3142,7 +3142,7 @@ class DatabasePage(wx.Panel):
                   "Recover as much as possible to a new database?" % \
                   (self.db, err)
             if wx.YES == wx.MessageBox(msg, conf.Title,
-                                       wx.ICON_WARNING | wx.YES | wx.NO):
+                                       wx.YES | wx.NO | wx.ICON_WARNING):
                 directory, filename = os.path.split(self.db.filename)
                 base = os.path.splitext(filename)[0]
                 self.dialog_savefile.Directory = directory
@@ -3422,7 +3422,7 @@ class DatabasePage(wx.Panel):
             else:
                 e = "The file \"%s\" cannot be found on this computer." % \
                     filename
-                wx.MessageBox(e, conf.Title, wx.OK | wx.ICON_INFORMATION)
+                wx.MessageBox(e, conf.Title, wx.OK | wx.ICON_WARNING)
         elif link_data:
             # Go to specific data/schema page object
             category, row = link_data.get("category"), link_data.get("row")
@@ -5929,7 +5929,7 @@ class SQLPage(wx.PyPanel):
         if self._export.IsExporting() and not force and wx.OK != wx.MessageBox(
             "Export is currently underway, "
             "are you sure you want to cancel it?",
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
         ): return
         self._export.Stop()
 
@@ -6468,7 +6468,7 @@ class DataObjectPage(wx.PyPanel):
         if self._export.IsExporting() and wx.OK != wx.MessageBox(
             "Export is currently underway, "
             "are you sure you want to cancel it?",
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
         ): return
         if self._export.IsExporting():
             self._export.Stop()
@@ -8730,7 +8730,6 @@ class SchemaObjectPage(wx.PyPanel):
         start = self._panel_columnsgrid.GetScrollPos(wx.VERTICAL)
         end = start + rng - 1
         if row >= 0 and (row < start or row > end):
-            logger.info("scrolling to %s", row if row < start else row - rng + 1) # TODO remove
             self._panel_columnsgrid.Scroll(0, row if row < start else row - rng + 1)
 
         if row >= 0:
@@ -9328,7 +9327,7 @@ class ExportProgressPanel(wx.PyPanel):
         """Confirms with popup if exports underway, notifies parent."""
         if self._worker.is_working() and wx.OK != wx.MessageBox(
             "Export is currently underway, are you sure you want to cancel it?",
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
         ): return
 
         self._worker.stop_work(drop_results=True)
@@ -9347,7 +9346,7 @@ class ExportProgressPanel(wx.PyPanel):
         else:
             msg = "Are you sure you want to cancel this export?"
         if wx.OK != wx.MessageBox(
-            msg, conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            msg, conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
         ): return
 
         if self._exports[index]["pending"]: self._OnResult(self._exports[index])
