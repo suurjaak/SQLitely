@@ -2086,8 +2086,10 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     A StyledTextCtrl configured for SQLite syntax highlighting.
 
     Supports hiding caret line highlight when not focused (caretline_focus=True).
-    Supports traversable mode (traversable=True) - propagates Tab, swallows Enter
-    if a single line visible.
+    Supports traversable mode (traversable=True) - propagates Tab to parent,
+    swallows Enter if a single line visible.
+    Supports non-wheelable mode (wheelable=False) - propagates mouse wheel events
+    to parent.
     """
 
     """SQLite reserved keywords."""
@@ -2132,7 +2134,8 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
     def __init__(self, *args, **kwargs):
         self.caretline_focus = kwargs.pop("caretline_focus", None)
-        self.traversable      = kwargs.pop("traversable", None)
+        self.traversable     = kwargs.pop("traversable", False)
+        self.wheelable       = kwargs.pop("wheelable", True)
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
         self.autocomps_added = set(["sqlite_master"])
         # All autocomps: added + KEYWORDS
@@ -2160,6 +2163,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.stc.EVT_STC_ZOOM,       self.OnZoom)
         if self.caretline_focus: self.SetCaretLineVisible(False)
         if self.traversable: self.Bind(wx.EVT_CHAR_HOOK, self.OnChar)
+        if self.wheelable is False: self.Bind(wx.EVT_MOUSEWHEEL, self.OnWheel)
 
 
     def SetStyleSpecs(self):
@@ -2265,6 +2269,25 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     Traversable = property(IsTraversable, SetTraversable)
 
 
+    def IsWheelable(self):
+        """
+        Returns whether control is in wheelable mode
+        (mouse wheel events not propagated to parent).
+        """
+        return self.wheelable
+
+
+    def SetWheelable(self, wheelable):
+        """
+        Sets control wheelable mode
+        (mouse wheel events not propagated to parent).
+        """
+        self.Unbind(wx.EVT_MOUSEWHEEL, handler=self.OnWheel)
+        self.wheelable = wheelable
+        if wheelable is False: self.Bind(wx.EVT_MOUSEWHEEL, self.OnWheel)
+    Wheelable = property(IsWheelable, SetWheelable)
+
+
     def OnFocus(self, event):
         """Handler for control getting focus, shows caret."""
         event.Skip()
@@ -2287,8 +2310,15 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
 
     def OnZoom(self, event):
-        """Disable zoom."""
+        """Disables zoom."""
         if self.Zoom: self.Zoom = 0
+
+
+    def OnWheel(self, event):
+        """Propagates wheel events to parent control."""
+        event.Skip()
+        event.ResumePropagation(1)
+        self.Parent.ProcessWindowEvent(event)
 
 
     def OnChar(self, event):
