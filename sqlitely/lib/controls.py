@@ -62,7 +62,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    20.10.2019
+@modified    21.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -290,8 +290,9 @@ class FormDialog(wx.Dialog):
         self._data     = {}
         self._rows     = 0
 
-        panel_wrap  = wx.lib.scrolledpanel.ScrolledPanel(self)
+        panel_wrap  = wx.ScrolledWindow(self)
         panel_items = self._panel = wx.Panel(panel_wrap)
+        panel_wrap.SetScrollRate(0, 20)
 
         button_save   = wx.Button(self, label="OK",     id=wx.OK)
         button_cancel = wx.Button(self, label="Cancel", id=wx.CANCEL)
@@ -311,7 +312,6 @@ class FormDialog(wx.Dialog):
         sizer_buttons.Add(button_save,   border=10, flag=wx.LEFT)
         sizer_buttons.Add(button_cancel, border=10, flag=wx.LEFT)
 
-        panel_wrap.SetupScrolling(scroll_x=False)
         self.Sizer.Add(panel_wrap, border=15, proportion=1, flag=wx.LEFT | wx.TOP | wx.GROW)
         self.Sizer.Add(sizer_buttons, border=5, flag=wx.ALL | wx.ALIGN_CENTER_HORIZONTAL)
 
@@ -1205,7 +1205,7 @@ class PropertyDialog(wx.Dialog):
         self.properties = [] # [(name, type, orig_val, default, label, ctrl), ]
 
         panelwrap = wx.Panel(self)
-        panel = self.panel = wx.lib.scrolledpanel.ScrolledPanel(panelwrap)
+        panel = self.panel = wx.ScrolledWindow(panelwrap)
 
         button_save = wx.Button(panelwrap, label="Save")
         button_reset = wx.Button(panelwrap, label="Restore defaults")
@@ -1268,7 +1268,7 @@ class PropertyDialog(wx.Dialog):
 
     def Realize(self):
         """Lays out the properties, to be called when adding is completed."""
-        self.panel.SetupScrolling(scroll_x=False)
+        self.panel.SetScrollRate(20, 20)
         self.sizer_items.AddGrowableCol(1) # Grow ctrl column
 
 

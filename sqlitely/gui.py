@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.10.2019
+@modified    21.10.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -41,7 +41,6 @@ import wx.lib.agw.flatmenu
 import wx.lib.agw.flatnotebook
 import wx.lib.agw.ultimatelistctrl
 import wx.lib.newevent
-import wx.lib.scrolledpanel
 import wx.stc
 
 from . lib import controls
@@ -275,8 +274,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         list_db.SetTopRow(topdata, [0])
         list_db.Select(0)
 
-        panel_right = wx.lib.scrolledpanel.ScrolledPanel(page)
+        panel_right = wx.ScrolledWindow(page)
         panel_right.Sizer = wx.BoxSizer(wx.HORIZONTAL)
+        panel_right.SetScrollRate(0, 20)
 
         panel_main   = self.panel_db_main   = wx.Panel(panel_right)
         panel_detail = self.panel_db_detail = wx.Panel(panel_right)
@@ -349,7 +349,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         children = list(panel_main.Children) + list(panel_detail.Children)
         for c in [panel_main, panel_detail] + children:
             ColourManager.Manage(c, "BackgroundColour", "MainBgColour")
-        panel_right.SetupScrolling(scroll_x=False)
         panel_detail.Hide()
 
         list_db.Bind(wx.EVT_LIST_ITEM_SELECTED,    self.on_select_list_db)
@@ -2313,7 +2312,7 @@ class DatabasePage(wx.Panel):
         notebook.AddPage(page, "Pragma")
         sizer = page.Sizer = wx.BoxSizer(wx.VERTICAL)
 
-        panel_wrapper = wx.lib.scrolledpanel.ScrolledPanel(page)
+        panel_wrapper = wx.ScrolledWindow(page)
         panel_pragma = wx.Panel(panel_wrapper)
         panel_sql = wx.Panel(page)
         sizer_wrapper = panel_wrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2322,6 +2321,7 @@ class DatabasePage(wx.Panel):
         sizer_sql = panel_sql.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_sql_header = wx.BoxSizer(wx.HORIZONTAL)
         sizer_footer = wx.BoxSizer(wx.HORIZONTAL)
+        panel_wrapper.SetScrollRate(0, 20)
 
         label_header = wx.StaticText(page, label="Database PRAGMA settings")
         label_header.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
@@ -2495,7 +2495,6 @@ class DatabasePage(wx.Panel):
 
         panel_sql.Hide()
         ColourManager.Manage(panel_wrapper, "BackgroundColour", "BgColour")
-        panel_wrapper.SetupScrolling(scroll_x=False)
 
 
     def create_page_info(self, notebook):
@@ -7199,14 +7198,16 @@ class SchemaObjectPage(wx.PyPanel):
     def _MakeColumnsGrid(self, parent):
         """Returns panel with columns header, grid and column management buttons."""
         s1, s2 = (0, wx.BORDER_STATIC) if "table" == self._category else (wx.BORDER_STATIC, 0)
-        panel = wx.lib.scrolledpanel.ScrolledPanel(parent, style=s1)
+        panel = wx.ScrolledWindow(parent, style=s1)
         panel.Sizer = wx.BoxSizer(wx.VERTICAL)
+        panel.SetScrollRate(20, 0)
 
         cols = {"table": 5, "index": 4, "trigger": 2, "view": 2}[self._category]
         sizer_headers = wx.FlexGridSizer(cols=cols+1)
-        panel_grid = self._panel_columnsgrid = wx.lib.scrolledpanel.ScrolledPanel(panel, style=s2)
+        panel_grid = self._panel_columnsgrid = wx.ScrolledWindow(panel, style=s2)
         panel_grid.Sizer = wx.BoxSizer(wx.HORIZONTAL)
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+        panel_grid.SetScrollRate(0, 23)
 
         sizer_headers.AddSpacer((50, 0))
         if "table" == self._category:
@@ -7283,8 +7284,6 @@ class SchemaObjectPage(wx.PyPanel):
         panel.Sizer.Add(panel_grid, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
         panel.Sizer.Add(sizer_buttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
-        panel_grid.SetupScrolling(scroll_x=False)
-
         # Bind column click to focusing current row column control
         headeritems = list(sizer_headers.Children)
         for i, x in list(enumerate(headeritems))[::-1]:
@@ -7303,18 +7302,20 @@ class SchemaObjectPage(wx.PyPanel):
 
         self.Bind(wx.grid.EVT_GRID_SELECT_CELL,  self._OnSelectGridRow, grid)
         self.Bind(wx.grid.EVT_GRID_RANGE_SELECT, self._OnSelectGridRow, grid)
-        panel.SetupScrolling(scroll_y=False)
+
         return panel
 
 
     def _MakeConstraintsGrid(self, parent):
         """Returns panel with constraints grid and constraint management buttons."""
-        panel = wx.lib.scrolledpanel.ScrolledPanel(parent)
+        panel = wx.ScrolledWindow(parent)
         panel.Sizer = wx.BoxSizer(wx.VERTICAL)
+        panel.SetScrollRate(20, 0)
 
-        panel_grid = self._panel_constraintsgrid = wx.lib.scrolledpanel.ScrolledPanel(panel, style=wx.BORDER_STATIC)
+        panel_grid = self._panel_constraintsgrid = wx.ScrolledWindow(panel, style=wx.BORDER_STATIC)
         panel_grid.Sizer = wx.BoxSizer(wx.HORIZONTAL)
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+        panel_grid.SetScrollRate(0, 20)
 
         grid = self._grid_constraints = wx.grid.Grid(panel_grid)
         grid.DisableDragRowSize()
@@ -7358,8 +7359,6 @@ class SchemaObjectPage(wx.PyPanel):
         panel.Sizer.Add(panel_grid, border=5, proportion=1, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
         panel.Sizer.Add(sizer_buttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
-        panel_grid.SetupScrolling(scroll_x=False)
-
         self.Bind(wx.EVT_BUTTON, self._OnAddConstraint, button_add)
         self._BindDataHandler(self._OnMoveItem,   button_move_up,   ["constraints"], -1)
         self._BindDataHandler(self._OnMoveItem,   button_move_down, ["constraints"], +1)
@@ -7367,7 +7366,7 @@ class SchemaObjectPage(wx.PyPanel):
 
         self.Bind(wx.grid.EVT_GRID_SELECT_CELL,  self._OnSelectConstraintGridRow, grid)
         self.Bind(wx.grid.EVT_GRID_RANGE_SELECT, self._OnSelectConstraintGridRow, grid)
-        panel.SetupScrolling(scroll_y=False)
+
         return panel
 
 
@@ -8345,9 +8344,11 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_columnstop = wx.FlexGridSizer(cols=3, hgap=10)
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
 
-        panel_columns = wx.lib.scrolledpanel.ScrolledPanel(panel_wrapper)
+        panel_columns = wx.ScrolledWindow(panel_wrapper)
         panel_columns.Sizer = wx.FlexGridSizer(cols=4, vgap=4, hgap=10)
         panel_columns.Sizer.AddGrowableCol(3)
+        panel_columns.MinSize = (-1, 60)
+        panel_columns.SetScrollRate(0, 20)
 
         button_add_column = wx.Button(panel_wrapper, label="&Add column")
 
@@ -8362,8 +8363,6 @@ class SchemaObjectPage(wx.PyPanel):
         parent.Sizer.Add(panel_wrapper, border=10, pos=(dialog._rows, 0), span=(1, 12), flag=wx.BOTTOM)
 
         if not dialog._editmode: button_add_column.Hide()
-        panel_columns.MinSize = (-1, 60)
-        panel_columns.SetupScrolling(scroll_x=False)
         dialog._BindHandler(on_add, button_add_column)
         wx.CallAfter(size_dialog)
 
@@ -9165,9 +9164,9 @@ class ExportProgressPanel(wx.PyPanel):
         self._worker = workers.WorkerThread(self._OnWorker)
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
-        panel_exports = self._panel = wx.lib.scrolledpanel.ScrolledPanel(self)
+        panel_exports = self._panel = wx.ScrolledWindow(self)
         panel_exports.Sizer = wx.BoxSizer(wx.VERTICAL)
-        panel_exports.SetupScrolling(scroll_x=False)
+        panel_exports.SetScrollRate(0, 20)
 
         button_close  = self._button_close  = wx.Button(self, label="Close")
 
