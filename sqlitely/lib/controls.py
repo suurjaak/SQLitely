@@ -587,6 +587,8 @@ class FormDialog(wx.Dialog):
                 if isinstance(ctrl, SQLiteTextCtrl):
                     ctrl.MinSize = (-1, 60)
                     ctrl.Traversable = True
+                    ctrl.Wheelable   = False
+                    ctrl.SetCaretLineVisible(False)
             elif bool is field.get("type"):
                 ctrl = wx.CheckBox(parent, label=label) if self._editmode \
                        else wx.StaticText(parent, label=label)
