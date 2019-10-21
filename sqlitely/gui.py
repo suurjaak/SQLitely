@@ -8725,6 +8725,14 @@ class SchemaObjectPage(wx.PyPanel):
             self._grid_columns.SetRowLabelValue(i, "%s%s  " % (pref, i + 1))
         self._grid_columns.ForceRefresh()
 
+        # Ensure row is visible
+        rng  = self._panel_columnsgrid.GetScrollPageSize(wx.VERTICAL)
+        start = self._panel_columnsgrid.GetScrollPos(wx.VERTICAL)
+        end = start + rng - 1
+        if row >= 0 and (row < start or row > end):
+            logger.info("scrolling to %s", row if row < start else row - rng + 1) # TODO remove
+            self._panel_columnsgrid.Scroll(0, row if row < start else row - rng + 1)
+
         if row >= 0:
             COLS = {"table": 8, "index": 3, "trigger": 1, "view": 1}
             index, ctrl = (row * COLS[self._category]) + max(0, col), None
@@ -8761,6 +8769,16 @@ class SchemaObjectPage(wx.PyPanel):
             pref = u"\u25ba " if row == i else "" # Right-pointing pointer symbol
             self._grid_constraints.SetRowLabelValue(i, "%s%s  " % (pref, i + 1))
         self._grid_constraints.ForceRefresh()
+
+        # Ensure row is visible
+        _, h = self._panel_constraintsgrid.GetScrollPixelsPerUnit()
+        rowpos = sum(self._grid_constraints.GetRowSize(x) for x in range(row)) / h
+        rowh = math.ceil(self._grid_constraints.GetRowSize(row) / float(h))
+        rng  = self._panel_constraintsgrid.GetScrollPageSize(wx.VERTICAL)
+        start = self._panel_constraintsgrid.GetScrollPos(wx.VERTICAL)
+        end = start + rng - 1
+        if row >= 0 and (rowpos < start or rowpos + rowh > end):
+            self._panel_constraintsgrid.Scroll(0, rowpos if rowpos < start else rowpos - rng + rowh)
 
         COLS = self._panel_constraints.Sizer.Cols
         if row >= 0 and col <= 0 and self._grid_constraints.NumberRows \
