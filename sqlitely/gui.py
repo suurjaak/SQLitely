@@ -203,9 +203,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 wx.CallAfter(self.ProcessFiles, filenames)
 
             def ProcessFiles(self, filenames):
-                self.window.update_database_list(filenames)
-                for filename in filenames:
-                    self.window.load_database_page(filename)
+                folders   = filter(os.path.isdir,  filenames)
+                filenames = filter(os.path.isfile, filenames)
+                if folders:
+                    t = util.plural("folder", folders) if len(folders) > 1 else folders[0]
+                    guibase.status("Detecting databases under %s.", t, log=True)
+                    self.window.button_folder.Label = "Stop &import from folder"
+                    for f in folders: self.window.worker_folder.work(f)
+                if filenames: self.window.load_database_pages(filenames)
 
         self.DropTarget = FileDrop(self)
         self.notebook.DropTarget = FileDrop(self)
@@ -288,21 +293,21 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         label_main.Font = wx.Font(14, wx.FONTFAMILY_SWISS,
             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
         BUTTONS_MAIN = [
-            ("new", "&New database", images.ButtonNew,
+            ("button_new", "&New database", images.ButtonNew,
              "Create a new SQLite database."),
-            ("opena", "&Open a database..", images.ButtonOpenA,
+            ("button_opena", "&Open a database..", images.ButtonOpenA,
              "Choose a database from your computer to open."),
-            ("folder", "&Import from folder", images.ButtonFolder,
+            ("button_folder", "&Import from folder", images.ButtonFolder,
              "Select a folder where to look for databases."),
-            ("detect", "Detect databases", images.ButtonDetect,
+            ("button_detect", "Detect databases", images.ButtonDetect,
              "Auto-detect databases from user folders."),
-            ("missing", "Remove missing", images.ButtonRemoveMissing,
+            ("button_missing", "Remove missing", images.ButtonRemoveMissing,
              "Remove non-existing files from the database list."),
-            ("clear", "C&lear list", images.ButtonClear,
+            ("button_clear", "C&lear list", images.ButtonClear,
              "Clear the current database list."), ]
         for name, label, img, note in BUTTONS_MAIN:
             button = controls.NoteButton(panel_main, label, note, img.Bitmap)
-            setattr(self, "button_" + name, button)
+            setattr(self, name, button)
         self.button_missing.Hide(); self.button_clear.Hide()
 
         # Create detail page labels, values and buttons
@@ -1452,9 +1457,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             style=wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE | wx.FD_OPEN | wx.RESIZE_BORDER
         )
         if wx.ID_OK == dialog.ShowModal():
-            for filename in dialog.GetPaths():
-                self.update_database_list(filename)
-                self.load_database_page(filename)
+            self.load_database_pages(dialog.GetPaths())
 
 
     def on_new_database(self, event):
@@ -1469,9 +1472,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for OpenDatabaseEvent, updates db list and loads the event
         database.
         """
-        filename = os.path.realpath(event.file)
-        self.update_database_list(filename)
-        self.load_database_page(filename)
+        self.load_database_pages([os.path.realpath(event.file)])
 
 
     def on_recent_file(self, event):
@@ -1813,10 +1814,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         conf.save()
 
 
-    def load_database(self, filename):
+    def load_database(self, filename, silent=False):
         """
         Tries to load the specified database, if not already open, and returns
         it. If filename is None, creates a temporary file database.
+
+        @param   silent  if true, no error popups on failing to open the file
         """
         db = self.dbs.get(filename)
         if not db:
@@ -1824,22 +1827,21 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 try:
                     db = database.Database(filename)
                 except Exception:
-                    logger.exception("some error")
+                    logger.exception("Error opening %s.", filename)
                     is_accessible = False
                     if filename:
                         try:
-                            with open(filename, "rb"):
-                                is_accessible = True
+                            with open(filename, "rb"): is_accessible = True
                         except Exception: pass
-                    if filename and not is_accessible:
+                    if filename and not is_accessible and not silent:
                         wx.MessageBox(
                             "Could not open %s.\n\n"
                             "Some other process may be using the file."
                             % filename, conf.Title, wx.OK | wx.ICON_ERROR)
-                    elif filename:
+                    elif filename and not silent:
                         wx.MessageBox(
                             "Could not open %s.\n\n"
-                            "Not a valid SQLITE database?" % filename,
+                            "Not a valid SQLite database?" % filename,
                             conf.Title, wx.OK | wx.ICON_ERROR)
                 if db:
                     logger.info("Opened %s (%s).", db, util.format_bytes(db.filesize))
@@ -1855,7 +1857,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                         util.add_unique(conf.RecentFiles, filename, -1,
                                         conf.MaxRecentFiles)
                         conf.save()
-            else:
+            elif not silent:
                 wx.MessageBox("Nonexistent file: %s." % filename,
                               conf.Title, wx.OK | wx.ICON_ERROR)
         return db
@@ -1897,6 +1899,34 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     self.update_notebook_header()
                     break # break for i in range(self.notebook..)
         return page
+
+
+    def load_database_pages(self, filenames):
+        """
+        Tries to load the specified databases, if not already open, create
+        subpages for them, if not already created, and focus the subpages.
+        Skips files that are not SQLite databases, adds others to databae list.
+        """
+        db_filenames, notdb_filenames = [], []
+        for f in filenames:
+            if database.is_sqlite_file(f): db_filenames.append(f)
+            else:
+                notdb_filenames.append(f)
+                guibase.status("%s is not a valid SQLite database.", f,
+                               log=True, flash=True)
+        if len(db_filenames) == 1:
+            self.update_database_list(db_filenames)
+            self.load_database_page(db_filenames[0])
+        else:
+            for f in db_filenames:
+                if not self.load_database(f, silent=True): continue # for f
+                self.update_database_list(f)
+                self.load_database_page(f)
+        if notdb_filenames:
+            t = "valid SQLite databases"
+            if len(notdb_filenames) == 1: t = "a " + t[:-1]
+            wx.MessageBox("Not %s:\n\n%s" % (t, "\n".join(notdb_filenames)),
+                          conf.Title, wx.OK | wx.ICON_ERROR)
 
 
     def get_unique_tab_title(self, title):

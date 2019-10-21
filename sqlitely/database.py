@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.10.2019
+@modified    21.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1124,6 +1124,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
 def is_sqlite_file(filename, path=None):
     """Returns whether the file looks to be an SQLite database file."""
+    SQLITE_HEADER = "SQLite format 3\00"
     result = os.path.splitext(filename)[1].lower() in conf.DBExtensions
     if result:
         try:
@@ -1131,7 +1132,6 @@ def is_sqlite_file(filename, path=None):
             result = bool(os.path.getsize(fullpath))
             if result:
                 result = False
-                SQLITE_HEADER = "SQLite format 3\00"
                 with open(fullpath, "rb") as f:
                     result = (f.read(len(SQLITE_HEADER)) == SQLITE_HEADER)
         except Exception: pass
