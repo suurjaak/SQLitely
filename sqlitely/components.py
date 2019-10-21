@@ -1307,6 +1307,7 @@ class DataObjectPage(wx.PyPanel):
         grid.Bind(wx.EVT_KEY_DOWN,                     self._OnGridScroll)
         grid.GridWindow.Bind(wx.EVT_MOTION,            self._OnGridMouse)
         grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,         self._OnGridKey)
+        self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(lambda: self and (self.Layout(), self.Refresh())))
 
         sizer_header.Add(tb)
         sizer_header.AddStretchSpacer()
@@ -4141,6 +4142,7 @@ class ExportProgressPanel(wx.PyPanel):
         button_close  = self._button_close  = wx.Button(self, label="Close")
 
         self.Bind(wx.EVT_BUTTON, self._OnClose, button_close)
+        self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(lambda: self and (self.Layout(), self.Refresh())))
 
         sizer.AddStretchSpacer()
         sizer.Add(panel_exports, proportion=5, flag=wx.ALIGN_CENTER | wx.GROW)
