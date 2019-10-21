@@ -5919,7 +5919,7 @@ class SQLPage(wx.PyPanel):
             maxpos = self._grid.GetNumberRows() - 1, self._grid.GetNumberCols() - 1
             cursorpos = [min(x) for x in zip(cursorpos, maxpos)]
             self._grid.SetGridCursor(*cursorpos)
-        finally; self._grid.Thaw()
+        finally: self._grid.Thaw()
 
 
     def Close(self, force=False):
@@ -6544,7 +6544,7 @@ class DataObjectPage(wx.PyPanel):
         Handler for closing export panel.
         """
         self.Freeze()
-        trY:
+        try:
             for x in self.Children: x.Show()
             self._export.Hide()
             self.Layout()
@@ -6928,7 +6928,7 @@ class SchemaObjectPage(wx.PyPanel):
         self.Bind(wx.EVT_BUTTON,   self._OnClose,          button_close)
         self.Bind(wx.EVT_CHECKBOX, self._OnToggleAlterSQL, check_alter)
         self._BindDataHandler(self._OnChange, edit_name, ["name"])
-        self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(self.Layout))
+        self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(lambda: self and (self.Layout(), self.Refresh())))
 
         self._Populate()
         if "sql" not in self._original and "sql" in self._item:
@@ -7007,14 +7007,8 @@ class SchemaObjectPage(wx.PyPanel):
         check_rowid  = self._ctrls["without"]   = wx.CheckBox(panel, label="WITHOUT &ROWID")
 
         nb = self._notebook_table = wx.Notebook(panel)
-
-        panel_columnwrapper = wx.Panel(nb)
-        panel_columnwrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
-        self._MakeColumnsGrid(panel_columnwrapper)
-
-        panel_constraintwrapper = wx.Panel(nb)
-        panel_constraintwrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
-        self._MakeConstraintsGrid(panel_constraintwrapper)
+        panel_columnwrapper     = self._MakeColumnsGrid(nb)
+        panel_constraintwrapper = self._MakeConstraintsGrid(nb)
 
         sizer_flags.Add(check_temp)
         sizer_flags.AddSpacer((100, -1))
@@ -7050,9 +7044,7 @@ class SchemaObjectPage(wx.PyPanel):
         check_unique = self._ctrls["unique"] = wx.CheckBox(panel, label="&UNIQUE")
         check_exists = self._ctrls["exists"] = wx.CheckBox(panel, label="IF NOT &EXISTS")
 
-        panel_wrapper = wx.Panel(panel, style=wx.BORDER_STATIC)
-        panel_wrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
-        self._MakeColumnsGrid(panel_wrapper)
+        panel_wrapper = self._MakeColumnsGrid(panel)
 
         label_where = wx.StaticText(panel, label="WHE&RE:")
         stc_where   = self._ctrls["where"] = controls.SQLiteTextCtrl(panel,
@@ -7108,10 +7100,8 @@ class SchemaObjectPage(wx.PyPanel):
         check_for    = self._ctrls["for"]       = wx.CheckBox(panel, label="FOR EACH &ROW")
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
-        panel1, panel2 = wx.Panel(splitter, style=wx.BORDER_STATIC), wx.Panel(splitter)
-        panel1.Sizer, panel2.Sizer = wx.BoxSizer(wx.VERTICAL), wx.BoxSizer(wx.VERTICAL)
-
-        self._MakeColumnsGrid(panel1)
+        panel1, panel2 = self._MakeColumnsGrid(splitter), wx.Panel(splitter)
+        panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         label_body = wx.StaticText(panel2, label="&Body:")
         stc_body   = self._ctrls["body"] = controls.SQLiteTextCtrl(panel2,
@@ -7178,10 +7168,8 @@ class SchemaObjectPage(wx.PyPanel):
         check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT &EXISTS")
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
-        panel1, panel2 = wx.Panel(splitter, style=wx.BORDER_STATIC), wx.Panel(splitter)
-        panel1.Sizer, panel2.Sizer = wx.BoxSizer(wx.VERTICAL), wx.BoxSizer(wx.HORIZONTAL)
-
-        self._MakeColumnsGrid(panel1)
+        panel1, panel2 = self._MakeColumnsGrid(splitter), wx.Panel(splitter)
+        panel2.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
         label_body = wx.StaticText(panel2, label="Se&lect:")
         stc_body = self._ctrls["select"] = controls.SQLiteTextCtrl(panel2,
@@ -7208,13 +7196,15 @@ class SchemaObjectPage(wx.PyPanel):
         return panel
 
 
-    def _MakeColumnsGrid(self, panel):
-        """Adds panel columns header, grid-panel and column management buttons-sizer."""
-        cols = {"table": 5, "index": 4, "trigger": 2, "view": 2}[self._category]
+    def _MakeColumnsGrid(self, parent):
+        """Returns panel with columns header, grid and column management buttons."""
+        s1, s2 = (0, wx.BORDER_STATIC) if "table" == self._category else (wx.BORDER_STATIC, 0)
+        panel = wx.lib.scrolledpanel.ScrolledPanel(parent, style=s1)
+        panel.Sizer = wx.BoxSizer(wx.VERTICAL)
 
+        cols = {"table": 5, "index": 4, "trigger": 2, "view": 2}[self._category]
         sizer_headers = wx.FlexGridSizer(cols=cols+1)
-        pstyle = wx.BORDER_STATIC if "table" == self._category else 0
-        panel_grid = self._panel_columnsgrid = wx.lib.scrolledpanel.ScrolledPanel(panel, style=pstyle)
+        panel_grid = self._panel_columnsgrid = wx.lib.scrolledpanel.ScrolledPanel(panel, style=s2)
         panel_grid.Sizer = wx.BoxSizer(wx.HORIZONTAL)
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
 
@@ -7293,7 +7283,7 @@ class SchemaObjectPage(wx.PyPanel):
         panel.Sizer.Add(panel_grid, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
         panel.Sizer.Add(sizer_buttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
-        panel_grid.SetupScrolling()
+        panel_grid.SetupScrolling(scroll_x=False)
 
         # Bind column click to focusing current row column control
         headeritems = list(sizer_headers.Children)
@@ -7313,10 +7303,15 @@ class SchemaObjectPage(wx.PyPanel):
 
         self.Bind(wx.grid.EVT_GRID_SELECT_CELL,  self._OnSelectGridRow, grid)
         self.Bind(wx.grid.EVT_GRID_RANGE_SELECT, self._OnSelectGridRow, grid)
+        panel.SetupScrolling(scroll_y=False)
+        return panel
 
 
-    def _MakeConstraintsGrid(self, panel):
-        """Adds panel constraints grid-panel and constraint management buttons-sizer."""
+    def _MakeConstraintsGrid(self, parent):
+        """Returns panel with constraints grid and constraint management buttons."""
+        panel = wx.lib.scrolledpanel.ScrolledPanel(parent)
+        panel.Sizer = wx.BoxSizer(wx.VERTICAL)
+
         panel_grid = self._panel_constraintsgrid = wx.lib.scrolledpanel.ScrolledPanel(panel, style=wx.BORDER_STATIC)
         panel_grid.Sizer = wx.BoxSizer(wx.HORIZONTAL)
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
@@ -7363,7 +7358,7 @@ class SchemaObjectPage(wx.PyPanel):
         panel.Sizer.Add(panel_grid, border=5, proportion=1, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
         panel.Sizer.Add(sizer_buttons, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
-        panel_grid.SetupScrolling()
+        panel_grid.SetupScrolling(scroll_x=False)
 
         self.Bind(wx.EVT_BUTTON, self._OnAddConstraint, button_add)
         self._BindDataHandler(self._OnMoveItem,   button_move_up,   ["constraints"], -1)
@@ -7372,6 +7367,8 @@ class SchemaObjectPage(wx.PyPanel):
 
         self.Bind(wx.grid.EVT_GRID_SELECT_CELL,  self._OnSelectConstraintGridRow, grid)
         self.Bind(wx.grid.EVT_GRID_RANGE_SELECT, self._OnSelectConstraintGridRow, grid)
+        panel.SetupScrolling(scroll_y=False)
+        return panel
 
 
     def _Populate(self):
@@ -7684,8 +7681,8 @@ class SchemaObjectPage(wx.PyPanel):
             sizer_foreign.Add(label_keys,  flag=wx.ALIGN_CENTER_VERTICAL)
             sizer_foreign.Add(ctrl_keys, flag=wx.GROW)
 
-            sizer_item.Add(ctrl_cols, proportion=1, flag=wx.ALIGN_CENTER_VERTICAL)
-            self._AddSizer(sizer_item, sizer_foreign, proportion=1, border=5, flag=wx.LEFT)
+            sizer_item.Add(ctrl_cols, proportion=2, flag=wx.ALIGN_CENTER_VERTICAL)
+            self._AddSizer(sizer_item, sizer_foreign, proportion=3, border=5, flag=wx.LEFT)
 
             label_table.Bind(wx.EVT_LEFT_UP, lambda e: list_table.SetFocus())
             label_keys.Bind (wx.EVT_LEFT_UP, lambda e: ctrl_keys.SetFocus())
@@ -7915,7 +7912,11 @@ class SchemaObjectPage(wx.PyPanel):
             if "disable" in action: b.Enable(not edit)
             if "show"    in action: b.Show(edit)
             if not ("disable" in action or "skip" in action): b.Enable(edit)
+
         self._buttons["edit"].Label = "Save" if edit else "Edit"
+        tooltip = "Validate and confirm SQL, and save to database schema"
+        self._buttons["edit"].ToolTipString = tooltip if edit else ""
+
         for c in self._ctrls.values():
             action = getattr(c, "_toggle", None) or []
             if callable(action): action = action() or []
@@ -7929,9 +7930,16 @@ class SchemaObjectPage(wx.PyPanel):
         self._PopulateAutoComp()
         self._ctrls["alter"].Show(edit and self._has_alter)
         self._ctrls["alter"].ContainingSizer.Layout()
-        for c in (c for n, c in vars(self).items() if n.startswith("_panel_")):
-            c.ContainingSizer.Layout()
+        def layout_panels():
+            if not self: return
+            self.Freeze()
+            try:
+                for n, c in vars(self).items():
+                    if n.startswith("_panel_"): c.ContainingSizer.Layout()
+            finally: self.Thaw()
+        layout_panels()
         self.Layout()
+        wx.CallAfter(layout_panels) # Large tables have trouble otherwise
 
 
     def _PopulateAutoComp(self):
@@ -8948,17 +8956,23 @@ class SchemaObjectPage(wx.PyPanel):
         self._views  = [x["name"] for x in self._db.get_category("view").values()]
         if not self._editmode:
             item = self._db.get_category(self._category, self._item["name"])
-            if not item: return wx.MessageBox(
+            if event and not item: return wx.MessageBox(
                 "%s %s no longer present in the database." %
                 (self._category.capitalize(), grammar.quote(self._item["name"])),
                 conf.Title, wx.OK | wx.ICON_ERROR
             )
-
-            item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
-            self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
+            if item:
+                item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
+                self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
 
         if not event or any(prevs[x] != getattr(self, x) for x in prevs):
             self._Populate()
+        else:
+            self.Freeze()
+            try:
+                for n, c in vars(self).items():
+                    if n.startswith("_panel_"): c.ContainingSizer.Layout()
+            finally: self.Thaw()
 
 
     def _OnSaveOrEdit(self, event=None):
@@ -9001,8 +9015,6 @@ class SchemaObjectPage(wx.PyPanel):
 
             if self._editmode:
                 self._ToggleControls(self._editmode)
-                self._buttons["edit"].ToolTipString = "Validate and confirm SQL, " \
-                                                      "and save to database schema"
             else:
                 self._buttons["edit"].ToolTipString = ""
                 if self._show_alter: self._OnToggleAlterSQL()
