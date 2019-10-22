@@ -15,7 +15,7 @@ Stand-alone GUI components for wx:
 - NonModalOKDialog(wx.Dialog):
   A simple non-modal dialog with an OK button, stays on top of parent.
 
-- NoteButton(wx.PyPanel, wx.Button):
+- NoteButton(wx.Panel, wx.Button):
   A large button with a custom icon, main label, and additional note.
   Inspired by wx.CommandLinkButton, which does not support custom icons
   (at least not of wx 2.9.4).
@@ -41,7 +41,7 @@ Stand-alone GUI components for wx:
 - SQLiteTextCtrl(wx.stc.StyledTextCtrl):
   A StyledTextCtrl configured for SQLite syntax highlighting.
 
-- TabbedHtmlWindow(wx.PyPanel):
+- TabbedHtmlWindow(wx.Panel):
   wx.html.HtmlWindow with tabs for different content pages.
 
 - TextCtrlAutoComplete(wx.TextCtrl):
@@ -53,7 +53,7 @@ Stand-alone GUI components for wx:
   on 09.02.2006 in wxPython-users thread "TextCtrlAutoComplete",
   http://wxpython-users.1045709.n5.nabble.com/TextCtrlAutoComplete-td2348906.html
 
-- TreeListCtrl(wx.gizmos.TreeListCtrls):
+- TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
   A tree control with a more convenient API.
 
 ------------------------------------------------------------------------------
@@ -73,7 +73,6 @@ import os
 import re
 
 import wx
-import wx.gizmos
 import wx.html
 import wx.lib.agw.flatnotebook
 import wx.lib.agw.gradientbutton
@@ -82,6 +81,7 @@ try: # ShapedButton requires PIL, might not be installed
 except Exception: pass
 import wx.lib.agw.ultimatelistctrl
 import wx.lib.embeddedimage
+import wx.lib.gizmos
 import wx.lib.mixins.listctrl
 import wx.lib.newevent
 import wx.lib.wordwrap
@@ -89,8 +89,8 @@ import wx.stc
 
 
 # Convenience methods for creating a wx.Brush and wx.Pen or returning cached.
-BRUSH = lambda c, s=wx.SOLID: wx.TheBrushList.FindOrCreateBrush(c, s)
-PEN = lambda c, w=1, s=wx.SOLID: wx.ThePenList.FindOrCreatePen(c, w, s)
+BRUSH = lambda c, s=wx.BRUSHSTYLE_SOLID: wx.TheBrushList.FindOrCreateBrush(c, s)
+PEN = lambda c, w=1, s=wx.PENSTYLE_SOLID: wx.ThePenList.FindOrCreatePen(c, w, s)
 
 
 class BusyPanel(wx.Window):
@@ -172,6 +172,16 @@ class ColourManager(object):
                 return result
         wx.lib.agw.labelbook.ImageContainer = HackContainer
 
+        # Hack: monkey-patch TreeListCtrl with working Colour properties
+        wx.lib.gizmos.TreeListCtrl.BackgroundColour = property(
+            wx.lib.gizmos.TreeListCtrl.GetBackgroundColour,
+            wx.lib.gizmos.TreeListCtrl.SetBackgroundColour
+        )
+        wx.lib.gizmos.TreeListCtrl.ForegroundColour = property(
+            wx.lib.gizmos.TreeListCtrl.GetForegroundColour,
+            wx.lib.gizmos.TreeListCtrl.SetForegroundColour
+        )
+
         window.Bind(wx.EVT_SYS_COLOUR_CHANGED, cls.OnSysColourChange)
 
 
@@ -211,7 +221,7 @@ class ColourManager(object):
 
     @classmethod
     def GetColour(cls, colour):
-        return wx.NamedColour(getattr(cls.colourcontainer, colour)) \
+        return wx.Colour(getattr(cls.colourcontainer, colour)) \
                if isinstance(colour, basestring) \
                else wx.SystemSettings.GetColour(colour)
 
@@ -786,7 +796,7 @@ class NonModalOKDialog(wx.Dialog):
 
 
 
-class NoteButton(wx.PyPanel, wx.Button):
+class NoteButton(wx.Panel, wx.Button):
     """
     A large button with a custom icon, main label, and additional note.
     Inspired by wx.CommandLinkButton, which does not support custom icons
@@ -799,15 +809,15 @@ class NoteButton(wx.PyPanel, wx.Button):
     def __init__(self, parent, label=wx.EmptyString, note=wx.EmptyString,
                  bmp=wx.NullBitmap, id=-1, pos=wx.DefaultPosition,
                  size=wx.DefaultSize, style=0, name=wx.PanelNameStr):
-        wx.PyPanel.__init__(self, parent, id, pos, size,
-                            style | wx.FULL_REPAINT_ON_RESIZE, name)
+        wx.Panel.__init__(self, parent, id, pos, size,
+                          style | wx.FULL_REPAINT_ON_RESIZE, name)
         self._label = label
         self._note = note
         self._bmp = bmp
         self._bmp_disabled = bmp
         if bmp is not None and bmp.IsOk():
             img = bmp.ConvertToImage().ConvertToGreyscale()
-            self._bmp_disabled = wx.BitmapFromImage(img) if img.IsOk() else bmp
+            self._bmp_disabled = wx.Bitmap(img) if img.IsOk() else bmp
         self._hover = False # Whether button is being mouse hovered
         self._press = False # Whether button is being mouse pressed
         self._align = style & (wx.ALIGN_RIGHT | wx.ALIGN_CENTER)
@@ -821,8 +831,8 @@ class NoteButton(wx.PyPanel, wx.Button):
         self._extent_label = None
         self._extent_note = None
 
-        self._cursor_hover   = wx.StockCursor(wx.CURSOR_HAND)
-        self._cursor_default = wx.StockCursor(wx.CURSOR_DEFAULT)
+        self._cursor_hover   = wx.Cursor(wx.CURSOR_HAND)
+        self._cursor_default = wx.Cursor(wx.CURSOR_DEFAULT)
 
         self.Bind(wx.EVT_MOUSE_EVENTS, self.OnMouseEvent)
         self.Bind(wx.EVT_MOUSE_CAPTURE_LOST, self.OnMouseCaptureLostEvent)
@@ -890,7 +900,7 @@ class NoteButton(wx.PyPanel, wx.Button):
 
             # Draw focus marquee.
             if not NoteButton.BMP_MARQUEE:
-                NoteButton.BMP_MARQUEE = wx.EmptyBitmap(2, 2)
+                NoteButton.BMP_MARQUEE = wx.Bitmap(2, 2)
                 dc_bmp = wx.MemoryDC()
                 dc_bmp.SelectObject(NoteButton.BMP_MARQUEE)
                 dc_bmp.Background = wx.Brush(self.BackgroundColour)
@@ -899,7 +909,7 @@ class NoteButton(wx.PyPanel, wx.Button):
                 dc_bmp.DrawPointList([(0, 1), (1, 0)])
                 dc_bmp.SelectObject(wx.NullBitmap)
             if hasattr(wx.Pen, "Stipple"):
-                pen = PEN(dc.TextForeground, 1, wx.STIPPLE)
+                pen = PEN(dc.TextForeground, 1, wx.PENSTYLE_STIPPLE)
                 pen.Stipple, dc.Pen = NoteButton.BMP_MARQUEE, pen
                 dc.DrawRectangle(4, 4, width - 8, height - 8)
             else:
@@ -943,7 +953,7 @@ class NoteButton(wx.PyPanel, wx.Button):
 
         # Draw label and accelerator key underlines
         dc.Font = wx.Font(dc.Font.PointSize, dc.Font.Family, dc.Font.Style,
-                          wx.FONTWEIGHT_BOLD, face=dc.Font.FaceName)
+                          wx.FONTWEIGHT_BOLD, faceName=dc.Font.FaceName)
         text_label = self._text_label
         if "&" in self._label:
             text_label, h = "", y - 1
@@ -963,12 +973,12 @@ class NoteButton(wx.PyPanel, wx.Button):
                     if i < len(line):
                         chars += line[i]
                     i += 1
-                h += self._extent_label[2]
+                h += self._extent_label[1]
                 text_label += chars + "\n"
         dc.DrawText(text_label, x, y)
 
         # Draw note
-        _, label_h, _ = dc.GetMultiLineTextExtent(self._text_label)
+        _, label_h = dc.GetMultiLineTextExtent(self._text_label)
         y += label_h + 10
         dc.Font = self.Font
         dc.DrawText(self._text_note, x, y)
@@ -985,12 +995,12 @@ class NoteButton(wx.PyPanel, wx.Button):
             dc = wx.ClientDC(self)
         else: # Not properly sized yet: assume a reasonably fitting size
             dc, width, height = wx.MemoryDC(), 500, 100
-            dc.SelectObject(wx.EmptyBitmap(500, 100))
+            dc.SelectObject(wx.Bitmap(500, 100))
         dc.Font = self.Font
         x = 10 + self._bmp.Size.width + 10
         self._text_note = WORDWRAP(self._text_note, width - 10 - x, dc)
         dc.Font = wx.Font(dc.Font.PointSize, dc.Font.Family, dc.Font.Style,
-                          wx.FONTWEIGHT_BOLD, face=dc.Font.FaceName)
+                          wx.FONTWEIGHT_BOLD, faceName=dc.Font.FaceName)
         self._text_label = WORDWRAP(self._text_label, width - 10 - x, dc)
         self._extent_label = dc.GetMultiLineTextExtent(self._text_label)
         self._extent_note = dc.GetMultiLineTextExtent(self._text_note)
@@ -1093,7 +1103,7 @@ class NoteButton(wx.PyPanel, wx.Button):
         control state was changed.
         """
         self._enabled = enable
-        result = wx.PyPanel.Enable(self, enable)
+        result = wx.Panel.Enable(self, enable)
         if result:
             self.Refresh()
         return result
@@ -1101,8 +1111,8 @@ class NoteButton(wx.PyPanel, wx.Button):
 
     def IsThisEnabled(self):
         """Returns the internal enabled state, independent of parent state."""
-        if hasattr(wx.PyPanel, "IsThisEnabled"):
-            result = wx.PyPanel.IsThisEnabled(self)
+        if hasattr(wx.Panel, "IsThisEnabled"):
+            result = wx.Panel.IsThisEnabled(self)
         else:
             result = self._enabled
         return result
@@ -1567,6 +1577,18 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
 
 
+    def GetScrollThumb(self, orientation):
+        """Returns the scrollbar size in pixels."""
+        # Workaround for wxpython v4 bug of missing orientation parameter
+        return self._mainWin.GetScrollThumb(orientation) if self._mainWin else 0
+
+
+    def GetScrollRange(self, orientation):
+        """Returns the scrollbar range in pixels."""
+        # Workaround for wxpython v4 bug of missing orientation parameter
+        return self._mainWin.GetScrollRange(orientation) if self._mainWin else 0
+
+
     def GetSortImages(self):
         """For ColumnSorterMixin."""
         return (0, 1)
@@ -1914,7 +1936,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         """
         il = wx.lib.agw.ultimatelistctrl.PyImageList(*self.SORT_ARROW_UP.Bitmap.Size)
         fgcolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNTEXT)
-        defrgb, myrgb = "\x00" * 3, "".join(map(chr, fgcolour.Get()))
+        defrgb, myrgb = "\x00" * 3, "".join(map(chr, fgcolour.Get()))[:3]
 
         for embedded in self.SORT_ARROW_UP, self.SORT_ARROW_DOWN:
             if myrgb != defrgb:
@@ -1956,7 +1978,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             w = sum((self.GetColumnWidth(i) for i in range(1, len(self._columns))), 0)
             width = self.Size[0] - w - 5 # Space for padding
             if self.GetScrollRange(wx.VERTICAL) > 1:
-                width -= 16 # Space for scrollbar
+                width -= self.GetScrollThumb(wx.VERTICAL) # Space for scrollbar
             self.SetColumnWidth(0, width)
         if self.GetItemCount() == 1: wx.CallAfter(resize)
 
@@ -2406,15 +2428,15 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
 TabLeftDClickEvent, EVT_TAB_LEFT_DCLICK = wx.lib.newevent.NewEvent()
 
-class TabbedHtmlWindow(wx.PyPanel):
+class TabbedHtmlWindow(wx.Panel):
     """
     HtmlWindow with tabs for different content pages.
     """
 
     def __init__(self, parent, id=wx.ID_ANY, pos=wx.DefaultPosition,
                  size=wx.DefaultSize, style=wx.html.HW_DEFAULT_STYLE,
-                 name=wx.html.HtmlWindowNameStr):
-        wx.PyPanel.__init__(self, parent, pos=pos, size=size, style=style)
+                 name=""):
+        wx.Panel.__init__(self, parent, pos=pos, size=size, style=style)
         # [{"title", "content", "id", "info", "scrollpos", "scrollrange"}]
         self._tabs = []
         self._default_page = ""      # Content shown on the blank page
@@ -2720,8 +2742,8 @@ class TextCtrlAutoComplete(wx.TextCtrl):
             self.SetChoices(choices or [])
             self._cursor = None
             # For changing cursor when hovering over final "Clear" item.
-            self._cursor_action_hover = wx.StockCursor(wx.CURSOR_HAND)
-            self._cursor_default      = wx.StockCursor(wx.CURSOR_DEFAULT)
+            self._cursor_action_hover = wx.Cursor(wx.CURSOR_HAND)
+            self._cursor_default      = wx.Cursor(wx.CURSOR_DEFAULT)
 
             gp = self
             while gp is not None:
@@ -2981,7 +3003,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         if show and self.IsShownOnScreen() and self._choices and self._listwindow:
             size = self._listwindow.GetSize()
             width, height = self.Size.width - 3, self.Size.height
-            x, y = self.ClientToScreenXY(0, height - 2)
+            x, y = self.ClientToScreen(0, height - 2)
             if size.GetWidth() <> width:
                 size.SetWidth(width)
                 self._listwindow.SetSize(size)
@@ -3022,7 +3044,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
 
 
 
-class TreeListCtrl(wx.gizmos.TreeListCtrl):
+class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
     """
     A tree control with a more convenient API.
     Events should be registered directly via self.Bind,
@@ -3037,11 +3059,20 @@ class TreeListCtrl(wx.gizmos.TreeListCtrl):
 
     def __init__(self, parent, id=wx.ID_ANY, pos=wx.DefaultPosition,
                  size=wx.DefaultSize, style=wx.TR_DEFAULT_STYLE,
+                 agwStyle=wx.lib.gizmos.TR_HAS_BUTTONS | wx.lib.gizmos.TR_LINES_AT_ROOT,
                  validator=wx.DefaultValidator,
-                 name=wx.gizmos.TreeListCtrlNameStr):
-        super(TreeListCtrl, self).__init__(parent, id, pos, size, style,
-                                             validator, name)
+                 name=wx.EmptyString):
         self._handlers = collections.defaultdict(list) # {event type: [handler, ]}
+        super(TreeListCtrl, self).__init__(parent, id, pos, size, style,
+                                           agwStyle, validator, name)
+
+
+    def AppendItem(self, *args, **kwargs):
+        """Appends an item as a last child of its parent."""
+        result = super(TreeListCtrl, self).AppendItem(*args, **kwargs)
+        # Workaround for TreeListCtrl bug of not using our foreground colour
+        self.SetItemTextColour(result, self.ForegroundColour)
+        return result
 
 
     def Bind(self, event, handler, source=None, id=wx.ID_ANY, id2=wx.ID_ANY):
@@ -3072,7 +3103,7 @@ class TreeListCtrl(wx.gizmos.TreeListCtrl):
                   fmatch(x) and isinstance(x, dict) 
                   and all(x.get(k) == dmatch.get(k) for k in dmatch))
 
-        item, myitem = self.GetNext(self.RootItem), None
+        item, myitem = self.GetNext(self.GetRootItem()), None
         while item and item.IsOk():
             if mymatch(self.GetItemPyData(item)): myitem, item = item, None
             item = item and self.GetNext(item)
@@ -3100,4 +3131,6 @@ class TreeListCtrl(wx.gizmos.TreeListCtrl):
             it = self.GetNextSibling(it)
         if all(self.IsExpanded(x) or not self.HasChildren(x) for x in items):
             for x in items: self.Collapse(x)
-        else: self.ExpandAll(item)
+        else: self.ExpandAllChildren(item)
+
+    RootItem = property(lambda x: x.GetRootItem())

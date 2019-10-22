@@ -49,7 +49,7 @@ SchemaPageEvent, EVT_SCHEMA_PAGE = wx.lib.newevent.NewCommandEvent()
 
 
 
-class SQLiteGridBase(wx.grid.PyGridTableBase):
+class SQLiteGridBase(wx.grid.GridTableBase):
     """
     Table base for wx.grid.Grid, can take its data from a single table/view, or from
     the results of any SELECT query.
@@ -437,33 +437,36 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
             self.idx_new.append(idx)
         self.row_count += numRows
         self.NotifyViewChange(rows_before)
+        return True
 
 
     def DeleteRows(self, row, numRows):
         """Deletes rows from a specified position."""
-        if row + numRows - 1 < self.row_count:
-            self.SeekToRow(row + numRows - 1)
-            rows_before = self.GetNumberRows()
-            for _ in range(numRows):
-                data = self.rows_current[row]
-                idx = data["__id__"]
-                del self.rows_current[row]
-                if idx in self.rows_backup:
-                    # If row was changed, switch to its backup data
-                    data = self.rows_backup[idx]
-                    del self.rows_backup[idx]
-                    self.idx_changed.remove(idx)
-                if not data["__new__"]:
-                    # Drop new rows on delete, rollback can't restore them.
-                    data["__changed__"] = False
-                    data["__deleted__"] = True
-                    self.rows_deleted[idx] = data
-                else:
-                    self.idx_new.remove(idx)
-                    self.idx_all.remove(idx)
-                    del self.rows_all[idx]
-                self.row_count -= numRows
-            self.NotifyViewChange(rows_before)
+        if row + numRows - 1 >= self.row_count: return False
+
+        self.SeekToRow(row + numRows - 1)
+        rows_before = self.GetNumberRows()
+        for _ in range(numRows):
+            data = self.rows_current[row]
+            idx = data["__id__"]
+            del self.rows_current[row]
+            if idx in self.rows_backup:
+                # If row was changed, switch to its backup data
+                data = self.rows_backup[idx]
+                del self.rows_backup[idx]
+                self.idx_changed.remove(idx)
+            if not data["__new__"]:
+                # Drop new rows on delete, rollback can't restore them.
+                data["__changed__"] = False
+                data["__deleted__"] = True
+                self.rows_deleted[idx] = data
+            else:
+                self.idx_new.remove(idx)
+                self.idx_all.remove(idx)
+                del self.rows_all[idx]
+            self.row_count -= numRows
+        self.NotifyViewChange(rows_before)
+        return True
 
 
     def NotifyViewChange(self, rows_before):
@@ -471,20 +474,20 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
         Notifies the grid view of a change in the underlying grid table if
         current row count is different.
         """
-        if self.View:
-            args = None
-            rows_now = self.GetNumberRows()
-            if rows_now < rows_before:
-                args = [self, wx.grid.GRIDTABLE_NOTIFY_ROWS_DELETED,
-                        rows_now, rows_before - rows_now]
-            elif rows_now > rows_before:
-                args = [self, wx.grid.GRIDTABLE_NOTIFY_ROWS_APPENDED,
-                        rows_now - rows_before]
-            self.View.BeginBatch()
-            if args: self.View.ProcessTableMessage(wx.grid.GridTableMessage(*args))
-            args = [self, wx.grid.GRIDTABLE_REQUEST_VIEW_GET_VALUES]
-            self.View.ProcessTableMessage(wx.grid.GridTableMessage(*args))
-            self.View.EndBatch()
+        if not self.View: return
+        args = None
+        rows_now = self.GetNumberRows()
+        if rows_now < rows_before:
+            args = [self, wx.grid.GRIDTABLE_NOTIFY_ROWS_DELETED,
+                    rows_now, rows_before - rows_now]
+        elif rows_now > rows_before:
+            args = [self, wx.grid.GRIDTABLE_NOTIFY_ROWS_APPENDED,
+                    rows_now - rows_before]
+        self.View.BeginBatch()
+        if args: self.View.ProcessTableMessage(wx.grid.GridTableMessage(*args))
+        args = [self, wx.grid.GRIDTABLE_REQUEST_VIEW_GET_VALUES]
+        self.View.ProcessTableMessage(wx.grid.GridTableMessage(*args))
+        self.View.EndBatch()
 
 
     def AddFilter(self, col, val):
@@ -677,7 +680,7 @@ class SQLiteGridBase(wx.grid.PyGridTableBase):
 
 
 
-class SQLPage(wx.PyPanel):
+class SQLPage(wx.Panel):
     """
     Component for running SQL queries and seeing results in a grid.
     """
@@ -687,7 +690,7 @@ class SQLPage(wx.PyPanel):
         """
         @param   page  target to send EVT_SCHEMA_PAGE events to
         """
-        wx.PyPanel.__init__(self, parent, pos=pos, size=size)
+        wx.Panel.__init__(self, parent, pos=pos, size=size)
         ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
         ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
 
@@ -833,7 +836,7 @@ class SQLPage(wx.PyPanel):
             if sql.lower().startswith(("select", "pragma", "explain")):
                 # SELECT statement: populate grid with rows
                 grid_data = SQLiteGridBase(self._db, sql=sql)
-                self._grid.Table = grid_data
+                self._grid.SetTable(grid_data, takeOwnership=True)
                 self._button_reset.Enabled = bool(grid_data.columns)
                 self._button_export.Enabled = bool(grid_data.columns)
             else:
@@ -880,7 +883,7 @@ class SQLPage(wx.PyPanel):
         try:
             grid_data = SQLiteGridBase(self._db, sql=self._grid.Table.sql)
             self._grid.Table = None # Reset grid data to empty
-            self._grid.Table = grid_data
+            self._grid.SetTable(grid_data, takeOwnership=True)
             self._grid.Scroll(*scrollpos)
             maxpos = self._grid.GetNumberRows() - 1, self._grid.GetNumberCols() - 1
             cursorpos = [min(x) for x in zip(cursorpos, maxpos)]
@@ -1227,14 +1230,14 @@ class SQLPage(wx.PyPanel):
 
 
 
-class DataObjectPage(wx.PyPanel):
+class DataObjectPage(wx.Panel):
     """
     Component for viewing and editing data objects like tables and views.
     """
 
     def __init__(self, parent, db, item, id=wx.ID_ANY, pos=wx.DefaultPosition,
                  size=wx.DefaultSize):
-        wx.PyPanel.__init__(self, parent, pos=pos, size=size)
+        wx.Panel.__init__(self, parent, pos=pos, size=size)
         ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
         ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
 
@@ -1300,7 +1303,7 @@ class DataObjectPage(wx.PyPanel):
         self.Bind(wx.EVT_BUTTON, self._OnExport,       button_export)
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,  self._OnSort)
         grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,  self._OnFilter)
-        grid.Bind(wx.grid.EVT_GRID_CELL_CHANGE,        self._OnChange)
+        grid.Bind(wx.grid.EVT_GRID_CELL_CHANGED,       self._OnChange)
         grid.Bind(wx.EVT_SCROLLWIN,                    self._OnGridScroll)
         grid.Bind(wx.EVT_SCROLL_THUMBRELEASE,          self._OnGridScroll)
         grid.Bind(wx.EVT_SCROLL_CHANGED,               self._OnGridScroll)
@@ -1406,7 +1409,7 @@ class DataObjectPage(wx.PyPanel):
     def _Populate(self):
         """Loads data to grid."""
         grid_data = SQLiteGridBase(self._db, category=self._category, name=self._item["name"])
-        self._grid.SetTable(grid_data)
+        self._grid.SetTable(grid_data, takeOwnership=True)
         self._grid.Scroll(0, 0)
         self._grid.SetColMinimalAcceptableWidth(100)
         col_range = range(grid_data.GetNumberCols())
@@ -1749,7 +1752,7 @@ class DataObjectPage(wx.PyPanel):
 
 
 
-class SchemaObjectPage(wx.PyPanel):
+class SchemaObjectPage(wx.Panel):
     """
     Component for viewing and editing schema objects like tables and triggers.
     """
@@ -1781,7 +1784,7 @@ class SchemaObjectPage(wx.PyPanel):
 
     def __init__(self, parent, db, item, id=wx.ID_ANY, pos=wx.DefaultPosition,
                  size=wx.DefaultSize):
-        wx.PyPanel.__init__(self, parent, pos=pos, size=size)
+        wx.Panel.__init__(self, parent, pos=pos, size=size)
         ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
         ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
 
@@ -1974,9 +1977,9 @@ class SchemaObjectPage(wx.PyPanel):
         panel_constraintwrapper = self._MakeConstraintsGrid(nb)
 
         sizer_flags.Add(check_temp)
-        sizer_flags.AddSpacer((100, -1))
+        sizer_flags.Add(100, 0)
         sizer_flags.Add(check_exists)
-        sizer_flags.AddSpacer((100, -1))
+        sizer_flags.Add(100, 0)
         sizer_flags.Add(check_rowid)
 
         nb.AddPage(panel_columnwrapper,     "Columns")
@@ -2019,7 +2022,7 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_table.Add(list_table, flag=wx.GROW)
 
         sizer_flags.Add(check_unique)
-        sizer_flags.AddSpacer((100, -1))
+        sizer_flags.Add(100, 0)
         sizer_flags.Add(check_exists)
 
         sizer_where.Add(label_where, border=5, flag=wx.RIGHT)
@@ -2080,17 +2083,17 @@ class SchemaObjectPage(wx.PyPanel):
 
         sizer_table.Add(label_table, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_table.Add(list_table, flag=wx.GROW)
-        sizer_table.AddSpacer((20, -1))
+        sizer_table.Add(20, 0)
         sizer_table.Add(label_upon, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_table.Add(list_upon, flag=wx.GROW)
-        sizer_table.AddSpacer((20, -1))
+        sizer_table.Add(20, 0)
         sizer_table.Add(label_action, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_table.Add(list_action, flag=wx.GROW)
 
         sizer_flags.Add(check_temp)
-        sizer_flags.AddSpacer((100, -1))
+        sizer_flags.Add(100, 0)
         sizer_flags.Add(check_exists)
-        sizer_flags.AddSpacer((100, -1))
+        sizer_flags.Add(100, 0)
         sizer_flags.Add(check_for)
 
         sizer_body.Add(label_body, border=5, flag=wx.RIGHT)
@@ -2140,7 +2143,7 @@ class SchemaObjectPage(wx.PyPanel):
         label_body.ToolTipString = "SELECT statement for view"
 
         sizer_flags.Add(check_temp)
-        sizer_flags.AddSpacer((100, -1))
+        sizer_flags.Add(100, 0)
         sizer_flags.Add(check_exists)
 
         panel2.Sizer.Add(label_body, border=5, flag=wx.RIGHT)
@@ -2172,7 +2175,7 @@ class SchemaObjectPage(wx.PyPanel):
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
         panel_grid.SetScrollRate(0, 23)
 
-        sizer_headers.AddSpacer((50, 0))
+        sizer_headers.Add(50, 0)
         if "table" == self._category:
             sizer_columnflags = wx.BoxSizer(wx.HORIZONTAL)
             for l, t in [("P", grammar.SQL.PRIMARY_KEY), ("I", grammar.SQL.AUTOINCREMENT),
@@ -2731,7 +2734,7 @@ class SchemaObjectPage(wx.PyPanel):
             panel.Sizer.Add(ctrl_index, border=5, flag=vertical | wx.LEFT)
             panel.Sizer.Add(list_collate, flag=vertical)
             panel.Sizer.Add(list_order, flag=vertical)
-            panel.Sizer.AddSpacer((0, 23))
+            panel.Sizer.Add(0, 23)
 
         self._BindDataHandler(self._OnChange, ctrl_index,   ["columns", ctrl_index,   "name" if "name" in col else "expr"])
         self._BindDataHandler(self._OnChange, list_collate, ["columns", list_collate, "collate"])
@@ -2767,7 +2770,7 @@ class SchemaObjectPage(wx.PyPanel):
             panel.Sizer.InsertSpacer(start+1, (0, 23))
         else:
             panel.Sizer.Add(list_column, border=5, flag=wx.LEFT)
-            panel.Sizer.AddSpacer((0, 23))
+            panel.Sizer.Add(0, 23)
 
         self._BindDataHandler(self._OnChange, list_column, ["columns", list_column, "name"])
         ctrls = [list_column]
@@ -2794,7 +2797,7 @@ class SchemaObjectPage(wx.PyPanel):
             panel.Sizer.InsertSpacer(start+1, (0, 23))
         else:
             panel.Sizer.Add(text_column, border=5, flag=wx.LEFT)
-            panel.Sizer.AddSpacer((0, 23))
+            panel.Sizer.Add(0, 23)
 
         self._BindDataHandler(self._OnChange, text_column, ["columns", text_column, "name"])
         ctrls = [text_column]
@@ -2835,7 +2838,8 @@ class SchemaObjectPage(wx.PyPanel):
             while parentsizer is not ctrl.Parent.Sizer:
                 indexitem = parentsizer
                 parentsizer = self._sizers.get(indexitem)
-            index = ctrl.Parent.Sizer.GetItemIndex(indexitem) / ctrl.Parent.Sizer.Cols
+            itemindex = next(i for i, x in enumerate(ctrl.Parent.Sizer.Children) if indexitem in (x.Sizer, x.Window))
+            index = itemindex / ctrl.Parent.Sizer.Cols
             path = [index if x is ctrl else x for x in path]
         handler(path, *args)
 
@@ -3152,28 +3156,6 @@ class SchemaObjectPage(wx.PyPanel):
         return sorted(result)
 
 
-    def _GetMoveButtonToggle(self, button, direction):
-        """
-        Returns function, returning a list with ["show", "disable"]
-        depending on editmode and direction.
-        """
-        def inner():
-            result = ["show"]
-            if not self._editmode: return result
-
-            indexitem, parentsizer = button, button.ContainingSizer
-            while parentsizer is not button.Parent.Sizer:
-                indexitem = parentsizer
-                parentsizer = self._sizers.get(indexitem)
-            index = button.Parent.Sizer.GetItemIndex(indexitem) / button.Parent.Sizer.Cols
-            count = len(button.Parent.Sizer.Children) / button.Parent.Sizer.Cols
-
-            if index + direction < 0 or index + direction >= count:
-                result.append("disable")
-            return result
-        return inner
-
-
     def _GetSizerChildren(self, sizer):
         """Returns all the nested child components of a sizer."""
         result = []
@@ -3299,7 +3281,7 @@ class SchemaObjectPage(wx.PyPanel):
         panel_wrapper = wx.Panel(parent, style=wx.BORDER_STATIC)
         sizer_wrapper = panel_wrapper.Sizer = wx.BoxSizer(wx.VERTICAL)
 
-        sizer_columnstop = wx.FlexGridSizer(cols=3, hgap=10)
+        sizer_columnstop = wx.FlexGridSizer(cols=3, vgap=0, hgap=10)
 
         panel_columns = wx.ScrolledWindow(panel_wrapper)
         panel_columns.Sizer = wx.FlexGridSizer(cols=4, vgap=4, hgap=10)
@@ -4120,13 +4102,13 @@ class SchemaObjectPage(wx.PyPanel):
 
 
 
-class ExportProgressPanel(wx.PyPanel):
+class ExportProgressPanel(wx.Panel):
     """
     Panel for running exports and showing their progress.
     """
 
     def __init__(self, parent, onclose):
-        wx.PyPanel.__init__(self, parent)
+        wx.Panel.__init__(self, parent)
 
         self._exports = []   # [{filename, callable, pending, count, ?total, ?is_total_estimated}]
         self._ctrls   = []   # [{title, gauge, text, cancel, open, folder}]

@@ -30,7 +30,7 @@ import urllib
 import webbrowser
 
 import wx
-import wx.gizmos
+import wx.adv
 import wx.html
 import wx.lib
 import wx.lib.agw.fmresources
@@ -149,7 +149,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         # Memory file system for showing images in wx.HtmlWindow
         self.memoryfs = {"files": {}, "handler": wx.MemoryFSHandler()}
-        wx.FileSystem_AddHandler(self.memoryfs["handler"])
+        wx.FileSystem.AddHandler(self.memoryfs["handler"])
         self.load_fs_images()
 
         self.worker_detection = \
@@ -165,11 +165,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.Bind(wx.EVT_CLOSE, self.on_exit)
         self.Bind(wx.EVT_SIZE, self.on_size)
         self.Bind(wx.EVT_MOVE, self.on_move)
-        notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_page)
+        notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_page, notebook)
         notebook.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
-                      self.on_close_page)
+                      self.on_close_page, notebook)
         notebook.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_DROPPED,
-                      self.on_dragdrop_page)
+                      self.on_dragdrop_page, notebook)
 
 
         # Register Ctrl-F4 close and Ctrl-1..9 tab handlers
@@ -228,11 +228,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.Position.top = 50
         self.list_db.SetFocus()
 
-        self.trayicon = wx.TaskBarIcon()
+        self.trayicon = wx.adv.TaskBarIcon()
         if conf.TrayIconEnabled:
             self.trayicon.SetIcon(self.TRAY_ICON.Icon, conf.Title)
-        self.trayicon.Bind(wx.EVT_TASKBAR_LEFT_DCLICK, self.on_toggle_iconize)
-        self.trayicon.Bind(wx.EVT_TASKBAR_RIGHT_DOWN, self.on_open_tray_menu)
+        self.trayicon.Bind(wx.adv.EVT_TASKBAR_LEFT_DCLICK, self.on_toggle_iconize)
+        self.trayicon.Bind(wx.adv.EVT_TASKBAR_RIGHT_DOWN, self.on_open_tray_menu)
 
         if conf.WindowIconized:
             conf.WindowIconized = False
@@ -291,7 +291,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                                    label="Welcome to %s" % conf.Title)
         ColourManager.Manage(label_main, "ForegroundColour", "TitleColour")
         label_main.Font = wx.Font(14, wx.FONTFAMILY_SWISS,
-            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
+            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
         BUTTONS_MAIN = [
             ("button_new", "&New database", images.ButtonNew,
              "Create a new SQLite database."),
@@ -314,7 +314,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         label_db = self.label_db = wx.TextCtrl(panel_detail, value="",
             style=wx.NO_BORDER | wx.TE_MULTILINE | wx.TE_RICH)
         label_db.Font = wx.Font(12, wx.FONTFAMILY_SWISS,
-            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
+            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
         ColourManager.Manage(label_db, "BackgroundColour", "WidgetColour")
         label_db.SetEditable(False)
 
@@ -406,71 +406,64 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu.Append(menu_file, "&File")
 
         menu_new_database = self.menu_new_database = menu_file.Append(
-            id=-1, text="&New database\tCtrl-N",
-            help="Create a new SQLite database"
+            wx.ID_ANY, "&New database\tCtrl-N", "Create a new SQLite database"
         )
         menu_open_database = self.menu_open_database = menu_file.Append(
-            id=-1, text="&Open database...\tCtrl-O",
-            help="Choose a database file to open"
+            wx.ID_ANY, "&Open database...\tCtrl-O", "Choose a database file to open"
         )
         menu_save_database = self.menu_save_database = menu_file.Append(
-            id=-1, text="&Save",
-            help="Save changes to the active database"
+            wx.ID_ANY, "&Save", "Save changes to the active database"
         )
         menu_save_database_as = self.menu_save_database_as = menu_file.Append(
-            id=-1, text="Save &as...",
-            help="Save the active database under a new name"
+            wx.ID_ANY, "Save &as...", "Save the active database under a new name"
         )
         menu_save_database.Enable(False)
         menu_save_database_as.Enable(False)
         menu_recent = self.menu_recent = wx.Menu()
-        menu_file.AppendMenu(id=-1, text="&Recent files",
-            submenu=menu_recent, help="Recently opened databases")
+        menu_file.AppendSubMenu(menu_recent, "&Recent files", "Recently opened databases")
         menu_file.AppendSeparator()
         menu_options = self.menu_options = \
-            menu_file.Append(id=-1, text="Advanced opt&ions",
-                help="Edit advanced program options")
+            menu_file.Append(wx.ID_ANY, "Advanced opt&ions", "Edit advanced program options")
         menu_iconize = self.menu_iconize = \
-            menu_file.Append(id=-1, text="Minimize to &tray",
-                help="Minimize %s window to notification area" % conf.Title)
+            menu_file.Append(wx.ID_ANY, "Minimize to &tray",
+                "Minimize %s window to notification area" % conf.Title)
         menu_exit = self.menu_exit = \
-            menu_file.Append(id=-1, text="E&xit\tAlt-X", help="Exit")
+            menu_file.Append(wx.ID_ANY, "E&xit\tAlt-X", "Exit")
 
         menu_help = wx.Menu()
         menu.Append(menu_help, "&Help")
 
-        menu_update = self.menu_update = menu_help.Append(id=-1,
-            text="Check for &updates",
-            help="Check whether a new version of %s is available" % conf.Title)
-        menu_homepage = self.menu_homepage = menu_help.Append(id=-1,
-            text="Go to &homepage",
-            help="Open the %s homepage, %s" % (conf.Title, conf.HomeUrl))
+        menu_update = self.menu_update = menu_help.Append(wx.ID_ANY,
+            "Check for &updates",
+            "Check whether a new version of %s is available" % conf.Title)
+        menu_homepage = self.menu_homepage = menu_help.Append(wx.ID_ANY,
+            "Go to &homepage",
+            "Open the %s homepage, %s" % (conf.Title, conf.HomeUrl))
         menu_help.AppendSeparator()
-        menu_log = self.menu_log = menu_help.Append(id=-1,
-            kind=wx.ITEM_CHECK, text="Show &log window",
-            help="Show/hide the log messages window")
-        menu_console = self.menu_console = menu_help.Append(id=-1,
-            kind=wx.ITEM_CHECK, text="Show Python &console\tCtrl-E",
-            help="Show/hide a Python shell environment window")
+        menu_log = self.menu_log = menu_help.Append(wx.ID_ANY,
+            "Show &log window", "Show/hide the log messages window",
+            kind=wx.ITEM_CHECK)
+        menu_console = self.menu_console = menu_help.Append(wx.ID_ANY,
+            "Show Python &console\tCtrl-E",
+            "Show/hide a Python shell environment window", kind=wx.ITEM_CHECK)
         menu_help.AppendSeparator()
-        menu_tray = self.menu_tray = menu_help.Append(id=-1,
-            kind=wx.ITEM_CHECK, text="Display &icon in notification area",
-            help="Show/hide %s icon in system tray" % conf.Title)
+        menu_tray = self.menu_tray = menu_help.Append(wx.ID_ANY,
+            "Display &icon in notification area",
+            "Show/hide %s icon in system tray" % conf.Title, kind=wx.ITEM_CHECK)
         menu_autoupdate_check = self.menu_autoupdate_check = menu_help.Append(
-            id=-1, kind=wx.ITEM_CHECK,
-            text="Automatic up&date check",
-            help="Automatically check for program updates periodically")
+            wx.ID_ANY, "Automatic up&date check",
+            "Automatically check for program updates periodically", kind=wx.ITEM_CHECK)
         menu_help.AppendSeparator()
         menu_about = self.menu_about = menu_help.Append(
-            id=-1, text="&About %s" % conf.Title,
-            help="Show program information and copyright")
+            wx.ID_ANY, "&About %s" % conf.Title,
+            "Show program information and copyright")
 
         self.history_file = wx.FileHistory(conf.MaxRecentFiles)
         self.history_file.UseMenu(menu_recent)
         # Reverse list, as FileHistory works like a stack
         [self.history_file.AddFileToHistory(f) for f in conf.RecentFiles[::-1]]
-        wx.EVT_MENU_RANGE(self, wx.ID_FILE1, wx.ID_FILE1 + conf.MaxRecentFiles,
-                          self.on_recent_file)
+        self.Bind(wx.EVT_MENU_RANGE, self.on_recent_file, id=wx.ID_FILE1,
+                  id2=wx.ID_FILE1 + conf.MaxRecentFiles)
         menu_tray.Check(conf.TrayIconEnabled)
         menu_autoupdate_check.Check(conf.UpdateCheckAutomatic)
 
@@ -604,9 +597,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             menu.Bind(wx.EVT_MENU, functools.partial(open_item, path),
                       id=item.GetId())
         if allfiles:
-            menu.AppendMenu(-1, "All &files", submenu=menu_all)
+            menu.AppendSubMenu(menu_all, "All &files")
 
-        item_recent = menu.AppendMenu(-1, "&Recent files", submenu=menu_recent)
+        item_recent = menu.AppendSubMenu(menu_recent, "&Recent files")
         menu.Enable(item_recent.Id, bool(conf.RecentFiles))
         menu.AppendSeparator()
         menu.AppendItem(item_toggle)
@@ -617,8 +610,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         item_icon.Check(True)
         item_console.Check(self.frame_console.Shown)
 
-        wx.EVT_MENU_RANGE(menu, wx.ID_FILE1, wx.ID_FILE1 + conf.MaxRecentFiles,
-                          on_recent_file)
+        menu.Bind(wx.EVT_MENU_RANGE, on_recent_file, id=wx.ID_FILE1,
+                  id2=wx.ID_FILE1 + conf.MaxRecentFiles)
         menu.Bind(wx.EVT_MENU, self.on_toggle_iconize, id=item_toggle.GetId())
         menu.Bind(wx.EVT_MENU, self.on_toggle_trayicon, id=item_icon.GetId())
         menu.Bind(wx.EVT_MENU, self.on_toggle_console, id=item_console.GetId())
@@ -698,25 +691,24 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def load_fs_images(self):
         """Loads content to MemoryFS."""
         abouticon = "%s.png" % conf.Title.lower() # Program icon shown in About window
-        raw = base64.b64decode(images.Icon48x48_32bit.data)
+        img = images.Icon48x48_32bit
         if abouticon in self.memoryfs["files"]:
             self.memoryfs["handler"].RemoveFile(abouticon)
-        self.memoryfs["handler"].AddFile(abouticon, raw, wx.BITMAP_TYPE_PNG)
+        self.memoryfs["handler"].AddFile(abouticon, img.Image, wx.BITMAP_TYPE_PNG)
         self.memoryfs["files"][abouticon] = 1
 
         # Screenshots look better with colouring if system has off-white colour
-        tint_colour = wx.NamedColour(conf.BgColour)
+        tint_colour = wx.Colour(conf.BgColour)
         tint_factor = [((4 * x) % 256) / 255. for x in tint_colour]
         # Images shown on the default search content page
         for name in ["Search", "Tables", "SQL", "Pragma", "Info"]:
             embedded = getattr(images, "Help" + name, None)
             if not embedded: continue # for name
             img = embedded.Image.AdjustChannels(*tint_factor)
-            raw = util.img_wx_to_raw(img)
             filename = "Help%s.png" % name
             if filename in self.memoryfs["files"]:
                 self.memoryfs["handler"].RemoveFile(filename)
-            self.memoryfs["handler"].AddFile(filename, raw, wx.BITMAP_TYPE_PNG)
+            self.memoryfs["handler"].AddFile(filename, img, wx.BITMAP_TYPE_PNG)
             self.memoryfs["files"][filename] = 1
 
 
@@ -2046,6 +2038,8 @@ class DatabasePage(wx.Panel):
         self.Layout()
         # Hack to get info-page multiline TextCtrls to layout without quirks.
         self.notebook.SetSelection(self.pageorder[self.page_info])
+        # Hack to get SQL window size to layout without quirks.
+        self.notebook.SetSelection(self.pageorder[self.page_sql])
         self.notebook.SetSelection(self.pageorder[self.page_search])
         # Restore last active page
         if db.filename in conf.LastActivePage \
@@ -2083,12 +2077,12 @@ class DatabasePage(wx.Panel):
         tb = self.tb_search_settings = \
             wx.ToolBar(page, style=wx.TB_FLAT | wx.TB_NODIVIDER | wx.TB_HORZ_TEXT)
         tb.SetToolBitmapSize((24, 24))
-        tb.AddRadioLabelTool(wx.ID_STATIC, "Data", bitmap=images.ToolbarTables.Bitmap,
+        tb.AddRadioTool(wx.ID_STATIC, "Data", bitmap1=images.ToolbarTables.Bitmap,
             shortHelp="Search in all columns of all database tables and views")
-        tb.AddRadioLabelTool(wx.ID_INDEX, "Meta", bitmap=images.ToolbarTitle.Bitmap,
+        tb.AddRadioTool(wx.ID_INDEX, "Meta", bitmap1=images.ToolbarTitle.Bitmap,
             shortHelp="Search in database CREATE SQL")
         tb.AddSeparator()
-        tb.AddCheckLabelTool(wx.ID_NEW, "Tabs", bitmap=images.ToolbarTabs.Bitmap,
+        tb.AddCheckTool(wx.ID_NEW, "Tabs", bitmap1=images.ToolbarTabs.Bitmap,
             shortHelp="New tab for each search  (Alt-N)", longHelp="")
         tb.AddSimpleTool(wx.ID_STOP, bitmap=images.ToolbarStopped.Bitmap,
             shortHelpString="Stop current search, if any")
@@ -2114,7 +2108,7 @@ class DatabasePage(wx.Panel):
         html.Bind(wx.html.EVT_HTML_LINK_CLICKED,
                   self.on_click_html_link)
         html._html.Bind(wx.EVT_RIGHT_UP, self.on_rightclick_searchall)
-        html.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_searchall_tab)
+        html.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_searchall_tab, html)
         html.Bind(controls.EVT_TAB_LEFT_DCLICK, self.on_dclick_searchall_tab)
         self.register_notebook_hotkeys(html)
         ColourManager.Manage(html, "TabAreaColour", "WidgetColour")
@@ -2155,7 +2149,7 @@ class DatabasePage(wx.Panel):
         sizer_topleft.AddStretchSpacer()
         sizer_topleft.Add(button_refresh)
         tree = self.tree_data = controls.TreeListCtrl(
-            panel1, style=wx.TR_DEFAULT_STYLE | wx.TR_FULL_ROW_HIGHLIGHT
+            panel1, agwStyle=wx.TR_DEFAULT_STYLE | wx.TR_FULL_ROW_HIGHLIGHT
         )
         ColourManager.Manage(tree, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(tree, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
@@ -2198,7 +2192,7 @@ class DatabasePage(wx.Panel):
 
         self.Bind(components.EVT_DATA_PAGE, self.on_data_page_event)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
-                self.on_close_data_page)
+                self.on_close_data_page, nb)
         self.register_notebook_hotkeys(nb)
 
 
@@ -2220,7 +2214,7 @@ class DatabasePage(wx.Panel):
         button_refresh = wx.Button(panel1, label="Refresh")
         button_new = wx.Button(panel1, label="Create ne&w ..")
         tree = self.tree_schema = controls.TreeListCtrl(
-            panel1, style=wx.TR_DEFAULT_STYLE | wx.TR_FULL_ROW_HIGHLIGHT
+            panel1, agwStyle=wx.TR_DEFAULT_STYLE | wx.TR_FULL_ROW_HIGHLIGHT
         )
         ColourManager.Manage(tree, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(tree, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
@@ -2279,7 +2273,7 @@ class DatabasePage(wx.Panel):
         tree.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_schema)
         self.Bind(components.EVT_SCHEMA_PAGE, self.on_schema_page_event)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
-                self.on_close_schema_page)
+                self.on_close_schema_page, nb)
         self.register_notebook_hotkeys(nb)
 
 
@@ -2320,13 +2314,13 @@ class DatabasePage(wx.Panel):
 
         sizer.Add(nb, proportion=1, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
 
-        nb.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_sql_page)
+        nb.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_sql_page, nb)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
-                self.on_close_sql_page)
+                self.on_close_sql_page, nb)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_DROPPED,
-                self.on_dragdrop_sql_page)
+                self.on_dragdrop_sql_page, nb)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
-                self.on_rclick_sql_page)
+                self.on_rclick_sql_page, nb)
         nb.Bind(wx.EVT_CHAR_HOOK, self.on_key_sql_page)
         self.register_notebook_hotkeys(nb)
 
@@ -2351,7 +2345,7 @@ class DatabasePage(wx.Panel):
 
         label_header = wx.StaticText(page, label="Database PRAGMA settings")
         label_header.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
-                                    wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
+                                    wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
         edit_filter = self.edit_pragma_filter = controls.SearchCtrl(page, "Filter settings")
         edit_filter.SetToolTipString("Filter PRAGMA directive list (Ctrl-F)")
 
@@ -2360,7 +2354,7 @@ class DatabasePage(wx.Panel):
             wx.TipWindow(ctrl, text, maxLength=300)
 
         bmp = wx.ArtProvider.GetBitmap(wx.ART_QUESTION, wx.ART_TOOLBAR, (16, 16))
-        cursor_pointer = wx.StockCursor(wx.CURSOR_HAND)
+        cursor_pointer = wx.Cursor(wx.CURSOR_HAND)
         lastopts = {}
         for name, opts in sorted(database.Database.PRAGMA.items(),
             key=lambda x: (bool(x[1].get("deprecated")), x[1]["label"])
@@ -2441,8 +2435,6 @@ class DatabasePage(wx.Panel):
             for i, x in enumerate(xx):
                 if not isinstance(x, wx.CheckBox):
                     sizer_pragma.SetItemMinSize(x, (widths[i], -1))
-        for i, w in widths.items():
-            sizer_pragma.AddSpacer((w, -1))
 
         check_sql = self.check_pragma_sql = \
             wx.CheckBox(panel_sql, label="See change S&QL")
@@ -2490,7 +2482,7 @@ class DatabasePage(wx.Panel):
         page.Bind(wx.EVT_CHAR_HOOK,  self.on_pragma_key)
         edit_filter.Bind(wx.EVT_TEXT_ENTER, self.on_pragma_filter)
 
-        sizer_header.AddSpacer((edit_filter.Size[0], -1))
+        sizer_header.Add(edit_filter.Size[0], 0)
         sizer_header.AddStretchSpacer()
         sizer_header.Add(label_header)
         sizer_header.AddStretchSpacer()
@@ -2545,7 +2537,7 @@ class DatabasePage(wx.Panel):
         sizer_info = wx.GridBagSizer(vgap=3, hgap=10)
         label_file = wx.StaticText(panel1, label="Database information")
         label_file.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
-                                  wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
+                                  wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
 
         names = ["edit_info_path", "edit_info_size", "edit_info_created",
                  "edit_info_modified", "edit_info_sha1", "edit_info_md5", ]
@@ -2590,7 +2582,7 @@ class DatabasePage(wx.Panel):
         button_open_folder.SetToolTipString("Open database file directory")
         button_refresh.SetToolTipString("Refresh file information")
 
-        sizer_buttons = wx.FlexGridSizer(cols=5, vgap=5)
+        sizer_buttons = wx.FlexGridSizer(cols=5, vgap=5, hgap=0)
         sizer_buttons.AddGrowableCol(1)
         sizer_buttons.AddGrowableCol(3)
 
@@ -4014,7 +4006,7 @@ class DatabasePage(wx.Panel):
         menu.Bind(wx.EVT_MENU, functools.partial(reopen, -1), id=item_last.GetId())
 
         menu.AppendItem(item_last)
-        item_recent = menu.AppendMenu(-1, "Recent &tabs", submenu=menu_recent)
+        item_recent = menu.AppendSubMenu(menu_recent, "Recent &tabs")
 
         for i, (name, _) in enumerate(pp):
             item = wx.MenuItem(menu_recent, -1, name)
@@ -4683,7 +4675,7 @@ class DatabasePage(wx.Panel):
             tree.ToggleItem(node)
 
         boldfont = wx.Font(self.Font.PointSize, wx.FONTFAMILY_SWISS,
-            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, face=self.Font.FaceName)
+            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
 
         menu = wx.Menu()
         item_file = item_database = None
@@ -4883,13 +4875,17 @@ class DatabasePage(wx.Panel):
                           id=item_copy_sql.GetId())
                 menu.AppendItem(item_copy_sql)
 
-            menu.AppendMenu(id=-1, text="Create ne&w ..", submenu=submenu)
+            menu.AppendSubMenu(submenu, text="Create ne&w ..")
             for category in database.Database.CATEGORIES:
                 key = next((x for x in category if x not in keys), category[0])
                 keys.append(key)
                 it = wx.MenuItem(submenu, -1, 'New ' + category.replace(key, "&" + key, 1))
                 submenu.AppendItem(it)
                 menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), id=it.GetId())
+
+            item_import = wx.MenuItem(menu, -1, "&Import table from spreadsheet")
+            menu.Bind(wx.EVT_MENU, self.on_import, id=item_import.GetId())
+            menu.AppendItem(item_import)
         elif "category" == data["type"]:
             sqlkws = {"category": data["category"]}
             if data.get("parent"): sqlkws["name"] = [x["name"] for x in data["items"]]
@@ -4918,6 +4914,10 @@ class DatabasePage(wx.Panel):
                     menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, names, False, None),
                              id=item_database_meta.GetId())
                     menu.AppendItem(item_database_meta)
+
+                    item_import = wx.MenuItem(menu, -1, "&Import table from spreadsheet")
+                    menu.Bind(wx.EVT_MENU, self.on_import, id=item_import.GetId())
+                    menu.AppendItem(item_import)
 
                 menu.AppendSeparator()
                 menu.AppendItem(item_delete)
@@ -5022,7 +5022,7 @@ class DatabasePage(wx.Panel):
 
             if "table" == data["type"]:
                 submenu, keys = wx.Menu(), []
-                menu.AppendMenu(id=-1, text="Create ne&w ..", submenu=submenu)
+                menu.AppendSubMenu(submenu, text="Create ne&w ..")
                 for category in database.Database.CATEGORIES:
                     key = next((x for x in category if x not in keys), category[0])
                     keys.append(key)
@@ -5043,6 +5043,19 @@ class DatabasePage(wx.Panel):
         if item != item0: select_item(item, False)
         tree.PopupMenu(menu)
         if item0 and item != item0: select_item(item0, False)
+
+
+    def on_import(self, event):
+        """Opens file dialog for choosing file, creates table and imports data."""
+        exts = ";".join("*" + x for x in conf.DBExtensions)
+        wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
+        dialog = wx.FileDialog(
+            self, message="Open", defaultFile="", wildcard=wildcard,
+            style=wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE | wx.FD_OPEN | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        path = dialog.GetPath()
 
 
     def update_autocomp(self):
