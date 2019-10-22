@@ -62,7 +62,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    21.10.2019
+@modified    22.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -1715,13 +1715,16 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         Clears the list and inserts all unfiltered rows, auto-sizing the
         columns.
         """
-        selected_ids, selected = [], self.GetFirstSelected()
+        selected_ids, selected_idxs, selected = [], [], self.GetFirstSelected()
         while selected >= 0:
             selected_ids.append(self.GetItemData(selected))
+            selected_idxs.append(selected)
             selected = self.GetNextSelected(selected)
 
         self.Freeze()
         try:
+            for i in selected_idxs:
+                self._mainWin.SendNotify(i, wx.wxEVT_COMMAND_LIST_ITEM_DESELECTED)
             wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
             self._PopulateTopRow()
             self._PopulateRows(selected_ids)
@@ -1999,8 +2002,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             header_lengths[col_name] = width
         index = self.GetItemCount()
         for item_id, row in self._id_rows:
-            if not self._RowMatchesFilter(row):
-                continue # continue for index, (item_id, row) in enumerate(..)
+            if not self._RowMatchesFilter(row): continue # for item_id, row
             col_name = self._columns[0][0]
             col_value = self._formatters[col_name](row, col_name)
             col_lengths[col_name] = max(col_lengths[col_name],
