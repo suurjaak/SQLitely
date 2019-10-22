@@ -736,7 +736,7 @@ class SQLPage(wx.Panel):
         button_export = self._button_export = wx.Button(panel2, label="&Export to file")
         button_close  = self._button_close  = wx.Button(panel2, label="&Close query")
 
-        button_sql.ToolTipString    = "Execute a single statement from the SQL window"
+        button_sql.ToolTip    = "Execute a single statement from the SQL window"
         button_script.ToolTipString = "Execute multiple SQL statements, separated by semicolons"
         button_reset.ToolTipString  = "Resets all applied sorting and filtering"
         button_export.ToolTipString = "Export result to a file"
@@ -3974,6 +3974,7 @@ class SchemaObjectPage(wx.Panel):
                 else:
                     self._item = copy.deepcopy(self._original)
                     self._ToggleControls(self._editmode)
+                self._buttons["edit"].SetFocus()
         finally: self.Thaw()
         self._PostEvent(modified=True)
 
