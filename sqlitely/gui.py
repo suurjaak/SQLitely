@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.10.2019
+@modified    22.10.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -98,6 +98,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                             #            tables, title, error},}
         self.dbs = {}       # Open databases {filename: Database, }
         self.db_pages = {}  # {DatabasePage: Database, }
+        self.db_filter = "" # Current database list filter
+        self.db_filter_timer = None # Database list filter callback timer
         self.page_db_latest = None  # Last opened database page
         # List of Notebook pages user has visited, used for choosing page to
         # show when closing one.
@@ -256,6 +258,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         label_count = self.label_count = wx.StaticText(page)
         edit_filter = self.edit_filter = controls.SearchCtrl(page, "Filter list")
+        edit_filter.ToolTip = "Filter database list (Ctrl-F)"
         list_db = self.list_db = controls.SortableUltimateListCtrl(page,
             agwStyle=wx.LC_REPORT | wx.BORDER_NONE)
         list_db.MinSize = 400, -1 # Maximize-restore would resize width to 100
@@ -943,10 +946,21 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
 
     def on_filter_list_db(self, event):
-        """Handler for filtering dblist, applies search filter."""
+        """Handler for filtering dblist, applies search filter after timeout."""
         event.Skip()
-        self.list_db.SetFilter(event.String.strip())
-        self.update_database_count()
+        search = event.String.strip()
+        if search == self.db_filter: return
+
+        def do_filter(search):
+            self.db_filter_timer = None
+            if search != self.db_filter: return
+            self.list_db.SetFilter(search)
+            self.update_database_count()
+
+        if self.db_filter_timer: self.db_filter_timer.Stop()
+        self.db_filter = search
+        if search: self.db_filter_timer = wx.CallLater(200, do_filter, search)
+        else: do_filter(search)
 
 
     def on_menu_homepage(self, event):
