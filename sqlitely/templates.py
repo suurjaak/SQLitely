@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.10.2019
+@modified    22.10.2019
 ------------------------------------------------------------------------------
 """
 import re
@@ -249,6 +249,7 @@ if not i % 100 and isdef("progress") and not progress(count=i):
 """
 
 
+
 """
 TXT SQL create statements export template.
 
@@ -470,6 +471,7 @@ Results for "{{ text }}" from {{ fromtext }}:
 """
 
 
+
 """
 HTML template for SQL search results.
 
@@ -487,6 +489,7 @@ wrap_b = lambda x: "<b>%s</b>" % x.group(0)
 <pre><font size="2">{{! pattern_replace.sub(wrap_b, escape(item["sql"])).replace(" ", "&nbsp;") }}</font></pre>
 <br /><br />
 """
+
 
 
 """
@@ -508,6 +511,7 @@ from sqlitely import conf, grammar
 %endfor
 </tr>
 """
+
 
 
 """
@@ -547,6 +551,7 @@ and not (keywords.get("-column") and match_kw("-column", col)):
 %endfor
 </tr>
 """
+
 
 
 """Text shown in Help -> About dialog (HTML content)."""
@@ -691,6 +696,7 @@ from sqlitely import conf
 </center>
 </font>
 """
+
 
 
 """Long help text shown in a separate tab on search page."""
@@ -900,6 +906,7 @@ except ImportError:
 """
 
 
+
 """Short help text shown on search page."""
 SEARCH_HELP_SHORT_HTML = """<%
 import os
@@ -914,6 +921,7 @@ For searching from specific tables, add "table:name", and from specific columns,
 &nbsp;&nbsp;<a href=\"page:#help\"><font color="{{ conf.LinkColour }}">{{ helplink }}</font></a>.
 </font>
 """
+
 
 
 """
@@ -1034,6 +1042,7 @@ total = index_total + sum(x["size"] for x in data["table"])
 """
 
 
+
 """
 Database statistics row plot.
 
@@ -1067,6 +1076,7 @@ fgcolour = conf.PlotTableColour if "table" == category else conf.PlotIndexColour
   </td>
 </tr></table>
 """
+
 
 
 """
@@ -1274,6 +1284,7 @@ total = index_total + sum(x["size"] for x in data["table"])
 """
 
 
+
 """
 Database statistics row plot.
 
@@ -1296,6 +1307,7 @@ text_cell2 = "" if text_cell1 else "&nbsp;%d%%&nbsp;" % percent
   <td style="width: {{ 100 - percent }}%;">{{! text_cell2 }}</td>
 </tr></table>
 """
+
 
 
 """
@@ -1376,6 +1388,7 @@ justs  = {0: 1, 1: 1, 2: 0, 3: 0, 4: 0}
 """
 
 
+
 """
 Database statistics table section.
 
@@ -1413,4 +1426,27 @@ widths = {i: max([len(x[i]) for x in vals.values()] +
 %for item in items:
 [{{ plot(item[sizecol]) }}]{{ (" " * PAD) }}{{ (" " * PAD).join((x.ljust if justs[i] else x.rjust)(widths[i]) for i, x in enumerate(vals[item["name"]])) }}
 %endfor
+"""
+
+
+
+"""
+Database statistics SQL export template.
+
+@param   db_filename  database path or temporary name
+@param   db_filesize  database size in bytes
+@param   sql          SQL query giving export data, if any
+"""
+DATA_STATISTICS_SQL = """<%
+import datetime
+from sqlitely.lib import util
+from sqlitely import conf
+
+%>-- Output from sqlite3_analyzer.
+-- Source: {{ db_filename }}.
+-- Source size: {{ util.format_bytes(db_filesize) }} ({{ util.format_bytes(db_filesize, max_units=False) }}).
+-- Exported with {{ conf.Title }} on {{ datetime.datetime.now().strftime("%d.%m.%Y %H:%M") }}.
+
+
+{{! sql.replace("\\r", "") }}
 """

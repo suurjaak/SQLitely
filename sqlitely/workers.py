@@ -473,7 +473,7 @@ class AnalyzerThread(WorkerThread):
                 self.postback({"error": error})
             else:
                 tablemap = {} # {name: {}}
-                data = {"table": [], "index": [], "filesize": filesize}
+                data = {"table": [], "index": [], "filesize": filesize, "sql": output}
                 for row in rows:
                     category = "index" if row["is_index"] else "table"
                     item = {"name": row["name"], "size": row["compressed_size"]}
