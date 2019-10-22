@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.10.2019
+@modified    22.10.2019
 ------------------------------------------------------------------------------
 """
 import hashlib
@@ -114,7 +114,7 @@ class WorkerThread(threading.Thread):
                     logger.exception("Error running %s.", func)
                     error = util.format_exc(e)
 
-            if self._drop_results: continue # while
+            if self._drop_results: continue # while self._is_running
             if error: self.postback({"error": error})
             else:
                 self.postback({"done": True, "result": result, "callable": func})
@@ -418,7 +418,7 @@ class AnalyzerThread(WorkerThread):
         self._is_running = True
         while self._is_running:
             path = self._queue.get()
-            if not path: continue # while
+            if not path: continue # while self._is_running
 
             self._is_working, self._drop_results = True, False
             filesize, output, rows, error = 0, "", [], None
@@ -468,7 +468,7 @@ class AnalyzerThread(WorkerThread):
             if not rows and not error and self._is_working:
                 error = "Database is empty."
 
-            if self._drop_results: continue # while
+            if self._drop_results: continue # while self._is_running
             if error:
                 self.postback({"error": error})
             else:
@@ -509,7 +509,7 @@ class ChecksumThread(WorkerThread):
         self._is_running = True
         while self._is_running:
             path = self._queue.get()
-            if not path: continue # while
+            if not path: continue # while self._is_running
 
             self._is_working, self._drop_results = True, False
             error = ""
@@ -527,7 +527,7 @@ class ChecksumThread(WorkerThread):
                     logger.exception("Error calculating checksum for %s.", path)
                     error = util.format_exc(e)
 
-            if self._drop_results: continue # while
+            if self._drop_results: continue # while self._is_running
             if error: self.postback({"error": error})
             elif self._is_working:
                 self.postback({"sha1": sha1.hexdigest(), "md5": md5.hexdigest()})

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.10.2019
+@modified    22.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -307,7 +307,7 @@ class xlsx_writer(object):
             writefunc(self._row, c, v, self._formats[fmt_name])
             if (merge_cols or not autowidth or "wrap" == fmt_name
             or c in self._autowrap):
-                continue # continue for c, v in enumerate(Values)
+                continue # for c, v
 
             # Calculate and update maximum written column width
             strval = (v.encode("latin1", "replace") if isinstance(v, unicode)

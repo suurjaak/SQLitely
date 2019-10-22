@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    19.10.2019
+@modified    22.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -687,7 +687,7 @@ class Parser(object):
             ptr = ptr.parentCtx
             if any(isinstance(ptr, x) for x in types):
                 result = ptr
-                if not top: break # while
+                if not top: break # while ptr
         return result
 
 
@@ -864,12 +864,12 @@ class Generator(object):
             for token in self._tokens.values():
                 # Redo if data happened to contain a generated token
                 if result.count(token) > self._tokendata[token]["count"]:
-                    continue # while
+                    continue # for token
 
             # Calculate max length for paddings
             widths = defaultdict(int)
             for (tokentype, _), token in self._tokens.items():
-                if "PAD" != tokentype: continue # for
+                if "PAD" != tokentype: continue # for (tokentype, _), token
                 data = self._tokendata[token]
                 widths[data["key"]] = max(len(data["value"]), widths[data["key"]])
 
@@ -887,7 +887,7 @@ class Generator(object):
                     r = r"\s*" + re.escape(token) + ("" if self._indent else " *")
                     result = re.sub(r, val, result, flags=re.U)
                 else: result = result.replace(token, val)
-            break # while
+            break # while True
 
         self._tokens.clear(); self._tokendata.clear(); self._data = None
         return result, None

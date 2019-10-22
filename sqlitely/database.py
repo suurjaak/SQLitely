@@ -1153,7 +1153,7 @@ def detect_databases():
         for path in ["%s\\Users" % c, "%s\\Documents and Settings" % c]:
             if os.path.exists(path):
                 search_paths.append(path)
-                break # break for path in [..]
+                break # for path
     else:
         search_paths = [os.getenv("HOME"),
                         "/Users" if "mac" == os.name else "/home"]

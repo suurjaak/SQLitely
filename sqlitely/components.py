@@ -3676,11 +3676,11 @@ class SchemaObjectPage(wx.Panel):
                 si = children.pop(0)
                 if si.Sizer:
                     children[:0] = list(si.Sizer.Children)
-                    continue # while
+                    continue # while children
                 if si.Window: i += 1
                 if i != index: continue
                 ctrl = si.Window
-                break # while
+                break # while children
             if ctrl and not ctrl.HasFocus():
                 ctrl.SetFocus()
                 if isinstance(ctrl, wx.ComboBox) and ctrl.IsEditable():

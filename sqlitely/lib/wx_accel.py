@@ -30,7 +30,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     19.11.2011
-@modified    05.10.2019
+@modified    22.10.2019
 ------------------------------------------------------------------------------
 """
 import functools
@@ -137,7 +137,7 @@ def collect_shortcuts(control, use_heuristics=True):
                     result.append(key)
                     if DEBUG and key:
                         print("Parsed '%s' in label '%s'." % (key, ctrl.Label))
-                    break # break for part in filter
+                    break # for part
         return result
 
 
@@ -210,7 +210,7 @@ def collect_shortcuts(control, use_heuristics=True):
                     item = ctrl.ContainingSizer.GetItem(len(sizer_items))
                     sizer_items.append(item.Window)
                 except Exception:
-                    break # Reached item limit
+                    break # while True
             index = sizer_items.index(ctrl)
             if index < len(sizer_items) - 1:
                 next_ctrl = sizer_items[index + 1]
@@ -326,12 +326,12 @@ def accelerate(window, use_heuristics=True, skipclicklabels=set()):
                             event = wx.CommandEvent(wx.EVT_TOOL.typeId, id)
                             event.SetEventObject(target)
                             target.ToggleTool(id, not target.GetToolState(id))
-                            break # break for i in range(target.GetToolsCount)
+                            break # for tool
                 else:
                     target.SetFocus()
                     if isinstance(target, wx.TextCtrl):
                         target.SelectAll()
-                break # break for target in targets
+                break # for target
         if event:
             if DEBUG: print("Chose target %s." % (target.Label or target))
 

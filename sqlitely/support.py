@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.09.2019
+@modified    22.10.2019
 ------------------------------------------------------------------------------
 """
 import HTMLParser
@@ -133,7 +133,7 @@ def download_and_install(url):
                 msg = "%d%% of %s" % (percent, util.format_bytes(filesize))
                 is_cancelled = not dlg_progress.Update(percent, msg)
                 if is_cancelled:
-                    break # break while len(buf)
+                    break # while len(buf)
                 wx.YieldIfNeeded()
                 buf = urlfile.read(BLOCKSIZE)
         dlg_progress.Destroy()

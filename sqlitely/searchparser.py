@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.10.2019
+@modified    22.10.2019
 """
 import calendar
 import collections
@@ -263,7 +263,7 @@ class SearchQueryParser(object):
                             continue # for word
                         format, value = "", ""
                         for j, (frm, val) in enumerate(zip("Ymd", ymd)):
-                            if val is None: continue # continue for j, (forma..
+                            if val is None: continue # for j, (frm, val)
                             format += ("-" if format else "") + "%" + frm
                             value += ("-" if value else "")
                             value += "%02d" % val if j else "%04d" % val
@@ -283,7 +283,7 @@ class SearchQueryParser(object):
                         parts = filter(None, d.split("-")[:3])
                         ymd = list(map(util.to_int, parts))
                         if not ymd or ymd[0] is None:
-                            continue # continue for i, d in filter(..
+                            continue # for i, d
                         while len(ymd) < 3: ymd.append(None) # Ensure 3 values
                         ymd[0] = max(min(ymd[0], 9999), 1) # Year in 1..9999
                         # Force month into legal range

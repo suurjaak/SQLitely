@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.10.2019
+@modified    22.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -143,7 +143,7 @@ def cmp_dicts(dict1, dict2):
             v1, v2 = (tuple(x) if isinstance(x, list) else x for x in [v1, v2])
             result = (v1 == v2)
         if not result:
-            break # break for key, v1
+            break # for key, v1
     return result
 
 

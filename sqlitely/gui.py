@@ -1439,7 +1439,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             value, help = getattr(conf, name, None), get_field_doc(name)
             default = conf.OptionalFileDirectiveDefaults.get(name)
             if value is None and default is None:
-                continue # continue for name
+                continue # for name
 
             kind = type(value)
             if isinstance(value, (tuple, list)):
@@ -1688,7 +1688,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             ): return
 
         for page, db in self.db_pages.items():
-            if not page: continue # continue for page, if dead object
+            if not page: continue # for page, db
             active_idx = page.notebook.Selection
             if active_idx and not db.temporary:
                 conf.LastActivePage[db.filename] = active_idx
@@ -1906,12 +1906,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 for i in range(1, self.list_db.GetItemCount()):
                     if self.list_db.GetItemText(i) == filename:
                         self.list_db.Select(i)
-                        break # break for i
+                        break # for i
             for i in range(self.notebook.GetPageCount()):
                 if self.notebook.GetPage(i) == page:
                     self.notebook.SetSelection(i)
                     self.update_notebook_header()
-                    break # break for i in range(self.notebook..)
+                    break # for i
         return page
 
 
@@ -3806,7 +3806,7 @@ class DatabasePage(wx.Panel):
             for dct in self.data_pages, self.schema_pages:
                 for category, key, page in ((c, k, p) for c, m in dct.items()
                                             for k, p in m.items()):
-                    if not page.IsChanged(): continue # for category
+                    if not page.IsChanged(): continue # for category, ..
                     success = page.Save(backup=True)
                     if not success: break # for category
                     if isinstance(page, components.SchemaObjectPage):
@@ -4836,7 +4836,7 @@ class DatabasePage(wx.Panel):
             def collect(relateds):
                 for category, item in ((c, v) for c, vv in relateds.items() for v in vv):
                     sqls[item["name"]] = item["sql"]
-                    if category not in ("table", "view"): continue # for item
+                    if category not in ("table", "view"): continue # for category, item
                     subrelateds = self.db.get_related("table", item["name"], associated=True)
                     for subitems in subrelateds.values():
                         for subitem in subitems:
