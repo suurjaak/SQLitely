@@ -1856,15 +1856,16 @@ class SchemaObjectPage(wx.Panel):
 
         button_edit    = self._buttons["edit"]    = wx.Button(panel2, label="Edit")
         button_refresh = self._buttons["refresh"] = wx.Button(panel2, label="Refresh")
+        button_test    = self._buttons["test"]    = wx.Button(panel2, label="Test")
         button_import  = self._buttons["import"]  = wx.Button(panel2, label="Import SQL")
         button_cancel  = self._buttons["cancel"]  = wx.Button(panel2, label="Cancel")
         button_delete  = self._buttons["delete"]  = wx.Button(panel2, label="Delete")
         button_close   = self._buttons["close"]   = wx.Button(panel2, label="Close")
         button_edit._toggle   = button_refresh._toggle = "skip"
         button_delete._toggle = button_close._toggle   = "hide skip"
-        button_import._toggle = button_cancel._toggle  = "show skip"
-        button_test.ToolTip    = "Test saving schema object, checking SQL validity"
+        button_import._toggle = button_cancel._toggle  = button_test._toggle  = "show skip"
         button_refresh.ToolTip = "Reload statement, and database tables"
+        button_test.ToolTip    = "Test saving schema object, checking SQL validity"
         button_import.ToolTip  = "Import %s definition from external SQL" % item["type"]
 
         sizer_name.Add(label_name, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
@@ -1872,6 +1873,7 @@ class SchemaObjectPage(wx.Panel):
 
         sizer_buttons.Add(button_edit)
         sizer_buttons.Add(button_refresh, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        sizer_buttons.Add(button_test,    flag=wx.ALIGN_CENTER_HORIZONTAL)
         sizer_buttons.Add(button_import,  flag=wx.ALIGN_CENTER_HORIZONTAL)
         sizer_buttons.Add(button_cancel,  flag=wx.ALIGN_RIGHT)
         sizer_buttons.Add(button_delete,  flag=wx.ALIGN_CENTER_HORIZONTAL)
@@ -1894,6 +1896,7 @@ class SchemaObjectPage(wx.Panel):
         tb.Bind(wx.EVT_TOOL, self._OnSaveSQL, id=wx.ID_SAVE)
         self.Bind(wx.EVT_BUTTON,   self._OnSaveOrEdit,     button_edit)
         self.Bind(wx.EVT_BUTTON,   self._OnRefresh,        button_refresh)
+        self.Bind(wx.EVT_BUTTON,   self._OnTest,           button_test)
         self.Bind(wx.EVT_BUTTON,   self._OnImportSQL,      button_import)
         self.Bind(wx.EVT_BUTTON,   self._OnToggleEdit,     button_cancel)
         self.Bind(wx.EVT_BUTTON,   self._OnDelete,         button_delete)
@@ -4004,14 +4007,14 @@ class SchemaObjectPage(wx.Panel):
         return True
 
 
-    def _OnSave(self, event=None):
-        """Handler for clicking to save the item, validates and saves, returns success."""
-        if not self._newmode and not self.IsChanged():
-            self._OnToggleEdit()
-            return True
+    def _Validate(self):
+        """
+        Returns a list of errors for current schema object properties.
 
-        errors, meta, meta2 = [], self._item["meta"], None
-        name = meta.get("name") or ""
+        @return   ([errors], {parsed meta from current SQL})
+        """
+        errors, meta2 = [], None
+        name = self._item["meta"].get("name") or ""
 
         if not name:
             errors += ["Name is required."]
@@ -4020,13 +4023,14 @@ class SchemaObjectPage(wx.Panel):
                 errors += ["View is required."]
             else:
                 errors += ["Table is required."]
-        if "trigger" == self._category and not meta.get("body"):
+        if "trigger" == self._category and not self._item["meta"].get("body"):
             errors += ["Body is required."]
-        if "trigger" == self._category and not meta.get("action"):
+        if "trigger" == self._category and not self._item["meta"].get("action"):
             errors += ["Action is required."]
-        if "view"    == self._category and not meta.get("select"):
+        if "view"    == self._category and not self._item["meta"].get("select"):
             errors += ["Select is required."]
-        if self._category in ("table", "index") and not meta.get("columns"):
+        if self._category in ("table", "index") \
+        and not self._item["meta"].get("columns"):
             errors += ["Columns are required."]
 
         if (self._newmode or name.lower() != self._item["name"].lower()) \
@@ -4036,6 +4040,44 @@ class SchemaObjectPage(wx.Panel):
         if not errors:
             meta2, err = grammar.parse(self._item["sql"])
             if not meta2: errors += [err[:200] + (".." if len(err) > 200 else "")]
+        return errors, meta2
+
+
+    def _OnTest(self, event=None):
+        """
+        Handler for clicking to test schema SQL validity, tries
+        executing CREATE or ALTER statement, shows success.
+        """
+        errors, sql = [], self._item["sql"]
+        if self.IsChanged(): errors, _ = self._Validate()
+        if not errors and self.IsChanged():
+            " TODO run CREATE or ALTER "
+            if not self._newmode: sql = self._GetAlterSQL()
+            sql2 = "PRAGMA foreign_keys = off;\n\nSAVEPOINT test;\n\n" \
+                   "%s;\n\nROLLBACK TO SAVEPOINT test;\n" % sql
+            logger.info("Executing test SQL:\n\n%s", sql2)
+            try: self._db.connection.executescript(sql2)
+            except Exception as e:
+                logger.exception("Error executing test SQL.")
+                try: self._db.execute("ROLLBACK")
+                except Exception: pass
+                try: self._fks_on and self._db.execute("PRAGMA foreign_keys = on")
+                except Exception: pass
+                errors = [util.format_exc(e)]
+
+        if errors: wx.MessageBox("Errors:\n\n%s" % "\n\n".join(errors),
+                                 conf.Title, wx.OK | wx.ICON_WARNING)
+        else: wx.MessageBox("No errors detected. SQL:\n\n%s" % sql,
+                            conf.Title, wx.OK | wx.ICON_INFORMATION)
+
+
+    def _OnSave(self, event=None):
+        """Handler for clicking to save the item, validates and saves, returns success."""
+        if not self._newmode and not self.IsChanged():
+            self._OnToggleEdit()
+            return True
+
+        errors, meta2 = self._Validate()
         if errors:
             wx.MessageBox("Errors:\n\n%s" % "\n\n".join(errors),
                           conf.Title, wx.OK | wx.ICON_WARNING)
@@ -4069,7 +4111,7 @@ class SchemaObjectPage(wx.Panel):
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
             return
 
-        self._item.update(name=name, meta=self._AssignColumnIDs(meta2))
+        self._item.update(name=meta2["name"], meta=self._AssignColumnIDs(meta2))
         self._original = copy.deepcopy(self._item)
         if self._show_alter: self._OnToggleAlterSQL()
         self._has_alter = True
