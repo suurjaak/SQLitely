@@ -1064,8 +1064,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         self.button_missing.Show(bool(items))
         self.button_clear.Show(bool(items))
-        self.update_database_count()
         self.panel_db_main.Layout()
+        self.update_database_count()
         if selected_files: wx.CallLater(100, self.update_database_detail)
 
 
@@ -1104,8 +1104,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.db_datas.setdefault(filename, {}).update(data)
                 result = True
 
-        self.button_missing.Show(self.list_db.GetItemCount() > 1)
-        self.button_clear.Show(self.list_db.GetItemCount() > 1)
+        if self.button_missing.Shown != (self.list_db.GetItemCount() > 1):
+            self.button_missing.Show(self.list_db.GetItemCount() > 1)
+            self.button_clear.Show(self.list_db.GetItemCount() > 1)
+            self.panel_db_main.Layout()
         self.update_database_count()
         return result
 
@@ -1254,7 +1256,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if isinstance(page, DatabasePage): page.save_database(rename=True)
 
 
-    def on_remove_database(self, event):
+    def on_remove_database(self, event=None):
         """Handler for clicking to remove an item from the database list."""
         if not self.dbs_selected: return
 
@@ -1271,9 +1273,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             for dct in conf.LastSearchResults, self.dbs:
                 dct.pop(filename, None)
             self.db_datas.get(filename, {}).pop("name", None)
-        for i in range(self.list_db.GetItemCount())[::-1]:
-            if self.list_db.GetItemText(i) in self.dbs_selected:
-                self.list_db.DeleteItem(i)
+        self.list_db.Freeze()
+        try:
+            for i in range(self.list_db.GetItemCount())[::-1]:
+                if self.list_db.GetItemText(i) in self.dbs_selected:
+                    self.list_db.DeleteItem(i)
+        finally: self.list_db.Thaw()
         # Remove from recent file history
         historyfiles = [(i, self.history_file.GetHistoryFile(i))
                         for i in range(self.history_file.Count)]
