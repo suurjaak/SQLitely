@@ -2179,7 +2179,7 @@ class DatabasePage(wx.Panel):
         ColourManager.Manage(tree, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
         tree.AssignImageList(wx.ImageList(16, 16)) # Same height rows as tree_schema
 
-        tree.AddColumn("Table")
+        tree.AddColumn("Object")
         tree.AddColumn("Info")
         tree.AddRoot("Loading data..")
         tree.SetMainColumn(0)
