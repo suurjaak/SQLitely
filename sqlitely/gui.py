@@ -2711,6 +2711,8 @@ class DatabasePage(wx.Panel):
             default = step.Template(templates.SEARCH_WELCOME_HTML).expand()
             self.html_searchall.SetDefaultPage(default)
             self.populate_statistics()
+            self.load_tree_data()
+            self.load_tree_schema()
         wx.CallAfter(dorefresh) # Postpone to allow conf update
 
 
