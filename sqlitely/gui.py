@@ -2373,7 +2373,7 @@ class DatabasePage(wx.Panel):
         label_header.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                     wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
         edit_filter = self.edit_pragma_filter = controls.SearchCtrl(page, "Filter settings")
-        edit_filter.SetToolTipString("Filter PRAGMA directive list (Ctrl-F)")
+        edit_filter.ToolTip = "Filter PRAGMA directive list (Ctrl-F)"
 
         def on_help(ctrl, text, event):
             """Handler for clicking help bitmap, shows text popup."""
@@ -2429,9 +2429,7 @@ class DatabasePage(wx.Panel):
             if opts.get("deprecated"):
                 ColourManager.Manage(label, "ForegroundColour", "DisabledColour")
                 ColourManager.Manage(label_text, "ForegroundColour", "DisabledColour")
-            label.SetToolTipString(description)
-            ctrl.SetToolTipString(description)
-            label_text.SetToolTipString(description)
+            label.ToolTip = ctrl.ToolTip = label_text.ToolTip = description
             help_bmp.SetCursor(cursor_pointer)
             help_bmp.Bind(wx.EVT_LEFT_UP, functools.partial(on_help, help_bmp, description))
 
@@ -2464,12 +2462,11 @@ class DatabasePage(wx.Panel):
 
         check_sql = self.check_pragma_sql = \
             wx.CheckBox(panel_sql, label="See change S&QL")
-        check_sql.SetToolTipString("See SQL statements for PRAGMA changes")
+        check_sql.ToolTip = "See SQL statements for PRAGMA changes"
         check_sql.Value = True
         check_fullsql = self.check_pragma_fullsql = \
             wx.CheckBox(panel_sql, label="See f&ull SQL")
-        check_fullsql.SetToolTipString("See SQL statements for "
-                                       "setting all current PRAGMA values")
+        check_fullsql.ToolTip = "See SQL statements for setting all current PRAGMA values"
         check_fullsql.Hide()
 
         stc = self.stc_pragma = controls.SQLiteTextCtrl(
@@ -2495,9 +2492,9 @@ class DatabasePage(wx.Panel):
         button_cancel = self.button_pragma_cancel = \
             wx.Button(page, label="Cancel")
 
-        button_edit.SetToolTipString("Change PRAGMA values")
-        button_refresh.SetToolTipString("Reload PRAGMA values from database")
-        button_cancel.SetToolTipString("Cancel PRAGMA changes")
+        button_edit.ToolTip = "Change PRAGMA values"
+        button_refresh.ToolTip = "Reload PRAGMA values from database"
+        button_cancel.ToolTip = "Cancel PRAGMA changes"
         button_cancel.Enabled = False
 
         self.Bind(wx.EVT_BUTTON,     self.on_pragma_edit,    button_edit)
@@ -2598,15 +2595,15 @@ class DatabasePage(wx.Panel):
         button_refresh     = self.button_refresh_info = wx.Button(panel1c, label="Refresh")
         button_fks.Enabled = button_check.Enabled = button_optimize.Enabled = False
         button_vacuum.Enabled = button_open_folder.Enabled = button_refresh.Enabled = False
-        button_fks.SetToolTipString("Check for foreign key violations")
-        button_check.SetToolTipString("Check database integrity for "
-                                      "corruption and recovery")
-        button_optimize.SetToolTipString("Attempt to optimize the database, "
-                                         "running ANALYZE on tables")
-        button_vacuum.SetToolTipString("Rebuild the database file, repacking "
-                                       "it into a minimal amount of disk space")
-        button_open_folder.SetToolTipString("Open database file directory")
-        button_refresh.SetToolTipString("Refresh file information")
+        button_fks.ToolTip         = "Check for foreign key violations"
+        button_check.ToolTip       = "Check database integrity for " \
+                                     "corruption and recovery"
+        button_optimize.ToolTip    = "Attempt to optimize the database, " \
+                                     "running ANALYZE on tables"
+        button_vacuum.ToolTip      = "Rebuild the database file, repacking " \
+                                     "it into a minimal amount of disk space"
+        button_open_folder.ToolTip = "Open database file directory"
+        button_refresh.ToolTip =     "Refresh file information"
 
         sizer_buttons = wx.FlexGridSizer(cols=5, vgap=5, hgap=0)
         sizer_buttons.AddGrowableCol(1)
@@ -3030,7 +3027,7 @@ class DatabasePage(wx.Panel):
         try:
             for name, opts in database.Database.PRAGMA.items():
                 texts = [name, opts["label"], opts["short"],
-                         self.pragma_ctrls[name].ToolTipString]
+                         self.pragma_ctrls[name].ToolTip]
                 for kv in opts.get("values", {}).items():
                     texts.extend(map(str, kv))
                 if name in values: texts.append(str(values[name]))
