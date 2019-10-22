@@ -1638,7 +1638,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         @param   rows      a list of data dicts
         @param   imageIds  list of indexes for the images associated to rows
         """
-        self._col_widths.clear()
+        if rows: self._col_widths.clear()
         self._id_rows[:] = []
         if imageIds: imageIds = self._ConvertImageIds(imageIds)
         for r in rows:
@@ -1678,10 +1678,6 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                 if imageIds and not i: self.InsertImageStringItem(index, col_value, imageIds)
                 elif not i: self.InsertStringItem(index, col_value)
                 else: self.SetStringItem(index, i, col_value)
-                col_width = self.GetTextExtent(col_value)[0] + self.COL_PADDING
-                if col_width > self._col_widths.get(i, 0):
-                    self._col_widths[i] = col_width
-                    self.SetColumnWidth(i, col_width)
             self.SetItemData(index, item_id)
             self.itemDataMap[item_id] = [data[c] for c in columns]
             self._data_map[item_id] = data
@@ -1703,11 +1699,9 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                                 filter value did not change
         """
         if force_refresh or value != self._filter:
-            if force_refresh:
-                self._col_widths.clear()
             self._filter = value
-            if self._id_rows:
-                self.RefreshRows()
+            if force_refresh: self._col_widths.clear()
+            if self._id_rows: self.RefreshRows()
 
 
     def RefreshRows(self):

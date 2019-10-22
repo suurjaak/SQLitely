@@ -203,6 +203,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             def OnDropFiles(self, x, y, filenames):
                 # CallAfter to allow UI to clear up the dragged icons
                 wx.CallAfter(self.ProcessFiles, filenames)
+                return True
 
             def ProcessFiles(self, filenames):
                 folders   = filter(os.path.isdir,  filenames)
@@ -1532,6 +1533,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                            log=True, flash=True)
         if result.get("done", False):
             self.button_detect.Label = "Detect databases"
+            self.list_db.ResetColumnWidths()
             wx.Bell()
 
 
@@ -1576,6 +1578,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                            result["folder"], log=True, flash=True)
         if result.get("done"):
             self.button_folder.Label = "&Import from folder"
+            self.list_db.ResetColumnWidths()
             wx.Bell()
 
 
@@ -1933,6 +1936,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 if not self.load_database(f, silent=True): continue # for f
                 self.update_database_list(f)
                 self.load_database_page(f)
+        if db_filenames: self.list_db.ResetColumnWidths()
         if notdb_filenames:
             t = "valid SQLite databases"
             if len(notdb_filenames) == 1: t = "a " + t[:-1]
