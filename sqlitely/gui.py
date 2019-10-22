@@ -2154,6 +2154,7 @@ class DatabasePage(wx.Panel):
         )
         ColourManager.Manage(tree, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(tree, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
+        tree.AssignImageList(wx.ImageList(16, 16)) # Same height rows as tree_schema
 
         tree.AddColumn("Table")
         tree.AddColumn("Info")
@@ -3225,7 +3226,7 @@ class DatabasePage(wx.Panel):
             wx.MessageBox(err, conf.Title, wx.OK | wx.ICON_ERROR)
         else:
             self.update_info_panel()
-            wx.MessageBox("VACUUM complete.\n\nSize before: %s, size after: %s." %
+            wx.MessageBox("VACUUM complete.\n\nSize before: %s.\nSize after:    %s." %
                 tuple(util.format_bytes(x, max_units=False) for x in (size1, self.db.filesize)),
                 conf.Title, wx.OK | wx.ICON_INFORMATION)
 
@@ -3660,8 +3661,10 @@ class DatabasePage(wx.Panel):
 
         filename = dialog.GetPath()
         try:
+            title = "PRAGMA settings." if stc is self.stc_pragma else "Database schema."
             content = step.Template(templates.CREATE_SQL, strip=False).expand(
-                title="Database schema.", db_filename=self.db.name, sql=stc.GetText())
+                title=title, db_filename=self.db.name, sql=stc.GetText()
+            )
             with open(filename, "wb") as f:
                 f.write(content.encode("utf-8"))
             util.start_file(filename)

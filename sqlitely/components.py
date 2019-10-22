@@ -4317,6 +4317,7 @@ class ExportProgressPanel(wx.Panel):
                 ctrls["title"].Label = 'Exported "%s".' % opts["filename"]
                 ctrls["text"].Label = util.plural("row", opts["count"])
                 ctrls["open"].Show()
+                ctrls["open"].SetFocus()
                 ctrls["folder"].Show()
             self._current = None
         else: # User cancel
