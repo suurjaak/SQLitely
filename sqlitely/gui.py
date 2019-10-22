@@ -4710,7 +4710,7 @@ class DatabasePage(wx.Panel):
         if data.get("type") in ("table", "view"): # Single table/view
             item_name = wx.MenuItem(menu, -1, '%s %s' % (
                         data["type"].capitalize(), util.unprint(grammar.quote(data["name"], force=True))))
-            item_open = wx.MenuItem(menu, -1, "&Open %s" % data["type"])
+            item_open = wx.MenuItem(menu, -1, "&Open %s data" % data["type"])
             item_open_meta = wx.MenuItem(menu, -1, "Open %s &schema" % data["type"])
             item_copy = wx.MenuItem(menu, -1, "&Copy name")
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, True),
@@ -4736,7 +4736,7 @@ class DatabasePage(wx.Panel):
             item_name = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
                         util.unprint(grammar.quote(data["parent"]["name"])),
                         util.unprint(grammar.quote(data["name"]))))
-            item_open = wx.MenuItem(menu, -1, "&Open %s" % data["parent"]["type"])
+            item_open = wx.MenuItem(menu, -1, "&Open %s data" % data["parent"]["type"])
             item_copy = wx.MenuItem(menu, -1, "&Copy name")
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, False),
                       id=item_name.GetId())
@@ -5008,7 +5008,7 @@ class DatabasePage(wx.Panel):
             item_name   = wx.MenuItem(menu, -1, '%s %s' % (
                           data["type"].capitalize(),
                           util.unprint(grammar.quote(data["name"], force=True))))
-            item_open = wx.MenuItem(menu, -1, "&Open %s" % data["type"])
+            item_open = wx.MenuItem(menu, -1, "&Open %s schema" % data["type"])
             item_open_data = wx.MenuItem(menu, -1, "Open %s &data" % data["type"]) \
                              if data["type"] in ("table", "view") else None
             item_copy      = wx.MenuItem(menu, -1, "&Copy name")
