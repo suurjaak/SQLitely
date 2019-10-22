@@ -1193,7 +1193,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         filenames = filter(os.path.exists, self.dbs_selected)
         if not filenames:
             m = "None of the selected files" if len(self.dbs_selected) > 1 \
-                else "The file \"%s\" does not" % self.dbs_selected[0]
+                else 'The file "%s" does not' % self.dbs_selected[0]
             return wx.MessageBox("%s exist on this computer." % m, conf.Title,
                                  wx.OK | wx.ICON_ERROR)
 
@@ -1261,10 +1261,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for clicking to remove an item from the database list."""
         if not self.dbs_selected: return
 
-        msg = "%s files" % len(self.dbs_selected)
-        if len(self.dbs_selected) == 1: msg = self.dbs_selected[0]
+        msg = util.plural("file", self.dbs_selected, single="this")
         if wx.OK != wx.MessageBox(
-            "Remove %s from database list?" % msg,
+            "Remove %s from database list?\n\n%s" % (msg, "\n".join(self.dbs_selected)),
             conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
         ): return
 
@@ -1324,10 +1323,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for clicking to delete a database from disk."""
         if not self.dbs_selected: return
 
-        msg = "%s files" % len(self.dbs_selected)
-        if len(self.dbs_selected) == 1: msg = self.dbs_selected[0]
+        msg = util.plural("file", self.dbs_selected, single="this")
         if wx.OK != wx.MessageBox(
-            "Delete %s from disk?" % msg,
+            "Delete %s from disk?\n\n%s" % (msg, "\n".join(self.dbs_selected)),
             conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
         ): return
 
@@ -1340,16 +1338,20 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     ongoing_pages[page] = db.filename
         if unsaved_pages:
             if wx.OK != wx.MessageBox(
-                "There are unsaved changes in files\n(%s).\n\n"
-                "Are you sure you want to discard them?" %
-                "\n".join(textwrap.wrap(", ".join(sorted(unsaved_pages.values())))),
+                "There are unsaved changes in %s:\n\n%s\n\n"
+                "Are you sure you want to discard them?" % (
+                    util.plural(unsaved_pages, single="this"),
+                    "\n".join(sorted(unsaved_pages.values()))
+                ),
                 conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
             ): return
         if ongoing_pages:
             if wx.OK != wx.MessageBox(
-                "There are ongoing exports in files\n(%s).\n\n"
-                "Are you sure you want to cancel them?" %
-                "\n".join(textwrap.wrap(", ".join(sorted(ongoing_pages.values())))),
+                "There are ongoing exports in %s:\n\n%s\n\n"
+                "Are you sure you want to cancel them?" % (
+                    util.plural(ongoing_pages, single="this"),
+                    "\n".join(sorted(ongoing_pages.values()))
+                ),
                 conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
             ): return
 
@@ -1388,7 +1390,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         conf.save()
         if errors:
             wx.MessageBox("Error removing %s:\n\n%s" % (
-                          util.plural("file", errors, False),
+                          util.plural("file", errors, numbers=False),
                           "\n".join(errors)), conf.Title, wx.OK | wx.ICON_ERROR)
 
 
@@ -1670,9 +1672,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         if unsaved_pages:
             resp = wx.MessageBox(
-                "There are unsaved changes in files\n(%s).\n\n"
-                "Do you want to save the changes?" %
-                "\n".join(textwrap.wrap(", ".join(sorted(unsaved_pages.values())))),
+                "There are unsaved changes in %s:\n\n%s\n\n"
+                "Do you want to save the changes?" % (
+                    util.plural("file", unsaved_pages, single="this"),
+                    "\n".join(sorted(unsaved_pages.values()))
+                ),
                 conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION
             )
             if wx.CANCEL == resp: return
@@ -1681,9 +1685,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         if ongoing_pages:
             if wx.OK != wx.MessageBox(
-                "There are ongoing exports in files\n(%s).\n\n"
-                "Are you sure you want to cancel them?" %
-                "\n".join(textwrap.wrap(", ".join(sorted(ongoing_pages.values())))),
+                "There are ongoing exports in %s:\n\n\n%s\n\n"
+                "Are you sure you want to cancel them?" % (
+                    util.plural("file", ongoing_pages, single="this"),
+                    "\n".join(sorted(ongoing_pages.values()))
+                ),
                 conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
             ): return
 
@@ -1738,13 +1744,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 if unsaved.get("pragma"): info = "PRAGMA settings"
                 if unsaved.get("table"):
                     info += (", and " if info else "")
-                    info += util.plural("table", unsaved["table"], with_items=False)
+                    info += util.plural("table", unsaved["table"], numbers=False)
                     info += " " + ", ".join(map(grammar.quote, sorted(unsaved["table"])))
                 if unsaved.get("schema"):
                     info += (", and " if info else "") + "schema changes"
                 if unsaved.get("temporary"):
                     info += (", and " if info else "") + "temporary file"
-                msg = "There are unsaved changes in %s:\n%s.\n\n" % (page.db, info)
+                msg = "There are unsaved changes in this file:\n\n%s\n\n%s.\n\n" % (page.db, info)
 
             resp = wx.MessageBox(msg + "Do you want to save the changes?", conf.Title,
                                  wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION)
@@ -1758,7 +1764,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             for category in "table", "view":
                 if category in ongoing:
                     info = ", ".join(sorted(ongoing[category], key=lambda x: x.lower()))
-                    title = util.plural(category, ongoing[category], with_items=False)
+                    title = util.plural(category, ongoing[category], numbers=False)
                     info = "%s %s" % (title, info)
                     if len(ongoing) > 1:
                         info = "%s (%s)" % (util.plural(category, ongoing[category]), info)
@@ -1767,7 +1773,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 infos.append(util.plural("SQL query", ongoing["sql"]))
 
             if wx.OK != wx.MessageBox(
-                "There are ongoing exports in %s:\n\n%s.\n\n"
+                "There are ongoing exports in this file:\n\n%s\n\n%s.\n\n"
                 "Are you sure you want to cancel them?" % (page.db, ", ".join(infos)),
                 conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
             ): return event.Veto()

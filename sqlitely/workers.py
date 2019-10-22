@@ -263,7 +263,7 @@ class SearchThread(WorkerThread):
                     break # for item
 
             infotext += "%s%s: %s" % ("; " if infotext else "",
-                util.plural(category, mytexts, with_items=False),
+                util.plural(category, mytexts, numbers=False),
                 ", ".join(mytexts))
             if not self._is_working or result["count"] >= conf.MaxSearchResults:
                 break # for category

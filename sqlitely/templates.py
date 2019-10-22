@@ -192,7 +192,7 @@ from sqlitely.lib import util
       <a id="toggle" title="Toggle full SQL" onclick="document.getElementById('sql').classList.toggle('clip')">...</a>
       <br />
       Source: <b>{{ db_filename }}</b>.<br />
-      <b>{{ row_count }}</b> {{ util.plural("row", row_count, with_items=False) }}{{ " in results" if sql else "" }}.<br />
+      <b>{{ row_count }}</b> {{ util.plural("row", row_count, numbers=False) }}{{ " in results" if sql else "" }}.<br />
     </td>
   </tr></table>
   <script> document.getElementById('sql').classList.add('clip'); </script>
@@ -295,7 +295,7 @@ from sqlitely import conf
 %>-- {{ title }}.
 -- Source: {{ db_filename }}.
 -- Exported with {{ conf.Title }} on {{ datetime.datetime.now().strftime("%d.%m.%Y %H:%M") }}.
--- {{ row_count }} {{ util.plural("row", row_count, with_items=False) }}.
+-- {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
 %if sql:
 --
 -- SQL: {{ sql.replace("\\n", "\\n--      ") }};
@@ -387,7 +387,7 @@ from sqlitely import conf
 %>{{ title }}.
 Source: {{ db_filename }}.
 Exported with {{ conf.Title }} on {{ datetime.datetime.now().strftime("%d.%m.%Y %H:%M") }}.
-{{ row_count }} {{ util.plural("row", row_count, with_items=False) }}.
+{{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
 %if sql:
 
 SQL: {{ sql }}

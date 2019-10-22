@@ -110,14 +110,15 @@ def format_exc(e):
     return result
 
 
-def plural(word, items=None, with_items=True):
+def plural(word, items=None, numbers=True, single="1"):
     """
     Returns the word as 'count words', or '1 word' if count is 1,
     or 'words' if count omitted.
 
-    @param   items       item collection or count,
-                         or None to get just the plural of the word
-             with_items  if False, count is omitted from final result
+    @param   items    item collection or count,
+                      or None to get just the plural of the word
+             numbers  if False, count is omitted from final result
+             single   prefix to use for word if count is 1
     """
     count   = len(items) if hasattr(items, "__len__") else items or 0
     isupper = word[-1:].isupper()
@@ -126,8 +127,8 @@ def plural(word, items=None, with_items=True):
         word = word[:-1] + ("I" if isupper else "i")
     if isupper: suffix = suffix.upper()
     result = word + ("" if 1 == count else suffix)
-    if with_items and items is not None:
-        result = "%s %s" % (count, result)
+    if numbers and items is not None:
+        result = "%s %s" % (single if 1 == count else count, result)
     return result
 
 
