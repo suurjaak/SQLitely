@@ -2497,7 +2497,7 @@ class SchemaObjectPage(wx.Panel):
 
     def _AddRowTable(self, path, i, col, insert=False, focus=False):
         """Adds a new row of controls for table columns."""
-        rowkey = wx.NewId()
+        rowkey = wx.NewIdRef().Id
         panel = self._panel_columns
 
         sizer_flags = wx.BoxSizer(wx.HORIZONTAL)
@@ -2579,7 +2579,7 @@ class SchemaObjectPage(wx.Panel):
 
     def _AddRowTableConstraint(self, path, i, cnstr, insert=False, focus=False):
         """Adds a new row of controls for table constraints."""
-        meta, rowkey = self._item.get("meta") or {}, wx.NewId()
+        meta, rowkey = self._item.get("meta") or {}, wx.NewIdRef().Id
         panel = self._panel_constraints
 
         mycolumns = [x["name"] for x in meta.get("columns") or () if x["name"]]
@@ -2700,7 +2700,7 @@ class SchemaObjectPage(wx.Panel):
 
     def _AddRowIndex(self, path, i, col, insert=False, focus=False):
         """Adds a new row of controls for index columns."""
-        meta, rowkey = self._item.get("meta") or {}, wx.NewId()
+        meta, rowkey = self._item.get("meta") or {}, wx.NewIdRef().Id
         table = self._db.get_category("table", meta["table"]) \
                 if meta.get("table") else {}
         tablecols = [x["name"] for x in table.get("columns") or ()]
@@ -2752,7 +2752,7 @@ class SchemaObjectPage(wx.Panel):
 
     def _AddRowTrigger(self, path, i, col, insert=False, focus=False):
         """Adds a new row of controls for trigger columns."""
-        meta, rowkey = self._item.get("meta") or {}, wx.NewId()
+        meta, rowkey = self._item.get("meta") or {}, wx.NewIdRef().Id
         category = "view" if grammar.SQL.INSTEAD_OF == meta.get("upon") else "table"
         table = self._db.get_category(category, meta["table"]) \
                 if meta.get("table") else {}
@@ -3487,7 +3487,7 @@ class SchemaObjectPage(wx.Panel):
             if ptr is None: ptr = parent[p] = {} if i < len(path) - 1 else []
             parent = ptr
         if self._category in ("table", "view") and ["columns"] == path:
-            value = dict(value, __id__=wx.NewId())
+            value = dict(value, __id__=wx.NewIdRef().Id)
         ptr.append(copy.deepcopy(value))
         self.Freeze()
         try:

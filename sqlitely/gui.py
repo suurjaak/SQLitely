@@ -181,10 +181,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 notebook.SetSelection(number)
                 self.on_change_page(None)
 
-        id_close = wx.NewId()
+        id_close = wx.NewIdRef().Id
         accelerators = [(wx.ACCEL_CTRL, k, id_close) for k in [wx.WXK_F4]]
         for i in range(9):
-            id_tab = wx.NewId()
+            id_tab = wx.NewIdRef().Id
             accelerators += [(wx.ACCEL_CTRL, ord(str(i + 1)), id_tab)]
             notebook.Bind(wx.EVT_MENU, functools.partial(on_tab_hotkey, i), id=id_tab)
 
@@ -2148,6 +2148,7 @@ class DatabasePage(wx.Panel):
             wx.Button(panel1, label="Refresh")
         sizer_topleft.AddStretchSpacer()
         sizer_topleft.Add(button_refresh)
+
         tree = self.tree_data = controls.TreeListCtrl(
             panel1, agwStyle=wx.TR_DEFAULT_STYLE | wx.TR_FULL_ROW_HIGHLIGHT
         )
@@ -2213,6 +2214,7 @@ class DatabasePage(wx.Panel):
         panel1 = wx.Panel(splitter)
         button_refresh = wx.Button(panel1, label="Refresh")
         button_new = wx.Button(panel1, label="Create ne&w ..")
+
         tree = self.tree_schema = controls.TreeListCtrl(
             panel1, agwStyle=wx.TR_DEFAULT_STYLE | wx.TR_FULL_ROW_HIGHLIGHT
         )
@@ -2693,7 +2695,7 @@ class DatabasePage(wx.Panel):
         def on_close_hotkey(event):
             notebook and notebook.DeletePage(notebook.GetSelection())
 
-        id_close = wx.NewId()
+        id_close = wx.NewIdRef().Id
         accelerators = [(wx.ACCEL_CTRL, k, id_close) for k in [ord('W')]]
         notebook.Bind(wx.EVT_MENU, on_close_hotkey, id=id_close)
         notebook.SetAcceleratorTable(wx.AcceleratorTable(accelerators))
@@ -3586,8 +3588,8 @@ class DatabasePage(wx.Panel):
             guibase.status('Searching for "%s" in %s.',
                            text, self.db, flash=True)
             html = self.html_searchall
-            data = {"id": wx.NewId(), "db": self.db, "text": text, "map": {},
-                    "width": html.Size.width * 5/9, "partial_html": ""}
+            data = {"id": wx.NewIdRef().Id, "db": self.db, "text": text,
+                    "map": {}, "width": html.Size.width * 5/9, "partial_html": ""}
             if conf.SearchInMeta:
                 data["source"] = "meta"
                 fromtext = "database metadata"
@@ -4362,7 +4364,7 @@ class DatabasePage(wx.Panel):
             title = last_search.get("title", "")
             html = last_search.get("content", "")
             info = last_search.get("info")
-            tabid = wx.NewId() if 0 != last_search.get("id") else 0
+            tabid = wx.NewIdRef().Id if 0 != last_search.get("id") else 0
             self.html_searchall.InsertTab(0, title, tabid, html, info)
         wx.CallLater(100, self.update_tabheader)
         wx.CallLater(200, self.load_tree_data)

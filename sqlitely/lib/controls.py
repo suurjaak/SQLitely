@@ -1565,7 +1565,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         # Default row column formatter function
         frmt = lambda: lambda r, c: "" if r.get(c) is None else unicode(r[c])
         self._formatters = collections.defaultdict(frmt)
-        id_copy = wx.NewId()
+        id_copy = wx.NewIdRef().Id
         entries = [(wx.ACCEL_CTRL, x, id_copy)
                    for x in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT)]
         self.SetAcceleratorTable(wx.AcceleratorTable(entries))
