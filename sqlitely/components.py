@@ -1818,7 +1818,7 @@ class SchemaObjectPage(wx.Panel):
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_name         = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_buttons      = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_buttons      = wx.FlexGridSizer(cols=7)
         sizer_sql_header   = wx.BoxSizer(wx.HORIZONTAL)
 
         splitter = wx.SplitterWindow(self, style=wx.BORDER_NONE)
@@ -1861,16 +1861,22 @@ class SchemaObjectPage(wx.Panel):
         button_delete  = self._buttons["delete"]  = wx.Button(panel2, label="Delete")
         button_close   = self._buttons["close"]   = wx.Button(panel2, label="Close")
         button_edit._toggle   = button_refresh._toggle = "skip"
-        button_delete._toggle = button_close._toggle   = "disable"
-        button_refresh.ToolTipString = "Reload statement, and database tables"
-        button_import.ToolTipString  = "Import %s definition from external SQL" % item["type"]
+        button_delete._toggle = button_close._toggle   = "hide skip"
+        button_import._toggle = button_cancel._toggle  = "show skip"
+        button_test.ToolTip    = "Test saving schema object, checking SQL validity"
+        button_refresh.ToolTip = "Reload statement, and database tables"
+        button_import.ToolTip  = "Import %s definition from external SQL" % item["type"]
 
         sizer_name.Add(label_name, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_name.Add(edit_name, proportion=1)
 
-        for i, n in enumerate(["edit", "refresh", "import", "cancel", "delete", "close"]):
-            if i: sizer_buttons.AddStretchSpacer()
-            sizer_buttons.Add(self._buttons[n])
+        sizer_buttons.Add(button_edit)
+        sizer_buttons.Add(button_refresh, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        sizer_buttons.Add(button_import,  flag=wx.ALIGN_CENTER_HORIZONTAL)
+        sizer_buttons.Add(button_cancel,  flag=wx.ALIGN_RIGHT)
+        sizer_buttons.Add(button_delete,  flag=wx.ALIGN_CENTER_HORIZONTAL)
+        sizer_buttons.Add(button_close,   flag=wx.ALIGN_RIGHT)
+        for i in range(sizer_buttons.Cols): sizer_buttons.AddGrowableCol(i)
 
         sizer_sql_header.Add(label_stc, flag=wx.ALIGN_BOTTOM)
         sizer_sql_header.AddStretchSpacer()
@@ -2872,11 +2878,13 @@ class SchemaObjectPage(wx.Panel):
             if callable(action): action = action() or []
             if "disable" in action: b.Enable(not edit)
             if "show"    in action: b.Show(edit)
+            if "hide"    in action: b.Show(not edit)
             if not ("disable" in action or "skip" in action): b.Enable(edit)
 
         self._buttons["edit"].Label = "Save" if edit else "Edit"
         tooltip = "Validate and confirm SQL, and save to database schema"
         self._buttons["edit"].ToolTipString = tooltip if edit else ""
+        self._buttons["edit"].ContainingSizer.Layout()
 
         for c in self._ctrls.values():
             action = getattr(c, "_toggle", None) or []
@@ -3848,7 +3856,7 @@ class SchemaObjectPage(wx.Panel):
         action, category = "CREATE", self._category.upper()
         name = self._item["meta"].get("name") or ""
         if self._show_alter:
-            action, name = "ALTER", self._original["name"]
+            action, name = "ALTER", self._item["name"]
         filename = " ".join((action, category, name))
         dialog = wx.FileDialog(
             self, message="Save as", defaultFile=filename,
@@ -3987,7 +3995,7 @@ class SchemaObjectPage(wx.Panel):
         if self._editmode and self.IsChanged():
             if self._newmode: msg = "Do you want to save the new %s?" % self._category
             else: msg = "Do you want to save changes to %s %s?" % (
-                        self._category, grammar.quote(self._original["name"], force=True))
+                        self._category, grammar.quote(self._item["name"], force=True))
             res = wx.MessageBox(msg, conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION)
             if wx.CANCEL == res: return
             if wx.YES == res and not self._OnSave(): return
