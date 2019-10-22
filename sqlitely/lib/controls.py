@@ -62,7 +62,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    21.10.2019
+@modified    22.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -438,7 +438,7 @@ class FormDialog(wx.Dialog):
         col = 0
         if field.get("toggle") and self._editmode:
             toggle = wx.CheckBox(parent, label=field["label"] if "label" in field else field["name"])
-            if field.get("help"): toggle.SetToolTipString(field["help"])
+            if field.get("help"): toggle.ToolTip = field["help"]
             sizer.Add(toggle, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
             self._comps[fpath].append(toggle)
             self._toggles[tuple(field.get("path") or fpath)] = toggle
@@ -447,7 +447,7 @@ class FormDialog(wx.Dialog):
         elif field.get("toggle"):
             # Show ordinary label in view mode, checkbox goes very gray
             label = wx.StaticText(parent, label=field["label"] if "label" in field else field["name"])
-            if field.get("help"): label.SetToolTipString(field["help"])
+            if field.get("help"): label.ToolTip = field["help"]
             sizer.Add(label, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
             col += 2
 
@@ -529,13 +529,13 @@ class FormDialog(wx.Dialog):
             b3    = wx.Button(parent, label=u"\u2191", size=(20, -1))
             b4    = wx.Button(parent, label=u"\u2193", size=(20, -1))
 
-            b1.SetToolTipString("Add selected from left to right")
-            b2.SetToolTipString("Remove selected from right")
-            b3.SetToolTipString("Move selected items higher")
-            b4.SetToolTipString("Move selected items lower")
+            b1.ToolTip = "Add selected from left to right"
+            b2.ToolTip = "Remove selected from right"
+            b3.ToolTip = "Move selected items higher"
+            b4.ToolTip = "Move selected items lower"
             ctrl1.SetName(accname)
             ctrl1.MinSize = ctrl2.MinSize = (150, 100)
-            if field.get("help"): ctrl1.SetToolTipString(field["help"])
+            if field.get("help"): ctrl1.ToolTip = field["help"]
 
             sizer_b1.Add(b1); sizer_b1.Add(b2)
             sizer_b2.Add(b3); sizer_b2.Add(b4)
@@ -616,7 +616,7 @@ class FormDialog(wx.Dialog):
             self._comps[fpath].append(x)
             if not i: continue # for i, x
             x.SetName(accname)
-            if field.get("help"): x.SetToolTipString(field["help"])
+            if field.get("help"): x.ToolTip = field["help"]
         return result
 
 
@@ -1262,7 +1262,7 @@ class PropertyDialog(wx.Dialog):
         tip = wx.StaticText(self.panel, label=help)
 
         ctrl.Value = self._GetValueForCtrl(value, typeclass)
-        ctrl.ToolTipString = label.ToolTipString = "Value of type %s%s." % (
+        ctrl.ToolTip = label.ToolTip = "Value of type %s%s." % (
             typeclass.__name__,
             "" if default is None else ", default %s" % repr(default))
         tip.ForegroundColour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)

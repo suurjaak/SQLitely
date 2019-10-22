@@ -736,11 +736,11 @@ class SQLPage(wx.Panel):
         button_export = self._button_export = wx.Button(panel2, label="&Export to file")
         button_close  = self._button_close  = wx.Button(panel2, label="&Close query")
 
-        button_sql.ToolTipString    = "Execute a single statement from the SQL window"
-        button_script.ToolTipString = "Execute multiple SQL statements, separated by semicolons"
-        button_reset.ToolTipString  = "Resets all applied sorting and filtering"
-        button_export.ToolTipString = "Export result to a file"
-        button_close.ToolTipString  = "Close data grid"
+        button_sql.ToolTip    = "Execute a single statement from the SQL window"
+        button_script.ToolTip = "Execute multiple SQL statements, separated by semicolons"
+        button_reset.ToolTip  = "Resets all applied sorting and filtering"
+        button_export.ToolTip = "Export result to a file"
+        button_close.ToolTip  = "Close data grid"
 
         button_reset.Enabled = button_export.Enabled = button_close.Enabled = False
 
@@ -1102,7 +1102,7 @@ class SQLPage(wx.Panel):
             tip = tip if len(tip) < 1000 else tip[:1000] + ".."
         if (row, col) != prev_cell or not (event.EventObject.ToolTip) \
         or event.EventObject.ToolTip.Tip != tip:
-            event.EventObject.SetToolTipString(tip)
+            event.EventObject.ToolTip = tip
         self._hovered_cell = (row, col)
 
 
@@ -1275,13 +1275,13 @@ class DataObjectPage(wx.Panel):
         button_reset     = wx.Button(self, label="&Reset filter/sort")
         button_export_db = wx.Button(self, label="Export to &database")
         button_export    = wx.Button(self, label="&Export to file")
-        button_reset.ToolTipString     = "Reset all applied sorting and filtering"
-        button_export_db.ToolTipString = "Export to another database"
-        button_export.ToolTipString    = "Export to file"
+        button_reset.ToolTip     = "Reset all applied sorting and filtering"
+        button_export_db.ToolTip = "Export to another database"
+        button_export.ToolTip    = "Export to file"
         button_export_db.Show("table" == self._category)
 
         grid = self._grid = wx.grid.Grid(self)
-        grid.ToolTipString = "Double click on column header to sort, right click to filter."
+        grid.ToolTip = "Double click on column header to sort, right click to filter."
         ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
         ColourManager.Manage(grid, "LabelBackgroundColour",       wx.SYS_COLOUR_BTNFACE)
@@ -1725,7 +1725,7 @@ class DataObjectPage(wx.Panel):
             tip = tip if len(tip) < 1000 else tip[:1000] + ".."
         if (row, col) != prev_cell or not (event.EventObject.ToolTip) \
         or event.EventObject.ToolTip.Tip != tip:
-            event.EventObject.SetToolTipString(tip)
+            event.EventObject.ToolTip = tip
         self._hovered_cell = (row, col)
 
 
@@ -1838,7 +1838,7 @@ class SchemaObjectPage(wx.Panel):
         check_alter = None
 
         check_alter = self._ctrls["alter"] = wx.CheckBox(panel2, label="Show A&LTER SQL")
-        check_alter.ToolTipString = "Show SQL statements used for performing schema change"
+        check_alter.ToolTip = "Show SQL statements used for performing schema change"
         check_alter.Shown = self._has_alter = not self._newmode
 
         tb = wx.ToolBar(panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
@@ -1862,8 +1862,8 @@ class SchemaObjectPage(wx.Panel):
         button_close   = self._buttons["close"]   = wx.Button(panel2, label="Close")
         button_edit._toggle   = button_refresh._toggle = "skip"
         button_delete._toggle = button_close._toggle   = "disable"
-        button_refresh.ToolTipString = "Reload statement, and database tables"
-        button_import.ToolTipString  = "Import %s definition from external SQL" % item["type"]
+        button_refresh.ToolTip = "Reload statement, and database tables"
+        button_import.ToolTip  = "Import %s definition from external SQL" % item["type"]
 
         sizer_name.Add(label_name, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_name.Add(edit_name, proportion=1)
@@ -2016,7 +2016,7 @@ class SchemaObjectPage(wx.Panel):
         stc_where   = self._ctrls["where"] = controls.SQLiteTextCtrl(panel,
             size=(-1, 40),
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
-        label_where.ToolTipString = "Optional WHERE-clause to create a partial index"
+        label_where.ToolTip = "Optional WHERE-clause to create a partial index"
 
         sizer_table.Add(label_table, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_table.Add(list_table, flag=wx.GROW)
@@ -2073,13 +2073,13 @@ class SchemaObjectPage(wx.Panel):
         stc_body   = self._ctrls["body"] = controls.SQLiteTextCtrl(panel2,
             size=(-1, 40),
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
-        label_body.ToolTipString = "Trigger body SQL"
+        label_body.ToolTip = "Trigger body SQL"
 
         label_when = wx.StaticText(panel2, label="WHEN:", name="trigger_when_label")
         stc_when   = self._ctrls["when"] = controls.SQLiteTextCtrl(panel2,
             size=(-1, 40), name="trigger_when",
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
-        label_when.ToolTipString = "Trigger WHEN expression, trigger executed only if WHEN is true"
+        label_when.ToolTip = "Trigger WHEN expression, trigger executed only if WHEN is true"
 
         sizer_table.Add(label_table, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_table.Add(list_table, flag=wx.GROW)
@@ -2140,7 +2140,7 @@ class SchemaObjectPage(wx.Panel):
         stc_body = self._ctrls["select"] = controls.SQLiteTextCtrl(panel2,
             size=(-1, 40),
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
-        label_body.ToolTipString = "SELECT statement for view"
+        label_body.ToolTip = "SELECT statement for view"
 
         sizer_flags.Add(check_temp)
         sizer_flags.Add(100, 0)
@@ -2181,7 +2181,7 @@ class SchemaObjectPage(wx.Panel):
             for l, t in [("P", grammar.SQL.PRIMARY_KEY), ("I", grammar.SQL.AUTOINCREMENT),
                          ("N", grammar.SQL.NOT_NULL),    ("U", grammar.SQL.UNIQUE)]:
                 label = wx.StaticText(panel, label=l, size=(14, -1))
-                label.ToolTipString = t
+                label.ToolTip = t
                 sizer_columnflags.Add(label)
 
             sizer_headers.Add(wx.StaticText(panel, label="Name",    size=(150, -1)), border=7, flag=wx.LEFT)
@@ -2218,14 +2218,14 @@ class SchemaObjectPage(wx.Panel):
         button_add_expr   = None
         if "index" == self._category:
             button_add_expr = self._buttons["add_expr"] = wx.Button(panel, label="Add ex&pression")
-            button_add_expr.ToolTipString = "Add index expression"
+            button_add_expr.ToolTip = "Add index expression"
         button_move_up    = self._buttons["move_up"]       = wx.Button(panel, label="Move up")
         button_move_down  = self._buttons["move_down"]     = wx.Button(panel, label="Move down")
         button_remove_col = self._buttons["remove_column"] = wx.Button(panel, label="Remove")
         button_move_up.Enabled = button_move_down.Enabled = False
-        button_move_up.ToolTipString    = "Move item one step higher"
-        button_move_down.ToolTipString  = "Move item one step lower"
-        button_remove_col.ToolTipString = "Delete item"
+        button_move_up.ToolTip    = "Move item one step higher"
+        button_move_down.ToolTip  = "Move item one step lower"
+        button_remove_col.ToolTip = "Delete item"
         button_add_column._toggle = "show"
         if "index" == self._category:
             button_add_column._toggle = button_add_expr._toggle = lambda: (
@@ -2305,13 +2305,13 @@ class SchemaObjectPage(wx.Panel):
         button_move_down = self._buttons["move_constraint_down"] = wx.Button(panel, label="Move down")
         button_remove    = self._buttons["remove_constraint"]   = wx.Button(panel, label="Remove")
         button_move_up.Enabled = button_move_down.Enabled = False
-        button_move_up.ToolTipString    = "Move constraint one step higher"
-        button_move_down.ToolTipString  = "Move constraint one step lower"
-        button_remove.ToolTipString = "Delete constraint"
+        button_move_up.ToolTip   = "Move constraint one step higher"
+        button_move_down.ToolTip = "Move constraint one step lower"
+        button_remove.ToolTip    = "Delete constraint"
         button_add._toggle = "show"
-        button_move_up._toggle    = lambda: "show disable" if not grid.NumberRows or grid.GridCursorRow <= 0 else "show"
-        button_move_down._toggle  = lambda: "show disable" if not grid.NumberRows or grid.GridCursorRow == grid.NumberRows - 1 else "show"
-        button_remove._toggle     = lambda: "show disable" if not grid.NumberRows else "show"
+        button_move_up._toggle   = lambda: "show disable" if not grid.NumberRows or grid.GridCursorRow <= 0 else "show"
+        button_move_down._toggle = lambda: "show disable" if not grid.NumberRows or grid.GridCursorRow == grid.NumberRows - 1 else "show"
+        button_remove._toggle    = lambda: "show disable" if not grid.NumberRows else "show"
 
         sizer_buttons.AddStretchSpacer()
         sizer_buttons.Add(button_add, border=5, flag=wx.RIGHT)
@@ -2511,10 +2511,10 @@ class SchemaObjectPage(wx.Panel):
         check_autoinc = wx.CheckBox(panel)
         check_notnull = wx.CheckBox(panel)
         check_unique  = wx.CheckBox(panel)
-        check_pk.ToolTipString      = grammar.SQL.PRIMARY_KEY
-        check_autoinc.ToolTipString = grammar.SQL.AUTOINCREMENT
-        check_notnull.ToolTipString = grammar.SQL.NOT_NULL
-        check_unique.ToolTipString  = grammar.SQL.UNIQUE
+        check_pk.ToolTip      = grammar.SQL.PRIMARY_KEY
+        check_autoinc.ToolTip = grammar.SQL.AUTOINCREMENT
+        check_notnull.ToolTip = grammar.SQL.NOT_NULL
+        check_unique.ToolTip  = grammar.SQL.UNIQUE
 
         button_open = wx.Button(panel, label="Open", size=(50, -1))
 
@@ -2522,7 +2522,7 @@ class SchemaObjectPage(wx.Panel):
         list_type.MinSize    = (100, -1)
         text_default.MinSize = (100, text_name.Size[1])
         button_open._toggle = "skip"
-        button_open.ToolTipString   = "Open advanced options"
+        button_open.ToolTip = "Open advanced options"
 
         text_name.Value     = col.get("name") or ""
         list_type.Value     = col.get("type") or ""
@@ -2662,9 +2662,9 @@ class SchemaObjectPage(wx.Panel):
             stc_check = controls.SQLiteTextCtrl(panel, size=(-1, 40), traversable=True, wheelable=False)
             stc_check.Text = cnstr.get("check") or ""
 
-            stc_check.ToolTipString  = "Expression yielding a NUMERIC 0 on " \
-                                        "constraint violation,\ncannot contain a subquery."
-            label_type.ToolTipString = stc_check.ToolTipString
+            stc_check.ToolTip  = "Expression yielding a NUMERIC 0 on " \
+                                 "constraint violation,\ncannot contain a subquery."
+            label_type.ToolTip = stc_check.ToolTip
 
             sizer_item.Add(stc_check, proportion=1)
 
@@ -2675,7 +2675,7 @@ class SchemaObjectPage(wx.Panel):
 
         button_open = wx.Button(panel, label="Open", size=(50, -1))
         button_open._toggle = "skip"
-        button_open.ToolTipString   = "Open advanced options"
+        button_open.ToolTip = "Open advanced options"
 
         if insert:
             start = panel.Sizer.Cols * i
@@ -2876,7 +2876,7 @@ class SchemaObjectPage(wx.Panel):
 
         self._buttons["edit"].Label = "Save" if edit else "Edit"
         tooltip = "Validate and confirm SQL, and save to database schema"
-        self._buttons["edit"].ToolTipString = tooltip if edit else ""
+        self._buttons["edit"].ToolTip = tooltip if edit else ""
 
         for c in self._ctrls.values():
             action = getattr(c, "_toggle", None) or []
@@ -3324,9 +3324,9 @@ class SchemaObjectPage(wx.Panel):
             list_order.MinSize =   ( 60, -1)
             if first: button_up.Enable(False)
             if last:  button_down.Enable(False)
-            button_up.ToolTipString     = "Move one step higher"
-            button_down.ToolTipString   = "Move one step lower"
-            button_remove.ToolTipString = "Remove"
+            button_up.ToolTip     = "Move one step higher"
+            button_down.ToolTip   = "Move one step lower"
+            button_remove.ToolTip = "Remove"
 
             ctrl_index.Value   = col.get("name") or ""
             list_collate.Value = col.get("collate") or ""
@@ -3968,7 +3968,7 @@ class SchemaObjectPage(wx.Panel):
             if self._editmode:
                 self._ToggleControls(self._editmode)
             else:
-                self._buttons["edit"].ToolTipString = ""
+                self._buttons["edit"].ToolTip = ""
                 if self._show_alter: self._OnToggleAlterSQL()
                 if is_changed: self._OnRefresh()
                 else:
