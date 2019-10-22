@@ -360,7 +360,7 @@ def accelerate(window, use_heuristics=True, skipclicklabels=set()):
             ctrls = [t[0] for t in targets]
             if DEBUG: print("Binding %s to targets %s." %
                             (key, [type(t) for t in ctrls]))
-            menu_item = dummy_menu.Append(-1, text="&%s" % key)
+            menu_item = dummy_menu.Append(wx.ID_ANY, "&%s" % key)
             window.Bind(wx.EVT_MENU, functools.partial(eventhandler, ctrls, key),
                         menu_item)
             accelerators.append((wx.ACCEL_ALT, ord(key), menu_item.Id))

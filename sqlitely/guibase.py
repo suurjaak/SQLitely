@@ -13,7 +13,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.09.2019
+@modified    21.10.2019
 """
 import datetime
 import logging
@@ -137,14 +137,14 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
         menu_file = wx.Menu()
         menu.Insert(0, menu_file, "&File")
         menu_recent = self.menu_recent = wx.Menu()
-        menu_file.AppendMenu(id=wx.NewId(), text="&Recent files",
+        menu_file.AppendMenu(id=wx.NewIdRef().Id, text="&Recent files",
             submenu=menu_recent, help="Recently opened files.")
         menu_file.AppendSeparator()
         menu_console = self.menu_console = menu_file.Append(
-            id=wx.NewId(), kind=wx.ITEM_CHECK, text="Show &console\tCtrl-E",
+            id=wx.NewIdRef().Id, kind=wx.ITEM_CHECK, text="Show &console\tCtrl-E",
             help="Show/hide a Python shell environment window")
         menu_inspect = self.menu_inspect = menu_file.Append(
-            id=wx.NewId(), kind=wx.ITEM_CHECK, text="Show &widget inspector",
+            id=wx.NewIdRef().Id, kind=wx.ITEM_CHECK, text="Show &widget inspector",
             help="Show/hide the widget inspector")
 
         self.file_history = wx.FileHistory(conf.MaxRecentFiles)
