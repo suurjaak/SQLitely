@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.10.2019
+@modified    23.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter
@@ -987,7 +987,7 @@ class SQLPage(wx.Panel):
                          if col in grid_data.filters else ""
         name = grammar.quote(grid_data.columns[col]["name"], force=True)
         dialog = wx.TextEntryDialog(self,
-            "Filter column %s by:" % name, "Filter", defaultValue=current_filter,
+            "Filter column %s by:" % name, "Filter", value=current_filter,
             style=wx.OK | wx.CANCEL)
         if wx.ID_OK != dialog.ShowModal(): return
 
@@ -1627,7 +1627,7 @@ class DataObjectPage(wx.Panel):
                          if col in grid_data.filters else ""
         name = grammar.quote(grid_data.columns[col]["name"], force=True)
         dialog = wx.TextEntryDialog(self,
-            "Filter column %s by:" % name, "Filter", defaultValue=current_filter,
+            "Filter column %s by:" % name, "Filter", value=current_filter,
             style=wx.OK | wx.CANCEL)
         if wx.ID_OK != dialog.ShowModal(): return
 
