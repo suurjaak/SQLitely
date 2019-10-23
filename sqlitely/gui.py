@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.10.2019
+@modified    23.10.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2681,9 +2681,9 @@ class DatabasePage(wx.Panel):
         tb_sql = self.tb_sql = wx.ToolBar(panel_schema,
                                       style=wx.TB_FLAT | wx.TB_NODIVIDER)
         tb_sql.SetToolBitmapSize(bmp1.Size)
-        tb_sql.AddLabelTool(wx.ID_REFRESH, "", bitmap=bmp1, shortHelp="Refresh schema SQL")
-        tb_sql.AddLabelTool(wx.ID_COPY,    "", bitmap=bmp2, shortHelp="Copy schema SQL to clipboard")
-        tb_sql.AddLabelTool(wx.ID_SAVE,    "", bitmap=bmp3, shortHelp="Save schema SQL to file")
+        tb_sql.AddLabelTool(wx.ID_REFRESH, "", bitmap=bmp4, shortHelp="Refresh schema SQL")
+        tb_sql.AddLabelTool(wx.ID_COPY,    "", bitmap=bmp1, shortHelp="Copy schema SQL to clipboard")
+        tb_sql.AddLabelTool(wx.ID_SAVE,    "", bitmap=bmp2, shortHelp="Save schema SQL to file")
         tb_sql.Realize()
         tb_sql.EnableTool(wx.ID_COPY, False)
         tb_sql.EnableTool(wx.ID_SAVE, False)
