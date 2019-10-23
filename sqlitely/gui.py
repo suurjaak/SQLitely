@@ -1007,12 +1007,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             changes = changes[:MAX] + ".." if len(changes) > MAX else changes
             guibase.status("New %s version %s available.",
                            conf.Title, version, flash=True)
-            if wx.OK == wx.MessageBox(
+            if wx.YES == controls.YesNoMessageBox(
                 "Newer version (%s) available. You are currently on "
                 "version %s.%s\nDownload and install %s %s?" %
                 (version, conf.Version, "\n\n%s\n" % changes,
                  conf.Title, version),
-                "Update information", wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+                "Update information", wx.ICON_INFORMATION
             ):
                 wx.CallAfter(support.download_and_install, url)
         elif full_response and check_result is not None:
@@ -1170,22 +1170,23 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_clear_databases(self, event):
         """Handler for clicking to clear the database list."""
-        if (self.list_db.GetItemCount() > 1) and wx.OK == wx.MessageBox(
+        if (self.list_db.GetItemCount() > 1) and wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to clear the list of all databases?",
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
-        ):
-            self.list_db.Populate([])
-            del conf.DBFiles[:]
-            del conf.LastSelectedFiles[:]
-            del conf.RecentFiles[:]
-            conf.LastSearchResults.clear()
-            while self.history_file.Count:
-                self.history_file.RemoveFileFromHistory(0)
-            del self.dbs_selected[:]
-            for v in self.db_datas.values(): v.pop("name", None)
-            self.dbs.clear()
-            conf.save()
-            self.update_database_list()
+            conf.Title, wx.ICON_INFORMATION, defaultno=True
+        ): return
+
+        self.list_db.Populate([])
+        del conf.DBFiles[:]
+        del conf.LastSelectedFiles[:]
+        del conf.RecentFiles[:]
+        conf.LastSearchResults.clear()
+        while self.history_file.Count:
+            self.history_file.RemoveFileFromHistory(0)
+        del self.dbs_selected[:]
+        for v in self.db_datas.values(): v.pop("name", None)
+        self.dbs.clear()
+        conf.save()
+        self.update_database_list()
 
 
     def on_save_database_as(self, event=None):
@@ -1262,9 +1263,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if not self.dbs_selected: return
 
         msg = util.plural("file", self.dbs_selected, single="this")
-        if wx.OK != wx.MessageBox(
+        if wx.YES != controls.YesNoMessageBox(
             "Remove %s from database list?\n\n%s" % (msg, "\n".join(self.dbs_selected)),
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            conf.Title, wx.ICON_INFORMATION, defaultno=True
         ): return
 
         for filename in self.dbs_selected:
@@ -1324,9 +1325,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if not self.dbs_selected: return
 
         msg = util.plural("file", self.dbs_selected, single="this")
-        if wx.OK != wx.MessageBox(
+        if wx.YES != controls.YesNoMessageBox(
             "Delete %s from disk?\n\n%s" % (msg, "\n".join(self.dbs_selected)),
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+            conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
 
         unsaved_pages, ongoing_pages = {}, {}
@@ -1337,22 +1338,22 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 if page.get_ongoing():
                     ongoing_pages[page] = db.filename
         if unsaved_pages:
-            if wx.OK != wx.MessageBox(
+            if wx.YES != controls.YesNoMessageBox(
                 "There are unsaved changes in %s:\n\n%s\n\n"
                 "Are you sure you want to discard them?" % (
                     util.plural(unsaved_pages, single="this"),
                     "\n".join(sorted(unsaved_pages.values()))
                 ),
-                conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+                conf.Title, wx.ICON_INFORMATION, defaultno=True
             ): return
         if ongoing_pages:
-            if wx.OK != wx.MessageBox(
+            if wx.YES != controls.YesNoMessageBox(
                 "There are ongoing exports in %s:\n\n%s\n\n"
                 "Are you sure you want to cancel them?" % (
                     util.plural(ongoing_pages, single="this"),
                     "\n".join(sorted(ongoing_pages.values()))
                 ),
-                conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+                conf.Title, wx.ICON_INFORMATION, defaultno=True
             ): return
 
         errors = []
@@ -1684,13 +1685,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 if not page.save_database(): return
 
         if ongoing_pages:
-            if wx.OK != wx.MessageBox(
+            if wx.YES != controls.YesNoMessageBox(
                 "There are ongoing exports in %s:\n\n\n%s\n\n"
                 "Are you sure you want to cancel them?" % (
                     util.plural("file", ongoing_pages, single="this"),
                     "\n".join(sorted(ongoing_pages.values()))
                 ),
-                conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+                conf.Title, wx.ICON_INFORMATION, defaultno=True
             ): return
 
         for page, db in self.db_pages.items():
@@ -1745,12 +1746,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 if unsaved.get("table"):
                     info += (", and " if info else "")
                     info += util.plural("table", unsaved["table"], numbers=False)
-                    info += " " + ", ".join(map(grammar.quote, sorted(unsaved["table"])))
+                    info += " " + ", ".join(grammar.quote(x, force=True)
+                                            for x in sorted(unsaved["table"]))
                 if unsaved.get("schema"):
                     info += (", and " if info else "") + "schema changes"
                 if unsaved.get("temporary"):
                     info += (", and " if info else "") + "temporary file"
-                msg = "There are unsaved changes in this file:\n\n%s\n\n%s.\n\n" % (page.db, info)
+                msg = "There are unsaved changes in this file:\n%s.\n\n%s\n\n" % (info, page.db)
 
             resp = wx.MessageBox(msg + "Do you want to save the changes?", conf.Title,
                                  wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION)
@@ -1772,10 +1774,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if "sql" in ongoing:
                 infos.append(util.plural("SQL query", ongoing["sql"]))
 
-            if wx.OK != wx.MessageBox(
+            if wx.YES != controls.YesNoMessageBox(
                 "There are ongoing exports in this file:\n\n%s\n\n%s.\n\n"
                 "Are you sure you want to cancel them?" % (page.db, ", ".join(infos)),
-                conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+                conf.Title, wx.ICON_INFORMATION, defaultno=True
             ): return event.Veto()
 
         # Remove page from MainWindow data structures
@@ -3133,9 +3135,9 @@ class DatabasePage(wx.Panel):
 
     def on_pragma_cancel(self, event=None):
         """Handler for clicking to cancel PRAGMA changes."""
-        if event and self.pragma_changes and wx.OK != wx.MessageBox(
+        if event and self.pragma_changes and wx.YES != controls.YesNoMessageBox(
             "You have unsaved changes, are you sure you want to discard them?",
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            conf.Title, wx.ICON_INFORMATION, defaultno=True
         ): return
 
         self.pragma_edit = False
@@ -3228,40 +3230,43 @@ class DatabasePage(wx.Panel):
             msg = "A number of errors were found in %s:\n\n- %s\n\n" \
                   "Recover as much as possible to a new database?" % \
                   (self.db, err)
-            if wx.YES == wx.MessageBox(msg, conf.Title,
-                                       wx.YES | wx.NO | wx.ICON_WARNING):
-                directory, filename = os.path.split(self.db.filename)
-                base = os.path.splitext(filename)[0]
-                self.dialog_savefile.Directory = directory
-                self.dialog_savefile.Filename = "%s (recovered)" % base
-                self.dialog_savefile.Message = "Save recovered data as"
-                self.dialog_savefile.Wildcard = "SQLite database (*.db)|*.db"
-                self.dialog_savefile.WindowStyle |= wx.FD_OVERWRITE_PROMPT
-                if wx.ID_OK == self.dialog_savefile.ShowModal():
-                    newfile = self.dialog_savefile.GetPath()
-                    if not newfile.lower().endswith(".db"): newfile += ".db"
-                    if newfile != self.db.filename:
-                        guibase.status("Recovering data from %s to %s.",
-                                       self.db.filename, newfile, flash=True)
-                        m = "Recovering data from %s\nto %s."
-                        busy = controls.BusyPanel(self, m % (self.db, newfile))
-                        wx.YieldIfNeeded()
-                        try:
-                            copyerrors = self.db.recover_data(newfile)
-                        finally:
-                            busy.Close()
-                        err = ("\n\nErrors occurred during the recovery, "
-                              "more details in log window:\n\n- "
-                              + "\n- ".join(copyerrors)) if copyerrors else ""
-                        err = err[:500] + ".." if len(err) > 500 else err
-                        guibase.status("Recovery to %s complete." % newfile, flash=True)
-                        wx.PostEvent(self, OpenDatabaseEvent(-1, file=newfile))
-                        wx.MessageBox("Recovery to %s complete.%s" %
-                                      (newfile, err), conf.Title,
-                                      wx.ICON_INFORMATION)
-                    else:
-                        wx.MessageBox("Cannot recover data from %s to itself."
-                                      % self.db, conf.Title, wx.ICON_ERROR)
+            if wx.YES != wx.MessageBox(msg, conf.Title,
+                                       wx.YES | wx.NO | wx.ICON_WARNING): return
+
+            directory, filename = os.path.split(self.db.filename)
+            base = os.path.splitext(filename)[0]
+            self.dialog_savefile.Directory = directory
+            self.dialog_savefile.Filename = "%s (recovered)" % base
+            self.dialog_savefile.Message = "Save recovered data as"
+            self.dialog_savefile.Wildcard = "SQLite database (*.db)|*.db"
+            self.dialog_savefile.WindowStyle |= wx.FD_OVERWRITE_PROMPT
+            if wx.ID_OK != self.dialog_savefile.ShowModal(): return
+
+            newfile = self.dialog_savefile.GetPath()
+            if not newfile.lower().endswith(".db"): newfile += ".db"
+            if newfile == self.db.filename:
+                wx.MessageBox("Cannot recover data from %s to itself."
+                              % self.db, conf.Title, wx.ICON_ERROR)
+                return
+
+            guibase.status("Recovering data from %s to %s.",
+                           self.db.filename, newfile, flash=True)
+            m = "Recovering data from %s\nto %s."
+            busy = controls.BusyPanel(self, m % (self.db, newfile))
+            wx.YieldIfNeeded()
+            try:
+                copyerrors = self.db.recover_data(newfile)
+            finally:
+                busy.Close()
+            err = ("\n\nErrors occurred during the recovery, "
+                  "more details in log window:\n\n- "
+                  + "\n- ".join(copyerrors)) if copyerrors else ""
+            err = err[:500] + ".." if len(err) > 500 else err
+            guibase.status("Recovery to %s complete." % newfile, flash=True)
+            wx.PostEvent(self, OpenDatabaseEvent(-1, file=newfile))
+            wx.MessageBox("Recovery to %s complete.%s" %
+                          (newfile, err), conf.Title,
+                          wx.ICON_INFORMATION)
 
 
     def on_vacuum(self, event=None):
@@ -4895,23 +4900,23 @@ class DatabasePage(wx.Panel):
             if len(items) == 1:
                 itemtext = " ".join((items[0]["type"], grammar.quote(items[0]["name"], force=True)))
 
-            if wx.OK != wx.MessageBox(
+            if wx.YES != controls.YesNoMessageBox(
                 "Are you sure you want to delete the %s?%s" % (itemtext, extra),
-                conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+                conf.Title, wx.ICON_WARNING, defaultno=True
             ): return
 
             if "table" == items[0]["type"] and any(x.get("count") for x in items):
                 count = sum(x.get("count") or 0 for x in items)
                 is_estimated = any(x.get("is_count_estimated") for x in items)
                 if is_estimated: count = int(math.ceil(count / 100.) * 100)
-                if wx.OK != wx.MessageBox(
+                if wx.YES != controls.YesNoMessageBox(
                     "Are you REALLY sure you want to delete the %s?\n\n"
                     "%s currently %s %s%s." %
                     (itemtext, "They" if len(items) > 1 else "It",
                      "contain" if len(items) > 1 else "contains",
                      "~" if is_estimated else "",
                      util.plural("row", count)),
-                    conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+                    conf.Title, wx.ICON_WARNING, defaultno=True
                 ): return
             deleteds = []
             try:

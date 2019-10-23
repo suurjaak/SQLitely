@@ -3130,3 +3130,18 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
         else: self.ExpandAllChildren(item)
 
     RootItem = property(lambda x: x.GetRootItem())
+
+
+def YesNoMessageBox(message, caption, icon=wx.ICON_NONE, defaultno=False):
+    """
+    Opens a Yes/No messagebox that is closable by pressing Escape,
+    returns dialog result.
+
+    @param   icon       dialog icon to use, one of wx.ICON_XYZ
+    @param   defaultno  True if No-button should be default
+    """
+    RES = {wx.ID_OK: wx.OK, wx.ID_CANCEL: wx.CANCEL}
+    style = icon | wx.OK | wx.CANCEL | (wx.CANCEL_DEFAULT if defaultno else 0)
+    dlg = wx.MessageDialog(None, message, caption, style)
+    dlg.SetOKCancelLabels("&Yes", "&No")
+    return wx.YES if wx.ID_OK == dlg.ShowModal() else wx.NO

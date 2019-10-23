@@ -896,10 +896,11 @@ class SQLPage(wx.Panel):
         Closes the page, asking for confirmation if export underway.
         Returns whether page closed.
         """
-        if self._export.IsExporting() and not force and wx.OK != wx.MessageBox(
+        if self._export.IsExporting() and not force \
+        and wx.YES != controls.YesNoMessageBox(
             "Export is currently underway, "
             "are you sure you want to cancel it?",
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+            conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
         self._export.Stop()
 
@@ -1434,20 +1435,20 @@ class DataObjectPage(wx.Panel):
         Handler for clicking to close the item, sends message to parent.
         Returns whether page closed.
         """
-        if self._export.IsExporting() and wx.OK != wx.MessageBox(
+        if self._export.IsExporting() and wx.YES != controls.YesNoMessageBox(
             "Export is currently underway, "
             "are you sure you want to cancel it?",
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+            conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
         if self._export.IsExporting():
             self._export.Stop()
             self._export.Hide()
             self.Layout()
 
-        if self.IsChanged() and wx.OK != wx.MessageBox(
+        if self.IsChanged() and wx.YES != controls.YesNoMessageBox(
             "There are unsaved changes, "
             "are you sure you want to discard them?",
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            conf.Title, wx.ICON_INFORMATION, defaultno=True
         ): return
         self._PostEvent(close=True)
         return True
@@ -1549,9 +1550,9 @@ class DataObjectPage(wx.Panel):
     def _OnCommit(self, event=None):
         """Handler for clicking to commit the changed database table."""
         info = self._grid.Table.GetChangedInfo()
-        if wx.OK != wx.MessageBox(
+        if wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to commit these changes (%s)?" %
-            info, conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            info, conf.Title, wx.ICON_INFORMATION
         ): return
 
         logger.info("Committing %s in table %s (%s).", info,
@@ -1567,9 +1568,9 @@ class DataObjectPage(wx.Panel):
     def _OnRollback(self, event=None):
         """Handler for clicking to rollback the changed database table."""
         info = self._grid.Table.GetChangedInfo()
-        if wx.OK != wx.MessageBox(
+        if wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to discard these changes (%s)?" %
-            info, conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            info, conf.Title, wx.ICON_INFORMATION, defaultno=True
         ): return
 
         self._grid.Table.UndoChanges()
@@ -1586,11 +1587,11 @@ class DataObjectPage(wx.Panel):
 
         @param   pending  retain unsaved pending changes
         """
-        if not pending and self.IsChanged() and wx.OK != wx.MessageBox(
+        if not pending and self.IsChanged() and wx.YES != controls.YesNoMessageBox(
             "There are unsaved changes (%s).\n\n"
             "Are you sure you want to discard them?" % 
             self._grid.Table.GetChangedInfo(), 
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            conf.Title, wx.ICON_INFORMATION, defaultno=True
         ): return
 
         scrollpos = map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
@@ -3946,10 +3947,10 @@ class SchemaObjectPage(wx.Panel):
     def _OnToggleEdit(self, event=None):
         """Handler for toggling edit mode."""
         is_changed = self.IsChanged()
-        if is_changed and wx.OK != wx.MessageBox(
+        if is_changed and wx.YES != controls.YesNoMessageBox(
             "There are unsaved changes, "
             "are you sure you want to discard them?",
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            conf.Title, wx.ICON_INFORMATION, defaultno=True
         ): return
 
         self._editmode = not self._editmode
@@ -4093,11 +4094,11 @@ class SchemaObjectPage(wx.Panel):
 
         sql = self._item["sql"] if self._newmode else self._GetAlterSQL()
 
-        if wx.OK != wx.MessageBox(
+        if wx.YES != controls.YesNoMessageBox(
             "Execute the following schema change?\n\n%s" % sql.strip(),
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION
+            conf.Title, wx.ICON_INFORMATION
         ): return
-            
+
 
         logger.info("Executing schema SQL:\n\n%s", sql)
         try: self._db.connection.executescript(sql)
@@ -4125,19 +4126,19 @@ class SchemaObjectPage(wx.Panel):
         """Handler for clicking to delete the item, asks for confirmation."""
         extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
                 if "table" == self._category else ""
-        if wx.OK != wx.MessageBox(
+        if wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to delete the %s %s?%s" %
             (self._category, grammar.quote(self._item["name"], force=True), extra),
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+            conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
 
         if "table" == self._category and self._item.get("count") \
-        and wx.OK != wx.MessageBox(
+        and wx.YES != controls.YesNoMessageBox(
             "Are you REALLY sure you want to delete the %s %s?\n\n"
             "It currently contains %s." %
             (self._category, grammar.quote(self._item["name"], force=True),
              util.plural("row", self._item["count"])),
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+            conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
 
         if self._db.is_locked(self._category, self._item["name"]):
@@ -4313,9 +4314,9 @@ class ExportProgressPanel(wx.Panel):
 
     def _OnClose(self, event=None):
         """Confirms with popup if exports underway, notifies parent."""
-        if self._worker.is_working() and wx.OK != wx.MessageBox(
+        if self._worker.is_working() and wx.YES != controls.YesNoMessageBox(
             "Export is currently underway, are you sure you want to cancel it?",
-            conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
+            conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
 
         self._worker.stop_work(drop_results=True)
@@ -4333,9 +4334,8 @@ class ExportProgressPanel(wx.Panel):
             msg = "Export is currently underway, are you sure you want to cancel it?"
         else:
             msg = "Are you sure you want to cancel this export?"
-        if wx.OK != wx.MessageBox(
-            msg, conf.Title, wx.OK | wx.CANCEL | wx.ICON_WARNING
-        ): return
+        if wx.YES != controls.YesNoMessageBox(msg, conf.Title, wx.ICON_WARNING,
+                                              defaultno=True): return
 
         if self._exports[index]["pending"]: self._OnResult(self._exports[index])
 
