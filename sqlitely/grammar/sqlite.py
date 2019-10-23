@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    22.10.2019
+@modified    23.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -96,11 +96,11 @@ def transform(sql, flags=None, renames=None, indent="  "):
 def quote(val, force=False):
     """
     Returns value in quotes and proper-escaped for queries,
-    if name needs quoting (whitespace etc) or if force set.
-    Always returns unicode.
+    if name needs quoting (has non-alphanumerics or starts with number)
+    or if force set. Always returns unicode.
     """
     result = uni(val)
-    if force or re.search(r"\W", result, re.U):
+    if force or re.search(r"(^[\W\d])|(?=\W)", result, re.U):
         result = u'"%s"' % result.replace('"', '""')
     return result
 
