@@ -285,7 +285,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 data["__changed__"] = True
                 self.idx_changed.add(idx)
             data[self.columns[col]["name"]] = col_value
-            if self.View: self.View.Refresh()
+            if self.View:
+                self.View.RefreshAttr(row, col)
+                self.View.Refresh()
 
 
     def IsChanged(self):
@@ -397,23 +399,19 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 self.attrs[n].SetBackgroundColour(conf.GridRowChangedColour)
             for n in ["cell_changed", "cell_changedblob"]:
                 self.attrs[n].SetBackgroundColour(conf.GridCellChangedColour)
-            for n in ["newblob", "defaultblob",
-            "row_changedblob", "cell_changedblob"]:
+            for n in ["newblob", "defaultblob", "row_changedblob", "cell_changedblob"]:
                 self.attrs[n].SetEditor(wx.grid.GridCellAutoWrapStringEditor())
 
         blob = "blob" if (self.columns[col].get("type", "").lower() == "blob") else ""
-        attr = self.attrs["default%s" % blob]
+        name = "default"
         if row < len(self.rows_current):
             if self.rows_current[row]["__changed__"]:
                 idx = self.rows_current[row]["__id__"]
                 value = self.rows_current[row][self.columns[col]["name"]]
                 backup = self.rows_backup[idx][self.columns[col]["name"]]
-                if backup != value:
-                    attr = self.attrs["cell_changed%s" % blob]
-                else:
-                    attr = self.attrs["row_changed%s" % blob]
-            elif self.rows_current[row]["__new__"]:
-                attr = self.attrs["new%s" % blob]
+                name = "row_changed" if backup == value else "cell_changed"
+            elif self.rows_current[row]["__new__"]: name = "new"
+        attr = self.attrs[name + blob]
         attr.IncRef()
         return attr
 
@@ -588,6 +586,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         Returns success.
         """
         result = False
+        refresh_idxs = []
         try:
             for idx in self.idx_changed.copy():
                 row = self.rows_all[idx]
@@ -596,6 +595,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 row["__changed__"] = False
                 self.idx_changed.remove(idx)
                 del self.rows_backup[idx]
+                refresh_idxs.append(idx)
             # Save all newly inserted rows
             pks = [c["name"] for c in self.columns if "pk" in c]
             col_map = dict((c["name"], c) for c in self.columns)
@@ -610,6 +610,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                         self.rowids[idx] = insert_id
                 row["__new__"] = False
                 self.idx_new.remove(idx)
+                refresh_idxs.append(idx)
             # Delete all newly deleted rows
             for idx, row in self.rows_deleted.copy().items():
                 self.db.delete_row(self.name, row, self.rowids.get(idx))
@@ -622,13 +623,13 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
-        if self.View: self.View.Refresh()
-        return result
+        self._RefreshAttrs(refresh_idxs)
 
 
     def UndoChanges(self):
         """Undoes the changes made to the rows in this table."""
         rows_before = self.GetNumberRows()
+        refresh_idxs = []
         # Restore all changed row data from backup
         for idx in self.idx_changed.copy():
             row = self.rows_backup[idx]
@@ -636,6 +637,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             self.rows_all[idx].update(row)
             self.idx_changed.remove(idx)
             del self.rows_backup[idx]
+            refresh_idxs.append(idx)
         # Discard all newly inserted rows
         for idx in self.idx_new[:]:
             row = self.rows_all[idx]
@@ -651,7 +653,18 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 self.rows_current.append(row)
             self.row_count += 1
         self.NotifyViewChange(rows_before)
-        if self.View: self.View.Refresh()
+        self._RefreshAttrs(refresh_idxs)
+
+
+    def _RefreshAttrs(self, idxs):
+        """Refreshes cell attributes for rows specified by identifiers."""
+        if not self.View: return
+        for idx in idxs:
+            row = next((i for i, x in enumerate(self.rows_current)
+                        if x["__id__"] == idx), -1)
+            for col in range(len(self.columns)) if row >= 0 else ():
+                self.View.RefreshAttr(row, col)
+        self.View.Refresh()
 
 
     def _IsRowFiltered(self, rowdata):
@@ -4052,7 +4065,6 @@ class SchemaObjectPage(wx.Panel):
         errors, sql = [], self._item["sql"]
         if self.IsChanged(): errors, _ = self._Validate()
         if not errors and self.IsChanged():
-            " TODO run CREATE or ALTER "
             if not self._newmode: sql = self._GetAlterSQL()
             sql2 = "PRAGMA foreign_keys = off;\n\nSAVEPOINT test;\n\n" \
                    "%s;\n\nROLLBACK TO SAVEPOINT test;\n" % sql
