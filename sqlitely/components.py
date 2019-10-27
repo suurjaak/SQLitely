@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.10.2019
+@modified    26.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter
@@ -4137,7 +4137,8 @@ class SchemaObjectPage(wx.Panel):
     def _OnDelete(self, event=None):
         """Handler for clicking to delete the item, asks for confirmation."""
         extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
-                if "table" == self._category else ""
+                if "table" == self._category else \
+                "\n\nAny associated triggers will be lost." if "view" == self._category else ""
         if wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to delete the %s %s?%s" %
             (self._category, grammar.quote(self._item["name"], force=True), extra),
@@ -4368,6 +4369,7 @@ class ExportProgressPanel(wx.Panel):
         self.Freeze()
         opts, ctrls = (x[index] for x in (self._exports, self._ctrls))
         if "error" in result:
+            self.Layout()
             self._current = None
             if opts["pending"]: ctrls["text"] = result["error"]
             if opts["pending"] and len(self._exports) > 1:
@@ -4383,6 +4385,7 @@ class ExportProgressPanel(wx.Panel):
                 ctrls["open"].SetFocus()
                 ctrls["folder"].Show()
             self._current = None
+            self.Layout()
         else: # User cancel
             ctrls["title"].Label = 'Export to "%s".' % opts["filename"]
             ctrls["text"].Label = "Cancelled"
@@ -4395,7 +4398,6 @@ class ExportProgressPanel(wx.Panel):
         opts["pending"] = False
 
         if self._current is None: wx.CallAfter(self._RunNext)
-        self.Layout()
         self.Thaw()
 
 
