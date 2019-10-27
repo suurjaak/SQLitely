@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.10.2019
+@modified    27.10.2019
 ------------------------------------------------------------------------------
 """
 import hashlib
@@ -20,11 +20,6 @@ import sqlite3
 import subprocess
 import threading
 import traceback
-
-try:
-    import wx
-except ImportError:
-    pass # Most functionality works without wx
 
 from . lib import util
 from . lib.vendor import step
@@ -39,7 +34,7 @@ logger = logging.getLogger(__name__)
 class WorkerThread(threading.Thread):
     """Base class for worker threads."""
 
-    def __init__(self, callback):
+    def __init__(self, callback=None):
         """
         @param   callback  function to call with result chunks
         """
@@ -88,14 +83,8 @@ class WorkerThread(threading.Thread):
 
     def postback(self, data):
         # Check whether callback is still bound to a valid object instance
-        if getattr(self._callback, "__self__", True):
+        if callable(self._callback) and getattr(self._callback, "__self__", True):
             self._callback(data)
-
-
-    def yield_ui(self):
-        """Allows UI to respond to user input."""
-        try: wx.YieldIfNeeded()
-        except Exception: pass
 
 
     def run(self):
