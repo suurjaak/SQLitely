@@ -62,7 +62,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    22.10.2019
+@modified    27.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -76,6 +76,7 @@ import wx
 import wx.html
 import wx.lib.agw.flatnotebook
 import wx.lib.agw.gradientbutton
+import wx.lib.agw.labelbook
 try: # ShapedButton requires PIL, might not be installed
     import wx.lib.agw.shapedbutton
 except Exception: pass
@@ -855,15 +856,16 @@ class NoteButton(wx.Panel, wx.Button):
 
 
     def DoGetBestSize(self):
-        w = 100 if self.Size.width < 100 else self.Size.width
+        w = 40 if self.Size.width  < 40 else self.Size.width
         h = 40 if self.Size.height < 40 else self.Size.height
+        if self._bmp:
+            w = max(w, self._bmp.Size.width  + 20)
+            h = max(h, self._bmp.Size.height + 20)
         if self._extent_label:
             h1 = 10 + self._bmp.Size.height + 10
             h2 = 10 + self._extent_label[1] + 10 + self._extent_note[1] + 10
             h  = max(h1, h2)
-        size = wx.Size(w, h)
-
-        return size
+        return wx.Size(w, h)
 
 
     def Draw(self, dc):
@@ -898,7 +900,7 @@ class NoteButton(wx.Panel, wx.Button):
             dc.Brush = wx.TRANSPARENT_BRUSH
             dc.DrawRectangle(0, 0, width, height)
 
-            # Draw focus marquee.
+            # Create cached focus marquee
             if not NoteButton.BMP_MARQUEE:
                 NoteButton.BMP_MARQUEE = wx.Bitmap(2, 2)
                 dc_bmp = wx.MemoryDC()
@@ -908,11 +910,15 @@ class NoteButton(wx.Panel, wx.Button):
                 dc_bmp.Pen = wx.Pen(self.ForegroundColour)
                 dc_bmp.DrawPointList([(0, 1), (1, 0)])
                 dc_bmp.SelectObject(wx.NullBitmap)
-            if hasattr(wx.Pen, "Stipple"):
+
+            # Draw focus marquee
+            draw_focus = (self._label or self._note) or self._press or \
+                         (is_focused and wx.GetKeyState(wx.WXK_SPACE))
+            if draw_focus and hasattr(wx.Pen, "Stipple"):
                 pen = PEN(dc.TextForeground, 1, wx.PENSTYLE_STIPPLE)
                 pen.Stipple, dc.Pen = NoteButton.BMP_MARQUEE, pen
                 dc.DrawRectangle(4, 4, width - 8, height - 8)
-            else:
+            elif draw_focus:
                 brush = BRUSH(dc.TextForeground)
                 brush.SetStipple(NoteButton.BMP_MARQUEE)
                 dc.Brush = brush
@@ -923,13 +929,13 @@ class NoteButton(wx.Panel, wx.Button):
             dc.Pen = PEN(dc.TextForeground)
 
         if self._press or (is_focused and wx.GetKeyState(wx.WXK_SPACE)):
-            # Button is being clicked with mouse: create sunken effect.
+            # Button is being clicked with mouse: create sunken effect
             colours = [(128, 128, 128)] * 2
             lines   = [(1, 1, width - 2, 1), (1, 1, 1, height - 2)]
             dc.DrawLineList(lines, [PEN(wx.Colour(*c)) for c in colours])
             x += 1; y += 1
         elif self._hover and self.IsThisEnabled():
-            # Button is being hovered with mouse: create raised effect.
+            # Button is being hovered with mouse: create raised effect
             colours  = [(255, 255, 255)] * 2
             if wx.WHITE == self.BackgroundColour:
                 colours =  [(158, 158, 158)] * 2
@@ -969,7 +975,7 @@ class NoteButton(wx.Panel, wx.Button):
                             x1, y1 = x + extent_all[0], h + extent[1]
                             dc.DrawLine(x1, y1, x1 + extent[0], y1)
                         elif i < len(line):
-                            chars += line[i] # Double ampersand: add as one.
+                            chars += line[i] # Double ampersand: add as one
                     if i < len(line):
                         chars += line[i]
                     i += 1
@@ -986,11 +992,14 @@ class NoteButton(wx.Panel, wx.Button):
 
     def WrapTexts(self):
         """Wraps button texts to current control size."""
-        width, height = self.Size
-        label = self._label
-        self._text_label = label
-        self._text_note = self._note
+        self._text_label, self._text_note = self._label, self._note
+
+        if not self._label and not self._note:
+            self._extent_label = self._extent_note = (0, 0)
+            return
+            
         WORDWRAP = wx.lib.wordwrap.wordwrap
+        width, height = self.Size
         if width > 20 and height > 20:
             dc = wx.ClientDC(self)
         else: # Not properly sized yet: assume a reasonably fitting size
@@ -1007,7 +1016,7 @@ class NoteButton(wx.Panel, wx.Button):
 
 
     def OnPaint(self, event):
-        """Handler for paint event, calls """
+        """Handler for paint event, calls Draw()."""
         dc = wx.BufferedPaintDC(self)
         self.Draw(dc)
 
@@ -1097,16 +1106,24 @@ class NoteButton(wx.Panel, wx.Button):
         return True
 
 
+    def Disable(self):
+        return self.Enable(False)
+
+
     def Enable(self, enable=True):
         """
         Enable or disable this control for user input, returns True if the
         control state was changed.
         """
+        result = (self._enabled != enable)
+        if not result: return result
+
         self._enabled = enable
-        result = wx.Panel.Enable(self, enable)
-        if result:
-            self.Refresh()
+        wx.Panel.Enable(self, enable)
+        self.Refresh()
         return result
+    def IsEnabled(self): return wx.Panel.IsEnabled(self)
+    Enabled = property(Enable, IsEnabled)
 
 
     def IsThisEnabled(self):
