@@ -4278,7 +4278,7 @@ class ExportProgressPanel(wx.Panel):
                                         style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
             text   = ctrls["text"]   = wx.StaticText(parent)
             cancel = ctrls["cancel"] = wx.Button(panel, label="Cancel")
-            open   = ctrls["open"]   = wx.Button(panel, label="Open")
+            open   = ctrls["open"]   = wx.Button(panel, label="Open file")
             folder = ctrls["folder"] = wx.Button(panel, label="Show in folder")
             gauge.SetForegroundColour(conf.GaugeColour)
             open.Hide(), folder.Hide()
@@ -4385,7 +4385,7 @@ class ExportProgressPanel(wx.Panel):
                 ctrls["open"].SetFocus()
                 ctrls["folder"].Show()
             self._current = None
-            self.Layout()
+            wx.CallAfter(self.Layout)
         else: # User cancel
             ctrls["title"].Label = 'Export to "%s".' % opts["filename"]
             ctrls["text"].Label = "Cancelled"
