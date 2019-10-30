@@ -2128,7 +2128,7 @@ class DatabasePage(wx.Panel):
 
         self.label_search.Label = "&Search in data:"
         if conf.SearchInMeta:
-            self.label_search.Label = "&Search in meta:"
+            self.label_search.Label = "&Search in metadata:"
 
         html = self.html_searchall = controls.TabbedHtmlWindow(page)
         default = step.Template(templates.SEARCH_WELCOME_HTML).expand()
@@ -3561,7 +3561,7 @@ class DatabasePage(wx.Panel):
         if wx.ID_INDEX == event.Id:
             conf.SearchInMeta = True
             conf.SearchInData = False
-            self.label_search.Label = "&Search in meta:"
+            self.label_search.Label = "&Search in metadata:"
         elif wx.ID_STATIC == event.Id:
             conf.SearchInData = True
             conf.SearchInMeta = False
