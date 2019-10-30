@@ -111,7 +111,8 @@ def export_data(make_iterable, filename, title, db, columns,
                         query = flat.encode("latin1", "replace")
                     header = [c.encode("latin1", "replace") for c in colnames]
                 else:
-                    writer = xlsx_writer(filename, name or "SQL Query")
+                    props = {"title": title, "comments": templates.export_comment()}
+                    writer = xlsx_writer(filename, name or "SQL Query", props=props)
                     writer.set_header(True)
                     header = colnames
                 if query:
@@ -417,14 +418,16 @@ class xlsx_writer(object):
                                           "align": "left",
                                           "num_format": "yyyy-mm-dd HH:MM", })
 
-    def __init__(self, filename, sheetname=None, autowrap=()):
+    def __init__(self, filename, sheetname=None, autowrap=(), props=None):
         """
         @param   sheetname  title of the first sheet to create, if any
         @param   autowrap   a list of column indexes that will get their width
                             set to COL_MAXWIDTH and their contents wrapped
+                 props      document properties like 'title', 'subject', etc
         """
         self._workbook = xlsxwriter.Workbook(filename,
             {"constant_memory": True, "strings_to_formulas": False})
+        if props: self._workbook.set_properties(props)
         self._sheet      = None # Current xlsxwriter.Worksheet, if any
         self._sheets     = {} # {lowercase sheet name: xlsxwriter.Worksheet, }
         self._sheetnames = {} # {xlsxwriter.Worksheet: original given name, }
@@ -549,6 +552,4 @@ class xlsx_writer(object):
                 w = min(w, self.COL_MAXWIDTH)
                 sheet.set_column(c, c, w, self._formats[None])
             sheet.set_column(c + 1, 50, cell_format=self._formats[None])
-        self._workbook.set_properties({"comments": "Exported with %s on %s." %
-            (conf.Title, datetime.datetime.now().strftime("%d.%m.%Y %H:%M"))})
         self._workbook.close()

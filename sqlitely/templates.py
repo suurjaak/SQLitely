@@ -11,10 +11,13 @@ Released under the MIT License.
 @modified    22.10.2019
 ------------------------------------------------------------------------------
 """
+import datetime
 import re
 
+from . import conf
+
 # Modules imported inside templates:
-#import datetime, os, pyparsing, sys, wx
+#import os, pyparsing, sys, wx
 #from sqlitely import conf, grammar, images, templates
 #from sqlitely.lib import util
 
@@ -23,6 +26,13 @@ SAFEBYTE_RGX = re.compile(r"[\x00-\x1f\x7f-\xa0]")
 
 """Replacer callback for unprintable characters (\x00 etc)."""
 SAFEBYTE_REPL = lambda m: m.group(0).encode("unicode-escape")
+
+
+def export_comment():
+    """Returns export comment like "Exported with SQLitely on [DATETIME]"."""
+    dt = datetime.datetime.now().strftime("%d.%m.%Y %H:%M")
+    return "Exported with %s on %s." % (conf.Title, dt)
+
 
 
 """
@@ -38,8 +48,7 @@ HTML data export template.
 @param   category     export object category ("table" etc), if any
 """
 DATA_HTML = """<%
-import datetime
-from sqlitely import conf, grammar, images
+from sqlitely import conf, grammar, images, templates
 from sqlitely.lib import util
 %><!DOCTYPE HTML><html lang="en">
 <head>
@@ -216,7 +225,7 @@ for chunk in data_buffer:
   </table>
 </div>
 </td></tr></table>
-<div id="footer">Exported with {{ conf.Title }} on {{ datetime.datetime.now().strftime("%d.%m.%Y %H:%M") }}.</div>
+<div id="footer">{{ templates.export_comment() }}</div>
 </body>
 </html>
 """
@@ -258,8 +267,7 @@ TXT SQL create statements export template.
 @param   sql           SQL statements string
 """
 CREATE_SQL = """<%
-import datetime
-from sqlitely import conf
+from sqlitely import conf, templates
 
 %>--
 %if isdef("title") and title:
@@ -268,7 +276,7 @@ from sqlitely import conf
 %if isdef("db_filename") and db_filename:
 -- Source: {{ db_filename }}.
 %endif
--- Exported with {{ conf.Title }} on {{ datetime.datetime.now().strftime("%d.%m.%Y %H:%M") }}.
+-- {{ templates.export_comment() }}
 --
 
 
@@ -288,13 +296,12 @@ TXT SQL insert statements export template.
 @param   data_buffer  iterable yielding rows data in text chunks
 """
 DATA_SQL = """<%
-import datetime
 from sqlitely.lib import util
-from sqlitely import conf
+from sqlitely import conf, templates
 
 %>-- {{ title }}.
 -- Source: {{ db_filename }}.
--- Exported with {{ conf.Title }} on {{ datetime.datetime.now().strftime("%d.%m.%Y %H:%M") }}.
+-- {{ templates.export_comment() }}
 -- {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
 %if sql:
 --
@@ -380,13 +387,12 @@ TXT data export template.
 @param   columnwidths  {col name: char length}
 """
 DATA_TXT = """<%
-import datetime
 from sqlitely.lib import util
-from sqlitely import conf
+from sqlitely import conf, templates
 
 %>{{ title }}.
 Source: {{ db_filename }}.
-Exported with {{ conf.Title }} on {{ datetime.datetime.now().strftime("%d.%m.%Y %H:%M") }}.
+{{ templates.export_comment() }}
 {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
 %if sql:
 
@@ -1089,7 +1095,6 @@ HTML statistics export template.
                        "index": [{name, size, table}]}
 """
 DATA_STATISTICS_HTML = """<%
-import datetime
 from sqlitely.lib.vendor.step import Template
 from sqlitely.lib import util
 from sqlitely import conf, images, templates
@@ -1278,7 +1283,7 @@ total = index_total + sum(x["size"] for x in data["table"])
 
 </div>
 </td></tr></table>
-<div id="footer">Exported with {{ conf.Title }} on {{ datetime.datetime.now().strftime("%d.%m.%Y %H:%M") }}.</div>
+<div id="footer">{{ templates.export_comment() }}</div>
 </body>
 </html>
 """
@@ -1438,14 +1443,13 @@ Database statistics SQL export template.
 @param   sql          SQL query giving export data, if any
 """
 DATA_STATISTICS_SQL = """<%
-import datetime
 from sqlitely.lib import util
-from sqlitely import conf
+from sqlitely import conf, templates
 
 %>-- Output from sqlite3_analyzer.
 -- Source: {{ db_filename }}.
 -- Source size: {{ util.format_bytes(db_filesize) }} ({{ util.format_bytes(db_filesize, max_units=False) }}).
--- Exported with {{ conf.Title }} on {{ datetime.datetime.now().strftime("%d.%m.%Y %H:%M") }}.
+-- {{ templates.export_comment() }}
 
 
 {{! sql.replace("\\r", "") }}
