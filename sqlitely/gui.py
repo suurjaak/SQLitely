@@ -4984,10 +4984,6 @@ class DatabasePage(wx.Panel):
                 it = wx.MenuItem(submenu, -1, 'New ' + category.replace(key, "&" + key, 1))
                 submenu.AppendItem(it)
                 menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), id=it.GetId())
-
-            item_import = wx.MenuItem(menu, -1, "&Import table from spreadsheet")
-            menu.Bind(wx.EVT_MENU, self.on_import, id=item_import.GetId())
-            menu.AppendItem(item_import)
         elif "category" == data["type"]:
             sqlkws = {"category": data["category"]}
             if data.get("parent"): sqlkws["name"] = [x["name"] for x in data["items"]]
@@ -5016,10 +5012,6 @@ class DatabasePage(wx.Panel):
                     menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, names, False, None),
                              id=item_database_meta.GetId())
                     menu.AppendItem(item_database_meta)
-
-                    item_import = wx.MenuItem(menu, -1, "&Import table from spreadsheet")
-                    menu.Bind(wx.EVT_MENU, self.on_import, id=item_import.GetId())
-                    menu.AppendItem(item_import)
 
                 menu.AppendSeparator()
                 menu.AppendItem(item_delete)
@@ -5145,19 +5137,6 @@ class DatabasePage(wx.Panel):
         if item != item0: select_item(item, False)
         tree.PopupMenu(menu)
         if item0 and item != item0: select_item(item0, False)
-
-
-    def on_import(self, event):
-        """Opens file dialog for choosing file, creates table and imports data."""
-        exts = ";".join("*" + x for x in conf.DBExtensions)
-        wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
-        dialog = wx.FileDialog(
-            self, message="Open", defaultFile="", wildcard=wildcard,
-            style=wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE | wx.FD_OPEN | wx.RESIZE_BORDER
-        )
-        if wx.ID_OK != dialog.ShowModal(): return
-
-        path = dialog.GetPath()
 
 
     def update_autocomp(self):
