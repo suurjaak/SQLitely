@@ -716,6 +716,11 @@ class SQLPage(wx.Panel):
         self._export = {}   # Current export options, if any
         self._hovered_cell = None # (row, col)
 
+        self._dialog_export = wx.FileDialog(self, defaultDir=os.getcwd(),
+            message="Save query as", wildcard=importexport.EXPORT_WILDCARD,
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
+        )
+
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         splitter = wx.SplitterWindow(self, style=wx.BORDER_NONE)
@@ -937,13 +942,8 @@ class SQLPage(wx.Panel):
         if not self._grid.Table: return
 
         title = "SQL query"
-        dialog = wx.FileDialog(self, defaultDir=os.getcwd(),
-            message="Save query as",
-            defaultFile=util.safe_filename(title),
-            wildcard=importexport.EXPORT_WILDCARD,
-            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
-        )
-        if wx.ID_OK != dialog.ShowModal(): return
+        self._dialog_export.Filename = util.safe_filename(title),
+        if wx.ID_OK != self._dialog_export.ShowModal(): return
 
         filename = dialog.GetPath()
         extname = importexport.EXPORT_EXTS[dialog.FilterIndex]
@@ -1204,8 +1204,7 @@ class SQLPage(wx.Panel):
         """
         Handler for loading SQL from file, opens file dialog and loads content.
         """
-        dialog = wx.FileDialog(
-            self, message="Open", defaultFile="",
+        dialog = wx.FileDialog(self, message="Open", defaultFile="",
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
             style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
         )
@@ -1226,8 +1225,7 @@ class SQLPage(wx.Panel):
         Handler for saving SQL to file, opens file dialog and saves content.
         """
         filename = "%s SQL" % os.path.splitext(os.path.basename(self._db.name))[0]
-        dialog = wx.FileDialog(
-            self, message="Save as", defaultFile=filename,
+        dialog = wx.FileDialog(self, message="Save as", defaultFile=filename,
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
             style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
         )
@@ -1265,6 +1263,12 @@ class DataObjectPage(wx.Panel):
         self._backup   = None # Pending changes for Reload(pending=True)
         self._ignore_change = False
         self._hovered_cell  = None # (row, col)
+
+        self._dialog_export = wx.FileDialog(self, defaultDir=os.getcwd(),
+            message="Save %s as" % self._category,
+            wildcard=importexport.EXPORT_WILDCARD,
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
+        )
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_header       = wx.BoxSizer(wx.HORIZONTAL)
@@ -1485,13 +1489,8 @@ class DataObjectPage(wx.Panel):
         """
         title = "%s %s" % (self._category.capitalize(),
                            grammar.quote(self._item["name"], force=True))
-        dialog = wx.FileDialog(self, defaultDir=os.getcwd(),
-            message="Save %s as" % self._category,
-            defaultFile=util.safe_filename(title),
-            wildcard=importexport.EXPORT_WILDCARD,
-            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
-        )
-        if wx.ID_OK != dialog.ShowModal(): return
+        self._dialog_export.Filename = util.safe_filename(title)
+        if wx.ID_OK != self._dialog_export.ShowModal(): return
 
         filename = dialog.GetPath()
         extname = importexport.EXPORT_EXTS[dialog.FilterIndex]
@@ -3879,8 +3878,7 @@ class SchemaObjectPage(wx.Panel):
         if self._show_alter:
             action, name = "ALTER", self._item["name"]
         filename = " ".join((action, category, name))
-        dialog = wx.FileDialog(
-            self, message="Save as", defaultFile=filename,
+        dialog = wx.FileDialog(self, message="Save as", defaultFile=filename,
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
             style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
         )
@@ -4598,8 +4596,7 @@ class ImportDialog(wx.Dialog):
         self._progress   = {}    # {count}
         self._worker = workers.WorkerThread()
 
-        self._dialog_file = wx.FileDialog(
-            self, message="Open", defaultFile="",
+        self._dialog_file = wx.FileDialog(self, message="Open",
             wildcard=importexport.IMPORT_WILDCARD,
             style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST | wx.RESIZE_BORDER
         )
