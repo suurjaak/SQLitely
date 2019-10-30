@@ -4149,14 +4149,19 @@ class SchemaObjectPage(wx.Panel):
             conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
 
-        if "table" == self._category and self._item.get("count") \
-        and wx.YES != controls.YesNoMessageBox(
-            "Are you REALLY sure you want to delete the %s %s?\n\n"
-            "It currently contains %s." %
-            (self._category, grammar.quote(self._item["name"], force=True),
-             util.plural("row", self._item["count"])),
-            conf.Title, wx.ICON_WARNING, defaultno=True
-        ): return
+        if "table" == self._category and self._item.get("count"):
+
+            count, pref = self._item["count"], ""
+            if self._item.get("is_count_estimated"):
+                count, pref = int(math.ceil(count / 100.) * 100), "~"
+            countstr = pref + util.plural("row", count, sep=",")
+            if wx.YES != controls.YesNoMessageBox(
+                "Are you REALLY sure you want to delete the %s %s?\n\n"
+                "It currently contains %s." %
+                (self._category, grammar.quote(self._item["name"], force=True),
+                 countstr),
+                conf.Title, wx.ICON_WARNING, defaultno=True
+            ): return
 
         if self._db.is_locked(self._category, self._item["name"]):
             wx.MessageBox("%s %s is currently locked, cannot delete." % 

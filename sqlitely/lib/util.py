@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.10.2019
+@modified    30.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -110,7 +110,7 @@ def format_exc(e):
     return result
 
 
-def plural(word, items=None, numbers=True, single="1"):
+def plural(word, items=None, numbers=True, single="1", sep=""):
     """
     Returns the word as 'count words', or '1 word' if count is 1,
     or 'words' if count omitted.
@@ -119,6 +119,7 @@ def plural(word, items=None, numbers=True, single="1"):
                       or None to get just the plural of the word
              numbers  if False, count is omitted from final result
              single   prefix to use for word if count is 1
+             sep      thousand-separator to use for count
     """
     count   = len(items) if hasattr(items, "__len__") else items or 0
     isupper = word[-1:].isupper()
@@ -128,7 +129,10 @@ def plural(word, items=None, numbers=True, single="1"):
     if isupper: suffix = suffix.upper()
     result = word + ("" if 1 == count else suffix)
     if numbers and items is not None:
-        result = "%s %s" % (single if 1 == count else count, result)
+        fmtcount = "".join([x + ("," if i and not i % 3 else "")
+                            for i, x in enumerate(str(count)[::-1])][::-1]) \
+                   if sep else count
+        result = "%s %s" % (single if 1 == count else fmtcount, result)
     return result
 
 

@@ -4555,8 +4555,9 @@ class DatabasePage(wx.Panel):
                     else:
                         count = item["count"]
                         if item.get("is_count_estimated"):
-                            t = "~" + util.plural("row", int(math.ceil(count / 100.) * 100))
-                        else: t = util.plural("row", count)
+                            roundedcount = int(math.ceil(count / 100.) * 100)
+                            t = "~" + util.plural("row", roundedcount, sep=",")
+                        else: t = util.plural("row", count, sep=",")
                 else: t = "" if "view" == category else "Counting.."
                 tree.SetItemText(child, t, 1)
 
@@ -4940,7 +4941,7 @@ class DatabasePage(wx.Panel):
                     (itemtext, "They" if len(items) > 1 else "It",
                      "contain" if len(items) > 1 else "contains",
                      "~" if is_estimated else "",
-                     util.plural("row", count)),
+                     util.plural("row", count, sep=",")),
                     conf.Title, wx.ICON_WARNING, defaultno=True
                 ): return
             deleteds = []
