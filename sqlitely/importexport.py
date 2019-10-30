@@ -8,23 +8,25 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.10.2019
+@modified    30.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
 import csv
 import datetime
+import logging
 import os
 import re
 
-try: # ImageFont for calculating column widths in Excel export, not required.
-    from PIL import ImageFont
-except ImportError:
-    ImageFont = None
-try:
-    import xlsxwriter
-except ImportError:
-    xlsxwriter = None
+# ImageFont for calculating column widths in Excel export, not required.
+try: from PIL import ImageFont
+except ImportError: ImageFont = None
+try: import openpyxl
+except ImportError: openpyxl = None
+try: import xlrd
+except ImportError: xlrd = None
+try: import xlsxwriter
+except ImportError: xlsxwriter = None
 
 from . lib import util
 from . lib.vendor import step
@@ -42,15 +44,30 @@ except Exception: # Fall back to a simple mono-spaced calculation if no PIL
     FONT_MONO = type('', (), {"getsize": lambda self, s: (8*len(s), 12)})()
     FONT_XLSX = FONT_XLSX_BOLD = FONT_MONO
 
+"""Wildcards for import file dialog."""
+EXCEL_EXTS = (["xls"] if xlrd else []) + (["xlsx"] if openpyxl else [])
+IMPORT_WILDCARD = "%s%sCSV spreadsheet (*.csv)|*.csv" % (
+    "All spreadsheets ({0})|{0}|".format(";".join("*." + x for x in EXCEL_EXTS + ["csv"])),
+    "Excel workbook ({0})|{0}|".format(";".join("*." + x for x in EXCEL_EXTS))
+    if EXCEL_EXTS else ""
+)
+
 """FileDialog wildcard strings, matching extensions lists and default names."""
 XLSX_WILDCARD = "Excel workbook (*.xlsx)|*.xlsx|" if xlsxwriter else ""
 
-WILDCARD = ("HTML document (*.html)|*.html|"
-            "Text document (*.txt)|*.txt|"
-            "SQL INSERT statements (*.sql)|*.sql|"
-            "%sCSV spreadsheet (*.csv)|*.csv" % XLSX_WILDCARD)
-EXTS = ["html", "txt", "sql", "xlsx", "csv"] if xlsxwriter \
-        else ["html", "txt", "sql", "csv"]
+"""Wildcards for export file dialog."""
+EXPORT_WILDCARD = ("HTML document (*.html)|*.html|"
+                   "Text document (*.txt)|*.txt|"
+                   "SQL INSERT statements (*.sql)|*.sql|"
+                   "%sCSV spreadsheet (*.csv)|*.csv" % XLSX_WILDCARD)
+EXPORT_EXTS = ["html", "txt", "sql", "xlsx", "csv"] if xlsxwriter \
+               else ["html", "txt", "sql", "csv"]
+
+"""Maximum file size to do full row count for."""
+MAX_IMPORT_FILESIZE_FOR_COUNT = 10 * 1e6
+
+logger = logging.getLogger(__name__)
+
 
 
 def export_data(make_iterable, filename, title, db, columns,
@@ -182,6 +199,206 @@ def export_data(make_iterable, filename, title, db, columns,
         if category and name: db.unlock(category, name, make_iterable)
 
     return result
+
+
+
+def get_import_file_data(filename):
+    """
+    Returns import file metadata, as {
+        "name":        file name and path}.
+        "size":        file size in bytes,
+        "sheets":      [
+            "name":    sheet name or None if CSV,
+            "rows":    count or -1 if file too large,
+            "columns": [first row cell value, ],
+    ]}.
+    """
+    sheets, size = [], os.path.getsize(filename)
+
+    is_csv  = filename.lower().endswith(".csv")
+    is_xls  = filename.lower().endswith(".xls")
+    is_xlsx = filename.lower().endswith(".xlsx")
+    if is_csv:
+        rows = -1 if size > MAX_IMPORT_FILESIZE_FOR_COUNT else 0
+        with open(filename, "rbU") as f:
+            firstline = next(f, "")
+            if not rows: rows = sum((1 for _ in f), 1 if firstline else 0)
+        if firstline.startswith("\xFF\xFE"): # Unicode little endian header
+            try:
+                firstline = firstline.decode("utf-16") # GMail CSVs can be in UTF-16
+            except UnicodeDecodeError:
+                firstline = firstline[2:].replace("\x00", "")
+            else: # CSV has trouble with Unicode: turn back to string
+                firstline = firstline.encode("latin1", errors="xmlcharrefreplace")
+        csvfile = csv.reader([firstline], csv.Sniffer().sniff(firstline, ",;\t"))
+        sheets.append({"rows": rows, "columns": next(csvfile), "name": "<no name>"})
+    elif is_xls:
+        with xlrd.open_workbook(filename, on_demand=True) as wb:
+            for sheet in wb.sheets():
+                rows = -1 if size > MAX_IMPORT_FILESIZE_FOR_COUNT else sheet.nrows
+                columns = [x.value for x in next(sheet.get_rows(), [])]
+                while columns and columns[-1] is None: columns.pop(-1)
+                sheets.append({"rows": rows, "columns": columns, "name": sheet.name})
+    elif is_xlsx:
+        wb = None
+        try:
+            wb = openpyxl.load_workbook(filename, read_only=True)
+            for sheet in wb.worksheets:
+                rows = -1 if size > MAX_IMPORT_FILESIZE_FOR_COUNT \
+                       else sum(1 for _ in sheet.iter_rows())
+                columns = list(next(sheet.values, []))
+                while columns and columns[-1] is None: columns.pop(-1)
+                sheets.append({"rows": rows, "columns": columns, "name": sheet.title})
+        finally: wb and wb.close()
+
+    return {"name": filename, "size": size, "sheets": sheets}
+
+
+
+def import_data(filename, db, table, columns,
+                sheet=None, has_header=True, pk=None, progress=None):
+    """
+    Imports data from file to database table. Will create table if not exists.
+
+    @param   filename    file path to import from
+    @param   db          database.Database instance
+    @param   table       table name to import to
+    @param   columns     mapping of file columns to table columns,
+                         as OrderedDict(file column index: table columm name)
+    @param   sheet       sheet name to import from, if applicable
+    @param   has_header  whether the file has a header row
+    @param   pk          name of auto-increment primary key to add
+                         for new table, if any
+    @param   progress    callback(?count, ?done, ?error, ?errorcount, ?index) to report
+                         progress, returning false if import should cancel,
+                         and None if import should rollback
+    @return              success
+    """
+    result = True
+    create_sql = None
+
+    if not db.get_category("table", table):
+        cols = [{"name": x} for x in columns.values()]
+        if pk: cols.insert(0, {"name": pk, "type": "INTEGER", "pk": {"autoincrement": True}})
+        meta = {"name": table, "__type__": grammar.SQL.CREATE_TABLE,
+                "columns": cols}
+        create_sql, err = grammar.generate(meta)
+        if err:
+            if progress: progress(error=err, done=True)
+            return
+
+    sql = "INSERT INTO %s (%s) VALUES (%s)" % (grammar.quote(table),
+        ", ".join(grammar.quote(x) for x in columns.values()),
+        ", ".join("?" * len(columns))
+    )
+
+    continue_on_error = None
+    try:
+        isolevel = db.connection.isolation_level
+        db.connection.isolation_level = None # Disable autocommit
+        with db.connection:
+            cursor = db.connection.cursor()
+            cursor.execute("BEGIN TRANSACTION")
+            if create_sql:
+                logger.info("Creating new table %s.",
+                            grammar.quote(table, force=True))
+                cursor.execute(create_sql)
+            db.lock("table", table, filename)
+            logger.info("Running import from %s%s to table %s.",
+                        filename, (" sheet '%s'" % sheet) if sheet else "",
+                        grammar.quote(table, force=True))
+            index, count, errorcount = -1, 0, 0
+            for row in iter_file_rows(filename, list(columns), sheet):
+                index += 1
+                if has_header and not index: continue # for row
+
+                try:
+                    cursor.execute(sql, row)
+                    count += 1
+                except Exception as e:
+                    errorcount += 1
+                    if not progress: raise
+
+                    logger.exception("Error executing '%s' with %s.", sql, row)
+                    if continue_on_error is None:
+                        result = progress(error=util.format_exc(e), index=index,
+                                          count=count, errorcount=errorcount)
+                        if result:
+                            continue_on_error = True
+                            continue # for row
+                        logger.info("Cancelling%s import on user request.",
+                                    " and rolling back" if result is None else "")
+                        if result is None: cursor.execute("ROLLBACK")
+                        break # for row
+                if progress and (count and not count % 100 or errorcount and not errorcount % 100):
+                    result = progress(count=count, errorcount=errorcount)
+                    if not result:
+                        logger.info("Cancelling%s import on user request.",
+                                    " and rolling back" if result is None else "")
+                        if result is None: cursor.execute("ROLLBACK")
+                        break # for row
+            if result: cursor.execute("COMMIT")
+            logger.info("Finished importing %s from %s%s to table %s.",
+                        util.plural("row", count),
+                        filename, (" sheet '%s'" % sheet) if sheet else "",
+                        grammar.quote(table, force=True))
+            if progress: progress(count=count, errorcount=errorcount, done=True)
+    except Exception as e:
+        logger.exception("Error running import from %s%s to table %s.",
+                         filename, (" sheet '%s'" % sheet) if sheet else "",
+                         grammar.quote(table, force=True))
+        if progress: progress(error=util.format_exc(e), done=True)
+        result = False
+    finally:
+        db.connection.isolation_level = isolevel
+        db.unlock("table", table, filename)
+
+    if result is not None and create_sql:
+        db.populate_schema(category="table", name=table, count=True, parse=True)
+    elif result:
+        db.populate_schema(category="table", name=table, count=True)
+
+    return result
+
+
+
+def iter_file_rows(filename, columns, sheet=None):
+    """
+    Yields rows as [value, ] from spreadsheet file.
+
+    @param   filename    file path to open
+    @param   columns     list of column indexes to return
+    @param   sheet       sheet name to read from, if applicable
+    """
+    is_csv  = filename.lower().endswith(".csv")
+    is_xls  = filename.lower().endswith(".xls")
+    is_xlsx = filename.lower().endswith(".xlsx")
+    if is_csv:
+        with open(filename, "rbU") as f:
+            firstline = next(f, "")
+
+            if firstline.startswith("\xFF\xFE"): # Unicode little endian header
+                try:
+                    firstline = firstline.decode("utf-16") # GMail CSVs can be in UTF-16
+                except UnicodeDecodeError:
+                    firstline = firstline[2:].replace("\x00", "")
+                else: # CSV has trouble with Unicode: turn back to string
+                    firstline = firstline.encode("latin1", errors="xmlcharrefreplace")
+            iterable = itertools.chain([firstline], f)
+            csvfile = csv.reader(iterable, csv.Sniffer().sniff(firstline, ",;\t"))
+            for row in csvfile:
+                yield [row[i] for i in columns]
+    elif is_xls:
+        with xlrd.open_workbook(filename, on_demand=True) as wb:
+            for row in wb.sheet_by_name(sheet).get_rows():
+                yield [row[i].value if i < len(row) else None for i in columns]
+    elif is_xlsx:
+        wb = None
+        try:
+            wb = openpyxl.load_workbook(filename, read_only=True)
+            for row in wb.get_sheet_by_name(sheet).iter_rows(values_only=True):
+                yield [row[i] if i < len(row) else None for i in columns]
+        finally: wb and wb.close()
 
 
 

@@ -11,18 +11,21 @@ Released under the MIT License.
 @modified    30.10.2019
 ------------------------------------------------------------------------------
 """
-from collections import Counter
+from collections import Counter, OrderedDict
 import copy
 import datetime
 import functools
 import logging
 import math
+import pickle
 import os
+import string
 import sys
 
 import wx
 import wx.grid
 import wx.lib
+import wx.lib.mixins.listctrl
 import wx.lib.newevent
 import wx.stc
 
@@ -46,6 +49,7 @@ logger = logging.getLogger(__name__)
 
 DataPageEvent,   EVT_DATA_PAGE   = wx.lib.newevent.NewCommandEvent()
 SchemaPageEvent, EVT_SCHEMA_PAGE = wx.lib.newevent.NewCommandEvent()
+ImportEvent,     EVT_IMPORT      = wx.lib.newevent.NewCommandEvent()
 
 
 
@@ -936,13 +940,13 @@ class SQLPage(wx.Panel):
         dialog = wx.FileDialog(self, defaultDir=os.getcwd(),
             message="Save query as",
             defaultFile=util.safe_filename(title),
-            wildcard=importexport.WILDCARD,
+            wildcard=importexport.EXPORT_WILDCARD,
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
         filename = dialog.GetPath()
-        extname = importexport.EXTS[dialog.FilterIndex]
+        extname = importexport.EXPORT_EXTS[dialog.FilterIndex]
         if not filename.lower().endswith(".%s" % extname):
             filename += ".%s" % extname
         try:
@@ -1484,13 +1488,13 @@ class DataObjectPage(wx.Panel):
         dialog = wx.FileDialog(self, defaultDir=os.getcwd(),
             message="Save %s as" % self._category,
             defaultFile=util.safe_filename(title),
-            wildcard=importexport.WILDCARD,
+            wildcard=importexport.EXPORT_WILDCARD,
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
         filename = dialog.GetPath()
-        extname = importexport.EXTS[dialog.FilterIndex]
+        extname = importexport.EXPORT_EXTS[dialog.FilterIndex]
         if not filename.lower().endswith(".%s" % extname):
             filename += ".%s" % extname
         try:
@@ -4414,3 +4418,1150 @@ class ExportProgressPanel(wx.Panel):
     def _OnWorker(self, result):
         """Handler for export worker report, invokes _OnResult in a callafter."""
         wx.CallAfter(self._OnResult, result)
+
+
+
+class ImportDialog(wx.Dialog):
+    """
+    Dialog for importing table data from a spreadsheet file.
+    """
+
+    ACTIVE_SEP  = -1 # ListCtrl item data value for active-section separator
+    DISCARD_SEP = -2 # ListCtrl item data value for discard-section header
+
+
+    class DropTarget(wx.DropTarget):
+        """Custom drop target for column listboxes."""
+
+        def __init__(self, side, ctrl, on_drop):
+            super(self.__class__, self).__init__(wx.CustomDataObject("Column"))
+            self._side    = side
+            self._ctrl    = ctrl
+            self._on_drop = on_drop
+
+        def OnData(self, x, y, defResult):
+            """Handler for completing drag, rearranges this and other listbox."""
+            if not self.GetData(): return
+            listrow, _ = self._ctrl.HitTest((x, y))
+            data = pickle.loads(self.GetDataObject().GetData().tobytes())
+            self._on_drop(self._ctrl, listrow, data)
+            return defResult
+
+        def OnDragOver(self, x, y, defResult):
+            """
+            Retains move icon regardless of Ctrl-key,
+            forbids drag onto other listbox if multiple selection.
+            """
+            if self.GetData():
+                data = pickle.loads(self.GetDataObject().GetData().tobytes())
+                if len(data["index"]) > 1 and self._side != data["side"]:
+                    return wx.DragResult.DragNone
+            return wx.DragResult.DragMove
+
+        def BeginDrag(self, side, indexes):
+            """Starts drag on this listbox, using given pickle-able data."""
+            obj = wx.CustomDataObject("Column")
+            obj.SetData(pickle.dumps({"side": side, "index": indexes}))
+            src = wx.DropSource(obj, self._ctrl)
+            src.DoDragDrop(wx.DragResult.DragMove)
+
+
+    class ListCtrl(wx.ListCtrl, wx.lib.mixins.listctrl.TextEditMixin):
+        """
+        ListCtrl with toggleable TextEditMixin,
+        starts edit on double-click or F2/Enter.
+        """
+
+        def __init__(self, parent, id=wx.ID_ANY, pos=wx.DefaultPosition,
+                     size=wx.DefaultSize, style=0):
+            super(self.__class__, self).__init__(parent, id, pos, size, style)
+            self._editable      = False
+            self._editable_cols = []  # [editable column index, ] if not all
+            self._editable_set  = False
+            self._readonly      = False
+            self.Bind(wx.EVT_CHAR_HOOK, self._OnKey)
+
+        def SetReadOnly(self, readonly):
+            """Sets the control as read-only (not editable, not draggable)."""
+            if self._readonly == bool(readonly): return False
+            self._readonly = bool(readonly)
+            return True
+        def IsReadOnly(self):
+            return self._readonly
+        ReadOnly = property(IsReadOnly, SetReadOnly)
+
+        def SetEditable(self, editable, columns=()):
+            """Sets list items editable on double-click."""
+            if bool(editable) == self._editable: return False
+
+            self._editable      = bool(editable)
+            self._editable_cols = copy.copy(columns or ())
+            if editable and not self._editable_set:
+                wx.lib.mixins.listctrl.TextEditMixin.__init__(self)
+                self.Unbind(wx.EVT_LEFT_DOWN, handler=self.OnLeftDown)
+                self.Bind(wx.EVT_LEFT_DOWN, self._OnLeftDown)
+                if not hasattr(self, "col_locs"): # TextEditMixin bug workaround
+                    ww = map(self.GetColumnWidth, range(self.ColumnCount))
+                    self.col_locs = [0] + [sum(ww[:i], x) for i, x in enumerate(ww)]
+                self._editable_set = True
+            return True
+
+        def GetSelections(self):
+            """Returns a list of selected row indexes that have valid data."""
+            result, selected = [], self.GetFirstSelected()
+            while selected >= 0:
+                if self.GetItemData(selected) >= 0: result.append(selected)
+                selected = self.GetNextSelected(selected)
+            return result
+
+        def OpenEditor(self, col, row):
+            """Opens an editor at the current position, unless non-data row."""
+            if not self._editable or self._readonly or self.GetItemData(row) < 0: return
+
+            if self._editable_cols and col not in self._editable_cols:
+                col = self._editable_cols[0]
+            wx.lib.mixins.listctrl.TextEditMixin.OpenEditor(self, col, row)
+
+        def OnItemSelected(self, event):
+            """Closes current editor if selecting another row."""
+            if self.curRow == event.Index: return
+            event.Skip()
+            self.CloseEditor()
+            self.curRow = event.Index
+
+        def _OnKey(self, event):
+            """
+            Handler for keypress, starts edit mode on F2/Enter if editable,
+            generates scroll events on keyboard navigation.
+            """
+            event.Skip()
+            EDIT_KEYS = [wx.WXK_F2, wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]
+            MOVE_KEYS = [wx.WXK_UP, wx.WXK_DOWN, wx.WXK_PAGEUP, wx.WXK_PAGEDOWN,
+                         wx.WXK_HOME, wx.WXK_END, wx.WXK_NUMPAD_HOME, 
+                         wx.WXK_NUMPAD_PAGEUP, wx.WXK_NUMPAD_PAGEDOWN,
+                         wx.WXK_NUMPAD_UP, wx.WXK_NUMPAD_DOWN, wx.WXK_NUMPAD_END]
+
+            pos0 = self.GetScrollPos(wx.VERTICAL)
+            def fire_scroll():
+                pos = self.GetScrollPos(wx.VERTICAL)
+                if pos == pos0: return
+                e = wx.ScrollWinEvent(wx.wxEVT_SCROLLWIN_THUMBTRACK, pos, wx.VERTICAL)
+                e.EventObject = self
+                wx.PostEvent(self, e)
+            if event.KeyCode in MOVE_KEYS: wx.CallAfter(fire_scroll)
+
+            if self._editable and not self._readonly and not self.editor.Shown \
+            and event.KeyCode in EDIT_KEYS:
+                self.OpenEditor(self.curCol, self.curRow)
+
+        def _OnLeftDown(self, event):
+            """
+            Swallows event if clicking a focused row in editable ListCtrl
+            (TextEditMixin starts edit mode on single-clicking a focused item).
+            """
+            propagate = False
+            if not self._editable or self._readonly: return
+            if self.editor.Shown: propagate = True
+            else:
+                row, _ = self.HitTest(event.Position)
+                if row not in self.GetSelections(): propagate = True
+            if propagate:
+                wx.lib.mixins.listctrl.TextEditMixin.OnLeftDown(self, event)
+            else: event.Skip()
+
+
+
+    def __init__(self, parent, db):
+        """
+        @param   db     database.Database
+        """
+        super(self.__class__, self).__init__(parent, -1, "Import data", size=(600, 480),
+                                             style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER)
+        self.Sizer = wx.BoxSizer(wx.VERTICAL)
+
+        self._db     = db # database.Database
+        self._data   = None # {name, size, sheets: {?name, rows, columns}}
+        self._cols1  = [] # [{index, name, skip}]
+        self._cols2  = []
+        self._tables = db.get_category("table").values()
+        self._sheet  = None # {name, rows, columns}
+        self._table  = None # {table opts} to import into
+        self._has_header = True  # Whether using first row as header
+        self._has_new    = False # Whether a new table has been added
+        self._has_pk     = False # Whether new table has auto-increment primary key
+        self._importing  = False # Whether import underway
+        self._progress   = {}    # {count}
+        self._worker = workers.WorkerThread()
+
+        self._dialog_file = wx.FileDialog(
+            self, message="Open", defaultFile="",
+            wildcard=importexport.IMPORT_WILDCARD,
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST | wx.RESIZE_BORDER
+        )
+
+        splitter = wx.SplitterWindow(self, style=wx.BORDER_NONE)
+        p1, p2   = wx.Panel(splitter), wx.Panel(splitter)
+        sizer_p1 = p1.Sizer = wx.FlexGridSizer(rows=5, cols=2, gap=(0, 0))
+        sizer_p2 = p2.Sizer = wx.FlexGridSizer(rows=5, cols=2, gap=(0, 0))
+        sizer_p1.AddGrowableCol(1), sizer_p2.AddGrowableCol(0)
+        sizer_p1.AddGrowableRow(3), sizer_p2.AddGrowableRow(3)
+
+        sizer_header  = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_footer  = wx.BoxSizer(wx.VERTICAL)
+        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+
+        sizer_b1     = wx.BoxSizer(wx.VERTICAL)
+        sizer_b2     = wx.BoxSizer(wx.VERTICAL)
+        sizer_l1     = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_l2     = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_pk     = wx.BoxSizer(wx.HORIZONTAL)
+
+        info_file = wx.StaticText(self)
+        button_file = controls.NoteButton(self, bmp=images.ButtonOpenA.Bitmap)
+
+        label_sheet  = wx.StaticText(p1, label="&Source worksheet:")
+        combo_sheet  = wx.ComboBox(p1, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+
+        check_header = wx.CheckBox(p1, label="Use first row as column name &header")
+
+        label_table  = wx.StaticText(p2, label="&Target table:")
+        combo_table  = wx.ComboBox(p2, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+
+        button_table = wx.Button(p2,   label="&New table", size=(-1, 20))
+
+        button_up1   = wx.Button(p1, label=u"\u2191", size=(20, -1))
+        button_down1 = wx.Button(p1, label=u"\u2193", size=(20, -1))
+        l1 = self.ListCtrl(p1, style=wx.LC_REPORT)
+
+        l2 = self.ListCtrl(p2, style=wx.LC_REPORT)
+        button_up2   = wx.Button(p2, label=u"\u2191", size=(20, -1))
+        button_down2 = wx.Button(p2, label=u"\u2193", size=(20, -1))
+
+        pk_placeholder = wx.Panel(p1)
+        check_pk = wx.CheckBox(p2, label="Add auto-increment &primary key")
+        edit_pk  = wx.TextCtrl(p2, size=(50, -1))
+
+        info_help = wx.StaticText(self, style=wx.ALIGN_RIGHT)
+        gauge = wx.Gauge(self, range=100, size=(300,-1), style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
+        info_gauge = wx.StaticText(self)
+
+        button_ok      = wx.Button(self, label="&Import")
+        button_reset   = wx.Button(self, label="&Reset")
+        button_cancel  = wx.Button(self, label="&Cancel", id=wx.CANCEL)
+
+        button_restart = wx.Button(self, label="Re&start")
+        button_open    = wx.Button(self, label="Open &table")
+        button_close   = wx.Button(self, label="Close")
+
+        self._info_file      = info_file
+        self._button_file    = button_file
+        self._splitter       = splitter
+        self._label_sheet    = label_sheet
+        self._combo_sheet    = combo_sheet
+        self._check_header   = check_header
+        self._combo_table    = combo_table
+        self._pk_placeholder = pk_placeholder
+        self._check_pk       = check_pk
+        self._edit_pk        = edit_pk
+        self._info_help      = info_help
+        self._gauge          = gauge
+        self._info_gauge     = info_gauge
+        self._button_table   = button_table
+        self._button_reset   = button_reset
+        self._button_ok      = button_ok
+        self._button_reset   = button_reset
+        self._button_cancel  = button_cancel
+        self._button_restart = button_restart
+        self._button_open    = button_open
+        self._button_close   = button_close
+        self._l1, self._l2   = l1, l2
+
+        sizer_header.Add(info_file, proportion=1)
+        sizer_header.Add(button_file, border=20, flag=wx.BOTTOM)
+
+        sizer_p1.Add(0, 0)
+        sizer_p1.Add(label_sheet,  border=10, flag=wx.RIGHT | wx.GROW)
+        sizer_p1.Add(0, 0)
+        sizer_p1.Add(combo_sheet,  border=10, flag=wx.RIGHT | wx.GROW)
+        sizer_p1.Add(0, 0)
+        sizer_p1.Add(check_header, border=5, flag=wx.RIGHT | wx.TOP | wx.BOTTOM | wx.GROW)
+
+        sizer_p2.Add(label_table,  border=10, flag=wx.GROW)
+        sizer_p2.Add(0, 0)
+        sizer_p2.Add(combo_table,  border=10, flag=wx.GROW)
+        sizer_p2.Add(0, 0)
+        sizer_p2.Add(button_table, border=5, flag=wx.TOP | wx.BOTTOM | wx.ALIGN_RIGHT)
+        sizer_p2.Add(0, 0)
+
+        sizer_b1.Add(button_up1)
+        sizer_b1.Add(button_down1)
+        sizer_b2.Add(button_up2)
+        sizer_b2.Add(button_down2)
+
+        sizer_pk.Add(check_pk, border=5, flag=wx.TOP | wx.ALIGN_CENTER)
+        sizer_pk.Add(edit_pk,  border=5, flag=wx.LEFT | wx.TOP)
+
+        sizer_p1.Add(sizer_b1, flag=wx.ALIGN_CENTER)
+        sizer_p1.Add(l1, flag=wx.GROW)
+        sizer_p1.Add(0, 0)
+        sizer_p1.Add(pk_placeholder)
+        sizer_p2.Add(l2, flag=wx.GROW)
+        sizer_p2.Add(sizer_b2, flag=wx.ALIGN_CENTER)
+        sizer_p2.Add(sizer_pk, flag=wx.ALIGN_RIGHT)
+
+        sizer_footer.Add(info_help, flag=wx.GROW)
+        sizer_footer.Add(gauge, flag=wx.ALIGN_CENTER)
+        sizer_footer.Add(info_gauge, flag=wx.ALIGN_CENTER)
+
+        for b in (button_ok, button_reset, button_cancel, button_restart,
+                  button_open, button_close):
+            sizer_buttons.Add(b, border=10, flag=wx.LEFT | wx.RIGHT)
+
+        self.Sizer.Add(sizer_header,  border=10, flag=wx.ALL | wx.GROW)
+        self.Sizer.Add(splitter,      proportion=1, flag=wx.GROW)
+        self.Sizer.Add(sizer_footer,  border=10, flag=wx.ALL | wx.ALIGN_CENTER_HORIZONTAL)
+        self.Sizer.Add(sizer_buttons, border=5,  flag=wx.ALL | wx.ALIGN_CENTER_HORIZONTAL)
+
+        for l in l1, l2:
+            self.Bind(wx.EVT_LIST_BEGIN_DRAG,        self._OnBeginDrag, l)
+            self.Bind(wx.EVT_LIST_COL_BEGIN_DRAG,    lambda e: e.Veto(), l)
+            self.Bind(wx.EVT_CONTEXT_MENU,           self._OnMenuList, l)
+            l.GetMainWindow().Bind(wx.EVT_SCROLLWIN, self._OnScrollColumns)
+        self.Bind(wx.EVT_LIST_END_LABEL_EDIT, functools.partial(self._OnEndEdit, l2), l2)
+
+        self.Bind(wx.EVT_CHECKBOX, self._OnHeaderRow,   check_header)
+        self.Bind(wx.EVT_CHECKBOX, self._OnPK,          check_pk)
+        self.Bind(wx.EVT_COMBOBOX, self._OnSheet,       combo_sheet)
+        self.Bind(wx.EVT_COMBOBOX, self._OnTable,       combo_table)
+        self.Bind(wx.EVT_BUTTON,   self._OnFile,        button_file)
+        self.Bind(wx.EVT_BUTTON,   self._OnButtonTable, button_table)
+        self.Bind(wx.EVT_BUTTON,   self._OnImport,      button_ok)
+        self.Bind(wx.EVT_BUTTON,   self._OnReset,       button_reset)
+        self.Bind(wx.EVT_BUTTON,   self._OnCancel,      button_cancel)
+        self.Bind(wx.EVT_BUTTON,   self._OnRestart,     button_restart)
+        self.Bind(wx.EVT_BUTTON,   self._OnOpenTable,   button_open)
+        self.Bind(wx.EVT_BUTTON,   self._OnCancel,      button_close)
+        self.Bind(wx.EVT_TEXT,     self._OnEditPK,      edit_pk)
+        self.Bind(wx.EVT_SPLITTER_SASH_POS_CHANGED, self._OnSize, splitter)
+        self.Bind(wx.EVT_CLOSE,    self._OnCancel)
+        self.Bind(wx.EVT_SIZE,     self._OnSize)
+
+        self.Bind(wx.EVT_BUTTON, functools.partial(self._OnMoveItems, "source", -1), button_up1)
+        self.Bind(wx.EVT_BUTTON, functools.partial(self._OnMoveItems, "source", +1), button_down1)
+        self.Bind(wx.EVT_BUTTON, functools.partial(self._OnMoveItems, "target", -1), button_up2)
+        self.Bind(wx.EVT_BUTTON, functools.partial(self._OnMoveItems, "target", +1), button_down2)
+
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED, lambda e: (e.Skip(), wx.CallAfter(self._Populate)))
+
+        button_file.ToolTip = "Choose file to import"
+
+        combo_sheet.Enabled = check_header.Enabled = False
+        combo_table.Enabled = button_table.Enabled = False
+
+        combo_table.SetItems(["%s (%s)" % (x["name"], util.plural("column", x["columns"]))
+                              for x in self._tables])
+
+        check_header.Value = self._has_header
+        check_header.MinSize = (-1, button_table.Size.height)
+
+        button_up1  .ToolTip = button_up2  .ToolTip = "Move column one step higher"
+        button_down1.ToolTip = button_down2.ToolTip = "Move column one step lower"
+
+        l1.AppendColumn("") # Dummy hidden column, as first can't right-align
+        l1.AppendColumn("Index",        wx.LIST_FORMAT_RIGHT)
+        l1.AppendColumn("File column",  wx.LIST_FORMAT_RIGHT)
+        l2.AppendColumn("")
+        l2.AppendColumn("Table column")
+        l2.AppendColumn("Index",  wx.LIST_FORMAT_RIGHT)
+        l1.SetDropTarget(self.DropTarget("source", l1, self._OnDropItems))
+        l2.SetDropTarget(self.DropTarget("target", l2, self._OnDropItems))
+        l2.Disable()
+
+        check_pk.ToolTip = "Add an additional INTEGER PRIMARY KEY AUTOINCREMENT " \
+                           "column to the new table"
+        check_pk.MinSize = (-1, edit_pk.Size.height)
+        pk_placeholder.Shown = check_pk.Shown = edit_pk.Shown = False
+
+        ColourManager.Manage(info_help, "ForegroundColour", "DisabledColour")
+        gauge.SetForegroundColour(conf.GaugeColour)
+        gauge.Shown = info_gauge.Shown = False
+
+        button_ok.ToolTip      = "Start importing data"
+        button_reset.ToolTip   = "Reset to initial state"
+        button_restart.ToolTip = "Run another import"
+        button_open.ToolTip    = "Close dialog and open table data"
+        button_close.ToolTip   = "Close dialog"
+        self.SetEscapeId(wx.CANCEL)
+
+        button_restart.Shown = button_open.Shown = button_close.Shown = False
+
+        splitter.SetMinimumPaneSize(200)
+        splitter.SetSashGravity(0.5)
+        splitter.SplitVertically(p1, p2)
+
+        self._Populate()
+        self._UpdateFooter()
+
+        self.MinSize = (400, 400)
+        wx_accel.accelerate(self)
+        self.Layout()
+        self.CenterOnParent()
+        button_file.SetFocus()
+
+
+    def SetFile(self, data):
+        """
+        Sets the file data to import from, refreshes controls.
+
+        @param   data   file metadata as {name, size, sheets: [{name, rows, columns}]}
+        """
+        self._data  = data
+
+        idx = next((i for i, x in enumerate(data["sheets"]) if x["columns"]), 0)
+        self._sheet = data["sheets"][idx]
+
+        self._cols1 = [{"name": x, "index": i, "skip": bool(self._cols2 and i >= len(self._cols2))}
+                       for i, x in enumerate(self._sheet["columns"])]
+        for i, c in enumerate(self._cols2): c["skip"] = i >= len(self._cols1)
+
+        info = "Import from %s.\nSize: %s (%s).\nWorksheets: %s." % (
+            data["name"],
+            util.format_bytes(data["size"]),
+            util.format_bytes(data["size"], max_units=False),
+            len(data["sheets"]),
+        )
+        self._info_file.Label = info
+
+        self._combo_sheet.Enabled = self._check_header.Enabled = True
+        self._combo_table.Enabled = self._button_table.Enabled = True
+        self._combo_sheet.SetItems(["%s (%s, %s)" % (
+            x["name"], util.plural("column", x["columns"]),
+            "rows: file too large to count" if x["rows"] < 0
+            else util.plural("row", x["rows"]),
+        ) for x in data["sheets"]])
+        self._combo_sheet.Select(idx)
+
+        self._l1.Enable()
+        self._check_header.Enable()
+        self._OnSize()
+        self._Populate()
+
+
+    def SetTable(self, table):
+        """Sets the table to import into, refreshes columns."""
+        idx, self._table = next((i, x) for i, x in enumerate(self._tables)
+                                if x["name"] == table)
+        if self._combo_table.Selection != idx: self._combo_table.Select(idx)            
+
+        self._cols2 = [{"name": x["name"], "index": i, "skip": False}
+                       for i, x in enumerate(self._table["columns"])]
+        for c1, c2 in zip(self._cols1, self._cols2):
+            if c1["skip"]: c2["skip"] = True
+        if len(self._cols1) > len(self._cols2):
+            for x in self._cols1[len(self._cols2):]: x["skip"] = True
+        if self._cols1 and len(self._cols1) < len(self._cols2):
+            for x in self._cols2[len(self._cols1):]: x["skip"] = True
+
+        self._l2.Enable()
+        self._l2.SetEditable(self._table.get("new"), columns=[1])
+        self._combo_table.Enable()
+        self._button_table.Enable(bool(not self._has_new or self._table.get("new")))
+        self._UpdatePK()
+        self._UpdateFooter()
+        self._OnSize()
+        self._Populate()
+
+
+    def _Populate(self):
+        """Populates listboxes with current data."""
+        if not self: return
+        discardcolour   = wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)
+        discardbgcolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNFACE)
+        bgcolour        = wx.SystemSettings.GetColour(wx.SYS_COLOUR_WINDOW)
+
+        def add_row(l, name, other, data):
+            """Adds row and data to listbox."""
+            l.Append(["", name, other] if l is self._l2 else ["", other, name])
+            l.SetItemData(l.ItemCount - 1, data)
+            if l.ReadOnly:
+                l.SetItemBackgroundColour(l.ItemCount - 1, discardbgcolour)
+
+
+        def add_separator(l, i):
+            """Inserts discard pile separator."""
+            t = ("Discarded: " + "-" * 20) if i else ("-" * 20 + " Discarded:")
+            add_row(l, "", "", self.ACTIVE_SEP), add_row(l, "", "", self.ACTIVE_SEP)
+            add_row(l, t, "", self.DISCARD_SEP)
+            l.SetItemTextColour(l.ItemCount - 1, discardcolour)
+
+        if not self._importing: self._button_ok.Enable()
+        for i, (l, cc) in enumerate([(self._l1, self._cols1),
+                                     (self._l2, self._cols2)]):
+            self.Freeze()
+            ctrl2 = self._l1 if i else self._l2
+
+
+            l._scrolling = True # Disable scroll syncing during update
+            pos = (l if l.ItemCount else ctrl2).GetScrollPos(wx.VERTICAL)
+            selected_idxs = [int(l.GetItemText(x, 2 if i else 1)) - 1
+                             for x in l.GetSelections()] if not l.ReadOnly else []
+            l.DeleteAllItems()
+            l.SetBackgroundColour(discardbgcolour if l.ReadOnly else bgcolour)
+            for j, c in enumerate(cc):
+                if c["skip"] and (not j or not cc[j-1]["skip"]): add_separator(l, i)
+                name = c["name"] if i or self._has_header else self._MakeColumnName(i, c)
+                add_row(l, name, c["index"] + 1, j)
+                if c["skip"]:
+                    l.SetItemTextColour(l.ItemCount - 1, discardcolour)
+                    if l.ReadOnly:
+                        l.SetItemBackgroundColour(l.ItemCount - 1, discardbgcolour)
+                if c["index"] in selected_idxs: l.Select(l.ItemCount - 1)
+            if cc and not cc[-1]["skip"]: add_separator(l, i)
+            pos = max(0, min(pos, l.ItemCount - 1))
+            l.ScrollLines(pos)
+            l.EnsureVisible(max(0, min(pos + l.CountPerPage, l.ItemCount) - 1))
+            wx.CallAfter(setattr, l, "_scrolling", False)
+            if not self._importing and all(x["skip"] for x in cc):
+                self._button_ok.Disable()
+            self.Thaw()
+
+
+    def _MakeColumnName(self, target, coldata):
+        """Returns auto-generated column name for {name, index}."""
+        if target:
+            op = "%%0%dd" % math.ceil(math.log(len(self._cols1), 10))
+            return "col_%s" % op % (coldata["index"] + 1) # Zero-pad to max
+        else:
+            digits, base = string.ascii_uppercase, len(string.ascii_uppercase)
+            t, n = "", coldata["index"] + 1 # Convert to 1-based alphabetic label
+            while n: t, n = digits[(n % base or base) - 1] + t, (n - 1) / base
+            return t
+
+
+    def _UpdateFooter(self):
+        """Updates dialog footer content."""
+        infotext = "Drag column from one side to other to swap index. " \
+                   "Drag column within one side to move index."
+        if self._table and self._table.get("new"):
+            infotext += "\nDouble-click on table column to rename."
+        self._info_help.Label = infotext
+        self._info_help.Wrap(self.Size.width - 30)
+        self.Layout()
+
+
+    def _OnDropItems(self, ctrl, ctrlrow, fromdata):
+        """DropTarget handler, rearranges columns on one or both sides."""
+        if ctrl.ReadOnly: return
+        fromside, indexes = fromdata["side"], fromdata["index"]
+        fromcols  = self._cols1 if "source" == fromside else self._cols2
+        othercols = self._cols2 if "source" == fromside else self._cols1
+        toside = "source" if ctrl is self._l1 else "target"
+
+        fromcol = fromcols[indexes[0]]
+        toindex, skip = None, None
+        if ctrlrow < 0: # Drag to end of discard pile: set as last discard
+            toindex = min(len(fromcols), len(othercols or fromcols)) - 1
+            if not fromcol["skip"]: skip = True
+        else:
+            toindex = ctrl.GetItemData(ctrlrow)
+            if toindex == self.ACTIVE_SEP:
+                # Drag to active separator: set as last active
+                firstdiscard = next((i for i, c in enumerate(fromcols)
+                                     if c["skip"]), -1)
+                if firstdiscard < 0: toindex = len(fromcols) - 1
+                else: toindex = firstdiscard
+                if fromcol["skip"]: skip = False
+            elif toindex == self.DISCARD_SEP:
+                # Drag to discard header: set as first discard
+                toindex = next((i for i, c in enumerate(fromcols)
+                                if c["skip"]), len(fromcols) - 1)
+                if not fromcol["skip"]: skip, toindex = True, toindex - 1
+            elif fromside == toside:
+                if fromcols[toindex]["skip"] != fromcol["skip"]:
+                    skip = bool(fromcols[toindex]["skip"])
+        self._MoveItems(fromside, indexes, skip, toindex)
+        ctrl2 = self._l1 if "source" == fromside else self._l2
+        ctrl2.SetFocus()
+
+
+    def _OnMoveItems(self, side, direction, event=None):
+        """Handler for clicking a move button, updates side columns."""
+        l = self._l1 if "source" == side else self._l2
+        if l.ReadOnly: return
+            
+        rows = l.GetSelections()
+        if not rows or direction < 0 and not rows[0] \
+        or direction > 0 and rows[0] == l.ItemCount - 1: return
+
+        indexes, skip = map(l.GetItemData, rows), None
+        cc = self._cols1 if "source" == side else self._cols2
+        allactives  = [i for i, x in enumerate(cc) if not x["skip"]]
+        alldiscards = [i for i, x in enumerate(cc) if x["skip"]]
+        if direction > 0 and allactives and any(x == allactives[-1] for x in indexes):
+            skip = True
+        elif direction < 0 and alldiscards and any(x == alldiscards[0] for x in indexes):
+            skip = False
+        self._MoveItems(side, indexes, skip, direction=direction)
+
+
+    def _OnMenuList(self, event):
+        """Handler for right-click or menu key on list, opens popup menu."""
+        event.Skip()
+        if event.EventObject.ReadOnly: return            
+        rows, l = event.EventObject.GetSelections(), event.EventObject
+        if not rows: return
+
+        cc, side = (self._cols1, "source") if l is self._l1 else (self._cols2, "target")
+        idxs = map(l.GetItemData, rows)
+        cols = [cc[x] for x in idxs]
+        single = None if len(cols) > 1 else cols[0]
+        allactives  = [i for i, x in enumerate(cc) if not x["skip"]]
+        alldiscards = [i for i, x in enumerate(cc) if x["skip"]]
+        myactives   = [i for i, x in zip(idxs, cols) if not x["skip"]]
+        mydiscards  = [i for i, x in zip(idxs, cols) if x["skip"]]
+        can_up     = all(idxs) or not allactives and mydiscards
+        can_down   = idxs[-1] < len(cc) - 1 or not alldiscards and myactives
+        can_top    = myactives  and myactives  != allactives [:len(myactives)] or \
+                     mydiscards and mydiscards != alldiscards[:len(mydiscards)]
+        can_bottom = myactives  and myactives  != allactives [-len(myactives):] or \
+                     mydiscards and mydiscards != alldiscards[-len(mydiscards):]
+
+        menu = wx.Menu()
+
+        item_up       = wx.MenuItem(menu, -1, "Move &up")
+        item_down     = wx.MenuItem(menu, -1, "Move &down")
+        item_top      = wx.MenuItem(menu, -1, "Move to section &top")
+        item_bottom   = wx.MenuItem(menu, -1, "Move to section &bottom")
+        item_pos      = wx.MenuItem(menu, -1, "Move to &position ..")
+        item_activate = wx.MenuItem(menu, -1, "Activate")
+        item_discard  = wx.MenuItem(menu, -1, "Discard")
+        item_rename = item_restore = None
+        if single and "target" == side and self._table.get("new"):
+            suf = (" '%s'" % single["name0"] if single.get("name0") else "")
+            item_rename  = wx.MenuItem(menu, -1, "Rena&me")
+            item_restore = wx.MenuItem(menu, -1, "&Restore name" + suf)
+
+        item_up      .Enable(bool(can_up))
+        item_down    .Enable(bool(can_down))
+        item_top     .Enable(bool(can_top))
+        item_bottom  .Enable(bool(can_bottom))
+        item_pos     .Enable(len(cc) != len(cols))
+        item_activate.Enable(bool(mydiscards))
+        item_discard .Enable(bool(myactives))
+        if item_restore: item_restore.Enable("name0" in single)
+
+        menu.Append(item_up)
+        menu.Append(item_down)
+        menu.Append(item_top)
+        menu.Append(item_bottom)
+        menu.Append(item_pos)
+        menu.AppendSeparator()
+        if item_rename:  menu.Append(item_rename)
+        if item_restore: menu.Append(item_restore)
+        menu.Append(item_activate)
+        menu.Append(item_discard)
+
+        def move_to_pos(pos, indexes, skip=None): self._MoveItems(side, indexes, skip, pos)
+
+        def on_position(event=None):
+            """Opens popup dialog for entering position."""
+            dlg = wx.TextEntryDialog(self, "Move selected items to position:",
+                                     conf.Title)
+            if wx.ID_OK != dlg.ShowModal(): return
+            v = dlg.GetValue().strip()
+            pos = max(0, min(int(v) - 1, len(cc))) if v.isdigit() else None
+            if pos is not None: move_to_pos(pos, idxs)
+
+        def on_top(event=None):
+            """Moves selected actives and discards to active and discard top."""
+            if myactives  and myactives  != allactives [:len(myactives)]:
+                move_to_pos(0, myactives)
+            if mydiscards and mydiscards != alldiscards[:len(mydiscards)]:
+                move_to_pos(alldiscards[0], mydiscards)
+
+        def on_bottom(event=None):
+            """Moves selected actives and discards to active and discard bottom."""
+            if myactives  and myactives  != allactives [-len(myactives):]:
+                move_to_pos(allactives[-1] + 1, myactives)
+            if mydiscards and mydiscards != alldiscards[-len(mydiscards):]:
+                move_to_pos(alldiscards[-1] + 1, mydiscards)
+
+        def on_rename(event=None): l.OpenEditor(1, rows[0])
+        def on_restore(event=None):
+            single["name"] = single.pop("name0")
+            self._Populate()
+
+        def on_activate(event=None): move_to_pos(len(allactives), mydiscards, False)
+        def on_discard (event=None): move_to_pos(len(allactives), myactives,  True)
+
+        menu.Bind(wx.EVT_MENU, functools.partial(self._OnMoveItems, side, -1), id=item_up  .GetId())
+        menu.Bind(wx.EVT_MENU, functools.partial(self._OnMoveItems, side, +1), id=item_down.GetId())
+        menu.Bind(wx.EVT_MENU, on_top,      id=item_top     .GetId())
+        menu.Bind(wx.EVT_MENU, on_bottom,   id=item_bottom  .GetId())
+        menu.Bind(wx.EVT_MENU, on_position, id=item_pos     .GetId())
+        menu.Bind(wx.EVT_MENU, on_activate, id=item_activate.GetId())
+        menu.Bind(wx.EVT_MENU, on_discard,  id=item_discard .GetId())
+        if item_rename:  menu.Bind(wx.EVT_MENU, on_rename,  id=item_rename .GetId())
+        if item_restore: menu.Bind(wx.EVT_MENU, on_restore, id=item_restore.GetId())
+
+        l.PopupMenu(menu)
+
+
+    def _MoveItems(self, side, indexes, skip=None, index2=None, direction=None):
+        """
+        Moves items on one side to a new position.
+        Moves mirrored items where discard status changes.
+        Skips items that would change discard status but have no mirror.
+
+        @param   side       "source" or "target"
+        @param   indexes    item indexes to move in .cols1/.cols2
+        @param   skip       True/False to force discard/activation
+        @param   index2     index to move items to
+        @param   direction  direction to move items towards
+        """
+        if skip is None and direction is None and indexes[0] <= index2 <= indexes[-1]:
+            return # Cancel if dragging into selection with no status change
+
+        cc  = self._cols1 if "source" == side else self._cols2
+        cc2 = self._cols2 if "source" == side else self._cols1
+
+        shift1, shift2, lastindex1, sparse, indexes2 = 0, 0, None, False, []
+        for index1 in indexes[::-direction if direction else 1]:
+            if lastindex1 is not None and abs(index1 - lastindex1) > 1: sparse = True
+            lastindex1 = index1
+
+            fromindex = index1 + shift1
+            if direction is None: toindex = min(index2 + shift2, len(cc))
+            else: toindex = fromindex + shift2 + (direction if skip is None or sparse else 0)
+            safeindex = min(toindex, len(cc) - 1)
+            mirrorcol = cc2[fromindex] if fromindex < len(cc2) else None
+
+            same = cc[fromindex]["skip"] == cc[safeindex]["skip"]
+            myskip = (None if same else cc[safeindex]["skip"]) if skip is None else (skip if direction is None or not sparse else None)
+
+            if myskip is not None and cc2 and not mirrorcol \
+            or myskip is None and fromindex == toindex and direction is None:
+                continue # for index1
+
+            if myskip is not None:
+                cc[fromindex]["skip"] = myskip
+                if mirrorcol:
+                    mirrorcol["skip"] = myskip
+                    if fromindex != toindex: cc2.insert(toindex, cc2.pop(fromindex))
+            if fromindex != toindex: cc.insert(toindex, cc.pop(fromindex))
+            if direction is None:
+                if fromindex < toindex: shift1 -= 1
+                else: shift2 += 1
+
+            indexes2.append(toindex)
+        if not indexes2: return
+
+        indexes2 = sorted(indexes2)
+        visible = (indexes2[0] if index2 <= indexes2[0] else indexes2[-1]) + \
+                  (2 if skip else -2 if skip is False else 0)
+        if visible > len(cc) - 3: visible = len(cc) + 3
+        for l in self._l1, self._l2: l.EnsureVisible(min(visible, l.ItemCount - 1))
+        self._Populate()
+
+
+    def _OnImport(self, event=None):
+        """Handler for clicking to start import, launches process, updates UI."""
+        self._importing = True
+        self._progress.clear()
+        SKIP = (self._gauge, self._info_gauge, self._info_file,
+                self._button_cancel, self._splitter, self._l1, self._l2)
+        for c in sum((list(x.Children) for x in [self] + list(self._splitter.Children)), []):
+            if c not in SKIP: c.Disable()
+
+        self._Populate()
+        self._l1.ReadOnly = self._l2.ReadOnly = True
+        self._info_help.Hide()
+        self._gauge.Show()
+        self._gauge.Value = 0
+        self._info_gauge.Show()
+        self._info_gauge.Label = "0 rows"
+
+        self.Layout()
+        self._gauge.Pulse()
+
+        sheet, table = self._sheet.get("name"), self._table["name"]
+        columns = OrderedDict((a["index"], b["name"])
+                              for a, b in zip(self._cols1, self._cols2))
+        pk = self._table.get("pk")
+        callable = functools.partial(importexport.import_data, self._data["name"],
+                                     self._db, table, columns, sheet,
+                                     self._has_header, pk, self._OnProgress)
+        self._worker.work(callable)
+
+
+    def _OnProgress(self, **kwargs):
+        """
+        Handler for import progress report, updates progress bar,
+        updates dialog if done. Returns whether importing should continue,
+        True/False/None (yes/no/no+rollback).
+        """
+        if not self: return
+        result = self._importing
+
+        self._progress.update(kwargs)
+        VARS = "count", "errorcount", "error", "index", "done"
+        count, errorcount, error, index, done = (kwargs.get(x) for x in VARS)
+
+        msg_shown = False
+        if error and not done and self._importing:
+            dlg = wx.MessageDialog(self, "Error inserting row #%s.\n\n%s" % (
+                index + (not self._has_header), error), conf.Title,
+                wx.YES | wx.NO | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING
+            )
+            dlg.SetYesNoCancelLabels("&Abort", "Abort and &rollback", "&Ignore errors")
+            res = dlg.ShowModal()
+            if wx.ID_CANCEL != res:
+                result = self._importing = False if wx.ID_YES == res else None
+
+        def after():
+            if count is not None:
+                total = self._sheet["rows"]
+                if total < 0: text = util.plural("row", count)
+                else:
+                    if self._has_header: total -= 1
+                    percent = int(100 * util.safedivf(count + (errorcount or 0), total))
+                    text = "%s%% (%s of %s)" % (percent, util.plural("row", count), total)
+                    self._gauge.Value = percent
+                if errorcount:
+                    text += ", %s" % util.plural("error", errorcount)
+                self._info_gauge.Label = text
+                self._gauge.ContainingSizer.Layout()
+
+            if done:
+                success = self._importing
+                if success: self._importing = False
+                if success is not None:
+                    wx.PostEvent(self.Parent, ImportEvent(-1, table=self._table["name"], ))
+                SHOW = (self._button_restart, self._button_open, self._button_close)
+                HIDE = (self._button_ok, self._button_reset, self._button_cancel)
+                for c in SHOW: c.Show(), c.Enable()
+                for c in HIDE: c.Hide()
+                self._gauge.Value = self._gauge.Value
+                self._button_ok.ContainingSizer.Layout()
+                if success is None: self._button_open.Disable()
+                else: self._button_open.SetFocus()
+                if msg_shown: return
+
+                if error: msg = "Error on data import:\n\n%s" % error
+                else: msg = "Data import %s.\n\n%s inserted into %stable %s.%s%s" % (
+                    "complete" if success else "cancelled",
+                    util.plural("row", count),
+                    "new " if self._table.get("new") else "" ,
+                    grammar.quote(self._table["name"], force=True),
+                    ("\n%s failed." % util.plural("row", self._progress["errorcount"])) if self._progress.get("errorcount") else "",
+                    ("\n\nAll changes rolled back." if success is None else ""),
+                )
+                icon = wx.ICON_ERROR if error else wx.ICON_INFORMATION if success else wx.ICON_WARNING
+                wx.MessageBox(msg, conf.Title, wx.OK | icon)
+        wx.CallAfter(after)
+
+        return result
+
+
+    def _OnRestart(self, event=None):
+        """Handler for clicking to restart import, updates controls."""
+        for c in sum((list(x.Children) for x in [self] + list(self._splitter.Children)), []):
+            c.Enable()
+
+        SHOW = (self._info_help, self._button_ok, self._button_reset,
+                self._button_cancel)
+        HIDE = (self._gauge, self._info_gauge, self._button_restart,
+                self._button_open, self._button_close)
+        for c in SHOW: c.Show(), c.Enable()
+        for c in HIDE: c.Hide()
+        self._l1.ReadOnly = self._l2.ReadOnly = False
+
+        if self._table.get("new") \
+        and self._db.get_category("table", self._table["name"]):
+            self._has_new = False
+            self._has_pk = self._check_pk.Value = False
+            self._tables = self._db.get_category("table").values()
+            self._combo_table.SetItems(["%s (%s)" % (x["name"], util.plural("column", x["columns"]))
+                                        for x in self._tables])
+            for i, x in enumerate(self._tables):
+                if x["name"] != self._table["name"]: continue # for i, x
+                self._table = x
+                self._combo_table.Select(i)
+            self._button_table.Label = "&New table"
+            self._button_table.Enable()
+            self._l2.SetEditable(False)
+            self._UpdateFooter()
+            self._UpdatePK()
+        elif self._has_new and not self._table.get("new"):
+            self._button_table.Enable()
+            
+
+        self._Populate()
+        self.Layout()
+        self._gauge.Value = 0
+
+
+    def _OnReset(self, event=None):
+        """Resets columns, drops new table if any."""
+        self._cols1 = sorted(self._cols1, key=lambda x: x["index"])
+        for c in self._cols1: c["skip"] = False
+        self._cols2, self._table = [], None
+        for c in self._cols1: c["skip"] = False
+        self._l1.Select(self._l1.GetFirstSelected(), False)
+
+        if self._has_new:
+            self._tables = [x for x in self._tables if not x.get("new")]
+            self._combo_table.SetItems(["%s (%s)" % (x["name"], util.plural("column", x["columns"]))
+                                        for x in self._tables])
+            self._button_table.Label = "&New table"
+            self._button_table.Enable()
+            self._button_table.ContainingSizer.Layout()
+        self._has_new = False
+        self._has_pk = self._check_pk.Value = False
+        self._has_header = self._check_header.Value = True
+        self._UpdatePK()
+        self._combo_table.Select(-1)
+
+        self._OnSize()
+        self._Populate()
+
+
+    def _OnCancel(self, event=None):
+        """
+        Handler for cancelling import, closes dialog if nothing underway,
+        confirms and cancels work if import underway.
+        """
+        if not self._importing: return wx.CallAfter(self.EndModal, wx.CANCEL)
+
+        if wx.YES != controls.YesNoMessageBox("Import is currently underway, "
+            "are you sure you want to cancel it?", conf.Title, wx.ICON_WARNING,
+            defaultno=True
+        ) or not self._importing: return
+
+        qname = grammar.quote(self._table["name"], force=True)
+        changes = "%s%stable %s." % (
+            ("%s in " % util.plural("row", self._progress["count"]))
+             if self._progress.get("count") else "",
+            "new " if self._table.get("new") else "", qname
+        ) if (self._progress.get("count") or self._table.get("new")) else ""
+
+        keep = wx.MessageBox("Keep changes?\n\n%s" % changes.strip().capitalize(),
+            conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.CANCEL_DEFAULT
+        ) if changes else wx.NO
+        if wx.CANCEL == keep or not self._importing: return
+
+        self._importing = None if wx.NO == keep else False
+        self._worker.stop_work()
+        self._gauge.Value = self._gauge.Value # Stop pulse, if any
+
+        if wx.YES == keep:
+            wx.PostEvent(self.Parent, ImportEvent(-1, table=self._table["name"]))
+
+        if isinstance(event, wx.CloseEvent): return wx.CallAfter(self.EndModal, wx.CANCEL)
+            
+        SHOW = (self._button_restart, self._button_open, self._button_close)
+        HIDE = (self._button_ok, self._button_reset, self._button_cancel)
+        for c in SHOW: c.Show(), c.Enable()
+        for c in HIDE: c.Hide()
+        self.Layout()
+
+
+    def _OnButtonTable(self, event=None):
+        """Handler for clicking to add or rename new table."""
+        NEW_SUFFIX = "(* new table *)"
+
+        name, valid, msg = "", False, ""
+        if self._has_new: name = self._table["name"]
+        else:
+            allnames = sum(map(list, self._db.schema.values()), [])
+            name = util.make_unique("import_data", allnames)
+
+        while not valid:
+            dlg = wx.TextEntryDialog(self, "%sEnter name for new table:" %
+                                     (msg + "\n\n" if msg else ""),
+                                     conf.Title, name)
+            if wx.ID_OK != dlg.ShowModal(): return
+            name = dlg.GetValue().strip()
+            if not name: return
+
+            if not self._db.is_valid_name(name):
+                msg = "Invalid table name."
+                continue # while not valid
+            category = next((c for c in self._db.CATEGORIES
+                             for n in self._db.get_category(c)
+                             if n == name.lower()), None)
+            if category:
+                msg = "A %s by this name already exists." % category
+                continue # while not valid
+            break # while not valid
+
+        if not self._has_new:
+            self._cols2, allcols = [], []
+            for i, c in enumerate(self._cols1):
+                if not self._has_header: cname = self._MakeColumnName(1, {"index": i})
+                else:
+                    cname = util.make_unique(c["name"] or "col", allcols)
+                    allcols.append(cname)
+                self._cols2.append({"name": cname, "index": i, "skip": c["skip"]})
+
+            self._tables.append({"name": name, "columns": self._cols2, "new": True})
+            self._table = self._tables[-1]
+            self._has_new = True
+            self._combo_table.Append(name + " " + NEW_SUFFIX)
+            self._combo_table.Select(len(self._tables) - 1)
+            self._button_table.Label = "Rename &new table"
+            self._button_table.ContainingSizer.Layout()
+            self._l2.Enable()
+            self._l2.SetEditable(True, [1])
+            self._check_pk.Enable()
+            self._UpdatePK()
+            self._UpdateFooter()
+            self._OnSize()
+            self._Populate()
+        elif name != self._table["name"]:
+            self._table["name"] = name
+            self._combo_table.Clear()
+            for t in self._tables:
+                n = t["name"] + (" " + NEW_SUFFIX) if t.get("new") else ""
+                self._combo_table.Append(n)
+            self._combo_table.Select(len(self._tables) - 1)
+
+
+    def _OnScrollColumns(self, event):
+        """Handler for scrolling one listbox, scrolls the other in sync."""
+        event.Skip()
+        ctrl1 = event.EventObject
+        if getattr(ctrl1, "_scrolling", False): return
+
+        ctrl2 = self._l2 if ctrl1 is self._l1 else self._l1
+        ctrl1._scrolling = ctrl2._scrolling = True
+        pos1, pos2 = (x.GetScrollPos(wx.VERTICAL) for x in (ctrl1, ctrl2))
+        if event.EventType == wx.wxEVT_SCROLLWIN_THUMBTRACK: pos1 = event.Position
+        elif event.EventType == wx.wxEVT_SCROLLWIN_LINEDOWN: pos1 += 1
+        elif event.EventType == wx.wxEVT_SCROLLWIN_LINEUP:   pos1 -= 1
+        elif event.EventType == wx.wxEVT_SCROLLWIN_PAGEDOWN: pos1 += ctrl1.CountPerPage
+        elif event.EventType == wx.wxEVT_SCROLLWIN_PAGEUP:   pos1 -= ctrl1.CountPerPage
+        elif event.EventType == wx.wxEVT_SCROLLWIN_TOP:      pos1  = 0
+        elif event.EventType == wx.wxEVT_SCROLLWIN_BOTTOM:   pos1  = ctrl1.GetScrollRange(wx.VERTICAL)
+        ctrl2.ScrollLines(pos1 - pos2)
+        ctrl1._scrolling = ctrl2._scrolling = False
+
+
+    def _OnSize(self, event=None):
+        """Handler for window size change, resizes list columns and footer."""
+        event and event.Skip()
+        def after():
+            self.Freeze()
+            for i, l in enumerate([self._l1, self._l2]):
+                l.SetColumnWidth(0, 0)
+                indexw = 0
+                for j in range(1, l.ColumnCount): # First pass: resize index column
+                    # Force full width at first, as autosize expands last column
+                    l.SetColumnWidth(j, l.Size.width)
+                    if "Index" != l.GetColumn(j).Text: continue # for j
+                    l.SetColumnWidth(j, wx.LIST_AUTOSIZE_USEHEADER)
+                    indexw = l.GetColumnWidth(j)
+                for j in range(1, l.ColumnCount): # Second pass: resize name column
+                    if "Index" == l.GetColumn(j).Text: continue # for j
+                    w = l.Size.width + (l.ClientSize.width - l.Size.width) - indexw
+                    l.SetColumnWidth(j, w)
+            self.Thaw()
+            self._UpdateFooter()
+        wx.CallAfter(after) # Allow size time to activate
+
+
+    def _OnPK(self, event):
+        """Handler for toggling primary key, shows column name editbox."""
+        event.Skip()
+        self._has_pk = not self._has_pk
+        self._edit_pk.Shown = self._has_pk
+        self._splitter.Window2.Layout()
+        if self._has_pk and not self._table.get("pk"):
+            name = util.make_unique("id", [x["name"] for x in self._cols2])
+            self._edit_pk.Value = self._table["pk"] = name
+
+
+    def _OnEditPK(self, event):
+        """Handler for changing primary key name, updates data."""
+        event.Skip()
+        self._table["pk"] = event.EventObject.Value.strip()
+
+
+    def _UpdatePK(self):
+        """Shows or hides primary key row."""
+        show = bool(self._table and self._table.get("new"))
+        self._pk_placeholder.Shown = self._check_pk.Shown = show
+        self._edit_pk.Show(show and self._has_pk)
+        self._splitter.Window2.Layout()
+        self._pk_placeholder.MinSize = self._check_pk.ContainingSizer.Size
+        self._splitter.Window1.Layout()
+
+
+    def _OnHeaderRow(self, event=None):
+        """Handler for toggling using first row as header."""
+        self._has_header = not self._has_header
+        self._Populate()
+
+
+    def _OnFile(self, event=None):
+        """Handler for clicking to choose source file, opens file dialog."""
+        if wx.ID_OK != self._dialog_file.ShowModal(): return
+
+        filename = self._dialog_file.GetPath()
+        if self._data and filename == self._data["name"]: return
+            
+        try: data = importexport.get_import_file_data(filename)
+        except Exception as e:
+            logger.exception("Error reading import file %s.", filename)
+            wx.MessageBox("Error reading file:\n\n%s" % util.format_exc(e),
+                          conf.Title, wx.OK | wx.ICON_ERROR)
+            return
+        self.SetFile(data)
+
+
+    def _OnSheet(self, event):
+        """Handler for selecting sheet, refreshes columns."""
+        self._sheet = self._data["sheets"][event.Selection]
+        self._cols1 = [{"name": x, "index": i, "skip": False}
+                        for i, x in enumerate(self._sheet["columns"])]
+        for i, c in enumerate(self._cols2):
+            c["skip"] = not i < len(self._cols1)
+        self._OnSize()
+        self._Populate()
+
+
+    def _OnOpenTable(self, event=None):
+        """Handler for clicking to close the dialog and open table data."""
+        wx.PostEvent(self.Parent, ImportEvent(-1, table=self._table["name"], open=True))
+        self.EndModal(wx.OK)
+
+
+    def _OnTable(self, event):
+        """Handler for selecting table, refreshes columns."""
+        if event.Selection < 0: return
+        self.SetTable(self._tables[event.Selection]["name"])
+
+
+    def _OnBeginDrag(self, event):
+        """Handler for starting to drag a list item, inits drag with item data."""
+        if event.EventObject.ReadOnly: return
+        indexes = map(event.EventObject.GetItemData, event.EventObject.GetSelections())
+        if not indexes: return
+        side = "source" if event.EventObject is self._l1 else "target"
+        event.EventObject.DropTarget.BeginDrag(side, indexes)
+        return
+
+
+    def _OnEndEdit(self, ctrl, event):
+        """Handler for completing column name edit, updates table, vetoes if empty."""
+        event.Skip()
+        text = event.Text.strip()
+        if not text: event.Veto()
+        else:
+            index = ctrl.GetItemData(event.Index)
+            if text == self._cols2[index]["name"]: return
+
+            if "name0" not in self._cols2[index]:
+                self._cols2[index]["name0"] = self._cols2[index]["name"]
+            self._cols2[index]["name"] = text
+            wx.CallAfter(ctrl.SetItemText, event.Index, text)

@@ -2224,6 +2224,7 @@ class DatabasePage(wx.Panel):
         splitter.SplitVertically(panel1, panel2, 400)
 
         self.Bind(components.EVT_DATA_PAGE, self.on_data_page_event)
+        self.Bind(components.EVT_IMPORT, self.on_import_event)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
                 self.on_close_data_page, nb)
         self.register_notebook_hotkeys(nb)
@@ -4200,11 +4201,11 @@ class DatabasePage(wx.Panel):
             self.dialog_savefile.Filename = "Filename will be ignored"
             self.dialog_savefile.Message = "Choose directory where to save files"
             self.dialog_savefile.WindowStyle ^= wx.FD_OVERWRITE_PROMPT
-        self.dialog_savefile.Wildcard = importexport.WILDCARD
+        self.dialog_savefile.Wildcard = importexport.EXPORT_WILDCARD
         if wx.ID_OK != self.dialog_savefile.ShowModal(): return
 
         wx.YieldIfNeeded() # Allow dialog to disappear
-        extname = importexport.EXTS[self.dialog_savefile.FilterIndex]
+        extname = importexport.EXPORT_EXTS[self.dialog_savefile.FilterIndex]
         path = self.dialog_savefile.GetPath()
         filenames = [path]
         if len(items) > 1:
@@ -4419,6 +4420,18 @@ class DatabasePage(wx.Panel):
                     else " as %s" % grammar.quote(tables2[0], force=True)
             guibase.status("Exported %s to %s%s.", t, filename2, extra, flash=True)
             wx.PostEvent(self, OpenDatabaseEvent(-1, file=filename2))
+
+
+    def on_import_event(self, event):
+        """
+        Handler for import dialog event, refreshes schema,
+        opens table if specified.
+        """
+        table, open = (getattr(event, x, None) for x in ("table", "open"))
+        logger.info("import event %s", event) # TODO remove
+        if table: self.reload_schema(count=True, parse=True)
+        if open and self.tree_data.FindAndActivateItem(type="table", name=table):
+            self.notebook.SetSelection(self.pageorder[self.page_data])
 
 
     def load_data(self):
@@ -4743,6 +4756,10 @@ class DatabasePage(wx.Panel):
                 name=data["name"], level=data["type"], expand=True
             ):
                 self.notebook.SetSelection(self.pageorder[self.page_schema])
+        def import_data(*_, **__):
+            dlg = components.ImportDialog(self, self.db)
+            if "table" == data["type"]: dlg.SetTable(data["name"])
+            dlg.ShowModal()
         def clipboard_copy(text, *_, **__):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text)
@@ -4754,7 +4771,7 @@ class DatabasePage(wx.Panel):
             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
 
         menu = wx.Menu()
-        item_file = item_database = None
+        item_file = item_database = item_import = None
         if data.get("type") in ("table", "view"): # Single table/view
             item_name = wx.MenuItem(menu, -1, '%s %s' % (
                         data["type"].capitalize(), util.unprint(grammar.quote(data["name"], force=True))))
@@ -4776,9 +4793,10 @@ class DatabasePage(wx.Panel):
             menu.AppendItem(item_open_meta)
             menu.AppendItem(item_copy)
 
-            item_file     = wx.MenuItem(menu, -1, '&Export %s to file' % data["type"])
+            item_file = wx.MenuItem(menu, -1, '&Export %s to file' % data["type"])
             if "table" == data["type"]:
                 item_database = wx.MenuItem(menu, -1, 'Export table to another &database')
+                item_import   = wx.MenuItem(menu, -1, '&Import from file into table')
 
         elif "column" == data.get("type"): # Column
             item_name = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
@@ -4810,6 +4828,7 @@ class DatabasePage(wx.Panel):
 
             if "table" == data["category"]:
                 item_database = wx.MenuItem(menu, -1, "Export all tables to another &database")
+                item_import   = wx.MenuItem(menu, -1, '&Import from file into table')
             if not data["items"]:
                 item_copy.Enable(False)
                 item_file.Enable(False)
@@ -4818,7 +4837,8 @@ class DatabasePage(wx.Panel):
         if item_file:
             menu.AppendSeparator()
             menu.AppendItem(item_file)
-            if item_database:      menu.AppendItem(item_database)
+            if item_database: menu.AppendItem(item_database)
+            if item_import:   menu.AppendItem(item_import)
             names = data["items"] if "category" == data["type"] else [data["name"]]
             category = data["category"] if "category" == data["type"] else data["type"]
             menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, category, names),
@@ -4826,6 +4846,8 @@ class DatabasePage(wx.Panel):
             if item_database:
                 menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, names, True, None),
                          id=item_database.GetId())
+            if item_import:
+                menu.Bind(wx.EVT_MENU, import_data, id=item_import.GetId())
 
         if tree.HasChildren(item):
             item_expand   = wx.MenuItem(menu, -1, "&Toggle expanded/collapsed")
