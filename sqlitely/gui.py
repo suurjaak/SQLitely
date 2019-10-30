@@ -2041,6 +2041,11 @@ class DatabasePage(wx.Panel):
         notebook = self.notebook = wx.lib.agw.labelbook.FlatImageBook(
             self, agwStyle=bookstyle, style=wx.BORDER_STATIC)
 
+        self.TopLevelParent.page_db_latest = self
+        self.TopLevelParent.run_console(
+            "page = self.page_db_latest # Database tab")
+        self.TopLevelParent.run_console("db = page.db # SQLite database wrapper")
+
         self.create_page_search(notebook)
         self.create_page_data(notebook)
         self.create_page_schema(notebook)
@@ -2060,11 +2065,6 @@ class DatabasePage(wx.Panel):
         self.dialog_savefile = wx.FileDialog(
             self, defaultDir=os.getcwd(), defaultFile="",
             style=wx.FD_SAVE | wx.RESIZE_BORDER)
-
-        self.TopLevelParent.page_db_latest = self
-        self.TopLevelParent.run_console(
-            "page = self.page_db_latest # Database tab")
-        self.TopLevelParent.run_console("db = page.db # SQLite database wrapper")
 
         self.Layout()
         # Hack to get info-page multiline TextCtrls to layout without quirks.
@@ -3937,7 +3937,7 @@ class DatabasePage(wx.Panel):
         finally: self.notebook_data.Thaw()
         self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
         self.TopLevelParent.run_console(
-            "subpage = page.notebook_data.GetPage(0) # Data object subtab")
+            "datapage = page.notebook_data.GetPage(0) # Data object subtab")
 
 
     def add_sql_page(self, name="", text=""):
@@ -3953,6 +3953,9 @@ class DatabasePage(wx.Panel):
         self.sql_pages[name] = p
         self.notebook_sql.InsertPage(0, page=p, text=name, select=True)
         self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
+        self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
+        self.TopLevelParent.run_console(
+            "sqlpage = page.notebook_sql.GetPage(0) # SQL window subtab")
 
 
     def on_refresh_schema(self, event):
@@ -3992,7 +3995,7 @@ class DatabasePage(wx.Panel):
         finally: self.notebook_schema.Thaw()
         self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
         self.TopLevelParent.run_console(
-            "subpage = page.notebook_schema.GetPage(0) # Schema object subtab")
+            "schemapage = page.notebook_schema.GetPage(0) # Schema object subtab")
 
 
     def on_close_schema_page(self, event):
