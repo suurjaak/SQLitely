@@ -2670,8 +2670,8 @@ class DatabasePage(wx.Panel):
         tb_stats.EnableTool(wx.ID_SAVE, False)
         tb_stats.EnableTool(wx.ID_SAVEAS, False)
         tb_stats.Bind(wx.EVT_TOOL, self.on_copy_statistics,     id=wx.ID_COPY)
-        tb_stats.Bind(wx.EVT_TOOL, self.on_save_statistics,     id=wx.ID_SAVE)
-        tb_stats.Bind(wx.EVT_TOOL, self.on_save_statistics_sql, id=wx.ID_SAVEAS)
+        tb_stats.Bind(wx.EVT_TOOL, functools.partial(self.on_save_statistics, "html"), id=wx.ID_SAVE)
+        tb_stats.Bind(wx.EVT_TOOL, functools.partial(self.on_save_statistics, "sql"),  id=wx.ID_SAVEAS)
         tb_stats.Bind(wx.EVT_TOOL, self.on_update_statistics,   id=wx.ID_REFRESH)
         tb_stats.Bind(wx.EVT_TOOL, self.on_stop_statistics,     id=wx.ID_STOP)
 
@@ -2773,15 +2773,14 @@ class DatabasePage(wx.Panel):
         if wx.TheClipboard.Open():
             ns = {"db_filename": self.db.name,
                   "db_filesize": self.statistics["data"]["filesize"]}
-            content = step.Template(templates.DATA_STATISTICS_TXT, strip=False).expand(
-                dict(ns, **self.statistics)
-            )
+            template = step.Template(templates.DATA_STATISTICS_TXT, strip=False)
+            content = template.expand(ns, **self.statistics)
             d = wx.TextDataObject(content)
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
             guibase.status("Copied database statistics to clipboard", flash=True)
 
 
-    def on_save_statistics(self, event=None):
+    def on_save_statistics(self, filetype, event=None):
         """
         Handler for saving database statistics to file, pops open file dialog
         and saves content.
@@ -2790,53 +2789,18 @@ class DatabasePage(wx.Panel):
         filename = filename.rstrip() + " statistics"
         dialog = wx.FileDialog(
             self, message="Save statistics as", defaultFile=filename,
-            wildcard="HTML file (*.html)|*.html|All files|*.*",
+            wildcard="%s file (*.%s)|*.%s|All files|*.*" %
+                     (filetype.upper(), filetype, filetype),
             style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
         filename = dialog.GetPath()
         try:
-            ns = {"title": "Database statistics", "db_filename": self.db.name,
-                  "db_filesize": self.statistics["data"]["filesize"]}
-            content = step.Template(templates.DATA_STATISTICS_HTML, escape=True).expand(
-                dict(ns, **self.statistics)
-            )
-            with open(filename, "wb") as f:
-                f.write(content.encode("utf-8"))
+            importexport.export_stats(filename, self.db, self.statistics, filetype)
             util.start_file(filename)
         except Exception as e:
-            msg = "Error saving statistics to %s." % filename
-            logger.exception(msg); guibase.status(msg, flash=True)
-            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
-
-
-    def on_save_statistics_sql(self, event=None):
-        """
-        Handler for saving database statistics to SQL file, pops open file dialog
-        and saves content.
-        """
-        filename = os.path.splitext(os.path.basename(self.db.name))[0]
-        filename = filename.rstrip() + " statistics"
-        dialog = wx.FileDialog(
-            self, message="Save statistics as", defaultFile=filename,
-            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
-            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
-        )
-        if wx.ID_OK != dialog.ShowModal(): return
-
-        filename = dialog.GetPath()
-        try:
-            content = step.Template(templates.DATA_STATISTICS_SQL, strip=False).expand({
-                "db_filename": self.db.name, "sql": self.statistics["data"]["sql"],
-                "db_filesize": self.statistics["data"]["filesize"],
-            })
-            with open(filename, "wb") as f:
-                f.write(content.encode("utf-8"))
-            util.start_file(filename)
-        except Exception as e:
-            msg = "Error saving statistics SQL to %s." % filename
+            msg = "Error saving statistics %s to %s." % (filetype.upper(), filename)
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
@@ -3734,11 +3698,7 @@ class DatabasePage(wx.Panel):
         filename = dialog.GetPath()
         try:
             title = "PRAGMA settings." if stc is self.stc_pragma else "Database schema."
-            content = step.Template(templates.CREATE_SQL, strip=False).expand(
-                title=title, db_filename=self.db.name, sql=stc.GetText()
-            )
-            with open(filename, "wb") as f:
-                f.write(content.encode("utf-8"))
+            importexport.export_sql(filename, self.db, stc.Text, title)
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving SQL to %s." % filename

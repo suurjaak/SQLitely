@@ -202,6 +202,24 @@ def export_data(make_iterable, filename, title, db, columns,
     return result
 
 
+def export_sql(filename, db, sql, title=None):
+    """Exports arbitrary SQL to file."""
+    template = step.Template(templates.CREATE_SQL, strip=False)
+    ns = {"title": title, "db_filename": db.name, "sql": sql}
+    with open(filename, "wb") as f: template.stream(f, ns)
+    return True
+
+
+def export_stats(filename, db, data, filetype="html"):
+    """Exports statistics to HTML or SQL file."""
+    TPLARGS = {"html": (templates.DATA_STATISTICS_HTML, dict(escape=True)),
+               "sql":  (templates.DATA_STATISTICS_SQL,  dict(strip=False))}
+    template = step.Template(TPLARGS[filetype][0], **TPLARGS[filetype][1])
+    ns = {"title": "Database statistics", "sql": data["data"]["sql"],
+          "db_filename": db.name, "db_filesize": data["data"]["filesize"]}
+    with open(filename, "wb") as f: template.stream(f, ns, **data)
+    return True
+
 
 def get_import_file_data(filename):
     """

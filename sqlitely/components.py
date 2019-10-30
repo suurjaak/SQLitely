@@ -942,11 +942,11 @@ class SQLPage(wx.Panel):
         if not self._grid.Table: return
 
         title = "SQL query"
-        self._dialog_export.Filename = util.safe_filename(title),
+        self._dialog_export.Filename = util.safe_filename(title)
         if wx.ID_OK != self._dialog_export.ShowModal(): return
 
-        filename = dialog.GetPath()
-        extname = importexport.EXPORT_EXTS[dialog.FilterIndex]
+        filename = self._dialog_export.GetPath()
+        extname = importexport.EXPORT_EXTS[self._dialog_export.FilterIndex]
         if not filename.lower().endswith(".%s" % extname):
             filename += ".%s" % extname
         try:
@@ -1233,10 +1233,7 @@ class SQLPage(wx.Panel):
 
         filename = dialog.GetPath()
         try:
-            content = step.Template(templates.CREATE_SQL, strip=False).expand(
-                title="SQL window.", db_filename=self._db.name, sql=self._stc.Text)
-            with open(filename, "wb") as f:
-                f.write(content.encode("utf-8"))
+            importexport.export_sql(filename, self._db, self._stc.Text, "SQL window.")
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving SQL to %s." % filename
@@ -1492,8 +1489,8 @@ class DataObjectPage(wx.Panel):
         self._dialog_export.Filename = util.safe_filename(title)
         if wx.ID_OK != self._dialog_export.ShowModal(): return
 
-        filename = dialog.GetPath()
-        extname = importexport.EXPORT_EXTS[dialog.FilterIndex]
+        filename = self._dialog_export.GetPath()
+        extname = importexport.EXPORT_EXTS[self._dialog_export.FilterIndex]
         if not filename.lower().endswith(".%s" % extname):
             filename += ".%s" % extname
         try:
@@ -3888,11 +3885,7 @@ class SchemaObjectPage(wx.Panel):
         title = " ".join(filter(bool, (category, grammar.quote(name))))
         if self._show_alter: title = " ".join((action, title))
         try:
-            content = step.Template(templates.CREATE_SQL, strip=False).expand(
-                title=title, db_filename=self._db.name,
-                sql=self._ctrls["sql"].GetText())
-            with open(filename, "wb") as f:
-                f.write(content.encode("utf-8"))
+            importexport.export_sql(filename, self._db, self._ctrls["sql"].Text, title)
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving SQL to %s." % filename
