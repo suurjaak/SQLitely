@@ -1064,7 +1064,7 @@ class SQLPage(wx.Panel):
 
     def _OnGridKey(self, event):
         """Handler for grid keypress, copies selection to clipboard on Ctrl-C."""
-        if not event.ControlDown() or ord('C') != event.KeyCode:
+        if not event.ControlDown() or ord("C") != event.KeyCode:
             return event.Skip()
 
         rows, cols = [], []
@@ -1683,7 +1683,7 @@ class DataObjectPage(wx.Panel):
 
     def _OnGridKey(self, event):
         """Handler for grid keypress, copies selection to clipboard on Ctrl-C."""
-        if not event.ControlDown() or ord('C') != event.KeyCode:
+        if not event.ControlDown() or ord("C") != event.KeyCode:
             return event.Skip()
 
         rows, cols = [], []

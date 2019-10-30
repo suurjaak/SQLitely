@@ -823,7 +823,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     if self.list_db.GetItemText(i) in selected_files:
                         self.list_db.Select(i)
                 self.update_database_detail()
-        elif event.KeyCode in [ord('F')] and event.ControlDown():
+        elif event.KeyCode in [ord("F")] and event.ControlDown():
             self.edit_filter.SetFocus()
         elif self.list_db.GetFirstSelected() >= 0 and self.dbs_selected \
         and not event.AltDown() \
@@ -2734,7 +2734,7 @@ class DatabasePage(wx.Panel):
             notebook and notebook.DeletePage(notebook.GetSelection())
 
         id_close = wx.NewIdRef().Id
-        accelerators = [(wx.ACCEL_CTRL, k, id_close) for k in [ord('W')]]
+        accelerators = [(wx.ACCEL_CTRL, k, id_close) for k in [ord("W")]]
         notebook.Bind(wx.EVT_MENU, on_close_hotkey, id=id_close)
         notebook.SetAcceleratorTable(wx.AcceleratorTable(accelerators))
 
@@ -3020,7 +3020,7 @@ class DatabasePage(wx.Panel):
         """
         Handler for pressing a key in pragma page, focuses filter on Ctrl-F.
         """
-        if event.ControlDown() and event.KeyCode in [ord('F')]:
+        if event.ControlDown() and event.KeyCode in [ord("F")]:
             self.edit_pragma_filter.SetFocus()
         else: event.Skip()
 
@@ -3444,7 +3444,7 @@ class DatabasePage(wx.Panel):
                     href = href[3:] # Strip redundant filelink slashes
                 if isinstance(href, unicode):
                     # Workaround for wx.html.HtmlWindow double encoding
-                    href = href.encode('latin1', errors="xmlcharrefreplace"
+                    href = href.encode("latin1", errors="xmlcharrefreplace"
                            ).decode("utf-8")
                 menutitle = "C&opy file location"
             elif href.startswith("mailto:"):
@@ -3935,7 +3935,7 @@ class DatabasePage(wx.Panel):
         for category in database.Database.CATEGORIES:
             key = next((x for x in category if x not in keys), category[0])
             keys.append(key)
-            it = wx.MenuItem(menu, -1, 'New ' + category.replace(key, "&" + key, 1))
+            it = wx.MenuItem(menu, -1, "New " + category.replace(key, "&" + key, 1))
             menu.AppendItem(it)
             menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), id=it.GetId())
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
@@ -4062,7 +4062,7 @@ class DatabasePage(wx.Panel):
         skips adder-tab on Ctrl+PageUp|PageDown|Tab navigation,
         reopens last closed tab on Ctrl+Shift+T.
         """
-        if event.ControlDown() and event.ShiftDown() and ord('T') == event.KeyCode:
+        if event.ControlDown() and event.ShiftDown() and ord("T") == event.KeyCode:
             if self.sql_pages_closed:
                 self.add_sql_page(*self.sql_pages_closed[-1])
                 del self.sql_pages_closed[-1]
@@ -4241,12 +4241,12 @@ class DatabasePage(wx.Panel):
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             return wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
-        entrymsg = ('Name conflict on exporting table %(table)s as %(table2)s.\n'
-                    'Database %(filename2)s %(entryheader)s '
-                    'table named %(table2)s.\n\nYou can:\n'
-                    '- keep same name to overwrite table %(table2)s,\n'
-                    '- enter another name to export table %(table)s as,\n'
-                    '- or set blank to skip table %(table)s.')
+        entrymsg = ("Name conflict on exporting table %(table)s as %(table2)s.\n"
+                    "Database %(filename2)s %(entryheader)s "
+                    "table named %(table2)s.\n\nYou can:\n"
+                    "- keep same name to overwrite table %(table2)s,\n"
+                    "- enter another name to export table %(table)s as,\n"
+                    "- or set blank to skip table %(table)s.")
         fks_on = self.db.execute("PRAGMA foreign_keys").fetchone()["foreign_keys"]
         insert_sql, success = "INSERT INTO main2.%s SELECT * FROM main.%s", False
         db1_tables = set(self.db.get_category("table"))
@@ -4737,7 +4737,7 @@ class DatabasePage(wx.Panel):
         menu = wx.Menu()
         item_file = item_database = item_import = None
         if data.get("type") in ("table", "view"): # Single table/view
-            item_name = wx.MenuItem(menu, -1, '%s %s' % (
+            item_name = wx.MenuItem(menu, -1, "%s %s" % (
                         data["type"].capitalize(), util.unprint(grammar.quote(data["name"], force=True))))
             item_open = wx.MenuItem(menu, -1, "&Open %s data" % data["type"])
             item_open_meta = wx.MenuItem(menu, -1, "Open %s &schema" % data["type"])
@@ -4757,10 +4757,10 @@ class DatabasePage(wx.Panel):
             menu.AppendItem(item_open_meta)
             menu.AppendItem(item_copy)
 
-            item_file = wx.MenuItem(menu, -1, '&Export %s to file' % data["type"])
+            item_file = wx.MenuItem(menu, -1, "&Export %s to file" % data["type"])
             if "table" == data["type"]:
-                item_database = wx.MenuItem(menu, -1, 'Export table to another &database')
-                item_import   = wx.MenuItem(menu, -1, '&Import from file into table')
+                item_database = wx.MenuItem(menu, -1, "Export table to another &database")
+                item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
 
         elif "column" == data.get("type"): # Column
             item_name = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
@@ -4792,7 +4792,7 @@ class DatabasePage(wx.Panel):
 
             if "table" == data["category"]:
                 item_database = wx.MenuItem(menu, -1, "Export all tables to another &database")
-                item_import   = wx.MenuItem(menu, -1, '&Import from file into table')
+                item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
             if not data["items"]:
                 item_copy.Enable(False)
                 item_file.Enable(False)
@@ -4941,7 +4941,7 @@ class DatabasePage(wx.Panel):
             for category in database.Database.CATEGORIES:
                 key = next((x for x in category if x not in keys), category[0])
                 keys.append(key)
-                it = wx.MenuItem(submenu, -1, 'New ' + category.replace(key, "&" + key, 1))
+                it = wx.MenuItem(submenu, -1, "New " + category.replace(key, "&" + key, 1))
                 submenu.AppendItem(it)
                 menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), id=it.GetId())
         elif "category" == data["type"]:
@@ -4950,7 +4950,7 @@ class DatabasePage(wx.Panel):
             names = [x["name"] for x in data["items"]]
 
             if names:
-                item_delete = wx.MenuItem(menu, -1, 'Delete all %s' % util.plural(data["category"]))
+                item_delete = wx.MenuItem(menu, -1, "Delete all %s" % util.plural(data["category"]))
                 item_copy     = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
                 item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % util.plural(data["category"]))
 
@@ -5031,7 +5031,7 @@ class DatabasePage(wx.Panel):
         else: # Single category item, like table
             sqlkws = {"category": data["type"], "name": data["name"]}
 
-            item_name   = wx.MenuItem(menu, -1, '%s %s' % (
+            item_name   = wx.MenuItem(menu, -1, "%s %s" % (
                           data["type"].capitalize(),
                           util.unprint(grammar.quote(data["name"], force=True))))
             item_open = wx.MenuItem(menu, -1, "&Open %s schema" % data["type"])
@@ -5040,7 +5040,7 @@ class DatabasePage(wx.Panel):
             item_copy      = wx.MenuItem(menu, -1, "&Copy name")
             item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s &SQL" % data["type"])
             item_copy_rel  = wx.MenuItem(menu, -1, "Copy all &related SQL")
-            item_delete    = wx.MenuItem(menu, -1, 'Delete %s' % data["type"])
+            item_delete    = wx.MenuItem(menu, -1, "Delete %s" % data["type"])
 
             item_name.Font = boldfont
 
@@ -5067,7 +5067,7 @@ class DatabasePage(wx.Panel):
             menu.AppendItem(item_copy_rel)
 
             if "table" == data["type"]:
-                item_database_meta = wx.MenuItem(menu, -1, 'Export %s str&ucture to another database' % data["type"])
+                item_database_meta = wx.MenuItem(menu, -1, "Export %s str&ucture to another database" % data["type"])
                 menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, [data["name"]], False, None),
                          id=item_database_meta.GetId())
                 menu.AppendItem(item_database_meta)
@@ -5081,7 +5081,7 @@ class DatabasePage(wx.Panel):
                     key = next((x for x in category if x not in keys), category[0])
                     keys.append(key)
                     if category == data["type"]: continue # for category
-                    it = wx.MenuItem(submenu, -1, 'New ' + category.replace(key, "&" + key, 1))
+                    it = wx.MenuItem(submenu, -1, "New " + category.replace(key, "&" + key, 1))
                     submenu.AppendItem(it)
                     menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), id=it.GetId())
 
