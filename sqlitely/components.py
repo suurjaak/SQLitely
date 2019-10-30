@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.10.2019
+@modified    30.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter
@@ -34,10 +34,10 @@ from . lib.vendor import step
 
 from . import conf
 from . import database
-from . import export
 from . import grammar
 from . import guibase
 from . import images
+from . import importexport
 from . import templates
 from . import workers
 
@@ -936,13 +936,13 @@ class SQLPage(wx.Panel):
         dialog = wx.FileDialog(self, defaultDir=os.getcwd(),
             message="Save query as",
             defaultFile=util.safe_filename(title),
-            wildcard=export.WILDCARD,
+            wildcard=importexport.WILDCARD,
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
         filename = dialog.GetPath()
-        extname = export.EXTS[dialog.FilterIndex]
+        extname = importexport.EXTS[dialog.FilterIndex]
         if not filename.lower().endswith(".%s" % extname):
             filename += ".%s" % extname
         try:
@@ -956,7 +956,7 @@ class SQLPage(wx.Panel):
                 if wx.ID_OK != dlg.ShowModal(): return
                 name = dlg.GetValue().strip()
                 if not name: return
-            exporter = functools.partial(export.export_data,
+            exporter = functools.partial(importexport.export_data,
                 make_iterable, filename, title, self._db, self._grid.Table.columns,
                 query=self._grid.Table.sql, name=name,
                 progress=self._export.OnProgress
@@ -1484,18 +1484,18 @@ class DataObjectPage(wx.Panel):
         dialog = wx.FileDialog(self, defaultDir=os.getcwd(),
             message="Save %s as" % self._category,
             defaultFile=util.safe_filename(title),
-            wildcard=export.WILDCARD,
+            wildcard=importexport.WILDCARD,
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
         filename = dialog.GetPath()
-        extname = export.EXTS[dialog.FilterIndex]
+        extname = importexport.EXTS[dialog.FilterIndex]
         if not filename.lower().endswith(".%s" % extname):
             filename += ".%s" % extname
         try:
             grid = self._grid.Table
-            exporter = functools.partial(export.export_data, grid.GetRowIterator,
+            exporter = functools.partial(importexport.export_data, grid.GetRowIterator,
                 filename, title, self._db, grid.columns,
                 category=self._category, name=self._item["name"],
                 progress=self._export.OnProgress,

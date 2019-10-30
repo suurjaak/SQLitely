@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.10.2019
+@modified    30.10.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -47,10 +47,10 @@ from . lib.vendor import step
 from . import components
 from . import conf
 from . import database
-from . import export
 from . import grammar
 from . import guibase
 from . import images
+from . import importexport
 from . import support
 from . import templates
 from . import workers
@@ -4200,11 +4200,11 @@ class DatabasePage(wx.Panel):
             self.dialog_savefile.Filename = "Filename will be ignored"
             self.dialog_savefile.Message = "Choose directory where to save files"
             self.dialog_savefile.WindowStyle ^= wx.FD_OVERWRITE_PROMPT
-        self.dialog_savefile.Wildcard = export.WILDCARD
+        self.dialog_savefile.Wildcard = importexport.WILDCARD
         if wx.ID_OK != self.dialog_savefile.ShowModal(): return
 
         wx.YieldIfNeeded() # Allow dialog to disappear
-        extname = export.EXTS[self.dialog_savefile.FilterIndex]
+        extname = importexport.EXTS[self.dialog_savefile.FilterIndex]
         path = self.dialog_savefile.GetPath()
         filenames = [path]
         if len(items) > 1:
@@ -4230,7 +4230,7 @@ class DatabasePage(wx.Panel):
             item = self.db.get_category(category, name)
             sql = "SELECT * FROM %s" % grammar.quote(name)
             make_iterable = functools.partial(self.db.execute, sql)
-            exporter = functools.partial(export.export_data, make_iterable, filename,
+            exporter = functools.partial(importexport.export_data, make_iterable, filename,
                 "%s %s" % (category.capitalize(), grammar.quote(name, force=True)),
                 self.db, item["columns"], category=category, name=name,
                 progress=functools.partial(self.panel_data_export.OnProgress, i)
