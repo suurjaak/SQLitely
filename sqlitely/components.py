@@ -1531,8 +1531,8 @@ class DataObjectPage(wx.Panel):
         menu = wx.Menu()
         item_export = wx.MenuItem(menu, -1, "&Export to another database")
         item_import = wx.MenuItem(menu, -1, "&Import into table from file")
-        menu.AppendItem(item_export)
-        menu.AppendItem(item_import)
+        menu.Append(item_export)
+        menu.Append(item_import)
         menu.Bind(wx.EVT_MENU, self._OnExportToDB, id=item_export.GetId())
         menu.Bind(wx.EVT_MENU, on_import,          id=item_import.GetId())
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
@@ -3560,7 +3560,7 @@ class SchemaObjectPage(wx.Panel):
         menu = wx.Menu()
         for ctype in self.TABLECONSTRAINT:
             it = wx.MenuItem(menu, -1, ctype)
-            menu.AppendItem(it)
+            menu.Append(it)
             if grammar.SQL.PRIMARY_KEY == ctype \
             and (any(grammar.SQL.PRIMARY_KEY == x["type"]
                     for x in self._item["meta"].get("constraints") or ())
