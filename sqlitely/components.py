@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.10.2019
+@modified    31.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -128,12 +128,12 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         return label
 
 
-    def GetNumberRows(self):
+    def GetNumberRows(self, total=False):
         """
         Returns the number of grid rows, currently retrieved if query or filtered
         else total row count.
         """
-        return len(self.rows_current) if self.filters else self.row_count
+        return len(self.rows_current) if self.filters and not total else self.row_count
 
 
     def GetNumberCols(self): return len(self.columns)
@@ -754,17 +754,27 @@ class SQLPage(wx.Panel):
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
         button_sql    = wx.Button(panel2, label="Execute S&QL")
         button_script = wx.Button(panel2, label="Execute scrip&t")
-        button_reset  = self._button_reset  = wx.Button(panel2, label="&Reset filter/sort")
+
+        tbgrid = self._tbgrid = wx.ToolBar(panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
+        bmp2 = images.ToolbarRefresh.Bitmap
+        bmp3 = images.ToolbarClear.Bitmap
+        tbgrid.SetToolBitmapSize(bmp1.Size)
+        tbgrid.AddLabelTool(wx.ID_INFO,    "", bitmap=bmp1, shortHelp="Copy executed SQL statement to clipboard")
+        tbgrid.AddLabelTool(wx.ID_REFRESH, "", bitmap=bmp2, shortHelp="Re-execute query")
+        tbgrid.AddLabelTool(wx.ID_RESET,   "", bitmap=bmp3, shortHelp="Reset all applied sorting and filtering")
+        tbgrid.Realize()
+        tbgrid.Disable()
+
         button_export = self._button_export = wx.Button(panel2, label="&Export to file")
         button_close  = self._button_close  = wx.Button(panel2, label="&Close query")
 
         button_sql.ToolTip    = "Execute a single statement from the SQL window"
         button_script.ToolTip = "Execute multiple SQL statements, separated by semicolons"
-        button_reset.ToolTip  = "Resets all applied sorting and filtering"
         button_export.ToolTip = "Export result to a file"
         button_close.ToolTip  = "Close data grid"
 
-        button_reset.Enabled = button_export.Enabled = button_close.Enabled = False
+        button_export.Enabled = button_close.Enabled = False
 
         grid = self._grid = wx.grid.Grid(panel2)
         ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
@@ -782,9 +792,11 @@ class SQLPage(wx.Panel):
         self.Bind(wx.EVT_TOOL,     self._OnCopySQL,       id=wx.ID_COPY)
         self.Bind(wx.EVT_TOOL,     self._OnLoadSQL,       id=wx.ID_OPEN)
         self.Bind(wx.EVT_TOOL,     self._OnSaveSQL,       id=wx.ID_SAVE)
+        self.Bind(wx.EVT_TOOL,     self._OnCopyGridSQL,   id=wx.ID_INFO)
+        self.Bind(wx.EVT_TOOL,     self._OnRequery,       id=wx.ID_REFRESH)
+        self.Bind(wx.EVT_TOOL,     self._OnResetView,     id=wx.ID_RESET)
         self.Bind(wx.EVT_BUTTON,   self._OnExecuteSQL,    button_sql)
         self.Bind(wx.EVT_BUTTON,   self._OnExecuteScript, button_script)
-        self.Bind(wx.EVT_BUTTON,   self._OnResetView,     button_reset)
         self.Bind(wx.EVT_BUTTON,   self._OnExport,        button_export)
         self.Bind(wx.EVT_BUTTON,   self._OnGridClose,     button_close)
         stc.Bind(wx.EVT_KEY_DOWN,                         self._OnSTCKey)
@@ -803,8 +815,8 @@ class SQLPage(wx.Panel):
 
         sizer_buttons.Add(button_sql, flag=wx.ALIGN_LEFT)
         sizer_buttons.Add(button_script, border=5, flag=wx.LEFT | wx.ALIGN_LEFT)
+        sizer_buttons.Add(tbgrid, border=10, flag=wx.LEFT)
         sizer_buttons.AddStretchSpacer()
-        sizer_buttons.Add(button_reset, border=5, flag=wx.ALIGN_RIGHT | wx.RIGHT)
         sizer_buttons.Add(button_export, border=5, flag=wx.RIGHT | wx.ALIGN_RIGHT)
         sizer_buttons.Add(button_close, flag=wx.ALIGN_RIGHT)
 
@@ -853,13 +865,14 @@ class SQLPage(wx.Panel):
 
     def ExecuteSQL(self, sql):
         """Executes the SQL query and populates the SQL grid with results."""
+        result = False
         try:
             grid_data = None
             if sql.lower().startswith(("select", "pragma", "explain")):
                 # SELECT statement: populate grid with rows
                 grid_data = SQLiteGridBase(self._db, sql=sql)
                 self._grid.SetTable(grid_data, takeOwnership=True)
-                self._button_reset.Enabled = bool(grid_data.columns)
+                self._tbgrid.EnableTool(wx.ID_RESET, True)
                 self._button_export.Enabled = bool(grid_data.columns)
             else:
                 # Assume action query
@@ -868,8 +881,9 @@ class SQLPage(wx.Panel):
                 self._grid.CreateGrid(1, 1)
                 self._grid.SetColLabelValue(0, "Affected rows")
                 self._grid.SetCellValue(0, 0, str(affected_rows))
-                self._button_reset.Enabled = False
+                self._tbgrid.EnableTool(wx.ID_RESET, False)
                 self._button_export.Enabled = False
+            self._tbgrid.Enable()
             self._button_close.Enabled = bool(grid_data and grid_data.columns)
             self._label_help.Show(bool(grid_data and grid_data.columns))
             self._label_help.ContainingSizer.Layout()
@@ -885,11 +899,13 @@ class SQLPage(wx.Panel):
             if grid_data:
                 col_range = range(grid_data.GetNumberCols())
                 [self._grid.AutoSizeColLabelSize(x) for x in col_range]
+            result = True
         except Exception as e:
             logger.exception("Error running SQL %s.", sql)
             guibase.status("Error running SQL.", flash=True)
             error = "Error running SQL:\n\n%s" % util.format_exc(e)
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+        return result
 
 
     def Reload(self):
@@ -996,9 +1012,10 @@ class SQLPage(wx.Panel):
         Handler for right-clicking a table grid column, lets the user
         change the column filter.
         """
+        if not isinstance(self._grid.Table, SQLiteGridBase): return
         row, col = event.GetRow(), event.GetCol()
         grid_data = self._grid.Table
-        if not grid_data or not grid_data.columns: return
+        if not grid_data.columns: return
         if row >= 0: return # Only react to clicks in the header
 
         current_filter = unicode(grid_data.filters[col]) \
@@ -1025,6 +1042,7 @@ class SQLPage(wx.Panel):
         """
         Handler for clicking a table grid column, sorts table by the column.
         """
+        if not isinstance(self._grid.Table, SQLiteGridBase): return
         row, col = event.GetRow(), event.GetCol()
         # Remember scroll positions, as grid update loses them
         scroll_hor = self._grid.GetScrollPos(wx.HORIZONTAL)
@@ -1148,13 +1166,13 @@ class SQLPage(wx.Panel):
         if sql: self.ExecuteSQL(sql)
 
 
-    def _OnExecuteScript(self, event=None):
+    def _OnExecuteScript(self, event=None, sql=None):
         """
-        Handler for clicking to run multiple SQL statements, runs the selected
-        text or whole contents as an SQL script.
+        Handler for clicking to run multiple SQL statements, runs the given SQL,
+        or selected text, or whole edit window contents as an SQL script.
         """
         if self._export.Shown: return
-        sql = (self._stc.SelectedText or self._stc.Text).strip()
+        sql = sql or (self._stc.SelectedText or self._stc.Text).strip()
         if not sql: return
 
         try:
@@ -1165,7 +1183,8 @@ class SQLPage(wx.Panel):
             self._grid.CreateGrid(1, 1)
             self._grid.SetColLabelValue(0, "Affected rows")
             self._grid.SetCellValue(0, 0, "-1")
-            self._button_reset.Enabled = False
+            self._tbgrid.EnableTool(wx.ID_RESET, False)
+            self._tbgrid.Enable()
             self._button_export.Enabled = False
             self._label_help.Show()
             self._label_help.ContainingSizer.Layout()
@@ -1181,26 +1200,55 @@ class SQLPage(wx.Panel):
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
+    def _OnRequery(self, event=None):
+        """Handler for re-running grid SQL statement."""
+        if not isinstance(self._grid.Table, SQLiteGridBase):
+            return self._OnExecuteScript(self._last_sql)
+
+        scrollpos = map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
+        maxrow = self._grid.Table.GetNumberRows(total=True)
+        cursorpos = [self._grid.GridCursorRow, self._grid.GridCursorCol]
+        state = self._grid.Table.GetFilterSort()
+        self._grid.Freeze()
+        try:
+            if not self.ExecuteSQL(self._last_sql): return
+            self._grid.Table.SeekToRow(maxrow)
+            self._grid.Table.SetFilterSort(state)
+            maxpos = self._grid.GetNumberRows() - 1, self._grid.GetNumberCols() - 1
+            cursorpos = [max(0, min(x)) for x in zip(cursorpos, maxpos)]
+            self._grid.SetGridCursor(*cursorpos)
+            self._grid.Scroll(*scrollpos)
+        finally: self._grid.Thaw()
+
+
     def _OnGridClose(self, event=None):
         """Handler for clicking to close the results grid."""
         self._grid.Table = None
         self.Refresh()
         self._button_export.Enabled = False
-        self._button_reset.Enabled = False
+        self._tbgrid.Disable()
         self._button_close.Enabled = False
         self._label_help.Hide()
         self._label_help.ContainingSizer.Layout()
 
 
-    def _OnCopySQL(self, event):
-        """Handler for copying SQL to clipboard."""
+    def _OnCopyGridSQL(self, event=None):
+        """Handler for copying current grid SQL query to clipboard."""
         if wx.TheClipboard.Open():
-            d = wx.TextDataObject(self._stc.Text)
+            d = wx.TextDataObject(self._last_sql)
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
             guibase.status("Copied SQL to clipboard", flash=True)
 
 
-    def _OnLoadSQL(self, event):
+    def _OnCopySQL(self, event=None):
+        """Handler for copying SQL to clipboard."""
+        if wx.TheClipboard.Open():
+            d = wx.TextDataObject()
+            wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+            guibase.status("Copied SQL to clipboard", flash=True)
+
+
+    def _OnLoadSQL(self, event=None):
         """
         Handler for loading SQL from file, opens file dialog and loads content.
         """
@@ -1220,7 +1268,7 @@ class SQLPage(wx.Panel):
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
-    def _OnSaveSQL(self, event):
+    def _OnSaveSQL(self, event=None):
         """
         Handler for saving SQL to file, opens file dialog and saves content.
         """
@@ -1274,16 +1322,18 @@ class DataObjectPage(wx.Panel):
         bmp1 = images.ToolbarInsert.Bitmap
         bmp2 = images.ToolbarDelete.Bitmap
         bmp3 = images.ToolbarRefresh.Bitmap
-        bmp4 = images.ToolbarCommit.Bitmap
-        bmp5 = images.ToolbarRollback.Bitmap
+        bmp4 = images.ToolbarClear.Bitmap
+        bmp5 = images.ToolbarCommit.Bitmap
+        bmp6 = images.ToolbarRollback.Bitmap
         tb.SetToolBitmapSize(bmp1.Size)
         tb.AddLabelTool(wx.ID_ADD,     "", bitmap=bmp1, shortHelp="Add new row")
         tb.AddLabelTool(wx.ID_DELETE,  "", bitmap=bmp2, shortHelp="Delete current row")
         tb.AddSeparator()
         tb.AddLabelTool(wx.ID_REFRESH, "", bitmap=bmp3, shortHelp="Reload data")
+        tb.AddLabelTool(wx.ID_RESET,   "", bitmap=bmp4, shortHelp="Reset all applied sorting and filtering")
         tb.AddSeparator()
-        tb.AddLabelTool(wx.ID_SAVE,    "", bitmap=bmp4, shortHelp="Commit changes to database")
-        tb.AddLabelTool(wx.ID_UNDO,    "", bitmap=bmp5, shortHelp="Rollback changes and restore original values")
+        tb.AddLabelTool(wx.ID_SAVE,    "", bitmap=bmp5, shortHelp="Commit changes to database")
+        tb.AddLabelTool(wx.ID_UNDO,    "", bitmap=bmp6, shortHelp="Rollback changes and restore original values")
         tb.EnableTool(wx.ID_UNDO, False)
         tb.EnableTool(wx.ID_SAVE, False)
         if "view" == self._category:
@@ -1291,10 +1341,8 @@ class DataObjectPage(wx.Panel):
             tb.EnableTool(wx.ID_DELETE, False)
         tb.Realize()
 
-        button_reset     = wx.Button(self, label="&Reset filter/sort")
         button_export_db = wx.Button(self, label="Export to &database")
         button_export    = wx.Button(self, label="&Export to file")
-        button_reset.ToolTip     = "Reset all applied sorting and filtering"
         button_export_db.ToolTip = "Export to another database"
         button_export.ToolTip    = "Export to file"
         button_export_db.Show("table" == self._category)
@@ -1315,9 +1363,9 @@ class DataObjectPage(wx.Panel):
         self.Bind(wx.EVT_TOOL,   self._OnInsert,       id=wx.ID_ADD)
         self.Bind(wx.EVT_TOOL,   self._OnDelete,       id=wx.ID_DELETE)
         self.Bind(wx.EVT_TOOL,   self._OnRefresh,      id=wx.ID_REFRESH)
+        self.Bind(wx.EVT_TOOL,   self._OnResetView,    id=wx.ID_RESET)
         self.Bind(wx.EVT_TOOL,   self._OnCommit,       id=wx.ID_SAVE)
         self.Bind(wx.EVT_TOOL,   self._OnRollback,     id=wx.ID_UNDO)
-        self.Bind(wx.EVT_BUTTON, self._OnResetView,    button_reset)
         self.Bind(wx.EVT_BUTTON, self._OnExportToDB,   button_export_db)
         self.Bind(wx.EVT_BUTTON, self._OnExport,       button_export)
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,  self._OnSort)
@@ -1333,7 +1381,6 @@ class DataObjectPage(wx.Panel):
 
         sizer_header.Add(tb)
         sizer_header.AddStretchSpacer()
-        sizer_header.Add(button_reset)
         sizer_header.Add(button_export_db, border=5, flag=wx.LEFT)
         sizer_header.Add(button_export, border=5, flag=wx.LEFT)
 
@@ -4662,7 +4709,6 @@ class ImportDialog(wx.Dialog):
         self._gauge          = gauge
         self._info_gauge     = info_gauge
         self._button_table   = button_table
-        self._button_reset   = button_reset
         self._button_ok      = button_ok
         self._button_reset   = button_reset
         self._button_cancel  = button_cancel
