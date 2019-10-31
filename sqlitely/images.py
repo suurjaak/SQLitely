@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.09.2019
+@modified    31.10.2019
 ------------------------------------------------------------------------------
 """
 try:
@@ -1519,6 +1519,15 @@ PageTables = PyEmbeddedImage(
 )
 
 
+"""Toolbar icon for reset sort/filter button in data grids."""
+ToolbarClear = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAkElEQVQ4y82SSwrCQBBEn5LL"
+    "1BHEa2SRTRAX3kbwBCLZZZGD5AZ9G8dNR5r2g+AiUzBMU10z1NQ0rI1NqAdJ/cKZWewhqXhZ"
+    "zGwAjiTBHTgDra+Mhb+4FoAmuZmB6YPbKZx5utv+m0HlF0gqIf23aL4181fWmUF8QgH2gRuT"
+    "tvN959qXUb5JOvw4ylfgRBV4AH70JI5OrydaAAAAAElFTkSuQmCC"
+)
+
+
 """Toolbar icon for commit button in database table grids."""
 ToolbarCommit = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAB3RJTUUH3AEaFDUPgk08NAAA"
@@ -1546,17 +1555,17 @@ ToolbarInsert = PyEmbeddedImage(
 
 """Toolbar icon for refresh button."""
 ToolbarRefresh = PyEmbeddedImage(
-    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAB8klEQVQ4y4WSv2tUQRDHPzP7"
-    "PLkiNoo/GkmKnJ0gMahoZ2clKcQuHILwSA4Tc1Y29h5C8C7Je8Qm6WwkEPwDFFGxCBcsIkEQ"
-    "RGwCGg4Oi7c7NptweZw43czu5zvf3RlhSLRaraRarU6IyDjggG/VavVjvV7/A7C8vHwuhHBr"
-    "ZmbmhQyCWZZVvPcLZjanqqdLuj0zWzWzVVV9BWiapuPJwWm73T5VFMVrVZ0UkWHGRkRkXkTm"
-    "Y/4VQAHW19ePOec2VXUSwMy2gWmgFkIYA6aA98NUE4Ber7cgIlcivNbv9+81m81i4GkhhHB2"
-    "mIBmWeZEZA4ghNAtw7G+AYyVWANIiqK4rKpnAFT1WRmOcQc4eYQ22wdIVLU2UHw3zGaaprvA"
-    "LkCn0xkRkek4TkuAT2aWRqs/+U84586b2fOY3hWAlZWViyGEE4MXRWQvTdOdssDS0tJ9Ecli"
-    "w0tJtL4hIqOlj/sAXBusLS4uHheRh5H50e12uxovSwneUdWpMlypVNaAC7H0NM9zS/7x1N/A"
-    "jU6ns+2cS0II12PnA/itc659uEil2YqqXgVeqipmxuBqm9kb7/3tRqPhD1c52v7sva+ZWSuE"
-    "sD/E1XfgQb/fv9loNH4dWWXgiZltzs7O7gGPsix77L2fAEYBLyJftra2tvM8t7LqX6+25V+I"
-    "oGv0AAAAAElFTkSuQmCC"
+    "iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAB8ElEQVQ4y9WUu2sUURSHv3Pn"
+    "mkCINoqPRhIwa58ovqNGKyvZItjIriYWVsbkz1BsTLmLbMo0Elgsd4lRfCJktdgQBEHEJqiJ"
+    "KUT3nmPhrMwOk9VSf92558435/Hjwr8u6ZYcHjff38eIcwwBEfCuv49n1Vn5BnB2wvapcmHx"
+    "npS7As9fs55WYMaMKefYnUp/NaOkSimKuA+4elmGtgSeKtgu53jgHIf/ssu39bIcaAcumcnf"
+    "tG3eU23DzGgABRFyqgwCeeBJN7pPBp/WmRHhSAyb29hk4tW8tBKj0KDs7QZ0icuRCFMAqiyn"
+    "YQBBWQAGUwzLrPD7Dw5FEXsAnONOGgYgwrgZOztoxnom0HtyZr8vPc5qp1aSVWAVYLRo252j"
+    "ADA2aVYrSTM9wxdmXAcIgY9/Wq337DfjbhxeAjqBtZI0xyatR5UdUcTwmau/ynWOtfbfk1Ll"
+    "hMSmC4GVzC2bsSDCQMciAk+BY8mz45etV4Tp+JsPiy9ZzvShaqfRVWk6Rz4N6+1hDjgYH93i"
+    "tVhmhRn6ApwcLVrDe3zc5nQCtuQjZrc0dspb4hxHgfkoAjMQ6RjPw1bgYr0iIdPYiTbfhEDO"
+    "jNuqnR6L9R64sbHJuUcV+dz1+Tp9xYqqVJcqspZ4dUaAASCIsFJ/TiM5s/9PPwEL3sR2T7wK"
+    "YAAAAABJRU5ErkJggg=="
 )
 
 
