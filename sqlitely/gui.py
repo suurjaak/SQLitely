@@ -4221,7 +4221,7 @@ class DatabasePage(wx.Panel):
         exts = ";".join("*" + x for x in conf.DBExtensions)
         wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
         dialog = wx.FileDialog(
-            self, message="Select database to export to",
+            self, message="Select existing or new database to export to",
             defaultFile="", wildcard=wildcard,
             style=wx.FD_OPEN | wx.RESIZE_BORDER
         )
@@ -4388,7 +4388,6 @@ class DatabasePage(wx.Panel):
         opens table if specified.
         """
         table, open = (getattr(event, x, None) for x in ("table", "open"))
-        logger.info("import event %s", event) # TODO remove
         if table: self.reload_schema(count=True, parse=True)
         if open and self.tree_data.FindAndActivateItem(type="table", name=table):
             self.notebook.SetSelection(self.pageorder[self.page_data])

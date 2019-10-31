@@ -1341,11 +1341,10 @@ class DataObjectPage(wx.Panel):
             tb.EnableTool(wx.ID_DELETE, False)
         tb.Realize()
 
-        button_export_db = wx.Button(self, label="Export to &database")
-        button_export    = wx.Button(self, label="&Export to file")
-        button_export_db.ToolTip = "Export to another database"
+        button_actions = wx.Button(self, label="Other actions ..")
+        button_export  = wx.Button(self, label="&Export to file")
         button_export.ToolTip    = "Export to file"
-        button_export_db.Show("table" == self._category)
+        button_actions.Show("table" == self._category)
 
         grid = self._grid = wx.grid.Grid(self)
         grid.ToolTip = "Double click on column header to sort, right click to filter."
@@ -1366,7 +1365,7 @@ class DataObjectPage(wx.Panel):
         self.Bind(wx.EVT_TOOL,   self._OnResetView,    id=wx.ID_RESET)
         self.Bind(wx.EVT_TOOL,   self._OnCommit,       id=wx.ID_SAVE)
         self.Bind(wx.EVT_TOOL,   self._OnRollback,     id=wx.ID_UNDO)
-        self.Bind(wx.EVT_BUTTON, self._OnExportToDB,   button_export_db)
+        self.Bind(wx.EVT_BUTTON, self._OnAction,       button_actions)
         self.Bind(wx.EVT_BUTTON, self._OnExport,       button_export)
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,  self._OnSort)
         grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,  self._OnFilter)
@@ -1378,10 +1377,11 @@ class DataObjectPage(wx.Panel):
         grid.GridWindow.Bind(wx.EVT_MOTION,            self._OnGridMouse)
         grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,         self._OnGridKey)
         self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(lambda: self and (self.Layout(), self.Refresh())))
+        self.Bind(EVT_IMPORT, self._OnImportEvent)
 
         sizer_header.Add(tb)
         sizer_header.AddStretchSpacer()
-        sizer_header.Add(button_export_db, border=5, flag=wx.LEFT)
+        sizer_header.Add(button_actions, border=5, flag=wx.LEFT)
         sizer_header.Add(button_export, border=5, flag=wx.LEFT)
 
         sizer.Add(sizer_header, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
@@ -1517,6 +1517,36 @@ class DataObjectPage(wx.Panel):
         ): return
         self._PostEvent(close=True)
         return True
+
+
+    def _OnAction(self, event):
+        """Handler for showing other actions, opens popup menu."""
+        menu = wx.Menu()
+
+        def on_import(event=None):
+            dlg = ImportDialog(self, self._db)
+            dlg.SetTable(self._item["name"])
+            dlg.ShowModal()
+
+        menu = wx.Menu()
+        item_export = wx.MenuItem(menu, -1, "&Export to another database")
+        item_import = wx.MenuItem(menu, -1, "&Import into table from file")
+        menu.AppendItem(item_export)
+        menu.AppendItem(item_import)
+        menu.Bind(wx.EVT_MENU, on_import, id=item_import.GetId())
+        menu.Bind(wx.EVT_MENU, self._OnExportToDB, id=item_export.GetId())
+        event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
+
+
+    def _OnImportEvent(self, event):
+        """
+        Handler for import dialog event, refreshes schema,
+        opens table if specified.
+        """
+        event.Skip()
+        table = getattr(event, "table", None)
+        logger.info("import event %s", event) # TODO remove
+        if table and not self.IsChanged(): self._OnRefresh()
 
 
     def _OnExportToDB(self, event=None):
