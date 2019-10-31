@@ -656,7 +656,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             if not self._IsRowFiltered(row):
                 self.rows_current.append(row)
             self.row_count += 1
-        self.NotifyViewChange(rows_before)
+        self.Filter(rows_before)
         self._RefreshAttrs(refresh_idxs)
 
 
@@ -881,6 +881,7 @@ class SQLPage(wx.Panel):
                 self._grid.CreateGrid(1, 1)
                 self._grid.SetColLabelValue(0, "Affected rows")
                 self._grid.SetCellValue(0, 0, str(affected_rows))
+                self._grid.SetColSize(0, wx.grid.GRID_AUTOSIZE)
                 self._tbgrid.EnableTool(wx.ID_RESET, False)
                 self._button_export.Enabled = False
             self._tbgrid.Enable()
