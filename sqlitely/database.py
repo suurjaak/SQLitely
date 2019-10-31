@@ -1050,8 +1050,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if rowid is not None:
             key_data = [{"name": "rowid"}]
             keyargs = self.make_args(key_data, {"rowid": rowid}, args)
-        else:
-            # If no primary key either, use all columns to identify row
+        else: # Use either primary key or all columns to identify row
             key_data = [c for c in col_data if "pk" in c] or col_data
             keyargs = self.make_args(key_data, original_row, args)
         for col, key in zip(key_data, keyargs):
@@ -1084,8 +1083,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if rowid is not None:
             key_data = [{"name": "rowid"}]
             keyargs = self.make_args(key_data, {"rowid": rowid}, args)
-        else:
-            # If no primary key either, use all columns to identify row
+        else: # Use either primary key or all columns to identify row
             key_data = [c for c in col_data if "pk" in c] or col_data
             keyargs = self.make_args(key_data, row, args)
         for col, key in zip(key_data, keyargs):

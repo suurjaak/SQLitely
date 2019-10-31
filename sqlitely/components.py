@@ -91,10 +91,14 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         self.attrs = {}   # {"new": wx.grid.GridCellAttr, }
 
         if not self.is_query:
-            if "table" == category and db.has_rowid(name): self.rowid_name = "rowid"
-            cols = ("%s, *" % self.rowid_name) if self.rowid_name else "*"
+            self.columns = self.db.get_category(category, name)["columns"]
+            if "table" == category and db.has_rowid(name):
+                names = [x["name"].lower() for x in self.columns]
+                self.rowid_name = util.make_unique("rowid", names)
+            cols = ("rowid AS %s, *" % self.rowid_name) if self.rowid_name else "*"
             self.sql = "SELECT %s FROM %s" % (cols, grammar.quote(name))
         self.row_iterator = self.db.execute(self.sql)
+
         if self.is_query:
             self.columns = [{"name": c[0], "type": "TEXT"}
                             for c in self.row_iterator.description or ()]
@@ -107,7 +111,6 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 value = self.rows_current[0][col["name"]]
                 col["type"] = TYPES.get(type(value), col.get("type", ""))
         else:
-            self.columns = self.db.get_category(category, name)["columns"]
             data = self.db.get_count(self.name)
             if data["count"] is not None: self.row_count = data["count"]
             self.is_seek = data.get("is_count_estimated", False) \
@@ -610,17 +613,19 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                     if "INTEGER" == self.db.get_affinity(col_map[pks[0]]):
                         # Autoincremented row: update with new value
                         row[pks[0]] = insert_id
-                    elif insert_id: # For non-integers, insert returns ROWID
-                        self.rowids[idx] = insert_id
+                elif insert_id is not None:
+                    # No or compound or non-integer primary key: insert gives ROWID
+                    self.rowids[idx] = insert_id
                 row["__new__"] = False
                 self.idx_new.remove(idx)
                 refresh_idxs.append(idx)
-            # Delete all newly deleted rows
+            # Delete all newly removed rows
             for idx, row in self.rows_deleted.copy().items():
                 self.db.delete_row(self.name, row, self.rowids.get(idx))
                 del self.rows_deleted[idx]
                 del self.rows_all[idx]
                 self.idx_all.remove(idx)
+                self.rowids.pop(idx, None)
             result = True
         except Exception as e:
             msg = "Error saving changes in %s." % grammar.quote(self.name)
