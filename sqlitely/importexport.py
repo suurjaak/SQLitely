@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.10.2019
+@modified    31.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -120,7 +120,7 @@ def export_data(make_iterable, filename, title, db, columns,
                     writer.writerow(*a)
                 writer.writerow(*([header, "bold"] if is_xlsx else [header]))
                 writer.set_header(False) if is_xlsx else 0
-                for i, row in enumerate(make_iterable()):
+                for i, row in enumerate(make_iterable(), 1):
                     values = []
                     for col in colnames:
                         val = "" if row[col] is None else row[col]

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.10.2019
+@modified    31.10.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -215,7 +215,7 @@ from sqlitely.lib import util
   <tr>
     <th class="index asc"><a class="sort asc" title="Sort by index" onclick="onSort(0)">#</a></th>
 %for i, col in enumerate(columns):
-    <th><a class="sort" title="Sort by {{ grammar.quote(col) }}" onclick="onSort({{ i + 1 }})">{{ col }}</a></th>
+    <th><a class="sort" title="Sort by {{ grammar.quote(col) }}" onclick="onSort({{ i }})">{{ col }}</a></th>
 %endfor
   </tr>
 <%
@@ -241,11 +241,11 @@ HTML data export template for the rows part.
 @param   ?progress  callback(count) returning whether to cancel, if any
 """
 DATA_ROWS_HTML = """
-%for i, row in enumerate(rows):
+%for i, row in enumerate(rows, 1):
 <%
 namespace["row_count"] += 1
 %><tr>
-  <td class="index">{{ i + 1 }}</td>
+  <td class="index">{{ i }}</td>
 %for col in columns:
   <td>{{ "" if row[col] is None else row[col] }}</td>
 %endfor
@@ -336,7 +336,7 @@ from sqlitely import grammar, templates
 
 str_cols = ", ".join(map(grammar.quote, columns))
 %>
-%for i, row in enumerate(rows):
+%for i, row in enumerate(rows, 1):
 <%
 values = []
 namespace["row_count"] += 1
@@ -438,7 +438,7 @@ DATA_ROWS_TXT = """<%
 from sqlitely import templates
 
 %>
-%for i, row in enumerate(rows):
+%for i, row in enumerate(rows, 1):
 <%
 values = []
 namespace["row_count"] += 1
