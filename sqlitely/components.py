@@ -4933,7 +4933,7 @@ class ImportDialog(wx.Dialog):
         self._l2.SetEditable(self._table.get("new"), columns=[1])
         self._combo_table.Enable(not fixed)
         self._button_table.Enable(not fixed and not self._has_new
-                                  and not self._table.get("new"))
+                                  or bool(self._table.get("new")))
         self._UpdatePK()
         self._UpdateFooter()
         self._OnSize()
@@ -4962,12 +4962,10 @@ class ImportDialog(wx.Dialog):
             add_row(l, t, "", self.DISCARD_SEP)
             l.SetItemTextColour(l.ItemCount - 1, discardcolour)
 
-        if not self._importing: self._button_ok.Enable()
         for i, (l, cc) in enumerate([(self._l1, self._cols1),
                                      (self._l2, self._cols2)]):
             self.Freeze()
             ctrl2 = self._l1 if i else self._l2
-
 
             l._scrolling = True # Disable scroll syncing during update
             pos = (l if l.ItemCount else ctrl2).GetScrollPos(wx.VERTICAL)
@@ -4989,9 +4987,9 @@ class ImportDialog(wx.Dialog):
             l.ScrollLines(pos)
             l.EnsureVisible(max(0, min(pos + l.CountPerPage, l.ItemCount) - 1))
             wx.CallAfter(setattr, l, "_scrolling", False)
-            if not self._importing and all(x["skip"] for x in cc):
-                self._button_ok.Disable()
             self.Thaw()
+        has = all(any(not y["skip"] for y in x) for x in (self._cols1, self._cols2))
+        self._button_ok.Enable(not self._importing and has)
 
 
     def _MakeColumnName(self, target, coldata):
@@ -5599,6 +5597,8 @@ class ImportDialog(wx.Dialog):
 
     def _OnSheet(self, event):
         """Handler for selecting sheet, refreshes columns."""
+        if self._sheet == self._data["sheets"][event.Selection]: return
+
         self._sheet = self._data["sheets"][event.Selection]
         self._cols1 = [{"name": x, "index": i, "skip": False}
                         for i, x in enumerate(self._sheet["columns"])]
@@ -5616,7 +5616,8 @@ class ImportDialog(wx.Dialog):
 
     def _OnTable(self, event):
         """Handler for selecting table, refreshes columns."""
-        if event.Selection < 0: return
+        if event.Selection < 0 or self._table == self._tables[event.Selection]:
+            return
         self.SetTable(self._tables[event.Selection]["name"])
 
 
