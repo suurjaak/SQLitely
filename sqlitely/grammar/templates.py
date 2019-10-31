@@ -4,14 +4,17 @@ Templates for generating SQL statements.
 
 Parameters expected by templates:
 
-    data    statement data structure
-    CM      comma setter(type, i)
-    GLUE    surrounding whitespace consuming token setter()
-    LF      linefeed token setter()
-    PAD     padding token setter(key, data)
-    PRE     line start indentation token setter()
-    Q       quoted name token setter(identifier)
-    WS      whitespace as-is token setter(val)
+    data       statement data structure
+    root       root data structure
+    Template   Template-class
+    templates  this module
+    CM         comma setter(type, i, ?subtype, ?j, ?root=None)
+    GLUE       surrounding whitespace consuming token setter()
+    LF         linefeed token setter()
+    PAD        padding token setter(key, data)
+    PRE        line start indentation token setter()
+    Q          quoted name token setter(identifier)
+    WS         whitespace as-is token setter(val)
 
 ------------------------------------------------------------------------------
 This file is part of SQLitely - SQLite database tool.
@@ -19,22 +22,290 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    10.09.2019
+@modified    20.10.2019
 ------------------------------------------------------------------------------
 """
+
+
+
+"""
+Simple ALTER TABLE.
+
+@param   data {
+             name:      table old name,
+             name2:     table new name if renamed else old name,
+             ?columns:  [(column name in old, column name in new)]
+             ?add:      [{column data}],
+         }
+"""
+ALTER_TABLE = """
+SAVEPOINT alter_table;{{ LF() }}
+
+%if data["name"] != data["name2"]:
+{{ LF() }}
+ALTER TABLE {{ Q(data["name"]) }} RENAME TO {{ Q(data["name2"]) }};{{ LF() }}
+%endif
+
+%for i, (c1, c2) in enumerate(data.get("columns", [])):
+    %if not i:
+{{ LF() }}
+    %endif
+ALTER TABLE {{ Q(data["name"]) }} RENAME COLUMN {{ Q(c1) }} TO {{ Q(c2) }};{{ LF() }}
+%endfor
+
+%for i, c in enumerate(data.get("add", [])):
+    %if not i:
+{{ LF() }}
+    %endif
+ALTER TABLE {{ Q(data["name"]) }} ADD COLUMN{{ WS(" ") }}
+  {{ Template(templates.COLUMN_DEFINITION, strip=True, collapse=True).expand(dict(locals(), data=c)) }};{{ LF() }}
+%endfor
+
+{{ LF() }}
+RELEASE SAVEPOINT alter_table;{{ LF() }}
+"""
+
+
+
+"""
+Complex ALTER TABLE: re-create table under new temporary name,
+copy rows from existing to new, drop existing, rename new to existing. Steps:
+
+ 1. PRAGMA foreign_keys = off
+ 2. BEGIN TRANSACTION
+ 3. CREATE TABLE tempname
+ 4. INSERT INTO tempname (..) SELECT .. FROM oldname
+ 5. DROP TABLE oldname
+ 8. ALTER TABLE tempname RENAME TO oldname
+ 6. for every related table affected by change:
+    - CREATE TABLE related_tempname
+    - INSERT INTO related_tempname SELECT * FROM related_name
+    - DROP TABLE related_name
+    - ALTER TABLE related_tempname RENAME TO related_name
+    - CREATE indexes-triggers for related_name
+ 7. DROP all related indexes-views-triggers
+ 9. CREATE indexes-views-triggers
+10. COMMIT TRANSACTION
+11. PRAGMA foreign_keys = on
+
+@param   data {
+             name:      table old name,
+             name2:     table new name if renamed else old name,
+             tempname:  table temporary name,
+             meta:      {table CREATE metainfo, using temporary name}
+             columns:   [(column name in old, column name in new)]
+             fks:       whether foreign_keys PRAGMA is on
+             ?table:    [{related table {name, tempname, sql, ?index, ?trigger}, using new names}, ]
+             ?index:    [{related index {name, sql}, using new names}, ]
+             ?trigger:  [{related trigger {name, sql}, using new names}, ]
+             ?view:     [{related view {name, sql}, using new names}, ]
+         }
+"""
+ALTER_TABLE_COMPLEX = """<%
+CATEGORIES = ["index", "view", "trigger"]
+
+%>
+%if data["fks"]:
+PRAGMA foreign_keys = off;{{ LF() }}
+{{ LF() }}
+
+%endif
+SAVEPOINT alter_table;{{ LF() }}
+{{ LF() }}
+
+{{ Template(templates.CREATE_TABLE).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
+{{ LF() }}
+
+%if data.get("columns"):
+INSERT INTO {{ Q(data["tempname"]) }}{{ WS(" ") }}
+(
+    %for i, (c1, c2) in enumerate(data["columns"]):
+  {{ GLUE() }}{{ Q(c2) }}{{ CM("columns", i) }}
+    %endfor
+{{ GLUE() }}){{ LF() }}
+SELECT{{ WS(" ") }}
+    %for i, (c1, c2) in enumerate(data["columns"]):
+  {{ GLUE() }}{{ Q(c1) }}{{ CM("columns", i) }}
+    %endfor
+FROM {{ Q(data["name"]) }};{{ LF() }}
+{{ LF() }}
+%endif
+
+DROP TABLE {{ Q(data["name"]) }};{{ LF() }}
+{{ LF() }}
+
+ALTER TABLE {{ Q(data["tempname"]) }} RENAME TO {{ Q(data["name2"]) }};{{ LF() }}
+{{ LF() }}
+
+%for reltable in data.get("table") or []:
+{{ WS(reltable["sql"]) }};{{ LF() }}
+INSERT INTO {{ Q(reltable["tempname"]) }} SELECT * FROM {{ Q(reltable["name"]) }};{{ LF() }}
+DROP TABLE {{ Q(reltable["name"]) }};{{ LF() }}
+ALTER TABLE {{ Q(reltable["tempname"]) }} RENAME TO {{ Q(reltable["name"]) }};{{ LF() }}
+    %for category in CATEGORIES:
+        %for x in reltable.get(category) or []:
+{{ WS(x["sql"]) }};{{ LF() }}
+        %endfor
+    %endfor
+{{ LF() }}
+%endfor
+
+%for category in CATEGORIES:
+    %for x in data.get(category) or []:
+DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
+    %endfor
+%endfor
+%if any(data.get(x) for x in CATEGORIES):
+{{ LF() }}
+%endif
+
+%for category in CATEGORIES:
+    %for x in data.get(category) or []:
+{{ WS(x["sql"]) }};{{ LF() }}
+    %endfor
+%endfor
+%if any(data.get(x) for x in CATEGORIES):
+{{ LF() }}
+%endif
+
+RELEASE SAVEPOINT alter_table;{{ LF() }}
+{{ LF() }}
+%if data["fks"]:
+
+PRAGMA foreign_keys = on;{{ LF() }}
+%endif
+"""
+
+
+
+"""
+ALTER INDEX: re-create index.
+
+1. BEGIN TRANSACTION
+2. DROP INDEX oldname
+3. CREATE INDEX newname
+4. COMMIT TRANSACTION
+
+@param   data {
+             name:      index old name,
+             name2:     index new name if renamed else old name,
+             meta:      {index CREATE metainfo, using new name}
+         }
+"""
+ALTER_INDEX = """
+SAVEPOINT alter_index;{{ LF() }}
+{{ LF() }}
+
+DROP INDEX {{ Q(data["name"]) }};{{ LF() }}
+{{ LF() }}
+
+{{ Template(templates.CREATE_INDEX).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
+{{ LF() }}
+
+RELEASE SAVEPOINT alter_index;{{ LF() }}
+{{ LF() }}
+"""
+
+
+
+"""
+ALTER TRIGGER: re-create trigger.
+
+1. BEGIN TRANSACTION
+2. DROP TRIGGER oldname
+3. CREATE TRIGGER newname
+4. COMMIT TRANSACTION
+
+@param   data {
+             name:      trigger old name,
+             name2:     trigger new name if renamed else old name,
+             meta:      {trigger CREATE metainfo, using new name}
+         }
+"""
+ALTER_TRIGGER = """
+SAVEPOINT alter_trigger;{{ LF() }}
+{{ LF() }}
+
+DROP TRIGGER {{ Q(data["name"]) }};{{ LF() }}
+{{ LF() }}
+
+{{ Template(templates.CREATE_TRIGGER).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
+{{ LF() }}
+
+RELEASE SAVEPOINT alter_trigger;{{ LF() }}
+{{ LF() }}
+"""
+
+
+
+"""
+ALTER VIEW: re-create view, re-create triggers and other views using this view.
+
+1. BEGIN TRANSACTION
+2. DROP VIEW oldname
+3. DROP all related triggers-views
+4. CREATE VIEW newname
+5. CREATE triggers-views
+6. COMMIT TRANSACTION
+
+@param   data {
+             name:      view old name,
+             name2:     view new name if renamed else old name,
+             meta:      {view CREATE metainfo, using new name}
+             ?trigger:  [{related trigger {name, sql}, using new names}, ]
+             ?view:     [{related view {name, sql}, using new names}, ]
+         }
+"""
+ALTER_VIEW = """<%
+CATEGORIES = ["view", "trigger"]
+
+%>
+SAVEPOINT alter_view;{{ LF() }}
+{{ LF() }}
+
+DROP VIEW {{ Q(data["name"]) }};{{ LF() }}
+{{ LF() }}
+
+%for category in CATEGORIES:
+    %for x in data.get(category) or []:
+DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
+    %endfor
+%endfor
+%if any(data.get(x) for x in CATEGORIES):
+{{ LF() }}
+%endif
+
+{{ Template(templates.CREATE_VIEW).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
+{{ LF() }}
+
+%for category in CATEGORIES:
+    %for x in data.get(category) or []:
+{{ WS(x["sql"]) }};{{ LF() }}
+    %endfor
+%endfor
+%if any(data.get(x) for x in CATEGORIES):
+{{ LF() }}
+%endif
+
+RELEASE SAVEPOINT alter_view;{{ LF() }}
+{{ LF() }}
+"""
+
 
 
 COLUMN_DEFINITION = """
 
 {{ GLUE() }}
-{{ Q(data["name"]) }}{{ PAD("name", data, quoted=True) }}
+    %if data.get("name"):
+  {{ Q(data["name"]) }}{{ PAD("name", data, quoted=True) }}
+    %endif
 
-    %if data.get("type") is not None:
+    %if data.get("type"):
   {{ data["type"] }}{{ PAD("type", data) }}
     %endif
 
     %if data.get("pk") is not None:
-  PRIMARY KEY {{ data["pk"].get("direction", "") }}
+  PRIMARY KEY {{ data["pk"].get("order", "") }}
         %if data["pk"].get("conflict"):
   ON CONFLICT {{ data["pk"]["conflict"] }}
         %endif
@@ -57,7 +328,7 @@ COLUMN_DEFINITION = """
         %endif
     %endif
 
-    %if data.get("default") is not None:
+    %if data.get("default") not in (None, ""):
   DEFAULT {{ WS(data["default"]) }}
     %endif
 
@@ -70,22 +341,22 @@ COLUMN_DEFINITION = """
     %endif
 
     %if data.get("fk") is not None:
-  REFERENCES {{ Q(data["fk"]["table"]) }}
+  REFERENCES {{ Q(data["fk"]["table"]) if data["fk"].get("table") else "" }}
         %if data["fk"].get("key"):
-  ({{ Q(data["fk"]["key"]) }})
+  {{ WS(" ") }}({{ Q(data["fk"]["key"]) }})
         %endif
         %if data["fk"].get("defer") is not None:
     {{ "NOT" if data["fk"]["defer"].get("not") else "" }}
     DEFERRABLE 
-            %if data["fk"].get("initial"):
+            %if data["fk"]["defer"].get("initial"):
     INITIALLY {{ data["fk"]["defer"]["initial"] }}
             %endif
         %endif
         %for action, act in data["fk"].get("action", {}).items():
     ON {{ action }} {{ act }}
         %endfor
-        %for match in data["fk"].get("match", []):
-    MATCH {{ match }}
+        %if data["fk"].get("match"):
+    MATCH {{ data["fk"]["match"] }}
         %endfor
     %endif
 """
@@ -95,7 +366,7 @@ COLUMN_DEFINITION = """
 CREATE_INDEX = """
 CREATE
 
-%if data.get("unique") is not None:
+%if data.get("unique"):
   UNIQUE
 %endif
 INDEX
@@ -104,21 +375,21 @@ INDEX
   IF NOT EXISTS
 %endif
 
-{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) }}
+{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") else "" }}
 {{ LF() if data.get("exists") and data.get("schema") else "" }}
-ON {{ Q(data["table"]) }}{{ WS(" ") }}
+ON {{ Q(data["table"]) if "table" in data else "" }}{{ WS(" ") }}
 
 (
 {{ GLUE() }}
-%for i, col in enumerate(data["columns"]):
-  {{ Q(col["name"]) if col.get("name") else WS(col["expr"]) }}
-    %if col.get("collate") is not None:
+%for i, col in enumerate(data.get("columns", [])):
+  {{ Q(col["name"]) if "name" in col else WS(col["expr"]) if "expr" in col else "" }}
+    %if col.get("collate"):
   COLLATE {{ col["collate"] }}
     %endif
-    %if col.get("direction") is not None:
-  {{ col["direction"] }}
+    %if col.get("order"):
+  {{ col["order"] }}
     %endif
-  {{ CM("columns", i) }}
+  {{ CM("columns", i, root=root) }}
 %endfor
 {{ GLUE() }}
 )
@@ -140,20 +411,20 @@ TABLE
     %if data.get("exists"):
   IF NOT EXISTS
     %endif
-{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) }}{{ WS(" ") }}(
+{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") else "" }}{{ WS(" ") if data.get("schema") or data.get("name") else "" }}(
 {{ LF() or GLUE() }}
 
-%for i, c in enumerate(data["columns"]):
+%for i, c in enumerate(data.get("columns") or []):
   {{ PRE() }}
-  {{ step.Template(templates.COLUMN_DEFINITION, strip=True, collapse=True).expand(dict(locals(), data=c)) }}
-  {{ CM("columns", i) }}
+  {{ Template(templates.COLUMN_DEFINITION, strip=True, collapse=True).expand(dict(locals(), data=c)) }}
+  {{ CM("columns", i, root=root) }}
   {{ LF() }}
 %endfor
 
-%for i, c in enumerate(data.get("constraints", [])):
+%for i, c in enumerate(data.get("constraints") or []):
   {{ PRE() }}
-  {{ step.Template(templates.TABLE_CONSTRAINT, strip=True, collapse=True).expand(dict(locals(), data=c)) }}
-  {{ CM("constraints", i) }}
+  {{ Template(templates.TABLE_CONSTRAINT, strip=True, collapse=True).expand(dict(locals(), data=c, i=i)) }}
+  {{ CM("constraints", i, root=root) }}
   {{ LF() }}
 %endfor
 
@@ -167,7 +438,9 @@ WITHOUT ROWID
 
 
 
-CREATE_TRIGGER = """
+CREATE_TRIGGER = """<%
+import re
+%>
 CREATE
 
 %if data.get("temporary"):
@@ -180,20 +453,23 @@ TRIGGER
   IF NOT EXISTS
 %endif
 
-{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) }}
+{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") else "" }}
 
 %if data.get("upon"):
   {{ data["upon"] }}
 %endif
 
-{{ data["action"] }}
+{{ data.get("action") or "" }}
 
 %if data.get("columns"):
-  OF {{ ", ".join(map(Q, data["columns"])) }}
+  OF 
+    %for i, c in enumerate(data["columns"]):
+  {{ Q(c["name"]) }}{{ CM("columns", i, root=root) }}
+    %endfor
 %endif
 
 ON
-{{ Q(data["table"]) }}
+{{ Q(data["table"]) if data.get("table") else "" }}
 
 %if data.get("for"):
   FOR EACH ROW
@@ -204,9 +480,11 @@ ON
   WHEN {{ WS(data["when"]) }}
 %endif
 
-{{ LF() }}BEGIN
-{{ WS(data["body"]) }}
-{{ LF() }}END
+{{ LF() }}BEGIN{{ LF() }}
+%if data.get("body"):
+  {{ WS(data["body"]) }}{{ LF() }}
+%endif
+END
 """
 
 
@@ -224,21 +502,21 @@ VIEW
   IF NOT EXISTS
 %endif
 
-{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) }}
+{{ "%s." % Q(data["schema"]) if data.get("schema") else "" }}{{ Q(data["name"]) if data.get("name") else "" }}
 
 %if data.get("columns"):
   {{ GLUE() }}{{ WS(" ") }}(
   {{ LF() or GLUE() }}
     %for i, c in enumerate(data["columns"]):
-  {{ PRE() }}{{ Q(c) }}
-  {{ CM("columns", i) }}
+  {{ PRE() }}{{ Q(c["name"]) }}
+  {{ CM("columns", i, root=root) }}
   {{ LF() }}
     %endfor
   )
 %endif
 
 
-AS {{ WS(data["select"]) }}
+AS {{ WS(data["select"]) if data.get("select") else "" }}
 """
 
 
@@ -261,31 +539,37 @@ USING {{ data["module"]["name"] }}
 
 
 
-TABLE_CONSTRAINT = """
+"""
+@param   ?i     constraint index
+"""
+TABLE_CONSTRAINT = """<%
+if not isdef("i"): i = 0
+
+%>
 
 {{ GLUE() }}
 %if data.get("name"):
   CONSTRAINT {{ Q(data["name"]) }}
 %endif
 
-  {{ data["type"] }}
+  {{ data.get("type") or "" }}
 
 %if "CHECK" == data.get("type"):
-  ({{ WS(data["check"]) }})
+  ({{ WS(data.get("check") or "") }})
 %endif
 
 %if data.get("type") in ("PRIMARY KEY", "UNIQUE"):
   (
   {{ GLUE() }}
-    %for j, col in enumerate(data["key"]):
-  {{ Q(col["name"]) if col.get("name") else WS(col["expr"]) }}
+    %for j, col in enumerate(data.get("key") or []):
+  {{ Q(col["name"]) if col.get("name") else "" }}
         %if col.get("collate") is not None:
   COLLATE {{ col["collate"] }}
         %endif
-        %if col.get("direction") is not None:
-  {{ col["direction"] }}
+        %if col.get("order") is not None:
+  {{ col["order"] }}
         %endif
-  {{ CM("constraints", i, "key", j) }}
+  {{ CM("constraints", i, "key", j, root=root) }}
     %endfor
   {{ GLUE() }}
   )
@@ -296,23 +580,36 @@ TABLE_CONSTRAINT = """
 
 
 %if "FOREIGN KEY" == data.get("type"):
-  ({{ ", ".join(map(Q, data["columns"])) }})
-  REFERENCES  {{ Q(data["table"]) }}
+  {{ GLUE() }}{{ WS(" ") }}
+  (
+    {{ GLUE() }}
+    %for j, c in enumerate(data.get("columns") or []):
+    {{ Q(c) }}{{ CM("constraints", i, "columns", j, root=root) }}
+    %endfor
+  )
+
+  REFERENCES  {{ Q(data["table"]) if data.get("table") else "" }}
     %if data.get("key"):
-  ({{ ", ".join(map(Q, data["key"])) }})
+  {{ GLUE() }}{{ WS(" ") }}
+  (
+  {{ GLUE() }}
+        %for j, c in enumerate(data["key"]):
+  {{ Q(c) if c else "" }}{{ CM("constraints", i, "key", j, root=root) }}
+        %endfor
+  )
     %endif
     %if data.get("defer") is not None:
     {{ "NOT" if data["defer"].get("not") else "" }}
     DEFERRABLE 
-        %if data.get("initial"):
+        %if data["defer"].get("initial"):
     INITIALLY {{ data["defer"]["initial"] }}
         %endif
     %endif
     %for action, act in data.get("action", {}).items():
     ON {{ action }} {{ act }}
     %endfor
-    %for match in data.get("match", []):
-    MATCH {{ match }}
+    %if data.get("match"):
+    MATCH {{ data["match"] }}
     %endfor
 %endif
 """

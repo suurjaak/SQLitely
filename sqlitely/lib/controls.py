@@ -9,10 +9,13 @@ Stand-alone GUI components for wx:
 - ColourManager(object):
   Updates managed component colours on Windows system colour change.
 
+- FormDialog(wx.Dialog):
+  Dialog for displaying a complex editable form.
+
 - NonModalOKDialog(wx.Dialog):
   A simple non-modal dialog with an OK button, stays on top of parent.
 
-- NoteButton(wx.PyPanel, wx.Button):
+- NoteButton(wx.Panel, wx.Button):
   A large button with a custom icon, main label, and additional note.
   Inspired by wx.CommandLinkButton, which does not support custom icons
   (at least not of wx 2.9.4).
@@ -38,7 +41,7 @@ Stand-alone GUI components for wx:
 - SQLiteTextCtrl(wx.stc.StyledTextCtrl):
   A StyledTextCtrl configured for SQLite syntax highlighting.
 
-- TabbedHtmlWindow(wx.PyPanel):
+- TabbedHtmlWindow(wx.Panel):
   wx.html.HtmlWindow with tabs for different content pages.
 
 - TextCtrlAutoComplete(wx.TextCtrl):
@@ -50,17 +53,21 @@ Stand-alone GUI components for wx:
   on 09.02.2006 in wxPython-users thread "TextCtrlAutoComplete",
   http://wxpython-users.1045709.n5.nabble.com/TextCtrlAutoComplete-td2348906.html
 
+- TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
+  A tree control with a more convenient API.
+
 ------------------------------------------------------------------------------
 This file is part of SQLitely - SQLite database tool.
 Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    09.09.2019
+@modified    27.10.2019
 ------------------------------------------------------------------------------
 """
 import collections
 import copy
+import functools
 import locale
 import os
 import re
@@ -69,11 +76,13 @@ import wx
 import wx.html
 import wx.lib.agw.flatnotebook
 import wx.lib.agw.gradientbutton
+import wx.lib.agw.labelbook
 try: # ShapedButton requires PIL, might not be installed
     import wx.lib.agw.shapedbutton
 except Exception: pass
 import wx.lib.agw.ultimatelistctrl
 import wx.lib.embeddedimage
+import wx.lib.gizmos
 import wx.lib.mixins.listctrl
 import wx.lib.newevent
 import wx.lib.wordwrap
@@ -81,8 +90,8 @@ import wx.stc
 
 
 # Convenience methods for creating a wx.Brush and wx.Pen or returning cached.
-BRUSH = lambda c, s=wx.SOLID: wx.TheBrushList.FindOrCreateBrush(c, s)
-PEN = lambda c, w=1, s=wx.SOLID: wx.ThePenList.FindOrCreatePen(c, w, s)
+BRUSH = lambda c, s=wx.BRUSHSTYLE_SOLID: wx.TheBrushList.FindOrCreateBrush(c, s)
+PEN = lambda c, w=1, s=wx.PENSTYLE_SOLID: wx.ThePenList.FindOrCreatePen(c, w, s)
 
 
 class BusyPanel(wx.Window):
@@ -97,7 +106,7 @@ class BusyPanel(wx.Window):
         wx.Window.__init__(self, parent)
         self.Hide()
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
-        label = self._label = wx.StaticText(parent=self, label=label)
+        label = self._label = wx.StaticText(self, label=label)
         self.BackgroundColour = self.BACKGROUND_COLOUR
         label.ForegroundColour = self.FOREGROUND_COLOUR
         sizer.Add(label, border=15, flag=wx.ALL | wx.ALIGN_CENTER_HORIZONTAL)
@@ -164,6 +173,16 @@ class ColourManager(object):
                 return result
         wx.lib.agw.labelbook.ImageContainer = HackContainer
 
+        # Hack: monkey-patch TreeListCtrl with working Colour properties
+        wx.lib.gizmos.TreeListCtrl.BackgroundColour = property(
+            wx.lib.gizmos.TreeListCtrl.GetBackgroundColour,
+            wx.lib.gizmos.TreeListCtrl.SetBackgroundColour
+        )
+        wx.lib.gizmos.TreeListCtrl.ForegroundColour = property(
+            wx.lib.gizmos.TreeListCtrl.GetForegroundColour,
+            wx.lib.gizmos.TreeListCtrl.SetForegroundColour
+        )
+
         window.Bind(wx.EVT_SYS_COLOUR_CHANGED, cls.OnSysColourChange)
 
 
@@ -203,7 +222,7 @@ class ColourManager(object):
 
     @classmethod
     def GetColour(cls, colour):
-        return wx.NamedColour(getattr(cls.colourcontainer, colour)) \
+        return wx.Colour(getattr(cls.colourcontainer, colour)) \
                if isinstance(colour, basestring) \
                else wx.SystemSettings.GetColour(colour)
 
@@ -245,11 +264,515 @@ class ColourManager(object):
 
 
 
+class FormDialog(wx.Dialog):
+    """
+    Dialog for displaying a complex editable form.
+    Uses ComboBox for fields with choices.
+    Uses two ListBoxes for list fields.
+
+    @param   props  [{
+       name:          field name
+       ?type:         (bool | list | anything) if field has direct content,
+                      or callback(dialog, field, panel, data) making controls
+       ?label:        field label if not using name
+       ?help:         field tooltip
+       ?path:         [data path, if, more, complex, nesting]
+       ?choices:      [value, ] or callback(field, path, data) returning list
+       ?choicesedit   true if value not limited to given choices
+       ?component     specific wx component to use
+       ?toggle:       if true, field is toggle-able and children hidden when off
+       ?children:     [{field}, ]
+       ?link:         "name" of linked field, cleared and repopulated on change
+       ?tb:           [{type, ?help}] for SQLiteTextCtrl component, adds toolbar,
+                      supported toolbar buttons "open" and "paste"
+    }]
+    @param   autocomp  list of words to add to SQLiteTextCtrl autocomplete
+    """
+
+    def __init__(self, parent, title, props=None, data=None, edit=None, autocomp=None):
+        wx.Dialog.__init__(self, parent, title=title,
+                          style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER)
+        self._ignore_change = False
+        self._editmode = True
+        self._comps    = collections.defaultdict(list) # {(path): [wx component, ]}
+        self._autocomp = autocomp
+        self._toggles  = {} # {(path): wx.CheckBox, }
+        self._props    = []
+        self._data     = {}
+        self._rows     = 0
+
+        panel_wrap  = wx.ScrolledWindow(self)
+        panel_items = self._panel = wx.Panel(panel_wrap)
+        panel_wrap.SetScrollRate(0, 20)
+
+        button_save   = wx.Button(self, label="OK",     id=wx.OK)
+        button_cancel = wx.Button(self, label="Cancel", id=wx.CANCEL)
+
+        button_save.SetDefault()
+        self.SetEscapeId(wx.CANCEL)
+        self.Bind(wx.EVT_BUTTON, self._OnClose, button_save)
+
+        self.Sizer        = wx.BoxSizer(wx.VERTICAL)
+        sizer_buttons     = wx.BoxSizer(wx.HORIZONTAL)
+        panel_wrap.Sizer  = wx.BoxSizer(wx.VERTICAL)
+        panel_items.Sizer = wx.GridBagSizer(hgap=5, vgap=0)
+
+        panel_items.Sizer.SetEmptyCellSize((0, 0))
+        panel_wrap.Sizer.Add(panel_items, border=10, proportion=1, flag=wx.RIGHT | wx.GROW)
+
+        sizer_buttons.Add(button_save,   border=10, flag=wx.LEFT)
+        sizer_buttons.Add(button_cancel, border=10, flag=wx.LEFT)
+
+        self.Sizer.Add(panel_wrap, border=15, proportion=1, flag=wx.LEFT | wx.TOP | wx.GROW)
+        self.Sizer.Add(sizer_buttons, border=5, flag=wx.ALL | wx.ALIGN_CENTER_HORIZONTAL)
+
+        for x in self, panel_wrap, panel_items:
+            ColourManager.Manage(x, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
+            ColourManager.Manage(x, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
+        self.Populate(props, data, edit)
+
+        if self._editmode:
+            self.MinSize = (440, panel_items.Size[1] + 80)
+        else:
+            self.MinSize = (440, panel_items.Size[1] + 10)
+            self.SetEscapeId(wx.OK)
+            self.Fit()
+            button_cancel.Hide()
+        self.CenterOnParent()
+
+
+    def Populate(self, props, data, edit=None):
+        """
+        Clears current content, if any, adds controls to dialog,
+        and populates with data.
+        """
+        self._ignore_change = True
+        self._props = copy.deepcopy(props or [])
+        self._data  = copy.deepcopy(data  or {})
+        if edit is not None: self._editmode = edit
+        self._rows  = 0
+
+        while self._panel.Sizer.Children: self._panel.Sizer.Remove(0)
+        for c in self._panel.Children: c.Destroy()
+        self._toggles.clear()
+        self._comps.clear()
+
+        for f in self._props: self._AddField(f)
+
+        for f in self._props: self._PopulateField(f)
+        self._panel.Sizer.AddGrowableCol(6, 1)
+        if len(self._comps) == 1: self._panel.Sizer.AddGrowableRow(0, 1)
+        self._ignore_change = False
+        self.Layout()
+
+
+    def GetData(self):
+        """Returns the current data values."""
+        result = copy.deepcopy(self._data)
+        for p in sorted(self._toggles, key=len, reverse=True):
+            if not self._toggles[p].Value:
+                ptr = result
+                for x in p[:-1]: ptr = ptr.get(x) or {}
+                ptr.pop(p[-1], None)
+        return result
+
+
+    def _GetValue(self, field, path=()):
+        """Returns field data value."""
+        ptr = self._data
+        path = field.get("path") or path
+        for x in path: ptr = ptr.get(x, {}) if isinstance(ptr, dict) else ptr[x]
+        return ptr.get(field["name"])
+
+
+    def _SetValue(self, field, value, path=()):
+        """Sets field data value."""
+        ptr = parent = self._data
+        path = field.get("path") or path
+        for x in path:
+            ptr = ptr.get(x) if isinstance(ptr, dict) else ptr[x]
+            if ptr is None: ptr = parent[x] = {}
+            parent = ptr
+        ptr[field["name"]] = value
+
+
+    def _DelValue(self, field, path=()):
+        """Deletes field data value."""
+        ptr = self._data
+        path = field.get("path") or path
+        for x in path: ptr = ptr.get(x, {})
+        ptr.pop(field["name"], None)
+
+
+    def _GetField(self, name, path=()):
+        """Returns field from props."""
+        fields, path = self._props, list(path) + [name]
+        while fields:
+            for f in fields:
+                if [f["name"]] == path: return f
+                if f["name"] == path[0] and f.get("children"):
+                    fields, path = f["children"], path[1:]
+                    break # for f
+
+
+    def _GetChoices(self, field, path):
+        """Returns the choices list for field, if any."""
+        result = field.get("choices") or []
+        if callable(result):
+            if path:
+                parentfield = self._GetField(path[-1], path[:-1])
+                data = self._GetValue(parentfield, path[:-1])
+            else: data = self.GetData()
+            result = result(data)
+        return result
+
+
+    def _AddField(self, field, path=()):
+        """Adds field controls to dialog."""
+        callback = field["type"] if callable(field.get("type")) \
+                   and field["type"] not in (bool, list) else None
+        if not callback and not self._editmode and self._GetValue(field, path) is None: return
+        MAXCOL = 8
+        parent, sizer = self._panel, self._panel.Sizer
+        level, fpath = len(path), path + (field["name"], )
+
+        col = 0
+        if field.get("toggle") and self._editmode:
+            toggle = wx.CheckBox(parent, label=field["label"] if "label" in field else field["name"])
+            if field.get("help"): toggle.ToolTip = field["help"]
+            sizer.Add(toggle, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
+            self._comps[fpath].append(toggle)
+            self._toggles[tuple(field.get("path") or fpath)] = toggle
+            self._BindHandler(self._OnToggleField, toggle, field, path, toggle)
+            col += 2
+        elif field.get("toggle"):
+            # Show ordinary label in view mode, checkbox goes very gray
+            label = wx.StaticText(parent, label=field["label"] if "label" in field else field["name"])
+            if field.get("help"): label.ToolTip = field["help"]
+            sizer.Add(label, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
+            col += 2
+
+        if callback: callback(self, field, parent, self._data)
+        elif not field.get("toggle") or any(field.get(x) for x in ["type", "choices", "component"]):
+            ctrls = self._MakeControls(field, path)
+            for i, c in enumerate(ctrls):
+                colspan = 2 if isinstance(c, wx.StaticText) else MAXCOL - level - col
+                brd, BRD = (5, wx.BOTTOM) if isinstance(c, wx.CheckBox) else (0, 0)
+                sizer.Add(c, border=brd, pos=(self._rows, level + col), span=(1, colspan), flag=BRD | wx.GROW)
+                col += colspan
+
+        self._rows += 1
+        for f in field.get("children") or (): self._AddField(f, fpath)
+
+
+    def _PopulateField(self, field, path=()):
+        """Populates field controls with data state."""
+        if not self._editmode and self._GetValue(field, path) is None: return
+        fpath = path + (field["name"], )
+        choices = self._GetChoices(field, path)
+        value = self._GetValue(field, path)
+
+        ctrls = [x for x in self._comps[fpath]
+                 if not isinstance(x, (wx.StaticText, wx.Sizer))]
+        if list is field.get("type"):
+            value = value or []
+            listbox1, listbox2 = (x for x in ctrls if isinstance(x, wx.ListBox))
+            listbox1.SetItems([x for x in choices if x not in value])
+            listbox2.SetItems(value or [])
+            listbox1.Enable(self._editmode)
+            listbox2.Enable(self._editmode)
+            for c in ctrls:
+                if isinstance(c, wx.Button): c.Enable(self._editmode)
+        else:
+            for i, c in enumerate(ctrls):
+                if not i and isinstance(c, wx.CheckBox) and field.get("toggle"):
+                    c.Value = (value is not None)
+                    self._OnToggleField(field, path, c)
+                    c.Enable(self._editmode)
+                    continue # for i, c
+                if isinstance(c, wx.stc.StyledTextCtrl):
+                    c.SetText(value or "")
+                    if self._autocomp and isinstance(c, SQLiteTextCtrl):
+                        c.AutoCompClearAdded()
+                        c.AutoCompAddWords(self._autocomp)
+                elif isinstance(c, wx.CheckBox): c.Value = bool(value)
+                else:
+                    if isinstance(c, wx.ComboBox): c.SetItems(choices)
+                    if isinstance(value, (list, tuple)): value = "".join(value)
+                    c.Value = "" if value is None else value
+
+                if isinstance(c, wx.TextCtrl): c.SetEditable(self._editmode)
+                else: c.Enable(self._editmode)
+
+        for f in field.get("children") or (): self._PopulateField(f, fpath)
+
+
+    def _MakeControls(self, field, path=()):
+        """Returns a list of wx components for field."""
+        result = []
+        parent, sizer, ctrl = self._panel, self._panel.Sizer, None
+        fpath = path + (field["name"], )
+        label = field["label"] if "label" in field else field["name"]
+        accname = "ctrl_%s" % self._rows # Associating label click with control
+
+        if list is field.get("type"):
+            if not field.get("toggle") and field.get("type") not in (bool, list):
+                result.append(wx.StaticText(parent, label=label, name=accname + "_label"))
+
+            sizer_f = wx.BoxSizer(wx.VERTICAL)
+            sizer_l = wx.BoxSizer(wx.HORIZONTAL)
+            sizer_b1 = wx.BoxSizer(wx.VERTICAL)
+            sizer_b2 = wx.BoxSizer(wx.VERTICAL)
+            ctrl1 = wx.ListBox(parent, style=wx.LB_EXTENDED)
+            b1    = wx.Button(parent, label=">", size=(30, -1))
+            b2    = wx.Button(parent, label="<", size=(30, -1))
+            ctrl2 = wx.ListBox(parent, style=wx.LB_EXTENDED)
+            b3    = wx.Button(parent, label=u"\u2191", size=(20, -1))
+            b4    = wx.Button(parent, label=u"\u2193", size=(20, -1))
+
+            b1.ToolTip = "Add selected from left to right"
+            b2.ToolTip = "Remove selected from right"
+            b3.ToolTip = "Move selected items higher"
+            b4.ToolTip = "Move selected items lower"
+            ctrl1.SetName(accname)
+            ctrl1.MinSize = ctrl2.MinSize = (150, 100)
+            if field.get("help"): ctrl1.ToolTip = field["help"]
+
+            sizer_b1.Add(b1); sizer_b1.Add(b2)
+            sizer_b2.Add(b3); sizer_b2.Add(b4)
+            sizer_l.Add(ctrl1, proportion=1)
+            sizer_l.Add(sizer_b1, flag=wx.ALIGN_CENTER_VERTICAL);
+            sizer_l.Add(ctrl2, proportion=1)
+            sizer_l.Add(sizer_b2, flag=wx.ALIGN_CENTER_VERTICAL);
+
+            toplabel = wx.StaticText(parent, label=label, name=accname + "_label")
+            sizer_f.Add(toplabel, flag=wx.GROW)
+            sizer_f.Add(sizer_l, border=10, proportion=1, flag=wx.BOTTOM | wx.GROW)
+
+            result.append(sizer_f)
+            self._comps[fpath].extend([toplabel, ctrl1, b1, b2, ctrl2, b3, b4])
+
+            self._BindHandler(self._OnAddToList,      ctrl1, field, path)
+            self._BindHandler(self._OnAddToList,      b1,    field, path)
+            self._BindHandler(self._OnRemoveFromList, b2,    field, path)
+            self._BindHandler(self._OnRemoveFromList, ctrl2, field, path)
+            self._BindHandler(self._OnMoveInList,     b3,    field, path, -1)
+            self._BindHandler(self._OnMoveInList,     b4,    field, path, +1)
+        elif field.get("tb") and field.get("component") is SQLiteTextCtrl:
+            # Special case, add toolbar buttons to STC
+            sizer_top = wx.BoxSizer(wx.HORIZONTAL)
+            sizer_stc = wx.BoxSizer(wx.VERTICAL)
+
+            mylabel = wx.StaticText(parent, label=label, name=accname + "_label")
+            tb = wx.ToolBar(parent, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+            ctrl = field["component"](parent)
+
+            OPTS = {"open":  {"id": wx.ID_OPEN,  "bmp": wx.ART_FILE_OPEN, "handler": self._OnOpenFile},
+                    "paste": {"id": wx.ID_PASTE, "bmp": wx.ART_PASTE,     "handler": self._OnPaste}, }
+            for prop in field["tb"]:
+                opts = OPTS[prop["type"]]
+                bmp = wx.ArtProvider.GetBitmap(opts["bmp"], wx.ART_TOOLBAR, (16, 16))
+                tb.SetToolBitmapSize(bmp.Size)
+                tb.AddLabelTool(opts["id"], "", bitmap=bmp, shortHelp=prop.get("help", ""))
+                tb.Bind(wx.EVT_TOOL, functools.partial(opts["handler"], field, path), id=opts["id"])
+            tb.Realize()
+            ctrl.SetName(accname)
+
+            sizer_top.Add(mylabel, border=5, flag=wx.BOTTOM | wx.ALIGN_BOTTOM)
+            sizer_top.AddStretchSpacer()
+            sizer_top.Add(tb, flag=wx.ALIGN_BOTTOM)
+
+            sizer_stc.Add(sizer_top, flag=wx.GROW)
+            sizer_stc.Add(ctrl, proportion=1, flag=wx.GROW)
+
+            result.append(sizer_stc)
+            self._comps[fpath].append(ctrl)
+
+            self._BindHandler(self._OnChange, ctrl, field, path)
+        else:
+            if not field.get("toggle") and field.get("type") not in (bool, list):
+                result.append(wx.StaticText(parent, label=label, name=accname + "_label"))
+
+            if field.get("component"):
+                ctrl = field["component"](parent)
+                if isinstance(ctrl, SQLiteTextCtrl):
+                    ctrl.MinSize = (-1, 60)
+                    ctrl.Traversable = True
+                    ctrl.Wheelable   = False
+                    ctrl.SetCaretLineVisible(False)
+            elif bool is field.get("type"):
+                ctrl = wx.CheckBox(parent, label=label) if self._editmode \
+                       else wx.StaticText(parent, label=label)
+            elif "choices" in field:
+                style = wx.CB_DROPDOWN | (0 if field.get("choicesedit") else wx.CB_READONLY)
+                ctrl = wx.ComboBox(parent, style=style)
+            else:
+                ctrl = wx.TextCtrl(parent)
+
+            result.append(ctrl)
+            self._BindHandler(self._OnChange, ctrl, field, path)
+
+        for i, x in enumerate(result):
+            if not isinstance(x, wx.Window): continue # for i, x
+            self._comps[fpath].append(x)
+            if not i: continue # for i, x
+            x.SetName(accname)
+            if field.get("help"): x.ToolTip = field["help"]
+        return result
+
+
+    def _BindHandler(self, handler, ctrl, *args):
+        """Binds appropriate handler for control type."""
+        if isinstance(ctrl, wx.stc.StyledTextCtrl): events = [wx.stc.EVT_STC_CHANGE]
+        elif isinstance(ctrl, wx.Button):   events = [wx.EVT_BUTTON]
+        elif isinstance(ctrl, wx.CheckBox): events = [wx.EVT_CHECKBOX]
+        elif isinstance(ctrl, wx.ComboBox): events = [wx.EVT_TEXT, wx.EVT_COMBOBOX]
+        elif isinstance(ctrl, wx.ListBox): events = [wx.EVT_LISTBOX_DCLICK]
+        else: events = [wx.EVT_TEXT]
+        for e in events: self.Bind(e, functools.partial(handler, *args), ctrl)
+
+
+    def _OnChange(self, field, path, event):
+        """
+        Handler for changing field content, updates data,
+        refreshes linked field if any.
+        """
+        if self._ignore_change: return
+        value = event.EventObject.Value
+        if isinstance(value, basestring) \
+        and (not isinstance(event.EventObject, wx.stc.StyledTextCtrl)
+        or not value.strip()): value = value.strip()
+        self._SetValue(field, value, path)
+        if field.get("link"):
+            linkfield = self._GetField(field["link"], path)
+            self._DelValue(linkfield, path)
+            self._PopulateField(linkfield, path)
+
+
+    def _OnAddToList(self, field, path, event):
+        """Handler from adding items from listbox on the left to the right."""
+        indexes = []
+
+        listbox1, listbox2 = (x for x in self._comps[path + (field["name"], )]
+                              if isinstance(x, wx.ListBox))
+        if isinstance(event.EventObject, wx.ListBox):
+            indexes.append(event.GetSelection())
+        else:
+            indexes.extend(listbox1.GetSelections())
+            if not indexes and listbox1.GetCount(): indexes.append(0)
+        selecteds = map(listbox1.GetString, indexes)
+
+        for i in indexes[::-1]: listbox1.Delete(i)
+        listbox2.AppendItems(selecteds)
+        self._SetValue(field, listbox2.GetItems(), path)
+
+
+    def _OnRemoveFromList(self, field, path, event):
+        """Handler from removing items from listbox on the right."""
+        indexes = []
+        listbox1, listbox2 = (x for x in self._comps[path + (field["name"], )]
+                              if isinstance(x, wx.ListBox))
+        if isinstance(event.EventObject, wx.ListBox):
+            indexes.append(event.GetSelection())
+        else:
+            indexes.extend(listbox2.GetSelections())
+            if not indexes and listbox2.GetCount(): indexes.append(0)
+
+        for i in indexes[::-1]: listbox2.Delete(i)
+        items2 = listbox2.GetItems()
+        allchoices = self._GetChoices(field, path)
+        listbox1.SetItems([x for x in allchoices if x not in items2])
+        self._SetValue(field, items2, path)
+
+
+    def _OnMoveInList(self, field, path, direction, event):
+        """Handler for moving selected items up/down within listbox."""
+        _, listbox2 = (x for x in self._comps[path + (field["name"], )]
+                       if isinstance(x, wx.ListBox))
+        indexes = listbox2.GetSelections()
+        selecteds, items = map(listbox2.GetString, indexes), listbox2.GetItems()
+
+        if not indexes or direction < 0 and not indexes[0] \
+        or direction > 0 and indexes[-1] == len(items) - 1: return
+
+        for i in range(len(items))[::-direction]:
+            if i not in indexes: continue # for i
+            i2 = i + direction
+            items[i], items[i2] = items[i2], items[i]
+
+        listbox2.SetItems(items)
+        for i in indexes: listbox2.Select(i + direction)
+        self._SetValue(field, items, path)
+
+
+    def _OnToggleField(self, field, path, ctrl, event=None):
+        """
+        Handler for toggling a field (and subfields) on/off, updates display.
+        """
+        fpath = path + (field["name"], )
+        ctrls = [] # [(field, path, ctrl)]
+        for c in self._comps.get(fpath, []):
+            ctrls.append((field, path, c))
+        for f in field.get("children", []):
+            for c in self._comps.get(fpath + (f["name"], ), []):
+                ctrls.append((f, fpath, c))
+
+        on = event.EventObject.Value if event else ctrl.Value
+        for f, p, c in ctrls:
+            # Never hide field-level toggle itself
+            if isinstance(c, wx.CheckBox) and f.get("toggle") and p == path:
+                continue # for f, p, c
+
+            fon = on
+            # Hide field children that are toggled off
+            if not isinstance(c, wx.CheckBox) and f.get("toggle") \
+            and p != path and self._GetValue(f, p) is None:
+                fon = False
+
+            c.Show(fon)
+        if on and self._GetValue(field, path) is None:
+            self._SetValue(field, {} if field.get("children") else "", path)
+        self.Layout()
+
+
+    def _OnOpenFile(self, field, path, event=None):
+        """Handler for opening file dialog and loading file contents to STC field."""
+        dialog = wx.FileDialog(
+            self, message="Open file", defaultFile="",
+            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
+            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+        fpath = path + (field["name"], )
+        ctrl = self._comps[fpath][0]
+        filename = dialog.GetPath()
+        ctrl.LoadFile(filename)
+        self._SetValue(field, ctrl.GetText(), path)
+
+
+    def _OnPaste(self, field, path, event=None):
+        """Handler for pasting clipboard contents to STC field."""
+        if wx.TheClipboard.Open():
+            d = wx.TextDataObject()
+            if wx.TheClipboard.GetData(d):
+                fpath = path + (field["name"], )
+                self._comps[fpath][0].SetText(d.GetText())
+                self._SetValue(field, d.GetText(), path)
+            wx.TheClipboard.Close()
+
+
+    def _OnClose(self, event):
+        """Handler for clicking OK/Cancel, hides the dialog."""
+        self.Hide()
+        self.IsModal() and self.EndModal(event.GetId())
+
+
+
 class NonModalOKDialog(wx.Dialog):
     """A simple non-modal dialog with an OK button, stays on top of parent."""
 
     def __init__(self, parent, title, message):
-        wx.Dialog.__init__(self, parent=parent, title=title,
+        wx.Dialog.__init__(self, parent, title=title,
                            style=wx.CAPTION | wx.CLOSE_BOX |
                                  wx.FRAME_FLOAT_ON_PARENT)
 
@@ -274,7 +797,7 @@ class NonModalOKDialog(wx.Dialog):
 
 
 
-class NoteButton(wx.PyPanel, wx.Button):
+class NoteButton(wx.Panel, wx.Button):
     """
     A large button with a custom icon, main label, and additional note.
     Inspired by wx.CommandLinkButton, which does not support custom icons
@@ -287,15 +810,15 @@ class NoteButton(wx.PyPanel, wx.Button):
     def __init__(self, parent, label=wx.EmptyString, note=wx.EmptyString,
                  bmp=wx.NullBitmap, id=-1, pos=wx.DefaultPosition,
                  size=wx.DefaultSize, style=0, name=wx.PanelNameStr):
-        wx.PyPanel.__init__(self, parent, id, pos, size,
-                            style | wx.FULL_REPAINT_ON_RESIZE, name)
+        wx.Panel.__init__(self, parent, id, pos, size,
+                          style | wx.FULL_REPAINT_ON_RESIZE, name)
         self._label = label
         self._note = note
         self._bmp = bmp
         self._bmp_disabled = bmp
         if bmp is not None and bmp.IsOk():
             img = bmp.ConvertToImage().ConvertToGreyscale()
-            self._bmp_disabled = wx.BitmapFromImage(img) if img.IsOk() else bmp
+            self._bmp_disabled = wx.Bitmap(img) if img.IsOk() else bmp
         self._hover = False # Whether button is being mouse hovered
         self._press = False # Whether button is being mouse pressed
         self._align = style & (wx.ALIGN_RIGHT | wx.ALIGN_CENTER)
@@ -309,8 +832,8 @@ class NoteButton(wx.PyPanel, wx.Button):
         self._extent_label = None
         self._extent_note = None
 
-        self._cursor_hover   = wx.StockCursor(wx.CURSOR_HAND)
-        self._cursor_default = wx.StockCursor(wx.CURSOR_DEFAULT)
+        self._cursor_hover   = wx.Cursor(wx.CURSOR_HAND)
+        self._cursor_default = wx.Cursor(wx.CURSOR_DEFAULT)
 
         self.Bind(wx.EVT_MOUSE_EVENTS, self.OnMouseEvent)
         self.Bind(wx.EVT_MOUSE_CAPTURE_LOST, self.OnMouseCaptureLostEvent)
@@ -333,15 +856,16 @@ class NoteButton(wx.PyPanel, wx.Button):
 
 
     def DoGetBestSize(self):
-        w = 100 if self.Size.width < 100 else self.Size.width
+        w = 40 if self.Size.width  < 40 else self.Size.width
         h = 40 if self.Size.height < 40 else self.Size.height
+        if self._bmp:
+            w = max(w, self._bmp.Size.width  + 20)
+            h = max(h, self._bmp.Size.height + 20)
         if self._extent_label:
             h1 = 10 + self._bmp.Size.height + 10
             h2 = 10 + self._extent_label[1] + 10 + self._extent_note[1] + 10
             h  = max(h1, h2)
-        size = wx.Size(w, h)
-
-        return size
+        return wx.Size(w, h)
 
 
     def Draw(self, dc):
@@ -376,9 +900,9 @@ class NoteButton(wx.PyPanel, wx.Button):
             dc.Brush = wx.TRANSPARENT_BRUSH
             dc.DrawRectangle(0, 0, width, height)
 
-            # Draw focus marquee.
+            # Create cached focus marquee
             if not NoteButton.BMP_MARQUEE:
-                NoteButton.BMP_MARQUEE = wx.EmptyBitmap(2, 2)
+                NoteButton.BMP_MARQUEE = wx.Bitmap(2, 2)
                 dc_bmp = wx.MemoryDC()
                 dc_bmp.SelectObject(NoteButton.BMP_MARQUEE)
                 dc_bmp.Background = wx.Brush(self.BackgroundColour)
@@ -386,11 +910,15 @@ class NoteButton(wx.PyPanel, wx.Button):
                 dc_bmp.Pen = wx.Pen(self.ForegroundColour)
                 dc_bmp.DrawPointList([(0, 1), (1, 0)])
                 dc_bmp.SelectObject(wx.NullBitmap)
-            if hasattr(wx.Pen, "Stipple"):
-                pen = PEN(dc.TextForeground, 1, wx.STIPPLE)
+
+            # Draw focus marquee
+            draw_focus = (self._label or self._note) or self._press or \
+                         (is_focused and wx.GetKeyState(wx.WXK_SPACE))
+            if draw_focus and hasattr(wx.Pen, "Stipple"):
+                pen = PEN(dc.TextForeground, 1, wx.PENSTYLE_STIPPLE)
                 pen.Stipple, dc.Pen = NoteButton.BMP_MARQUEE, pen
                 dc.DrawRectangle(4, 4, width - 8, height - 8)
-            else:
+            elif draw_focus:
                 brush = BRUSH(dc.TextForeground)
                 brush.SetStipple(NoteButton.BMP_MARQUEE)
                 dc.Brush = brush
@@ -401,13 +929,13 @@ class NoteButton(wx.PyPanel, wx.Button):
             dc.Pen = PEN(dc.TextForeground)
 
         if self._press or (is_focused and wx.GetKeyState(wx.WXK_SPACE)):
-            # Button is being clicked with mouse: create sunken effect.
+            # Button is being clicked with mouse: create sunken effect
             colours = [(128, 128, 128)] * 2
             lines   = [(1, 1, width - 2, 1), (1, 1, 1, height - 2)]
             dc.DrawLineList(lines, [PEN(wx.Colour(*c)) for c in colours])
             x += 1; y += 1
         elif self._hover and self.IsThisEnabled():
-            # Button is being hovered with mouse: create raised effect.
+            # Button is being hovered with mouse: create raised effect
             colours  = [(255, 255, 255)] * 2
             if wx.WHITE == self.BackgroundColour:
                 colours =  [(158, 158, 158)] * 2
@@ -431,7 +959,7 @@ class NoteButton(wx.PyPanel, wx.Button):
 
         # Draw label and accelerator key underlines
         dc.Font = wx.Font(dc.Font.PointSize, dc.Font.Family, dc.Font.Style,
-                          wx.FONTWEIGHT_BOLD, face=dc.Font.FaceName)
+                          wx.FONTWEIGHT_BOLD, faceName=dc.Font.FaceName)
         text_label = self._text_label
         if "&" in self._label:
             text_label, h = "", y - 1
@@ -447,16 +975,16 @@ class NoteButton(wx.PyPanel, wx.Button):
                             x1, y1 = x + extent_all[0], h + extent[1]
                             dc.DrawLine(x1, y1, x1 + extent[0], y1)
                         elif i < len(line):
-                            chars += line[i] # Double ampersand: add as one.
+                            chars += line[i] # Double ampersand: add as one
                     if i < len(line):
                         chars += line[i]
                     i += 1
-                h += self._extent_label[2]
+                h += self._extent_label[1]
                 text_label += chars + "\n"
         dc.DrawText(text_label, x, y)
 
         # Draw note
-        _, label_h, _ = dc.GetMultiLineTextExtent(self._text_label)
+        _, label_h = dc.GetMultiLineTextExtent(self._text_label)
         y += label_h + 10
         dc.Font = self.Font
         dc.DrawText(self._text_note, x, y)
@@ -464,28 +992,31 @@ class NoteButton(wx.PyPanel, wx.Button):
 
     def WrapTexts(self):
         """Wraps button texts to current control size."""
-        width, height = self.Size
-        label = self._label
-        self._text_label = label
-        self._text_note = self._note
+        self._text_label, self._text_note = self._label, self._note
+
+        if not self._label and not self._note:
+            self._extent_label = self._extent_note = (0, 0)
+            return
+            
         WORDWRAP = wx.lib.wordwrap.wordwrap
+        width, height = self.Size
         if width > 20 and height > 20:
             dc = wx.ClientDC(self)
         else: # Not properly sized yet: assume a reasonably fitting size
             dc, width, height = wx.MemoryDC(), 500, 100
-            dc.SelectObject(wx.EmptyBitmap(500, 100))
+            dc.SelectObject(wx.Bitmap(500, 100))
         dc.Font = self.Font
         x = 10 + self._bmp.Size.width + 10
         self._text_note = WORDWRAP(self._text_note, width - 10 - x, dc)
         dc.Font = wx.Font(dc.Font.PointSize, dc.Font.Family, dc.Font.Style,
-                          wx.FONTWEIGHT_BOLD, face=dc.Font.FaceName)
+                          wx.FONTWEIGHT_BOLD, faceName=dc.Font.FaceName)
         self._text_label = WORDWRAP(self._text_label, width - 10 - x, dc)
         self._extent_label = dc.GetMultiLineTextExtent(self._text_label)
         self._extent_note = dc.GetMultiLineTextExtent(self._text_note)
 
 
     def OnPaint(self, event):
-        """Handler for paint event, calls """
+        """Handler for paint event, calls Draw()."""
         dc = wx.BufferedPaintDC(self)
         self.Draw(dc)
 
@@ -575,22 +1106,30 @@ class NoteButton(wx.PyPanel, wx.Button):
         return True
 
 
+    def Disable(self):
+        return self.Enable(False)
+
+
     def Enable(self, enable=True):
         """
         Enable or disable this control for user input, returns True if the
         control state was changed.
         """
+        result = (self._enabled != enable)
+        if not result: return result
+
         self._enabled = enable
-        result = wx.PyPanel.Enable(self, enable)
-        if result:
-            self.Refresh()
+        wx.Panel.Enable(self, enable)
+        self.Refresh()
         return result
+    def IsEnabled(self): return wx.Panel.IsEnabled(self)
+    Enabled = property(Enable, IsEnabled)
 
 
     def IsThisEnabled(self):
         """Returns the internal enabled state, independent of parent state."""
-        if hasattr(wx.PyPanel, "IsThisEnabled"):
-            result = wx.PyPanel.IsThisEnabled(self)
+        if hasattr(wx.Panel, "IsThisEnabled"):
+            result = wx.Panel.IsThisEnabled(self)
         else:
             result = self._enabled
         return result
@@ -626,7 +1165,7 @@ class ProgressWindow(wx.Dialog):
 
     def __init__(self, parent, title, message="", maximum=100, cancel=True,
                  style=wx.CAPTION | wx.CLOSE_BOX | wx.FRAME_FLOAT_ON_PARENT):
-        wx.Dialog.__init__(self, parent=parent, title=title, style=style)
+        wx.Dialog.__init__(self, parent, title=title, style=style)
         self._is_cancelled = False
 
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -690,12 +1229,12 @@ class PropertyDialog(wx.Dialog):
     COLOUR_ERROR = wx.RED
 
     def __init__(self, parent, title):
-        wx.Dialog.__init__(self, parent=parent, title=title,
+        wx.Dialog.__init__(self, parent, title=title,
                           style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER)
         self.properties = [] # [(name, type, orig_val, default, label, ctrl), ]
 
         panelwrap = wx.Panel(self)
-        panel = self.panel = wx.lib.scrolledpanel.ScrolledPanel(panelwrap)
+        panel = self.panel = wx.ScrolledWindow(panelwrap)
 
         button_save = wx.Button(panelwrap, label="Save")
         button_reset = wx.Button(panelwrap, label="Restore defaults")
@@ -740,12 +1279,13 @@ class PropertyDialog(wx.Dialog):
         tip = wx.StaticText(self.panel, label=help)
 
         ctrl.Value = self._GetValueForCtrl(value, typeclass)
-        ctrl.ToolTipString = label.ToolTipString = "Value of type %s%s." % (
+        ctrl.ToolTip = label.ToolTip = "Value of type %s%s." % (
             typeclass.__name__,
             "" if default is None else ", default %s" % repr(default))
         tip.ForegroundColour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)
         tipfont, tipfont.PixelSize = tip.Font, (0, 9)
         tip.Font = tipfont
+        tip.Wrap(self.panel.Size[0] - 20)
         for x in (label, tip): x.Bind(wx.EVT_LEFT_UP, label_handler)
 
         self.sizer_items.Add(label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
@@ -757,7 +1297,7 @@ class PropertyDialog(wx.Dialog):
 
     def Realize(self):
         """Lays out the properties, to be called when adding is completed."""
-        self.panel.SetupScrolling(scroll_x=False)
+        self.panel.SetScrollRate(20, 20)
         self.sizer_items.AddGrowableCol(1) # Grow ctrl column
 
 
@@ -888,14 +1428,15 @@ class ScrollingHtmlWindow(wx.html.HtmlWindow):
         Appends HTML fragment to currently displayed text, refreshes the window
         and restores scroll position.
         """
-        self.Freeze()
         p, r, s = self.GetScrollPos, self.GetScrollRange, self.GetScrollPageSize
-        pos, rng, size = (x(wx.VERTICAL) for x in [p, r, s])
-        result = super(ScrollingHtmlWindow, self).AppendToPage(source)
-        if size != s(wx.VERTICAL) or pos + size >= rng:
-            pos = r(wx.VERTICAL) # Keep scroll at bottom edge
-        self.Scroll(0, pos), self._OnScroll()
-        self.Thaw()
+        self.Freeze()
+        try:
+            pos, rng, size = (x(wx.VERTICAL) for x in [p, r, s])
+            result = super(ScrollingHtmlWindow, self).AppendToPage(source)
+            if size != s(wx.VERTICAL) or pos + size >= rng:
+                pos = r(wx.VERTICAL) # Keep scroll at bottom edge
+            self.Scroll(0, pos), self._OnScroll()
+        finally: self.Thaw()
         return result
 
 
@@ -1041,7 +1582,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         # Default row column formatter function
         frmt = lambda: lambda r, c: "" if r.get(c) is None else unicode(r[c])
         self._formatters = collections.defaultdict(frmt)
-        id_copy = wx.NewId()
+        id_copy = wx.NewIdRef().Id
         entries = [(wx.ACCEL_CTRL, x, id_copy)
                    for x in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT)]
         self.SetAcceleratorTable(wx.AcceleratorTable(entries))
@@ -1051,6 +1592,18 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         self.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_END_DRAG,    self.OnDragStop)
         self.Bind(wx.lib.agw.ultimatelistctrl.EVT_LIST_BEGIN_RDRAG, self.OnDragCancel)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
+
+
+    def GetScrollThumb(self, orientation):
+        """Returns the scrollbar size in pixels."""
+        # Workaround for wxpython v4 bug of missing orientation parameter
+        return self._mainWin.GetScrollThumb(orientation) if self._mainWin else 0
+
+
+    def GetScrollRange(self, orientation):
+        """Returns the scrollbar range in pixels."""
+        # Workaround for wxpython v4 bug of missing orientation parameter
+        return self._mainWin.GetScrollRange(orientation) if self._mainWin else 0
 
 
     def GetSortImages(self):
@@ -1102,7 +1655,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         @param   rows      a list of data dicts
         @param   imageIds  list of indexes for the images associated to rows
         """
-        self._col_widths.clear()
+        if rows: self._col_widths.clear()
         self._id_rows[:] = []
         if imageIds: imageIds = self._ConvertImageIds(imageIds)
         for r in rows:
@@ -1142,10 +1695,6 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                 if imageIds and not i: self.InsertImageStringItem(index, col_value, imageIds)
                 elif not i: self.InsertStringItem(index, col_value)
                 else: self.SetStringItem(index, i, col_value)
-                col_width = self.GetTextExtent(col_value)[0] + self.COL_PADDING
-                if col_width > self._col_widths.get(i, 0):
-                    self._col_widths[i] = col_width
-                    self.SetColumnWidth(i, col_width)
             self.SetItemData(index, item_id)
             self.itemDataMap[item_id] = [data[c] for c in columns]
             self._data_map[item_id] = data
@@ -1167,11 +1716,9 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                                 filter value did not change
         """
         if force_refresh or value != self._filter:
-            if force_refresh:
-                self._col_widths.clear()
             self._filter = value
-            if self._id_rows:
-                self.RefreshRows()
+            if force_refresh: self._col_widths.clear()
+            if self._id_rows: self.RefreshRows()
 
 
     def RefreshRows(self):
@@ -1179,84 +1726,20 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         Clears the list and inserts all unfiltered rows, auto-sizing the
         columns.
         """
-        selected_ids, selected = [], self.GetFirstSelected()
+        selected_ids, selected_idxs, selected = [], [], self.GetFirstSelected()
         while selected >= 0:
             selected_ids.append(self.GetItemData(selected))
+            selected_idxs.append(selected)
             selected = self.GetNextSelected(selected)
 
         self.Freeze()
-        wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
-        self._PopulateTopRow()
-
-        # To map list item data ID to row, ListCtrl allows only integer per row
-        row_data_map = {} # {item_id: {row dict}, }
-        item_data_map = {} # {item_id: [row values], }
-        # For measuring by which to set column width: header or value
-        header_lengths = {} # {col_name: integer}
-        col_lengths = {} # {col_name: integer}
-        for col_name, col_label in self._columns:
-            col_lengths[col_name] = 0
-            # Keep space for sorting arrows.
-            width = self.GetTextExtent(col_label + "  ")[0] + self.COL_PADDING
-            header_lengths[col_name] = width
-        index = self.GetItemCount()
-        for item_id, row in self._id_rows:
-            if not self._RowMatchesFilter(row):
-                continue # continue for index, (item_id, row) in enumerate(..)
-            col_name = self._columns[0][0]
-            col_value = self._formatters[col_name](row, col_name)
-            col_lengths[col_name] = max(col_lengths[col_name],
-                                        self.GetTextExtent(col_value)[0] + self.COL_PADDING)
-
-            if item_id in self._id_images:
-                self.InsertImageStringItem(index, col_value, self._id_images[item_id])
-            else: self.InsertStringItem(index, col_value)
-
-            self.SetItemData(index, item_id)
-            item_data_map[item_id] = {0: row[col_name]}
-            row_data_map[item_id] = row
-            col_index = 1 # First was already inserted
-            for col_name, col_label in self._columns[col_index:]:
-                col_value = self._formatters[col_name](row, col_name)
-                col_width = self.GetTextExtent(col_value)[0] + self.COL_PADDING
-                col_lengths[col_name] = max(col_lengths[col_name], col_width)
-                self.SetStringItem(index, col_index, col_value)
-                item_data_map[item_id][col_index] = row.get(col_name)
-                col_index += 1
-            self.SetItemTextColour(index, self.ForegroundColour)
-            self.SetItemBackgroundColour(index, self.BackgroundColour)
-            index += 1
-        self._data_map = row_data_map
-        self.itemDataMap = item_data_map
-
-        if self._id_rows and not self._col_widths:
-            if self._col_maxwidth > 0:
-                for col_name, width in col_lengths.items():
-                    col_lengths[col_name] = min(width, self._col_maxwidth)
-                for col_name, width in header_lengths.items():
-                    header_lengths[col_name] = min(width, self._col_maxwidth)
-            for i, (col_name, col_label) in enumerate(self._columns):
-                col_width = max(col_lengths[col_name], header_lengths[col_name])
-                self.SetColumnWidth(i, col_width)
-                self._col_widths[i] = col_width
-        elif self._col_widths:
-            for col, width in self._col_widths.items():
-                self.SetColumnWidth(col, width)
-        if self.GetSortState()[0] >= 0:
-            self.SortListItems(*self.GetSortState())
-
-        if selected_ids: # Re-select the previously selected items
-            idindx = dict((self.GetItemData(i), i)
-                          for i in range(self.GetItemCount()))
-            for item_id in selected_ids:
-                if item_id not in idindx: continue # for item_id
-                self.Select(idindx[item_id])
-                if idindx[item_id] >= self.GetCountPerPage():
-                    lh = self.GetUserLineHeight()
-                    dy = (idindx[item_id] - self.GetCountPerPage() / 2) * lh
-                    self.ScrollList(0, dy)
-
-        self.Thaw()
+        try:
+            for i in selected_idxs:
+                self._mainWin.SendNotify(i, wx.wxEVT_COMMAND_LIST_ITEM_DESELECTED)
+            wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
+            self._PopulateTopRow()
+            self._PopulateRows(selected_ids)
+        finally: self.Thaw()
 
 
     def ResetColumnWidths(self):
@@ -1283,9 +1766,10 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         for item_id in self._id_images:
             if item_id >= 0: self._id_images.pop(item_id)
         self.Freeze()
-        result = wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
-        self._PopulateTopRow()
-        self.Thaw()
+        try:
+            result = wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteAllItems(self)
+            self._PopulateTopRow()
+        finally: self.Thaw()
         return result
 
 
@@ -1426,17 +1910,18 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         if not selecteds: # Dragged beyond last item
             idx, selecteds = self.GetItemCount() - 1, [start]
 
-        item_ids = map(self.GetItemData, selecteds)
-        datas    = map(self.GetItemMappedData, selecteds)
-        image_ids = map(self._id_images.get, item_ids)
+        datas     = map(self.GetItemMappedData, selecteds)
+        image_ids = map(self._id_images.get, map(self.GetItemData, selecteds))
 
         self.Freeze()
-        for x in selecteds[::-1]: self.DeleteItem(x)
-        for i, (item_id, data, imageIds) in enumerate(zip(item_ids, datas, image_ids)):
-            self.InsertRow(idx + i, data, self._ConvertImageIds(imageIds, reverse=True))
-            self.Select(idx + i)
-        self._drag_start = None
-        self.Thaw()
+        try:
+            for x in selecteds[::-1]: self.DeleteItem(x)
+            for i, (data, imageIds) in enumerate(zip(datas, image_ids)):
+                imageIds0 = self._ConvertImageIds(imageIds, reverse=True)
+                self.InsertRow(idx + i, data, imageIds0)
+                self.Select(idx + i)
+            self._drag_start = None
+        finally: self.Thaw()
 
 
     def OnDragStart(self, event):
@@ -1465,7 +1950,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         """
         il = wx.lib.agw.ultimatelistctrl.PyImageList(*self.SORT_ARROW_UP.Bitmap.Size)
         fgcolour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNTEXT)
-        defrgb, myrgb = "\x00" * 3, "".join(map(chr, fgcolour.Get()))
+        defrgb, myrgb = "\x00" * 3, "".join(map(chr, fgcolour.Get()))[:3]
 
         for embedded in self.SORT_ARROW_UP, self.SORT_ARROW_DOWN:
             if myrgb != defrgb:
@@ -1507,9 +1992,80 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             w = sum((self.GetColumnWidth(i) for i in range(1, len(self._columns))), 0)
             width = self.Size[0] - w - 5 # Space for padding
             if self.GetScrollRange(wx.VERTICAL) > 1:
-                width -= 16 # Space for scrollbar
+                width -= self.GetScrollThumb(wx.VERTICAL) # Space for scrollbar
             self.SetColumnWidth(0, width)
         if self.GetItemCount() == 1: wx.CallAfter(resize)
+
+
+    def _PopulateRows(self, selected_ids=()):
+        """Populates all rows, restoring previous selecteds if any"""
+
+        # To map list item data ID to row, ListCtrl allows only integer per row
+        row_data_map = {} # {item_id: {row dict}, }
+        item_data_map = {} # {item_id: [row values], }
+        # For measuring by which to set column width: header or value
+        header_lengths = {} # {col_name: integer}
+        col_lengths = {} # {col_name: integer}
+        for col_name, col_label in self._columns:
+            col_lengths[col_name] = 0
+            # Keep space for sorting arrows.
+            width = self.GetTextExtent(col_label + "  ")[0] + self.COL_PADDING
+            header_lengths[col_name] = width
+        index = self.GetItemCount()
+        for item_id, row in self._id_rows:
+            if not self._RowMatchesFilter(row): continue # for item_id, row
+            col_name = self._columns[0][0]
+            col_value = self._formatters[col_name](row, col_name)
+            col_lengths[col_name] = max(col_lengths[col_name],
+                                        self.GetTextExtent(col_value)[0] + self.COL_PADDING)
+
+            if item_id in self._id_images:
+                self.InsertImageStringItem(index, col_value, self._id_images[item_id])
+            else: self.InsertStringItem(index, col_value)
+
+            self.SetItemData(index, item_id)
+            item_data_map[item_id] = {0: row[col_name]}
+            row_data_map[item_id] = row
+            col_index = 1 # First was already inserted
+            for col_name, col_label in self._columns[col_index:]:
+                col_value = self._formatters[col_name](row, col_name)
+                col_width = self.GetTextExtent(col_value)[0] + self.COL_PADDING
+                col_lengths[col_name] = max(col_lengths[col_name], col_width)
+                self.SetStringItem(index, col_index, col_value)
+                item_data_map[item_id][col_index] = row.get(col_name)
+                col_index += 1
+            self.SetItemTextColour(index, self.ForegroundColour)
+            self.SetItemBackgroundColour(index, self.BackgroundColour)
+            index += 1
+        self._data_map = row_data_map
+        self.itemDataMap = item_data_map
+
+        if self._id_rows and not self._col_widths:
+            if self._col_maxwidth > 0:
+                for col_name, width in col_lengths.items():
+                    col_lengths[col_name] = min(width, self._col_maxwidth)
+                for col_name, width in header_lengths.items():
+                    header_lengths[col_name] = min(width, self._col_maxwidth)
+            for i, (col_name, col_label) in enumerate(self._columns):
+                col_width = max(col_lengths[col_name], header_lengths[col_name])
+                self.SetColumnWidth(i, col_width)
+                self._col_widths[i] = col_width
+        elif self._col_widths:
+            for col, width in self._col_widths.items():
+                self.SetColumnWidth(col, width)
+        if self.GetSortState()[0] >= 0:
+            self.SortListItems(*self.GetSortState())
+
+        if selected_ids: # Re-select the previously selected items
+            idindx = dict((self.GetItemData(i), i)
+                          for i in range(self.GetItemCount()))
+            for item_id in selected_ids:
+                if item_id not in idindx: continue # for item_id
+                self.Select(idindx[item_id])
+                if idindx[item_id] >= self.GetCountPerPage():
+                    lh = self.GetUserLineHeight()
+                    dy = (idindx[item_id] - self.GetCountPerPage() / 2) * lh
+                    self.ScrollList(0, dy)
 
 
     def _RowMatchesFilter(self, row):
@@ -1563,7 +2119,15 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
 
 class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
-    """A StyledTextCtrl configured for SQLite syntax highlighting."""
+    """
+    A StyledTextCtrl configured for SQLite syntax highlighting.
+
+    Supports hiding caret line highlight when not focused (caretline_focus=True).
+    Supports traversable mode (traversable=True) - propagates Tab to parent,
+    swallows Enter if a single line visible.
+    Supports non-wheelable mode (wheelable=False) - propagates mouse wheel events
+    to parent.
+    """
 
     """SQLite reserved keywords."""
     KEYWORDS = map(unicode, sorted([
@@ -1602,10 +2166,13 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     AUTOCOMP_LEN = 2
     FONT_FACE = "Courier New" if os.name == "nt" else "Courier"
     """Regex for matching unprintable characters (\x00 etc)."""
-    SAFEBYTE_RGX = re.compile(r"[\x00-\x20,\x7f-\xa0]")
+    SAFEBYTE_RGX = re.compile(r"[\x00-\x20\x7f-\xa0]")
 
 
     def __init__(self, *args, **kwargs):
+        self.caretline_focus = kwargs.pop("caretline_focus", None)
+        self.traversable     = kwargs.pop("traversable", False)
+        self.wheelable       = kwargs.pop("wheelable", True)
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
         self.autocomps_added = set(["sqlite_master"])
         # All autocomps: added + KEYWORDS
@@ -1625,18 +2192,26 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.AutoCompSetIgnoreCase(True)
 
         self.SetStyleSpecs()
+
         self.Bind(wx.EVT_KEY_DOWN,           self.OnKeyDown)
+        self.Bind(wx.EVT_SET_FOCUS,          self.OnFocus)
         self.Bind(wx.EVT_KILL_FOCUS,         self.OnKillFocus)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
+        self.Bind(wx.stc.EVT_STC_ZOOM,       self.OnZoom)
+        if self.caretline_focus: self.SetCaretLineVisible(False)
+        if self.traversable: self.Bind(wx.EVT_CHAR_HOOK, self.OnChar)
+        if self.wheelable is False: self.Bind(wx.EVT_MOUSEWHEEL, self.OnWheel)
 
 
     def SetStyleSpecs(self):
         """Sets STC style colours."""
         fgcolour, bgcolour, highcolour = (
             wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
-            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW,
+            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW 
+                      if self.Enabled else wx.SYS_COLOUR_BTNFACE,
                       wx.SYS_COLOUR_HOTLIGHT)
         )
+
 
         self.SetCaretForeground(fgcolour)
         self.SetCaretLineBackground("#00FFFF")
@@ -1682,9 +2257,9 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.autocomps_added.update(map(unicode, words))
         # A case-insensitive autocomp has to be sorted, will not work
         # properly otherwise. UserList would support arbitrarily sorting.
-        self.autocomps_total = sorted(
-            list(self.autocomps_added) + map(unicode, self.KEYWORDS), cmp=self.stricmp
-        )
+        self.autocomps_total = sorted(list(self.autocomps_added) + 
+                                      map(unicode, self.KEYWORDS),
+                                      cmp=self.stricmp)
 
 
     def AutoCompAddSubWords(self, word, subwords):
@@ -1711,15 +2286,91 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.autocomps_subwords.clear()
 
 
+    def Enable(self, enable=True):
+        """Enables or disables the control, updating display."""
+        if self.Enabled == enable: return False
+        result = super(self.__class__, self).Enable(enable)
+        self.SetStyleSpecs()
+        return result
+
+    def IsTraversable(self):
+        """Returns whether control is in traversable mode."""
+        return self.traversable
+
+
+    def SetTraversable(self, traversable):
+        """Sets control traversable mode."""
+        self.Unbind(wx.EVT_CHAR_HOOK, handler=self.OnChar)
+        self.traversable = traversable
+        if traversable: self.Bind(wx.EVT_CHAR_HOOK, self.OnChar)
+    Traversable = property(IsTraversable, SetTraversable)
+
+
+    def IsWheelable(self):
+        """
+        Returns whether control is in wheelable mode
+        (mouse wheel events not propagated to parent).
+        """
+        return self.wheelable
+
+
+    def SetWheelable(self, wheelable):
+        """
+        Sets control wheelable mode
+        (mouse wheel events not propagated to parent).
+        """
+        self.Unbind(wx.EVT_MOUSEWHEEL, handler=self.OnWheel)
+        self.wheelable = wheelable
+        if wheelable is False: self.Bind(wx.EVT_MOUSEWHEEL, self.OnWheel)
+    Wheelable = property(IsWheelable, SetWheelable)
+
+
+    def OnFocus(self, event):
+        """Handler for control getting focus, shows caret."""
+        event.Skip()
+        self.SetCaretStyle(wx.stc.STC_CARETSTYLE_LINE)
+        if self.caretline_focus: self.SetCaretLineVisible(True)
+
+
     def OnKillFocus(self, event):
-        """Handler for control losing focus, hides autocomplete."""
+        """Handler for control losing focus, hides autocomplete and caret."""
+        event.Skip()
         self.AutoCompCancel()
+        self.SetCaretStyle(wx.stc.STC_CARETSTYLE_INVISIBLE)
+        if self.caretline_focus: self.SetCaretLineVisible(False)
 
 
     def OnSysColourChange(self, event):
         """Handler for system colour change, updates STC styling."""
         event.Skip()
         self.SetStyleSpecs()
+
+
+    def OnZoom(self, event):
+        """Disables zoom."""
+        if self.Zoom: self.Zoom = 0
+
+
+    def OnWheel(self, event):
+        """Propagates wheel events to parent control."""
+        event.Skip()
+        event.ResumePropagation(1)
+        self.Parent.ProcessWindowEvent(event)
+
+
+    def OnChar(self, event):
+        """
+        Goes to next/previous control on Tab/Shift+Tab,
+        swallows Enter.
+        """
+        if self.AutoCompActive(): return event.Skip()
+        if event.KeyCode in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER) \
+        and self.LinesOnScreen() < 2: return
+        if wx.WXK_TAB != event.KeyCode: return event.Skip()
+
+        direction = wx.NavigationKeyEvent.IsBackward if event.ShiftDown() \
+                    else wx.NavigationKeyEvent.IsForward
+        self.Parent.NavigateIn(direction)
 
 
     def OnKeyDown(self, event):
@@ -1790,15 +2441,15 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
 TabLeftDClickEvent, EVT_TAB_LEFT_DCLICK = wx.lib.newevent.NewEvent()
 
-class TabbedHtmlWindow(wx.PyPanel):
+class TabbedHtmlWindow(wx.Panel):
     """
     HtmlWindow with tabs for different content pages.
     """
 
     def __init__(self, parent, id=wx.ID_ANY, pos=wx.DefaultPosition,
                  size=wx.DefaultSize, style=wx.html.HW_DEFAULT_STYLE,
-                 name=wx.html.HtmlWindowNameStr):
-        wx.PyPanel.__init__(self, parent, pos=pos, size=size, style=style)
+                 name=""):
+        wx.Panel.__init__(self, parent, pos=pos, size=size, style=style)
         # [{"title", "content", "id", "info", "scrollpos", "scrollrange"}]
         self._tabs = []
         self._default_page = ""      # Content shown on the blank page
@@ -1807,12 +2458,13 @@ class TabbedHtmlWindow(wx.PyPanel):
 
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
         notebook = self._notebook = wx.lib.agw.flatnotebook.FlatNotebook(
-            parent=self, size=(-1, 27),
-            agwStyle=wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
-                     wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
+            self, size=(-1, 27),
+            agwStyle=wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
+                     wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
                      wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
+                     wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
                      wx.lib.agw.flatnotebook.FNB_VC8)
-        self._html = wx.html.HtmlWindow(parent=self, style=style, name=name)
+        self._html = wx.html.HtmlWindow(self, style=style, name=name)
 
         self.Sizer.Add(notebook, flag=wx.GROW)
         self.Sizer.Add(self._html, proportion=1, flag=wx.GROW)
@@ -1836,7 +2488,7 @@ class TabbedHtmlWindow(wx.PyPanel):
                      "SelectAll", "SelectionToText",
                      "GetBackgroundColour", "SetBackgroundColour"]:
             setattr(self, name, getattr(self._html, name))
-        for name in ["GetTabAreaColour", "SetTabAreaColour"]:
+        for name in ["DeletePage", "GetSelection", "GetTabAreaColour", "SetTabAreaColour"]:
             setattr(self, name, getattr(self._notebook, name))
 
         self._CreateTab(0, "") # Make default empty tab in notebook with no text
@@ -1872,7 +2524,6 @@ class TabbedHtmlWindow(wx.PyPanel):
                              self.Scroll(*tab["scrollpos"]) if self else None)
             except Exception:
                 pass # CallLater fails if not called from the main thread
-
 
 
     def _OnScroll(self, event):
@@ -1922,9 +2573,10 @@ class TabbedHtmlWindow(wx.PyPanel):
                 nb.SetPageText(0, "")  # reuse as default empty tab
                 event.Veto()
                 self._SetPage(self._default_page)
-                # Default empty tab has no closing X: remove X from tab style
+                # Hide dropdown selector, remove X from tab style.
                 style = nb.GetAGWWindowStyleFlag()
-                style ^= wx.lib.agw.flatnotebook.FNB_X_ON_TAB
+                style ^= wx.lib.agw.flatnotebook.FNB_X_ON_TAB | \
+                         wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST
                 nb.SetAGWWindowStyleFlag(style)
             else:
                 index = min(nb.GetSelection(), nb.GetPageCount() - 2)
@@ -1935,7 +2587,7 @@ class TabbedHtmlWindow(wx.PyPanel):
 
     def _CreateTab(self, index, title):
         """Creates a new tab in the tab container at specified index."""
-        p = wx.Panel(parent=self, size=(0,0))
+        p = wx.Panel(self, size=(0,0))
         p.Hide() # Dummy empty window as notebook needs something to hold
         self._notebook.InsertPage(index, page=p, text=title, select=True)
 
@@ -1970,14 +2622,15 @@ class TabbedHtmlWindow(wx.PyPanel):
             self._CreateTab(index, tab["title"])
         else: # First real tab: fill the default empty one
             self._notebook.SetPageText(0, tab["title"])
-            # Default empty tab had no closing X: add X to tab style
+            # Hide dropdown selector, remove X from tab style.
             style = self._notebook.GetAGWWindowStyleFlag()
-            style |= wx.lib.agw.flatnotebook.FNB_X_ON_TAB
+            style |= wx.lib.agw.flatnotebook.FNB_X_ON_TAB | \
+                     wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST
             self._notebook.SetAGWWindowStyleFlag(style)
 
         self._html.Freeze()
-        self._SetPage(tab["content"])
-        self._html.Thaw()
+        try:     self._SetPage(tab["content"])
+        finally: self._html.Thaw()
 
 
     def GetTabDataByID(self, id):
@@ -2002,9 +2655,10 @@ class TabbedHtmlWindow(wx.PyPanel):
             self._notebook.Refresh()
             if self._tabs[self._notebook.GetSelection()] == tab:
                 self._html.Freeze()
-                self._SetPage(tab["content"])
-                self._html.Scroll(*tab["scrollpos"])
-                self._html.Thaw()
+                try:
+                    self._SetPage(tab["content"])
+                    self._html.Scroll(*tab["scrollpos"])
+                finally: self._html.Thaw()
 
 
     def SetActiveTab(self, index):
@@ -2012,9 +2666,10 @@ class TabbedHtmlWindow(wx.PyPanel):
         tab = self._tabs[index]
         self._notebook.SetSelection(index)
         self._html.Freeze()
-        self._SetPage(tab["content"])
-        self._html.Scroll(*tab["scrollpos"])
-        self._html.Thaw()
+        try:
+            self._SetPage(tab["content"])
+            self._html.Scroll(*tab["scrollpos"])
+        finally: self._html.Thaw()
 
 
     def SetActiveTabByID(self, id):
@@ -2023,9 +2678,10 @@ class TabbedHtmlWindow(wx.PyPanel):
         index = self._tabs.index(tab)
         self._notebook.SetSelection(index)
         self._html.Freeze()
-        self._SetPage(tab["content"])
-        self._html.Scroll(*tab["scrollpos"])
-        self._html.Thaw()
+        try:
+            self._SetPage(tab["content"])
+            self._html.Scroll(*tab["scrollpos"])
+        finally: self._html.Thaw()
 
 
     def GetActiveTabData(self):
@@ -2099,8 +2755,8 @@ class TextCtrlAutoComplete(wx.TextCtrl):
             self.SetChoices(choices or [])
             self._cursor = None
             # For changing cursor when hovering over final "Clear" item.
-            self._cursor_action_hover = wx.StockCursor(wx.CURSOR_HAND)
-            self._cursor_default      = wx.StockCursor(wx.CURSOR_DEFAULT)
+            self._cursor_action_hover = wx.Cursor(wx.CURSOR_HAND)
+            self._cursor_default      = wx.Cursor(wx.CURSOR_DEFAULT)
 
             gp = self
             while gp is not None:
@@ -2360,7 +3016,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         if show and self.IsShownOnScreen() and self._choices and self._listwindow:
             size = self._listwindow.GetSize()
             width, height = self.Size.width - 3, self.Size.height
-            x, y = self.ClientToScreenXY(0, height - 2)
+            x, y = self.ClientToScreen(0, height - 2)
             if size.GetWidth() <> width:
                 size.SetWidth(width)
                 self._listwindow.SetSize(size)
@@ -2398,3 +3054,111 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         self._ignore_textchange = True
         return wx.TextCtrl.SetValue(self, value)
     Value = property(GetValue, SetValue)
+
+
+
+class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
+    """
+    A tree control with a more convenient API.
+    Events should be registered directly via self.Bind,
+    not via parent.Bind(source=self).
+    """
+
+    class DummyEvent(object):
+        """Event to feed to directly invoked handlers."""
+        def __init__(self, item): self._item = item
+        def GetItem(self):        return self._item
+
+
+    def __init__(self, parent, id=wx.ID_ANY, pos=wx.DefaultPosition,
+                 size=wx.DefaultSize, style=wx.TR_DEFAULT_STYLE,
+                 agwStyle=wx.lib.gizmos.TR_HAS_BUTTONS | wx.lib.gizmos.TR_LINES_AT_ROOT,
+                 validator=wx.DefaultValidator,
+                 name=wx.EmptyString):
+        self._handlers = collections.defaultdict(list) # {event type: [handler, ]}
+        super(TreeListCtrl, self).__init__(parent, id, pos, size, style,
+                                           agwStyle, validator, name)
+
+
+    def AppendItem(self, *args, **kwargs):
+        """Appends an item as a last child of its parent."""
+        result = super(TreeListCtrl, self).AppendItem(*args, **kwargs)
+        # Workaround for TreeListCtrl bug of not using our foreground colour
+        self.SetItemTextColour(result, self.ForegroundColour)
+        return result
+
+
+    def Bind(self, event, handler, source=None, id=wx.ID_ANY, id2=wx.ID_ANY):
+        """
+        Binds an event to event handler,
+        registering handler for FindAndActivateItem if wx.EVT_TREE_ITEM_ACTIVATED.
+        """
+        if handler not in self._handlers[event]:
+            self._handlers[event].append(handler)
+        super(TreeListCtrl, self).Bind(event, handler, source, id, id2)
+
+
+    def FindAndActivateItem(self, match=None, expand=False, **kwargs):
+        """
+        Selects tree item where match returns true for item data, and invokes
+        handlers registered for wx.EVT_TREE_ITEM_ACTIVATED. Expands all item
+        parents.
+
+        @param    match   callback(data associated with item): bool
+                          or {key: value} to match in associated data dict
+        @param    expand  expand matched item
+        @param    kwargs  additional keyword arguments to match in data
+        @return           success
+        """
+        fmatch = match if callable(match) else bool
+        dmatch = dict(match if isinstance(match, dict) else {}, **kwargs)
+        mymatch = match if callable(match) and not dmatch else lambda x: (
+                  fmatch(x) and isinstance(x, dict) 
+                  and all(x.get(k) == dmatch.get(k) for k in dmatch))
+
+        item, myitem = self.GetNext(self.GetRootItem()), None
+        while item and item.IsOk():
+            if mymatch(self.GetItemPyData(item)): myitem, item = item, None
+            item = item and self.GetNext(item)
+
+        if myitem:
+            parent = self.GetItemParent(myitem)
+            while parent and parent.IsOk():
+                parent, _ = self.GetItemParent(parent), self.Expand(parent)
+
+            self.SelectItem(myitem)
+            if expand: self.Expand(myitem)
+            evt = self.DummyEvent(myitem)
+            for f in self._handlers.get(wx.EVT_TREE_ITEM_ACTIVATED): f(evt)
+        return bool(myitem)
+
+
+    def ToggleItem(self, item):
+        """
+        Toggles item and all children expanded if any collapsed,
+        else toggles all collapsed.
+        """
+        items, it = [item], self.GetNext(item)
+        while it and it.IsOk():
+            items.append(it)
+            it = self.GetNextSibling(it)
+        if all(self.IsExpanded(x) or not self.HasChildren(x) for x in items):
+            for x in items: self.Collapse(x)
+        else: self.ExpandAllChildren(item)
+
+    RootItem = property(lambda x: x.GetRootItem())
+
+
+def YesNoMessageBox(message, caption, icon=wx.ICON_NONE, defaultno=False):
+    """
+    Opens a Yes/No messagebox that is closable by pressing Escape,
+    returns dialog result.
+
+    @param   icon       dialog icon to use, one of wx.ICON_XYZ
+    @param   defaultno  True if No-button should be default
+    """
+    RES = {wx.ID_OK: wx.OK, wx.ID_CANCEL: wx.CANCEL}
+    style = icon | wx.OK | wx.CANCEL | (wx.CANCEL_DEFAULT if defaultno else 0)
+    dlg = wx.MessageDialog(None, message, caption, style)
+    dlg.SetOKCancelLabels("&Yes", "&No")
+    return wx.YES if wx.ID_OK == dlg.ShowModal() else wx.NO

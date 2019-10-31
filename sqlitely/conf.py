@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.09.2019
+@modified    30.10.2019
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -22,40 +22,40 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev52"
-VersionDate = "10.09.2019"
+Version = "1.0.dev158"
+VersionDate = "30.10.2019"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
     ApplicationDirectory = os.path.dirname(sys.executable)
     ResourceDirectory = os.path.join(getattr(sys, "_MEIPASS", ""), "media")
+    BinDirectory = os.path.join(getattr(sys, "_MEIPASS", ""), "bin")
 else:
-    ApplicationDirectory = os.path.dirname(__file__)
+    ApplicationDirectory = os.path.realpath(os.path.dirname(__file__))
     ResourceDirectory = os.path.join(ApplicationDirectory, "media")
+    BinDirectory = os.path.join(ApplicationDirectory, "bin")
 
 """Name of file where FileDirectives are kept."""
 ConfigFile = "%s.ini" % os.path.join(ApplicationDirectory, "etc", Title.lower())
 
 """List of attribute names that can be saved to and loaded from ConfigFile."""
-FileDirectives = ["ConsoleHistoryCommands", "DBDoBackup",  "DBFiles", "DBSort",
+FileDirectives = ["ConsoleHistoryCommands", "DBFiles", "DBSort",
     "LastActivePage", "LastSearchResults", "LastSelectedFiles",
-    "LastUpdateCheck", "RecentFiles", "SearchHistory", "SearchInNames",
-    "SearchInTables", "SearchUseNewTab", "SQLWindowTexts", "TrayIconEnabled",
+    "LastUpdateCheck", "RecentFiles", "SearchHistory", "SearchInMeta",
+    "SearchInData", "SearchUseNewTab", "SQLWindowTexts", "TrayIconEnabled",
     "UpdateCheckAutomatic", "WindowIconized", "WindowPosition", "WindowSize",
 ]
 """List of attributes saved if changed from default, user-modifiable."""
 OptionalFileDirectives = [
     "DBExtensions", "ExportDbTemplate", "LogSQL", "MinWindowSize",
-    "MaxConsoleHistory", "MaxHistoryInitialMessages", "MaxRecentFiles",
-    "MaxSearchHistory", "MaxSearchMessages", "MaxSearchTableRows",
-    "SearchResultsChunk", "StatusFlashLength", "UpdateCheckInterval",
+    "MaxConsoleHistory", "MaxDBSizeForFullCount", "MaxTableRowIDForFullCount",
+    "MaxHistoryInitialMessages", "MaxRecentFiles", "MaxSearchHistory",
+    "MaxSearchResults", "PopupUnexpectedErrors", "SearchResultsChunk",
+    "StatisticsPlotWidth", "StatusFlashLength", "UpdateCheckInterval",
 ]
 OptionalFileDirectiveDefaults = {}
 
 """---------------------------- FileDirectives: ----------------------------"""
-
-"""Whether a backup copy is made of a database before it's changed."""
-DBDoBackup = False
 
 """All detected/added databases."""
 DBFiles = []
@@ -76,7 +76,13 @@ LastActivePage = {}
 LastSearchResults = {}
 
 """Files selected in the database lists on last run."""
-LastSelectedFiles = ["", ""]
+LastSelectedFiles = []
+
+"""Maximum database file size for doing full COUNT(*) instead of estimating from MAX(ROWID)."""
+MaxDBSizeForFullCount = 500000000
+
+"""Maximum table ROWID for doing full COUNT(*) if database size over MaxDBSizeForFullCount."""
+MaxTableRowIDForFullCount = 1000
 
 """Contents of Recent Files menu."""
 RecentFiles = []
@@ -90,13 +96,13 @@ SearchHistory = []
 """Whether to create a new tab for each search or reuse current."""
 SearchUseNewTab = True
 
-"""Whether to search in table and column names."""
-SearchInNames = False
+"""Whether to search in database CREATE SQL."""
+SearchInMeta = False
 
-"""Whether to search in all columns of all tables."""
-SearchInTables = True
+"""Whether to search in all columns of all tables and views."""
+SearchInData = True
 
-"""Texts in SQL window, loaded on reopening a database {filename: text, }."""
+"""Texts in SQL window, loaded on reopening a database {filename: [(name, text), ], }."""
 SQLWindowTexts = {}
 
 """Whether the program tray icon is used."""
@@ -116,11 +122,23 @@ WindowSize = (1080, 710)
 
 """---------------------------- /FileDirectives ----------------------------"""
 
+"""Currently opened databases, as {filename: db}."""
+DBsOpen = {}
+
+"""Path to SQLite analyzer tool."""
+DBAnalyzer = os.path.join(BinDirectory, "sqlite3_analyzer" + (
+    ".exe" if "win32"  == sys.platform else 
+    "_osx" if "darwin" == sys.platform else "_linux"
+))
+
 """Whether logging to log window is enabled."""
 LogEnabled = True
 
 """Whether to log all SQL statements to log window."""
 LogSQL = False
+
+"""Whether to pop up message dialogs for unhandled errors."""
+PopupUnexpectedErrors = False
 
 """URLs for download list, changelog, submitting feedback and homepage."""
 DownloadURL  = "https://erki.lap.ee/downloads/SQLitely/"
@@ -148,17 +166,11 @@ LastUpdateCheck = None
 """Maximum length of a tab title, overflow will be cut on the left."""
 MaxTabTitleLength = 60
 
-"""Maximum number of messages to show in search results."""
-MaxSearchMessages = 500
-
-"""Maximum number of table rows to show in search results."""
-MaxSearchTableRows = 500
+"""Maximum number of results to show in search results."""
+MaxSearchResults = 500
 
 """Number of search results to yield in one chunk from search thread."""
 SearchResultsChunk = 50
-
-"""Number of contact search results to yield in one chunk."""
-SearchContactsChunk = 10
 
 """Name of font used in HTML content."""
 HtmlFontName = "Tahoma"
@@ -220,6 +232,18 @@ GridRowInsertedColour = "#88DDFF"
 
 """Colour set to table/list cells that have been changed."""
 GridCellChangedColour = "#FF7777"
+
+"""Width of the database statistics plots, in pixels."""
+StatisticsPlotWidth = 200
+
+"""Colour for tables plot in database statistics."""
+PlotTableColour = "#3399FF"
+
+"""Colour for indexes plot in database statistics."""
+PlotIndexColour = "#1DAB48"
+
+"""Background colour for plots in database statistics."""
+PlotBgColour = "#DDDDDD"
 
 """Duration of "flashed" status message on StatusBar, in seconds."""
 StatusFlashLength = 20

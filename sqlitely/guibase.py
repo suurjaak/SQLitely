@@ -13,7 +13,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.09.2019
+@modified    21.10.2019
 """
 import datetime
 import logging
@@ -30,6 +30,7 @@ from . lib.controls import ColourManager
 from . lib import util, wx_accel
 from . import conf
 
+logger = logging.getLogger(__name__)
 
 
 def status(text, *args, **kwargs):
@@ -50,7 +51,7 @@ def status(text, *args, **kwargs):
         msg = text % args if args else text
     msg = re.sub("[\n\r\t]+", " ", msg)
     log, flash = (kwargs.get(x) for x in ("log", "flash"))
-    if log: logging.info(msg)
+    if log: logger.info(msg)
     window.set_status(msg, timeout=flash)
 
 
@@ -72,13 +73,15 @@ class GUILogHandler(logging.Handler):
             text = record.msg % args if args else record.msg
         if record.exc_info:
             text += "\n\n" + "".join(traceback.format_exception(*record.exc_info))
-        if "\n" in text: text = text.replace("\n", "\n\t\t") # Indent linebreaks
+        if "\n" in text:
+            text = text.replace("\n", "\n\t\t") # Indent linebreaks
+            text = re.sub(r"^\s+$", "", text, flags=re.M) # Unindent whitespace-only lines
         msg = "%s.%03d\t%s" % (now.strftime("%H:%M:%S"), now.microsecond / 1000, text)
 
         window = wx.GetApp() and wx.GetApp().GetTopWindow()
         if window:
             msgs = self.deferred + [msg]
-            for m in msgs: window.log_message(m)
+            for m in msgs: wx.CallAfter(window.log_message, m)
             del self.deferred[:]
         else: self.deferred.append(msg)
 
@@ -134,14 +137,14 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
         menu_file = wx.Menu()
         menu.Insert(0, menu_file, "&File")
         menu_recent = self.menu_recent = wx.Menu()
-        menu_file.AppendMenu(id=wx.NewId(), text="&Recent files",
+        menu_file.AppendMenu(id=wx.NewIdRef().Id, text="&Recent files",
             submenu=menu_recent, help="Recently opened files.")
         menu_file.AppendSeparator()
         menu_console = self.menu_console = menu_file.Append(
-            id=wx.NewId(), kind=wx.ITEM_CHECK, text="Show &console\tCtrl-E",
+            id=wx.NewIdRef().Id, kind=wx.ITEM_CHECK, text="Show &console\tCtrl-E",
             help="Show/hide a Python shell environment window")
         menu_inspect = self.menu_inspect = menu_file.Append(
-            id=wx.NewId(), kind=wx.ITEM_CHECK, text="Show &widget inspector",
+            id=wx.NewIdRef().Id, kind=wx.ITEM_CHECK, text="Show &widget inspector",
             help="Show/hide the widget inspector")
 
         self.file_history = wx.FileHistory(conf.MaxRecentFiles)

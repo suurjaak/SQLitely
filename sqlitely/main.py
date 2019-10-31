@@ -9,14 +9,17 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.09.2019
+@modified    30.10.2019
 ------------------------------------------------------------------------------
 """
 import argparse
+import functools
 import glob
 import logging
 import os
 import sys
+import threading
+import traceback
 
 import wx
 
@@ -24,6 +27,8 @@ from . lib import util
 from . import conf
 from . import guibase
 from . import gui
+
+logger = logging.getLogger(__package__)
 
 
 ARGUMENTS = {
@@ -37,29 +42,68 @@ ARGUMENTS = {
 }
 
 
+def except_hook(etype, evalue, etrace):
+    """Handler for all unhandled exceptions."""
+    text = "".join(traceback.format_exception(etype, evalue, etrace)).strip()
+    log = "An unexpected error has occurred:\n\n%s"
+    logger.error(log, text)
+    if not conf.PopupUnexpectedErrors: return
+    msg = "An unexpected error has occurred:\n\n%s\n\n" \
+          "See log for full details." % util.format_exc(evalue)
+    wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
+
+
+def install_thread_excepthook():
+    """
+    Workaround for sys.excepthook not catching threading exceptions.
+
+    @from   https://bugs.python.org/issue1230540
+    """
+    init_old = threading.Thread.__init__
+    def init(self, *args, **kwargs):
+        init_old(self, *args, **kwargs)
+        run_old = self.run
+        def run_with_except_hook(*a, **b):
+            try: run_old(*a, **b)
+            except Exception: sys.excepthook(*sys.exc_info())
+        self.run = run_with_except_hook
+    threading.Thread.__init__ = init
+
+
 def run_gui(filenames):
     """Main GUI program entrance."""
+    global logger
 
     # Set up logging to GUI log window
-    logger = logging.getLogger(__package__)
     logger.addHandler(guibase.GUILogHandler())
     logger.setLevel(logging.DEBUG)
 
+    install_thread_excepthook()
+    sys.excepthook = except_hook
+
     # Create application main window
-    app = wx.App(redirect=0) # stdout and stderr redirected to wx popup
+    app = wx.App(redirect=True) # stdout and stderr redirected to wx popup
     window = gui.MainWindow()
     app.SetTopWindow(window) # stdout/stderr popup closes with MainWindow
+
+    # Override stdout/stderr.write to swallow Gtk warnings
+    swallow = lambda w, s: w(s) if ("Gtk" in s and "eprecat" in s) else None
+    try:
+        sys.stdout.write = functools.partial(swallow, sys.stdout.write)
+        sys.stderr.write = functools.partial(swallow, sys.stderr.write)
+    except Exception: raise
 
     # Some debugging support
     window.run_console("import datetime, os, re, time, sys, wx")
     window.run_console("# All %s modules:" % conf.Title)
-    window.run_console("import conf, database, export, grammar, guibase, gui, "
-                       "images, main, searchparser, support, templates, workers")
+    window.run_console("import components, conf, database, grammar, guibase, "
+                       "gui, images, importexport, main, searchparser, "
+                       "support, templates, workers")
     window.run_console("from lib import controls, util, wx_accel")
 
-    window.run_console("self = wx.GetApp().GetTopWindow() # Application main window instance")
+    window.run_console("self = wx.GetApp().TopWindow # Application main window")
     for f in filter(os.path.isfile, filenames):
-        wx.CallAfter(wx.PostEvent, window, gui.OpenDatabaseEvent(file=f))
+        wx.CallAfter(wx.PostEvent, window, gui.OpenDatabaseEvent(-1, file=f))
     app.MainLoop()
 
 

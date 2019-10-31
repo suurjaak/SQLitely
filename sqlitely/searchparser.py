@@ -23,11 +23,12 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.09.2019
+@modified    22.10.2019
 """
 import calendar
 import collections
 import datetime
+import logging
 import re
 import string
 import warnings
@@ -43,8 +44,10 @@ except ImportError:
 from . lib import util
 from . import grammar
 
+logger = logging.getLogger(__name__)
 
-ALLWORDCHARS = re.sub("[\x00-\x1f,\x7f-\xa0]", "", u"".join(
+
+ALLWORDCHARS = re.sub("[\x00-\x1f\x7f-\xa0]", "", u"".join(
     unichr(c) for c in range(65536) if not unichr(c).isspace()
 ))
 ALLCHARS = ALLWORDCHARS + string.whitespace
@@ -55,7 +58,7 @@ ESCAPE_CHAR = "\\" # Character used to escape SQLite special characters like _%
 class SearchQueryParser(object):
 
     # For naive identification of "table:xyz", "date:xyz" etc keywords
-    PATTERN_KEYWORD = re.compile("^(-?)(table|column|date)\\:([^\\s]+)$", re.I)
+    PATTERN_KEYWORD = re.compile("^(-?)(table|view|column|date)\\:([^\\s]+)$", re.I)
 
 
     def __init__(self):
@@ -104,14 +107,14 @@ class SearchQueryParser(object):
             self._grammar = query
 
 
-    def Parse(self, query, table=None):
+    def Parse(self, query, item=None):
         """
         Parses the query string and returns (sql, sql params, words).
 
-        @param   table  if set, search is performed on all the fields of this
-                        specific table
-                        {"name": "Table name", "columns": [{"name", "pk", }, ]}
-        @return         (SQL string, SQL parameter dict, word and phrase list, keyword map)
+        @param   item  if set, search is performed on all the fields of this
+                       specific table or view
+                       {"name": "Item name", "columns": [{"name", "pk", }, ]}
+        @return        (SQL string, SQL parameter dict, word and phrase list, keyword map)
         """
         words = [] # All encountered text words and quoted phrases
         keywords = collections.defaultdict(list) # {"table": [], "column": [], ..}
@@ -121,52 +124,53 @@ class SearchQueryParser(object):
             parse_results = self._grammar.parseString(query, parseAll=True)
         except Exception:
             # Grammar parsing failed: do a naive parsing into keywords and words
+            logger.exception('Failed to use grammar to parse search query "%s".', query)
             split_words = query.split()
 
             for word in split_words[:]:
                 if self.PATTERN_KEYWORD.match(word):
                     _, negation, key, value, _ = self.PATTERN_KEYWORD.split(word)
                     key = negation + key
-                    keywords[key.lower()].append(value)
+                    keywords[key.lower()].append(value.lower())
                     split_words.remove(word)
             try:
                 parse_results = ParseResults(split_words)
             except NameError: # pyparsing.ParseResults not available
                 parse_results = split_words
 
-        self._makeSQL(parse_results, [], keywords, {}, table) # Populate keywords
-        result = self._makeSQL(parse_results, words, keywords, sql_params, table)
+        self._makeSQL(parse_results, [], keywords, {}, item) # Populate keywords
+        result = self._makeSQL(parse_results, words, keywords, sql_params, item)
         match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
-        if table:
-            skip_table = False
+        if item:
+            skip_item = False
             for kw in keywords:
-                if ("table"  == kw and not match_kw("table", table)) \
-                or ("-table" == kw and match_kw("-table", table)):
-                    skip_table = True
-                    break # break for kw, values
-            if skip_table:
+                if (item["type"]  == kw and not match_kw(item["type"], item)) \
+                or ("-" + item["type"] == kw and match_kw("-" + item["type"], item)):
+                    skip_item = True
+                    break # for kw
+            if skip_item:
                 result = ""
             else:
-                kw_sql = self._makeKeywordsSQL(keywords, sql_params, table)
+                kw_sql = self._makeKeywordsSQL(keywords, sql_params, item)
                 result = "SELECT * FROM %s WHERE %s %s%s" % (
-                         grammar.quote(table["name"]), result,
+                         grammar.quote(item["name"]), result,
                          " AND " if result and kw_sql else "", kw_sql)
 
-                pk_cols = [c for c in table["columns"] if c.get("pk")]
+                pk_cols = [c for c in item["columns"] if c.get("pk")]
                 if pk_cols: result += " ORDER BY " + ", ".join(
                     "%s ASC" % grammar.quote(c["name"])
                     for c in sorted(pk_cols, key=lambda x: x["pk"])
                 )
         else:
-            kw_sql = self._makeKeywordsSQL(keywords, sql_params, table)
-        if not table and kw_sql:
+            kw_sql = self._makeKeywordsSQL(keywords, sql_params, item)
+        if not item and kw_sql:
             result = "%s%s" % ("%s AND " % result if result else "", kw_sql)
 
         return result, sql_params, words, keywords
 
 
-    def _makeSQL(self, item, words, keywords, sql_params,
-                table=None, parent_name=None):
+    def _makeSQL(self, parseresult, words, keywords, sql_params,
+                 item=None, parent_name=None):
         """
         Returns the ParseResults item as an SQL string, appending
         words and phrases to words list, and keyword and sql parameter values
@@ -175,37 +179,36 @@ class SearchQueryParser(object):
         result = ""
         match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
 
-        if isinstance(item, basestring):
-            words.append(item)
-            safe = self._escape(item, ("*" if "QUOTES" != parent_name else ""))
-            if not table:
-                table = {"name": "m", "columns": [{"name": "n"}]}
+        if isinstance(parseresult, basestring):
+            words.append(parseresult)
+            safe = self._escape(parseresult, ("*" if "QUOTES" != parent_name else ""))
+            if not item:
+                item = {"name": "m", "columns": [{"name": "n"}]}
 
             i = len(sql_params)
-            for col in table["columns"]:
+            for col in item["columns"]:
                 if (keywords.get("column") and not match_kw("column", col)) \
                 or (keywords.get("-column") and match_kw("-column", col)):
                     continue # for col
 
-                result_col = "%s.%s LIKE :column_like%s" % \
-                             (grammar.quote(table["name"]), grammar.quote(col["name"]), i)
-                if len(safe) > len(item):
+                result_col = "%s LIKE :column_like%s" % (grammar.quote(col["name"]), i)
+                if len(safe) > len(parseresult):
                     result_col += " ESCAPE '%s'" % ESCAPE_CHAR
                 result += (" OR " if result else "") + result_col
             if not result:
                 return "1 = 0" # No matching columns
 
-            if len(table["columns"]) > 1: result = "(%s)" % result
+            if len(item["columns"]) > 1: result = "(%s)" % result
             sql_params["column_like%s" % i] = "%" + safe + "%"
         else:
-            elements = item
+            elements = parseresult
             parsed_elements = []
-            name = hasattr(item, "getName") and item.getName()
+            name = hasattr(parseresult, "getName") and parseresult.getName()
             do_recurse = True
             negation = ("NOT" == name)
             if "KEYWORD" == name:
                 key, word = elements[0].split(":", 1)
-                if key.lower() in ["table", "-table", "column", "-column", "date", "-date"]:
+                if key.lower() in ["table", "-table", "view", "-view", "column", "-column", "date", "-date"]:
                     keywords[key.lower()].append(word.lower())
                     do_recurse = False
             elif "PARENTHESIS" == name:
@@ -219,7 +222,7 @@ class SearchQueryParser(object):
                 words_ptr = [] if negation else words # No words from negations
                 for i in elements:
                     sql = self._makeSQL(i, words_ptr, keywords, sql_params,
-                                       table, name)
+                                       item, name)
                     parsed_elements.append(sql)
                 or_names = ["OR_OPERAND", "OR_EXPRESSION"]
                 glue = " OR " if name in or_names else " AND "
@@ -229,19 +232,24 @@ class SearchQueryParser(object):
         return result
 
 
-    def _makeKeywordsSQL(self, keywords, sql_params, table):
+    def _makeKeywordsSQL(self, keywords, sql_params, item):
         """
-        Returns the keywords as an SQL string, appending SQL parameter values
-        to argument dictionary.
+        Returns the keywords as an SQL string, appending SQL argument values
+        to parameters dictionary.
         """
         result = ""
+        match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
+
         for keyword, words in keywords.items():
             kw_sql = ""
             for word in words:
                 sql = ""
                 if keyword.endswith("date"): # date:2002..2003-11-21
-                    datecols = [c for c in (table or {}).get("columns", [])
-                                if c["type"] in ("DATE", "DATETIME")]
+                    datecols = [c for c in (item or {}).get("columns", [])
+                        if c.get("type") in ("DATE", "DATETIME")
+                        and (not keywords.get("column")  or match_kw("column", c))
+                        and (not keywords.get("-column") or not match_kw("-column", c))
+                    ]
                     if not datecols:
                         kw_sql += (" OR " if kw_sql else "") + "1 = 0"
                         break # for word
@@ -255,7 +263,7 @@ class SearchQueryParser(object):
                             continue # for word
                         format, value = "", ""
                         for j, (frm, val) in enumerate(zip("Ymd", ymd)):
-                            if val is None: continue # continue for j, (forma..
+                            if val is None: continue # for j, (frm, val)
                             format += ("-" if format else "") + "%" + frm
                             value += ("-" if value else "")
                             value += "%02d" % val if j else "%04d" % val
@@ -275,7 +283,7 @@ class SearchQueryParser(object):
                         parts = filter(None, d.split("-")[:3])
                         ymd = list(map(util.to_int, parts))
                         if not ymd or ymd[0] is None:
-                            continue # continue for i, d in filter(..
+                            continue # for i, d
                         while len(ymd) < 3: ymd.append(None) # Ensure 3 values
                         ymd[0] = max(min(ymd[0], 9999), 1) # Year in 1..9999
                         # Force month into legal range
@@ -373,14 +381,14 @@ def test():
     loglines = [] # Cached trace lines
     def makeSQLLogger(func):
         level = [0] # List as workaround: enclosing scope cannot be reassigned
-        def inner(item, words, keywords, sql_params, table=None, parent_name=None):
+        def inner(parseresult, words, keywords, sql_params, item=None, parent_name=None):
             txt = "%s_makeSQL(<%s> %s, parent_name=%s)" % \
-                  ("  " * level[0], item.__class__.__name__, item, parent_name)
-            if hasattr(item, "getName"):
-                txt += ", name=%s" % item.getName()
+                  ("  " * level[0], parseresult.__class__.__name__, item, parent_name)
+            if hasattr(parseresult, "getName"):
+                txt += ", name=%s" % parseresult.getName()
             loglines.append(txt)
             level[0] += 1
-            result = func(item, words, keywords, sql_params, table, parent_name)
+            result = func(parseresult, words, keywords, sql_params, item, parent_name)
             level[0] -= 1
             loglines.append("%s = %s." % (txt, result))
             return result

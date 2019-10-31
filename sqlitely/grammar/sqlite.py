@@ -8,16 +8,19 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    10.09.2019
+@modified    23.10.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
 import logging
+import os
 import re
+import traceback
 import uuid
 
 from antlr4 import InputStream, CommonTokenStream, TerminalNode
 
+from .. lib import util
 from .. lib.vendor import step
 from . import templates
 from . SQLiteLexer import SQLiteLexer
@@ -31,15 +34,16 @@ def parse(sql, category=None):
     """
     Returns data structure for SQL statement.
 
-    @param   category  expected statement category if any
-    @return            {}, or None on error
+    @param   category  expected statement category if any, like "table"
+    @return            ({..}, None), or (None, error)
     """
-    result = None
+    result, err = None, None
     try:
-        result = Parser().parse(sql, category)
-    except Exception:
+        result, err = Parser().parse(sql, category)
+    except Exception as e:
         logger.exception("Error parsing SQL %s.", sql)
-    return result
+        err = util.format_exc(e)
+    return result, err
 
 
 def generate(data, indent="  "):
@@ -49,14 +53,15 @@ def generate(data, indent="  "):
     @param   data    {"__type__": "CREATE TABLE"|.., ..}
     @param   indent  indentation level to use. If falsy,
                      result is not indented in any, including linefeeds.
-    @return          SQL string, or None on error
+    @return          (SQL string, None) or (None, error)
     """
-    result, generator = None, Generator(indent)
+    result, err, generator = None, None, Generator(indent)
     try:
-        result = generator.generate(data)
-    except Exception:
+        result, err = generator.generate(data)
+    except Exception as e:
         logger.exception("Error generating SQL for %s.", data)
-    return result
+        err = util.format_exc(e)
+    return result, err
 
 
 def transform(sql, flags=None, renames=None, indent="  "):
@@ -66,30 +71,36 @@ def transform(sql, flags=None, renames=None, indent="  "):
     @param   flags    flags to toggle, like {"exists": True}
     @param   renames  renames to perform in SQL statement body,
                       supported types "schema" (top-level rename only),
-                      "table", "index", "trigger", "view".
-                      Renames all items of specified category, unless
-                      given nested value like {"table": {"old": "new"}}
+                      "table", "index", "trigger", "view", "column".
+                      Schema renames as {"schema": s2} or {"schema": {s1: s2}},
+                      category renames as {category: {v1: v2}},
+                      column renames as {"column": {table or view: {c1: c2}}},
+                      where category value should be the renamed value if
+                      the same transform is renaming the category as well.
     @param   indent   indentation level to use. If falsy,
                       result is not indented in any, including linefeeds.
+    @return           (SQL string, None) or (None, error)
     """
-    result, parser, generator = None, Parser(), Generator(indent)
+    result, err, parser, generator = None, None, Parser(), Generator(indent)
     try:
-        data = parser.parse(sql, renames=renames)
-        if flags: data.update(flags)
-        result = generator.generate(data)
-    except Exception:
+        data, err = parser.parse(sql, renames=renames)
+        if data:
+            if flags: data.update(flags)
+            result, err = generator.generate(data)
+    except Exception as e:
         logger.exception("Error transforming SQL %s.", sql)
-    return result
+        err = util.format_exc(e)
+    return result, err
 
 
 def quote(val, force=False):
     """
     Returns value in quotes and proper-escaped for queries,
-    if name needs quoting (whitespace etc) or if force set.
-    Always returns unicode.
+    if name needs quoting (has non-alphanumerics or starts with number)
+    or if force set. Always returns unicode.
     """
     result = uni(val)
-    if force or re.search(r"\W", result, re.U):
+    if force or re.search(r"(^[\W\d])|(?=\W)", result, re.U):
         result = u'"%s"' % result.replace('"', '""')
     return result
 
@@ -117,10 +128,12 @@ def uni(x, encoding="utf-8"):
 class SQL(object):
     """SQL word constants."""
     AFTER                = "AFTER"
+    ALTER_TABLE          = "ALTER TABLE"
     AUTOINCREMENT        = "AUTOINCREMENT"
     BEFORE               = "BEFORE"
     CHECK                = "CHECK"
     COLLATE              = "COLLATE"
+    COLUMN               = "COLUMN"
     CONSTRAINT           = "CONSTRAINT"
     CREATE_INDEX         = "CREATE INDEX"
     CREATE_TABLE         = "CREATE TABLE"
@@ -149,6 +162,7 @@ class SQL(object):
     WITHOUT_ROWID        = "WITHOUT ROWID"
 
 
+
 class CTX(object):
     """Parser context shorthands."""
     CREATE_INDEX         = SQLiteParser.Create_index_stmtContext
@@ -160,10 +174,44 @@ class CTX(object):
     INSERT               = SQLiteParser.Insert_stmtContext
     SELECT               = SQLiteParser.Select_stmtContext
     UPDATE               = SQLiteParser.Update_stmtContext
+    COLUMN_NAME          = SQLiteParser.Column_nameContext
     INDEX_NAME           = SQLiteParser.Index_nameContext
     TABLE_NAME           = SQLiteParser.Table_nameContext
     TRIGGER_NAME         = SQLiteParser.Trigger_nameContext
     VIEW_NAME            = SQLiteParser.View_nameContext
+    EXPRESSION           = SQLiteParser.ExprContext
+    FOREIGN_TABLE        = SQLiteParser.Foreign_tableContext
+    FOREIGN_KEY          = SQLiteParser.Foreign_key_clauseContext
+    SELECT_OR_VALUES     = SQLiteParser.Select_or_valuesContext
+
+
+
+class ErrorListener(object):
+    """Collects errors during parsing."""
+    def __init__(self): self._errors, self._stack = [], []
+
+    def reportAmbiguity(self, *_, **__): pass
+
+    def reportAttemptingFullContext(self, *_, **__): pass
+
+    def reportContextSensitivity(self, *_, **__): pass
+
+    def syntaxError(self, recognizer, offendingToken, line, column, msg, e):
+        err = "%sine %s:%s %s" % (
+            "L" if not e else "%s: l" % util.format_exc(e), line, column, msg
+        )
+        self._errors.append(err)
+        if not self._stack:
+            stack = traceback.extract_stack()[:-1]
+            for i, (f, l, fn, t) in enumerate(stack):
+                if f == __file__:
+                    del stack[:max(i-1, 0)]
+                    break # for i, (..)
+            self._stack = traceback.format_list(stack)
+
+    def getErrors(self, stack=False):
+        if not stack: return "\n\n".join(self._errors)
+        return "%s\n%s" % ("\n\n".join(self._errors), "".join(self._stack))
 
 
 
@@ -186,41 +234,66 @@ class Parser(object):
         SQL.CREATE_VIEW:           lambda self, ctx: self.build_create_view(ctx),
         SQL.CREATE_VIRTUAL_TABLE:  lambda self, ctx: self.build_create_virtual_table(ctx),
     }
-    RENAME_CTXS = {"index":   CTX.INDEX_NAME,   "table": CTX.TABLE_NAME,
-                   "trigger": CTX.TRIGGER_NAME, "view":  CTX.VIEW_NAME}
+    RENAME_CTXS = {"index": CTX.INDEX_NAME, "trigger": CTX.TRIGGER_NAME,
+                   "view":  (CTX.VIEW_NAME, CTX.TABLE_NAME), "column":  CTX.COLUMN_NAME,
+                   "table": (CTX.TABLE_NAME, CTX.FOREIGN_TABLE)}
+    CATEGORIES = {"index":   SQL.CREATE_INDEX,   "table": SQL.CREATE_TABLE,
+                  "trigger": SQL.CREATE_TRIGGER, "view":  SQL.CREATE_VIEW,
+                  "virtual table":  SQL.CREATE_VIRTUAL_TABLE}
     TRIGGER_BODY_CTXS = [CTX.DELETE, CTX.INSERT, CTX.SELECT, CTX.UPDATE]
 
 
     def __init__(self):
-        self._stream  = CommonTokenStream(SQLiteLexer())
+        self._category = None
+        self._stream   = None
 
 
     def parse(self, sql, category=None, renames=None):
         """
         Parses the SQL statement and returns data structure.
+        Result will have "__tables__" as a list of all the table names
+        the SQL statement refers to, in lowercase.
 
         @param   sql       source SQL string
-        @param   category  expected statement category if any
-        @param   renames   renames to perform in SQL data,
-                           supported types: "schema" (top-level rename only),
-                           "table", "index", "trigger", "view".
-                           Renames all items of specified category, unless
-                           given nested value like {"table": {"old": "new"}}
-        @return            {..}, or None on error
+        @param   category  expected statement category if any, like "table"
+        @param   renames   renames to perform in SQL statement body,
+                           supported types "schema" (top-level rename only),
+                           "table", "index", "trigger", "view", "column".
+                           Schema renames as {"schema": s2} or {"schema": {s1: s2}},
+                           category renames as {category: {v1: v2}},
+                           column renames as {"column": {table or view: {c1: c2}}},
+                           where category value should be the renamed value if
+                           the same transform is renaming the category as well.
+        @return            ({..}, None) or (None, error)
 
         """
-        self._stream.tokenSource.inputStream = InputStream(sql)
-        tree = SQLiteParser(self._stream).parse()
+        self._stream  = CommonTokenStream(SQLiteLexer(InputStream(sql)))
+        parser, listener = SQLiteParser(self._stream), ErrorListener()
+        parser.addErrorListener(listener)
+        tree = parser.parse()
+        if parser.getNumberOfSyntaxErrors():
+            logger.error('Errors parsing SQL "%s":\n\n%s', sql,
+                         listener.getErrors(stack=True))
+            return None, listener.getErrors()
 
         # parse ctx -> statement list ctx -> statement ctx -> specific type ctx
         ctx = tree.children[0].children[0].children[0]
         result, name = None, self.CTXS.get(type(ctx))
-        if category and name != category or name not in self.BUILDERS:
-            return
+        categoryname = self.CATEGORIES.get(category)
+        if category and name != categoryname or name not in self.BUILDERS:
+            error = "Unexpected statement category: '%s'%s."% (name,
+                     " (expected '%s')" % (categoryname or category)
+                     if category else "")
+            logger.error(error)
+            return None, error
 
-        if renames: self.recurse_rename([ctx], renames, name)
+        self._category = name
+        if renames: self.recurse_rename([ctx], renames)
         result = self.BUILDERS[name](self, ctx)
         result["__type__"] = name
+        result["__tables__"] = self.recurse_collect(
+            [ctx], [CTX.FOREIGN_TABLE] if SQL.CREATE_TABLE == name else [CTX.TABLE_NAME]
+        )
         if renames and "schema" in renames:
             if isinstance(renames["schema"], dict):
                 for v1, v2 in renames["schema"].items():
@@ -229,8 +302,7 @@ class Parser(object):
             elif renames["schema"]: result["schema"] = renames["schema"]
             else: result.pop("schema", None)
 
-        self._stream.tokenSource.inputStream = None
-        return result
+        return result, None
 
 
     def t(self, ctx):
@@ -249,7 +321,6 @@ class Parser(object):
         or raw text between two contexts, exclusive if terminal node tokens.
         """
         ctx, ctx2 = (x() if callable(x) else x for x in (ctx, ctx2))
-
         if ctx and ctx2:
             interval = ctx.getSourceInterval()[0], ctx2.getSourceInterval()[1]
         else: interval = ctx.getSourceInterval()
@@ -275,7 +346,8 @@ class Parser(object):
             table:    table the index is on
             ?schema:  index schema name
             ?exists:  True if IF NOT EXISTS
-            columns:  [{?name, ?expr, ?collate, ?direction}, ]
+            ?unique:  True if UNIQUE
+            columns:  [{?name, ?expr, ?collate, ?order}, ]
             where:    index WHERE SQL expression
         }.
         """
@@ -295,7 +367,7 @@ class Parser(object):
             if c.K_COLLATE():
                 col["collate"] = self.u(c.collation_name).upper()
             if c.K_ASC() or c.K_DESC():
-                col["direction"] = self.t(c.K_ASC() or c.K_DESC())
+                col["order"] = self.t(c.K_ASC() or c.K_DESC())
             result["columns"].append(col)
 
         if ctx.expr(): result["where"] = self.r(ctx.expr())
@@ -342,7 +414,7 @@ class Parser(object):
           ?temporary:  True if TEMPORARY | TEMP
           ?exists:     True if IF NOT EXISTS
           ?upon:       BEFORE | AFTER | INSTEAD OF
-          ?columns:    [column_name, ] for UPDATE OF action
+          ?columns:    {"name": column_name}, ] for UPDATE OF action
           ?for:        True if FOR EACH ROW
           ?when:       trigger WHEN-clause SQL expression
         }.
@@ -362,7 +434,7 @@ class Parser(object):
         result["action"] = self.t(action)
 
         cols = ctx.column_name()
-        if cols: result["columns"] =  [self.u(x) for x in cols]
+        if cols: result["columns"] =  [{"name": self.u(x) for x in cols}]
 
         result["table"] = self.u(ctx.table_name)
 
@@ -372,7 +444,8 @@ class Parser(object):
         if ctx.K_WHEN():
             result["when"] = self.r(ctx.expr())
 
-        result["body"] = self.r(ctx.K_BEGIN(), ctx.K_END()).rstrip()
+        body = self.r(ctx.K_BEGIN(), ctx.K_END()).rstrip()
+        result["body"] = re.sub(r"^\n?(.+)\n?$", r"\1", body)
 
         return result
 
@@ -396,7 +469,7 @@ class Parser(object):
         if ctx.K_EXISTS(): result["exists"]  = True
 
         cols = ctx.column_name()
-        if cols: result["columns"] =  [self.u(x) for x in cols]
+        if cols: result["columns"] =  [{"name": self.u(x)} for x in cols]
         result["select"] = self.r(ctx.select_stmt())
 
         return result
@@ -431,7 +504,7 @@ class Parser(object):
           ?type:               column type
           ?pk                  { if PRIMARY KEY
               ?autoincrement:  True if AUTOINCREMENT
-              ?direction:      ASC | DESC
+              ?order:          ASC | DESC
               ?conflict:       ROLLBACK | ABORT | FAIL | IGNORE | REPLACE
           ?
           ?notnull             { if NOT NULL
@@ -454,7 +527,7 @@ class Parser(object):
                   ?UPDATE:     SET NULL | SET DEFAULT | CASCADE | RESTRICT | NO ACTION
                   ?DELETE:     SET NULL | SET DEFAULT | CASCADE | RESTRICT | NO ACTION
               }
-              ?match:          [MATCH-clause name, ]
+              ?match:          MATCH-clause value
           }
         }.
         """
@@ -469,8 +542,8 @@ class Parser(object):
             if c.K_PRIMARY() and c.K_KEY():
                 result["pk"] = {}
                 if c.K_AUTOINCREMENT(): result["pk"]["autoincrement"] = True
-                direction = c.K_ASC() or c.K_DESC()
-                if direction: result["pk"]["direction"] = self.t(direction)
+                order = c.K_ASC() or c.K_DESC()
+                if order: result["pk"]["order"] = self.t(order)
                 if conflict:  result["pk"]["conflict"] = conflict
 
             elif c.K_NOT() and c.K_NULL():
@@ -508,15 +581,27 @@ class Parser(object):
         Assembles and returns table constraint data for CREATE TABLE, as {
             type:       PRIMARY KEY | FOREIGN KEY | UNIQUE | CHECK
             ?name:      constraint name
-                        
-            ?key:       [{?name, ?expr, ?collate, ?direction}, ] for PRIMARY KEY
-            ?conflict:  ROLLBACK | ABORT | FAIL | IGNORE | REPLACE for PRIMARY KEY
 
-            ?check      (SQL expression) for CHECK
+          # for PRIMARY KEY | UNIQUE:
+            ?key:       [{name, ?collate, ?order}, ]
+            ?conflict:  ROLLBACK | ABORT | FAIL | IGNORE | REPLACE
 
-            ?columns:   [column_name, ] for FOREIGN KEY
-            ?table:     table name for FOREIGN KEY
-            ?key:       [foreign_column_name, ] for FOREIGN KEY
+          # for CHECK:
+            ?check      (SQL expression)
+
+          # for FOREIGN KEY:
+            ?columns:   [column_name, ]
+            ?table:     foreign table name
+            ?key:       [foreign_column_name, ]
+            ?defer:          { if DEFERRABLE
+                ?not         True if NOT
+                ?initial:    DEFERRED | IMMEDIATE
+            }
+            ?action:         {
+                ?UPDATE:     SET NULL | SET DEFAULT | CASCADE | RESTRICT | NO ACTION
+                ?DELETE:     SET NULL | SET DEFAULT | CASCADE | RESTRICT | NO ACTION
+            }
+            ?match:          MATCH-clause value
         }.
         """
         result = {}
@@ -526,21 +611,20 @@ class Parser(object):
 
         if ctx.K_PRIMARY() and ctx.K_KEY() or ctx.K_UNIQUE():
             result["type"] = SQL.UNIQUE if ctx.K_UNIQUE() else SQL.PRIMARY_KEY
-            result["key"] = [] # {?name: column, ?expr: "expr", ?collate: name, ?asc|desc}
+            result["key"] = [] # {name: column, ?collate: name, ?asc|desc}
             for c in ctx.indexed_column():
                 col = {}
-                if c.column_name(): col["name"] = self.u(c.column_name)
-                else: col["expr"] = self.r(c.expr())
+                col["name"] = self.u(c.column_name)
 
                 if c.K_COLLATE(): col["collate"] = self.u(c.collation_name).upper()
-                direction = c.K_ASC() or c.K_DESC()
-                if direction: col["direction"] = self.t(direction)
+                order = c.K_ASC() or c.K_DESC()
+                if order: col["order"] = self.t(order)
                 result["key"].append(col)
             if conflict: result["conflict"] = conflict
 
         elif ctx.K_CHECK():
             result["type"] = SQL.CHECK
-            result["check"] = self.t(ctx.expr())
+            result["check"] = self.r(ctx.expr())
 
         elif ctx.K_FOREIGN() and ctx.K_KEY():
             result["type"] = SQL.FOREIGN_KEY
@@ -580,7 +664,7 @@ class Parser(object):
                 result.setdefault("action", {})
                 result["action"][accum[1]] = " ".join(accum[2:])
             elif SQL.MATCH == accum[0]:
-                result.setdefault("match", []).append(accum[1])
+                result["match"] = accum[1]
         return result
 
 
@@ -603,19 +687,51 @@ class Parser(object):
             ptr = ptr.parentCtx
             if any(isinstance(ptr, x) for x in types):
                 result = ptr
-                if not top: break # while
+                if not top: break # while ptr
         return result
 
 
-    def recurse_rename(self, items, renames, category):
+    def recurse_collect(self, items, ctxtypes):
+        """
+        Recursively goes through all items and item children,
+        returning a list of terminal values of specified context type,
+        lower-cased.
+
+        @param   ctxtypes  node context types to collect,
+                           like SQLiteParser.Table_nameContext
+        """
+        result, ctxtypes = [], tuple(ctxtypes)
+        for ctx in items:
+            if getattr(ctx, "children", None):
+                for x in self.recurse_collect(ctx.children, ctxtypes):
+                    if x not in result: result.append(x)
+
+            if not isinstance(ctx, ctxtypes): continue # for ctx
+
+            # Get the deepest terminal, the one holding name value
+            c = ctx
+            while not isinstance(c, TerminalNode): c = c.children[0]
+            v = self.u(c).lower()
+
+            # Skip special table names "OLD"/"NEW" in trigger body and WHEN
+            if SQL.CREATE_TRIGGER == self._category and v in ("old", "new") \
+            and self.get_parent(c, self.TRIGGER_BODY_CTXS):
+                continue # for ctx
+
+            if v not in result: result.append(v)
+
+        return result
+
+
+    def recurse_rename(self, items, renames, level=0):
         """
         Recursively goes through all items and item children,
         renaming specified types to specified values.
-
-        @param   category  original statement category
         """
         for ctx in items:
             for k, v in renames.items():
+                if "column" == k: continue # for k, v
+
                 cls, c = self.RENAME_CTXS.get(k), ctx
                 if not cls or not isinstance(ctx, cls): continue # for k, v
 
@@ -623,19 +739,67 @@ class Parser(object):
                 while not isinstance(c, TerminalNode): c = c.children[0]
                 v0 = self.u(c).lower()
 
-                # Skip special table names "OLD"/"NEW" in trigger body and WHEN
-                if "table" == k and SQL.CREATE_TRIGGER == category \
+                # Skip special table names OLD|NEW in trigger body and WHEN
+                if "table" == k and SQL.CREATE_TRIGGER == self._category \
                 and v0 in ("old", "new") \
                 and self.get_parent(c, self.TRIGGER_BODY_CTXS):
                     continue # for k, v
 
-                if isinstance(v, dict):
-                    for v1, v2 in v.items():
-                        if v0 == v1.lower(): c.getSymbol().text = quote(v2)
-                else: c.getSymbol().text = quote(v)
+                for v1, v2 in v.items():
+                    if v0 == v1.lower(): c.getSymbol().text = quote(v2)
 
             if getattr(ctx, "children", None):
-                self.recurse_rename(ctx.children, renames, category)
+                self.recurse_rename(ctx.children, renames, level+1)
+
+        if not level and renames.get("column"):
+            self.recurse_rename_column(items, renames)
+
+
+    def recurse_rename_column(self, items, renames, stack=None):
+        """
+        Recursively goes through all items and item children, renaming columns.
+        """
+        if stack is None:
+            stack = []
+            renames["column"] = {k.lower(): {c1.lower(): c2 for c1, c2 in v.items()}
+                                 for k, v in renames["column"].items()}
+        for ctx in items:
+            ownerctx = None
+            if isinstance(ctx, CTX.SELECT_OR_VALUES):
+                tables = ctx.table_or_subquery()
+                if len(tables) == 1 and tables[0].table_name():
+                    ownerctx = tables[0].table_name
+            elif isinstance(ctx, CTX.EXPRESSION):
+                if self.t(ctx.table_name): ownerctx = ctx.table_name
+            elif isinstance(ctx, CTX.FOREIGN_KEY):
+                ownerctx = ctx.foreign_table().any_name
+            elif isinstance(ctx, CTX.CREATE_VIEW):
+                ownerctx = ctx.view_name
+            elif isinstance(ctx, (CTX.UPDATE, CTX.DELETE)):
+                ownerctx = ctx.qualified_table_name().table_name
+            elif isinstance(ctx, (CTX.CREATE_TABLE, CTX.CREATE_VIRTUAL_TABLE,
+                                  CTX.CREATE_INDEX, CTX.CREATE_TRIGGER, CTX.INSERT)):
+                ownerctx = ctx.table_name
+            if ownerctx:
+                name = self.u(ownerctx).lower()
+                if SQL.CREATE_TRIGGER == self._category and name in ("old", "new") \
+                and stack and isinstance(stack[0][0], CTX.CREATE_TRIGGER):
+                    name = stack[0][1]
+                stack.append((ctx, name))
+
+            if isinstance(ctx, CTX.COLUMN_NAME) and stack:
+                c = ctx # Get the deepest terminal, the one holding name value
+                while not isinstance(c, TerminalNode): c = c.children[0]
+                v0 = self.u(c).lower()
+
+                v = renames["column"].get(stack and stack[-1][1])
+                for v1, v2 in v.items() if v else ():
+                    if v0 == v1.lower(): c.getSymbol().text = quote(v2)
+
+            if getattr(ctx, "children", None):
+                self.recurse_rename_column(ctx.children, renames, stack)
+
+            if ownerctx: stack.pop(-1)
 
 
 
@@ -645,7 +809,13 @@ class Generator(object):
     """
 
     TEMPLATES = {
-        "COLUMN":                  templates.COLUMN_DEFINITION,
+        SQL.COLUMN:                templates.COLUMN_DEFINITION,
+        SQL.CONSTRAINT:            templates.TABLE_CONSTRAINT,
+        SQL.ALTER_TABLE:           templates.ALTER_TABLE,
+        "COMPLEX ALTER TABLE":     templates.ALTER_TABLE_COMPLEX,
+        "ALTER INDEX":             templates.ALTER_INDEX,
+        "ALTER TRIGGER":           templates.ALTER_TRIGGER,
+        "ALTER VIEW":              templates.ALTER_VIEW,
         SQL.CREATE_INDEX:          templates.CREATE_INDEX,
         SQL.CREATE_TABLE:          templates.CREATE_TABLE,
         SQL.CREATE_TRIGGER:        templates.CREATE_TRIGGER,
@@ -672,16 +842,17 @@ class Generator(object):
 
         @param   data      SQL data structure {"__type__": "CREATE TABLE"|.., }
         @param   category  data category if not using data["__type__"]
-        @return            SQL string, or None if unknown data category
+        @return            (SQL string, None) or (None, error)
         """
         category = self._category = (category or data["__type__"]).upper()
-        if category not in self.TEMPLATES: return
+        if category not in self.TEMPLATES:
+            return None, "Unknown category: %s" % category
 
         REPLACE_ORDER = ["Q", "PAD", "GLUE", "LF", "CM", "PRE", "WS"]
         ns = {"Q":    self.quote,   "LF": self.linefeed, "PRE": self.indentation,
               "PAD":  self.padding, "CM": self.comma,    "WS":  self.token,
-              "GLUE": self.glue,
-              "data": data, "step": step, "templates": templates}
+              "GLUE": self.glue, "data": data, "root": data,
+              "Template": step.Template, "templates": templates}
 
         # Generate SQL, using unique tokens for whitespace-sensitive parts,
         # replaced after stripping down whitespace in template result.
@@ -693,12 +864,12 @@ class Generator(object):
             for token in self._tokens.values():
                 # Redo if data happened to contain a generated token
                 if result.count(token) > self._tokendata[token]["count"]:
-                    continue # while
+                    continue # for token
 
             # Calculate max length for paddings
             widths = defaultdict(int)
             for (tokentype, _), token in self._tokens.items():
-                if "PAD" != tokentype: continue # for
+                if "PAD" != tokentype: continue # for (tokentype, _), token
                 data = self._tokendata[token]
                 widths[data["key"]] = max(len(data["value"]), widths[data["key"]])
 
@@ -716,10 +887,10 @@ class Generator(object):
                     r = r"\s*" + re.escape(token) + ("" if self._indent else " *")
                     result = re.sub(r, val, result, flags=re.U)
                 else: result = result.replace(token, val)
-            break # while
+            break # while True
 
         self._tokens.clear(); self._tokendata.clear(); self._data = None
-        return result
+        return result, None
 
 
     def token(self, val, tokentype="WS", **kwargs):
@@ -770,21 +941,28 @@ class Generator(object):
         return self.token("", "GLUE")
 
 
-    def comma(self, collection, index, subcollection=None, subindex=None):
+    def comma(self, collection, index, subcollection=None, subindex=None, root=None):
         """
         Returns trailing comma token for item in specified collection,
         if not last item and no other collections following.
+
+        @param   root  collection root if not using self._data
         """
         islast = True
+        root = root or self._data
+        if collection not in root \
+        or subcollection and subcollection not in root[collection][index]:
+            return ""
+
         if subcollection:
-            container = self._data[collection][index]
+            container = root[collection][index]
             islast = (subindex == len(container[subcollection]) - 1)
-        elif "columns" == collection and SQL.CREATE_TABLE == self._category:
-            islast = not self._data.get("constraints") and \
-                     (index == len(self._data[collection]) - 1)
+        elif "columns" == collection:
+            islast = not root.get("constraints") and \
+                     (index == len(root[collection]) - 1)
         else:
-            islast = (index == len(self._data[collection]) - 1)
-            
+            islast = (index == len(root[collection]) - 1)
+
         val = "" if islast else ", "
         return self.token(val, "CM") if val else ""
 
@@ -797,7 +975,7 @@ def test():
     TEST_STATEMENTS = [
         u'''
         CREATE UNIQUE INDEX IF NOT EXISTS
-        myschema.myname ON mytable (mycol1, mycol) WHERE mytable.mycol1 NOT BETWEEN mytable.mycol2 AND mytable.mycol3
+        myschema.myindex ON mytable (mytablecol1, mytablecol2) WHERE mytable.mytablecol1 NOT BETWEEN mytable.mytablecol2 AND mytable.mytablecol3
         ''',
 
 
@@ -807,11 +985,11 @@ def test():
         -- comment
         IF NOT EXISTS 
         -- comment
-        feeds (
+        mytable (
             -- first line comment
-            myname TEXT PRIMARY KEY AUTOINCREMENT,
-            "my number" INTEGER NOT NULL, -- my comment
-            mybool
+            mytablecol1 TEXT PRIMARY KEY AUTOINCREMENT,
+            "mytable col2" INTEGER NOT NULL, -- my comment
+            mytablecol3
             /* multiline
             comment */
             -- last line comment
@@ -823,41 +1001,52 @@ def test():
 
 
         u'''
-        CREATE TABLE IF NOT EXISTS "feeds2" (
-            mykey     INTEGER NOT NULL DEFAULT (666666),
-            myinteger INTEGER NOT NULL ON CONFLICT ABORT DEFAULT /* uhuu */ -666.5 UNIQUE ON CONFLICT ROLLBACK,
-            mycol     INTEGER CHECK (NULL IS /* hoho */ NULL) COLLATE /* haha */ BiNARY,
-            mytext    TEXT NOT NULL CHECK (sometable.somecolumn),
-            mydate    TIMESTAMP WITH TIME ZONE,
-            fk_col    INTEGER REFERENCES ratings (id) ON delete cascade on update no action match foo MATCH bar,
-            colx DOUBLE TYPE,
-            coly INT,
-            colz INT,
-            colw INT,
-            col1 INT,
-            col2 INT,
-            PRIMARY KEY (mykey) ON CONFLICT ROLLBACK,
-            FOREIGN KEY (fk_col, myinteger) REFERENCES ratings (id, someid2) ON DELETE CASCADE ON UPDATE RESTRICT,
-            CONSTRAINT myconstraint CHECK (666)
+        CREATE TABLE IF NOT EXISTS "mytable" (
+            mytablekey    INTEGER NOT NULL DEFAULT (mytablecol1),
+            mytablecol1   INTEGER NOT NULL ON CONFLICT ABORT DEFAULT /* uhuu */ -666.5 UNIQUE ON CONFLICT ROLLBACK,
+            mytablecol2   INTEGER CHECK (mytablecol3 IS /* hoho */ NULL) COLLATE /* haha */ BiNARY,
+            mytablecol3   TEXT NOT NULL CHECK (LENGTH(mytable.mytablecol1) > 0),
+            mytablecol4   TIMESTAMP WITH TIME ZONE,
+            mytablefk     INTEGER REFERENCES mytable2 (mytable2key) ON delete cascade on update no action match SIMPLE,
+            mytablefk2    INTEGER,
+            mytablefk3    INTEGER,
+            mytablecol5   DOUBLE TYPE,
+            PRIMARY KEY (mytablekey) ON CONFLICT ROLLBACK,
+            FOREIGN KEY (mytablefk2, mytablefk3) REFERENCES mytable2 (mytable2col1, mytable2col2) ON DELETE CASCADE ON UPDATE RESTRICT,
+            CONSTRAINT myconstraint CHECK (mytablecol1 != mytablecol2)
         )
         ''',
 
 
         u'''
-        CREATE TRIGGER myschema.mytriggéér AFTER UPDATE OF address ON customers 
-        WHEN 1 NOT IN (SELECT rootpage FROM sqlite_master)
+        CREATE TRIGGER myschema.mytriggér AFTER UPDATE OF mytablecol1 ON mytable
+        WHEN 1 NOT IN (SELECT mytablecol2 FROM mytable)
           BEGIN
-            UPDATE "söme öther täble" SET address = NEW.address WHERE customer_name = OLD.name;
-            INSERT INTO foo (bar) VALUES (42);
-            UPDATE orders2 SET address2 = new.address WHERE customer_name = old.name;
+            SELECT mytablecol1, mytablecol2, "mytable col3" FROM mytable;
+            SELECT myviewcol1, myviewcol2 FROM myview;
+            UPDATE "my täble2" SET mytable2col1 = NEW.mytablecol1 WHERE mytable2col2 = OLD.mytablecol2;
+            INSERT INTO mytable2 (mytable2col1) VALUES (42);
+            DELETE FROM mytable2 WHERE mytable2col2 != old.mytablecol2;
+            UPDATE mytable2 SET mytable2col2 = new.mytablecol2 WHERE mytable2col1 = old.mytablecol1;
           END;
         ''',
 
 
         u'''
             CREATE TEMPORARY VIEW IF NOT EXISTS
-            myschema.myname (mycol1, mycol2, "my col 3")
-            AS SELECT * FROM mytable
+            myschema.myview (myviewcol1, myviewcol2, "myview col3")
+            AS SELECT mytablecol1, mytablecol2, "mytable col3" FROM mytable
+        ''',
+
+
+        u'''
+            CREATE TEMPORARY VIEW IF NOT EXISTS
+            myschema.myview (myviewcol1, myviewcol2, "myview col3")
+            AS SELECT mytablecol1, mytablecol2, "mytable col3" FROM mytable
+               UNION
+               SELECT mytable2col1, mytable2col2, "mytable2 col3" FROM mytable2
+               UNION
+               SELECT myview2col1, myview2col2, "myview2 col3" FROM myview2
         ''',
 
 
@@ -869,25 +1058,34 @@ def test():
 
 
     indent = "  "
-    renames = {"table": "renämed tablé", "trigger": "renämed triggér",
-               "index": "renämed indéx", "schema":  "renämed schéma",
-               "view":   {"myname": u"renämed viéw"}}
+    renames = {"table":   {"mytable": "renamed mytable", "mytable2": "renamed mytable2"},
+               "trigger": {u"mytriggér": u"renämed mytriggér"},
+               "index":   {"myindex":  u"renämed myindex"},
+               "view":    {"myview": u"renämed myview"},
+               "view":    {"myview2": u"renämed myview2"},
+               "column":  {
+                           "renamed mytable":   {"mytablecol1": u"renamed mytablecol1", "mytable col2": "renamed mytable col2", "mytablecol2": "renamed mytablecol2", "mytablecol3": "renamed mytablecol3", "mytable col3": "renamed mytable col3", "mytablekey": "renamed mytablekey", "mytablefk2": "renamed mytablefk2"},
+                           "renamed mytable2":  {"mytable2col1": u"renamed mytable2col1", "mytable2col2": u"renamed mytable2col2", "mytable2key": "renamed mytable2key", "mytablefk2": "renamed mytablefk2"},
+                           u"renämed myview":   {"myviewcol1": "renamed myviewcol1", "myview col3": "renamed myview col3"},
+                           u"renämed myview2":  {"myview2col1": "renamed myview2col1", "myview2 col3": "renamed myview2 col3"},
+               },
+               "schema":  u"renämed schéma"}
     for sql1 in TEST_STATEMENTS:
         print "\n%s\nORIGINAL:\n" % ("-" * 70)
         print sql1.encode("utf-8")
 
-        x = parse(sql1)
+        x, err = parse(sql1)
         if not x: continue # for sql1
 
         print "\n%s\nPARSED:" % ("-" * 70)
         print json.dumps(x, indent=2)
-        sql2 = generate(x, indent)
+        sql2, err2 = generate(x, indent)
         if sql2:
             print "\n%s\nGENERATED:\n" % ("-" * 70)
             print sql2.encode("utf-8") if sql2 else sql2
 
             print "\n%s\nTRANSFORMED:\n" % ("-" * 70)
-            sql3 = transform(sql2, renames=renames, indent=indent)
+            sql3, err3 = transform(sql2, renames=renames, indent=indent)
             print sql3.encode("utf-8") if sql3 else sql3
 
 

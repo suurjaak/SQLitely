@@ -8,9 +8,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.09.2019
+@modified    30.10.2019
 ------------------------------------------------------------------------------
 """
+import collections
 import ctypes
 import io
 import locale
@@ -53,17 +54,17 @@ def unprint(s, escape=True):
     return re.sub(r"[\x00-\x1f]", repl, s)
 
 
-def format_bytes(size, precision=2, max_units=True):
+def format_bytes(size, precision=2, max_units=True, with_units=True):
     """
     Returns a formatted byte size (e.g. "421.45 MB" or "421,451,273 bytes").
 
-    @param   precision  number of decimals to leave after converting to
-                        maximum units
-    @param   max_units  whether to convert value to corresponding maximum
-                        unit, or leave as bytes and add thousand separators
+    @param   precision   number of decimals to leave after converting to
+                         maximum units
+    @param   max_units   whether to convert value to corresponding maximum
+                         unit, or leave as bytes and add thousand separators
+    @param   with_units  whether to include units in result
     """
-    formatted = "0 bytes"
-    size = int(size)
+    size, formatted, unit = int(size), "0", "bytes"
     if size:
         byteunit = "byte" if 1 == size else "bytes"
         if max_units:
@@ -71,12 +72,12 @@ def format_bytes(size, precision=2, max_units=True):
             log = min(len(UNITS) - 1, math.floor(math.log(size, 1024)))
             formatted = "%.*f" % (precision, size / math.pow(1024, log))
             formatted = formatted.rstrip("0").rstrip(".")
-            formatted += " " + UNITS[int(log)]
+            unit = UNITS[int(log)]
         else:
             formatted = "".join([x + ("," if i and not i % 3 else "")
                                  for i, x in enumerate(str(size)[::-1])][::-1])
-            formatted += " " + byteunit
-    return formatted
+            unit = byteunit
+    return formatted + ((" " + unit) if with_units else "")
 
 
 def format_seconds(seconds, insert=""):
@@ -109,21 +110,29 @@ def format_exc(e):
     return result
 
 
-def plural(word, items=None, with_items=True):
+def plural(word, items=None, numbers=True, single="1", sep=""):
     """
     Returns the word as 'count words', or '1 word' if count is 1,
     or 'words' if count omitted.
 
-    @param   items       item collection or count,
-                         or None to get just the plural of the word
-             with_items  if False, count is omitted from final result
+    @param   items    item collection or count,
+                      or None to get just the plural of the word
+             numbers  if False, count is omitted from final result
+             single   prefix to use for word if count is 1
+             sep      thousand-separator to use for count
     """
-    count = items or 0
-    if hasattr(items, "__len__"):
-        count = len(items)
-    result = word + ("" if 1 == count else "s")
-    if with_items and items is not None:
-        result = "%s %s" % (count, result)
+    count   = len(items) if hasattr(items, "__len__") else items or 0
+    isupper = word[-1:].isupper()
+    suffix = "es" if word[-1:].lower() in "xyz" else "s"
+    if count != 1 and "y" == word[-1:].lower():
+        word = word[:-1] + ("I" if isupper else "i")
+    if isupper: suffix = suffix.upper()
+    result = word + ("" if 1 == count else suffix)
+    if numbers and items is not None:
+        fmtcount = "".join([x + ("," if i and not i % 3 else "")
+                            for i, x in enumerate(str(count)[::-1])][::-1]) \
+                   if sep else count
+        result = "%s %s" % (single if 1 == count else fmtcount, result)
     return result
 
 
@@ -139,7 +148,7 @@ def cmp_dicts(dict1, dict2):
             v1, v2 = (tuple(x) if isinstance(x, list) else x for x in [v1, v2])
             result = (v1 == v2)
         if not result:
-            break # break for key, v1
+            break # for key, v1
     return result
 
 
@@ -196,7 +205,7 @@ def unique_path(pathname):
 
 def start_file(filepath):
     """
-    Tries to open the specified file in the operating system.
+    Tries to open the specified file or directory in the operating system.
 
     @return  (success, error message)
     """
@@ -214,8 +223,19 @@ def start_file(filepath):
         elif "posix" == os.name:
             subprocess.call(("xdg-open", filepath))
     except Exception as e:
-        success, error = False, repr(e)
+        success, error = False, format_exc(e)
     return success, error
+
+
+def select_file(filepath):
+    """
+    Tries to open the file directory and select file.
+    Falls back to opening directory only (select is Windows-only).
+    """
+    if not os.path.exists(filepath):
+        return start_file(os.path.split(filepath)[0])
+    try: subprocess.Popen('explorer /select, "%s"' % shortpath(filepath))
+    except Exception: start_file(os.path.split(filepath)[0])
 
 
 def is_os_64bit():
@@ -275,6 +295,76 @@ def add_unique(lst, item, direction=1, maxlen=sys.maxint):
     if len(lst) > maxlen:
         lst[:] = lst[:maxlen] if direction < 0 else lst[-maxlen:]
     return lst
+
+
+def make_unique(value, existing, suffix="_%s", counter=2):
+    """
+    Returns a unique string, appending suffix % counter as necessary.
+
+    @param   existing  collection of existing strings to check
+    """
+    result = value
+    while result in existing:
+        result, counter = value + suffix % counter, counter + 1
+    return result
+
+
+def get(collection, *path, **kwargs):
+    """
+    Returns the value at specified collection path. If path not available,
+    returns the first keyword argument if any given, or None.
+    Collection can be a nested structure of dicts, lists, tuples or strings.
+    E.g. util.get({"root": {"first": [{"k": "v"}]}}, "root", "first", 0, "k").
+    """
+    default = (list(kwargs.values()) + [None])[0]
+    result = collection if path else default
+    if len(path) == 1 and isinstance(path[0], list): path = path[0]
+    for p in path:
+        if isinstance(result, collections.Sequence):  # Iterable with index
+            if isinstance(p, (int, long)) and p < len(result):
+                result = result[p]
+            else:
+                result = default
+        elif isinstance(result, collections.Mapping): # Container with lookup
+            result = result.get(p, default)
+        else:
+            result = default
+        if result == default: break  # for p
+    return result
+
+
+def set(collection, value, *path):
+    """
+    Sets the value at specified collection path. If a path step does not exist,
+    it is created as dict. Collection can be a nested structure of dicts and lists.
+    Returns value.
+    """
+    if len(path) == 1 and isinstance(path[0], list): path = path[0]
+    ptr = collection
+    for p in path[:-1]:
+        if isinstance(ptr, collections.Sequence):  # Iterable with index
+            if isinstance(p, (int, long)) and p < len(ptr):
+                ptr = ptr[p]
+            else:
+                ptr.append({})
+                ptr = ptr[-1]
+        elif isinstance(ptr, collections.Mapping): # Container with lookup
+            if p not in ptr: ptr[p] = {}
+            ptr = ptr[p]
+    ptr[path[-1]] = value
+    return value
+
+
+def walk(data, callback):
+    """
+    Walks through the collection of nested dicts or lists or tuples, invoking
+    callback(child, key, parent) for each element, recursively.
+    """
+    if isinstance(data, collections.Iterable) and not isinstance(data, basestring):
+        for k, v in enumerate(data):
+            if isinstance(data, collections.Mapping): k, v = v, data[v]
+            callback(k, v, data)
+            walk(v, callback)
 
 
 def get_locale_day_date(dt):
@@ -344,6 +434,22 @@ def longpath(path):
                 result = os.path.join(buf.value, tail)
     except Exception: pass
     return result
+
+
+def shortpath(path):
+    """Returns the path in short Windows form (PROGRA~1 not "Program Files")."""
+    if isinstance(path, str): return path
+    import ctypes.wintypes
+
+    ctypes.windll.kernel32.GetShortPathNameW.argtypes = [
+        ctypes.wintypes.LPCWSTR, # lpszLongPath
+        ctypes.wintypes.LPWSTR, # lpszShortPath
+        ctypes.wintypes.DWORD # cchBuffer
+    ]
+    ctypes.windll.kernel32.GetShortPathNameW.restype = ctypes.wintypes.DWORD
+    buf = ctypes.create_unicode_buffer(path)
+    ctypes.windll.kernel32.GetShortPathNameW(path, buf, len(buf))
+    return buf.value
 
 
 def win32_unicode_argv():
