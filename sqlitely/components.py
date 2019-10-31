@@ -1377,7 +1377,6 @@ class DataObjectPage(wx.Panel):
         grid.GridWindow.Bind(wx.EVT_MOTION,            self._OnGridMouse)
         grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,         self._OnGridKey)
         self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(lambda: self and (self.Layout(), self.Refresh())))
-        self.Bind(EVT_IMPORT, self._OnImportEvent)
 
         sizer_header.Add(tb)
         sizer_header.AddStretchSpacer()
@@ -1525,7 +1524,7 @@ class DataObjectPage(wx.Panel):
 
         def on_import(event=None):
             dlg = ImportDialog(self, self._db)
-            dlg.SetTable(self._item["name"])
+            dlg.SetTable(self._item["name"], fixed=True)
             dlg.ShowModal()
 
         menu = wx.Menu()
@@ -1533,20 +1532,9 @@ class DataObjectPage(wx.Panel):
         item_import = wx.MenuItem(menu, -1, "&Import into table from file")
         menu.AppendItem(item_export)
         menu.AppendItem(item_import)
-        menu.Bind(wx.EVT_MENU, on_import, id=item_import.GetId())
         menu.Bind(wx.EVT_MENU, self._OnExportToDB, id=item_export.GetId())
+        menu.Bind(wx.EVT_MENU, on_import,          id=item_import.GetId())
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
-
-
-    def _OnImportEvent(self, event):
-        """
-        Handler for import dialog event, refreshes schema,
-        opens table if specified.
-        """
-        event.Skip()
-        table = getattr(event, "table", None)
-        logger.info("import event %s", event) # TODO remove
-        if table and not self.IsChanged(): self._OnRefresh()
 
 
     def _OnExportToDB(self, event=None):
@@ -4644,12 +4632,14 @@ class ImportDialog(wx.Dialog):
 
 
 
-    def __init__(self, parent, db):
+    def __init__(self, parent, db, id=wx.ID_ANY, title="Import data",
+                 pos=wx.DefaultPosition, size=(600, 480),
+                 style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER,
+                 name=wx.DialogNameStr):
         """
         @param   db     database.Database
         """
-        super(self.__class__, self).__init__(parent, -1, "Import data", size=(600, 480),
-                                             style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER)
+        super(self.__class__, self).__init__(parent, id, title, pos, size, style, name)
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         self._db     = db # database.Database
@@ -4659,10 +4649,11 @@ class ImportDialog(wx.Dialog):
         self._tables = db.get_category("table").values()
         self._sheet  = None # {name, rows, columns}
         self._table  = None # {table opts} to import into
-        self._has_header = True  # Whether using first row as header
-        self._has_new    = False # Whether a new table has been added
-        self._has_pk     = False # Whether new table has auto-increment primary key
-        self._importing  = False # Whether import underway
+        self._has_header  = True  # Whether using first row as header
+        self._has_new     = False # Whether a new table has been added
+        self._has_pk      = False # Whether new table has auto-increment primary key
+        self._importing   = False # Whether import underway
+        self._table_fixed = False # Whether table selection is immutable
         self._progress   = {}    # {count}
         self._worker = workers.WorkerThread()
 
@@ -4717,13 +4708,12 @@ class ImportDialog(wx.Dialog):
         gauge = wx.Gauge(self, range=100, size=(300,-1), style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
         info_gauge = wx.StaticText(self)
 
+        button_restart = wx.Button(self, label="Re&start")
+        button_open    = wx.Button(self, label="Open &table")
+
         button_ok      = wx.Button(self, label="&Import")
         button_reset   = wx.Button(self, label="&Reset")
         button_cancel  = wx.Button(self, label="&Cancel", id=wx.CANCEL)
-
-        button_restart = wx.Button(self, label="Re&start")
-        button_open    = wx.Button(self, label="Open &table")
-        button_close   = wx.Button(self, label="Close")
 
         self._info_file      = info_file
         self._button_file    = button_file
@@ -4739,12 +4729,11 @@ class ImportDialog(wx.Dialog):
         self._gauge          = gauge
         self._info_gauge     = info_gauge
         self._button_table   = button_table
+        self._button_restart = button_restart
+        self._button_open    = button_open
         self._button_ok      = button_ok
         self._button_reset   = button_reset
         self._button_cancel  = button_cancel
-        self._button_restart = button_restart
-        self._button_open    = button_open
-        self._button_close   = button_close
         self._l1, self._l2   = l1, l2
 
         sizer_header.Add(info_file, proportion=1)
@@ -4784,8 +4773,7 @@ class ImportDialog(wx.Dialog):
         sizer_footer.Add(gauge, flag=wx.ALIGN_CENTER)
         sizer_footer.Add(info_gauge, flag=wx.ALIGN_CENTER)
 
-        for b in (button_ok, button_reset, button_cancel, button_restart,
-                  button_open, button_close):
+        for b in (button_restart, button_open, button_ok, button_reset, button_cancel):
             sizer_buttons.Add(b, border=10, flag=wx.LEFT | wx.RIGHT)
 
         self.Sizer.Add(sizer_header,  border=10, flag=wx.ALL | wx.GROW)
@@ -4811,7 +4799,6 @@ class ImportDialog(wx.Dialog):
         self.Bind(wx.EVT_BUTTON,   self._OnCancel,      button_cancel)
         self.Bind(wx.EVT_BUTTON,   self._OnRestart,     button_restart)
         self.Bind(wx.EVT_BUTTON,   self._OnOpenTable,   button_open)
-        self.Bind(wx.EVT_BUTTON,   self._OnCancel,      button_close)
         self.Bind(wx.EVT_TEXT,     self._OnEditPK,      edit_pk)
         self.Bind(wx.EVT_SPLITTER_SASH_POS_CHANGED, self._OnSize, splitter)
         self.Bind(wx.EVT_CLOSE,    self._OnCancel)
@@ -4827,7 +4814,7 @@ class ImportDialog(wx.Dialog):
         button_file.ToolTip = "Choose file to import"
 
         combo_sheet.Enabled = check_header.Enabled = False
-        combo_table.Enabled = button_table.Enabled = False
+        combo_table.Enabled = button_table.Enabled = True
 
         combo_table.SetItems(["%s (%s)" % (x["name"], util.plural("column", x["columns"]))
                               for x in self._tables])
@@ -4861,10 +4848,9 @@ class ImportDialog(wx.Dialog):
         button_reset.ToolTip   = "Reset to initial state"
         button_restart.ToolTip = "Run another import"
         button_open.ToolTip    = "Close dialog and open table data"
-        button_close.ToolTip   = "Close dialog"
         self.SetEscapeId(wx.CANCEL)
 
-        button_restart.Shown = button_open.Shown = button_close.Shown = False
+        button_restart.Shown = button_open.Shown = False
 
         splitter.SetMinimumPaneSize(200)
         splitter.SetSashGravity(0.5)
@@ -4876,8 +4862,13 @@ class ImportDialog(wx.Dialog):
         self.MinSize = (400, 400)
         wx_accel.accelerate(self)
         self.Layout()
-        self.CenterOnParent()
-        button_file.SetFocus()
+
+        if pos == wx.DefaultPosition:
+            top = wx.GetApp().TopWindow
+            (x, y), (w, h), (w2, h2) = top.Position, top.Size, self.Size
+            self.Position = x + (w - w2)  / 2, y + (h - h2) / 2
+
+        wx.CallLater(0, button_file.SetFocus)
 
 
     def SetFile(self, data):
@@ -4904,7 +4895,7 @@ class ImportDialog(wx.Dialog):
         self._info_file.Label = info
 
         self._combo_sheet.Enabled = self._check_header.Enabled = True
-        self._combo_table.Enabled = self._button_table.Enabled = True
+        self._combo_table.Enabled = self._button_table.Enabled = not self._table_fixed
         self._combo_sheet.SetItems(["%s (%s, %s)" % (
             x["name"], util.plural("column", x["columns"]),
             "rows: file too large to count" if x["rows"] < 0
@@ -4913,16 +4904,20 @@ class ImportDialog(wx.Dialog):
         self._combo_sheet.Select(idx)
 
         self._l1.Enable()
-        self._check_header.Enable()
         self._OnSize()
         self._Populate()
 
 
-    def SetTable(self, table):
-        """Sets the table to import into, refreshes columns."""
+    def SetTable(self, table, fixed=False):
+        """
+        Sets the table to import into, refreshes columns.
+
+        @param   fixed  whether to make table selection immutable
+        """
         idx, self._table = next((i, x) for i, x in enumerate(self._tables)
                                 if x["name"] == table)
         if self._combo_table.Selection != idx: self._combo_table.Select(idx)            
+        self._table_fixed = fixed
 
         self._cols2 = [{"name": x["name"], "index": i, "skip": False}
                        for i, x in enumerate(self._table["columns"])]
@@ -4935,8 +4930,9 @@ class ImportDialog(wx.Dialog):
 
         self._l2.Enable()
         self._l2.SetEditable(self._table.get("new"), columns=[1])
-        self._combo_table.Enable()
-        self._button_table.Enable(bool(not self._has_new or self._table.get("new")))
+        self._combo_table.Enable(not fixed)
+        self._button_table.Enable(not fixed and not self._has_new
+                                  and not self._table.get("new"))
         self._UpdatePK()
         self._UpdateFooter()
         self._OnSize()
@@ -5307,15 +5303,19 @@ class ImportDialog(wx.Dialog):
                 success = self._importing
                 if success: self._importing = False
                 if success is not None:
-                    wx.PostEvent(self.Parent, ImportEvent(-1, table=self._table["name"], ))
-                SHOW = (self._button_restart, self._button_open, self._button_close)
-                HIDE = (self._button_ok, self._button_reset, self._button_cancel)
+                    wx.PostEvent(self.Parent, ImportEvent(-1, table=self._table["name"]))
+                SHOW = (self._button_restart, )
+                HIDE = (self._button_ok, self._button_reset)
+                if not isinstance(self.Parent, DataObjectPage): SHOW += (self._button_open, )
                 for c in SHOW: c.Show(), c.Enable()
                 for c in HIDE: c.Hide()
                 self._gauge.Value = self._gauge.Value
+                self._button_cancel.Label = "&Close"
                 self._button_ok.ContainingSizer.Layout()
+                self.Layout()
                 if success is None: self._button_open.Disable()
-                else: self._button_open.SetFocus()
+                elif self._button_open.Shown: self._button_open.SetFocus()
+                else: self._button_cancel.SetFocus()
                 if msg_shown: return
 
                 if error: msg = "Error on data import:\n\n%s" % error
@@ -5339,12 +5339,12 @@ class ImportDialog(wx.Dialog):
         for c in sum((list(x.Children) for x in [self] + list(self._splitter.Children)), []):
             c.Enable()
 
-        SHOW = (self._info_help, self._button_ok, self._button_reset,
-                self._button_cancel)
+        SHOW = (self._info_help, self._button_ok, self._button_reset)
         HIDE = (self._gauge, self._info_gauge, self._button_restart,
-                self._button_open, self._button_close)
+                self._button_open)
         for c in SHOW: c.Show(), c.Enable()
         for c in HIDE: c.Hide()
+        self._button_cancel.Label = "&Cancel"
         self._l1.ReadOnly = self._l2.ReadOnly = False
 
         if self._table.get("new") \
@@ -5373,13 +5373,15 @@ class ImportDialog(wx.Dialog):
 
 
     def _OnReset(self, event=None):
-        """Resets columns, drops new table if any."""
-        self._cols1 = sorted(self._cols1, key=lambda x: x["index"])
-        for c in self._cols1: c["skip"] = False
-        self._cols2, self._table = [], None
-        for c in self._cols1: c["skip"] = False
-        self._l1.Select(self._l1.GetFirstSelected(), False)
+        """Empties source file data, and table data if not fixed."""
+        self._data, self._sheet, self._cols1 = None, None, []
 
+        if self._table_fixed:
+            self._cols2.sort(key=lambda x: x["index"])
+            for c in self._cols2: c["skip"] = False
+        else:
+            self._cols2, self._table = [], None
+            self._combo_table.Select(-1)
         if self._has_new:
             self._tables = [x for x in self._tables if not x.get("new")]
             self._combo_table.SetItems(["%s (%s)" % (x["name"], util.plural("column", x["columns"]))
@@ -5390,8 +5392,11 @@ class ImportDialog(wx.Dialog):
         self._has_new = False
         self._has_pk = self._check_pk.Value = False
         self._has_header = self._check_header.Value = True
+        self._check_header.Disable()
+        self._combo_sheet.Clear()
+        self._combo_sheet.Disable()
+        self._info_file.Label = ""
         self._UpdatePK()
-        self._combo_table.Select(-1)
 
         self._OnSize()
         self._Populate()
@@ -5430,8 +5435,9 @@ class ImportDialog(wx.Dialog):
 
         if isinstance(event, wx.CloseEvent): return wx.CallAfter(self.EndModal, wx.CANCEL)
             
-        SHOW = (self._button_restart, self._button_open, self._button_close)
-        HIDE = (self._button_ok, self._button_reset, self._button_cancel)
+        SHOW = (self._button_restart, )
+        HIDE = (self._button_ok, self._button_reset)
+        if not isinstance(self.Parent, DataObjectPage): SHOW += (self._button_open, )
         for c in SHOW: c.Show(), c.Enable()
         for c in HIDE: c.Hide()
         self.Layout()

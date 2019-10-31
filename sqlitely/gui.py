@@ -4388,8 +4388,10 @@ class DatabasePage(wx.Panel):
         opens table if specified.
         """
         table, open = (getattr(event, x, None) for x in ("table", "open"))
-        if table: self.reload_schema(count=True, parse=True)
-        if open and self.tree_data.FindAndActivateItem(type="table", name=table):
+        self.reload_schema(count=True, parse=True)
+        if table in self.data_pages["table"]:
+            self.data_pages["table"][table].Reload()
+        elif open and self.tree_data.FindAndActivateItem(type="table", name=table):
             self.notebook.SetSelection(self.pageorder[self.page_data])
 
 
@@ -4718,7 +4720,7 @@ class DatabasePage(wx.Panel):
                 self.notebook.SetSelection(self.pageorder[self.page_schema])
         def import_data(*_, **__):
             dlg = components.ImportDialog(self, self.db)
-            if "table" == data["type"]: dlg.SetTable(data["name"])
+            if "table" == data["type"]: dlg.SetTable(data["name"], fixed=True)
             dlg.ShowModal()
         def clipboard_copy(text, *_, **__):
             if wx.TheClipboard.Open():
