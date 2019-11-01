@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.10.2019
+@modified    01.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -1881,6 +1881,8 @@ class SchemaObjectPage(wx.Panel):
         if self._newmode:
             item = dict(item, meta=dict(copy.deepcopy(self.DEFAULTS[item["type"]]),
                                         **item.get("meta", {})))
+            names = sum(map(list, db.schema.values()), [])
+            item["meta"]["name"] = util.make_unique(item["meta"]["name"], names)
         item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
         self._item     = copy.deepcopy(item)
         self._original = copy.deepcopy(item)
