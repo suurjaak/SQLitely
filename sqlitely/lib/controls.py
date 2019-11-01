@@ -1123,7 +1123,7 @@ class NoteButton(wx.Panel, wx.Button):
         self.Refresh()
         return result
     def IsEnabled(self): return wx.Panel.IsEnabled(self)
-    Enabled = property(Enable, IsEnabled)
+    Enabled = property(IsEnabled, Enable)
 
 
     def IsThisEnabled(self):
