@@ -871,10 +871,11 @@ class SQLPage(wx.Panel):
     def ExecuteSQL(self, sql):
         """Executes the SQL query and populates the SQL grid with results."""
         result = False
+        CONTENT_QUERY = grammar.SQL.SELECT, grammar.SQL.PRAGMA, grammar.SQL.EXPLAIN
         try:
             grid_data = None
-            if sql.lower().startswith(("select", "pragma", "explain")):
-                # SELECT statement: populate grid with rows
+            if grammar.first(sql).startswith(CONTENT_QUERY):
+                # Result rows statement: populate grid with rows
                 grid_data = SQLiteGridBase(self._db, sql=sql)
                 self._grid.SetTable(grid_data, takeOwnership=True)
                 self._tbgrid.EnableTool(wx.ID_RESET, True)
