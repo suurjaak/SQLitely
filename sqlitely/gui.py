@@ -2167,8 +2167,7 @@ class DatabasePage(wx.Panel):
         )
         splitter.SetMinimumPaneSize(100)
 
-        panel_export = components.ExportProgressPanel(page, self._on_close_data_export)
-        self.panel_data_export = panel_export
+        panel_export = self.panel_data_export = components.ExportProgressPanel(page)
         panel_export.Hide()
 
         panel1 = wx.Panel(splitter)
@@ -2223,7 +2222,8 @@ class DatabasePage(wx.Panel):
         splitter.SplitVertically(panel1, panel2, 400)
 
         self.Bind(components.EVT_DATA_PAGE, self.on_data_page_event)
-        self.Bind(components.EVT_IMPORT, self.on_import_event)
+        self.Bind(components.EVT_IMPORT,    self.on_import_event)
+        self.Bind(components.EVT_EXPORT,    self.on_close_data_export)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
                 self.on_close_data_page, nb)
         self.register_notebook_hotkeys(nb)
@@ -3224,7 +3224,7 @@ class DatabasePage(wx.Panel):
                   + "\n- ".join(copyerrors)) if copyerrors else ""
             err = err[:500] + ".." if len(err) > 500 else err
             guibase.status("Recovery to %s complete." % newfile, flash=True)
-            wx.PostEvent(self, OpenDatabaseEvent(-1, file=newfile))
+            wx.PostEvent(self, OpenDatabaseEvent(self.Id, file=newfile))
             wx.MessageBox("Recovery to %s complete.%s" %
                           (newfile, err), conf.Title,
                           wx.ICON_INFORMATION)
@@ -3879,11 +3879,12 @@ class DatabasePage(wx.Panel):
 
     def update_page_header(self):
         """Mark database as changed/pristine in the parent notebook tabs."""
-        wx.PostEvent(self, DatabasePageEvent(-1, source=self, modified=self.get_unsaved()))
+        evt = DatabasePageEvent(self.Id, source=self, modified=self.get_unsaved())
+        wx.PostEvent(self, evt)
 
 
     def add_data_page(self, data):
-        """Opens a data object page for specified object data."""
+        """Opens and returns a data object page for specified object data."""
         title = "%s %s" % (data["type"].capitalize(), grammar.quote(data["name"]))
         self.notebook_data.Freeze()
         try:
@@ -3893,10 +3894,11 @@ class DatabasePage(wx.Panel):
         finally: self.notebook_data.Thaw()
         self.TopLevelParent.run_console(
             "datapage = page.notebook_data.GetPage(0) # Data object subtab")
+        return p
 
 
     def add_sql_page(self, name="", text=""):
-        """Opens an SQL page with specified text."""
+        """Opens and returns an SQL page with specified text."""
         if not name or name in self.sql_pages:
             name = "SQL"
             if not self.sql_pages: self.sql_page_counter = 1
@@ -3909,6 +3911,7 @@ class DatabasePage(wx.Panel):
         self.notebook_sql.InsertPage(0, page=p, text=name, select=True)
         self.TopLevelParent.run_console(
             "sqlpage = page.notebook_sql.GetPage(0) # SQL window subtab")
+        return p
 
 
     def on_refresh_schema(self, event):
@@ -3935,7 +3938,7 @@ class DatabasePage(wx.Panel):
 
 
     def add_schema_page(self, data):
-        """Opens a schema object page for specified object data."""
+        """Opens and returns schema object page for specified object data."""
         if "name" in data:
             title = "%s %s" % (data["type"].capitalize(), grammar.quote(data["name"]))
         else:
@@ -3948,6 +3951,7 @@ class DatabasePage(wx.Panel):
         finally: self.notebook_schema.Thaw()
         self.TopLevelParent.run_console(
             "schemapage = page.notebook_schema.GetPage(0) # Schema object subtab")
+        return p
 
 
     def on_close_schema_page(self, event):
@@ -4129,7 +4133,7 @@ class DatabasePage(wx.Panel):
             self.load_tree_data()
 
 
-    def _on_close_data_export(self):
+    def on_close_data_export(self, event=None):
         """Hides export panel."""
         self.Freeze()
         try:
@@ -4139,11 +4143,12 @@ class DatabasePage(wx.Panel):
         finally: self.Thaw()
 
 
-    def on_export_data_file(self, category, items, event=None):
+    def on_export_data_file(self, category, item, event=None):
         """
         Handler for exporting one or more tables/views to file, opens file dialog
         and performs export.
         """
+        items = [item] if isinstance(item, basestring) else item
         if len(items) == 1:
             filename = "%s %s" % (category.capitalize(), items[0])
             self.dialog_savefile.Filename = util.safe_filename(filename)
@@ -4180,18 +4185,26 @@ class DatabasePage(wx.Panel):
         for i, (name, filename) in enumerate(zip(items, filenames)):
             if not filename.lower().endswith(".%s" % extname):
                 filename += ".%s" % extname
-            item = self.db.get_category(category, name)
+            data = self.db.get_category(category, name)
             sql = "SELECT * FROM %s" % grammar.quote(name)
             make_iterable = functools.partial(self.db.execute, sql)
-            exporter = functools.partial(importexport.export_data, make_iterable, filename,
-                "%s %s" % (category.capitalize(), grammar.quote(name, force=True)),
-                self.db, item["columns"], category=category, name=name,
-                progress=functools.partial(self.panel_data_export.OnProgress, i)
-            )
-            exports.append({"filename": filename, "callable": exporter,
-                            "category": category, "name": item["name"],
-                            "total": item.get("count"),
-                            "is_total_estimated": item.get("is_count_estimated")})
+            args = {"make_iterable": make_iterable, "filename": filename,
+                    "title": "%s %s" % (category.capitalize(),
+                                        grammar.quote(name, force=True)),
+                    "db": self.db, "columns": data["columns"],
+                    "category": category, "name": name, }
+            exports.append({"filename": filename, "args": args,
+                            "category": category, "name": data["name"],
+                            "total": data.get("count"),
+                            "is_total_estimated": data.get("is_count_estimated")})
+
+        if isinstance(item, basestring): # Chose one specific table to export
+            page, noclose = self.data_pages[category].get(item), True
+            if not page:
+                page = self.add_data_page(self.db.get_category(category, item))
+                noclose = False
+            page.Export(exports, noclose=noclose)
+            return
 
         self.Freeze()
         try:
@@ -4371,7 +4384,7 @@ class DatabasePage(wx.Panel):
             extra = "" if len(tables1) > 1 or same_name \
                     else " as %s" % grammar.quote(tables2[0], force=True)
             guibase.status("Exported %s to %s%s.", t, filename2, extra, flash=True)
-            wx.PostEvent(self, OpenDatabaseEvent(-1, file=filename2))
+            wx.PostEvent(self, OpenDatabaseEvent(self.Id, file=filename2))
 
 
     def on_import_event(self, event):
@@ -4793,7 +4806,7 @@ class DatabasePage(wx.Panel):
             menu.Append(item_file)
             if item_database: menu.Append(item_database)
             if item_import:   menu.Append(item_import)
-            names = data["items"] if "category" == data["type"] else [data["name"]]
+            names = data["items"] if "category" == data["type"] else data["name"]
             category = data["category"] if "category" == data["type"] else data["type"]
             menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, category, names),
                      id=item_file.GetId())
@@ -5107,7 +5120,7 @@ class DatabasePage(wx.Panel):
         """Updates page tab header with option to close page."""
         if not self: return
         self.ready_to_close = True
-        wx.PostEvent(self, DatabasePageEvent(-1, source=self, ready=True))
+        wx.PostEvent(self, DatabasePageEvent(self.Id, source=self, ready=True))
 
 
 

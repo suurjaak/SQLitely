@@ -50,6 +50,7 @@ logger = logging.getLogger(__name__)
 DataPageEvent,   EVT_DATA_PAGE   = wx.lib.newevent.NewCommandEvent()
 SchemaPageEvent, EVT_SCHEMA_PAGE = wx.lib.newevent.NewCommandEvent()
 ImportEvent,     EVT_IMPORT      = wx.lib.newevent.NewCommandEvent()
+ExportEvent,     EVT_EXPORT      = wx.lib.newevent.NewCommandEvent()
 
 
 
@@ -719,7 +720,6 @@ class SQLPage(wx.Panel):
 
         self._db       = db
         self._last_sql = "" # Last executed SQL
-        self._export = {}   # Current export options, if any
         self._hovered_cell = None # (row, col)
 
         self._dialog_export = wx.FileDialog(self, defaultDir=os.getcwd(),
@@ -792,7 +792,7 @@ class SQLPage(wx.Panel):
             label="Double-click on column header to sort, right click to filter.")
         ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
 
-        panel_export = self._export = ExportProgressPanel(panel2, self._OnExportClose)
+        panel_export = self._export = ExportProgressPanel(panel2)
         panel_export.Hide()
 
         self.Bind(wx.EVT_TOOL,     self._OnCopySQL,       id=wx.ID_COPY)
@@ -805,6 +805,7 @@ class SQLPage(wx.Panel):
         self.Bind(wx.EVT_BUTTON,   self._OnExecuteScript, button_script)
         self.Bind(wx.EVT_BUTTON,   self._OnExport,        button_export)
         self.Bind(wx.EVT_BUTTON,   self._OnGridClose,     button_close)
+        self.Bind(EVT_EXPORT,      self._OnExportClose)
         stc.Bind(wx.EVT_KEY_DOWN,                         self._OnSTCKey)
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,     self._OnSort)
         grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,     self._OnFilter)
@@ -985,17 +986,14 @@ class SQLPage(wx.Panel):
                 if wx.ID_OK != dlg.ShowModal(): return
                 name = dlg.GetValue().strip()
                 if not name: return
-            exporter = functools.partial(importexport.export_data,
-                make_iterable, filename, title, self._db, self._grid.Table.columns,
-                query=self._grid.Table.sql, name=name,
-                progress=self._export.OnProgress
-            )
-            opts = {"filename": filename, "callable": exporter}
+            args = {"make_iterable": make_iterable, "filename": filename,
+                    "db": self._db, "columns": self._grid.Table.columns,
+                    "query": self._grid.Table.sql, "name": name, "title": title}
             self.Freeze()
             try:
                 for x in self._panel2.Children: x.Hide()
                 self._export.Show()
-                self._export.Export(opts)
+                self._export.Export({"filename": filename, "args": args})
                 self._panel2.Layout()
             finally: self.Thaw()
         except Exception as e:
@@ -1006,7 +1004,7 @@ class SQLPage(wx.Panel):
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
-    def _OnExportClose(self):
+    def _OnExportClose(self, event):
         """Handler for closing export panel."""
         self.Freeze()
         try:
@@ -1365,7 +1363,7 @@ class DataObjectPage(wx.Panel):
         label_help = wx.StaticText(self, label="Double-click on column header to sort, right click to filter.")
         ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
 
-        panel_export = self._export = ExportProgressPanel(self, self._OnExportClose)
+        panel_export = self._export = ExportProgressPanel(self, self._category)
         panel_export.Hide()
 
         self.Bind(wx.EVT_TOOL,   self._OnInsert,       id=wx.ID_ADD)
@@ -1376,6 +1374,7 @@ class DataObjectPage(wx.Panel):
         self.Bind(wx.EVT_TOOL,   self._OnRollback,     id=wx.ID_UNDO)
         self.Bind(wx.EVT_BUTTON, self._OnExport,       button_export)
         self.Bind(wx.EVT_BUTTON, self._OnAction,       button_actions)
+        self.Bind(EVT_EXPORT,    self._OnExportClose)
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,  self._OnSort)
         grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,  self._OnFilter)
         grid.Bind(wx.grid.EVT_GRID_CELL_CHANGED,       self._OnChange)
@@ -1481,6 +1480,21 @@ class DataObjectPage(wx.Panel):
         self._OnRefresh(pending=pending)
 
 
+    def Export(self, opts, noclose=True):
+        """
+        Opens export panel using given options, and starts export.
+
+        @param   noclose  whether export panel should not show "close" button
+        """
+        self.Freeze()
+        try:
+            for x in self.Children: x.Hide()
+            self._export.Show()
+            self._export.Export(opts, noclose)
+            self.Layout()
+        finally: self.Thaw()
+
+
     def _Populate(self):
         """Loads data to grid."""
         grid_data = SQLiteGridBase(self._db, category=self._category, name=self._item["name"])
@@ -1493,7 +1507,8 @@ class DataObjectPage(wx.Panel):
 
     def _PostEvent(self, **kwargs):
         """Posts an EVT_DATA_PAGE event to parent."""
-        wx.PostEvent(self, DataPageEvent(-1, source=self, item=self._item, **kwargs))
+        evt = DataPageEvent(self.Id, source=self, item=self._item, **kwargs)
+        wx.PostEvent(self, evt)
 
 
     def _OnChange(self, event=None):
@@ -1570,24 +1585,17 @@ class DataObjectPage(wx.Panel):
             filename += ".%s" % extname
         try:
             grid = self._grid.Table
-            exporter = functools.partial(importexport.export_data, grid.GetRowIterator,
-                filename, title, self._db, grid.columns,
-                category=self._category, name=self._item["name"],
-                progress=self._export.OnProgress,
-            )
-            opts = {"filename": filename, "callable": exporter}
-            opts.update({"total": grid.GetNumberRows()} if grid.IsComplete() else {
+            args = {"make_iterable": grid.GetRowIterator, "filename": filename,
+                    "title": title, "db": self._db, "columns": grid.columns,
+                    "category": self._category, "name": self._item["name"]}
+            opts = {"filename": filename, "args": args}
+            if grid.IsComplete() and not grid.IsChanged():
+                opts.update({"total": grid.GetNumberRows()})
+            elif "filter" not in grid.GetFilterSort(): opts.update({
                 "total": self._item.get("count"),
                 "is_total_estimated": self._item.get("is_count_estimated"),
-            } if "filter" not in grid.GetFilterSort() else {})
-
-            self.Freeze()
-            try:
-                for x in self.Children: x.Hide()
-                self._export.Show()
-                self._export.Export(opts)
-                self.Layout()
-            finally: self.Thaw()
+            })
+            self.Export(opts)
         except Exception as e:
             msg = "Error saving %s."
             logger.exception(msg, filename)
@@ -1596,10 +1604,11 @@ class DataObjectPage(wx.Panel):
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
-    def _OnExportClose(self):
+    def _OnExportClose(self, event):
         """
         Handler for closing export panel.
         """
+        if getattr(event, "close", False): return self._OnClose()
         self.Freeze()
         try:
             for x in self.Children: x.Show()
@@ -3465,7 +3474,8 @@ class SchemaObjectPage(wx.Panel):
 
     def _PostEvent(self, **kwargs):
         """Posts an EVT_SCHEMA_PAGE event to parent."""
-        wx.PostEvent(self, SchemaPageEvent(-1, source=self, item=self._item, **kwargs))
+        evt = SchemaPageEvent(self.Id, source=self, item=self._item, **kwargs)
+        wx.PostEvent(self, evt)
 
 
     def _AddSizer(self, parentsizer, childsizer, *args, **kwargs):
@@ -4250,39 +4260,48 @@ class ExportProgressPanel(wx.Panel):
     Panel for running exports and showing their progress.
     """
 
-    def __init__(self, parent, onclose):
+    def __init__(self, parent, category=None):
         wx.Panel.__init__(self, parent)
 
-        self._exports = []   # [{filename, callable, pending, count, ?total, ?is_total_estimated}]
+        self._exports = []   # [{filename, args, pending, count, ?total, ?is_total_estimated}]
         self._ctrls   = []   # [{title, gauge, text, cancel, open, folder}]
         self._current = None # Current export index
-        self._onclose = onclose
+        self._category = category # Category to show "Open %s" button for
         self._worker = workers.WorkerThread(self._OnWorker)
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_buttons      = wx.BoxSizer(wx.HORIZONTAL)
         panel_exports = self._panel = wx.ScrolledWindow(self)
         panel_exports.Sizer = wx.BoxSizer(wx.VERTICAL)
         panel_exports.SetScrollRate(0, 20)
 
-        button_close  = self._button_close  = wx.Button(self, label="Close")
+        button_open  = self._button_open  = wx.Button(self, label="Open %s" % category)\
+                       if category else None
+        button_close = self._button_close = wx.Button(self, label="Close")
 
+        if button_open: self.Bind(wx.EVT_BUTTON, self._OnClose, button_open)
         self.Bind(wx.EVT_BUTTON, self._OnClose, button_close)
         self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(lambda: self and (self.Layout(), self.Refresh())))
+
+        if button_open: sizer_buttons.Add(button_open, border=10, flag=wx.RIGHT)
+        sizer_buttons.Add(button_close)
 
         sizer.AddStretchSpacer()
         sizer.Add(panel_exports, proportion=5, flag=wx.ALIGN_CENTER | wx.GROW)
         sizer.AddStretchSpacer(0)
-        sizer.Add(button_close, border=16, flag=wx.ALL | wx.ALIGN_RIGHT)
+        sizer.Add(sizer_buttons, border=16, flag=wx.ALL | wx.ALIGN_RIGHT)
 
 
-    def Export(self, exports):
+    def Export(self, exports, noclose=False):
         """
         Run export.
 
-        @param   exports  [{filename, callable, ?total, ?is_total_estimated}]
+        @param   exports  [{filename, args, ?total, ?is_total_estimated}]
+        @param   noclose  whether close-button should not be shown
         """
         if isinstance(exports, dict): exports = [exports]
         self._exports = [dict(x, count=0, pending=True) for x in exports]
+        self._button_close.Show(not noclose)
         self._Populate()
         self._RunNext()
 
@@ -4400,10 +4419,12 @@ class ExportProgressPanel(wx.Panel):
         self._ctrls[index]["text"].Label = "0%"
         self.Layout()
         self.Thaw()
-        self._worker.work(opts["callable"])
+        args = dict(opts["args"], progress=functools.partial(self.OnProgress, index))
+        callable = opts["callable"] = lambda: importexport.export_data(**args)
+        self._worker.work(callable)
 
 
-    def _OnClose(self, event=None):
+    def _OnClose(self, event):
         """Confirms with popup if exports underway, notifies parent."""
         if self._worker.is_working() and wx.YES != controls.YesNoMessageBox(
             "Export is currently underway, are you sure you want to cancel it?",
@@ -4414,7 +4435,8 @@ class ExportProgressPanel(wx.Panel):
         self._exports = []
         self._current = None
         self._Populate()
-        self._onclose()
+        do_close = (event.EventObject is self._button_close)
+        wx.PostEvent(self, ExportEvent(self.Id, close=do_close))
 
 
     def _OnCancel(self, index, event=None):
@@ -5313,8 +5335,7 @@ class ImportDialog(wx.Dialog):
             if done:
                 success = self._importing
                 if success: self._importing = False
-                if success is not None:
-                    wx.PostEvent(self.Parent, ImportEvent(-1, table=self._table["name"]))
+                if success is not None: self._PostEvent()
                 SHOW = (self._button_restart, )
                 HIDE = (self._button_ok, self._button_reset)
                 if not isinstance(self.Parent, DataObjectPage): SHOW += (self._button_open, )
@@ -5441,8 +5462,7 @@ class ImportDialog(wx.Dialog):
         self._worker.stop_work()
         self._gauge.Value = self._gauge.Value # Stop pulse, if any
 
-        if wx.YES == keep:
-            wx.PostEvent(self.Parent, ImportEvent(-1, table=self._table["name"]))
+        if wx.YES == keep: self._PostEvent()
 
         if isinstance(event, wx.CloseEvent): return wx.CallAfter(self.EndModal, wx.CANCEL)
             
@@ -5622,7 +5642,7 @@ class ImportDialog(wx.Dialog):
 
     def _OnOpenTable(self, event=None):
         """Handler for clicking to close the dialog and open table data."""
-        wx.PostEvent(self.Parent, ImportEvent(-1, table=self._table["name"], open=True))
+        self._PostEvent(open=True)
         self.EndModal(wx.OK)
 
 
@@ -5656,3 +5676,9 @@ class ImportDialog(wx.Dialog):
                 self._cols2[index]["name0"] = self._cols2[index]["name"]
             self._cols2[index]["name"] = text
             wx.CallAfter(ctrl.SetItemText, event.Index, text)
+
+
+    def _PostEvent(self, **kwargs):
+        """Posts an EVT_IMPORT event to parent."""
+        evt = ImportEvent(self.Id, table=self._table["name"], **kwargs)
+        wx.PostEvent(self.Parent, evt)
