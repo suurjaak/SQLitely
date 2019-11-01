@@ -1347,9 +1347,9 @@ class DataObjectPage(wx.Panel):
             tb.EnableTool(wx.ID_DELETE, False)
         tb.Realize()
 
-        button_actions = wx.Button(self, label="Other actions ..")
         button_export  = wx.Button(self, label="&Export to file")
         button_export.ToolTip    = "Export to file"
+        button_actions = wx.Button(self, label="Other actions ..")
         button_actions.Show("table" == self._category)
 
         grid = self._grid = wx.grid.Grid(self)
@@ -1371,8 +1371,8 @@ class DataObjectPage(wx.Panel):
         self.Bind(wx.EVT_TOOL,   self._OnResetView,    id=wx.ID_RESET)
         self.Bind(wx.EVT_TOOL,   self._OnCommit,       id=wx.ID_SAVE)
         self.Bind(wx.EVT_TOOL,   self._OnRollback,     id=wx.ID_UNDO)
-        self.Bind(wx.EVT_BUTTON, self._OnAction,       button_actions)
         self.Bind(wx.EVT_BUTTON, self._OnExport,       button_export)
+        self.Bind(wx.EVT_BUTTON, self._OnAction,       button_actions)
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,  self._OnSort)
         grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,  self._OnFilter)
         grid.Bind(wx.grid.EVT_GRID_CELL_CHANGED,       self._OnChange)
@@ -1386,8 +1386,8 @@ class DataObjectPage(wx.Panel):
 
         sizer_header.Add(tb)
         sizer_header.AddStretchSpacer()
-        sizer_header.Add(button_actions, border=5, flag=wx.LEFT)
         sizer_header.Add(button_export, border=5, flag=wx.LEFT)
+        sizer_header.Add(button_actions, border=5, flag=wx.LEFT)
 
         sizer.Add(sizer_header, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer.Add(grid, proportion=1, flag=wx.GROW)
