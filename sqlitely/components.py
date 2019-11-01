@@ -103,7 +103,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             self.columns = [{"name": c[0], "type": "TEXT"}
                             for c in self.row_iterator.description or ()]
             TYPES = dict((v, k) for k, vv in {"INTEGER": (int, long, bool),
-                         "REAL": (float,)}.items() for v in vv)
+                         "REAL": (float, )}.items() for v in vv)
             self.is_seek = True
             self.SeekToRow(self.SEEK_CHUNK_LENGTH - 1)
             for col in self.columns if self.rows_current else ():
@@ -191,7 +191,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 value = self.rows_current[row][self.columns[col]["name"]]
                 if type(value) is buffer:
                     value = str(value).decode("latin1")
-        if value and "BLOB" == self.columns[col].get("type") and isinstance(value, basestring):
+        if value and isinstance(value, basestring) \
+        and "BLOB" == self.db.get_affinity(self.columns[col]):
             # Text editor does not support control characters or null bytes.
             value = value.encode("unicode-escape")
         return value if value is not None else ""
@@ -242,7 +243,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             part = ""
             for col, filter_value in self.filters.items():
                 column_data = self.columns[col]
-                if self.db.get_affinity(column_data["type"]) in ("INTEGER", "REAL"):
+                if self.db.get_affinity(column_data) in ("INTEGER", "REAL"):
                     part = "%s = %s" % (column_data["name"], filter_value)
                 else:
                     v = grammar.quote(filter_value, force=True)[1:-1]
@@ -274,7 +275,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                     col_value = float(valc) if ("." in valc) else int(val)
                     accepted = True
                 except Exception: pass
-        elif "BLOB" == self.columns[col].get("type"):
+        elif "BLOB" == self.db.get_affinity(self.columns[col]):
             # Text editor does not support control characters or null bytes.
             try: col_value, accepted = val.decode("unicode-escape"), True
             except UnicodeError: pass # Text is not valid escaped Unicode
@@ -409,7 +410,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             for n in ["newblob", "defaultblob", "row_changedblob", "cell_changedblob"]:
                 self.attrs[n].SetEditor(wx.grid.GridCellAutoWrapStringEditor())
 
-        blob = "blob" if (self.columns[col].get("type", "").lower() == "blob") else ""
+        blob = "blob" if ("BLOB" == self.db.get_affinity(self.columns[col])) else ""
         name = "default"
         if row < len(self.rows_current):
             if self.rows_current[row]["__changed__"]:
