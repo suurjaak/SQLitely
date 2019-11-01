@@ -62,7 +62,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    27.10.2019
+@modified    01.11.2019
 ------------------------------------------------------------------------------
 """
 import collections

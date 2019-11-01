@@ -835,6 +835,7 @@ class SQLPage(wx.Panel):
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
         label_help.Hide()
         self.Layout()
+        wx_accel.accelerate(self)
         wx.CallAfter(lambda: splitter.SplitHorizontally(panel1, panel2, sashPosition=self.Size[1] * 2/5))
 
 
@@ -1396,6 +1397,7 @@ class DataObjectPage(wx.Panel):
         sizer.Add(label_help, border=5, flag=wx.TOP | wx.BOTTOM)
         sizer.Add(panel_export, proportion=1, flag=wx.ALIGN_CENTER_HORIZONTAL | wx.GROW)
         self._Populate()
+        wx_accel.accelerate(self)
         self._grid.SetFocus()
 
 
@@ -2001,6 +2003,7 @@ class SchemaObjectPage(wx.Panel):
         splitter.SetMinimumPaneSize(100)
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
         splitter.SplitHorizontally(panel1, panel2, splitter.Size[1] - 200)
+        wx_accel.accelerate(self)
         def after():
             if not self: return
             if self._newmode: edit_name.SetFocus(), edit_name.SelectAll()
@@ -4870,7 +4873,6 @@ class ImportDialog(wx.Dialog):
         self._UpdateFooter()
 
         self.MinSize = (400, 400)
-        wx_accel.accelerate(self)
         self.Layout()
 
         if pos == wx.DefaultPosition:
@@ -4878,6 +4880,7 @@ class ImportDialog(wx.Dialog):
             (x, y), (w, h), (w2, h2) = top.Position, top.Size, self.Size
             self.Position = x + (w - w2)  / 2, y + (h - h2) / 2
 
+        wx_accel.accelerate(self)
         wx.CallLater(0, button_file.SetFocus)
 
 

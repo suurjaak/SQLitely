@@ -42,6 +42,7 @@ import wx.lib.newevent
 from . lib import controls
 from . lib.controls import ColourManager
 from . lib import util
+from . lib import wx_accel
 from . lib.vendor import step
 
 from . import components
@@ -1718,7 +1719,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def on_close_page(self, event):
         """
         Handler for closing a page, asks the user about saving unsaved data,
-        if any, removes page from main notebook and updates accelerators.
+        if any, removes page from main notebook.
         """
         if getattr(self, "_ignore_paging", False): return
         if event.EventObject == self.notebook:
@@ -1807,7 +1808,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.page_db_latest = next((i for i in self.pages_visited[::-1]
                                         if isinstance(i, DatabasePage)), None)
         self.SendSizeEvent() # Multiline wx.Notebooks need redrawing
-        self.UpdateAccelerators() # Remove page accelerators
 
         # Remove page from visited pages order
         self.pages_visited = [x for x in self.pages_visited if x != page]
@@ -1904,7 +1904,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 page = DatabasePage(self.notebook, tab_title, db, self.memoryfs)
                 conf.DBsOpen[db.filename] = db
                 self.db_pages[page] = db
-                self.UpdateAccelerators()
                 conf.save()
                 self.Bind(wx.EVT_LIST_DELETE_ALL_ITEMS,
                           self.on_clear_searchall, page.edit_searchall)
@@ -2082,11 +2081,11 @@ class DatabasePage(wx.Panel):
             guibase.status("Opened database %s." % db, flash=True)
         finally:
             busy.Close()
+        wx_accel.accelerate(self)
         self.edit_searchall.SetFocus()
         wx.CallAfter(self.edit_searchall.SelectAll)
         if "linux2" == sys.platform and wx.version().startswith("2.8"):
             wx.CallAfter(self.split_panels)
-
 
 
     def create_page_search(self, notebook):
@@ -3892,7 +3891,6 @@ class DatabasePage(wx.Panel):
             self.data_pages[data["type"]][data.get("name") or id(p)] = p
             self.notebook_data.InsertPage(0, page=p, text=title, select=True)
         finally: self.notebook_data.Thaw()
-        self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
         self.TopLevelParent.run_console(
             "datapage = page.notebook_data.GetPage(0) # Data object subtab")
 
@@ -3909,8 +3907,6 @@ class DatabasePage(wx.Panel):
         p.Text = text
         self.sql_pages[name] = p
         self.notebook_sql.InsertPage(0, page=p, text=name, select=True)
-        self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
-        self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
         self.TopLevelParent.run_console(
             "sqlpage = page.notebook_sql.GetPage(0) # SQL window subtab")
 
@@ -3950,7 +3946,6 @@ class DatabasePage(wx.Panel):
             self.schema_pages[data["type"]][data.get("name") or id(p)] = p
             self.notebook_schema.InsertPage(0, page=p, text=title, select=True)
         finally: self.notebook_schema.Thaw()
-        self.TopLevelParent.UpdateAccelerators() # Add panel accelerators
         self.TopLevelParent.run_console(
             "schemapage = page.notebook_schema.GetPage(0) # Schema object subtab")
 
@@ -3964,7 +3959,6 @@ class DatabasePage(wx.Panel):
             if p is page:
                 self.schema_pages[c].pop(k)
                 break # for c, k, p
-        self.TopLevelParent.UpdateAccelerators() # Remove panel accelerators
         self.update_page_header()
 
 
@@ -4096,7 +4090,6 @@ class DatabasePage(wx.Panel):
                     if p.Text.strip(): self.sql_pages_closed.append((k, p.Text))
                     self.sql_pages.pop(k)
                     break # for k, p
-            self.TopLevelParent.UpdateAccelerators() # Remove panel accelerators
         finally: wx.CallAfter(self.notebook_sql.Thaw)
 
 
@@ -4109,7 +4102,6 @@ class DatabasePage(wx.Panel):
             if p is page:
                 self.data_pages[c].pop(k)
                 break # for c, k, p
-        self.TopLevelParent.UpdateAccelerators() # Remove panel accelerators
         self.update_page_header()
 
 
