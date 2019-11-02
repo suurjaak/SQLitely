@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.10.2019
+@modified    02.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -261,7 +261,7 @@ def get_import_file_data(filename):
     elif is_xlsx:
         wb = None
         try:
-            wb = openpyxl.load_workbook(filename, read_only=True)
+            wb = openpyxl.load_workbook(filename, data_only=True, read_only=True)
             for sheet in wb.worksheets:
                 rows = -1 if size > MAX_IMPORT_FILESIZE_FOR_COUNT \
                        else sum(1 for _ in sheet.iter_rows())
@@ -414,7 +414,7 @@ def iter_file_rows(filename, columns, sheet=None):
     elif is_xlsx:
         wb = None
         try:
-            wb = openpyxl.load_workbook(filename, read_only=True)
+            wb = openpyxl.load_workbook(filename, data_only=True, read_only=True)
             for row in wb.get_sheet_by_name(sheet).iter_rows(values_only=True):
                 yield [row[i] if i < len(row) else None for i in columns]
         finally: wb and wb.close()
