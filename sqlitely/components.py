@@ -3043,6 +3043,9 @@ class SchemaObjectPage(wx.Panel):
                 and item["name"] == self._item["meta"].get("table"):
                     singlewords = ww
                 if self._category in ("trigger", "view"): subwords[myname] = ww
+                if "trigger" == self._category \
+                and item["name"] == self._item["meta"].get("table"):
+                    subwords["OLD"] = subwords["NEW"] = ww
 
         for c in self._ctrls.values():
             if not isinstance(c, controls.SQLiteTextCtrl): continue # for c
