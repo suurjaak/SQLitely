@@ -399,19 +399,13 @@ class SQLiteGridBase(wx.grid.GridTableBase):
     def GetAttr(self, row, col, kind):
         """Returns wx.grid.GridCellAttr for table cell."""
         if not self.attrs:
-            for n in ["new", "default", "row_changed", "cell_changed",
-            "newblob", "defaultblob", "row_changedblob", "cell_changedblob"]:
-                self.attrs[n] = wx.grid.GridCellAttr()
-            for n in ["new", "newblob"]:
-                self.attrs[n].SetBackgroundColour(conf.GridRowInsertedColour)
-            for n in ["row_changed", "row_changedblob"]:
-                self.attrs[n].SetBackgroundColour(conf.GridRowChangedColour)
-            for n in ["cell_changed", "cell_changedblob"]:
-                self.attrs[n].SetBackgroundColour(conf.GridCellChangedColour)
-            for n in ["newblob", "defaultblob", "row_changedblob", "cell_changedblob"]:
-                self.attrs[n].SetEditor(wx.grid.GridCellAutoWrapStringEditor())
+            ATTRS = {"row_changed":  conf.GridRowChangedColour,
+                     "cell_changed": conf.GridCellChangedColour,
+                     "new":          conf.GridRowInsertedColour, "default": None}
+            for name, bg in ATTRS.items():
+                self.attrs[name] = wx.grid.GridCellAttr()
+                if bg: self.attrs[name].SetBackgroundColour(bg)
 
-        blob = "blob" if ("BLOB" == self.db.get_affinity(self.columns[col])) else ""
         name = "default"
         if row < len(self.rows_current):
             if self.rows_current[row]["__changed__"]:
@@ -420,7 +414,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 backup = self.rows_backup[idx][self.columns[col]["name"]]
                 name = "row_changed" if backup == value else "cell_changed"
             elif self.rows_current[row]["__new__"]: name = "new"
-        attr = self.attrs[name + blob]
+        attr = self.attrs[name]
         attr.IncRef()
         return attr
 
