@@ -724,6 +724,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
             row["sql"] = row["sql0"] = row["sql"].strip()
             self.schema[row["type"]][row["name"].lower()] = row
 
+        for mycategory in self.schema: # Ensure item order
+            items = self.schema[mycategory].items()
+            self.schema[mycategory].clear()
+            self.schema[mycategory].update(sorted(items))
+
         for mycategory, itemmap in self.schema.items():
             if category and category != mycategory: continue # for mycategory
             for myname, opts in itemmap.items():
