@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.11.2019
+@modified    02.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -595,7 +595,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         Returns success.
         """
         result = False
-        refresh_idxs = []
+        refresh_idxs, reload_idxs = [], []
+        rels = self.db.get_related("table", self.name, associated=True)
+        actions = {x["meta"].get("action"): True for x in rels.get("trigger", [])}
         try:
             for idx in self.idx_changed.copy():
                 row = self.rows_all[idx]
@@ -605,22 +607,24 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 self.idx_changed.remove(idx)
                 del self.rows_backup[idx]
                 refresh_idxs.append(idx)
+                if grammar.SQL.UPDATE in actions: reload_idxs.append(idx)
             # Save all newly inserted rows
             pks = [c["name"] for c in self.columns if "pk" in c]
             col_map = dict((c["name"], c) for c in self.columns)
             for idx in self.idx_new[:]:
                 row = self.rows_all[idx]
                 insert_id = self.db.insert_row(self.name, row)
-                if len(pks) == 1 and row[pks[0]] in (None, ""):
-                    if "INTEGER" == self.db.get_affinity(col_map[pks[0]]):
-                        # Autoincremented row: update with new value
-                        row[pks[0]] = insert_id
+                if len(pks) == 1 and row[pks[0]] in (None, "") \
+                and "INTEGER" == self.db.get_affinity(col_map[pks[0]]):
+                    # Autoincremented row: update with new value
+                    row[pks[0]] = insert_id
                 elif insert_id is not None:
                     # No or compound or non-integer primary key: insert gives ROWID
                     self.rowids[idx] = insert_id
                 row["__new__"] = False
                 self.idx_new.remove(idx)
                 refresh_idxs.append(idx)
+                if grammar.SQL.INSERT in actions: reload_idxs.append(idx)
             # Delete all newly removed rows
             for idx, row in self.rows_deleted.copy().items():
                 self.db.delete_row(self.name, row, self.rowids.get(idx))
@@ -634,7 +638,11 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+        for idx in reload_idxs:
+            row, rowid = self.rows_all[idx], (self.rowids[idx] if self.rowids else None)
+            row.update(self.db.select_row(self.name, row, rowid) or {})
         self._RefreshAttrs(refresh_idxs)
+        if reload_idxs: self.NotifyViewChange(self.GetNumberRows())
 
 
     def UndoChanges(self):
@@ -4110,8 +4118,8 @@ class SchemaObjectPage(wx.Panel):
 
         @return   ([errors], {parsed meta from current SQL})
         """
-        errors, meta2 = [], None
-        name = self._item["meta"].get("name") or ""
+        errors, meta, meta2 = [], self._item["meta"], None
+        name = meta.get("name") or ""
 
         if not name:
             errors += ["Name is required."]
@@ -4120,14 +4128,13 @@ class SchemaObjectPage(wx.Panel):
                 errors += ["View is required."]
             else:
                 errors += ["Table is required."]
-        if "trigger" == self._category and not self._item["meta"].get("body"):
+        if "trigger" == self._category and not meta.get("body"):
             errors += ["Body is required."]
-        if "trigger" == self._category and not self._item["meta"].get("action"):
+        if "trigger" == self._category and not meta.get("action"):
             errors += ["Action is required."]
-        if "view"    == self._category and not self._item["meta"].get("select"):
+        if "view"    == self._category and not meta.get("select"):
             errors += ["Select is required."]
-        if self._category in ("table", "index") \
-        and not self._item["meta"].get("columns"):
+        if self._category in ("table", "index") and not meta.get("columns"):
             errors += ["Columns are required."]
 
         if (self._newmode or name.lower() != self._item["name"].lower()) \

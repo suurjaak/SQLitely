@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.11.2019
+@modified    02.11.2019
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -22,8 +22,8 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev164"
-VersionDate = "01.11.2019"
+Version = "1.0.dev166"
+VersionDate = "02.11.2019"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable

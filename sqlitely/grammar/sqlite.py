@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    01.11.2019
+@modified    02.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -155,6 +155,7 @@ class SQL(object):
     FOR_EACH_ROW         = "FOR EACH ROW"
     FOREIGN_KEY          = "FOREIGN KEY"
     IF_NOT_EXISTS        = "IF NOT EXISTS"
+    INSERT               = "INSERT"
     INITIALLY            = "INITIALLY"
     INSTEAD_OF           = "INSTEAD OF"
     MATCH                = "MATCH"
