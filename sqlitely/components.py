@@ -643,6 +643,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             row.update(self.db.select_row(self.name, row, rowid) or {})
         self._RefreshAttrs(refresh_idxs)
         if reload_idxs: self.NotifyViewChange(self.GetNumberRows())
+        return result
 
 
     def UndoChanges(self):
@@ -1473,7 +1474,7 @@ class DataObjectPage(wx.Panel):
                     grammar.quote(self._item["name"]), self._db)
         if not self._grid.Table.SaveChanges(): return False
 
-        self._OnChange()
+        self._OnChange(updated=True)
         # Refresh cell colours; without CallLater wx 2.8 can crash
         wx.CallLater(0, self._grid.ForceRefresh)
         return True
@@ -1519,12 +1520,12 @@ class DataObjectPage(wx.Panel):
         wx.PostEvent(self, evt)
 
 
-    def _OnChange(self, event=None):
+    def _OnChange(self, event=None, **kwargs):
         """Refresh toolbar icons based on data change state, notifies parent."""
         changed = self._grid.Table.IsChanged()
         self._tb.EnableTool(wx.ID_SAVE, changed)
         self._tb.EnableTool(wx.ID_UNDO, changed)
-        self._PostEvent(modified=changed)
+        self._PostEvent(modified=changed, **kwargs)
 
 
     def _OnClose(self, event=None):
@@ -1665,7 +1666,7 @@ class DataObjectPage(wx.Panel):
         if not self._grid.Table.SaveChanges(): return
 
         self._backup = None
-        self._OnChange()
+        self._OnChange(updated=True)
         # Refresh cell colours; without CallLater wx 2.8 can crash
         wx.CallLater(0, self._grid.ForceRefresh)
 
@@ -1683,7 +1684,7 @@ class DataObjectPage(wx.Panel):
         wx.CallLater(0, lambda: (self._grid.ContainingSizer.Layout(),
                                  self._grid.ForceRefresh()))
         self._backup = None
-        self._OnChange()
+        self._OnChange(updated=True)
 
 
     def _OnRefresh(self, event=None, pending=False):
@@ -1716,7 +1717,7 @@ class DataObjectPage(wx.Panel):
             cursorpos = [max(0, min(x)) for x in zip(cursorpos, maxpos)]
             self._grid.SetGridCursor(*cursorpos)
         finally: self._grid.Thaw()
-        self._OnChange()
+        self._OnChange(updated=True)
 
 
     def _OnFilter(self, event):
