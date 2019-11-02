@@ -459,8 +459,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             del self.rows_current[row]
             if idx in self.rows_backup:
                 # If row was changed, switch to its backup data
-                data = self.rows_backup[idx]
-                del self.rows_backup[idx]
+                data = self.rows_backup.pop(idx)
                 self.idx_changed.remove(idx)
             if not data["__new__"]:
                 # Drop new rows on delete, rollback can't restore them.
@@ -665,12 +664,12 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             if row in self.rows_current: self.rows_current.remove(row)
             self.idx_new.remove(idx)
             self.idx_all.remove(idx)
+            self.row_count -= 1
         # Undelete all newly deleted items
         for idx, row in self.rows_deleted.items():
             row["__deleted__"] = False
+            self.rows_all[idx].update(row)
             del self.rows_deleted[idx]
-            if not self._IsRowFiltered(row):
-                self.rows_current.append(row)
             self.row_count += 1
         self.Filter(rows_before)
         self._RefreshAttrs(refresh_idxs)
@@ -1548,7 +1547,7 @@ class DataObjectPage(wx.Panel):
             "are you sure you want to discard them?",
             conf.Title, wx.ICON_INFORMATION, defaultno=True
         ): return
-        self._PostEvent(close=True)
+        if event: self._PostEvent(close=True)
         return True
 
 
@@ -1617,7 +1616,7 @@ class DataObjectPage(wx.Panel):
         """
         Handler for closing export panel.
         """
-        if getattr(event, "close", False): return self._OnClose()
+        if getattr(event, "close", False): return self._OnClose(True)
         self.Freeze()
         try:
             for x in self.Children: x.Show()
