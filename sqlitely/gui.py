@@ -2070,6 +2070,9 @@ class DatabasePage(wx.Panel):
         self.notebook.SetSelection(self.pageorder[self.page_info])
         # Hack to get SQL window size to layout without quirks.
         self.notebook.SetSelection(self.pageorder[self.page_sql])
+        for i in range(1, self.notebook_sql.GetPageCount() - 1):
+            self.notebook_sql.SetSelection(i)
+        self.notebook_sql.SetSelection(0)
         self.notebook.SetSelection(self.pageorder[self.page_search])
         # Restore last active page
         if db.filename in conf.LastActivePage \
