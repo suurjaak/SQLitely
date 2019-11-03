@@ -11,6 +11,7 @@ Released under the MIT License.
 @modified    03.11.2019
 ------------------------------------------------------------------------------
 """
+from collections import OrderedDict
 import hashlib
 import logging
 import os
@@ -159,6 +160,7 @@ class SearchThread(WorkerThread):
         tpl = step.Template(templates.SEARCH_ROW_META_HTML, escape=True)
         result = {"output": "", "map": {}, "search": search, "count": 0}
 
+        counts = OrderedDict() # {category: count}
         for category in database.Database.CATEGORIES if words else ():
             othercats = set(database.Database.CATEGORIES) - set([category])
             if category not in kws and othercats & set(kws):
@@ -175,6 +177,7 @@ class SearchThread(WorkerThread):
                 if not self._is_working: break # for item
                 if not matches: continue # for item
 
+                counts[category] = counts.get(category, 0) + 1
                 result["count"] += 1
                 ns = dict(category=category, item=item,
                           pattern_replace=pattern_replace)
@@ -186,6 +189,12 @@ class SearchThread(WorkerThread):
                     yield "", result
                     result = dict(result, output="", map={})
             if not self._is_working: break # for category
+        if counts: infotext += ": found %s; %s in total" % (
+            ", ".join("<a href='#%s'><font color='%s'>%s</font></a>" %
+                      (k, conf.LinkColoura, util.plural(k, v))
+                      for k, v in counts.items()),
+            util.plural("result", result["count"])
+        )
         yield infotext, result
 
 
@@ -382,9 +391,8 @@ class AnalyzerThread(WorkerThread):
     def stop(self):
         """Stops the worker thread."""
         super(AnalyzerThread, self).stop()
-        if self._process:
-            try: self._process.kill()
-            except Exception: pass
+        try: self._process.kill()
+        except Exception: pass
         self._process = None
 
 
@@ -393,9 +401,8 @@ class AnalyzerThread(WorkerThread):
         Signals to stop the currently ongoing work, if any.
         """
         super(AnalyzerThread, self).stop_work(drop_results)
-        if self._process:
-            try: self._process.kill()
-            except Exception: pass
+        try: self._process.kill()
+        except Exception: pass
         self._process = None
 
 
@@ -426,7 +433,7 @@ class AnalyzerThread(WorkerThread):
                     except Exception:
                         if mypath == paths[-1]: raise
                     else: break # for mypath
-                output, error = self._process.communicate()
+                if self._process: output, error = self._process.communicate()
             except Exception as e:
                 if self._process:
                     try:

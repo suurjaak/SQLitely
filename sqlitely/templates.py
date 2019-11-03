@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.10.2019
+@modified    03.11.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -490,7 +490,7 @@ from sqlitely import conf, grammar
 
 wrap_b = lambda x: "<b>%s</b>" % x.group(0)
 %>
-{{ category.capitalize() }}
+<a name="{{ category }}">{{ category.capitalize() }}</a>
 <a href="{{ category }}:{{ item["name"] }}"><font color="{{ conf.LinkColour }}">{{! pattern_replace.sub(wrap_b, escape(grammar.quote(item["name"]))) }}</font></a>:
 <pre><font size="2">{{! pattern_replace.sub(wrap_b, escape(item["sql"])).replace(" ", "&nbsp;") }}</font></pre>
 <br /><br />
@@ -874,10 +874,10 @@ except ImportError:
   <b><font size="3">Examples</font></b><br /><br />
 
   <ul>
-    <li>search for "flickr.com" in columns named "url":
+    <li>search for "domain.com" in columns named "url":
         <br /><br />
         <font color="{{ conf.HelpCodeColour }}">
-        <code>flickr.com column:url</code></font><br />
+        <code>domain.com column:url</code></font><br />
     </li>
     <li>search for "foo bar" up to 2011:<br /><br />
         <font color="{{ conf.HelpCodeColour }}"><code>"foo bar" date:..2011</code></font>
