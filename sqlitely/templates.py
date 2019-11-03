@@ -664,7 +664,7 @@ from sqlitely import conf
 </tr>
 <tr>
   <td valign="top">
-    <a href="page:schema"><img src="memory:HelpData.png" /></a>
+    <a href="page:schema"><img src="memory:HelpSchema.png" /></a>
   </td><td valign="center">
     Create and edit database schema definitions.
   </td><td width="30"></td>

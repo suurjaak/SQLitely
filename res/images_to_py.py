@@ -59,6 +59,8 @@ IMAGES = {
         "Help image on default search page for information page.",
     "HelpPragma.png":
         "Help image on default search page for pragma page.",
+    "HelpSchema.png":
+        "Help image on default search page for schema page.",
     "HelpSearch.png":
         "Help image on default search page for search page.",
     "HelpSQL.png":
