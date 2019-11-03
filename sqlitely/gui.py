@@ -2588,6 +2588,7 @@ class DatabasePage(wx.Panel):
                            border=5, flag=wx.TOP | wx.GROW)
             setattr(self, name, valuetext)
         button_checksum_stop = self.button_checksum_stop = wx.Button(panel1c, label="Stop")
+        button_checksum_stop.ToolTip = "Stop checksum calculation"
         sizer_info.Add(button_checksum_stop, pos=(len(names) - 2, 2), span=(2, 1),
                        border=10, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         self.edit_info_path.Value = "<temporary file>" if self.db.temporary \
@@ -4427,13 +4428,14 @@ class DatabasePage(wx.Panel):
             self.html_searchall.InsertTab(0, title, tabid, html, info)
         wx.CallLater(100, self.update_tabheader)
         wx.CallLater(200, self.load_tree_data)
-        wx.CallLater(500, self.update_info_panel, False)
-        wx.CallLater(1000, self.reload_schema, count=True, parse=True)
+        wx.CallLater(300, self.update_info_panel, False)
+        wx.CallLater(400, self.reload_schema, count=True, parse=True)
         self.worker_analyzer.work(self.db.filename)
 
 
     def reload_schema(self, count=False, parse=False):
         """Reloads database schema and refreshes relevant controls"""
+        if not self: return
         self.db.populate_schema(count=count, parse=parse)
         self.load_tree_data()
         self.load_tree_schema()
@@ -4484,6 +4486,7 @@ class DatabasePage(wx.Panel):
 
     def load_tree_data(self, refresh=False):
         """Loads table and view data into data tree."""
+        if not self: return
         tree = self.tree_data
         expandeds = self.get_tree_state(tree, tree.RootItem)
         tree.DeleteAllItems()
@@ -4544,6 +4547,7 @@ class DatabasePage(wx.Panel):
 
     def load_tree_schema(self, refresh=False):
         """Loads database schema into schema tree."""
+        if not self: return
         tree = self.tree_schema
         expandeds = self.get_tree_state(tree, tree.RootItem)
         tree.DeleteAllItems()
@@ -5110,6 +5114,7 @@ class DatabasePage(wx.Panel):
 
     def update_autocomp(self):
         """Add PRAGMAS, and table/view/column names to SQL autocomplete."""
+        if not self: return
         words = list(database.Database.PRAGMA) + database.Database.EXTRA_PRAGMAS
         subwords = {}
 
