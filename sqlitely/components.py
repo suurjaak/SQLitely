@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.11.2019
+@modified    03.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -2477,34 +2477,25 @@ class SchemaObjectPage(wx.Panel):
         self._ctrls["exists"].Value    = bool(meta.get("exists"))
         self._ctrls["without"].Value   = bool(meta.get("without"))
 
-        row, col = self._grid_columns.GridCursorRow, self._grid_columns.GridCursorCol
-        if self._grid_columns.NumberRows:
-            self._grid_columns.SetGridCursor(-1, col)
-            self._grid_columns.DeleteRows(0, self._grid_columns.NumberRows)
-        self._grid_columns.AppendRows(len(meta.get("columns") or ()))
+        for i, grid in enumerate((self._grid_columns, self._grid_constraints)):
+            panel = self._panel_constraints     if i else self._panel_columns
+            adder = self._AddRowTableConstraint if i else self._AddRowTable
+            collection = "constraints" if i else "columns"
 
-        self._EmptyControl(self._panel_columns)
-        for i, coldata in enumerate(meta.get("columns") or ()):
-            self._AddRowTable(["columns"], i, coldata)
-        if self._grid_columns.NumberRows:
-            row = min(max(0, row), self._grid_columns.NumberRows - 1)
-            wx.CallLater(0, self._grid_columns.SetGridCursor, row, col)
-        self._panel_columns.Layout()
+            row, col = grid.GridCursorRow, grid.GridCursorCol
+            if grid.NumberRows:
+                grid.SetGridCursor(-1, col)
+                grid.DeleteRows(0, grid.NumberRows)
+            grid.AppendRows(len(meta.get(collection) or ()))
 
-        row, col = self._grid_constraints.GridCursorRow, self._grid_constraints.GridCursorCol
-        if self._grid_constraints.NumberRows:
-            self._grid_constraints.SetGridCursor(-1, col)
-            self._grid_constraints.DeleteRows(0, self._grid_constraints.NumberRows)
-        self._grid_constraints.AppendRows(len(meta.get("constraints") or ()))
-
-        self._EmptyControl(self._panel_constraints)
-        for i, cnstr in enumerate(meta.get("constraints") or ()):
-            self._AddRowTableConstraint(["constraints"], i, cnstr)
-        if self._grid_constraints.NumberRows:
-            row = min(max(0, row), self._grid_constraints.NumberRows - 1)
-            wx.CallLater(0, self._grid_constraints.SetGridCursor, row, col)
-            wx.CallAfter(self._SizeConstraintsGrid)
-        self._panel_constraints.Layout()
+            self._EmptyControl(panel)
+            for j, opts in enumerate(meta.get(collection) or ()):
+                adder([collection], j, opts)
+            if grid.NumberRows:
+                row = min(max(0, row), grid.NumberRows - 1)
+                wx.CallLater(0, grid.SetGridCursor, row, col)
+                if i: wx.CallAfter(self._SizeConstraintsGrid)
+            panel.Layout()
 
         lencol, lencnstr =  (len(meta.get(x) or ()) for x in ("columns", "constraints"))
         self._notebook_table.SetPageText(0, "Columns"     if not lencol   else "Columns (%s)" % lencol)
@@ -2776,7 +2767,7 @@ class SchemaObjectPage(wx.Panel):
 
             stc_check.ToolTip  = "Expression yielding a NUMERIC 0 on " \
                                  "constraint violation,\ncannot contain a subquery."
-            label_type.ToolTip = stc_check.ToolTip
+            label_type.ToolTip = stc_check.GetToolTipText()
 
             sizer_item.Add(stc_check, proportion=1)
 
