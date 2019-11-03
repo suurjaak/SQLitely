@@ -1,3 +1,6 @@
 antlr4-python2-runtime
+openpyxl
 pyparsing
+xlrd
 XlsxWriter
+wxpython

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    23.10.2019
+@modified    03.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -123,6 +123,14 @@ def uni(x, encoding="utf-8"):
     return unicode(str(x), encoding, errors="replace")
 
 
+def first(sql):
+    """
+    Returns the first token of the SQL statement, uppercased, leading comments 
+    and whitespace stripped. E.g. "SELECT" for "/** */--single\n select*FROM'mytable'".
+    """
+    sql = re.sub("(/\*(.|[\r\n])*?\*/)|(--(.*|[\r\n]))", "", sql)
+    return re.split("\W", sql.lstrip(), 1)[0].upper()
+
 
 
 class SQL(object):
@@ -143,9 +151,11 @@ class SQL(object):
     CREATE               = "CREATE"
     DEFAULT              = "DEFAULT"
     DEFERRABLE           = "DEFERRABLE"
+    EXPLAIN              = "EXPLAIN"
     FOR_EACH_ROW         = "FOR EACH ROW"
     FOREIGN_KEY          = "FOREIGN KEY"
     IF_NOT_EXISTS        = "IF NOT EXISTS"
+    INSERT               = "INSERT"
     INITIALLY            = "INITIALLY"
     INSTEAD_OF           = "INSTEAD OF"
     MATCH                = "MATCH"
@@ -153,8 +163,10 @@ class SQL(object):
     NOT                  = "NOT"
     ON_CONFLICT          = "ON CONFLICT"
     ON                   = "ON"
+    PRAGMA               = "PRAGMA"
     PRIMARY_KEY          = "PRIMARY KEY"
     REFERENCES           = "REFERENCES"
+    SELECT               = "SELECT"
     TABLE                = "TABLE"
     TEMPORARY            = "TEMPORARY"
     UNIQUE               = "UNIQUE"
@@ -445,7 +457,7 @@ class Parser(object):
             result["when"] = self.r(ctx.expr())
 
         body = self.r(ctx.K_BEGIN(), ctx.K_END()).rstrip()
-        result["body"] = re.sub(r"^\n?(.+)\n?$", r"\1", body)
+        result["body"] = re.sub("^\n?(.+?)\n?$", r"\1", body, flags=re.DOTALL)
 
         return result
 

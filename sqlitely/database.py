@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.10.2019
+@modified    02.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -724,6 +724,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
             row["sql"] = row["sql0"] = row["sql"].strip()
             self.schema[row["type"]][row["name"].lower()] = row
 
+        for mycategory in self.schema: # Ensure item order
+            items = self.schema[mycategory].items()
+            self.schema[mycategory].clear()
+            self.schema[mycategory].update(sorted(items))
+
         for mycategory, itemmap in self.schema.items():
             if category and category != mycategory: continue # for mycategory
             for myname, opts in itemmap.items():
@@ -1003,14 +1008,40 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
+    def select_row(self, table, row, rowid=None):
+        """
+        Fetches the table row from the database, identified by the given ROWID,
+        or by the primary keys in its original values, or by all columns in its
+        original values if table has no primary key.
+        """
+        if not self.is_open(): return
+
+        table, where = table.lower(), ""
+        col_data = self.schema["table"][table]["columns"]
+
+        where, args = "", {}
+
+        if rowid is not None:
+            key_data = [{"name": "rowid"}]
+            keyargs = self.make_args(key_data, {"rowid": rowid}, args)
+        else: # Use either primary key or all columns to identify row
+            key_data = [c for c in col_data if "pk" in c] or col_data
+            keyargs = self.make_args(key_data, row, args)
+        for col, key in zip(key_data, keyargs):
+            where += (" AND " if where else "") + "%s IS :%s" % (grammar.quote(col["name"]), key)
+        args.update(keyargs)
+        sql = "SELECT * FROM %s WHERE %s" % (grammar.quote(table), where)
+        return self.execute(sql, args).fetchone()
+
+
     def insert_row(self, table, row):
         """
         Inserts the new table row in the database.
 
         @return  ID of the inserted row
         """
-        if not self.is_open():
-            return
+        if not self.is_open(): return
+
         table = table.lower()
         logger.info("Inserting 1 row into table %s, %s.",
                     grammar.quote(self.schema["table"][table]["name"]),
@@ -1035,8 +1066,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         or by the primary keys in its original values, or by all columns in its
         original values if table has no primary key.
         """
-        if not self.is_open():
-            return
+        if not self.is_open(): return
+
         table, where = table.lower(), ""
         logger.info("Updating 1 row in table %s, %s.",
                     grammar.quote(self.schema["table"][table]["name"]), self.name)
@@ -1050,8 +1081,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if rowid is not None:
             key_data = [{"name": "rowid"}]
             keyargs = self.make_args(key_data, {"rowid": rowid}, args)
-        else:
-            # If no primary key either, use all columns to identify row
+        else: # Use either primary key or all columns to identify row
             key_data = [c for c in col_data if "pk" in c] or col_data
             keyargs = self.make_args(key_data, original_row, args)
         for col, key in zip(key_data, keyargs):
@@ -1071,8 +1101,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         @return   success as boolean
         """
-        if not self.is_open():
-            return
+        if not self.is_open(): return
+
         table, where = table.lower(), ""
         logger.info("Deleting 1 row from table %s, %s.",
                     grammar.quote(self.schema["table"][table]["name"]),
@@ -1084,8 +1114,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if rowid is not None:
             key_data = [{"name": "rowid"}]
             keyargs = self.make_args(key_data, {"rowid": rowid}, args)
-        else:
-            # If no primary key either, use all columns to identify row
+        else: # Use either primary key or all columns to identify row
             key_data = [c for c in col_data if "pk" in c] or col_data
             keyargs = self.make_args(key_data, row, args)
         for col, key in zip(key_data, keyargs):
