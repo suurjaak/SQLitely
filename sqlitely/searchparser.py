@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.10.2019
+@modified    03.11.2019
 """
 import calendar
 import collections
@@ -114,7 +114,9 @@ class SearchQueryParser(object):
         @param   item  if set, search is performed on all the fields of this
                        specific table or view
                        {"name": "Item name", "columns": [{"name", "pk", }, ]}
-        @return        (SQL string, SQL parameter dict, word and phrase list, keyword map)
+        @return        (SQL string, SQL parameter dict, word and phrase list,
+                        keyword map); phrases as tuple-wrapped strings
+                       
         """
         words = [] # All encountered text words and quoted phrases
         keywords = collections.defaultdict(list) # {"table": [], "column": [], ..}
@@ -180,8 +182,8 @@ class SearchQueryParser(object):
         match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
 
         if isinstance(parseresult, basestring):
-            words.append(parseresult)
-            safe = self._escape(parseresult, ("*" if "QUOTES" != parent_name else ""))
+            words.append(parseresult if "QUOTES" != parent_name else (parseresult, ))
+            safe = self._escape(parseresult, ("" if "QUOTES" == parent_name else "*"))
             if not item:
                 item = {"name": "m", "columns": [{"name": "n"}]}
 

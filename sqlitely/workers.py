@@ -125,27 +125,29 @@ class SearchThread(WorkerThread):
         self.parser = searchparser.SearchQueryParser()
 
 
+    def unwrap(self, v):
+        """Returns v[0] if v is tuple else v."""
+        return v[0] if isinstance(v, tuple) else v
+
     def match_all(self, text, words):
         """Returns whether the text contains all the specified words."""
         text_lower = text.lower()
-        result = all(w in text_lower for w in words)
+        result = all(self.unwrap(w) in text_lower for w in words)
         return result
 
 
     def match_any(self, text, words):
         """Returns whether the text contains any of the specified words."""
         text_lower = text.lower()
-        result = any(w in text_lower for w in words)
+        result = any(self.unwrap(w) in text_lower for w in words)
         return result
 
 
     def make_replacer(self, words):
         """Returns word/phrase matcher regex."""
-
-        # Turn wildcard characters * into regex-compatible .*
-        words_re = [".*".join(re.escape(step.escape_html(x))
-                              for w in words for x in
-                              ([w] if " " in w else w.split("*")))]
+        words_re = [x if isinstance(w, tuple) else x.replace(r"\*", ".*")
+                    for w in words
+                    for x in [re.escape(step.escape_html(self.unwrap(w)))]]
         patterns = "(%s)" % "|".join(words_re)
         # For replacing matching words with <b>words</b>
         pattern_replace = re.compile(patterns, re.IGNORECASE)
@@ -191,7 +193,7 @@ class SearchThread(WorkerThread):
             if not self._is_working: break # for category
         if counts: infotext += ": found %s; %s in total" % (
             ", ".join("<a href='#%s'><font color='%s'>%s</font></a>" %
-                      (k, conf.LinkColoura, util.plural(k, v))
+                      (k, conf.LinkColour, util.plural(k, v))
                       for k, v in counts.items()),
             util.plural("result", result["count"])
         )
