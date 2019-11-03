@@ -4875,7 +4875,7 @@ class ImportDialog(wx.Dialog):
         gauge.Shown = info_gauge.Shown = False
 
         button_ok.ToolTip      = "Start importing data"
-        button_reset.ToolTip   = "Reset to initial state"
+        button_reset.ToolTip   = "Reset form to initial state"
         button_restart.ToolTip = "Run another import"
         button_open.ToolTip    = "Close dialog and open table data"
         self.SetEscapeId(wx.CANCEL)
@@ -4983,7 +4983,6 @@ class ImportDialog(wx.Dialog):
             if l.ReadOnly:
                 l.SetItemBackgroundColour(l.ItemCount - 1, discardbgcolour)
 
-
         def add_separator(l, i):
             """Inserts discard pile separator."""
             t = ("Discarded: " + "-" * 20) if i else ("-" * 20 + " Discarded:")
@@ -5017,8 +5016,8 @@ class ImportDialog(wx.Dialog):
             l.EnsureVisible(max(0, min(pos + l.CountPerPage, l.ItemCount) - 1))
             wx.CallAfter(setattr, l, "_scrolling", False)
             self.Thaw()
-        has = all(any(not y["skip"] for y in x) for x in (self._cols1, self._cols2))
-        self._button_ok.Enable(not self._importing and has)
+        actives = [sum(not y["skip"] for y in x) for x in (self._cols1, self._cols2)]
+        self._button_ok.Enable(not self._importing and actives[0] and actives[0] == actives[1])
 
 
     def _MakeColumnName(self, target, coldata):
@@ -5033,10 +5032,66 @@ class ImportDialog(wx.Dialog):
             return t
 
 
+    def _MoveItems(self, side, indexes, skip=None, index2=None, direction=None, swap=False):
+        """
+        Moves items on one side to a new position.
+        Moves mirrored items where discard status changes.
+        Skips items that would change discard status but have no mirror.
+
+        @param   side       "source" or "target"
+        @param   indexes    item indexes to move in .cols1/.cols2
+        @param   skip       True/False to force discard/activation
+        @param   index2     index to move items to
+        @param   direction  direction to move items towards
+        @param   swap       whether to swap position with index2
+        """
+        if skip is None and direction is None and indexes[0] <= index2 <= indexes[-1]:
+            return # Cancel if dragging into selection with no status change
+
+        cc  = self._cols1 if "source" == side else self._cols2
+        shift1, shift2, lastindex1, sparse, indexes2 = 0, 0, None, False, []
+        for index1 in indexes[::-direction if direction else 1]:
+            if lastindex1 is not None and abs(index1 - lastindex1) > 1: sparse = True
+            lastindex1 = index1
+
+            fromindex = index1 + shift1
+            if direction is None: toindex = min(index2 + shift2, len(cc))
+            else: toindex = fromindex + shift2 + \
+                            (direction if skip is None or sparse else 0)
+            safeindex, curskip = min(toindex, len(cc) - 1), cc[fromindex]["skip"]
+
+            same = cc[fromindex]["skip"] == cc[safeindex]["skip"]
+            myskip = (None if same else cc[safeindex]["skip"]) if skip is None \
+                     else (skip if direction is None or not sparse else None)
+
+            if myskip is None and fromindex == toindex and direction is None:
+                continue # for index1
+
+            if myskip is not None: cc[fromindex]["skip"] = myskip
+            if fromindex != toindex:
+                if swap:
+                    cc[toindex]["skip"], cc[fromindex]["skip"] = curskip, cc[toindex]["skip"]
+                    cc[toindex], cc[fromindex] = cc[fromindex], cc[toindex]
+                else: cc.insert(toindex, cc.pop(fromindex))
+            if direction is None:
+                if fromindex < toindex: shift1 -= 1
+                else: shift2 += 1
+
+            indexes2.append(toindex)
+        if not indexes2: return
+
+        indexes2 = sorted(indexes2)
+        visible = (indexes2[0] if index2 <= indexes2[0] else indexes2[-1]) + \
+                  (2 if skip else -2 if skip is False else 0)
+        if visible > len(cc) - 3: visible = len(cc) + 3
+        for l in self._l1, self._l2: l.EnsureVisible(min(visible, l.ItemCount - 1))
+        self._Populate()
+
+
     def _UpdateFooter(self):
         """Updates dialog footer content."""
-        infotext = "Drag column from one side to other to swap index. " \
-                   "Drag column within one side to move index."
+        infotext = "Drag column within one side to change position. " \
+                   "Drag column from one side to other to swap position."
         if self._table and self._table.get("new"):
             infotext += "\nDouble-click on table column to rename."
         self._info_help.Label = infotext
@@ -5052,29 +5107,28 @@ class ImportDialog(wx.Dialog):
         othercols = self._cols2 if "source" == fromside else self._cols1
         toside = "source" if ctrl is self._l1 else "target"
 
+        if fromside != toside and (ctrlrow < 0 or ctrl.GetItemData(ctrlrow) < 0):
+            return # Swap only when dragged to real column on other side
+
         fromcol = fromcols[indexes[0]]
         toindex, skip = None, None
         if ctrlrow < 0: # Drag to end of discard pile: set as last discard
-            toindex = min(len(fromcols), len(othercols or fromcols)) - 1
+            toindex = len(fromcols) - 1
             if not fromcol["skip"]: skip = True
         else:
             toindex = ctrl.GetItemData(ctrlrow)
-            if toindex == self.ACTIVE_SEP:
-                # Drag to active separator: set as last active
-                firstdiscard = next((i for i, c in enumerate(fromcols)
-                                     if c["skip"]), -1)
-                if firstdiscard < 0: toindex = len(fromcols) - 1
-                else: toindex = firstdiscard
-                if fromcol["skip"]: skip = False
-            elif toindex == self.DISCARD_SEP:
-                # Drag to discard header: set as first discard
+            if toindex == self.ACTIVE_SEP: # Set as last active
                 toindex = next((i for i, c in enumerate(fromcols)
                                 if c["skip"]), len(fromcols) - 1)
-                if not fromcol["skip"]: skip, toindex = True, toindex - 1
+                if fromcol["skip"]: skip = False
+            elif toindex == self.DISCARD_SEP: # Set as first discard
+                toindex = next((i - 1 for i, c in enumerate(fromcols)
+                                if c["skip"]), len(fromcols) - 1)
+                if not fromcol["skip"]: skip = True
             elif fromside == toside:
                 if fromcols[toindex]["skip"] != fromcol["skip"]:
-                    skip = bool(fromcols[toindex]["skip"])
-        self._MoveItems(fromside, indexes, skip, toindex)
+                    skip = fromcols[toindex]["skip"]
+        self._MoveItems(fromside, indexes, skip, toindex, swap=fromside != toside)
         ctrl2 = self._l1 if "source" == fromside else self._l2
         ctrl2.SetFocus()
 
@@ -5202,63 +5256,6 @@ class ImportDialog(wx.Dialog):
         l.PopupMenu(menu)
 
 
-    def _MoveItems(self, side, indexes, skip=None, index2=None, direction=None):
-        """
-        Moves items on one side to a new position.
-        Moves mirrored items where discard status changes.
-        Skips items that would change discard status but have no mirror.
-
-        @param   side       "source" or "target"
-        @param   indexes    item indexes to move in .cols1/.cols2
-        @param   skip       True/False to force discard/activation
-        @param   index2     index to move items to
-        @param   direction  direction to move items towards
-        """
-        if skip is None and direction is None and indexes[0] <= index2 <= indexes[-1]:
-            return # Cancel if dragging into selection with no status change
-
-        cc  = self._cols1 if "source" == side else self._cols2
-        cc2 = self._cols2 if "source" == side else self._cols1
-
-        shift1, shift2, lastindex1, sparse, indexes2 = 0, 0, None, False, []
-        for index1 in indexes[::-direction if direction else 1]:
-            if lastindex1 is not None and abs(index1 - lastindex1) > 1: sparse = True
-            lastindex1 = index1
-
-            fromindex = index1 + shift1
-            if direction is None: toindex = min(index2 + shift2, len(cc))
-            else: toindex = fromindex + shift2 + (direction if skip is None or sparse else 0)
-            safeindex = min(toindex, len(cc) - 1)
-            mirrorcol = cc2[fromindex] if fromindex < len(cc2) else None
-
-            same = cc[fromindex]["skip"] == cc[safeindex]["skip"]
-            myskip = (None if same else cc[safeindex]["skip"]) if skip is None else (skip if direction is None or not sparse else None)
-
-            if myskip is not None and cc2 and not mirrorcol \
-            or myskip is None and fromindex == toindex and direction is None:
-                continue # for index1
-
-            if myskip is not None:
-                cc[fromindex]["skip"] = myskip
-                if mirrorcol:
-                    mirrorcol["skip"] = myskip
-                    if fromindex != toindex: cc2.insert(toindex, cc2.pop(fromindex))
-            if fromindex != toindex: cc.insert(toindex, cc.pop(fromindex))
-            if direction is None:
-                if fromindex < toindex: shift1 -= 1
-                else: shift2 += 1
-
-            indexes2.append(toindex)
-        if not indexes2: return
-
-        indexes2 = sorted(indexes2)
-        visible = (indexes2[0] if index2 <= indexes2[0] else indexes2[-1]) + \
-                  (2 if skip else -2 if skip is False else 0)
-        if visible > len(cc) - 3: visible = len(cc) + 3
-        for l in self._l1, self._l2: l.EnsureVisible(min(visible, l.ItemCount - 1))
-        self._Populate()
-
-
     def _OnImport(self, event=None):
         """Handler for clicking to start import, launches process, updates UI."""
         self._importing = True
@@ -5266,7 +5263,7 @@ class ImportDialog(wx.Dialog):
         SKIP = (self._gauge, self._info_gauge, self._info_file,
                 self._button_cancel, self._splitter, self._l1, self._l2)
         for c in sum((list(x.Children) for x in [self] + list(self._splitter.Children)), []):
-            if c not in SKIP: c.Disable()
+            if not isinstance(c, wx.StaticText) and c not in SKIP: c.Disable()
 
         self._Populate()
         self._l1.ReadOnly = self._l2.ReadOnly = True
@@ -5386,13 +5383,10 @@ class ImportDialog(wx.Dialog):
                 self._table = x
                 self._combo_table.Select(i)
             self._button_table.Label = "&New table"
-            self._button_table.Enable()
             self._l2.SetEditable(False)
             self._UpdateFooter()
             self._UpdatePK()
-        elif self._has_new and not self._table.get("new"):
-            self._button_table.Enable()
-            
+        self._button_table.Enabled = self._combo_table.Enabled = not self._table_fixed
 
         self._Populate()
         self.Layout()
