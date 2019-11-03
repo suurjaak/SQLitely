@@ -585,6 +585,9 @@ under the MIT License.
 <ul>
   <li>ANTLR4,
       <a href="https://www.antlr.org/"><font color="{{ conf.LinkColour }}">antlr.org</font></a></li>
+  <li>openpyxl,
+      <a href="https://pypi.org/project/openpyxl"><font color="{{ conf.LinkColour }}">
+          pypi.org/project/openpyxl</font></a></li>
   <li>pyparsing,
       <a href="https://pypi.org/project/pyparsing/"><font color="{{ conf.LinkColour }}">pypi.org/project/pyparsing</font></a></li>
   <li>Python,
@@ -595,9 +598,12 @@ under the MIT License.
       <a href="https://github.com/dotpy/step"><font color="{{ conf.LinkColour }}">github.com/dotpy/step</font></a></li>
   <li>wxPython{{ " %s" % getattr(wx, "__version__", "") if getattr(sys, 'frozen', False) else "" }},
       <a href="http://wxpython.org"><font color="{{ conf.LinkColour }}">wxpython.org</font></a></li>
+  <li>xrld,
+      <a href="https://pypi.org/project/xrld"><font color="{{ conf.LinkColour }}">
+          pypi.org/project/xrld</font></a></li>
   <li>XlsxWriter,
-      <a href="https://github.com/jmcnamara/XlsxWriter"><font color="{{ conf.LinkColour }}">
-          github.com/jmcnamara/XlsxWriter</font></a></li>
+      <a href="https://pypi.org/project/XlsxWriter"><font color="{{ conf.LinkColour }}">
+          pypi.org/project/XlsxWriter</font></a></li>
 </ul><br /><br />
 %if getattr(sys, 'frozen', False):
 Installer and binary executable created with:

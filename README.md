@@ -81,16 +81,17 @@ Source Dependencies
 
 If running from source code, SQLitely needs Python 2.7,
 and the following 3rd-party Python packages:
-* antlr4-python2-runtime (https://pypi.org/project/antlr4-python2-runtime/)
-* pyparsing (https://pypi.org/project/pyparsing/)
-* wxPython 2.9+ (https://wxpython.org/)
-* XlsxWriter (https://pypi.python.org/pypi/XlsxWriter)
+* antlr4-python2-runtime (https://pypi.org/project/antlr4-python2-runtime)
+* openpyxl (https://pypi.org/project/openpyxl)
+* pyparsing (https://pypi.org/project/pyparsing)
+* wxPython 4.0+ (https://wxpython.org/)
+* xlrd (https://pypi.org/project/xlrd)
+* XlsxWriter (https://pypi.org/project/XlsxWriter)
 
-If pyparsing or XlsxWriter are not available, the program will function
-regardless, only with lesser service - lacking Excel export or full
-search syntax.
+If openpyxl or pyparsing or xlrd or XlsxWriter are not available,
+the program will function regardless, only with lesser service - 
+lacking Excel import-export or full search syntax.
 
-SQLitely can also run under wxPython 2.8.12+, with some layout quirks.
 Python 2.6 will need the argparse library. Python 3 is yet unsupported.
 
 

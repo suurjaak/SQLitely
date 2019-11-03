@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.09.2019
+@modified    03.11.2019
 ------------------------------------------------------------------------------
 """
 import glob
@@ -29,7 +29,7 @@ setuptools.setup(
     platforms=["any"],
     keywords="sqlite database",
 
-    install_requires=["antlr4-python2-runtime", "pyparsing", "XlsxWriter"],
+    install_requires=["antlr4-python2-runtime", "openpyxl", "pyparsing", "xlrd", "XlsxWriter"],
     entry_points={"gui_scripts": ["sqlitely = sqlitely.main:run"]},
 
     packages=setuptools.find_packages(),
