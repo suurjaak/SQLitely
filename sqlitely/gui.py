@@ -706,11 +706,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         tint_colour = wx.Colour(conf.BgColour)
         tint_factor = [((4 * x) % 256) / 255. for x in tint_colour]
         # Images shown on the default search content page
-        for name in ["Search", "Tables", "SQL", "Pragma", "Info"]:
-            embedded = getattr(images, "Help" + name, None)
+        for name in ["HelpSearch", "HelpData", "HelpSQL", "HelpPragma", "HelpInfo"]:
+            embedded = getattr(images, name, None)
             if not embedded: continue # for name
             img = embedded.Image.AdjustChannels(*tint_factor)
-            filename = "Help%s.png" % name
+            filename = "%s.png" % name
             if filename in self.memoryfs["files"]:
                 self.memoryfs["handler"].RemoveFile(filename)
             self.memoryfs["handler"].AddFile(filename, img, wx.BITMAP_TYPE_PNG)
@@ -2053,7 +2053,7 @@ class DatabasePage(wx.Panel):
         self.create_page_pragma(notebook)
         self.create_page_info(notebook)
 
-        IMAGES = [images.PageSearch, images.PageTables, images.PageSchema,
+        IMAGES = [images.PageSearch, images.PageData, images.PageSchema,
                   images.PageSQL, images.PagePragma, images.PageInfo]
         il = wx.ImageList(32, 32)
         idxs = [il.Add(x.Bitmap) for x in IMAGES]
@@ -2111,7 +2111,7 @@ class DatabasePage(wx.Panel):
         tb = self.tb_search_settings = \
             wx.ToolBar(page, style=wx.TB_FLAT | wx.TB_NODIVIDER | wx.TB_HORZ_TEXT)
         tb.SetToolBitmapSize((24, 24))
-        tb.AddRadioTool(wx.ID_STATIC, "Data", bitmap1=images.ToolbarTables.Bitmap,
+        tb.AddRadioTool(wx.ID_STATIC, "Data", bitmap1=images.ToolbarData.Bitmap,
             shortHelp="Search in all columns of all database tables and views")
         tb.AddRadioTool(wx.ID_INDEX, "Meta", bitmap1=images.ToolbarTitle.Bitmap,
             shortHelp="Search in database CREATE SQL")

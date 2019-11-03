@@ -649,7 +649,7 @@ from sqlitely import conf
     table and column names and definitions.
   </td><td width="30"></td>
   <td valign="top">
-    <a href="page:data"><img src="memory:HelpTables.png" /></a>
+    <a href="page:data"><img src="memory:HelpData.png" /></a>
   </td><td valign="center">
     Browse, filter and change table data,<br />
     export as HTML, SQL, text or spreadsheet.
@@ -664,7 +664,7 @@ from sqlitely import conf
 </tr>
 <tr>
   <td valign="top">
-    <a href="page:schema"><img src="memory:HelpTables.png" /></a>
+    <a href="page:schema"><img src="memory:HelpData.png" /></a>
   </td><td valign="center">
     Create and edit database schema definitions.
   </td><td width="30"></td>

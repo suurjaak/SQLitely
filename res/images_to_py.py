@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  31.10.2019
+@modified  03.11.2019
 ------------------------------------------------------------------------------
 """
 import base64
@@ -53,8 +53,8 @@ IMAGES = {
         "Small icon for remove by type button on start page.",
     "ButtonSaveAs.png":
         "Small icon for save as button on start page.",
-    "HelpTables.png":
-        "Help image on default search page for tables page.",
+    "HelpData.png":
+        "Help image on default search page for data page.",
     "HelpInfo.png":
         "Help image on default search page for information page.",
     "HelpPragma.png":
@@ -63,8 +63,8 @@ IMAGES = {
         "Help image on default search page for search page.",
     "HelpSQL.png":
         "Help image on default search page for SQL window page.",
-    "PageTables.png":
-        "Icon for the Data tables page in a database tab.",
+    "PageData.png":
+        "Icon for the Data page in a database tab.",
     "PageInfo.png":
         "Icon for the Info page in a database tab.",
     "PagePragma.png":
@@ -91,8 +91,8 @@ IMAGES = {
         "Toolbar icon for stop button on search page.",
     "ToolbarStopped.png":
         "Toolbar icon for inactive stop button on search page.",
-    "ToolbarTables.png":
-        "Toolbar icon for tables button on search page.",
+    "ToolbarData.png":
+        "Toolbar icon for data button on search page.",
     "ToolbarTabs.png":
         "Toolbar icon for tabs toggle button on search page.",
     "ToolbarTitle.png":
