@@ -62,7 +62,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    01.11.2019
+@modified    03.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -912,13 +912,11 @@ class NoteButton(wx.Panel, wx.Button):
                 dc_bmp.SelectObject(wx.NullBitmap)
 
             # Draw focus marquee
-            draw_focus = (self._label or self._note) or self._press or \
-                         (is_focused and wx.GetKeyState(wx.WXK_SPACE))
-            if draw_focus and hasattr(wx.Pen, "Stipple"):
+            if hasattr(wx.Pen, "Stipple"):
                 pen = PEN(dc.TextForeground, 1, wx.PENSTYLE_STIPPLE)
                 pen.Stipple, dc.Pen = NoteButton.BMP_MARQUEE, pen
                 dc.DrawRectangle(4, 4, width - 8, height - 8)
-            elif draw_focus:
+            else:
                 brush = BRUSH(dc.TextForeground)
                 brush.SetStipple(NoteButton.BMP_MARQUEE)
                 dc.Brush = brush
@@ -963,7 +961,7 @@ class NoteButton(wx.Panel, wx.Button):
         text_label = self._text_label
         if "&" in self._label:
             text_label, h = "", y - 1
-            dc.Pen = wx.Pen(self.ForegroundColour)
+            dc.Pen = wx.Pen(dc.TextForeground)
             for line in self._text_label.split("\n"):
                 i, chars = 0, ""
                 while i < len(line):
