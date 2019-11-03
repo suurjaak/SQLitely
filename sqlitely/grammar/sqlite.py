@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    02.11.2019
+@modified    03.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -457,7 +457,7 @@ class Parser(object):
             result["when"] = self.r(ctx.expr())
 
         body = self.r(ctx.K_BEGIN(), ctx.K_END()).rstrip()
-        result["body"] = re.sub(r"^\n?(.+)\n?$", r"\1", body)
+        result["body"] = re.sub("^\n?(.+?)\n?$", r"\1", body, flags=re.DOTALL)
 
         return result
 
