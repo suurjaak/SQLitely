@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.10.2019
+@modified    03.11.2019
 ------------------------------------------------------------------------------
 """
 import hashlib
@@ -381,22 +381,18 @@ class AnalyzerThread(WorkerThread):
 
     def stop(self):
         """Stops the worker thread."""
-        self._is_running = False
-        self._is_working = False
-        self._drop_results = True
+        super(AnalyzerThread, self).stop()
         if self._process:
             try: self._process.kill()
             except Exception: pass
         self._process = None
-        self._queue.put(None) # To wake up thread waiting on queue
 
 
     def stop_work(self, drop_results=False):
         """
         Signals to stop the currently ongoing work, if any.
         """
-        self._is_working = False
-        self._drop_results = drop_results
+        super(AnalyzerThread, self).stop_work(drop_results)
         if self._process:
             try: self._process.kill()
             except Exception: pass
@@ -416,16 +412,21 @@ class AnalyzerThread(WorkerThread):
             else: error = "File does not exist."
 
             try:
-                if filesize:
-                    try: mypath = util.shortpath(path) if "nt" == os.name else path
-                    except Exception: mypath = path
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                pargs = dict(stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             startupinfo=startupinfo)
+                paths = [path]
+                if filesize and "nt" == os.name and isinstance(path, unicode):
+                    paths.append(util.shortpath(path))
+                for mypath in paths if filesize else ():
                     args = [conf.DBAnalyzer, mypath]
                     logger.info('Invoking external command "%s".', " ".join(args))
-                    startupinfo = subprocess.STARTUPINFO()
-                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                    self._process = subprocess.Popen(args, startupinfo=startupinfo,
-                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-                    output, error = self._process.communicate()
+                    try: self._process = subprocess.Popen(args, **pargs)
+                    except Exception:
+                        if mypath == paths[-1]: raise
+                    else: break # for mypath
+                output, error = self._process.communicate()
             except Exception as e:
                 if self._process:
                     try:
