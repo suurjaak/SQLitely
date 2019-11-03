@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.10.2019
+@modified    03.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1985,6 +1985,7 @@ class DatabasePage(wx.Panel):
         self.save_underway  = False
         self.statistics = {} # {?error: message, ?data: {..}}
         self.pragma         = db.get_pragma_values() # {pragma_name: value}
+        self.pragma_initial = copy.deepcopy(self.pragma)
         self.pragma_changes = {}    # {pragma_name: value}
         self.pragma_ctrls   = {}    # {pragma_name: wx control}
         self.pragma_items   = {}    # {pragma_name: [all wx components for directive]}
@@ -3739,6 +3740,8 @@ class DatabasePage(wx.Panel):
         if grids: result["table"] = [x.Name for x in grids]
         schemas = self.get_unsaved_schemas()
         if schemas: result["schema"] = True
+        if not result and self.db.temporary and self.pragma_initial != self.pragma:
+            result["temporary"] = True
         if not result and self.db.temporary:
             self.db.populate_schema()
             if any(self.db.schema.values()): result["temporary"] = True
