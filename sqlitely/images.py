@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.10.2019
+@modified    03.11.2019
 ------------------------------------------------------------------------------
 """
 try:
@@ -1555,17 +1555,15 @@ ToolbarInsert = PyEmbeddedImage(
 
 """Toolbar icon for refresh button."""
 ToolbarRefresh = PyEmbeddedImage(
-    "iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAB8ElEQVQ4y9WUu2sUURSHv3Pn"
-    "mkCINoqPRhIwa58ovqNGKyvZItjIriYWVsbkz1BsTLmLbMo0Elgsd4lRfCJktdgQBEHEJqiJ"
-    "KUT3nmPhrMwOk9VSf92558435/Hjwr8u6ZYcHjff38eIcwwBEfCuv49n1Vn5BnB2wvapcmHx"
-    "npS7As9fs55WYMaMKefYnUp/NaOkSimKuA+4elmGtgSeKtgu53jgHIf/ssu39bIcaAcumcnf"
-    "tG3eU23DzGgABRFyqgwCeeBJN7pPBp/WmRHhSAyb29hk4tW8tBKj0KDs7QZ0icuRCFMAqiyn"
-    "YQBBWQAGUwzLrPD7Dw5FEXsAnONOGgYgwrgZOztoxnom0HtyZr8vPc5qp1aSVWAVYLRo252j"
-    "ADA2aVYrSTM9wxdmXAcIgY9/Wq337DfjbhxeAjqBtZI0xyatR5UdUcTwmau/ynWOtfbfk1Ll"
-    "hMSmC4GVzC2bsSDCQMciAk+BY8mz45etV4Tp+JsPiy9ZzvShaqfRVWk6Rz4N6+1hDjgYH93i"
-    "tVhmhRn6ApwcLVrDe3zc5nQCtuQjZrc0dspb4hxHgfkoAjMQ6RjPw1bgYr0iIdPYiTbfhEDO"
-    "jNuqnR6L9R64sbHJuUcV+dz1+Tp9xYqqVJcqspZ4dUaAASCIsFJ/TiM5s/9PPwEL3sR2T7wK"
-    "YAAAAABJRU5ErkJggg=="
+    "iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAABnUlEQVQ4y9XUPWtUQRTG8d/c"
+    "rGuljeJLIwmYtTeKinZ2YuHdBUmnYCUWhuRjKDZaxiaVKO4mEPIBFFGxymKxIQiCaJqAik0I"
+    "ZsciN5u7d2/WlHq6M+fMf+Y88zD86xGGVp+pqJrAOEbwWdV7122AlpOia+qeDgfOq+qawZTg"
+    "WKH6SzSLWUELidT43sCXjgqWBOf3OeUnqdM7SdJXWnJAYrEHi9q4hZpoDHW8HUav9GUbZgQX"
+    "MticTXdM+p2Tois6MQyY5JpHBFMZbHkAtr2+gLECI5bfsOuc4Him7KMB2HbcxJEC7mc5MKjl"
+    "mt6UzpNaxSpoOpTpS0uU6hQ1/CC6mwHX9uHgU3icZZMUgamOlqrosOCsZm/j+s7phVEv90wX"
+    "rZS/MguC0cLGd7jUt/bCQcF0Vv9qzXK5D2PB6FFHUB+AVczhTLbywL3dl678RakfuKKpLahk"
+    "Y07nYK8lnuxt7H5vBcFFPO/dO/R1vBLd0LBVbuzdxo+imuhh0WNZfMF9m65q+D78+2q6LVrU"
+    "sJ77dSYwii3Bim/aec3+v/gDVpZ0g1sFQpUAAAAASUVORK5CYII="
 )
 
 
