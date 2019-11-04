@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.11.2019
+@modified    04.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -26,7 +26,7 @@ from . lib import util
 from . lib.vendor import step
 from . import conf
 from . import database
-from . import searchparser
+from . searchparser import flatten, match_words, SearchQueryParser
 from . import templates
 
 logger = logging.getLogger(__name__)
@@ -122,32 +122,14 @@ class SearchThread(WorkerThread):
 
     def __init__(self, callback):
         super(self.__class__, self).__init__(callback)
-        self.parser = searchparser.SearchQueryParser()
-
-
-    def unwrap(self, v):
-        """Returns v[0] if v is tuple else v."""
-        return v[0] if isinstance(v, tuple) else v
-
-    def match_all(self, text, words):
-        """Returns whether the text contains all the specified words."""
-        text_lower = text.lower()
-        result = all(self.unwrap(w) in text_lower for w in words)
-        return result
-
-
-    def match_any(self, text, words):
-        """Returns whether the text contains any of the specified words."""
-        text_lower = text.lower()
-        result = any(self.unwrap(w) in text_lower for w in words)
-        return result
+        self.parser = SearchQueryParser()
 
 
     def make_replacer(self, words):
         """Returns word/phrase matcher regex."""
         words_re = [x if isinstance(w, tuple) else x.replace(r"\*", ".*")
                     for w in words
-                    for x in [re.escape(step.escape_html(self.unwrap(w)))]]
+                    for x in [re.escape(step.escape_html(flatten(w)[0]))]]
         patterns = "(%s)" % "|".join(words_re)
         # For replacing matching words with <b>words</b>
         pattern_replace = re.compile(patterns, re.IGNORECASE)
@@ -163,21 +145,21 @@ class SearchThread(WorkerThread):
         result = {"output": "", "map": {}, "search": search, "count": 0}
 
         counts = OrderedDict() # {category: count}
-        for category in database.Database.CATEGORIES if words else ():
+        for category in database.Database.CATEGORIES if (words or kws) else ():
             othercats = set(database.Database.CATEGORIES) - set([category])
             if category not in kws and othercats & set(kws):
                 continue # for category
 
             for item in search["db"].get_category(category).values():
                 if (category in kws 
-                and not self.match_any(item["name"], kws[category])
+                and not match_words(item["name"], kws[category], any)
                 or "-" + category in kws 
-                and self.match_any(item["name"], kws["-" + category])):
+                and match_words(item["name"], kws["-" + category], any)):
                     continue # for item
 
-                matches = self.match_all(item["sql"], words)
-                if not self._is_working: break # for item
-                if not matches: continue # for item
+                if not match_words(item["sql"], words) \
+                and (words or category not in kws):
+                    continue # for item
 
                 counts[category] = counts.get(category, 0) + 1
                 result["count"] += 1
@@ -190,6 +172,7 @@ class SearchThread(WorkerThread):
                 if not result["count"] % conf.SearchResultsChunk:
                     yield "", result
                     result = dict(result, output="", map={})
+                if not self._is_working: break # for item
             if not self._is_working: break # for category
         if counts: infotext += ": found %s; %s in total" % (
             ", ".join("<a href='#%s'><font color='%s'>%s</font></a>" %
@@ -211,7 +194,7 @@ class SearchThread(WorkerThread):
 
         for category in "table", "view":
             if category not in kws \
-            and ("table" if "view" == category else "table") in kws:
+            and ("table" if "view" == category else "view") in kws:
                 continue # for category
 
             mytexts = []

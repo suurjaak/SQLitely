@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.11.2019
+@modified    04.11.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -18,7 +18,7 @@ from . import conf
 
 # Modules imported inside templates:
 #import os, pyparsing, sys, wx
-#from sqlitely import conf, grammar, images, templates
+#from sqlitely import conf, grammar, images, searchparser, templates
 #from sqlitely.lib import util
 
 """Regex for matching unprintable characters (\x00 etc)."""
@@ -531,9 +531,9 @@ HTML template for search result of data row; HTML table row.
 @param   pattern_replace  regex for matching search words
 """
 SEARCH_ROW_DATA_HTML = """<%
-from sqlitely import conf, templates
+from sqlitely import conf, searchparser, templates
 
-match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
+match_kw = lambda k, x: searchparser.match_words(x["name"], keywords[k], any)
 wrap_b = lambda x: "<b>%s</b>" % x.group(0)
 %>
 <tr>
