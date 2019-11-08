@@ -13,6 +13,7 @@ Released under the MIT License.
 """
 import collections
 import ctypes
+import datetime
 import io
 import locale
 import math
@@ -117,6 +118,20 @@ class CaselessDict(dict):
 
     def __repr__(self): return "%s(%s)" % (type(self).__name__, self.items())
 
+
+
+class tzinfo_utc(datetime.tzinfo):
+    """datetime.tzinfo class representing UTC timezone."""
+    ZERO = datetime.timedelta(0)
+    __reduce__ = object.__reduce__
+
+    def utcoffset(self, dt): return self.ZERO
+    def dst(self, dt):       return self.ZERO
+    def tzname(self, dt):    return "UTC"
+    def __ne__(self, other): return not self.__eq__(other)
+    def __repr__(self):      return "%s()" % self.__class__.__name__
+    def __eq__(self, other): return isinstance(other, self.__class__)
+UTC = tzinfo_utc() # UTC timezone singleton
 
 
 def m(o, name, case_insensitive=True):

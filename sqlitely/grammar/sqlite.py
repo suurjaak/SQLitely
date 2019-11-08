@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    03.11.2019
+@modified    08.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -25,6 +25,9 @@ from .. lib.vendor import step
 from . import templates
 from . SQLiteLexer import SQLiteLexer
 from . SQLiteParser import SQLiteParser
+
+"""Regex for matching unprintable characters (\x00 etc)."""
+SAFEBYTE_RGX = re.compile(r"[\x00-\x1f\x7f-\xa0]")
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +118,25 @@ def unquote(val):
         result, sep = result[1:-1], result[0]
         if sep != "[": result = result.replace(sep * 2, sep)
     return result
+
+
+def format(value):
+    """Formats a value for use in an SQL statement like INSERT."""
+    if isinstance(value, basestring):
+        if SAFEBYTE_RGX.search(value):
+            if isinstance(value, unicode):
+                try:
+                    value = value.encode("latin1")
+                except UnicodeError:
+                    value = value.encode("utf-8", errors="replace")
+            value = "X'%s'" % value.encode("hex").upper()
+        else:
+            if isinstance(value, unicode):
+                value = value.encode("utf-8")
+            value = '"%s"' % (value.encode("string-escape").replace('\"', '""'))
+    else:
+        value = "NULL" if value is None else str(value)
+    return value
 
 
 def uni(x, encoding="utf-8"):

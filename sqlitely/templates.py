@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.11.2019
+@modified    08.11.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -338,31 +338,9 @@ str_cols = ", ".join(map(grammar.quote, columns))
 %>
 %for i, row in enumerate(rows, 1):
 <%
-values = []
 if isdef("namespace"): namespace["row_count"] += 1
+values = [grammar.format(row[col]) for col in columns]
 %>
-%for col in columns:
-<%
-value = row[col]
-if isinstance(value, basestring):
-    if templates.SAFEBYTE_RGX.search(value):
-        if isinstance(value, unicode):
-            try:
-                value = value.encode("latin1")
-            except UnicodeError:
-                value = value.encode("utf-8", errors="replace")
-        value = "X'%s'" % value.encode("hex").upper()
-    else:
-        if isinstance(value, unicode):
-            value = value.encode("utf-8")
-        value = '"%s"' % (value.encode("string-escape").replace('\"', '""'))
-elif value is None:
-    value = "NULL"
-else:
-    value = str(value)
-values.append(value)
-%>
-%endfor
 INSERT INTO {{ name }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
 <%
 if not i % 100 and isdef("progress") and not progress(count=i):
