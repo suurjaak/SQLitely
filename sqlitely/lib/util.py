@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.11.2019
+@modified    08.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -227,22 +227,6 @@ def plural(word, items=None, numbers=True, single="1", sep=""):
     return result
 
 
-def cmp_dicts(dict1, dict2):
-    """
-    Returns True if dict2 has all the keys and matching values as dict1.
-    List values are converted to tuples before comparing.
-    """
-    result = True
-    for key, v1 in dict1.items():
-        result, v2 = key in dict2, dict2.get(key)
-        if result:
-            v1, v2 = (tuple(x) if isinstance(x, list) else x for x in [v1, v2])
-            result = (v1 == v2)
-        if not result:
-            break # for key, v1
-    return result
-
-
 def try_until(func, count=1, sleep=0.5):
     """
     Tries to execute the specified function a number of times.
@@ -349,16 +333,6 @@ def divide_delta(td1, td2):
     us2 = td2.microseconds + 1000000 * (td2.seconds + 86400 * td2.days)
     # Integer division, fractional division would be float(us1) / us2
     return us1 / us2
-
-
-def img_wx_to_raw(img, format="PNG"):
-    """Returns the wx.Image or wx.Bitmap as raw data of specified type."""
-    stream = io.BytesIO()
-    img = img if isinstance(img, wx.Image) else img.ConvertToImage()
-    fmttype = getattr(wx, "BITMAP_TYPE_" + format.upper(), wx.BITMAP_TYPE_PNG)
-    img.SaveStream(stream, fmttype)
-    result = stream.getvalue()
-    return result
 
 
 def timedelta_seconds(timedelta):
