@@ -622,7 +622,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         meta = self.schema["table"].get(table, {}).get("meta")
         if not meta or meta.get("without"): return False
         for c in self.schema["table"][table]["columns"]:
-            if c["name"].lower() == "rowid": return False
+            if c["name"].lower() == "_rowid_": return False
         return True
 
 
@@ -793,7 +793,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         result, do_full = {"count": None}, False
         tpl = "SELECT %%s AS count FROM %s LIMIT 1" % grammar.quote(table)
         try:
-            result = self.execute(tpl % "MAX(ROWID)", log=False).fetchone()
+            result = self.execute(tpl % "MAX(_rowid_)", log=False).fetchone()
             result["is_count_estimated"] = True
             if self.filesize < conf.MaxDBSizeForFullCount \
             or result["count"] < conf.MaxTableRowIDForFullCount:
@@ -1068,8 +1068,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         where, args = "", {}
 
         if rowid is not None:
-            key_data = [{"name": "rowid"}]
-            keyargs = self.make_args(key_data, {"rowid": rowid}, args)
+            key_data = [{"name": "_rowid_"}]
+            keyargs = self.make_args(key_data, {"_rowid_": rowid}, args)
         else: # Use either primary key or all columns to identify row
             key_data = [c for c in col_data if "pk" in c] or col_data
             keyargs = self.make_args(key_data, row, args)
@@ -1124,8 +1124,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         setsql = ", ".join("%s = :%s" % (grammar.quote(changed_cols[i]["name"]), x)
                                          for i, x in enumerate(args))
         if rowid is not None:
-            key_data = [{"name": "rowid"}]
-            keyargs = self.make_args(key_data, {"rowid": rowid}, args)
+            key_data = [{"name": "_rowid_"}]
+            keyargs = self.make_args(key_data, {"_rowid_": rowid}, args)
         else: # Use either primary key or all columns to identify row
             key_data = [c for c in col_data if "pk" in c] or col_data
             keyargs = self.make_args(key_data, original_row, args)
@@ -1154,8 +1154,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         where, args = "", {}
 
         if rowid is not None:
-            key_data = [{"name": "rowid"}]
-            keyargs = self.make_args(key_data, {"rowid": rowid}, args)
+            key_data = [{"name": "_rowid_"}]
+            keyargs = self.make_args(key_data, {"_rowid_": rowid}, args)
         else: # Use either primary key or all columns to identify row
             key_data = [c for c in col_data if "pk" in c] or col_data
             keyargs = self.make_args(key_data, row, args)
@@ -1189,8 +1189,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     col_data = self.schema["table"][table]["columns"]
                     where, args, info = "", {}, {}
                     if rowid is not None:
-                        key_data = [{"name": "rowid"}]
-                        keyargs = self.make_args(key_data, {"rowid": rowid}, args)
+                        key_data = [{"name": "_rowid_"}]
+                        keyargs = self.make_args(key_data, {"_rowid_": rowid}, args)
                     else: # Use either primary key or all columns to identify row
                         key_data = [c for c in col_data if "pk" in c] or col_data
                         keyargs = self.make_args(key_data, row, args)
@@ -1212,12 +1212,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
                                 where2 += (" AND " if where2 else "") + \
                                            "%s IS :%s" % (grammar.quote(col["name"]), key)
                             cols = "*"
-                            if self.has_rowid(table2): cols = "rowid AS rowid, *"
+                            if self.has_rowid(table2): cols = "_rowid_ AS _rowid_, *"
                             sql2 = "SELECT %s FROM %s WHERE %s" % (cols, grammar.quote(table2), where2)
                             if conf.LogSQL:
                                 logger.info("SQL: %s\nParameters: %s", sql2, keyargs2)
                             for row2 in cursor.execute(sql2, keyargs2):
-                                rowid = row2.pop("rowid") if self.has_rowid(table2) else None
+                                rowid = row2.pop("_rowid_", None)
                                 queue.append((table2, row2, rowid))
 
                     args.update(keyargs)

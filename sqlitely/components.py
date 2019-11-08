@@ -95,9 +95,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         if not self.is_query:
             self.columns = self.db.get_category(category, name)["columns"]
             if "table" == category and db.has_rowid(name):
-                names = [x["name"].lower() for x in self.columns]
-                self.rowid_name = util.make_unique("rowid", names)
-            cols = ("rowid AS %s, *" % self.rowid_name) if self.rowid_name else "*"
+                self.rowid_name = "_rowid_"
+            cols = ("_rowid_ AS %s, *" % self.rowid_name) if self.rowid_name else "*"
             self.sql = "SELECT %s FROM %s" % (cols, grammar.quote(name))
         self.row_iterator = self.db.execute(self.sql)
 
@@ -164,10 +163,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             try: rowdata = self.row_iterator.next()
             except Exception: pass
             if rowdata:
-                myid = self._MakeRowID(rowdata)
+                myid = self.id_counter = self.id_counter + 1
                 if not self.is_query and self.rowid_name in rowdata:
-                    self.rowids[myid] = rowdata[self.rowid_name]
-                    del rowdata[self.rowid_name]
+                    self.rowids[myid] = rowdata.pop(self.rowid_name)
                 rowdata["__id__"] = myid
                 rowdata["__changed__"] = False
                 rowdata["__new__"] = False
@@ -426,7 +424,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         for _ in range(numRows):
             # Construct empty dict from column names
             rowdata = dict((col["name"], None) for col in self.columns)
-            idx = self._MakeRowID(rowdata)
+            idx = self.id_counter = self.id_counter + 1
             rowdata["__id__"] = idx
             rowdata["__changed__"] = False
             rowdata["__new__"] = True
@@ -680,9 +678,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
         for rowdata in rowdatas:
             idx = None
-            if "rowid" in rowdata and self.db.has_rowid(self.name):
+            if self.rowid_name in rowdata and self.db.has_rowid(self.name):
                 idx = next((k for k, v in self.rowids.items()
-                            if v == rowdata["rowid"]), None)
+                            if v == rowdata[self.rowid_name]), None)
             else:
                 idx = next((k for i, x in self.rows_backup.items()
                             if all(v == x[k] for k, v in rowdata.items())), None)
@@ -902,12 +900,6 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 is_filtered = filter_value.lower() not in value.lower()
             if is_filtered: break # for col
         return is_filtered
-
-
-    def _MakeRowID(self, row):
-        """Returns unique identifier for row."""
-        self.id_counter += 1
-        return self.id_counter
 
 
 

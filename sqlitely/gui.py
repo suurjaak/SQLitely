@@ -3150,7 +3150,7 @@ class DatabasePage(wx.Panel):
                     line = "%s.%s REFERENCING %s.%s: %s" % args
                     if any(rowids): # NULL values: table WITHOUT ROWID
                         vals = [x[fk] for x in self.db.execute(
-                            "SELECT %s FROM %s WHERE rowid IN (%s)" %
+                            "SELECT %s FROM %s WHERE _rowid_ IN (%s)" %
                             (grammar.quote(fk), grammar.quote(table), ", ".join(map(str, rowids)))
                         ).fetchall()]
                         if vals: line += "\nKeys: (%s)" % ", ".join(map(unicode, sorted(vals)))
