@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.11.2019
+@modified    05.11.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -327,8 +327,8 @@ TXT SQL insert statements export template for the rows part.
 
 @param   rows       iterable
 @param   columns    [name, ]
-@param   namespace  {"row_count"}
 @param   name       table name
+@param   ?namespace  {"row_count"}
 @param   ?progress  callback(count) returning whether to cancel, if any
 """
 DATA_ROWS_SQL = """<%
@@ -339,7 +339,7 @@ str_cols = ", ".join(map(grammar.quote, columns))
 %for i, row in enumerate(rows, 1):
 <%
 values = []
-namespace["row_count"] += 1
+if isdef("namespace"): namespace["row_count"] += 1
 %>
 %for col in columns:
 <%

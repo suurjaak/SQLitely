@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.11.2019
+@modified    08.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2164,7 +2164,7 @@ class DatabasePage(wx.Panel):
         self.pageorder[page] = len(self.pageorder)
         notebook.AddPage(page, "Data")
 
-        self.data_pages = defaultdict(dict) # {category: {name: DataObjectPage}}
+        self.data_pages = defaultdict(util.CaselessDict) # {category: {name: DataObjectPage}}
 
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
         splitter = self.splitter_data = wx.SplitterWindow(
@@ -2240,7 +2240,7 @@ class DatabasePage(wx.Panel):
         self.pageorder[page] = len(self.pageorder)
         notebook.AddPage(page, "Schema")
 
-        self.schema_pages = defaultdict(dict) # {category: {name: SchemaObjectPage}}
+        self.schema_pages = defaultdict(util.CaselessDict) # {category: {name: SchemaObjectPage}}
 
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
         splitter = self.splitter_schema = wx.SplitterWindow(
@@ -3210,7 +3210,7 @@ class DatabasePage(wx.Panel):
             if wx.ID_OK != self.dialog_savefile.ShowModal(): return
 
             newfile = self.dialog_savefile.GetPath()
-            if not newfile.lower().endswith(".db"): newfile += ".db"
+            if newfile[-3:].lower() != ".db": newfile += ".db"
             if newfile == self.db.filename:
                 wx.MessageBox("Cannot recover data from %s to itself."
                               % self.db, conf.Title, wx.ICON_ERROR)
@@ -3852,9 +3852,9 @@ class DatabasePage(wx.Panel):
             if success: self.reload_grids()
 
         if not success and rename:
-            self.db.reopen(filename1)
             for category, key, page in ((c, k, p) for c, m in schemas_saved.items()
                                         for k, p in m.items()):
+                # Restore schema page under original key if was new object
                 self.schema_pages[category][key] = self.schema_pages[category].pop(page.Name)
                 page.RestoreBackup()
 
@@ -3897,7 +3897,7 @@ class DatabasePage(wx.Panel):
         self.notebook_data.Freeze()
         try:
             p = components.DataObjectPage(self.notebook_data, self.db, data)
-            self.data_pages[data["type"]][data.get("name") or id(p)] = p
+            self.data_pages[data["type"]][data["name"]] = p
             self.notebook_data.InsertPage(0, page=p, text=title, select=True)
         finally: self.notebook_data.Thaw()
         self.TopLevelParent.run_console(
@@ -3954,7 +3954,7 @@ class DatabasePage(wx.Panel):
         self.notebook_schema.Freeze()
         try:
             p = components.SchemaObjectPage(self.notebook_schema, self.db, data)
-            self.schema_pages[data["type"]][data.get("name") or id(p)] = p
+            self.schema_pages[data["type"]][data.get("name") or str(id(p))] = p
             self.notebook_schema.InsertPage(0, page=p, text=title, select=True)
         finally: self.notebook_schema.Thaw()
         self.TopLevelParent.run_console(
@@ -4122,9 +4122,9 @@ class DatabasePage(wx.Panel):
         if getattr(event, "export_db", False):
             return self.on_export_data_base(event.tables, selects=event.selects)
 
+        VARS = ("close", "modified", "updated", "open", "remove", "table", "row", "rows")
         idx = self.notebook_data.GetPageIndex(event.source)
-        close, modified, updated = (getattr(event, x, None)
-                                    for x in ("close", "modified", "updated"))
+        close, modified, updated, open, remove, table, row, rows = (getattr(event, x, None) for x in VARS)
         category, name = (event.item.get(x) for x in ("type", "name"))
         if close:
             self.notebook_data.DeletePage(idx)
@@ -4139,6 +4139,13 @@ class DatabasePage(wx.Panel):
         if updated and not self.save_underway:
             self.db.populate_schema(count=True, category=category, name=name)
             self.load_tree_data()
+        if open:
+            page = self.data_pages["table"].get(table) or \
+                   self.add_data_page(self.db.get_category("table", table))
+            self.notebook_data.SetSelection(self.notebook_data.GetPageIndex(page))
+            if row: page.ScrollToRow(row, full=True)
+        if remove and table in self.data_pages["table"]:
+            self.data_pages["table"][table].DropRows(rows)
 
 
     def on_close_data_export(self, event=None):
@@ -4191,7 +4198,7 @@ class DatabasePage(wx.Panel):
 
         exports = []
         for i, (name, filename) in enumerate(zip(items, filenames)):
-            if not filename.lower().endswith(".%s" % extname):
+            if filename[-3:].lower() != (".%s" % extname):
                 filename += ".%s" % extname
             data = self.db.get_category(category, name)
             sql = "SELECT * FROM %s" % grammar.quote(name)
@@ -4490,60 +4497,63 @@ class DatabasePage(wx.Panel):
         if not self: return
         tree = self.tree_data
         expandeds = self.get_tree_state(tree, tree.RootItem)
-        tree.DeleteAllItems()
-        tree.AddRoot("Loading data..")
+        tree.Freeze()
         try:
-            if refresh: self.db.populate_schema(count=True)
-        except Exception:
-            if not self: return
-            msg = "Error loading data from %s." % self.db
-            logger.exception(msg)
-            return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
+            tree.DeleteAllItems()
+            tree.AddRoot("Loading data..")
+            try:
+                if refresh: self.db.populate_schema(count=True)
+            except Exception:
+                if not self: return
+                msg = "Error loading data from %s." % self.db
+                logger.exception(msg)
+                return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
 
-        tree.DeleteAllItems()
-        root = tree.AddRoot("SQLITE")
-        tree.SetItemPyData(root, {"type": "data"})
+            tree.DeleteAllItems()
+            root = tree.AddRoot("SQLITE")
+            tree.SetItemPyData(root, {"type": "data"})
 
-        tops = []
-        for category in "table", "view":
-            # Fill data tree with information on row counts and columns
-            items = self.db.get_category(category).values()
-            if not items and "view" == category: continue # for category
-            categorydata = {"type": "category", "category": category,
-                            "items": [x["name"] for x in items]}
+            tops = []
+            for category in "table", "view":
+                # Fill data tree with information on row counts and columns
+                items = self.db.get_category(category).values()
+                if not items and "view" == category: continue # for category
+                categorydata = {"type": "category", "category": category,
+                                "items": [x["name"] for x in items]}
 
-            t = util.plural(category).capitalize()
-            if items: t += " (%s)" % len(items)
-            top = tree.AppendItem(root, t)
-            tree.SetItemPyData(top, categorydata)
-            tops.append(top)
-            for item in items:
-                itemdata = dict(item, parent=categorydata)
-                child = tree.AppendItem(top, util.unprint(item["name"]))
-                tree.SetItemPyData(child, itemdata)
+                t = util.plural(category).capitalize()
+                if items: t += " (%s)" % len(items)
+                top = tree.AppendItem(root, t)
+                tree.SetItemPyData(top, categorydata)
+                tops.append(top)
+                for item in items:
+                    itemdata = dict(item, parent=categorydata)
+                    child = tree.AppendItem(top, util.unprint(item["name"]))
+                    tree.SetItemPyData(child, itemdata)
 
-                if "count" in item:
-                    t = "ERROR" 
-                    if item["count"] is None: t = "ERROR"
-                    else:
-                        count = item["count"]
-                        if item.get("is_count_estimated"):
-                            roundedcount = int(math.ceil(count / 100.) * 100)
-                            t = "~" + util.plural("row", roundedcount, sep=",")
-                        else: t = util.plural("row", count, sep=",")
-                else: t = "" if "view" == category else "Counting.."
-                tree.SetItemText(child, t, 1)
+                    if "count" in item:
+                        t = "ERROR" 
+                        if item["count"] is None: t = "ERROR"
+                        else:
+                            count = item["count"]
+                            if item.get("is_count_estimated"):
+                                roundedcount = int(math.ceil(count / 100.) * 100)
+                                t = "~" + util.plural("row", roundedcount, sep=",")
+                            else: t = util.plural("row", count, sep=",")
+                    else: t = "" if "view" == category else "Counting.."
+                    tree.SetItemText(child, t, 1)
 
-                for col in item["columns"]:
-                    subchild = tree.AppendItem(child, util.unprint(col["name"]))
-                    tree.SetItemText(subchild, col.get("type", ""), 1)
-                    tree.SetItemPyData(subchild, dict(col, parent=item, type="column"))
+                    for col in item["columns"]:
+                        subchild = tree.AppendItem(child, util.unprint(col["name"]))
+                        tree.SetItemText(subchild, col.get("type", ""), 1)
+                        tree.SetItemPyData(subchild, dict(col, parent=item, type="column"))
 
-        tree.Expand(root)
-        for top in tops: tree.Expand(top)
-        tree.SetColumnWidth(1, 100)
-        tree.SetColumnWidth(0, tree.Size[0] - 130)
-        self.set_tree_state(tree, tree.RootItem, expandeds)
+            tree.Expand(root)
+            for top in tops: tree.Expand(top)
+            tree.SetColumnWidth(1, 100)
+            tree.SetColumnWidth(0, tree.Size[0] - 130)
+            self.set_tree_state(tree, tree.RootItem, expandeds)
+        finally: tree.Thaw()
 
 
     def load_tree_schema(self, refresh=False):
@@ -4551,126 +4561,129 @@ class DatabasePage(wx.Panel):
         if not self: return
         tree = self.tree_schema
         expandeds = self.get_tree_state(tree, tree.RootItem)
-        tree.DeleteAllItems()
-        tree.AddRoot("Loading schema..")
+        tree.Freeze()
         try:
-            if refresh: self.db.populate_schema(parse=True)
-        except Exception:
-            if not self: return
-            msg = "Error loading schema data from %s." % self.db
-            logger.exception(msg)
-            return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
+            tree.DeleteAllItems()
+            tree.AddRoot("Loading schema..")
+            try:
+                if refresh: self.db.populate_schema(parse=True)
+            except Exception:
+                if not self: return
+                msg = "Error loading schema data from %s." % self.db
+                logger.exception(msg)
+                return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
 
-        def is_indirect_item(a, b):
-            trg = next((x for x in (a, b) if x["type"] == "trigger"), None)
-            tbv = next((x for x in (a, b) if x["type"] in ("table", "view")), None)
-            return trg and tbv and trg["meta"]["table"].lower() != tbv["name"].lower()
+            def is_indirect_item(a, b):
+                trg = next((x for x in (a, b) if x["type"] == "trigger"), None)
+                tbv = next((x for x in (a, b) if x["type"] in ("table", "view")), None)
+                return trg and tbv and trg["meta"]["table"].lower() != tbv["name"].lower()
 
-        italicfont = tree.Font
-        italicfont.SetStyle(wx.FONTSTYLE_ITALIC)
+            italicfont = tree.Font
+            italicfont.SetStyle(wx.FONTSTYLE_ITALIC)
 
-        tree.DeleteAllItems()
-        root = tree.AddRoot("SQLITE")
-        tree.SetItemPyData(root, {"type": "schema"})
-        imgs = self.tree_schema_images
-        tops = []
-        for category in database.Database.CATEGORIES:
-            items = self.db.get_category(category).values()
-            categorydata = {"type": "category", "category": category, "level": "category", "items": items}
+            tree.DeleteAllItems()
+            root = tree.AddRoot("SQLITE")
+            tree.SetItemPyData(root, {"type": "schema"})
+            imgs = self.tree_schema_images
+            tops = []
+            for category in database.Database.CATEGORIES:
+                items = self.db.get_category(category).values()
+                categorydata = {"type": "category", "category": category, "level": "category", "items": items}
 
-            t = util.plural(category).capitalize()
-            if items: t += " (%s)" % len(items)
-            top = tree.AppendItem(root, t)
-            tree.SetItemPyData(top, categorydata)
-            tops.append(top)
-            for item in items:
-                itemdata = dict(item, parent=categorydata, level=category)
-                child = tree.AppendItem(top, util.unprint(item["name"]))
-                tree.SetItemPyData(child, itemdata)
-                columns, childtext = None, ""
-                relateds = self.db.get_related(category, item["name"])
+                t = util.plural(category).capitalize()
+                if items: t += " (%s)" % len(items)
+                top = tree.AppendItem(root, t)
+                tree.SetItemPyData(top, categorydata)
+                tops.append(top)
+                for item in items:
+                    itemdata = dict(item, parent=categorydata, level=category)
+                    child = tree.AppendItem(top, util.unprint(item["name"]))
+                    tree.SetItemPyData(child, itemdata)
+                    columns, childtext = None, ""
+                    relateds = self.db.get_related(category, item["name"])
 
-                if "table" == category:
-                    columns = item.get("columns") or []
-                    subcategories, emptysubs = ["table", "index", "trigger", "view"], True
-                    childtext = util.plural("column", columns)
-                elif "index" == category:
-                    childtext = "ON " + grammar.quote(item["meta"]["table"])
-                    columns = copy.deepcopy(item["meta"].get("columns") or [])
-                    table = self.db.get_category("table", item["meta"]["table"])
-                    for col in columns:
-                        if table.get("columns") and col.get("name"):
-                            tcol = next((x for x in table["columns"]
-                                         if x["name"] == col["name"]), None)
-                            if tcol: col["type"] = tcol.get("type", "")
-                    subcategories, emptysubs = ["table"], True
-                elif "trigger" == category:
-                    childtext = " ".join(filter(bool, (item["meta"].get("upon"), item["meta"]["action"],
-                                                       "ON", grammar.quote(item["meta"]["table"]))))
-                    subcategories, emptysubs = ["table", "view"], False
-                elif "view" == category:
-                    childtext = "ON " + ", ".join(grammar.quote(x)
-                        for x in item["meta"].get("__tables__") or [])
-                    columns = item.get("columns") or []
-                    subcategories, emptysubs = ["table", "trigger", "view"], False
+                    if "table" == category:
+                        columns = item.get("columns") or []
+                        subcategories, emptysubs = ["table", "index", "trigger", "view"], True
+                        childtext = util.plural("column", columns)
+                    elif "index" == category:
+                        childtext = "ON " + grammar.quote(item["meta"]["table"])
+                        columns = copy.deepcopy(item["meta"].get("columns") or [])
+                        table = self.db.get_category("table", item["meta"]["table"])
+                        for col in columns:
+                            if table.get("columns") and col.get("name"):
+                                tcol = next((x for x in table["columns"]
+                                             if x["name"] == col["name"]), None)
+                                if tcol: col["type"] = tcol.get("type", "")
+                        subcategories, emptysubs = ["table"], True
+                    elif "trigger" == category:
+                        childtext = " ".join(filter(bool, (item["meta"].get("upon"), item["meta"]["action"],
+                                                           "ON", grammar.quote(item["meta"]["table"]))))
+                        subcategories, emptysubs = ["table", "view"], False
+                    elif "view" == category:
+                        childtext = "ON " + ", ".join(grammar.quote(x)
+                            for x in item["meta"].get("__tables__") or [])
+                        columns = item.get("columns") or []
+                        subcategories, emptysubs = ["table", "trigger", "view"], False
 
-                tree.SetItemText(child, childtext, 1)
+                    tree.SetItemText(child, childtext, 1)
 
-                if columns is not None:
-                    colchild = tree.AppendItem(child, "Columns (%s)" % len(columns))
-                    tree.SetItemPyData(colchild, {"type": "columns", "parent": itemdata})
-                    tree.SetItemImage(colchild, imgs["columns"], wx.TreeItemIcon_Normal)
-                    for col in columns:
-                        subchild = tree.AppendItem(colchild, util.unprint(col["name"]))
-                        tree.SetItemText(subchild, col.get("type", ""), 1)
-                        tree.SetItemPyData(subchild, dict(col, parent=itemdata, type="column", level=item["name"]))
-                for subcategory in subcategories:
-                    subitems = relateds.get(subcategory, [])
-                    if not subitems and (not emptysubs or category == subcategory):
-                        continue # for subcategory
+                    if columns is not None:
+                        colchild = tree.AppendItem(child, "Columns (%s)" % len(columns))
+                        tree.SetItemPyData(colchild, {"type": "columns", "parent": itemdata})
+                        tree.SetItemImage(colchild, imgs["columns"], wx.TreeItemIcon_Normal)
+                        for col in columns:
+                            subchild = tree.AppendItem(colchild, util.unprint(col["name"]))
+                            tree.SetItemText(subchild, col.get("type", ""), 1)
+                            tree.SetItemPyData(subchild, dict(col, parent=itemdata, type="column", level=item["name"]))
+                    for subcategory in subcategories:
+                        subitems = relateds.get(subcategory, [])
+                        if not subitems and (not emptysubs or category == subcategory):
+                            continue # for subcategory
 
-                    subitems.sort(key=lambda x: (is_indirect_item(item, x), x["name"].lower()))
-                    t = util.plural(subcategory).capitalize()
-                    if "table" == category == subcategory:
-                        t = "Related tables"
-                    if subitems: t += " (%s)" % len(subitems)
-                    categchild = tree.AppendItem(child, t)
-                    subcategorydata = {"type": "category", "category": subcategory, "items": subitems, "parent": itemdata}
-                    tree.SetItemPyData(categchild, subcategorydata)
-                    if subcategory in imgs:
-                        tree.SetItemImage(categchild, imgs[subcategory], wx.TreeItemIcon_Normal)
+                        subitems.sort(key=lambda x: (is_indirect_item(item, x), x["name"].lower()))
+                        t = util.plural(subcategory).capitalize()
+                        if "table" == category == subcategory:
+                            t = "Related tables"
+                        if subitems: t += " (%s)" % len(subitems)
+                        categchild = tree.AppendItem(child, t)
+                        subcategorydata = {"type": "category", "category": subcategory, "items": subitems, "parent": itemdata}
+                        tree.SetItemPyData(categchild, subcategorydata)
+                        if subcategory in imgs:
+                            tree.SetItemImage(categchild, imgs[subcategory], wx.TreeItemIcon_Normal)
 
-                    for subitem in subitems:
-                        subchild = tree.AppendItem(categchild, util.unprint(subitem["name"]))
-                        tree.SetItemPyData(subchild, dict(subitem, parent=itemdata, level=item["name"]))
-                        t = ""
-                        if "index" == subcategory:
-                            t = ", ".join(x.get("name", x.get("expr")) for x in subitem["meta"]["columns"])
-                        elif "table" == category == subcategory:
-                            fks = [x["fk"]["key"] for x in subitem["meta"]["columns"]
-                                   if item["name"] == x.get("fk", {}).get("table")]
-                            for x in subitem["meta"].get("constraints") or ():
-                                if grammar.SQL.FOREIGN_KEY == x["type"] and item["name"] == x["table"]:
-                                    fks.extend(x["key"])
-                            fks += [x["name"] for x in item["meta"]["columns"]
-                                    if subitem["name"] == x.get("fk", {}).get("table")]
-                            for x in item["meta"].get("constraints") or ():
-                                if grammar.SQL.FOREIGN_KEY == x["type"] and subitem["name"] == x["table"]:
-                                    fks.extend(x["columns"])
-                            if fks: t = "REFERENCES " + ", ".join(sorted(set(fks)))
-                        elif "trigger" == subcategory:
-                            t = " ".join(filter(bool, (subitem["meta"].get("upon"), subitem["meta"]["action"])))
-                            if is_indirect_item(item, subitem):
-                                t += " ON %s" % grammar.quote(subitem["meta"]["table"])
-                        tree.SetItemText(subchild, t, 1)
-                        if is_indirect_item(item, subitem): tree.SetItemFont(subchild, italicfont)
+                        for subitem in subitems:
+                            subchild = tree.AppendItem(categchild, util.unprint(subitem["name"]))
+                            tree.SetItemPyData(subchild, dict(subitem, parent=itemdata, level=item["name"]))
+                            t = ""
+                            if "index" == subcategory:
+                                t = ", ".join(x.get("name", x.get("expr")) for x in subitem["meta"]["columns"])
+                            elif "table" == category == subcategory:
+                                fks = [x["fk"]["key"] for x in subitem["meta"]["columns"]
+                                       if item["name"] == x.get("fk", {}).get("table")]
+                                for x in subitem["meta"].get("constraints") or ():
+                                    if grammar.SQL.FOREIGN_KEY == x["type"] and item["name"] == x["table"]:
+                                        fks.extend(x["key"])
+                                fks += [x["name"] for x in item["meta"]["columns"]
+                                        if subitem["name"] == x.get("fk", {}).get("table")]
+                                for x in item["meta"].get("constraints") or ():
+                                    if grammar.SQL.FOREIGN_KEY == x["type"] and subitem["name"] == x["table"]:
+                                        fks.extend(x["columns"])
+                                if fks: t = "REFERENCES " + ", ".join(sorted(set(fks)))
+                            elif "trigger" == subcategory:
+                                t = " ".join(filter(bool, (subitem["meta"].get("upon"), subitem["meta"]["action"])))
+                                if is_indirect_item(item, subitem):
+                                    t += " ON %s" % grammar.quote(subitem["meta"]["table"])
+                            tree.SetItemText(subchild, t, 1)
+                            if is_indirect_item(item, subitem): tree.SetItemFont(subchild, italicfont)
 
-            tree.Collapse(top)
-        tree.SetColumnWidth(0, tree.Size[0] - 180)
-        tree.SetColumnWidth(1, 150)
-        tree.Expand(root)
-        for top in tops: tree.Expand(top)
-        self.set_tree_state(tree, tree.RootItem, expandeds)
+                tree.Collapse(top)
+            tree.SetColumnWidth(0, tree.Size[0] - 180)
+            tree.SetColumnWidth(1, 150)
+            tree.Expand(root)
+            for top in tops: tree.Expand(top)
+            self.set_tree_state(tree, tree.RootItem, expandeds)
+        finally: tree.Thaw()
 
 
     def on_change_tree_data(self, event):

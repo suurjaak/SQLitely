@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.11.2019
+@modified    08.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -51,6 +51,7 @@ DataPageEvent,   EVT_DATA_PAGE   = wx.lib.newevent.NewCommandEvent()
 SchemaPageEvent, EVT_SCHEMA_PAGE = wx.lib.newevent.NewCommandEvent()
 ImportEvent,     EVT_IMPORT      = wx.lib.newevent.NewCommandEvent()
 ExportEvent,     EVT_EXPORT      = wx.lib.newevent.NewCommandEvent()
+GridBaseEvent,   EVT_GRID_BASE   = wx.lib.newevent.NewCommandEvent()
 
 
 
@@ -77,7 +78,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         self.idx_all = []      # An ordered list of row identifiers in rows_all
         self.rows_all = {}     # Unfiltered, unsorted rows {id: row, }
         self.rows_current = [] # Currently shown (filtered/sorted) rows
-        self.rowids = {}       # SQLite table rowids, for UPDATE and DELETE
+        self.rowids = {}       # {id: SQLite table rowid}, for UPDATE and DELETE
         self.idx_changed = set() # set of indexes for changed rows in rows_all
         self.rows_backup = {}    # For changed rows {id: original_row, }
         self.idx_new = []        # Unsaved added row indexes
@@ -611,8 +612,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 and "INTEGER" == self.db.get_affinity(col_map[pks[0]]):
                     # Autoincremented row: update with new value
                     row[pks[0]] = insert_id
-                elif insert_id is not None:
-                    # No or compound or non-integer primary key: insert gives ROWID
+                if self.rowid_name and insert_id is not None:
                     self.rowids[idx] = insert_id
                 row["__new__"] = False
                 self.idx_new.remove(idx)
@@ -667,6 +667,211 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             self.row_count += 1
         self.Filter(rows_before)
         self._RefreshAttrs(refresh_idxs)
+
+
+    def DropRows(self, rowdatas):
+        """
+        Drops the specified rows from current grid.
+
+        @param   rowdatas  [{identifying column: value}]
+        """
+        if not rowdatas or not self.rows_all or "table" != self.category: return
+        rows_before = self.GetNumberRows()
+
+        for rowdata in rowdatas:
+            idx = None
+            if "rowid" in rowdata and self.db.has_rowid(self.name):
+                idx = next((k for k, v in self.rowids.items()
+                            if v == rowdata["rowid"]), None)
+            else:
+                idx = next((k for i, x in self.rows_backup.items()
+                            if all(v == x[k] for k, v in rowdata.items())), None)
+                idx = idx or next((k for i, x in self.rows_all.items()
+                                   if all(v == x[k] for k, v in rowdata.items())), None)
+            if idx is None: continue # for rowdata
+
+            myrow = self.rows_all[idx]
+            if myrow in self.rows_current:
+                self.rows_current.remove(myrow)
+                self.row_count -= 1
+            self.rows_all.pop(idx)
+            self.idx_all.remove(idx)
+            self.rowids.pop(idx, None)
+            self.rows_backup.pop(idx, None)
+            self.idx_changed.discard(idx)
+            self.rows_deleted.pop(idx, None)
+
+        self.NotifyViewChange(rows_before)
+
+
+    def OnMenu(self, event):
+        """Handler for opening popup menu in grid."""
+        event.Skip()
+        menu = wx.Menu()
+        menu_fks, menu_dks = wx.Menu(), wx.Menu()
+
+        def on_event(event=None, **kwargs):
+            """Fires event to parent grid."""
+            wx.PostEvent(self.View, GridBaseEvent(wx.ID_ANY, **kwargs))
+
+        def on_copy(event=None):
+            """Copies row data to clipboard."""
+            if wx.TheClipboard.Open():
+                text = "\t".join(util.to_unicode(rowdata[c["name"]])
+                                 for c in self.columns)
+                d = wx.TextDataObject(text)
+                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+                guibase.status("Copied data to clipboard", flash=True)
+
+        def on_copy_sql(event=None):
+            """Copies row INSERT SQL to clipboard."""
+            tpl = step.Template(templates.DATA_ROWS_SQL, strip=False)
+            text = tpl.expand(name=self.name, rows=[rowdata],
+                              columns=[x["name"] for x in self.columns])
+            if wx.TheClipboard.Open():
+                d = wx.TextDataObject(text)
+                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+                guibase.status("Copied SQL to clipboard", flash=True)
+
+        def on_delete_cascade(event=None):
+            """Confirms whether to delete row and related rows."""
+            inter1 = inter2 = ""
+            if any("table" in x for x in dks):
+                inter1 = " and all its related rows"
+                inter2 = "Table %s is referenced by:\n- %s.\n\n" \
+                        "Deleting this row will delete any related rows " \
+                        "in related tables also,\ncascading further to related " \
+                        "rows in any of their related tables, etc.\n\n" % (
+                    grammar.quote(self.name, force=True),
+                    "\n- ".join("table %s %s (ON %s)" % (
+                        grammar.quote(t, force=True),
+                        ", ".join(map(grammar.quote, kk)),
+                        ", ".join(map(grammar.quote, x["name"]))
+                    ) for x in dks for t, kk in x.get("table", {}).items())
+                )
+            msg = "Are you sure you want to delete this row%s?\n\n" \
+                  "%sThis action executes immediately and is not undoable." % (inter1, inter2)
+            if wx.YES != controls.YesNoMessageBox(msg, "Delete %s" % caption, wx.ICON_WARNING,
+            defaultno=True): return
+
+            result = self.db.delete_cascade(self.name, rowdata, self.rowids.get(rowdata["__id__"]))
+            self.DropRows([x for t, x in result if t == self.name])
+            others, totals = OrderedDict(), [] # {table: [datas]}, [(table, [datas])]
+            for i, (t, x) in enumerate(result):
+                if not i: totals.append([t, [x]])
+                elif len(totals) > 1 and result[i-1][0] == t:
+                    totals[-1][1].append(x)
+                else: totals.append([t, [x]])
+
+                if t != self.name: others.setdefault(t, []).append(x)
+            for t, xx in others.items():
+                on_event(remove=True, table=t, data=xx)
+
+            msg = "Deleted %s:\n" % util.plural("row", result)
+            for t, xx in totals:
+                msg += "\n- %s in table %s" % (util.plural("row", xx), grammar.quote(t, force=True))
+            wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_INFORMATION)
+
+
+        schema = self.db.get_category(self.category, self.name) or {"meta": {}}
+        pks = [c for c in self.columns if "pk" in c]
+        dks, fks = self.db.get_keys(self.name)
+        is_table = ("table" == self.category)
+
+        caption, rowdata, row, col = "", None, -1, -1
+        if isinstance(event, wx.MouseEvent):
+            xy = self.View.CalcUnscrolledPosition(event.Position)
+            row, col = self.View.XYToCell(xy)
+        elif isinstance(event, wx.grid.GridEvent): row, col = event.Row, event.Col
+        if row < 0: row, col = self.View.GridCursorRow, self.View.GridCursorCol
+
+        if row >= 0:
+            rowdata = self.rows_current[row]
+            if rowdata["__id__"] in self.rows_backup:
+                rowdata = self.rows_backup[rowdata["__id__"]]
+            if rowdata["__new__"]: caption = "New row"                
+            elif pks: caption = ", ".join("%s %s" % (c["name"], rowdata[c["name"]])
+                                          for c in pks)
+            elif rowdata["__id__"] in self.rowids:
+                caption = "ROWID %s" % self.rowids[rowdata["__id__"]]
+            else: caption = "Row #%s" % (row + 1)
+
+
+        if rowdata: item_caption = wx.MenuItem(menu, -1, caption)
+        if rowdata:
+            item_copy     = wx.MenuItem(menu, -1, "&Copy row")
+            item_copy_sql = wx.MenuItem(menu, -1, "Copy row INSERT &SQL")
+
+        if is_table:
+            item_insert = wx.MenuItem(menu, -1, "Add &new row")
+        if is_table and rowdata:
+            item_insert = wx.MenuItem(menu, -1, "Add &new row")
+            item_delete = wx.MenuItem(menu, -1, "Delete row")
+            item_delete_cascade = wx.MenuItem(menu, -1, "Delete row cascade")
+
+        if rowdata:
+            boldfont = item_caption.Font
+            boldfont.SetWeight(wx.FONTWEIGHT_BOLD)
+            boldfont.SetFaceName(self.View.Font.FaceName)
+            boldfont.SetPointSize(self.View.Font.PointSize)
+            item_caption.Font = boldfont
+
+        if rowdata:
+            menu.Append(item_caption)
+            menu.AppendSeparator()
+            menu.Append(item_copy)
+            if is_table: menu.Append(item_copy_sql)
+
+        fmtval = lambda x: "NULL" if x is None else '"%s"' % x if x and isinstance(x, basestring) else str(x)
+        def fmtvals(kk):
+            if not rowdata: return ""
+            if len(kk) == 1:
+                return "" if rowdata[kk[0]] is None else fmtval(rowdata[kk[0]])
+            return ", ".join(fmtval(rowdata[k]) for k in kk)
+
+        has_cascade = False
+        for is_fks, (keys, menu2) in enumerate([(dks, menu_dks), (fks, menu_fks)]):
+            for c in keys:
+                itemtitle = ", ".join(c["name"]) + " " + fmtvals(c["name"])
+                if rowdata and (is_fks or "table" in c) and all(rowdata[x] is not None for x in c["name"]):
+                    if not is_fks: has_cascade = True
+                    submenu = wx.Menu()
+                    menu2.Append(wx.ID_ANY, itemtitle, submenu)
+                    for table2, keys in c["table"].items():
+                        vals = {a: rowdata[b] for a, b in zip(keys, c["name"])}
+                        valstr = ", ".join("%s %s" % (k, fmtval(v))
+                                           for k, v in vals.items())
+                        item_goto = wx.MenuItem(submenu, -1, "Open table %s ON %s" %
+                                                (grammar.quote(table2, force=True), valstr))
+                        menu.Bind(wx.EVT_MENU, functools.partial(on_event, open=True, table=table2, data=vals), item_goto)
+                        submenu.Append(item_goto)
+                else:
+                    menu2.Append(wx.ID_ANY, itemtitle)
+
+        if is_table and rowdata:
+            menu.AppendSeparator()
+            item_dks = menu.AppendSubMenu(menu_dks, "&Domestic keys")
+            item_fks = menu.AppendSubMenu(menu_fks, "&Foreign keys")
+            menu.AppendSeparator()
+            menu.Append(item_insert)
+            menu.Append(item_delete)
+            if any(x.get("table") for x in dks):
+                menu.Append(item_delete_cascade)
+            if not dks: item_dks.Enabled = False
+            if not fks: item_fks.Enabled = False
+            item_delete_cascade.Enabled = has_cascade and not rowdata["__new__"]
+        elif is_table:
+            menu.Append(item_insert)
+
+        if is_table:
+            menu.Bind(wx.EVT_MENU, functools.partial(on_event, insert=True), item_insert)
+        if is_table and rowdata:
+            menu.Bind(wx.EVT_MENU, on_copy,     item_copy)
+            menu.Bind(wx.EVT_MENU, on_copy_sql, item_copy_sql)
+            menu.Bind(wx.EVT_MENU, functools.partial(on_event, delete=True, row=row), item_delete)
+            menu.Bind(wx.EVT_MENU, on_delete_cascade, item_delete_cascade)
+
+        self.View.PopupMenu(menu)
 
 
     def _RefreshAttrs(self, idxs):
@@ -815,6 +1020,8 @@ class SQLPage(wx.Panel):
         grid.Bind(wx.EVT_SCROLL_THUMBRELEASE,             self._OnGridScroll)
         grid.Bind(wx.EVT_SCROLL_CHANGED,                  self._OnGridScroll)
         grid.Bind(wx.EVT_KEY_DOWN,                        self._OnGridScroll)
+        grid.Bind(wx.EVT_CONTEXT_MENU,                    self._OnGridMenu)
+        grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK,      self._OnGridMenu)
         grid.GridWindow.Bind(wx.EVT_MOTION,               self._OnGridMouse)
         grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,            self._OnGridKey)
 
@@ -1025,7 +1232,7 @@ class SQLPage(wx.Panel):
         row, col = event.GetRow(), event.GetCol()
         grid_data = self._grid.Table
         if not grid_data.columns: return
-        if row >= 0: return # Only react to clicks in the header
+        if row >= 0: return self._grid.Table.OnMenu(event)
 
         current_filter = unicode(grid_data.filters[col]) \
                          if col in grid_data.filters else ""
@@ -1121,6 +1328,13 @@ class SQLPage(wx.Panel):
             text = "\n".join("\t".join(c for c in r) for r in data)
             d = wx.TextDataObject(text)
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+
+
+    def _OnGridMenu(self, event):
+        """Handler for right-click or context menu in grid, opens popup menu."""
+        if not isinstance(self._grid.Table, SQLiteGridBase) \
+        or self._grid.IsCellEditControlShown(): event.Skip()
+        else: self._grid.Table.OnMenu(event)
 
 
     def _OnGridMouse(self, event):
@@ -1384,6 +1598,9 @@ class DataObjectPage(wx.Panel):
         grid.Bind(wx.EVT_SCROLL_THUMBRELEASE,          self._OnGridScroll)
         grid.Bind(wx.EVT_SCROLL_CHANGED,               self._OnGridScroll)
         grid.Bind(wx.EVT_KEY_DOWN,                     self._OnGridScroll)
+        grid.Bind(EVT_GRID_BASE,                       self._OnGridBaseEvent)
+        grid.Bind(wx.EVT_CONTEXT_MENU,                 self._OnGridMenu)
+        grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK,   self._OnGridMenu)
         grid.GridWindow.Bind(wx.EVT_MOTION,            self._OnGridMouse)
         grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,         self._OnGridKey)
         self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(lambda: self and (self.Layout(), self.Refresh())))
@@ -1428,18 +1645,25 @@ class DataObjectPage(wx.Panel):
         return self._export.IsExporting()
 
 
-    def ScrollToRow(self, row):
-        """Scrolls to row matching given row dict."""
+    def ScrollToRow(self, row, full=False):
+        """
+        Scrolls to row matching given row dict.
+
+        @param   full  whether to match all given fields
+        """
         columns = self._item["columns"]
-        id_fields = [c["name"] for c in columns if "pk" in c]
-        if not id_fields: # No primary key fields: take all
-            id_fields = [c["name"] for c in columns]
-        row_id = [row[c] for c in id_fields]
+        if full: fields = [c["name"] for c in columns if c["name"] in row]
+        else:
+            fields = [c["name"] for c in columns if "pk" in c] or \
+                     [c["name"] for c in columns] # No primary keys: take all
+        if not fields: return
+
+        row_id = [row[c] for c in fields]
         for i in range(self._grid.Table.GetNumberRows()):
             row2 = self._grid.Table.GetRowData(i)
             if not row2: break # for i
 
-            row2_id = [row2[c] for c in id_fields]
+            row2_id = [row2[c] for c in fields]
             if row_id == row2_id:
                 self._grid.MakeCellVisible(i, 0)
                 self._grid.SelectRow(i)
@@ -1495,6 +1719,13 @@ class DataObjectPage(wx.Panel):
             self._export.Export(opts, noclose)
             self.Layout()
         finally: self.Thaw()
+
+
+    def DropRows(self, rowdatas):
+        """Drops the specified rows from current grid."""
+        self._grid.Table.DropRows(rowdatas)
+        self.Layout() # Refresh scrollbars
+        self._OnChange()
 
 
     def _Populate(self):
@@ -1619,7 +1850,7 @@ class DataObjectPage(wx.Panel):
         finally: self.Thaw()
 
 
-    def _OnInsert(self, event):
+    def _OnInsert(self, event=None):
         """
         Handler for clicking to insert a table row, lets the user edit a new
         grid line.
@@ -1638,9 +1869,12 @@ class DataObjectPage(wx.Panel):
         """
         Handler for clicking to delete a table row, removes the row from grid.
         """
-        selected_rows = self._grid.GetSelectedRows()
-        cursor_row = self._grid.GetGridCursorRow()
-        if cursor_row >= 0: selected_rows.append(cursor_row)
+        if isinstance(event, GridBaseEvent):
+            selected_rows = [event.Row]
+        else:
+            selected_rows = self._grid.GetSelectedRows()
+            cursor_row = self._grid.GetGridCursorRow()
+            if cursor_row >= 0: selected_rows.append(cursor_row)
         for row in selected_rows: self._grid.DeleteRows(row)
         self.Layout() # Refresh scrollbars
         self._OnChange()
@@ -1719,8 +1953,7 @@ class DataObjectPage(wx.Panel):
         change the column filter.
         """
         row, col = event.GetRow(), event.GetCol()
-        # Remember scroll positions, as grid update loses them
-        if row >= 0: return # Only react to clicks in the header
+        if row >= 0: return self._grid.Table.OnMenu(event)
 
         grid_data = self._grid.Table
         current_filter = unicode(grid_data.filters[col]) \
@@ -1799,6 +2032,28 @@ class DataObjectPage(wx.Panel):
             text = "\n".join("\t".join(c for c in r) for r in data)
             d = wx.TextDataObject(text)
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+
+
+    def _OnGridBaseEvent(self, event):
+        """Handler for event from SQLiteGridBase."""
+        VARS = ("insert", "delete", "open", "remove", "table", "data")
+        insert, delete, open, remove, table, data = (getattr(event, x, None) for x in VARS)
+        if insert: self._OnInsert()
+        elif delete:
+            event.Row = event.row
+            self._OnDelete(event)
+        elif open:
+            self._PostEvent(open=True, table=table, row=data)
+        elif remove:
+            self._PostEvent(remove=True, table=table, rows=data)
+            self.Layout() # Refresh scrollbars
+            self._OnChange()
+
+
+    def _OnGridMenu(self, event):
+        """Handler for right-click or context menu in grid, opens popup menu."""
+        if self._grid.IsCellEditControlShown(): event.Skip()
+        else: self._grid.Table.OnMenu(event)
 
 
     def _OnGridMouse(self, event):
@@ -2061,6 +2316,12 @@ class SchemaObjectPage(wx.Panel):
         for k, v in self._backup.items(): setattr(self, k, v)
         self._Populate()
         self._PostEvent(modified=True)
+
+
+    def GetName(self):
+        """Returns schema item name."""
+        return self._item.get("name", "")
+    Name = property(GetName)
 
 
     def _AssignColumnIDs(self, meta):
