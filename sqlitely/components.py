@@ -2196,7 +2196,7 @@ class SchemaObjectPage(wx.Panel):
     }
     DEFAULTS = {
         "table":   {"name": "new_table", "columns": [
-            {"name": "id", "type": "INTEGER", "pk": {"autoincrement": True}}]
+            {"name": "id", "type": "INTEGER", "pk": {"autoincrement": True}, "notnull": {}}]
         },
         "index":   {"name": "new_index"},
         "trigger": {"name": "new_trigger"},
@@ -3614,12 +3614,15 @@ class SchemaObjectPage(wx.Panel):
         def get_table_cols(data):
             return [x["name"] for x in self._item["meta"].get("columns") or ()]
 
+        def toggle_pk(data):
+            if "pk" in data: data["notnull"] = {}
+            return "notnull"
 
         if "columns" == path[0]: return [
             {"name": "name",    "label": "Name"},
             {"name": "type",    "label": "Type", "choices": self._types, "choicesedit": True},
             {"name": "default", "label": "Default", "component": controls.SQLiteTextCtrl},
-            {"name": "pk", "label": "PRIMARY KEY", "toggle": True, "children": [
+            {"name": "pk", "label": "PRIMARY KEY", "toggle": True, "link": toggle_pk, "children": [
                 {"name": "autoincrement", "label": "AUTOINCREMENT", "type": bool},
                 {"name": "order", "label": "Order", "toggle": True, "choices": self.ORDER,
                  "help": "If DESC, an integer key is not an alias for ROWID."},
@@ -4249,6 +4252,7 @@ class SchemaObjectPage(wx.Panel):
     def _OnToggleColumnFlag(self, path, event):
         """Toggles PRIMARY KEY / NOT NULL / UNIQUE flag."""
         path, flag = path[:-1], path[-1]
+        coldata = util.get(self._item["meta"], path[:2])
         data, value = util.get(self._item["meta"], path), event.EventObject.Value
         if data is None: data = util.set(self._item["meta"], {}, path)            
 
@@ -4256,8 +4260,13 @@ class SchemaObjectPage(wx.Panel):
         else: data.pop(flag, None)
         if "pk" == flag and not value: # Clear autoincrement checkbox
             event.EventObject.GetNextSibling().Value = False
-        elif "autoincrement" == flag and value: # Set PK checkbox
+        elif "pk" == flag and value:   # Set not null checkbox
+            event.EventObject.GetNextSibling().GetNextSibling().Value = True
+            coldata["notnull"] = {}
+        elif "autoincrement" == flag and value: # Set PK and NOT NULL checkbox
             event.EventObject.GetPrevSibling().Value = True
+            event.EventObject.GetNextSibling().Value = True
+            coldata["notnull"] = {}
         self._PopulateSQL()
 
 

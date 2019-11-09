@@ -282,7 +282,8 @@ class FormDialog(wx.Dialog):
        ?component     specific wx component to use
        ?toggle:       if true, field is toggle-able and children hidden when off
        ?children:     [{field}, ]
-       ?link:         "name" of linked field, cleared and repopulated on change
+       ?link:         "name" of linked field, cleared and repopulated on change,
+                      or callable(data) doing required change and returning field name
        ?tb:           [{type, ?help}] for SQLiteTextCtrl component, adds toolbar,
                       supported toolbar buttons "open" and "paste"
     }]
@@ -644,8 +645,13 @@ class FormDialog(wx.Dialog):
         or not value.strip()): value = value.strip()
         self._SetValue(field, value, path)
         if field.get("link"):
-            linkfield = self._GetField(field["link"], path)
-            self._DelValue(linkfield, path)
+            name = field["link"]
+            if callable(name):
+                name = field["link"](self._data)
+                linkfield = self._GetField(name, path)
+            else:
+                linkfield = self._GetField(name, path)
+                self._DelValue(linkfield, path)
             self._PopulateField(linkfield, path)
 
 
@@ -732,6 +738,15 @@ class FormDialog(wx.Dialog):
             c.Show(fon)
         if on and self._GetValue(field, path) is None:
             self._SetValue(field, {} if field.get("children") else "", path)
+        if field.get("link"):
+            name = field["link"]
+            if callable(name):
+                name = field["link"](self._data)
+                linkfield = self._GetField(name, path)
+            else:
+                linkfield = self._GetField(name, path)
+                self._DelValue(linkfield, path)
+            self._PopulateField(linkfield, path)
         self.Layout()
 
 
