@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.11.2019
+@modified    09.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2733,7 +2733,11 @@ class DatabasePage(wx.Panel):
     def register_notebook_hotkeys(self, notebook):
         """Register Ctrl-W close handler to notebook pages."""
         def on_close_hotkey(event):
-            notebook and notebook.DeletePage(notebook.GetSelection())
+            if not notebook: return
+            if notebook is self.notebook_sql: # Close SQL grid first
+                page = notebook.GetPage(notebook.GetSelection())
+                if page.HasGrid(): return page.CloseGrid()                    
+            notebook.DeletePage(notebook.GetSelection())
 
         id_close = wx.NewIdRef().Id
         accelerators = [(wx.ACCEL_CTRL, k, id_close) for k in [ord("W")]]

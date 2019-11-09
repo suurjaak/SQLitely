@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.11.2019
+@modified    09.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -1206,6 +1206,16 @@ class SQLPage(wx.Panel):
     def IsExporting(self):
         """Returns whether export is currently underway."""
         return self._export.IsExporting()
+
+
+    def HasGrid(self):
+        """Returns whether the page has a grid open."""
+        return bool(self._grid.Table)
+
+
+    def CloseGrid(self):
+        """Closes the current grid, if any."""
+        if self._grid.Table: self._OnGridClose()
 
 
     def _OnExport(self, event=None):
