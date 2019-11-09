@@ -3035,22 +3035,31 @@ class DatabasePage(wx.Panel):
         """Handler for clicking to save PRAGMA changes."""
         result = True
 
-        changes = {} # {pragma_name: value}
-        for name, value in sorted(self.pragma_changes.items()):
-            if value == self.pragma.get(name): continue # for name, value
-            changes[name] = value
+        sql = ""
+        sortkey = lambda x: (bool(x[1].get("deprecated")), x[1]["label"])
+        for name, _ in sorted(database.Database.PRAGMA.items(), key=sortkey):
+            if name not in self.pragma_changes: continue # for name
+            value = self.pragma_changes[name]
+            if value == self.pragma.get(name): continue # for name
+            if isinstance(value, basestring):
+                value = '"%s"' % value.replace('"', '""')
+            elif isinstance(value, bool): value = str(value).upper()
+            sql += ("\n\n" if sql else "") + "PRAGMA %s = %s;" % (name, value)
+
+        if sql and wx.YES != controls.YesNoMessageBox(
+            "Save PRAGMA changes?\n\n%s" % sql, conf.Title,
+            wx.ICON_INFORMATION, defaultno=True
+        ): return
+            
 
         try:
-            for name, value in changes.items():
-                if isinstance(value, basestring):
-                    value = '"%s"' % value.replace('"', '""')
-                elif isinstance(value, bool): value = str(value).upper()
-                sql = "PRAGMA %s = %s" % (name, value)
-                logger.info("Executing %s.", sql)
-                self.db.execute(sql)
+            mysql = "SAVEPOINT save_pragma;\n\n%s\n\n" \
+                    "RELEASE SAVEPOINT save_pragma;" % sql
+            logger.info("Executing %s.", mysql)
+            self.db.connection.executescript(mysql)
         except Exception as e:
             result = False
-            msg = "Error setting %s:\n\n%s" % (sql, util.format_exc(e))
+            msg = "Error saving PRAGMA:\n\n%s" % util.format_exc(e)
             logger.exception(msg)
             guibase.status(msg, flash=True)
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
