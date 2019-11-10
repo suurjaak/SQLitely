@@ -514,12 +514,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_tools_export_schema = self.menu_tools_export_schema = menu_tools_export.Append(
             wx.ID_ANY, "Database schema as S&QL",
             "Export database schema as SQL")
+        menu_tools_export_dump = self.menu_tools_export_dump = menu_tools_export.Append(
+            wx.ID_ANY, "Full database &dump as SQL",
+            "Dump entire database as SQL")
         menu_tools_export_stats = self.menu_tools_export_stats = menu_tools_export.Append(
             wx.ID_ANY, "Database &statistics as HTML",
             "Export database statistics as HTML")
-        menu_tools_export_dump = self.menu_tools_export_dump = menu_tools_export.Append(
-            wx.ID_ANY, "Database &dump as SQL",
-            "Dump entire database as SQL")
 
         menu_help = wx.Menu()
         menu.Append(menu_help, "&Help")
@@ -3010,7 +3010,7 @@ class DatabasePage(wx.Panel):
                 else: info = ", analysis was cancelled"
                 wx.MessageBox("No statistics to save%s." % info, conf.Title, wx.ICON_NONE)
             elif "dump" == arg:
-                " TODO later "
+                self.on_dump()
 
 
     def on_sys_colour_change(self, event):
@@ -3987,6 +3987,31 @@ class DatabasePage(wx.Panel):
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving SQL to %s." % filename
+            logger.exception(msg); guibase.status(msg, flash=True)
+            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+
+
+    def on_dump(self, event=None):
+        """
+        Handler for saving database dump to file, opens file dialog and saves content.
+        """
+        filename = os.path.splitext(os.path.basename(self.db.name))[0]
+        filename += " dump"
+        dialog = wx.FileDialog(
+            self, message="Save database dump as", defaultFile=filename,
+            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        filename = dialog.GetPath()
+        try:
+            # TODO progress ka. ExportProgressPaneliga tegelt.
+            importexport.export_dump(filename, self.db)
+            util.start_file(filename)
+        except Exception as e:
+            msg = "Error saving database dump to %s." % filename
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
@@ -5155,6 +5180,10 @@ class DatabasePage(wx.Panel):
                 item_copy.Enable(False)
                 item_file.Enable(False)
                 if item_database:      item_database.Enable(False)
+        else: # Root
+            item_dump = wx.MenuItem(menu, -1, "Save database &dump as SQL")
+            menu.Bind(wx.EVT_MENU, self.on_dump, id=item_dump.GetId())
+            menu.Append(item_dump)
 
         if item_file:
             menu.AppendSeparator()

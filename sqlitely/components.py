@@ -4670,7 +4670,7 @@ class ExportProgressPanel(wx.Panel):
         return [x for x in self._exports if x["pending"]]
 
 
-    def OnProgress(self, index=0, count=None):
+    def OnProgress(self, index=0, count=None, **_):
         """
         Handler for export progress report, updates progress bar.
         Returns true if export should continue.

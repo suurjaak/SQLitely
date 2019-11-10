@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.11.2019
+@modified    10.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -219,6 +219,37 @@ def export_stats(filename, db, data, filetype="html"):
           "db_filename": db.name, "db_filesize": data["data"]["filesize"]}
     with open(filename, "wb") as f: template.stream(f, ns, **data)
     return True
+
+
+def export_dump(filename, db, progress=None):
+    """
+    Exports full database dump to SQL file.
+
+    @param   progress        callback(name, count) to report progress,
+                             returning false if export should cancel
+    """
+    result = False
+    tables = db.schema["table"]
+    try:
+        with open(filename, "w") as f:
+            for t in tables: db.lock("table", t, filename)
+            namespace = {
+                "db":       db,
+                "sql":      db.get_sql(),
+                "data":     [{"name": t, "columns": [x["name"] for x in opts["columns"]],
+                              "rows": iter(db.execute("SELECT * FROM %s" % grammar.quote(t)))}
+                             for t, opts in tables],
+                "pragma":   db.get_pragma_values(),
+                "progress": progress,
+            }
+            template = step.Template(templates.DUMP_SQL, strip=False)
+            template.stream(f, namespace)
+            result = progress() if progress else True
+    finally:
+        for t in tables: db.unlock("table", t, filename)
+        if not result: util.try_until(lambda: os.unlink(filename))
+
+    return result
 
 
 def get_import_file_data(filename):

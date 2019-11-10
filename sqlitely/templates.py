@@ -17,7 +17,7 @@ import re
 from . import conf
 
 # Modules imported inside templates:
-#import os, pyparsing, sys, wx
+#import itertools, os, pyparsing, sys, wx
 #from sqlitely import conf, grammar, images, searchparser, templates
 #from sqlitely.lib import util
 
@@ -251,7 +251,7 @@ namespace["row_count"] += 1
 %endfor
 </tr>
 <%
-if not i % 100 and isdef("progress") and not progress(count=i):
+if not i % 100 and isdef("progress") and progress and not progress(count=i):
     break # for i, row
 %>
 %endfor
@@ -329,7 +329,7 @@ TXT SQL insert statements export template for the rows part.
 @param   columns    [name, ]
 @param   name       table name
 @param   ?namespace  {"row_count"}
-@param   ?progress  callback(count) returning whether to cancel, if any
+@param   ?progress  callback(name, count) returning whether to cancel, if any
 """
 DATA_ROWS_SQL = """<%
 from sqlitely import grammar, templates
@@ -343,7 +343,7 @@ values = [grammar.format(row[col]) for col in columns]
 %>
 INSERT INTO {{ name }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
 <%
-if not i % 100 and isdef("progress") and not progress(count=i):
+if not i % 100 and isdef("progress") and progress and not progress(name=name, count=i):
     break # for i, row
 %>
 %endfor
@@ -432,7 +432,7 @@ values.append((value.ljust if columnjusts[col] else value.rjust)(columnwidths[co
 %endfor
 | {{ " | ".join(values) }} |
 <%
-if not i % 100 and isdef("progress") and not progress(count=i):
+if not i % 100 and isdef("progress") and progress and not progress(count=i):
     break # for i, row
 %>
 %endfor
@@ -1442,6 +1442,46 @@ from sqlitely import conf, templates
 
 
 """
+Database dump SQL template.
+
+@param   db         database.Database instance
+@param   sql        schema SQL
+@param   data       [{name, columns, rows}]
+@param   pragma     PRAGMA values as {name: value}
+@param   ?progress  callback(count) returning whether to cancel, if any
+"""
+DUMP_SQL = """<%
+import itertools
+from sqlitely.lib.vendor.step import Template
+from sqlitely import grammar, templates
+%>
+-- Database dump.
+-- Source: {{ db.name }}.
+-- {{ templates.export_comment() }}
+%if sql:
+
+{{ sql }}
+
+%endif
+
+%for table in data:
+<%
+row = next(table["rows"], None)
+if not row: continue # for table
+rows = itertools.chain([row], table["rows"])
+%>
+-- Table {{ grammar.quote(table["name"], force=True) }} data:
+{{! Template(templates.DATA_ROWS_SQL).expand(dict(table, progress=progress, rows=rows)) }}
+
+%endfor
+
+-- PRAGMA settings
+{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma) }}
+"""
+
+
+
+"""
 Database PRAGMA statements SQL template.
 
 @param   pragma   PRAGMA values as {name: value}
@@ -1465,8 +1505,8 @@ if name not in pragma:
 
 %>
     %if opts.get("deprecated") and bool(lastopts.get("deprecated")) != bool(opts.get("deprecated")):
--- DEPRECATED:
 
+-- DEPRECATED:
     %endif
 <%
 value = pragma[name]
