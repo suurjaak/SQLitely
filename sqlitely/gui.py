@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.11.2019
+@modified    10.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -64,6 +64,7 @@ SearchEvent,       EVT_SEARCH        = wx.lib.newevent.NewEvent()
 DetectionEvent,    EVT_DETECTION     = wx.lib.newevent.NewEvent()
 AddFolderEvent,    EVT_ADD_FOLDER    = wx.lib.newevent.NewEvent()
 OpenDatabaseEvent, EVT_OPEN_DATABASE = wx.lib.newevent.NewCommandEvent()
+DatabasePageEvent, EVT_DATABASE_PAGE = wx.lib.newevent.NewCommandEvent()
 
 
 class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
@@ -101,6 +102,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.db_pages = {}  # {DatabasePage: Database, }
         self.db_filter = "" # Current database list filter
         self.db_filter_timer = None # Database list filter callback timer
+        self.db_menustate    = {}   # {filename: {} if refresh or {full: True} if reload}
         self.page_db_latest = None  # Last opened database page
         # List of Notebook pages user has visited, used for choosing page to
         # show when closing one.
@@ -141,6 +143,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         sizer.Add(notebook, proportion=1, flag=wx.GROW | wx.RIGHT | wx.BOTTOM)
         self.create_menu()
+        self.populate_menu()
 
         self.dialog_selectfolder = wx.DirDialog(
             self, message="Choose a directory where to search for databases",
@@ -422,18 +425,101 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_save_database_as = self.menu_save_database_as = menu_file.Append(
             wx.ID_ANY, "Save &as...", "Save the active database under a new name"
         )
-        menu_save_database.Enable(False)
-        menu_save_database_as.Enable(False)
-        menu_recent = self.menu_recent = wx.Menu()
+        menu_recent = wx.Menu()
         menu_file.AppendSubMenu(menu_recent, "&Recent files", "Recently opened databases")
         menu_file.AppendSeparator()
-        menu_options = self.menu_options = \
-            menu_file.Append(wx.ID_ANY, "Advanced opt&ions", "Edit advanced program options")
-        menu_iconize = self.menu_iconize = \
-            menu_file.Append(wx.ID_ANY, "Minimize to &tray",
-                "Minimize %s window to notification area" % conf.Title)
+        menu_options = self.menu_options = menu_file.Append(wx.ID_ANY,
+            "Advanced opt&ions", "Edit advanced program options")
+        menu_iconize = self.menu_iconize = menu_file.Append(wx.ID_ANY,
+            "Minimize to &tray", "Minimize %s window to notification area" % conf.Title)
         menu_exit = self.menu_exit = \
             menu_file.Append(wx.ID_ANY, "E&xit\tAlt-X", "Exit")
+
+        menu_view = self.menu_view = wx.Menu()
+        menu.Append(menu_view, "&View")
+        menu_view_data = wx.Menu()
+        self.menu_view_data = menu_view.AppendSubMenu(menu_view_data, "&Data")
+        self.menu_view_data_table = menu_view_data.AppendSubMenu(wx.Menu(), "&Table")
+        self.menu_view_data_view  = menu_view_data.AppendSubMenu(wx.Menu(), "&View")
+        menu_view.AppendSeparator()
+        menu_view_refresh = self.menu_view_refresh = menu_view.Append(wx.ID_ANY,
+            "&Refresh", "Refresh all data")
+        menu_view_folder = self.menu_view_folder = menu_view.Append(wx.ID_ANY,
+            "Show in &folder", "Open database file directory")
+        menu_view_changes = self.menu_view_changes = menu_view.Append(
+            wx.ID_ANY, "&Unsaved changes", "Show unsaved changes")
+
+        menu_edit = self.menu_edit = wx.Menu()
+        menu.Append(menu_edit, "&Edit")
+        menu_edit_table   = wx.Menu()
+        menu_edit_index   = wx.Menu()
+        menu_edit_trigger = wx.Menu()
+        menu_edit_view    = wx.Menu()
+        menu_edit_drop    = wx.Menu()
+        self.menu_edit_table   = menu_edit.AppendSubMenu(menu_edit_table,   "&Table")
+        self.menu_edit_index   = menu_edit.AppendSubMenu(menu_edit_index,   "&Index")
+        self.menu_edit_trigger = menu_edit.AppendSubMenu(menu_edit_trigger, "T&rigger")
+        self.menu_edit_view    = menu_edit.AppendSubMenu(menu_edit_view,    "&View")
+        menu_edit.AppendSeparator()
+        menu_edit_save = self.menu_edit_save = menu_edit.Append(
+            wx.ID_ANY, "&Save all changes", "Save all unsaved changes")
+        menu_edit_undo = self.menu_edit_undo = menu_edit.Append(
+            wx.ID_ANY, "&Undo all changes", "Roll back all unsaved changes")
+        menu_edit.AppendSeparator()
+        self.menu_edit_drop    = menu_edit.AppendSubMenu(menu_edit_drop,    "&Drop")
+        menu_edit_drop_table   = wx.Menu()
+        menu_edit_drop_index   = wx.Menu()
+        menu_edit_drop_trigger = wx.Menu()
+        menu_edit_drop_view    = wx.Menu()
+        self.menu_edit_drop_table   = menu_edit_drop.AppendSubMenu(menu_edit_drop_table,   "&Table")
+        self.menu_edit_drop_index   = menu_edit_drop.AppendSubMenu(menu_edit_drop_index,   "&Index")
+        self.menu_edit_drop_trigger = menu_edit_drop.AppendSubMenu(menu_edit_drop_trigger, "T&rigger")
+        self.menu_edit_drop_view    = menu_edit_drop.AppendSubMenu(menu_edit_drop_view,    "&View")
+
+        menu_tools = self.menu_tools = wx.Menu()
+        menu.Append(menu_tools, "&Tools")
+        menu_tools_optimize = self.menu_tools_optimize = menu_tools.Append(
+            wx.ID_ANY, "&Optimize",
+            "Attempt to optimize the database, running ANALYZE on tables")
+        menu_tools_vacuum = self.menu_tools_vacuum = menu_tools.Append(
+            wx.ID_ANY, "&Vacuum",
+            "Rebuild the database file, repacking it into a minimal amount of disk space")
+        menu_tools_integrity = self.menu_tools_integrity = menu_tools.Append(
+            wx.ID_ANY, "Check for &corruption",
+            "Check database integrity for corruption and recovery")
+        menu_tools_fks = self.menu_tools_fks = menu_tools.Append(
+            wx.ID_ANY, "Check &foreign keys",
+            "Check for foreign key violations")
+        menu_tools.AppendSeparator()
+        menu_tools_import = self.menu_tools_import = menu_tools.Append(
+            wx.ID_ANY, "&Import data",
+            "Import data into table from file")
+        menu_tools_export = wx.Menu()
+        self.menu_tools_export = menu_tools.AppendSubMenu(menu_tools_export, "&Export")
+        menu_tools_export_tables = self.menu_tools_export_tables = menu_tools_export.Append(
+            wx.ID_ANY, "All tables to &file",
+            "Export all tables to individual files")
+        menu_tools_export_spreadsheet = self.menu_tools_export_spreadsheet = menu_tools_export.Append(
+            wx.ID_ANY, "All tables to s&ingle spreadsheet",
+            "Export all tables to a single Excel spreadsheet")
+        menu_tools_export_data = self.menu_tools_export_data = menu_tools_export.Append(
+            wx.ID_ANY, "All tables to another database",
+            "Export table schemas and data to another SQLite database")
+        menu_tools_export_structure = self.menu_tools_export_structure = menu_tools_export.Append(
+            wx.ID_ANY, "All table str&uctures to another database",
+            "Export table schemas to another SQLite database")
+        menu_tools_export_pragma = self.menu_tools_export_pragma = menu_tools_export.Append(
+            wx.ID_ANY, "&PRAGMA settings as SQL",
+            "Export database PRAGMA settings as SQL")
+        menu_tools_export_schema = self.menu_tools_export_schema = menu_tools_export.Append(
+            wx.ID_ANY, "Database schema as S&QL",
+            "Export database schema as SQL")
+        menu_tools_export_stats = self.menu_tools_export_stats = menu_tools_export.Append(
+            wx.ID_ANY, "Database &statistics as HTML",
+            "Export database statistics as HTML")
+        menu_tools_export_dump = self.menu_tools_export_dump = menu_tools_export.Append(
+            wx.ID_ANY, "Database &dump as SQL",
+            "Dump entire database as SQL")
 
         menu_help = wx.Menu()
         menu.Append(menu_help, "&Help")
@@ -472,6 +558,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_tray.Check(conf.TrayIconEnabled)
         menu_autoupdate_check.Check(conf.UpdateCheckAutomatic)
 
+        self.Bind(wx.EVT_MENU_OPEN, self.on_menu_open, menu)
         self.Bind(wx.EVT_MENU, self.on_new_database, menu_new_database)
         self.Bind(wx.EVT_MENU, self.on_open_database, menu_open_database)
         self.Bind(wx.EVT_MENU, self.on_save_active_database, menu_save_database)
@@ -487,6 +574,101 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_toggle_autoupdate_check,
                   menu_autoupdate_check)
         self.Bind(wx.EVT_MENU, self.on_about, menu_about)
+
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["refresh"]), menu_view_refresh)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["folder"]),  menu_view_folder)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["changes"]), menu_view_changes)
+
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["save"]), menu_edit_save)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["undo"]), menu_edit_undo)
+
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["optimize"]),  menu_tools_optimize)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["vacuum"]),    menu_tools_vacuum)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["integrity"]), menu_tools_integrity)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["fks"]),       menu_tools_fks)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["import"]),    menu_tools_import)
+
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "tables"]),     menu_tools_export_tables)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "single"]),     menu_tools_export_spreadsheet)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "data"]),       menu_tools_export_data)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "structure"]),  menu_tools_export_structure)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "pragma"]),     menu_tools_export_pragma)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "schema"]),     menu_tools_export_schema)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "statistics"]), menu_tools_export_stats)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "dump"]),       menu_tools_export_dump)
+
+
+
+    def populate_menu(self):
+        """Updates program menu for currently selected tab."""
+        page = self.notebook.GetSelection() and self.page_db_latest
+        db = page.db if page else None
+
+        for x in self.menu_view.MenuItems:  x.Enable(bool(db))
+        for x in self.menu_edit.MenuItems:  x.Enable(bool(db))
+        for x in self.menu_tools.MenuItems: x.Enable(bool(db))
+        self.menu_save_database.Enable(bool(page and (db.temporary or page.get_unsaved())))
+        self.menu_save_database_as.Enable(bool(page))
+        if not db: return
+
+        self.menu_view_changes.Enabled = self.menu_edit_save.Enabled = \
+        self.menu_edit_undo.Enabled = bool(page.get_unsaved())
+        self.menu_view_folder.Enabled = not db.temporary
+
+        EDITMENUS = {"table":   self.menu_edit_table,   "index": self.menu_edit_index,
+                     "trigger": self.menu_edit_trigger, "view": self.menu_edit_view}
+        DROPMENUS = {"table":   self.menu_edit_drop_table,   "index": self.menu_edit_drop_index,
+                     "trigger": self.menu_edit_drop_trigger, "view": self.menu_edit_drop_view}
+        VIEWMENUS = {"table":   self.menu_view_data_table,   "view": self.menu_view_data_view}
+        for category in db.CATEGORIES if self.db_menustate.get(db.filename, {}).get("full") else ():
+            menu = EDITMENUS[category]
+            for x in menu.SubMenu.MenuItems: menu.SubMenu.Delete(x)
+            item_add = menu.SubMenu.Append(wx.ID_ANY, "Create &new %s" % category)
+            args = ["create", category]
+            self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), item_add)
+            items = db.get_category(category)
+            if items: menu.SubMenu.AppendSeparator()
+            for name in items:
+                help = "Open schema editor for %s %s" % (category, grammar.quote(name))
+                item = menu.SubMenu.Append(wx.ID_ANY, name, help)
+                args = ["schema", category, name]
+                self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), item)
+
+            menu = DROPMENUS[category]
+            for x in menu.SubMenu.MenuItems: menu.SubMenu.Delete(x)
+            item_all = menu.SubMenu.Append(wx.ID_ANY, "Drop all %s" % util.plural(category))
+            args = ["drop", category]
+            self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), item_all)
+            if items: menu.SubMenu.AppendSeparator()
+            for name in items:
+                help = "Drop %s %s" % (category, grammar.quote(name))
+                item = menu.SubMenu.Append(wx.ID_ANY, name, help)
+                args = ["drop", category, name]
+                self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), item)
+
+            if category not in VIEWMENUS: continue # for category
+            menu = VIEWMENUS[category]
+            for x in menu.SubMenu.MenuItems: menu.SubMenu.Delete(x)
+            menu.Enable(bool(items))
+            for name in items:
+                help = "Open data grid for %s %s" % (category, grammar.quote(name))
+                item = menu.SubMenu.Append(wx.ID_ANY, name, help)
+                args = ["data", category, name]
+                self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), item)
+
+
+    def on_menu_open(self, event):
+        """Handler for opening main menu, repopulates menu if needed."""
+        page = self.notebook.GetSelection() and self.page_db_latest
+        db = page.db if page else None
+        if not db or db.filename in self.db_menustate:
+            self.populate_menu()
+            if db: self.db_menustate.pop(db.filename)
+
+
+    def on_menu_page(self, args, event=None):
+        """Handler for clicking a page-specific menu item, forwards to DatabasePage."""
+        self.page_db_latest.handle_command(args[0], *args[1:])
 
 
     def update_check(self):
@@ -634,15 +816,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if not self.pages_visited or self.pages_visited[-1] != p:
             self.pages_visited.append(p)
         self.Title = conf.Title
-        if hasattr(p, "title"):
-            subtitle = p.title
-            if isinstance(p, DatabasePage): # Use parent/file.db or C:/file.db
-                path, file = os.path.split(p.db.name)
-                subtitle = os.path.join(os.path.split(path)[-1] or path, file)
-            self.Title += " - " + subtitle
-        self.menu_save_database.Enable(isinstance(p, DatabasePage) and
-                                       (p.db.temporary or bool(p.get_unsaved())))
-        self.menu_save_database_as.Enable(isinstance(p, DatabasePage))
+        title, subtitle = conf.Title, ""
+        if isinstance(p, DatabasePage): # Use parent/file.db or C:/file.db
+            self.page_db_latest = p
+            path, file = os.path.split(p.db.name)
+            subtitle = os.path.join(os.path.split(path)[-1] or path, file)
+            self.db_menustate[p.db.filename] = {"full": True}
+        self.Title = " - ".join(filter(bool, (conf.Title, subtitle)))
         self.update_notebook_header()
 
 
@@ -651,8 +831,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for dragging notebook tabs, keeps main-tab first and log-tab last.
         """
         self.notebook.Freeze()
+        self._ignore_paging = True
         try:
-            self._ignore_paging = True
             cur_page = self.notebook.GetCurrentPage()
             idx_main = self.notebook.GetPageIndex(self.page_main)
             if idx_main > 0:
@@ -664,10 +844,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 text = self.notebook.GetPageText(idx_log)
                 self.notebook.RemovePage(idx_log)
                 self.notebook.AddPage(page=self.page_log, text=text)
-            delattr(self, "_ignore_paging")
             if self.notebook.GetCurrentPage() != cur_page:
                 self.notebook.SetSelection(self.notebook.GetPageIndex(cur_page))
-        finally: self.notebook.Thaw()
+        finally:
+            delattr(self, "_ignore_paging")
+            self.notebook.Thaw()
 
 
     def on_size(self, event):
@@ -752,7 +933,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for notification from DatabasePage, updates UI."""
         idx = self.notebook.GetPageIndex(event.source)
         ready, modified = (getattr(event, x, None) for x in ("ready", "modified"))
-        rename = getattr(event, "rename", None)
+        rename, updated = (getattr(event, x, None) for x in ("rename", "updated"))
 
         if rename:
             self.dbs.pop(event.filename1, None)
@@ -773,6 +954,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                             conf.MaxRecentFiles)
             conf.save()
 
+        if modified or updated:
+            self.db_menustate[event.source.db.filename] = {}
+            if updated: self.db_menustate[event.source.db.filename]["full"] = True
 
         if ready or rename: self.update_notebook_header()
 
@@ -784,9 +968,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             title2 = title1 + suffix
             if self.notebook.GetPageText(idx) != title2:
                 self.notebook.SetPageText(idx, title2)
-            if self.notebook.GetCurrentPage() is event.source:
-                saveable = event.source.db.temporary or bool(modified)
-                self.menu_save_database.Enable(saveable)
 
 
     def on_list_db_key(self, event):
@@ -1749,7 +1930,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     info += (", and " if info else "")
                     info += util.plural("table", unsaved["table"], numbers=False)
                     info += " " + ", ".join(grammar.quote(x, force=True)
-                                            for x in sorted(unsaved["table"]))
+                                            for x in unsaved["table"])
                 if unsaved.get("schema"):
                     info += (", and " if info else "") + "schema changes"
                 if unsaved.get("temporary"):
@@ -1920,6 +2101,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     self.notebook.SetSelection(i)
                     self.update_notebook_header()
                     break # for i
+            self.db_menustate[filename] = {"full": True}
         return page
 
 
@@ -1966,8 +2148,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         return util.make_unique(title, all_titles, suffix=" (%s)")
 
 
-
-DatabasePageEvent, EVT_DATABASE_PAGE = wx.lib.newevent.NewCommandEvent()
 
 class DatabasePage(wx.Panel):
     """
@@ -2492,8 +2672,8 @@ class DatabasePage(wx.Panel):
         tb.AddLabelTool(wx.ID_COPY, "", bitmap=bmp1, shortHelp="Copy pragma SQL to clipboard")
         tb.AddLabelTool(wx.ID_SAVE, "", bitmap=bmp2, shortHelp="Save pragma SQL to file")
         tb.Realize()
-        tb.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_pragma, e), id=wx.ID_COPY)
-        tb.Bind(wx.EVT_TOOL, lambda e: self.on_save_sql(self.stc_pragma, e), id=wx.ID_SAVE)
+        tb.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_pragma), id=wx.ID_COPY)
+        tb.Bind(wx.EVT_TOOL, lambda e: self.save_sql(self.stc_pragma.Text, "PRAGMA"), id=wx.ID_SAVE)
 
         button_edit = self.button_pragma_edit = \
             wx.Button(page, label="Edit")
@@ -2691,8 +2871,8 @@ class DatabasePage(wx.Panel):
         tb_sql.EnableTool(wx.ID_COPY, False)
         tb_sql.EnableTool(wx.ID_SAVE, False)
         tb_sql.Bind(wx.EVT_TOOL, self.on_update_stc_schema, id=wx.ID_REFRESH)
-        tb_sql.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_schema, e), id=wx.ID_COPY)
-        tb_sql.Bind(wx.EVT_TOOL, lambda e: self.on_save_sql(self.stc_schema, e), id=wx.ID_SAVE)
+        tb_sql.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_schema), id=wx.ID_COPY)
+        tb_sql.Bind(wx.EVT_TOOL, lambda e: self.save_sql(self.stc_schema.Text), id=wx.ID_SAVE)
 
         stc = self.stc_schema = controls.SQLiteTextCtrl(panel_schema,
             style=wx.BORDER_STATIC)
@@ -2713,6 +2893,124 @@ class DatabasePage(wx.Panel):
         splitter.SplitVertically(panel1, panel2, self.Size[0] / 2 - 60)
 
         self.populate_statistics()
+
+
+    def handle_command(self, cmd, *args):
+        """Handles a command, like "drop", ["table", name]."""
+
+        def format_changes():
+            """Returns unsaved changes as readable text."""
+            changes = self.get_unsaved()
+            if changes.pop("temporary", None) and not changes:
+                info = "%s has modifications" % self.db
+            else:
+                info = ""
+                if changes.get("pragma"): info += "PRAGMA settings\n\n"
+                if changes.get("table"):
+                    info += "Unsaved data in tables:\n- "
+                    info += "\n- ".join(map(grammar.quote, changes["table"]))
+                if changes.get("schema"):
+                    info += "Schema items:\n"
+                    names = {}
+                    for x in changes["schema"]:
+                        names.setdefault(x.Category, []).append(x.Name)
+                    for category in self.db.CATEGORIES:
+                        for name in names.get(category) or ():
+                            info += "- %s %s\n" % (category, grammar.quote(name))
+                if changes.get("temporary"):
+                    info += "Is a temporary file"
+            return info
+
+
+        if "data" == cmd:
+            category, name = args
+            page = self.data_pages[category].get(name) or \
+                   self.add_data_page(self.db.get_category(category, name))
+            self.notebook_data.SetSelection(self.notebook_data.GetPageIndex(page))
+        elif "schema" == cmd:
+            category, name = args
+            page = self.schema_pages[category].get(name) or \
+                   self.add_schema_page(self.db.get_category(category, name))
+            self.notebook_schema.SetSelection(self.notebook_schema.GetPageIndex(page))
+        elif "drop" == cmd:
+            category = args[0]
+            name = args[1:] if len(args) > 1 else list(self.db.schema[category])
+            self.on_delete_items(category, name)
+        elif "refresh" == cmd:
+            self.reload_schema(count=True, parse=True)
+            self.update_info_panel()
+            self.on_pragma_refresh()
+            for p in (x for xx in self.data_pages.values() for x in xx):
+                if not p.IsChanged(): p.Reload()
+            for p in (x for xx in self.schema_pages.values() for x in xx):
+                if not p.IsChanged(): p.Reload()
+        elif "changes" == cmd:
+            wx.MessageBox("Current unsaved changes:\n\n%s." % 
+                          format_changes().rstrip(), conf.Title)
+        elif "folder" == cmd:
+            util.select_file(self.db.filename)
+        elif "save" == cmd:
+            if wx.OK != wx.MessageBox(
+                "Are you sure you want to save the following changes:\n\n%s." % 
+                format_changes().rstrip(), conf.Title
+            ): return
+
+            self.save_database()
+        elif "undo" == cmd:
+            if wx.OK != wx.MessageBox(
+                "Are you sure you want to undo the following changes:\n\n%s." % 
+                format_changes().rstrip(), conf.Title
+            ): return
+
+            self.on_pragma_cancel()
+            for p in (x for xx in self.data_pages.values() for x in xx):
+                if p.IsChanged(): p.Reload()
+            for p in (x for xx in self.schema_pages.values() for x in xx):
+                if p.IsChanged(): p.Reload(force=True)
+        elif "optimize" == cmd:
+            self.on_optimize()
+        elif "vacuum" == cmd:
+            self.on_vacuum()
+        elif "integrity" == cmd:
+            self.on_check_integrity()
+        elif "fks" == cmd:
+            self.on_check_fks()
+        elif "import" == cmd:
+            components.ImportDialog(self, self.db).ShowModal()
+
+        elif "export" == cmd:
+            arg = args[0]
+            if arg in ("tables", "single", "data", "structure") \
+            and not self.db.schema["table"]: return wx.MessageBox(
+                "No tables to save.", conf.Title, wx.ICON_NONE
+            )
+
+            if "tables" == arg:
+                self.on_export_data_file("table", list(self.db.schema["table"]))
+            elif "single" == arg:
+                " TODO later "
+            elif "data" == arg:
+                self.on_export_data_base(list(self.db.schema["table"]))
+            elif "structure" == arg:
+                self.on_export_data_base(list(self.db.schema["table"]), data=False)
+            elif "pragma" == arg:
+                template = step.Template(templates.PRAGMA_SQL, strip=False)
+                sql = template.expand(pragma=self.pragma)
+                self.save_sql(sql, "PRAGMA")
+            elif "schema" == arg:
+                if any(self.db.schema.values()): return self.save_sql(self.stc_schema.Text)
+
+                wx.MessageBox("No schema to save.", conf.Title, wx.ICON_NONE)
+            elif "statistics" == arg:
+                if "data" in self.statistics: return self.on_save_statistics("html")
+
+                if not any(self.db.schema.values()):    info = ", database is empty"
+                elif "error" in self.statistics:        info = ", analysis failed"
+                elif self.worker_analyzer.is_working(): info = "yet, analysis underway"
+                else: info = ", analysis was cancelled"
+                wx.MessageBox("No statistics to save%s." % info, conf.Title, wx.ICON_NONE)
+            elif "dump" == arg:
+                " TODO later "
 
 
     def on_sys_colour_change(self, event):
@@ -2948,32 +3246,13 @@ class DatabasePage(wx.Panel):
         scrollpos = self.stc_pragma.GetScrollPos(wx.VERTICAL)
         self.stc_pragma.Freeze()
         try:
-            self.stc_pragma.SetReadOnly(False)
-            self.stc_pragma.Text = ""
             values = dict(self.pragma_changes)
-            if self.pragma_fullsql:
-                values = dict(self.pragma, **values)
-                for name, opts in database.Database.PRAGMA.items():
-                    if opts.get("read") or opts.get("write") is False:
-                        values.pop(name, None)
+            if self.pragma_fullsql: values = dict(self.pragma, **values)
 
-            lastopts = {}
-            sortkey = lambda x: (bool(x[1].get("deprecated")), x[1]["label"])
-            for name, opts in sorted(database.Database.PRAGMA.items(), key=sortkey):
-                if name not in values:
-                    lastopts = opts
-                    continue # for name, opts
-
-                if opts.get("deprecated") \
-                and bool(lastopts.get("deprecated")) != bool(opts.get("deprecated")):
-                    self.stc_pragma.Text += "-- DEPRECATED:\n\n"
-
-                value = values[name]
-                if isinstance(value, basestring):
-                    value = '"%s"' % value.replace('"', '""')
-                elif isinstance(value, bool): value = str(value).upper()
-                self.stc_pragma.Text += "PRAGMA %s = %s;\n\n" % (name, value)
-                lastopts = opts
+            template = step.Template(templates.PRAGMA_SQL, strip=False)
+            sql = template.expand(pragma=values)
+            self.stc_pragma.SetReadOnly(False)
+            self.stc_pragma.Text = sql
             self.stc_pragma.SetReadOnly(True)
             self.stc_pragma.ScrollToLine(scrollpos)
         finally: self.stc_pragma.Thaw()
@@ -3035,22 +3314,12 @@ class DatabasePage(wx.Panel):
         """Handler for clicking to save PRAGMA changes."""
         result = True
 
-        sql = ""
-        sortkey = lambda x: (bool(x[1].get("deprecated")), x[1]["label"])
-        for name, _ in sorted(database.Database.PRAGMA.items(), key=sortkey):
-            if name not in self.pragma_changes: continue # for name
-            value = self.pragma_changes[name]
-            if value == self.pragma.get(name): continue # for name
-            if isinstance(value, basestring):
-                value = '"%s"' % value.replace('"', '""')
-            elif isinstance(value, bool): value = str(value).upper()
-            sql += ("\n\n" if sql else "") + "PRAGMA %s = %s;" % (name, value)
-
+        template = step.Template(templates.PRAGMA_SQL, strip=False)
+        sql = template.expand(pragma=self.pragma_changes)
         if sql and wx.YES != controls.YesNoMessageBox(
             "Save PRAGMA changes?\n\n%s" % sql, conf.Title,
             wx.ICON_INFORMATION, defaultno=True
         ): return
-            
 
         try:
             mysql = "SAVEPOINT save_pragma;\n\n%s\n\n" \
@@ -3094,7 +3363,8 @@ class DatabasePage(wx.Panel):
         self.pragma_edit = False # Ignore change events in edit handler
         for name, opts in database.Database.PRAGMA.items():
             ctrl = self.pragma_ctrls[name]
-            value = self.pragma.get(name)
+            value = self.pragma_changes[name] if name in self.pragma_changes \
+                    else self.pragma.get(name)
             if "table" == opts["type"]:
                 ctrl.Value = "\n".join(str(x) for x in value or ())
             elif bool == opts["type"]:
@@ -3107,7 +3377,6 @@ class DatabasePage(wx.Panel):
                 ctrl.Value = value
             else:
                 ctrl.Value = "" if value is None else value
-        self.pragma_changes.clear()
         self.populate_pragma_sql()
         self.pragma_edit = editmode
         self.update_page_header()
@@ -3123,7 +3392,8 @@ class DatabasePage(wx.Panel):
         self.pragma_edit = False
         self.button_pragma_edit.Label = "Edit"
         self.button_pragma_cancel.Disable()
-        self.on_pragma_refresh(None)
+        self.pragma_changes.clear()
+        self.on_pragma_refresh()
         self.check_pragma_sql.Parent.Hide()
         for name, opts in database.Database.PRAGMA.items():
             if "table" != opts["type"]: self.pragma_ctrls[name].Disable()
@@ -3689,7 +3959,7 @@ class DatabasePage(wx.Panel):
             del self.workers_search[tab["id"]]
 
 
-    def on_copy_sql(self, stc, event):
+    def on_copy_sql(self, stc, event=None):
         """Handler for copying SQL to clipboard."""
         if wx.TheClipboard.Open():
             d = wx.TextDataObject(stc.Text)
@@ -3697,12 +3967,12 @@ class DatabasePage(wx.Panel):
             guibase.status("Copied SQL to clipboard", flash=True)
 
 
-    def on_save_sql(self, stc, event):
+    def save_sql(self, sql, title=None):
         """
         Handler for saving SQL to file, opens file dialog and saves content.
         """
         filename = os.path.splitext(os.path.basename(self.db.name))[0]
-        if stc is self.stc_pragma: filename += " PRAGMA"
+        if title: filename += " " + title
         dialog = wx.FileDialog(
             self, message="Save SQL as", defaultFile=filename,
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
@@ -3712,8 +3982,8 @@ class DatabasePage(wx.Panel):
 
         filename = dialog.GetPath()
         try:
-            title = "PRAGMA settings." if stc is self.stc_pragma else "Database schema."
-            importexport.export_sql(filename, self.db, stc.Text, title)
+            title = "PRAGMA settings." if "PRAGMA" == title else "Database schema."
+            importexport.export_sql(filename, self.db, sql, title)
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving SQL to %s." % filename
@@ -3754,7 +4024,7 @@ class DatabasePage(wx.Panel):
         grids = self.get_unsaved_grids()
         if grids: result["table"] = [x.Name for x in grids]
         schemas = self.get_unsaved_schemas()
-        if schemas: result["schema"] = True
+        if schemas: result["schema"] = schemas
         if not result and self.db.temporary and self.pragma_initial != self.pragma:
             result["temporary"] = True
         if not result and self.db.temporary:
@@ -3882,7 +4152,7 @@ class DatabasePage(wx.Panel):
 
         self.db.name, self.db.temporary = filename2, False
         if rename:
-            evt = DatabasePageEvent(-1, source=self, rename=True, temporary=is_temporary,
+            evt = DatabasePageEvent(self.Id, source=self, rename=True, temporary=is_temporary,
                                     filename1=filename1, filename2=filename2)
             wx.PostEvent(self, evt)
             self.load_data()
@@ -3895,12 +4165,12 @@ class DatabasePage(wx.Panel):
         optionally retaining pending data changes.
         """
         for p in self.data_pages["table"].values(): p.Reload(pending=pending)
-        for p in self.sql_pages.values():           p.Reload()
+        for p in self.sql_pages.values(): p.Reload()
 
 
-    def update_page_header(self):
+    def update_page_header(self, **kwargs):
         """Mark database as changed/pristine in the parent notebook tabs."""
-        evt = DatabasePageEvent(self.Id, source=self, modified=self.get_unsaved())
+        evt = DatabasePageEvent(self.Id, source=self, modified=self.get_unsaved(), **kwargs)
         wx.PostEvent(self, evt)
 
 
@@ -4002,7 +4272,7 @@ class DatabasePage(wx.Panel):
                                      grammar.quote(name), suffix)
                 if self.notebook_schema.GetPageText(idx) != title:
                     self.notebook_schema.SetPageText(idx, title)
-            if not self.save_underway: self.update_page_header()
+            if not self.save_underway: self.update_page_header(updated=updated)
         if updated:
             for k, p in self.schema_pages[category].items():
                 if p is event.source:
@@ -4426,6 +4696,54 @@ class DatabasePage(wx.Panel):
             self.data_pages["table"][table].Reload()
         elif open and self.tree_data.FindAndActivateItem(type="table", name=table):
             self.notebook.SetSelection(self.pageorder[self.page_data])
+
+
+    def on_delete_items(self, category, names, event=None):
+        """Handler for deleting schema items, confirms choice-"""
+        extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
+                if "table" == category else ""
+        itemtext = util.plural(category, names)
+        if len(names) == 1:
+            itemtext = " ".join((category, grammar.quote(names[0], force=True)))
+
+        if wx.YES != controls.YesNoMessageBox(
+            "Are you sure you want to delete the %s?%s" % (itemtext, extra),
+            conf.Title, wx.ICON_WARNING, defaultno=True
+        ): return
+
+        items = self.db.get_category(category, names).values() \
+                if "table" == category else ()
+        if "table" == category and any(x.get("count") for x in items):
+            count = sum(x.get("count") or 0 for x in items)
+            is_estimated = any(x.get("is_count_estimated") for x in items)
+            if is_estimated: count = int(math.ceil(count / 100.) * 100)
+            if wx.YES != controls.YesNoMessageBox(
+                "Are you REALLY sure you want to delete the %s?\n\n"
+                "%s currently %s %s%s." %
+                (itemtext, "They" if len(names) > 1 else "It",
+                 "contain" if len(names) > 1 else "contains",
+                 "~" if is_estimated else "",
+                 util.plural("row", count, sep=",")),
+                conf.Title, wx.ICON_WARNING, defaultno=True
+            ): return
+        deleteds = []
+        try:
+            for name in names:
+                if self.db.is_locked(category, name):
+                    wx.MessageBox("%s %s is currently locked, cannot delete." % 
+                                  (category.capitalize(),
+                                  grammar.quote(name, force=True)),
+                                  conf.Title, wx.OK | wx.ICON_WARNING)
+                    continue # for name
+                self.db.execute("DROP %s %s" % (category.upper(), grammar.quote(name)))
+                deleteds += [name]
+        finally:
+            for name in deleteds:
+                page = self.schema_pages[category].get(name)
+                if page: page.Close(force=True)
+                page = self.data_pages.get(category, {}).get(name)
+                if page: page.Close(force=True)
+            if deleteds: self.reload_schema(count=True)
 
 
     def load_data(self):
@@ -4919,49 +5237,6 @@ class DatabasePage(wx.Panel):
             collect(self.db.get_related(data["type"], data["name"], associated=True))
             collect(self.db.get_related(data["type"], data["name"]))
             clipboard_copy("\n\n".join(x.rstrip(";") + ";" for x in sqls.values()) + "\n\n")
-        def delete_items(items, *_, **__):
-            extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
-                    if "table" == items[0]["type"] else ""
-            itemtext = util.plural(items[0]["type"], items)
-            if len(items) == 1:
-                itemtext = " ".join((items[0]["type"], grammar.quote(items[0]["name"], force=True)))
-
-            if wx.YES != controls.YesNoMessageBox(
-                "Are you sure you want to delete the %s?%s" % (itemtext, extra),
-                conf.Title, wx.ICON_WARNING, defaultno=True
-            ): return
-
-            if "table" == items[0]["type"] and any(x.get("count") for x in items):
-                count = sum(x.get("count") or 0 for x in items)
-                is_estimated = any(x.get("is_count_estimated") for x in items)
-                if is_estimated: count = int(math.ceil(count / 100.) * 100)
-                if wx.YES != controls.YesNoMessageBox(
-                    "Are you REALLY sure you want to delete the %s?\n\n"
-                    "%s currently %s %s%s." %
-                    (itemtext, "They" if len(items) > 1 else "It",
-                     "contain" if len(items) > 1 else "contains",
-                     "~" if is_estimated else "",
-                     util.plural("row", count, sep=",")),
-                    conf.Title, wx.ICON_WARNING, defaultno=True
-                ): return
-            deleteds = []
-            try:
-                for x in items:
-                    if self.db.is_locked(x["type"], x["name"]):
-                        wx.MessageBox("%s %s is currently locked, cannot delete." % 
-                                      (x["type"].capitalize(),
-                                      grammar.quote(x["name"], force=True)),
-                                      conf.Title, wx.OK | wx.ICON_WARNING)
-                        continue # for x
-                    self.db.execute("DROP %s %s" % (x["type"].upper(), grammar.quote(x["name"])))
-                    deleteds += [x]
-            finally:
-                for x in deleteds:
-                    page = self.schema_pages[x["type"]].get(x["name"])
-                    if page: page.Close(force=True)
-                    page = self.data_pages.get(x["type"], {}).get(x["name"])
-                    if page: page.Close(force=True)
-                if deleteds: self.reload_schema(count=True)
 
         menu = wx.Menu()
         boldfont = self.Font
@@ -4994,14 +5269,14 @@ class DatabasePage(wx.Panel):
                 item_copy     = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
                 item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % util.plural(data["category"]))
 
-                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, delete_items, data["items"]),
+                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_delete_items, data["category"], names),
                           id=item_delete.GetId())
                 menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, lambda: "\n".join(map(grammar.quote, names))),
                           id=item_copy.GetId())
                 menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
                           functools.partial(self.db.get_sql, **sqlkws)), id=item_copy_sql.GetId())
 
-            item_create = wx.MenuItem(menu, -1, "Create ne&w %s" % data["category"])
+            item_create = wx.MenuItem(menu, -1, "Create &new %s" % data["category"])
 
             if names:
                 menu.Append(item_copy)
@@ -5095,7 +5370,7 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
                       functools.partial(self.db.get_sql, **sqlkws)), id=item_copy_sql.GetId())
             menu.Bind(wx.EVT_MENU, copy_related, id=item_copy_rel.GetId())
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, delete_items, [data]),
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_delete_items, data["type"], [data["name"]]),
                       id=item_delete.GetId())
 
             menu.Append(item_name)
@@ -5116,7 +5391,7 @@ class DatabasePage(wx.Panel):
 
             if "table" == data["type"]:
                 submenu, keys = wx.Menu(), []
-                menu.AppendSubMenu(submenu, text="Create ne&w ..")
+                menu.AppendSubMenu(submenu, text="Create &new ..")
                 for category in database.Database.CATEGORIES:
                     key = next((x for x in category if x not in keys), category[0])
                     keys.append(key)

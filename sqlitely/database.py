@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.11.2019
+@modified    09.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -814,17 +814,20 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Returns database objects in specified category.
 
         @param   category  "table"|"index"|"trigger"|"view"
-        @param   name      returns only this object
+        @param   name      returns only this object,
+                           or a dictionary with only these if collection
         @result            CaselessDict{name: {opts}},
-                           or {opts} if name or None if no object by such name
+                           or {opts} if single name 
+                           or None if no object by single name
         """
         category = category.lower()
 
-        if name is not None:
+        if isinstance(name, basestring):
             return copy.deepcopy(self.schema.get(category, {}).get(name))
 
         result = CaselessDict()
         for myname, opts in self.schema.get(category, {}).items():
+            if name and myname not in name: continue # for myname
             result[myname] = opts
         return copy.deepcopy(result)
 

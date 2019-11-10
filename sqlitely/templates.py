@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.11.2019
+@modified    10.11.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1437,4 +1437,47 @@ from sqlitely import conf, templates
 
 
 {{! sql.replace("\\r", "") }}
+"""
+
+
+
+"""
+Database PRAGMA statements SQL template.
+
+@param   pragma   PRAGMA values as {name: value}
+"""
+PRAGMA_SQL = """<%
+from sqlitely import database
+
+pragma = dict(pragma)
+for name, opts in database.Database.PRAGMA.items():
+    if opts.get("read") or opts.get("write") is False:
+        pragma.pop(name, None)
+
+lastopts, count = {}, 0
+sortkey = lambda x: (bool(x[1].get("deprecated")), x[1]["label"])
+%>
+%for name, opts in sorted(database.Database.PRAGMA.items(), key=sortkey):
+<%
+if name not in pragma:
+    lastopts = opts
+    continue # for name, opts
+
+%>
+    %if opts.get("deprecated") and bool(lastopts.get("deprecated")) != bool(opts.get("deprecated")):
+-- DEPRECATED:
+
+    %endif
+<%
+value = pragma[name]
+if isinstance(value, basestring):
+    value = '"%s"' % value.replace('"', '""')
+elif isinstance(value, bool): value = str(value).upper()
+lastopts = opts
+%>
+{{ "\\n" if count else "" }}PRAGMA {{ name }} = {{ value }};
+<%
+count += 1
+%>
+%endfor
 """

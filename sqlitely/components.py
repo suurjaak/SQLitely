@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.11.2019
+@modified    10.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -1004,7 +1004,7 @@ class SQLPage(wx.Panel):
 
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
         button_sql    = wx.Button(panel2, label="Execute S&QL")
-        button_script = wx.Button(panel2, label="Execute scrip&t")
+        button_script = wx.Button(panel2, label="Execute sc&ript")
 
         tbgrid = self._tbgrid = wx.ToolBar(panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
@@ -1017,7 +1017,7 @@ class SQLPage(wx.Panel):
         tbgrid.Realize()
         tbgrid.Disable()
 
-        button_export = self._button_export = wx.Button(panel2, label="&Export to file")
+        button_export = self._button_export = wx.Button(panel2, label="Export to fi&le")
         button_close  = self._button_close  = wx.Button(panel2, label="&Close query")
 
         button_sql.ToolTip    = "Execute a single statement from the SQL window"
@@ -1623,7 +1623,7 @@ class DataObjectPage(wx.Panel):
             tb.EnableTool(wx.ID_DELETE, False)
         tb.Realize()
 
-        button_export  = wx.Button(self, label="&Export to file")
+        button_export  = wx.Button(self, label="Export to fi&le")
         button_export.ToolTip    = "Export to file"
         button_actions = wx.Button(self, label="Other actions ..")
         button_actions.Show("table" == self._category)
@@ -2375,6 +2375,22 @@ class SchemaObjectPage(wx.Panel):
         return result
 
 
+    def Reload(self, force=False):
+        """Refreshes content if not changed."""
+        if not force and self.IsChanged(): return
+            
+        prevs = {"_types": self._types, "_tables": self._tables,
+                 "_views": self._views, "_item": self._item}
+        self._types = self._GetColumnTypes()
+        self._tables = [x["name"] for x in self._db.get_category("table").values()]
+        self._views  = [x["name"] for x in self._db.get_category("view").values()]
+        item = self._db.get_category(self._category, self._item["name"])
+        if not item: return
+        item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
+        self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
+        if any(prevs[x] != getattr(self, x) for x in prevs): self._Populate()
+
+
     def RestoreBackup(self):
         """
         Restores page state from before last successful .Save(backup=True), if any.
@@ -2387,8 +2403,14 @@ class SchemaObjectPage(wx.Panel):
 
     def GetName(self):
         """Returns schema item name."""
-        return self._item.get("name", "")
+        return self._item.get("name", self._item["meta"].get("name")) or ""
     Name = property(GetName)
+
+
+    def GetCategory(self):
+        """Returns schema item category."""
+        return self._category
+    Category = property(GetCategory)
 
 
     def _AssignColumnIDs(self, meta):
@@ -2409,7 +2431,7 @@ class SchemaObjectPage(wx.Panel):
         sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
 
         check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
-        check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT &EXISTS")
+        check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT EXISTS")
         check_rowid  = self._ctrls["without"]   = wx.CheckBox(panel, label="WITHOUT &ROWID")
 
         nb = self._notebook_table = wx.Notebook(panel)
@@ -2443,12 +2465,12 @@ class SchemaObjectPage(wx.Panel):
         sizer_flags = wx.BoxSizer(wx.HORIZONTAL)
         sizer_where = wx.BoxSizer(wx.HORIZONTAL)
 
-        label_table = wx.StaticText(panel, label="&Table:")
+        label_table = wx.StaticText(panel, label="T&able:")
         list_table = self._ctrls["table"] = wx.ComboBox(panel,
             style=wx.CB_DROPDOWN | wx.CB_READONLY)
 
         check_unique = self._ctrls["unique"] = wx.CheckBox(panel, label="&UNIQUE")
-        check_exists = self._ctrls["exists"] = wx.CheckBox(panel, label="IF NOT &EXISTS")
+        check_exists = self._ctrls["exists"] = wx.CheckBox(panel, label="IF NOT EXISTS")
 
         panel_wrapper = self._MakeColumnsGrid(panel)
 
@@ -2490,7 +2512,7 @@ class SchemaObjectPage(wx.Panel):
         sizer_body  = wx.BoxSizer(wx.HORIZONTAL)
         sizer_when  = wx.BoxSizer(wx.HORIZONTAL)
 
-        label_table = self._ctrls["label_table"] = wx.StaticText(panel, label="&Table:")
+        label_table = self._ctrls["label_table"] = wx.StaticText(panel, label="T&able:")
         list_table = self._ctrls["table"] = wx.ComboBox(panel,
             style=wx.CB_DROPDOWN | wx.CB_READONLY)
         label_upon = wx.StaticText(panel, label="&Upon:")
@@ -2502,7 +2524,7 @@ class SchemaObjectPage(wx.Panel):
         label_table._toggle = "skip"
 
         check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
-        check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT &EXISTS")
+        check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT EXISTS")
         check_for    = self._ctrls["for"]       = wx.CheckBox(panel, label="FOR EACH &ROW")
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
@@ -2570,7 +2592,7 @@ class SchemaObjectPage(wx.Panel):
         sizer_flags  = wx.BoxSizer(wx.HORIZONTAL)
 
         check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
-        check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT &EXISTS")
+        check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT EXISTS")
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
         panel1, panel2 = self._MakeColumnsGrid(splitter), wx.Panel(splitter)
@@ -2868,7 +2890,7 @@ class SchemaObjectPage(wx.Panel):
             self._ctrls["label_table"].Label = "&View:"
             self._ctrls["table"].SetItems(self._views)
         else:
-            self._ctrls["label_table"].Label = "&Table:"
+            self._ctrls["label_table"].Label = "T&able:"
             self._ctrls["table"].SetItems(self._tables)
 
         self._ctrls["table"].Value = meta.get("table") or ""
