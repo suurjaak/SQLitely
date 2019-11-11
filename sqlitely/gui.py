@@ -2378,6 +2378,7 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_BUTTON, self.on_refresh_data, button_refresh)
         tree.Bind(wx.EVT_TREE_ITEM_ACTIVATED, self.on_change_tree_data)
         tree.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_data)
+        tree.Bind(wx.EVT_CONTEXT_MENU,          self.on_rclick_tree_data)
 
         sizer1.Add(sizer_topleft, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
         sizer1.Add(tree, proportion=1,
@@ -2490,6 +2491,7 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_BUTTON, self.on_schema_create, button_new)
         tree.Bind(wx.EVT_TREE_ITEM_ACTIVATED, self.on_change_tree_schema)
         tree.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_schema)
+        tree.Bind(wx.EVT_CONTEXT_MENU,          self.on_rclick_tree_schema)
         self.Bind(components.EVT_SCHEMA_PAGE, self.on_schema_page_event)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
                 self.on_close_schema_page, nb)
@@ -5107,7 +5109,9 @@ class DatabasePage(wx.Panel):
         Handler for right-clicking an item in the tables list,
         opens popup menu for choices to export data.
         """
-        item, tree = event.GetItem(), self.tree_data
+        tree = self.tree_data
+        if isinstance(event, wx.ContextMenuEvent): item = tree.GetSelection()
+        else: item = event.GetItem()
         if not item or not item.IsOk(): return
         data = tree.GetItemPyData(item)
         if not data: return
@@ -5236,7 +5240,9 @@ class DatabasePage(wx.Panel):
         Handler for right-clicking an item in the schema tree,
         opens popup menu for choices.
         """
-        item, tree = event.GetItem(), self.tree_schema
+        tree = self.tree_schema
+        if isinstance(event, wx.ContextMenuEvent): item = tree.GetSelection()
+        else: item = event.GetItem()
         if not item or not item.IsOk(): return
         data = tree.GetItemPyData(item)
         if not data: return
