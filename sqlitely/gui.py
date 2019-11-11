@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.11.2019
+@modified    11.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2408,7 +2408,7 @@ class DatabasePage(wx.Panel):
 
         self.Bind(components.EVT_DATA_PAGE, self.on_data_page_event)
         self.Bind(components.EVT_IMPORT,    self.on_import_event)
-        self.Bind(components.EVT_EXPORT,    self.on_close_data_export)
+        self.Bind(components.EVT_PROGRESS,  self.on_close_data_export)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
                 self.on_close_data_page, nb)
         self.register_notebook_hotkeys(nb)
@@ -4006,15 +4006,30 @@ class DatabasePage(wx.Panel):
         if wx.ID_OK != dialog.ShowModal(): return
 
         filename = dialog.GetPath()
+        args = {"filename": filename, "db": self.db,
+                "progress": self.panel_data_export.OnProgress}
+        opts = {"filename": filename, "multi": True,
+                "callable": functools.partial(importexport.export_dump, **args),
+                "subtotals": {t: {
+                    "total": topts.get("count"),
+                    "is_total_estimated": topts.get("is_count_estimated")
+                } for t, topts in self.db.schema["table"].items()}}
+        opts["total"] = sum(x["total"] or 0 for x in opts["subtotals"].values())
+        if any(x["is_total_estimated"] for x in opts["subtotals"].values()):
+            opts["is_total_estimated"] = True
+            
+        self.Freeze()
         try:
-            # TODO progress ka. ExportProgressPaneliga tegelt.
-            importexport.export_dump(filename, self.db)
-            util.start_file(filename)
+            self.splitter_data.Hide()
+            self.panel_data_export.Show()
+            self.panel_data_export.Run(opts)
+            self.Layout()
         except Exception as e:
             msg = "Error saving database dump to %s." % filename
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+        finally: self.Thaw()
 
 
     def get_ongoing(self):
@@ -4515,11 +4530,15 @@ class DatabasePage(wx.Panel):
                     "title": "%s %s" % (category.capitalize(),
                                         grammar.quote(name, force=True)),
                     "db": self.db, "columns": data["columns"],
-                    "category": category, "name": name, }
-            exports.append({"filename": filename, "args": args,
-                            "category": category, "name": data["name"],
-                            "total": data.get("count"),
-                            "is_total_estimated": data.get("is_count_estimated")})
+                    "category": category, "name": name,
+                    "progress": functools.partial(self.panel_data_export.OnProgress,
+                                                  index=0)}
+            exports.append({
+                "filename": filename, "category": category,
+                "callable": functools.partial(importexport.export_data, **args),
+                "total": data.get("count"),
+                "is_total_estimated": data.get("is_count_estimated")
+            })
 
         if isinstance(item, basestring): # Chose one specific table to export
             page, noclose = self.data_pages[category].get(item), True
@@ -4533,7 +4552,7 @@ class DatabasePage(wx.Panel):
         try:
             self.splitter_data.Hide()
             self.panel_data_export.Show()
-            self.panel_data_export.Export(exports)
+            self.panel_data_export.Run(exports)
             self.Layout()
         finally: self.Thaw()
 

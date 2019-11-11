@@ -238,7 +238,7 @@ def export_dump(filename, db, progress=None):
                 "sql":      db.get_sql(),
                 "data":     [{"name": t, "columns": [x["name"] for x in opts["columns"]],
                               "rows": iter(db.execute("SELECT * FROM %s" % grammar.quote(t)))}
-                             for t, opts in tables],
+                             for t, opts in tables.items()],
                 "pragma":   db.get_pragma_values(),
                 "progress": progress,
             }
