@@ -1676,7 +1676,10 @@ class DataObjectPage(wx.Panel):
         sizer.Add(grid, proportion=1, flag=wx.GROW)
         sizer.Add(label_help, border=5, flag=wx.TOP | wx.BOTTOM)
         sizer.Add(panel_export, proportion=1, flag=wx.ALIGN_CENTER_HORIZONTAL | wx.GROW)
-        self._Populate()
+        try: self._Populate()
+        except Exception:
+            self.Destroy()
+            raise
         wx_accel.accelerate(self)
         self._grid.SetFocus()
 
