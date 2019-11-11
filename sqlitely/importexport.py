@@ -8,12 +8,13 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.11.2019
+@modified    11.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
 import csv
 import datetime
+import itertools
 import logging
 import os
 import re
@@ -78,7 +79,7 @@ def export_data(make_iterable, filename, title, db, columns,
     @param   make_iterable   function returning iterable sequence yielding rows
     @param   filename        full path and filename of resulting file, file extension
                              .html|.csv|.sql|.xslx determines file format
-    @param   title           title used in HTML
+    @param   title           title used in HTML and spreadsheet
     @param   db              Database instance
     @param   columns         iterable columns, as [name, ] or [{"name": name}, ]
     @param   query           the SQL query producing the data, if any
@@ -198,6 +199,60 @@ def export_data(make_iterable, filename, title, db, columns,
         if tmpname:    util.try_until(lambda: os.unlink(tmpname))
         if not result: util.try_until(lambda: os.unlink(filename))
         if category and name: db.unlock(category, name, make_iterable)
+
+    return result
+
+
+def export_data_single(filename, title, db, category, progress=None):
+    """
+    Exports database data from multiple tables/views to a single spreadsheet.
+
+    @param   filename        full path and filename of resulting file
+    @param   title           spreadsheet title
+    @param   db              Database instance
+    @param   category        category producing the data, "table" or "view"
+    @param   progress        callback(name, count) to report progress,
+                             returning false if export should cancel
+    """
+    result = True
+    items = db.schema[category]
+    try:
+        props = {"title": title, "comments": templates.export_comment()}
+        writer = xlsx_writer(filename, next(iter(items), None), props=props)
+
+        for n in items: db.lock(category, n, filename)
+        for idx, (name, item) in enumerate(items.items()):
+            count = 0
+            if progress and not progress(name=name, count=count):
+                result = False
+                break # for idx, (name, item)
+            if idx: writer.add_sheet(name)
+            colnames = [x["name"] for x in item["columns"]]
+            writer.set_header(True)
+            writer.writerow(colnames, "bold")
+            writer.set_header(False)
+
+            sql = "SELECT * FROM %s" % grammar.quote(name)
+            for i, row in enumerate(db.execute(sql), 1):
+                count = i
+                writer.writerow([row[c] for c in colnames])
+                if not i % 100 and progress and not progress(name=name, count=i):
+                    result = False
+                    break # for i, row
+            if not result: break # for idx, (name, item)
+            if progress and not progress(name=name, count=count):
+                result = False
+                break # for idx, (name, item)
+        writer.close()
+        if progress: progress(done=True)
+    except Exception as e:
+        logger.exception("Error exporting %s from %s to %s.",
+                         util.plural(category), db, filename)
+        if progress: progress(error=util.format_exc(e), done=True)
+        result = False
+    finally:
+        for n in items: db.unlock(category, n, filename)
+        if not result: util.try_until(lambda: os.unlink(filename))
 
     return result
 

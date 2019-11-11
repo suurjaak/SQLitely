@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.11.2019
+@modified    11.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -105,7 +105,7 @@ class WorkerThread(threading.Thread):
                     error = util.format_exc(e)
 
             if self._drop_results: continue # while self._is_running
-            if error: self.postback({"error": error})
+            if error: self.postback({"error": error, "callable": func})
             else:
                 self.postback({"done": True, "result": result, "callable": func})
             self._is_working = False

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.11.2019
+@modified    11.11.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1467,6 +1467,7 @@ from sqlitely import grammar, templates
 
 %for table in data:
 <%
+if progress and not progress(): break # for table
 row = next(table["rows"], None)
 if not row: continue # for table
 rows = itertools.chain([row], table["rows"])

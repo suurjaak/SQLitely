@@ -4720,6 +4720,7 @@ class ExportProgressPanel(wx.Panel):
             ctrls["text"].Parent.Layout()
             ctrls["text"].Parent.Thaw()
 
+        wx.YieldIfNeeded()
         return opts["pending"]
 
 
@@ -4824,6 +4825,8 @@ class ExportProgressPanel(wx.Panel):
         self._ctrls[index]["title"].Label = title
         self._ctrls[index]["gauge"].Pulse()
         self._ctrls[index]["text"].Label = "0%"
+        if opts.get("multi"):
+            self._ctrls[index]["subgauge"].Pulse()
         self.Layout()
         self.Thaw()
         self._worker.work(opts["callable"])
