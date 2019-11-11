@@ -4741,8 +4741,8 @@ class ExportProgressPanel(wx.Panel):
             percent = int(100 * util.safedivf(count, total))
             if opts.get("is_total_estimated"):
                 total = int(math.ceil(total / 100.) * 100)
-            text = "%s%% (%s of %s%s)" % (percent, util.plural(unit, count),
-                   "~" if opts.get("is_total_estimated") else "", total)
+            text = "%s%% (%s of %s%s)" % (percent, util.plural(unit, count, sep=","),
+                   "~" if opts.get("is_total_estimated") else "", "{0:,}".format(total))
         return percent, text
 
 
