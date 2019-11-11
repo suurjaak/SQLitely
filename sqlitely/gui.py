@@ -4521,7 +4521,7 @@ class DatabasePage(wx.Panel):
 
         exports = []
         for i, (name, filename) in enumerate(zip(items, filenames)):
-            if filename[-3:].lower() != (".%s" % extname):
+            if not filename.lower().endswith(".%s" % extname):
                 filename += ".%s" % extname
             data = self.db.get_category(category, name)
             sql = "SELECT * FROM %s" % grammar.quote(name)
