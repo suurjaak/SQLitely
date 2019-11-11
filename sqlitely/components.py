@@ -2291,7 +2291,7 @@ class SchemaObjectPage(wx.Panel):
         button_test    = self._buttons["test"]    = wx.Button(panel2, label="Test")
         button_import  = self._buttons["import"]  = wx.Button(panel2, label="Import SQL")
         button_cancel  = self._buttons["cancel"]  = wx.Button(panel2, label="Cancel")
-        button_delete  = self._buttons["delete"]  = wx.Button(panel2, label="Delete")
+        button_delete  = self._buttons["delete"]  = wx.Button(panel2, label="Drop")
         button_close   = self._buttons["close"]   = wx.Button(panel2, label="Close")
         button_edit._toggle   = button_refresh._toggle = "skip"
         button_delete._toggle = button_close._toggle   = "hide skip"
@@ -2693,9 +2693,9 @@ class SchemaObjectPage(wx.Panel):
         button_move_down  = self._buttons["move_down"]     = wx.Button(panel, label="Move down")
         button_remove_col = self._buttons["remove_column"] = wx.Button(panel, label="Remove")
         button_move_up.Enabled = button_move_down.Enabled = False
-        button_move_up.ToolTip    = "Move item one step higher"
-        button_move_down.ToolTip  = "Move item one step lower"
-        button_remove_col.ToolTip = "Delete item"
+        button_move_up.ToolTip    = "Move column one step higher"
+        button_move_down.ToolTip  = "Move column one step lower"
+        button_remove_col.ToolTip = "Drop column"
         button_add_column._toggle = "show"
         if "index" == self._category:
             button_add_column._toggle = button_add_expr._toggle = lambda: (
@@ -2777,7 +2777,7 @@ class SchemaObjectPage(wx.Panel):
         button_move_up.Enabled = button_move_down.Enabled = False
         button_move_up.ToolTip   = "Move constraint one step higher"
         button_move_down.ToolTip = "Move constraint one step lower"
-        button_remove.ToolTip    = "Delete constraint"
+        button_remove.ToolTip    = "Drop constraint"
         button_add._toggle = "show"
         button_move_up._toggle   = lambda: "show disable" if not grid.NumberRows or grid.GridCursorRow <= 0 else "show"
         button_move_down._toggle = lambda: "show disable" if not grid.NumberRows or grid.GridCursorRow == grid.NumberRows - 1 else "show"
@@ -4585,7 +4585,7 @@ class SchemaObjectPage(wx.Panel):
                 if "table" == self._category else \
                 "\n\nAny associated triggers will be lost." if "view" == self._category else ""
         if wx.YES != controls.YesNoMessageBox(
-            "Are you sure you want to delete the %s %s?%s" %
+            "Are you sure you want to drop the %s %s?%s" %
             (self._category, grammar.quote(self._item["name"], force=True), extra),
             conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
@@ -4597,7 +4597,7 @@ class SchemaObjectPage(wx.Panel):
                 count, pref = int(math.ceil(count / 100.) * 100), "~"
             countstr = pref + util.plural("row", count, sep=",")
             if wx.YES != controls.YesNoMessageBox(
-                "Are you REALLY sure you want to delete the %s %s?\n\n"
+                "Are you REALLY sure you want to drop the %s %s?\n\n"
                 "It currently contains %s." %
                 (self._category, grammar.quote(self._item["name"], force=True),
                  countstr),
@@ -4605,7 +4605,7 @@ class SchemaObjectPage(wx.Panel):
             ): return
 
         if self._db.is_locked(self._category, self._item["name"]):
-            wx.MessageBox("%s %s is currently locked, cannot delete." % 
+            wx.MessageBox("%s %s is currently locked, cannot drop." % 
                           (self._category.capitalize(),
                           grammar.quote(self._item["name"], force=True)),
                           conf.Title, wx.OK | wx.ICON_WARNING)

@@ -4751,7 +4751,7 @@ class DatabasePage(wx.Panel):
             itemtext = " ".join((category, grammar.quote(names[0], force=True)))
 
         if wx.YES != controls.YesNoMessageBox(
-            "Are you sure you want to delete the %s?%s" % (itemtext, extra),
+            "Are you sure you want to drop the %s?%s" % (itemtext, extra),
             conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
 
@@ -4762,7 +4762,7 @@ class DatabasePage(wx.Panel):
             is_estimated = any(x.get("is_count_estimated") for x in items)
             if is_estimated: count = int(math.ceil(count / 100.) * 100)
             if wx.YES != controls.YesNoMessageBox(
-                "Are you REALLY sure you want to delete the %s?\n\n"
+                "Are you REALLY sure you want to drop the %s?\n\n"
                 "%s currently %s %s%s." %
                 (itemtext, "They" if len(names) > 1 else "It",
                  "contain" if len(names) > 1 else "contains",
@@ -4774,7 +4774,7 @@ class DatabasePage(wx.Panel):
         try:
             for name in names:
                 if self.db.is_locked(category, name):
-                    wx.MessageBox("%s %s is currently locked, cannot delete." % 
+                    wx.MessageBox("%s %s is currently locked, cannot drop." % 
                                   (category.capitalize(),
                                   grammar.quote(name, force=True)),
                                   conf.Title, wx.OK | wx.ICON_WARNING)
@@ -5313,7 +5313,7 @@ class DatabasePage(wx.Panel):
             names = [x["name"] for x in data["items"]]
 
             if names:
-                item_delete = wx.MenuItem(menu, -1, "Delete all %s" % util.plural(data["category"]))
+                item_delete = wx.MenuItem(menu, -1, "Drop all %s" % util.plural(data["category"]))
                 item_copy     = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
                 item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % util.plural(data["category"]))
 
@@ -5403,7 +5403,7 @@ class DatabasePage(wx.Panel):
             item_copy      = wx.MenuItem(menu, -1, "&Copy name")
             item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s &SQL" % data["type"])
             item_copy_rel  = wx.MenuItem(menu, -1, "Copy all &related SQL")
-            item_delete    = wx.MenuItem(menu, -1, "Delete %s" % data["type"])
+            item_delete    = wx.MenuItem(menu, -1, "Drop %s" % data["type"])
 
             item_name.Font = boldfont
 
