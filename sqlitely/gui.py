@@ -638,6 +638,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             menu = DROPMENUS[category]
             for x in menu.SubMenu.MenuItems: menu.SubMenu.Delete(x)
             item_all = menu.SubMenu.Append(wx.ID_ANY, "Drop all %s" % util.plural(category))
+            item_all.Enable(bool(items))
             args = ["drop", category]
             self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), item_all)
             if items: menu.SubMenu.AppendSeparator()
