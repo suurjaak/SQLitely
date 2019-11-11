@@ -889,7 +889,8 @@ except ImportError:
 
   <br /><br />
   All search texts and keywords are case-insensitive. <br />
-  Keywords are global, even when in (grouped words).
+  Keywords are global, even when in (grouped words). <br />
+  Metadata search supports only <code>table:</code> and <code>view:</code> keywords.
 
 </td></tr></table>
 </font>
