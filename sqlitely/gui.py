@@ -500,7 +500,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             wx.ID_ANY, "All tables to &file",
             "Export all tables to individual files")
         menu_tools_export_spreadsheet = self.menu_tools_export_spreadsheet = menu_tools_export.Append(
-            wx.ID_ANY, "All tables to s&ingle spreadsheet",
+            wx.ID_ANY, "All tables to single spreads&heet",
             "Export all tables to a single Excel spreadsheet, "
             "each table in separate worksheet")
         menu_tools_export_data = self.menu_tools_export_data = menu_tools_export.Append(
@@ -1956,6 +1956,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     if len(ongoing) > 1:
                         info = "%s (%s)" % (util.plural(category, ongoing[category]), info)
                     infos.append(info)
+            if "multi" in ongoing: infos.append(ongoing["multi"])
             if "sql" in ongoing:
                 infos.append(util.plural("SQL query", ongoing["sql"]))
 
@@ -4013,6 +4014,7 @@ class DatabasePage(wx.Panel):
         args = {"filename": filename, "db": self.db,
                 "progress": self.panel_data_export.OnProgress}
         opts = {"filename": filename, "multi": True,
+                "name":     "database dump",
                 "callable": functools.partial(importexport.export_dump, **args),
                 "subtotals": {t: {
                     "total": topts.get("count"),
@@ -4055,7 +4057,8 @@ class DatabasePage(wx.Panel):
         args = {"filename": filename, "db": self.db, "title": title,
                 "category": category,
                 "progress": self.panel_data_export.OnProgress}
-        opts = {"filename": filename, "multi": True,
+        opts = {"filename": filename, "multi": True, "category": category,
+                "name": "all %s to single spreadsheet" % util.plural(category),
                 "callable": functools.partial(importexport.export_data_single, **args)}
         if "table" == category:
             opts["subtotals"] = {t: {
@@ -4083,11 +4086,12 @@ class DatabasePage(wx.Panel):
     def get_ongoing(self):
         """
         Returns whether page has ongoing exports,
-        as {?"table": [], ?"view": [], ?"sql": []}.
+        as {?"table": [], ?"view": [], ?"sql": [], ?multi: ""}.
         """
         result = {}
         for opts in self.panel_data_export.GetIncomplete():
-            result.setdefault(opts["category"], []).append(opts["name"])
+            if opts.get("multi"): result["multi"] = opts["name"]
+            else: result.setdefault(opts["category"], []).append(opts["name"])
         for category in self.data_pages:
             for p in self.data_pages[category].values():
                 if p.IsExporting():
@@ -4583,6 +4587,7 @@ class DatabasePage(wx.Panel):
                                                   index=0)}
             exports.append({
                 "filename": filename, "category": category,
+                "name": "all %s to file" % util.plural(category),
                 "callable": functools.partial(importexport.export_data, **args),
                 "total": data.get("count"),
                 "is_total_estimated": data.get("is_count_estimated")
@@ -4836,6 +4841,26 @@ class DatabasePage(wx.Panel):
                 page = self.data_pages.get(category, {}).get(name)
                 if page: page.Close(force=True)
             if deleteds: self.reload_schema(count=True)
+
+
+    def on_truncate(self, name, event=None):
+        """Handler for deleting all rows from a table, confirms choice."""
+        if name in self.data_pages["table"]:
+            return self.data_pages["table"][name].Truncate()
+
+        if wx.YES != controls.YesNoMessageBox(
+            "Are you sure you want to delete all rows from this table?\n\n"
+            "This action is not undoable.",
+            conf.Title, wx.ICON_WARNING, defaultno=True
+        ): return
+
+        sql = "DELETE FROM %s" % grammar.quote(name)
+        count = self.db.execute_action(sql)
+        self.db.schema["table"][name]["count"] = 0
+        self.db.schema["table"][name].pop("is_count_estimated", None)
+        self.load_tree_data()
+        wx.MessageBox("Deleted %s from table %s." % (util.plural("row", count),
+                      grammar.quote(name)), conf.Title)
 
 
     def load_data(self):
@@ -5187,7 +5212,7 @@ class DatabasePage(wx.Panel):
             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
 
         menu = wx.Menu()
-        item_file = item_file_single = item_database = item_import = None
+        item_file = item_file_single = item_database = item_import = item_truncate = None
         if data.get("type") in ("table", "view"): # Single table/view
             item_name = wx.MenuItem(menu, -1, "%s %s" % (
                         data["type"].capitalize(), util.unprint(grammar.quote(data["name"], force=True))))
@@ -5213,6 +5238,7 @@ class DatabasePage(wx.Panel):
             if "table" == data["type"]:
                 item_database = wx.MenuItem(menu, -1, "Export table to another &database")
                 item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
+                item_truncate = wx.MenuItem(menu, -1, "Truncate table")
 
         elif "column" == data.get("type"): # Column
             item_name = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
@@ -5237,7 +5263,7 @@ class DatabasePage(wx.Panel):
         elif "category" == data.get("type"): # Category list
             item_copy = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
             item_file = wx.MenuItem(menu, -1, "&Export all %s to file" % util.plural(data["category"]))
-            item_file_single = wx.MenuItem(menu, -1, "Export all %s to s&ingle spreadsheet" % util.plural(data["category"]))
+            item_file_single = wx.MenuItem(menu, -1, "Export all %s to single spreads&heet" % util.plural(data["category"]))
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, ", ".join(data["items"])),
                       id=item_copy.GetId())
 
@@ -5262,6 +5288,9 @@ class DatabasePage(wx.Panel):
             if item_file_single: menu.Append(item_file_single)
             if item_database: menu.Append(item_database)
             if item_import: menu.Append(item_import)
+            if item_truncate:
+                menu.AppendSeparator()
+                menu.Append(item_truncate)                
             names = data["items"] if "category" == data["type"] else data["name"]
             category = data["category"] if "category" == data["type"] else data["type"]
             menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, category, names),
@@ -5274,6 +5303,10 @@ class DatabasePage(wx.Panel):
                          id=item_database.GetId())
             if item_import:
                 menu.Bind(wx.EVT_MENU, import_data, id=item_import.GetId())
+            if item_truncate:
+                if not self.db.schema["table"][data["name"]].get("count"):
+                    item_truncate.Enable(False)
+                menu.Bind(wx.EVT_MENU, functools.partial(self.on_truncate, data["name"]), id=item_truncate.GetId())
 
         if tree.HasChildren(item):
             item_expand   = wx.MenuItem(menu, -1, "&Toggle expanded/collapsed")

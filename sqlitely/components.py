@@ -1793,6 +1793,22 @@ class DataObjectPage(wx.Panel):
         self._OnChange()
 
 
+    def Truncate(self, event=None):
+        """Handler for deleting all rows from table, confirms choice."""
+        if wx.YES != controls.YesNoMessageBox(
+            "Are you sure you want to delete all rows from this table?\n\n"
+            "This action is not undoable.",
+            conf.Title, wx.ICON_WARNING, defaultno=True
+        ): return
+
+        sql = "DELETE FROM %s" % grammar.quote(self.Name)
+        count = self._db.execute_action(sql)
+        self._grid.Table.UndoChanges()
+        self.Reload()
+        wx.MessageBox("Deleted %s from table %s." % (util.plural("row", count),
+                      grammar.quote(self.Name, force=True)), conf.Title)
+
+
     def _Populate(self):
         """Loads data to grid."""
         grid_data = SQLiteGridBase(self._db, category=self._category, name=self._item["name"])
@@ -1851,12 +1867,18 @@ class DataObjectPage(wx.Panel):
             dlg.ShowModal()
 
         menu = wx.Menu()
-        item_export = wx.MenuItem(menu, -1, "&Export to another database")
-        item_import = wx.MenuItem(menu, -1, "&Import into table from file")
+        item_export   = wx.MenuItem(menu, -1, "&Export to another database")
+        item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
+        item_truncate = wx.MenuItem(menu, -1, "Truncate table")
+        if not self._grid.Table.GetNumberRows(total=True):
+            item_truncate.Enable(False)
         menu.Append(item_export)
         menu.Append(item_import)
+        menu.AppendSeparator()
+        menu.Append(item_truncate)
         menu.Bind(wx.EVT_MENU, self._OnExportToDB, id=item_export.GetId())
         menu.Bind(wx.EVT_MENU, on_import,          id=item_import.GetId())
+        menu.Bind(wx.EVT_MENU, self.Truncate,      id=item_truncate.GetId())
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
 
 
