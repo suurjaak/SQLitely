@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.11.2019
+@modified    12.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -442,7 +442,10 @@ def import_data(filename, db, table, columns,
                                     " and rolling back" if result is None else "")
                         if result is None: cursor.execute("ROLLBACK")
                         break # for row
-            if result: cursor.execute("COMMIT")
+            if result:
+                cursor.execute("COMMIT")
+                db.log_query("IMPORT", [create_sql, sql] if create_sql else [sql],
+                             util.plural("row", count))
             logger.info("Finished importing %s from %s%s to table %s.",
                         util.plural("row", count),
                         filename, (" sheet '%s'" % sheet) if sheet else "",

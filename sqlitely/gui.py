@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.11.2019
+@modified    12.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -448,6 +448,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             "Show in &folder", "Open database file directory")
         menu_view_changes = self.menu_view_changes = menu_view.Append(
             wx.ID_ANY, "&Unsaved changes", "Show unsaved changes")
+        menu_view_history = self.menu_view_history = menu_view.Append(
+            wx.ID_ANY, "Action &history", "Show database action log for current session")
 
         menu_edit = self.menu_edit = wx.Menu()
         menu.Append(menu_edit, "&Edit")
@@ -579,6 +581,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["refresh"]), menu_view_refresh)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["folder"]),  menu_view_folder)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["changes"]), menu_view_changes)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["history"]), menu_view_history)
 
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["save"]), menu_edit_save)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["undo"]), menu_edit_undo)
@@ -2952,6 +2955,8 @@ class DatabasePage(wx.Panel):
         elif "changes" == cmd:
             wx.MessageBox("Current unsaved changes:\n\n%s." % 
                           format_changes().rstrip(), conf.Title)
+        elif "history" == cmd:
+            components.HistoryDialog(self, self.db).ShowModal()
         elif "folder" == cmd:
             util.select_file(self.db.filename)
         elif "save" == cmd:
@@ -3327,10 +3332,11 @@ class DatabasePage(wx.Panel):
         ): return
 
         try:
-            mysql = "SAVEPOINT save_pragma;\n\n%s\n\n" \
+            mysql = "SAVEPOINT save_pragma;\n\n%s\n" \
                     "RELEASE SAVEPOINT save_pragma;" % sql
             logger.info("Executing %s.", mysql)
-            self.db.connection.executescript(mysql)
+            self.db.log_query("PRAGMA", sql)
+            self.db.executescript(mysql)
         except Exception as e:
             result = False
             msg = "Error saving PRAGMA:\n\n%s" % util.format_exc(e)
@@ -3455,7 +3461,7 @@ class DatabasePage(wx.Panel):
         """
         msg = "Running optimize on %s." % self.db.filename
         guibase.status(msg, log=True, flash=True)
-        self.db.execute("PRAGMA optimize")
+        self.db.executeaction("PRAGMA optimize", name="OPTIMIZE")
         guibase.status("")
         wx.MessageBox("Optimize complete.", conf.Title, wx.OK | wx.ICON_INFORMATION)
 
@@ -3540,7 +3546,7 @@ class DatabasePage(wx.Panel):
         wx.YieldIfNeeded()
         errors = []
         try:
-            self.db.execute("VACUUM")
+            self.db.executeaction("VACUUM", name="VACUUM")
         except Exception as e:
             errors = e.args[:]
         busy.Close()
@@ -4626,9 +4632,11 @@ class DatabasePage(wx.Panel):
 
         wx.YieldIfNeeded() # Allow dialog to disappear
         filename2 = dialog.GetPath()
+        sqls = [] # [sql, ]
 
         try:
             self.db.execute("ATTACH DATABASE ? AS main2", [filename2])
+            sqls.append("ATTACH DATABASE ? AS main2")
         except Exception as e:
             msg = "Could not load database %s." % filename2
             logger.exception(msg); guibase.status(msg, flash=True)
@@ -4714,6 +4722,7 @@ class DatabasePage(wx.Panel):
                     logger.info("Creating table %s in %s, using %s.",
                                 grammar.quote(table2, force=True), filename2, create_sql)
                     self.db.execute(create_sql)
+                    sqls.append(create_sql)
                     if data:
                         if selects and table in selects:
                             myinsert_sql = "INSERT INTO main2.%s %s" % (
@@ -4722,6 +4731,7 @@ class DatabasePage(wx.Panel):
                             myinsert_sql = insert_sql % (grammar.quote(table2),
                                                          grammar.quote(table))
                         self.db.execute(myinsert_sql)
+                        sqls.append(myinsert_sql)
 
                     # Copy table indexes and triggers
                     for category, items in self.db.get_related("table", table, associated=True).items():
@@ -4745,6 +4755,7 @@ class DatabasePage(wx.Panel):
                                         grammar.quote(table2, force=True),
                                         filename2, item_sql)
                             self.db.execute(item_sql)
+                            sqls.append(item_sql)
 
                     guibase.status("Exported table %s to %s%s.",
                                    grammar.quote(table), filename2, extra, flash=True)
@@ -4766,6 +4777,7 @@ class DatabasePage(wx.Panel):
         finally:
             try: self.db.execute("DETACH DATABASE main2")
             except Exception: pass
+            self.db.execute("DETACH DATABASE main2")
             try: fks_on and self.db.execute("PRAGMA foreign_keys = on")
             except Exception: pass
 
@@ -4776,6 +4788,7 @@ class DatabasePage(wx.Panel):
             extra = "" if len(tables1) > 1 or same_name \
                     else " as %s" % grammar.quote(tables2[0], force=True)
             guibase.status("Exported %s to %s%s.", t, filename2, extra, flash=True)
+            self.db.log_query("EXPORT", sqls, filename2)
             wx.PostEvent(self, OpenDatabaseEvent(self.Id, file=filename2))
 
 
@@ -4829,7 +4842,7 @@ class DatabasePage(wx.Panel):
                                   grammar.quote(name, force=True)),
                                   conf.Title, wx.OK | wx.ICON_WARNING)
                     continue # for name
-                self.db.execute("DROP %s %s" % (category.upper(), grammar.quote(name)))
+                self.db.executeaction("DROP %s %s" % (category.upper(), grammar.quote(name)), name="DROP")
                 deleteds += [name]
         finally:
             for name in deleteds:
@@ -4852,7 +4865,7 @@ class DatabasePage(wx.Panel):
         ): return
 
         sql = "DELETE FROM %s" % grammar.quote(name)
-        count = self.db.execute_action(sql)
+        count = self.db.executeaction(sql, name="TRUNCATE")
         self.db.schema["table"][name]["count"] = 0
         self.db.schema["table"][name].pop("is_count_estimated", None)
         self.load_tree_data()

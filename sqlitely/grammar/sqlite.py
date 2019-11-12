@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    08.11.2019
+@modified    12.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -143,15 +143,6 @@ def uni(x, encoding="utf-8"):
     """Convert anything to Unicode, except None."""
     if x is None or isinstance(x, unicode): return x
     return unicode(str(x), encoding, errors="replace")
-
-
-def first(sql):
-    """
-    Returns the first token of the SQL statement, uppercased, leading comments 
-    and whitespace stripped. E.g. "SELECT" for "/** */--single\n select*FROM'mytable'".
-    """
-    sql = re.sub("(/\*(.|[\r\n])*?\*/)|(--(.*|[\r\n]))", "", sql)
-    return re.split("\W", sql.lstrip(), 1)[0].upper()
 
 
 

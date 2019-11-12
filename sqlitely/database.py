@@ -20,7 +20,8 @@ import re
 import sqlite3
 import tempfile
 
-from . lib.util import lccmp, format_exc, to_unicode, tuplefy, CaselessDict
+from . lib.util import CaselessDict
+from . lib import util
 from . import conf
 from . import grammar
 
@@ -454,6 +455,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         self.filesize = None
         self.date_created = None
         self.last_modified = None
+        self.log = [] # [{timestamp, action, sql: "" or [""], ?params: x or [x]}]
         self.compile_options = []
         self.consumers = set() # Registered objects using this database
         # {category: {name.lower(): set(lock key, )}}
@@ -527,9 +529,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         @return  a list of encountered errors, if any
         """
-        result = []
+        result, sqls = [], []
         with open(filename, "w") as _: pass # Truncate file
         self.execute("ATTACH DATABASE ? AS new", (filename, ))
+        sqls.append("ATTACH DATABASE ? AS new")
         fks = self.execute("PRAGMA foreign_keys").fetchone()["foreign_keys"]
         if fks: self.execute("PRAGMA foreign_keys = FALSE")
 
@@ -537,10 +540,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
         for name, opts in self.schema["table"].items():
             try:
                 sql, err = grammar.transform(opts["sql"], renames={"schema": "new"})
-                if sql: self.execute(sql)
+                if sql:
+                    sqls.append(sql)
+                    self.execute(sql)
                 else: result.append(err)
             except Exception as e:
-                result.append(format_exc(e))
+                result.append(util.format_exc(e))
                 logger.exception("Error creating table %s in %s.",
                                  grammar.quote(name), filename)
 
@@ -548,9 +553,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
         for name, opts in self.schema["table"].items():
             sql = "INSERT INTO new.%s SELECT * FROM main.%s" % ((grammar.quote(name),) * 2)
             try:
-                self.execute(sql)
+                cursor = self.execute(sql)
+                sqls.append(sql)
             except Exception as e:
-                result.append(format_exc(e))
+                result.append(util.format_exc(e))
                 logger.exception("Error copying table %s from %s to %s.",
                                  grammar.quote(name), self.filename, filename)
 
@@ -559,14 +565,18 @@ WARNING: misuse can easily result in a corrupt database file.""",
             for name, opts in self.schema[category].items():
                 try:
                     sql, err = grammar.transform(opts["sql"], renames={"schema": "new"})
-                    if sql: self.execute(sql)
+                    if sql:
+                        self.execute(sql)
+                        sqls.append(sql)
                     else: result.append(err)
                 except Exception as e:
-                    result.append(format_exc(e))
+                    result.append(util.format_exc(e))
                     logger.exception("Error creating %s %s for %s.",
                                      category, grammar.quote(name), filename)
         if fks: self.execute("PRAGMA foreign_keys = TRUE")
         self.execute("DETACH DATABASE new")
+        sqls.append("DETACH DATABASE new")
+        self.log_query("RECOVER", sqls, filename)
         return result
 
 
@@ -655,7 +665,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
-    def execute_action(self, sql, params=(), log=True):
+    def executeaction(self, sql, params=(), log=True, name=None):
         """
         Executes the specified SQL INSERT/UPDATE/DELETE statement and returns
         the number of affected rows.
@@ -665,11 +675,28 @@ WARNING: misuse can easily result in a corrupt database file.""",
             if log and conf.LogSQL:
                 logger.info("SQL: %s%s", sql,
                             ("\nParameters: %s" % params) if params else "")
-            res = self.execute(sql, params)
-            result = res.rowcount
+            result = self.execute(sql, params).rowcount
             if self.connection.isolation_level is not None: self.connection.commit()
+            if name: self.log_query(name, sql, params)
             self.last_modified = datetime.datetime.now()
         return result
+
+
+    def executescript(self, sql, log=True, name=None):
+        """
+        Executes the specified SQL as script.
+        """
+        if self.connection:
+            if log and conf.LogSQL: logger.info("SQL: %s", sql)
+            self.connection.executescript(sql)
+            if name: self.log_query(name, sql)
+
+
+    def log_query(self, action, sql, params=None):
+        """Adds the query to action log."""
+        item = {"timestamp": datetime.datetime.now(), "action": action, "sql": sql}
+        if params: item["params"] = params
+        self.log.append(item)
 
 
     def is_open(self):
@@ -858,8 +885,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         for subcategory in SUBCATEGORIES.get(category, []):
             for subname, subitem in self.schema[subcategory].items():
-                is_assoc = not lccmp(subitem["meta"].get("table", ""), name) \
-                           or not lccmp(item["meta"].get("table", ""), subname)
+                is_assoc = not util.lccmp(subitem["meta"].get("table", ""), name) \
+                           or not util.lccmp(item["meta"].get("table", ""), subname)
                 is_related = name in subitem["meta"]["__tables__"] \
                              or subname.lower() in item["meta"]["__tables__"]
                 if not is_related or associated is not None and associated != is_assoc:
@@ -887,11 +914,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 for c in item["meta"].get("constraints", [])
                 if grammar.SQL.FOREIGN_KEY == c["type"]
             ]
-            return [dict(name=tuplefy(c["name"]), table=CaselessDict(
-                {c["fk"]["table"]: tuplefy(c["fk"]["key"])}
+            return [dict(name=util.tuplefy(c["name"]), table=CaselessDict(
+                {c["fk"]["table"]: util.tuplefy(c["fk"]["key"])}
             )) for c in cc]
 
-        mykeys = CaselessDict((tuplefy(c["name"]), dict(name=tuplefy(c["name"]), pk=c.get("pk")))
+        mykeys = CaselessDict((util.tuplefy(c["name"]),
+                               dict(name=util.tuplefy(c["name"]), pk=c.get("pk")))
                               for c in item["columns"] if "pk" in c)
         for item2 in self.get_related("table", table, False).get("table", []):
             for fk in [x for x in get_fks(item2) if table in x["table"]]:
@@ -934,7 +962,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         sqls = OrderedDict() # {category: []}
         category, column = (x.lower() if x else x for x in (category, column))
-        names = [x.lower() for x in ([] if name is None else tuplefy(name))]
+        names = [x.lower() for x in ([] if name is None else util.tuplefy(name))]
 
         for mycategory in self.CATEGORIES:
             if category and category != mycategory \
@@ -1101,9 +1129,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
         str_cols = ", ".join(map(grammar.quote, fields))
         str_vals = ":" + ", :".join(args)
 
-        cursor = self.execute("INSERT INTO %s (%s) VALUES (%s)" %
-                              (grammar.quote(table), str_cols, str_vals), args)
+        sql = "INSERT INTO %s (%s) VALUES (%s)" % \
+              (grammar.quote(table), str_cols, str_vals)
+        cursor = self.execute(sql, args)
         if self.connection.isolation_level is not None: self.connection.commit()
+        self.log_query("INSERT", sql, args)
         self.last_modified = datetime.datetime.now()
         return cursor.lastrowid
 
@@ -1136,8 +1166,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
             where += (" AND " if where else "") + \
                      "%s IS :%s" % (grammar.quote(col["name"]), key)
         args.update(keyargs)
-        self.execute_action("UPDATE %s SET %s WHERE %s" %
-                            (grammar.quote(table), setsql, where), args)
+        self.executeaction("UPDATE %s SET %s WHERE %s" %
+                           (grammar.quote(table), setsql, where), args,
+                           name="UPDATE")
 
 
     def delete_row(self, table, row, rowid=None):
@@ -1165,7 +1196,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         for col, key in zip(key_data, keyargs):
             where += (" AND " if where else "") + "%s IS :%s" % (grammar.quote(col["name"]), key)
         args.update(keyargs)
-        self.execute_action("DELETE FROM %s WHERE %s" % (grammar.quote(table), where), args)
+        self.executeaction("DELETE FROM %s WHERE %s" % (grammar.quote(table), where),
+                           args, name="DELETE")
         self.last_modified = datetime.datetime.now()
         return True
 
@@ -1180,6 +1212,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if not self.is_open(): return
         result, queue = [], [(self.schema["table"][table]["name"], row, rowid)]
 
+        queries = [] # [(sql, params)]
         try:
             isolevel = self.connection.isolation_level
             self.connection.isolation_level = None # Disable autocommit
@@ -1226,10 +1259,14 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     args.update(keyargs)
                     logger.info("Deleting 1 row from table %s, %s.",
                                 grammar.quote(table), self.name)
-                    cursor.execute("DELETE FROM %s WHERE %s" % (grammar.quote(table), where), args)
+                    sql = "DELETE FROM %s WHERE %s" % (grammar.quote(table), where)
+                    queries.append((sql, args))
+                    cursor.execute(sql, args)
                     result.append((table, info))
 
                 cursor.execute("COMMIT")
+                self.log_query("DELETE CASCADE", [x for x, _ in queries],
+                               [x for _, x in queries])
                 self.last_modified = datetime.datetime.now()
         finally:
             self.connection.isolation_level = isolevel
@@ -1297,7 +1334,7 @@ def detect_databases():
     else:
         search_paths = [os.getenv("HOME"),
                         "/Users" if "mac" == os.name else "/home"]
-    search_paths = map(to_unicode, search_paths)
+    search_paths = map(util.to_unicode, search_paths)
     for search_path in filter(os.path.exists, search_paths):
         logger.info("Looking for SQLite databases under %s.", search_path)
         for root, _, files in os.walk(search_path):
@@ -1308,7 +1345,7 @@ def detect_databases():
             if results: yield results
 
     # Then search current working directory for database files.
-    search_path = to_unicode(os.getcwd())
+    search_path = util.to_unicode(os.getcwd())
     logger.info("Looking for SQLite databases under %s.", search_path)
     for root, _, files in os.walk(search_path):
         results = []

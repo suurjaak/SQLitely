@@ -1,1 +1,1 @@
-from . sqlite import parse, generate, transform, quote, unquote, format, first, SQL
+from . sqlite import parse, generate, transform, quote, unquote, format, SQL
