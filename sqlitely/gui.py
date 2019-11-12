@@ -4011,8 +4011,7 @@ class DatabasePage(wx.Panel):
         if wx.ID_OK != dialog.ShowModal(): return
 
         filename = dialog.GetPath()
-        args = {"filename": filename, "db": self.db,
-                "progress": self.panel_data_export.OnProgress}
+        args = {"filename": filename, "db": self.db}
         opts = {"filename": filename, "multi": True,
                 "name":     "database dump",
                 "callable": functools.partial(importexport.export_dump, **args),
@@ -4055,8 +4054,7 @@ class DatabasePage(wx.Panel):
 
         filename = dialog.GetPath()
         args = {"filename": filename, "db": self.db, "title": title,
-                "category": category,
-                "progress": self.panel_data_export.OnProgress}
+                "category": category}
         opts = {"filename": filename, "multi": True, "category": category,
                 "name": "all %s to single spreadsheet" % util.plural(category),
                 "callable": functools.partial(importexport.export_data_single, **args)}
@@ -4572,6 +4570,7 @@ class DatabasePage(wx.Panel):
             ): return
 
         exports = []
+
         for i, (name, filename) in enumerate(zip(items, filenames)):
             if not filename.lower().endswith(".%s" % extname):
                 filename += ".%s" % extname
@@ -4582,9 +4581,7 @@ class DatabasePage(wx.Panel):
                     "title": "%s %s" % (category.capitalize(),
                                         grammar.quote(name, force=True)),
                     "db": self.db, "columns": data["columns"],
-                    "category": category, "name": name,
-                    "progress": functools.partial(self.panel_data_export.OnProgress,
-                                                  index=0)}
+                    "category": category, "name": name}
             exports.append({
                 "filename": filename, "category": category,
                 "name": "all %s to file" % util.plural(category),

@@ -1246,8 +1246,7 @@ class SQLPage(wx.Panel):
                 if not name: return
             args = {"make_iterable": make_iterable, "filename": filename,
                     "db": self._db, "columns": self._grid.Table.columns,
-                    "query": self._grid.Table.sql, "name": name, "title": title,
-                    "progress": self._export.OnProgress}
+                    "query": self._grid.Table.sql, "name": name, "title": title}
             self.Freeze()
             try:
                 for x in self._panel2.Children: x.Hide()
@@ -1907,8 +1906,7 @@ class DataObjectPage(wx.Panel):
             grid = self._grid.Table
             args = {"make_iterable": grid.GetRowIterator, "filename": filename,
                     "title": title, "db": self._db, "columns": grid.columns,
-                    "category": self._category, "name": self._item["name"],
-                    "progress": self._export.OnProgress}
+                    "category": self._category, "name": self._item["name"]}
             opts = {"filename": filename,
                     "callable": functools.partial(importexport.export_data, **args)}
             if grid.IsComplete() and not grid.IsChanged():
@@ -4851,6 +4849,8 @@ class ExportProgressPanel(wx.Panel):
             self._ctrls[index]["subgauge"].Pulse()
         self.Layout()
         self.Thaw()
+        opts["callable"] = functools.partial(opts["callable"],
+                           progress=functools.partial(self.OnProgress, index))
         self._worker.work(opts["callable"])
 
 
@@ -4917,7 +4917,6 @@ class ExportProgressPanel(wx.Panel):
                 ctrls["subgauge"].Shown = ctrls["subtitle"].Shown = False
                 ctrls["subtext"].Shown = False
             self._current = None
-            wx.CallAfter(self.Layout)
         else: # User cancel
             ctrls["title"].Label = 'Export to "%s".' % opts["filename"]
             ctrls["text"].Label = "Cancelled"
@@ -4932,6 +4931,7 @@ class ExportProgressPanel(wx.Panel):
         opts["pending"] = False
 
         if self._current is None: wx.CallAfter(self._RunNext)
+        wx.CallAfter(self.Layout)
         self.Thaw()
 
 
