@@ -2380,7 +2380,7 @@ class DatabasePage(wx.Panel):
         tree.SetMainColumn(0)
         tree.SetColumnAlignment(1, wx.ALIGN_RIGHT)
         self.Bind(wx.EVT_BUTTON, self.on_refresh_data, button_refresh)
-        tree.Bind(wx.EVT_TREE_ITEM_ACTIVATED, self.on_change_tree_data)
+        tree.Bind(wx.EVT_TREE_ITEM_ACTIVATED,   self.on_change_tree_data)
         tree.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_data)
         tree.Bind(wx.EVT_CONTEXT_MENU,          self.on_rclick_tree_data)
 
@@ -2492,11 +2492,11 @@ class DatabasePage(wx.Panel):
         splitter.SplitVertically(panel1, panel2, 400)
 
         self.Bind(wx.EVT_BUTTON, self.on_refresh_schema, button_refresh)
-        self.Bind(wx.EVT_BUTTON, self.on_schema_create, button_new)
-        tree.Bind(wx.EVT_TREE_ITEM_ACTIVATED, self.on_change_tree_schema)
+        self.Bind(wx.EVT_BUTTON, self.on_schema_create,  button_new)
+        tree.Bind(wx.EVT_TREE_ITEM_ACTIVATED,   self.on_change_tree_schema)
         tree.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_schema)
         tree.Bind(wx.EVT_CONTEXT_MENU,          self.on_rclick_tree_schema)
-        self.Bind(components.EVT_SCHEMA_PAGE, self.on_schema_page_event)
+        self.Bind(components.EVT_SCHEMA_PAGE,   self.on_schema_page_event)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
                 self.on_close_schema_page, nb)
         self.register_notebook_hotkeys(nb)
@@ -5145,7 +5145,7 @@ class DatabasePage(wx.Panel):
     def on_change_tree_data(self, event):
         """Handler for activating a schema item, loads object."""
         if not self.splitter_data.Shown: return
-        item, tree = event.GetItem(), self.tree_schema
+        item, tree = event.GetItem(), self.tree_data
         if not item or not item.IsOk(): return
         data = tree.GetItemPyData(item) or {}
         data = data if data.get("type") in database.Database.CATEGORIES \

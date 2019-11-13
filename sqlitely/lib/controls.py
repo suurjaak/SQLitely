@@ -62,7 +62,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    03.11.2019
+@modified    13.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -3091,6 +3091,11 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
         self._handlers = collections.defaultdict(list) # {event type: [handler, ]}
         super(TreeListCtrl, self).__init__(parent, id, pos, size, style,
                                            agwStyle, validator, name)
+        self.Bind(wx.EVT_KEY_UP, self._OnKey)
+        self.GetMainWindow().Bind(wx.EVT_KEY_UP, self._OnKey)
+
+
+    RootItem = property(lambda x: x.GetRootItem())
 
 
     def AppendItem(self, *args, **kwargs):
@@ -3159,7 +3164,15 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
             for x in items: self.Collapse(x)
         else: self.ExpandAllChildren(item)
 
-    RootItem = property(lambda x: x.GetRootItem())
+
+    def _OnKey(self, event):
+        """Fires EVT_TREE_ITEM_ACTIVATED event on pressing enter."""
+        event.Skip()
+        if event.KeyCode not in [wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]: return
+        item = self.GetSelection()
+        if item and item.IsOk():
+            evt = self.DummyEvent(item)
+            for f in self._handlers.get(wx.EVT_TREE_ITEM_ACTIVATED): f(evt)
 
 
 def YesNoMessageBox(message, caption, icon=wx.ICON_NONE, defaultno=False):
