@@ -1877,9 +1877,9 @@ class DataObjectPage(wx.Panel):
         menu.Append(item_import)
         menu.AppendSeparator()
         menu.Append(item_truncate)
-        menu.Bind(wx.EVT_MENU, self._OnExportToDB, id=item_export.GetId())
-        menu.Bind(wx.EVT_MENU, on_import,          id=item_import.GetId())
-        menu.Bind(wx.EVT_MENU, self.Truncate,      id=item_truncate.GetId())
+        menu.Bind(wx.EVT_MENU, self._OnExportToDB, item_export)
+        menu.Bind(wx.EVT_MENU, on_import,          item_import)
+        menu.Bind(wx.EVT_MENU, self.Truncate,      item_truncate)
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
 
 
@@ -3968,7 +3968,7 @@ class SchemaObjectPage(wx.Panel):
                     for x in self._item["meta"].get("constraints") or ())
             or any(x.get("pk") for x in self._item["meta"].get("columns") or ())):
                 menu.Enable(it.GetId(), False)
-            menu.Bind(wx.EVT_MENU, functools.partial(add_constraint, ctype), id=it.GetId())
+            menu.Bind(wx.EVT_MENU, functools.partial(add_constraint, ctype), it)
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
 
 
@@ -5686,15 +5686,15 @@ class ImportDialog(wx.Dialog):
         def on_activate(event=None): move_to_pos(len(allactives), mydiscards, False)
         def on_discard (event=None): move_to_pos(len(allactives), myactives,  True)
 
-        menu.Bind(wx.EVT_MENU, functools.partial(self._OnMoveItems, side, -1), id=item_up  .GetId())
-        menu.Bind(wx.EVT_MENU, functools.partial(self._OnMoveItems, side, +1), id=item_down.GetId())
-        menu.Bind(wx.EVT_MENU, on_top,      id=item_top     .GetId())
-        menu.Bind(wx.EVT_MENU, on_bottom,   id=item_bottom  .GetId())
-        menu.Bind(wx.EVT_MENU, on_position, id=item_pos     .GetId())
-        menu.Bind(wx.EVT_MENU, on_activate, id=item_activate.GetId())
-        menu.Bind(wx.EVT_MENU, on_discard,  id=item_discard .GetId())
-        if item_rename:  menu.Bind(wx.EVT_MENU, on_rename,  id=item_rename .GetId())
-        if item_restore: menu.Bind(wx.EVT_MENU, on_restore, id=item_restore.GetId())
+        menu.Bind(wx.EVT_MENU, functools.partial(self._OnMoveItems, side, -1), item_up)
+        menu.Bind(wx.EVT_MENU, functools.partial(self._OnMoveItems, side, +1), item_down)
+        menu.Bind(wx.EVT_MENU, on_top,      item_top)
+        menu.Bind(wx.EVT_MENU, on_bottom,   item_bottom)
+        menu.Bind(wx.EVT_MENU, on_position, item_pos)
+        menu.Bind(wx.EVT_MENU, on_activate, item_activate)
+        menu.Bind(wx.EVT_MENU, on_discard,  item_discard)
+        if item_rename:  menu.Bind(wx.EVT_MENU, on_rename,  item_rename)
+        if item_restore: menu.Bind(wx.EVT_MENU, on_restore, item_restore)
 
         l.PopupMenu(menu)
 
