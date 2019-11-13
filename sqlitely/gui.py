@@ -2946,9 +2946,9 @@ class DatabasePage(wx.Panel):
             self.reload_schema(count=True, parse=True)
             self.update_info_panel()
             self.on_pragma_refresh()
-            for p in (x for xx in self.data_pages.values() for x in xx):
+            for p in (y for x in self.data_pages.values() for y in x.values()):
                 if not p.IsChanged(): p.Reload()
-            for p in (x for xx in self.schema_pages.values() for x in xx):
+            for p in (y for x in self.schema_pages.values() for y in x.values()):
                 if not p.IsChanged(): p.Reload()
         elif "changes" == cmd:
             wx.MessageBox("Current unsaved changes:\n\n%s." % 
