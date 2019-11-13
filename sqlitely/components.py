@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.11.2019
+@modified    13.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -1030,6 +1030,7 @@ class SQLPage(wx.Panel):
         button_export.Enabled = button_close.Enabled = False
 
         grid = self._grid = wx.grid.Grid(panel2)
+        grid.SetDefaultEditor(wx.grid.GridCellAutoWrapStringEditor())
         ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
         ColourManager.Manage(grid, "LabelBackgroundColour",       wx.SYS_COLOUR_BTNFACE)
@@ -1630,6 +1631,7 @@ class DataObjectPage(wx.Panel):
         button_actions.Show("table" == self._category)
 
         grid = self._grid = wx.grid.Grid(self)
+        grid.SetDefaultEditor(wx.grid.GridCellAutoWrapStringEditor())
         grid.ToolTip = "Double click on column header to sort, right click to filter."
         ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
