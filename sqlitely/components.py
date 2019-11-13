@@ -189,6 +189,12 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             self.NotifyViewChange(rows_before)
 
 
+    def GetRowLabelValue(self, row):
+        """Returns row label value, with cursor arrow if grid cursor on row."""
+        pref = u"\u25ba " if self.View and row == self.View.GridCursorRow else ""
+        return "%s%s  " % (pref, row + 1)
+
+
     def GetValue(self, row, col):
         value = None
         if row < self.row_count:
@@ -1036,6 +1042,7 @@ class SQLPage(wx.Panel):
 
         grid = self._grid = wx.grid.Grid(panel2)
         grid.SetDefaultEditor(wx.grid.GridCellAutoWrapStringEditor())
+        grid.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
         ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
         ColourManager.Manage(grid, "LabelBackgroundColour",       wx.SYS_COLOUR_BTNFACE)
@@ -1062,6 +1069,7 @@ class SQLPage(wx.Panel):
         stc.Bind(wx.EVT_KEY_DOWN,                         self._OnSTCKey)
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,     self._OnGridLabel)
         grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,     self._OnFilter)
+        grid.Bind(wx.grid.EVT_GRID_SELECT_CELL,           self._OnGridSelectCell)
         grid.Bind(wx.EVT_SCROLLWIN,                       self._OnGridScroll)
         grid.Bind(wx.EVT_SCROLL_THUMBRELEASE,             self._OnGridScroll)
         grid.Bind(wx.EVT_SCROLL_CHANGED,                  self._OnGridScroll)
@@ -1433,6 +1441,12 @@ class SQLPage(wx.Panel):
         self._hovered_cell = (row, col)
 
 
+    def _OnGridSelectCell(self, event):
+        """Handler for selecting grid row, refreshes row labels."""
+        event.Skip()
+        event.EventObject.Refresh()
+
+
     def _OnSTCKey(self, event):
         """
         Handler for pressing a key in STC, listens for Alt-Enter and
@@ -1638,6 +1652,7 @@ class DataObjectPage(wx.Panel):
 
         grid = self._grid = wx.grid.Grid(self)
         grid.SetDefaultEditor(wx.grid.GridCellAutoWrapStringEditor())
+        grid.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
         grid.ToolTip = "Double click on column header to sort, right click to filter."
         ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
@@ -1662,6 +1677,7 @@ class DataObjectPage(wx.Panel):
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,  self._OnGridLabel)
         grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,  self._OnFilter)
         grid.Bind(wx.grid.EVT_GRID_CELL_CHANGED,       self._OnChange)
+        grid.Bind(wx.grid.EVT_GRID_SELECT_CELL,        self._OnGridSelectCell)
         grid.Bind(wx.EVT_SCROLLWIN,                    self._OnGridScroll)
         grid.Bind(wx.EVT_SCROLL_THUMBRELEASE,          self._OnGridScroll)
         grid.Bind(wx.EVT_SCROLL_CHANGED,               self._OnGridScroll)
@@ -1823,6 +1839,7 @@ class DataObjectPage(wx.Panel):
         self._grid.SetColMinimalAcceptableWidth(100)
         col_range = range(grid_data.GetNumberCols())
         [self._grid.AutoSizeColLabelSize(x) for x in col_range]
+        self._grid.SetGridCursor(0, 0)
 
 
     def _PostEvent(self, **kwargs):
@@ -2198,6 +2215,11 @@ class DataObjectPage(wx.Panel):
             event.EventObject.ToolTip = tip
         self._hovered_cell = (row, col)
 
+
+    def _OnGridSelectCell(self, event):
+        """Handler for selecting grid row, refreshes row labels."""
+        event.Skip()
+        event.EventObject.Refresh()
 
 
     def _OnGridScroll(self, event):
@@ -4166,7 +4188,7 @@ class SchemaObjectPage(wx.Panel):
             row = event.TopRow
             col = self._grid_columns.GridCursorCol
         else: row, col = event.Row, event.Col
-        for i in range(self._grid_columns.NumberRows)   :
+        for i in range(self._grid_columns.NumberRows):
             pref = u"\u25ba " if row == i else "" # Right-pointing pointer symbol
             self._grid_columns.SetRowLabelValue(i, "%s%s  " % (pref, i + 1))
         self._grid_columns.ForceRefresh()
