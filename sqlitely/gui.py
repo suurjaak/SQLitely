@@ -8,11 +8,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.11.2019
+@modified    13.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
-import base64
 from collections import defaultdict, OrderedDict
 import copy
 import datetime
@@ -25,7 +24,6 @@ import re
 import shutil
 import sys
 import tempfile
-import textwrap
 import urllib
 import webbrowser
 
@@ -4186,7 +4184,7 @@ class DatabasePage(wx.Panel):
             self.reload_grids(pending=True)
             try: os.unlink(tempname)
             except Exception: pass
-            wx.MessageBox("Error saving %s as %s:\n\n" % 
+            wx.MessageBox("Error saving %s as %s:\n\n%s" % 
                           (filename1, filename2, util.format_exc(e)),
                           conf.Title, wx.OK | wx.ICON_ERROR)
             return
