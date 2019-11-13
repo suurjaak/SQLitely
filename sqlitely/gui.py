@@ -3783,7 +3783,7 @@ class DatabasePage(wx.Panel):
             if "schema" == link_data.get("page"):
                 tree, page = self.tree_schema, self.page_schema
                 match.update(level=category)
-            if tree.FindAndActivateItem(match, expand=(tree is self.tree_schema)):
+            if tree.FindAndActivateItem(match):
                 self.notebook.SetSelection(self.pageorder[page])
                 wx.YieldIfNeeded()
                 if row: # Scroll to matching row
@@ -5193,14 +5193,13 @@ class DatabasePage(wx.Panel):
         data = tree.GetItemPyData(item)
         if not data: return
 
-        def select_item(item, expand=False, *_, **__):
+        def select_item(item, *_, **__):
             tree.SelectItem(item)
-            if expand: tree.Expand(item)
         def open_data(data, *_, **__):
             tree.FindAndActivateItem(type=data["type"], name=data["name"])
         def open_meta(data, *_, **__):
             if self.tree_schema.FindAndActivateItem(type=data["type"],
-                name=data["name"], level=data["type"], expand=True
+                name=data["name"], level=data["type"]
             ):
                 self.notebook.SetSelection(self.pageorder[self.page_schema])
         def import_data(*_, **__):
@@ -5225,7 +5224,7 @@ class DatabasePage(wx.Panel):
             item_open = wx.MenuItem(menu, -1, "&Open %s data" % data["type"])
             item_open_meta = wx.MenuItem(menu, -1, "Open %s &schema" % data["type"])
             item_copy = wx.MenuItem(menu, -1, "&Copy name")
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, True),
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
                       item_name)
             menu.Bind(wx.EVT_MENU, functools.partial(open_data, data), item_open)
             menu.Bind(wx.EVT_MENU, functools.partial(open_meta, data), item_open_meta)
@@ -5252,7 +5251,7 @@ class DatabasePage(wx.Panel):
                         util.unprint(grammar.quote(data["name"]))))
             item_open = wx.MenuItem(menu, -1, "&Open %s data" % data["parent"]["type"])
             item_copy = wx.MenuItem(menu, -1, "&Copy name")
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, False),
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
                       item_name)
             menu.Bind(wx.EVT_MENU, functools.partial(open_data, data["parent"]),    item_open)
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]), item_copy)
@@ -5335,9 +5334,8 @@ class DatabasePage(wx.Panel):
         data = tree.GetItemPyData(item)
         if not data: return
 
-        def select_item(it, expand, *_, **__):
+        def select_item(it, *_, **__):
             tree.SelectItem(it)
-            if expand: tree.Expand(it)
         def clipboard_copy(text, *_, **__):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text() if callable(text) else text)
@@ -5349,7 +5347,7 @@ class DatabasePage(wx.Panel):
                 self.notebook.SetSelection(self.pageorder[self.page_data])
         def open_meta(data, *_, **__):
             tree.FindAndActivateItem(type=data["type"], name=data["name"],
-                                     level=data["level"], expand=True)
+                                     level=data["level"])
         def create_object(category, *_, **__):
             newdata = {"type": category,
                        "meta": {"__type__": "CREATE %s" % category.upper()}}
@@ -5363,7 +5361,6 @@ class DatabasePage(wx.Panel):
                     newdata["meta"]["table"] = data["parent"]["name"]
                     newdata["meta"]["upon"] = grammar.SQL.INSTEAD_OF
             self.add_schema_page(newdata)
-            tree.Expand(item)
         def copy_related(*_, **__):
             sqls = OrderedDict({data["name"]: self.db.get_sql(data["type"], data["name"])})
 
@@ -5464,7 +5461,7 @@ class DatabasePage(wx.Panel):
                 item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % " ".join(names))
 
             if has_name:
-                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, True),
+                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
                           item_name)
                 menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
                           item_copy)
@@ -5501,7 +5498,7 @@ class DatabasePage(wx.Panel):
 
             item_name.Font = boldfont
 
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item, True),
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
                       item_name)
             menu.Bind(wx.EVT_MENU, functools.partial(open_meta, data), item_open)
             if item_open_data:
@@ -5551,9 +5548,9 @@ class DatabasePage(wx.Panel):
             menu.Append(item_expand)
 
         item0 = tree.GetSelection()
-        if item != item0: select_item(item, False)
+        if item != item0: select_item(item)
         tree.PopupMenu(menu)
-        if item0 and item != item0: select_item(item0, False)
+        if item0 and item != item0: select_item(item0)
 
 
     def update_autocomp(self):

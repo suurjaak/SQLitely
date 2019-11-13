@@ -3116,7 +3116,7 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
         super(TreeListCtrl, self).Bind(event, handler, source, id, id2)
 
 
-    def FindAndActivateItem(self, match=None, expand=False, **kwargs):
+    def FindAndActivateItem(self, match=None, **kwargs):
         """
         Selects tree item where match returns true for item data, and invokes
         handlers registered for wx.EVT_TREE_ITEM_ACTIVATED. Expands all item
@@ -3124,7 +3124,6 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
 
         @param    match   callback(data associated with item): bool
                           or {key: value} to match in associated data dict
-        @param    expand  expand matched item
         @param    kwargs  additional keyword arguments to match in data
         @return           success
         """
@@ -3145,7 +3144,6 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
                 parent, _ = self.GetItemParent(parent), self.Expand(parent)
 
             self.SelectItem(myitem)
-            if expand: self.Expand(myitem)
             evt = self.DummyEvent(myitem)
             for f in self._handlers.get(wx.EVT_TREE_ITEM_ACTIVATED): f(evt)
         return bool(myitem)
@@ -3173,6 +3171,7 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
         if item and item.IsOk():
             evt = self.DummyEvent(item)
             for f in self._handlers.get(wx.EVT_TREE_ITEM_ACTIVATED): f(evt)
+
 
 
 def YesNoMessageBox(message, caption, icon=wx.ICON_NONE, defaultno=False):
