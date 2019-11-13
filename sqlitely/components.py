@@ -1823,7 +1823,7 @@ class DataObjectPage(wx.Panel):
     def _PostEvent(self, **kwargs):
         """Posts an EVT_DATA_PAGE event to parent."""
         evt = DataPageEvent(self.Id, source=self, item=self._item, **kwargs)
-        wx.PostEvent(self, evt)
+        wx.PostEvent(self.Parent, evt)
 
 
     def _OnChange(self, event=None, **kwargs):
@@ -1849,12 +1849,24 @@ class DataObjectPage(wx.Panel):
             self._export.Hide()
             self.Layout()
 
-        if self.IsChanged() and wx.YES != controls.YesNoMessageBox(
-            "There are unsaved changes, "
-            "are you sure you want to discard them?",
-            conf.Title, wx.ICON_INFORMATION, defaultno=True
-        ): return
-        if event: self._PostEvent(close=True)
+        kws = {}
+        if self.IsChanged():
+            info = self._grid.Table.GetChangedInfo()
+            res = wx.MessageBox(
+                "Do you want to save changes to %s %s?\n\n%s" %
+                (self._category, grammar.quote(self._item["name"], force=True), info),
+                conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION
+            )
+            if wx.CANCEL == res: return
+
+            if wx.YES == res:
+                logger.info("Committing %s in table %s (%s).", info,
+                            grammar.quote(self._item["name"], force=True), self._db)
+                if not self._grid.Table.SaveChanges(): return
+                kws["updated"] = True
+
+        if event: self._PostEvent(close=True, **kws)
+        elif kws: self._PostEvent(**kws)
         return True
 
 
@@ -1978,7 +1990,7 @@ class DataObjectPage(wx.Panel):
         ): return
 
         logger.info("Committing %s in table %s (%s).", info,
-                    grammar.quote(self._item["name"]), self._db)
+                    grammar.quote(self._item["name"], force=True), self._db)
         if not self._grid.Table.SaveChanges(): return
 
         self._backup = None
@@ -3855,7 +3867,7 @@ class SchemaObjectPage(wx.Panel):
     def _PostEvent(self, **kwargs):
         """Posts an EVT_SCHEMA_PAGE event to parent."""
         evt = SchemaPageEvent(self.Id, source=self, item=self._item, **kwargs)
-        wx.PostEvent(self, evt)
+        wx.PostEvent(self.Parent, evt)
 
 
     def _AddSizer(self, parentsizer, childsizer, *args, **kwargs):
