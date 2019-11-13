@@ -3509,7 +3509,7 @@ class SchemaObjectPage(wx.Panel):
             # Need to re-create table, first under temporary name to copy data.
             names_existing = set(sum((list(self._db.schema[x])
                                       for x in database.Database.CATEGORIES), []))
-
+            names_existing.add(new["name"])
             tempname = util.make_unique(new["name"], names_existing)
             names_existing.add(tempname)
             meta = copy.deepcopy(self._item["meta"])
@@ -3530,8 +3530,8 @@ class SchemaObjectPage(wx.Panel):
                                       for c2 in cols2 if c2["__id__"] in colmap1
                                       and colmap1[c2["__id__"]]["name"] != c2["name"]}}}
             for k, v in renames.items():
-                if not v or not any(x.values() for x in v.values()
-                                    if isinstance(x, dict)): renames.pop(k)
+                if not v or not any(x.values() if isinstance(x, dict) else x
+                                    for x in v.values()): renames.pop(k)
 
             for category, items in self._db.get_related("table", old["name"], associated=not renames).items():
                 for item in items:
