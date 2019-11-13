@@ -4673,7 +4673,7 @@ class DatabasePage(wx.Panel):
                     if wx.ID_OK != entrydialog.ShowModal(): return
 
                     value = entrydialog.GetValue().strip()
-                    if not self.db.is_valid_name(table=value):
+                    if value and not self.db.is_valid_name(table=value):
                         msg = "%s is not a valid table name." % grammar.quote(value, force=True)
                         wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
                         continue # while table2
@@ -4773,7 +4773,6 @@ class DatabasePage(wx.Panel):
         finally:
             try: self.db.execute("DETACH DATABASE main2")
             except Exception: pass
-            self.db.execute("DETACH DATABASE main2")
             try: fks_on and self.db.execute("PRAGMA foreign_keys = on")
             except Exception: pass
 
@@ -5293,7 +5292,7 @@ class DatabasePage(wx.Panel):
             if item_truncate:
                 menu.AppendSeparator()
                 menu.Append(item_truncate)                
-            names = data["items"] if "category" == data["type"] else data["name"]
+            names = data["items"] if "category" == data["type"] else [data["name"]]
             category = data["category"] if "category" == data["type"] else data["type"]
             menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, category, names),
                      item_file)
