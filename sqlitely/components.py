@@ -65,6 +65,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
     """How many rows to seek ahead for query grids."""
     SEEK_CHUNK_LENGTH = 100
 
+    """wx.Grid stops working when too many rows."""
+    MAX_ROWS = 5000000
+
 
     def __init__(self, db, category="", name="", sql="", cursor=None):
         super(SQLiteGridBase, self).__init__()
@@ -114,9 +117,11 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 col["type"] = TYPES.get(type(value), col.get("type", ""))
         else:
             data = self.db.get_count(self.name)
-            if data["count"] is not None: self.row_count = data["count"]
+            if data["count"] is not None:
+                self.row_count = min(data["count"], self.MAX_ROWS)
             self.is_seek = data.get("is_count_estimated", False) \
-                           or data["count"] is None
+                           or data["count"] is None \
+                           or data["count"] != self.row_count
             self.SeekToRow(self.SEEK_CHUNK_LENGTH - 1)
 
 
@@ -1725,7 +1730,7 @@ class DataObjectPage(wx.Panel):
         if not fields: return
 
         row_id = [row[c] for c in fields]
-        for i in range(self._grid.Table.GetNumberRows()):
+        for i in xrange(self._grid.Table.GetNumberRows()):
             row2 = self._grid.Table.GetRowData(i)
             if not row2: break # for i
 
@@ -6241,19 +6246,28 @@ class DataDialog(wx.Dialog):
         if not self: return
         self.Freeze()
         try:
-            title = "Row #%s" % (self._row + 1)
-            if not self._gridbase.is_query or self._gridbase.IsComplete():
-                title += " of %s" % self._gridbase.GetNumberRows()
+            title, gridbase = "Row #%s" % (self._row + 1), self._gridbase
+            if gridbase.IsComplete():
+                title += " of %s" % grid.GetNumberRows()
+            elif not gridbase.is_query:
+                item = gridbase.db.schema[gridbase.category][gridbase.name]
+                if item.get("count") is not None:
+                    count = item["count"]
+                    if not item.get("is_count_estimated"):
+                        changes = gridbase.GetChanges()
+                        count += len(changes.get("new", ())) - len(changes.get("deleted", ()))
+                    else: count = "~%s" % int(math.ceil(count / 100.) * 100)
+                title += " of %s" % count
             self.Title = title
             self._button_prev.Enabled = bool(self._row)
-            self._button_next.Enabled = self._row + 1 < self._gridbase.RowsCount
+            self._button_next.Enabled = self._row + 1 < gridbase.RowsCount
 
             pks = [c for c in self._columns if "pk" in c]
             if self._data["__new__"]: rowtitle = "New row"                
             elif pks: rowtitle = ", ".join("%s %s" % (c["name"], self._original[c["name"]])
                                           for c in pks)
-            elif self._data["__id__"] in self._gridbase.rowids:
-                rowtitle = "ROWID %s" % self._gridbase.rowids[self._data["__id__"]]
+            elif self._data["__id__"] in gridbase.rowids:
+                rowtitle = "ROWID %s" % gridbase.rowids[self._data["__id__"]]
             else: rowtitle = "Row #%s" % (self._row + 1)
             self._text_header.Label = rowtitle
 
