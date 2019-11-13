@@ -6246,18 +6246,18 @@ class DataDialog(wx.Dialog):
         if not self: return
         self.Freeze()
         try:
-            title, gridbase = "Row #%s" % (self._row + 1), self._gridbase
+            title, gridbase = "Row #{0:,}".format(self._row + 1), self._gridbase
             if gridbase.IsComplete():
-                title += " of %s" % grid.GetNumberRows()
+                title += " of {0:,}".format(grid.GetNumberRows())
             elif not gridbase.is_query:
                 item = gridbase.db.schema[gridbase.category][gridbase.name]
                 if item.get("count") is not None:
-                    count = item["count"]
+                    count, pref = item["count"], ""
                     if not item.get("is_count_estimated"):
                         changes = gridbase.GetChanges()
                         count += len(changes.get("new", ())) - len(changes.get("deleted", ()))
-                    else: count = "~%s" % int(math.ceil(count / 100.) * 100)
-                title += " of %s" % count
+                    else: count, pref = int(math.ceil(count / 100.) * 100), "~"
+                    title += " of {1}{0:,}".format(count, pref)
             self.Title = title
             self._button_prev.Enabled = bool(self._row)
             self._button_next.Enabled = self._row + 1 < gridbase.RowsCount
