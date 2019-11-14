@@ -6270,7 +6270,7 @@ class DataDialog(wx.Dialog):
         try:
             title, gridbase = "Row #{0:,}".format(self._row + 1), self._gridbase
             if gridbase.IsComplete():
-                title += " of {0:,}".format(grid.GetNumberRows())
+                title += " of {0:,}".format(gridbase.GetNumberRows())
             elif not gridbase.is_query:
                 item = gridbase.db.schema[gridbase.category][gridbase.name]
                 if item.get("count") is not None:
