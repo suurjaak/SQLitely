@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.11.2019
+@modified    14.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -553,7 +553,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         for name, opts in self.schema["table"].items():
             sql = "INSERT INTO new.%s SELECT * FROM main.%s" % ((grammar.quote(name),) * 2)
             try:
-                cursor = self.execute(sql)
+                self.execute(sql)
                 sqls.append(sql)
             except Exception as e:
                 result.append(util.format_exc(e))
@@ -654,41 +654,44 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return sqlite3.sqlite_version_info >= (3, 25)
 
 
-    def execute(self, sql, params=(), log=True):
-        """Shorthand for self.connection.execute(), returns cursor."""
+    def execute(self, sql, params=(), log=True, cursor=None):
+        """
+        Shorthand for self.connection.execute(), returns cursor.
+        Uses given cursor else creates new.
+        """
         result = None
-        if self.connection:
+        if cursor or self.connection:
             if log and conf.LogSQL:
                 logger.info("SQL: %s%s", sql,
                             ("\nParameters: %s" % params) if params else "")
-            result = self.connection.execute(sql, params)
+            result = (cursor or self.connection).execute(sql, params)
         return result
 
 
-    def executeaction(self, sql, params=(), log=True, name=None):
+    def executeaction(self, sql, params=(), log=True, name=None, cursor=None):
         """
         Executes the specified SQL INSERT/UPDATE/DELETE statement and returns
-        the number of affected rows.
+        the number of affected rows. Uses given cursor else creates new.
         """
         result = 0
-        if self.connection:
+        if cursor or self.connection:
             if log and conf.LogSQL:
                 logger.info("SQL: %s%s", sql,
                             ("\nParameters: %s" % params) if params else "")
-            result = self.execute(sql, params).rowcount
+            result = (cursor or self.connection).execute(sql, params).rowcount
             if self.connection.isolation_level is not None: self.connection.commit()
             if name: self.log_query(name, sql, params)
             self.last_modified = datetime.datetime.now()
         return result
 
 
-    def executescript(self, sql, log=True, name=None):
+    def executescript(self, sql, log=True, name=None, cursor=None):
         """
-        Executes the specified SQL as script.
+        Executes the specified SQL as script. Uses given cursor else creates new.
         """
-        if self.connection:
+        if cursor or self.connection:
             if log and conf.LogSQL: logger.info("SQL: %s", sql)
-            self.connection.executescript(sql)
+            (cursor or self.connection).executescript(sql)
             if name: self.log_query(name, sql)
 
 
@@ -725,10 +728,6 @@ WARNING: misuse can easily result in a corrupt database file.""",
     def populate_schema(self, count=False, parse=False, category=None, name=None):
         """
         Retrieves metadata on all database tables, triggers etc.
-
-        Returns the names and rowcounts of all tables in the database,
-        as [{"name": "tablename", "sql": CREATE SQL}, ].
-        Uses already retrieved cached values if possible, unless refreshing.
 
         @param   count      populate table row counts
         @param   parse      parse all CREATE statements in full, complete metadata
@@ -1075,13 +1074,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
                            for unique
         """
         result = OrderedDict()
+        existing = dict(existing or {})
         for c in cols:
             if isinstance(c, dict): c = c["name"]
-            name = base = re.sub(r"\W", "", c, flags=re.I)
-            count = 1
-            while name in result or existing and name in existing:
-                name, count = "%s_%s" % (base, count), count + 1
-            result[name] = data[c]
+            name = re.sub(r"\W", "", c, flags=re.I)
+            name = util.make_unique(name, existing, counter=1)
+            result[name] = existing[name] = data[c]
         return result
 
 
@@ -1202,15 +1200,45 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return True
 
 
-    def delete_cascade(self, table, row, rowid=None):
+    def chunk_args(self, cols, rows):
         """
-        Deletes the table row from the database, cascading delete to any
+        Yields WHERE-clause and arguments in chunks if any argument is a list 
+        with over 1000 items (SQLite can have up to 1000 host parameters).
+
+        @yield    "name IN (:name1, ..)", {"name1": ..}
+        """
+        MAX = 1000
+        for rows in [rows[i:i + MAX] for i in range(0, len(rows), MAX)]:
+            wheres, args, names = [], OrderedDict(), set()
+
+            for col in cols:
+                base = re.sub(r"\W", "", col["name"], flags=re.I)
+                name = base = util.make_unique(base, names)
+                names.add(base)
+                if len(rows) == 1:
+                    where = "%s = :%s" % (grammar.quote(col["name"]), name)
+                    args[name] = rows[0][col["name"]]
+                else:
+                    mynames = []
+                    for i, row in enumerate(rows):
+                        name = util.make_unique(base, names, counter=1)
+                        args[name] = row[col["name"]]
+                        mynames.append(name); names.add(name)
+                    where = "%s IN (:%s)" % (grammar.quote(col["name"]), ", :".join(mynames))
+                wheres.append(where)
+
+            yield " AND ".join(wheres), args
+        
+
+    def delete_cascade(self, table, rows, rowids=()):
+        """
+        Deletes the table rows from the database, cascading delete to any
         related rows in foreign tables, and their related rows, etc.
 
-        @return   [(table, {identifying column: value})] in order of deletion
+        @return   [(table, [{identifying column: value}])] in order of deletion
         """
         if not self.is_open(): return
-        result, queue = [], [(self.schema["table"][table]["name"], row, rowid)]
+        result, queue = [], [(self.schema["table"][table]["name"], rows, rowids)]
 
         queries = [] # [(sql, params)]
         try:
@@ -1218,53 +1246,54 @@ WARNING: misuse can easily result in a corrupt database file.""",
             self.connection.isolation_level = None # Disable autocommit
             with self.connection:
                 cursor = self.connection.cursor()
-                cursor.execute("BEGIN TRANSACTION")
+                self.execute("BEGIN TRANSACTION", cursor=cursor)
 
                 while queue:
-                    table, row, rowid = queue.pop(0)
+                    table, rows, rowids = queue.pop(0)
                     col_data = self.schema["table"][table]["columns"]
-                    where, args, info = "", {}, {}
-                    if rowid is not None:
-                        key_data = [{"name": "_rowid_"}]
-                        keyargs = self.make_args(key_data, {"_rowid_": rowid}, args)
-                    else: # Use either primary key or all columns to identify row
-                        key_data = [c for c in col_data if "pk" in c] or col_data
-                        keyargs = self.make_args(key_data, row, args)
-                    for col, key in zip(key_data, keyargs):
-                        info[col["name"]] = keyargs[key]
-                        where += (" AND " if where else "") + "%s IS :%s" % (grammar.quote(col["name"]), key)
-                    if any(x == info for t, xx in result if t == table for x in xx):
-                        continue # while queue
+                    use_rowids = rowids and all(rowids)
+                    key_cols = [{"name": "_rowid_"}] if use_rowids \
+                               else [c for c in col_data if "pk" in c] or col_data
+                    key_data, myrows = [], []
+
+                    for row, rowid in zip(rows, rowids):
+                        data = {"_rowid_": rowid} if use_rowids else \
+                               {c["name"]: row[c["name"]] for c in key_cols}
+                        if not any(data in xx for t, xx in result if t == table):
+                            key_data.append(data); myrows.append(row)
+                    if not key_data: continue # while queue
+
+                    logger.info("Deleting %s from table %s, %s.",
+                                util.plural("row", key_data), grammar.quote(table), self.name)
+                    for where, args in self.chunk_args(key_cols, key_data):
+                        sql = "DELETE FROM %s WHERE %s" % (grammar.quote(table), where)
+                        self.execute(sql, args, cursor=cursor)
+                        queries.append((sql, args))
+                    result.append((table, key_data))
 
                     for dk in self.get_keys(table)[0]:
-                        if "table" not in dk or any(row[x] is None for x in dk["name"]):
-                            continue # for dk
-                        for table2, keys in dk["table"].items():
+                        if "table" not in dk: continue # for dk
+                        dkrows = [x for x in myrows
+                                  if all(x[c] is not None for c in dk["name"])]
+                        if not dkrows: continue # for dk
+                        for table2, keys2 in dk["table"].items():
                             table2 = self.schema["table"][table2]["name"]
-                            key_data2, where2 = [{"name": x} for x in keys], ""
-                            data2 = {x: row[y] for x, y in zip(keys, dk["name"])}
-                            keyargs2 = self.make_args(key_data2, data2)
-                            for col, key in zip(key_data2, keyargs2):
-                                where2 += (" AND " if where2 else "") + \
-                                           "%s IS :%s" % (grammar.quote(col["name"]), key)
+
+                            key_cols2 = [{"name": x} for x in keys2]
+                            key_data2 = [{x: row[y] for x, y in zip(keys2, dk["name"])}
+                                         for row in dkrows]
                             cols = "*"
                             if self.has_rowid(table2): cols = "_rowid_ AS _rowid_, *"
-                            sql2 = "SELECT %s FROM %s WHERE %s" % (cols, grammar.quote(table2), where2)
-                            if conf.LogSQL:
-                                logger.info("SQL: %s\nParameters: %s", sql2, keyargs2)
-                            for row2 in cursor.execute(sql2, keyargs2):
-                                rowid = row2.pop("_rowid_", None)
-                                queue.append((table2, row2, rowid))
+                            sqlbase = "SELECT %s FROM %s" % (cols, grammar.quote(table2))
+                            rows2, rowids2 = [], []
+                            for where2, args2 in self.chunk_args(key_cols2, key_data2):
+                                sql2 = "%s WHERE %s" % (sqlbase, where2)
+                                myrows2 = self.execute(sql2, args2, cursor=cursor).fetchall()
+                                rowids2 += [x.pop("_rowid_", None) for x in myrows2]
+                                rows2.extend(myrows2)
+                            if rows2: queue.append((table2, rows2, rowids2))
 
-                    args.update(keyargs)
-                    logger.info("Deleting 1 row from table %s, %s.",
-                                grammar.quote(table), self.name)
-                    sql = "DELETE FROM %s WHERE %s" % (grammar.quote(table), where)
-                    queries.append((sql, args))
-                    cursor.execute(sql, args)
-                    result.append((table, info))
-
-                cursor.execute("COMMIT")
+                self.execute("COMMIT", cursor=cursor)
                 self.log_query("DELETE CASCADE", [x for x, _ in queries],
                                [x for _, x in queries])
                 self.last_modified = datetime.datetime.now()

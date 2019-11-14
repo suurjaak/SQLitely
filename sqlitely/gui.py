@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.11.2019
+@modified    14.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4512,7 +4512,7 @@ class DatabasePage(wx.Panel):
                     self.notebook_data.SetPageText(idx, title)
             if not self.save_underway: self.update_page_header()
         if updated and not self.save_underway:
-            self.db.populate_schema(count=True, category=category, name=name)
+            self.db.populate_schema(count=True, category=category, name=table or name)
             self.load_tree_data()
         if open:
             page = self.data_pages["table"].get(table) or \
