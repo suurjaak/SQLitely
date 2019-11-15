@@ -639,15 +639,16 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             menu = DROPMENUS[category]
             for x in menu.SubMenu.MenuItems: menu.SubMenu.Delete(x)
             item_all = menu.SubMenu.Append(wx.ID_ANY, "Drop all %s" % util.plural(category))
-            item_all.Enable(bool(items))
-            args = ["drop", category]
-            self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), item_all)
-            if items: menu.SubMenu.AppendSeparator()
-            for name in items:
-                help = "Drop %s %s" % (category, grammar.quote(name))
-                item = menu.SubMenu.Append(wx.ID_ANY, name, help)
-                args = ["drop", category, name]
-                self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), item)
+            menu.Enabled = bool(items)
+            if items:
+                args = ["drop", category]
+                self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), item_all)
+                if items: menu.SubMenu.AppendSeparator()
+                for name in items:
+                    help = "Drop %s %s" % (category, grammar.quote(name))
+                    item = menu.SubMenu.Append(wx.ID_ANY, name, help)
+                    args = ["drop", category, name]
+                    self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), item)
 
             if category not in VIEWMENUS: continue # for category
             menu = VIEWMENUS[category]
