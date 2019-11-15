@@ -421,9 +421,12 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         if not state: return
         rows_before = self.GetNumberRows()
         if "sort" in state:
-            self.sort_column, self.sort_ascending = state["sort"].items()[0]
+            name, asc = state["sort"].items()[0]
+            if name in self.columns:
+                self.sort_column, self.sort_ascending = name, asc
         if "filter" in state:
-            self.filters = state["filter"]
+            self.filters = {i: x for i, x in (state["filter"] or {}).items()
+                            if i < len(self.columns)}
         self.Filter(rows_before)
 
 
@@ -1805,13 +1808,14 @@ class DataObjectPage(wx.Panel):
         return True
 
 
-    def Reload(self, restore=False):
+    def Reload(self, restore=False, item=None):
         """
         Reloads current data grid, making a new query.
 
         @param   restore  restore last saved changes
+        @param   item     schema item (e.g. for when name changed)
         """
-        self._OnRefresh(restore=restore)
+        self._OnRefresh(restore=restore, item=item)
 
 
     def Export(self, opts, noclose=True):
@@ -2067,11 +2071,12 @@ class DataObjectPage(wx.Panel):
         self._OnChange(updated=True)
 
 
-    def _OnRefresh(self, event=None, restore=False):
+    def _OnRefresh(self, event=None, restore=False, item=None):
         """
         Handler for refreshing grid data, asks for confirmation if changed.
 
         @param   restore  restore last saved changes
+        @param   item     schema item (e.g. for when name changed)
         """
         if not restore and self.IsChanged() and wx.YES != controls.YesNoMessageBox(
             "There are unsaved changes (%s).\n\n"
@@ -2079,6 +2084,8 @@ class DataObjectPage(wx.Panel):
             self._grid.Table.GetChangedInfo(),
             conf.Title, wx.ICON_INFORMATION, defaultno=True
         ): return
+
+        if item: self._item = copy.deepcopy(item)            
 
         scrollpos = map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
         cursorpos = [self._grid.GridCursorRow, self._grid.GridCursorCol]

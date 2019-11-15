@@ -4041,9 +4041,10 @@ class DatabasePage(wx.Panel):
         nb = event.EventObject if has_page else event.EventObject.Parent
         page = nb.GetPage(event.Selection) if has_page else None
 
-        def fmtname(item):
+        def fmtname(item, cap=False):
             vv = [item.get(x) for x in ("type", "name")]
-            return " ".join(filter(bool, vv))
+            t = "%s %s" % (vv[0], grammar.quote(vv[1])) if all(vv) else vv[-1]
+            return "%s%s" % (t[0].capitalize(), t[1:]) if cap else t
 
         menu, hmenu = wx.Menu(), wx.Menu()
         item_close = item_save = item_last = None
@@ -4066,7 +4067,7 @@ class DatabasePage(wx.Panel):
             item_last = wx.MenuItem(menu, -1, "Re&open %s\t(Ctrl-Shift-T)" % fmtname(pp[-1]))
             menu.Bind(wx.EVT_MENU, functools.partial(self.reopen_page, nb, -1), item_last)
             for i, item in list(enumerate(pp))[::-1]:
-                item_open = wx.MenuItem(hmenu, -1, fmtname(item).capitalize())
+                item_open = wx.MenuItem(hmenu, -1, fmtname(item, cap=True))
                 hmenu.Append(item_open)
                 menu.Bind(wx.EVT_MENU, functools.partial(self.reopen_page, nb, i), item_open)
 
@@ -4447,6 +4448,7 @@ class DatabasePage(wx.Panel):
         close, modified, updated, drop = (getattr(event, x, None)
                                     for x in ("close", "modified", "updated", "drop"))
         category, name = (event.item.get(x) for x in ("type", "name"))
+        name0 = None
         if close and idx >= 0:
             self.notebook_schema.DeletePage(idx)
         if drop:
@@ -4462,6 +4464,7 @@ class DatabasePage(wx.Panel):
         if updated:
             for k, p in self.schema_pages[category].items():
                 if p is event.source and name != k:
+                    name0 = k
                     self.schema_pages[category].pop(k)
                     self.schema_pages[category][name] = p
                     for item in self.pages_closed.get(self.notebook_data, []):
@@ -4471,10 +4474,11 @@ class DatabasePage(wx.Panel):
         if updated and not self.save_underway:
             self.reload_schema(count=True, parse=True)
             self.on_update_statistics()
-            datapage = self.data_pages.get(category, {}).get(name)
+            datapage = self.data_pages.get(category, {}).get(name0 or name)
             if datapage:
                 if name in self.db.schema[category]:
-                    if not datapage.IsChanged(): datapage.Reload()
+                    if not datapage.IsChanged():
+                        datapage.Reload(item=self.db.get_category(category, name))
                 else: datapage.Close(force=True)
 
 
