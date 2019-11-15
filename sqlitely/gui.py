@@ -3440,8 +3440,9 @@ class DatabasePage(wx.Panel):
                     line = "%s.%s REFERENCING %s.%s: %s" % args
                     if any(rowids): # NULL values: table WITHOUT ROWID
                         vals = [x[fk] for x in self.db.execute(
-                            "SELECT %s FROM %s WHERE _rowid_ IN (%s)" %
-                            (grammar.quote(fk), grammar.quote(table), ", ".join(map(str, rowids)))
+                            "SELECT %s FROM %s WHERE %s IN (%s)" %
+                            (grammar.quote(fk), grammar.quote(table),
+                             self.db.get_rowid(table), ", ".join(map(str, rowids)))
                         ).fetchall()]
                         if vals: line += "\nKeys: (%s)" % ", ".join(map(unicode, sorted(vals)))
                     lines.append(line)
@@ -4524,8 +4525,11 @@ class DatabasePage(wx.Panel):
                    self.add_data_page(self.db.get_category("table", table))
             self.notebook_data.SetSelection(self.notebook_data.GetPageIndex(page))
             if row: page.ScrollToRow(row, full=True)
-        if remove and table in self.data_pages["table"]:
-            self.data_pages["table"][table].DropRows(rows)
+        if remove:
+            self.db.populate_schema(count=True)
+            self.load_tree_data()
+            if table in self.data_pages["table"]:
+                self.data_pages["table"][table].DropRows(rows)
 
 
     def on_close_data_export(self, event=None):

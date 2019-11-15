@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.11.2019
+@modified    15.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -624,16 +624,16 @@ WARNING: misuse can easily result in a corrupt database file.""",
                else self.locks.get(category) if not name and category else self.locks
 
 
-    def has_rowid(self, table):
+    def get_rowid(self, table):
         """
-        Returns whether the table has accessible ROWID, or else is WITHOUT ROWID
-        or has a column shadowing ROWID.
+        Returns ROWID name for table, or None if table is WITHOUT ROWID
+        or has columns shadowing all ROWID aliases (ROWID, _ROWID_, OID).
         """
         meta = self.schema["table"].get(table, {}).get("meta")
-        if not meta or meta.get("without"): return False
-        for c in self.schema["table"][table]["columns"]:
-            if c["name"].lower() == "_rowid_": return False
-        return True
+        if not meta or meta.get("without"): return
+        ALIASES = ("_rowid_", "rowid", "oid")
+        return next((x for x in ALIASES if not any(c["name"].lower() == x
+                     for c in self.schema["table"][table]["columns"])), None)
 
 
     def has_view_columns(self):
@@ -819,7 +819,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
         result, do_full = {"count": None}, False
         tpl = "SELECT %%s AS count FROM %s LIMIT 1" % grammar.quote(table)
         try:
-            result = self.execute(tpl % "MAX(_rowid_)", log=False).fetchone()
+            rowidname = self.get_rowid(table)
+            result = self.execute(tpl % "MAX(%s)" % rowidname, log=False).fetchone() \
+                     if rowidname else None
             result["is_count_estimated"] = True
             if self.filesize < conf.MaxDBSizeForFullCount \
             or result["count"] < conf.MaxTableRowIDForFullCount:
@@ -1097,8 +1099,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
         where, pks = "", [c for c in col_data if "pk" in c]
 
         if rowid is not None and not (len(pks) == 1 and pks[0]["name"] in row):
-            key_data = [{"name": "_rowid_"}]
-            keyargs = self.make_args(key_data, {"_rowid_": rowid})
+            rowidname = self.get_rowid(table)
+            key_data = [{"name": rowidname}]
+            keyargs = self.make_args(key_data, {rowidname: rowid})
         else: # Use either primary key or all columns to identify row
             key_data = pks or col_data
             keyargs = self.make_args(key_data, row)
@@ -1186,8 +1189,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
         where, pks = "", [c for c in col_data if "pk" in c]
 
         if rowid is not None and not (len(pks) == 1 and pks[0]["name"] in row):
-            key_data = [{"name": "_rowid_"}]
-            keyargs = self.make_args(key_data, {"_rowid_": rowid})
+            rowidname = self.get_rowid(table)
+            key_data = [{"name": rowidname}]
+            keyargs = self.make_args(key_data, {rowidname: rowid})
         else: # Use either primary key or all columns to identify row
             key_data = [c for c in col_data if "pk" in c] or col_data
             keyargs = self.make_args(key_data, row)
@@ -1251,13 +1255,14 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     table, rows, rowids = queue.pop(0)
                     col_data = self.schema["table"][table]["columns"]
                     pks = [c for c in col_data if "pk" in c]
-                    use_rowids = rowids and all(rowids) and \
+                    rowidname = self.get_rowid(table)
+                    use_rowids = rowidname and rowids and all(rowids) and \
                                  not (len(pks) == 1 and all(pks[0]["name"] in r for r in rows))
                     key_cols = [{"name": "_rowid_"}] if use_rowids else pks or col_data
                     key_data, myrows = [], []
 
                     for row, rowid in zip(rows, rowids):
-                        data = {"_rowid_": rowid} if use_rowids else \
+                        data = {rowidname: rowid} if use_rowids else \
                                {c["name"]: row[c["name"]] for c in key_cols}
                         if not any(data in xx for t, xx in result if t == table):
                             key_data.append(data); myrows.append(row)
@@ -1283,13 +1288,14 @@ WARNING: misuse can easily result in a corrupt database file.""",
                             key_data2 = [{x: row[y] for x, y in zip(keys2, dk["name"])}
                                          for row in dkrows]
                             cols = "*"
-                            if self.has_rowid(table2): cols = "_rowid_ AS _rowid_, *"
+                            rowidname2 = self.get_rowid(table2)
+                            if rowidname2: cols = "%s AS %s, *" % ((rowidname2, ) * 2)
                             sqlbase = "SELECT %s FROM %s" % (cols, grammar.quote(table2))
                             rows2, rowids2 = [], []
                             for where2, args2 in self.chunk_args(key_cols2, key_data2):
                                 sql2 = "%s WHERE %s" % (sqlbase, where2)
                                 myrows2 = self.execute(sql2, args2, cursor=cursor).fetchall()
-                                rowids2 += [x.pop("_rowid_") if cols != "*" else None
+                                rowids2 += [x.pop(rowidname2) if rowidname2 else None
                                             for x in myrows2]
                                 rows2.extend(myrows2)
                             if rows2: queue.append((table2, rows2, rowids2))

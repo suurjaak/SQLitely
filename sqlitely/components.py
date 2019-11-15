@@ -98,9 +98,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
         if not self.is_query:
             self.columns = self.db.get_category(category, name)["columns"]
-            if "table" == category and db.has_rowid(name):
-                self.rowid_name = "_rowid_"
-            cols = ("_rowid_ AS %s, *" % self.rowid_name) if self.rowid_name else "*"
+            if "table" == category: self.rowid_name = db.get_rowid(name)
+            cols = ("%s AS %s, *" % ((self.rowid_name, ) * 2)) if self.rowid_name else "*"
             self.sql = "SELECT %s FROM %s" % (cols, grammar.quote(name))
         self.row_iterator = cursor or self.db.execute(self.sql)
 
