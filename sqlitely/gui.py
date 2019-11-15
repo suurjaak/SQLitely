@@ -2167,6 +2167,7 @@ class DatabasePage(wx.Panel):
         self.db.register_consumer(self)
         self.save_underway  = False
         self.statistics = {} # {?error: message, ?data: {..}}
+        self.pages_closed = defaultdict(list) # {notebook: [{name, ..}, ]}
         self.pragma         = db.get_pragma_values() # {pragma_name: value}
         self.pragma_initial = copy.deepcopy(self.pragma)
         self.pragma_changes = {}    # {pragma_name: value}
@@ -2414,6 +2415,9 @@ class DatabasePage(wx.Panel):
         self.Bind(components.EVT_PROGRESS,  self.on_close_data_export)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
                 self.on_close_data_page, nb)
+        nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
+                self.on_notebook_menu, nb)
+        nb.GetTabArea().Bind(wx.EVT_CONTEXT_MENU, self.on_notebook_menu)
         self.register_notebook_hotkeys(nb)
 
 
@@ -2497,6 +2501,9 @@ class DatabasePage(wx.Panel):
         self.Bind(components.EVT_SCHEMA_PAGE,   self.on_schema_page_event)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
                 self.on_close_schema_page, nb)
+        nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
+                self.on_notebook_menu, nb)
+        nb.GetTabArea().Bind(wx.EVT_CONTEXT_MENU, self.on_notebook_menu)
         self.register_notebook_hotkeys(nb)
 
 
@@ -2507,7 +2514,6 @@ class DatabasePage(wx.Panel):
         notebook.AddPage(page, "SQL")
 
         self.sql_pages = defaultdict(dict) # {name: SQLPage}
-        self.sql_pages_closed = [] # [(name, content)]
         self.sql_page_counter = 0
 
         sizer = page.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2543,7 +2549,8 @@ class DatabasePage(wx.Panel):
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_DROPPED,
                 self.on_dragdrop_sql_page, nb)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
-                self.on_rclick_sql_page, nb)
+                self.on_notebook_menu, nb)
+        nb.GetTabArea().Bind(wx.EVT_CONTEXT_MENU, self.on_notebook_menu)
         nb.Bind(wx.EVT_CHAR_HOOK, self.on_key_sql_page)
         self.register_notebook_hotkeys(nb)
 
@@ -3035,17 +3042,22 @@ class DatabasePage(wx.Panel):
 
 
     def register_notebook_hotkeys(self, notebook):
-        """Register Ctrl-W close handler to notebook pages."""
-        def on_close_hotkey(event):
+        """Register Ctrl-W close and Ctrl-Shift-T reopen handler to notebook pages."""
+        def on_close_hotkey(event=None):
             if not notebook: return
             if notebook is self.notebook_sql: # Close SQL grid first
                 page = notebook.GetPage(notebook.GetSelection())
                 if page.HasGrid(): return page.CloseGrid()
             notebook.DeletePage(notebook.GetSelection())
+        def on_reopen_hotkey(event=None):
+            if not notebook: return
+            self.reopen_page(notebook, -1)
 
-        id_close = wx.NewIdRef().Id
-        accelerators = [(wx.ACCEL_CTRL, k, id_close) for k in [ord("W")]]
-        notebook.Bind(wx.EVT_MENU, on_close_hotkey, id=id_close)
+        id_close, id_reopen = wx.NewIdRef().Id, wx.NewIdRef().Id
+        accelerators = [(wx.ACCEL_CTRL,                  ord("W"), id_close),
+                        (wx.ACCEL_CTRL | wx.ACCEL_SHIFT, ord("T"), id_reopen)]
+        notebook.Bind(wx.EVT_MENU, on_close_hotkey,  id=id_close)
+        notebook.Bind(wx.EVT_MENU, on_reopen_hotkey, id=id_reopen)
         notebook.SetAcceleratorTable(wx.AcceleratorTable(accelerators))
 
 
@@ -4000,6 +4012,74 @@ class DatabasePage(wx.Panel):
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
+    def reopen_page(self, notebook, index, *_, **__):
+        """Reopens a page in the notebook."""
+        pp = self.pages_closed.get(notebook, [])
+        if not pp: return
+
+        if notebook is self.notebook_sql:
+            title, text = pp[index]["name"], pp[index]["text"]
+            t, p = next(iter(self.sql_pages.items()), (None, None))
+            if p and "SQL" == t and not p.Text and not p.CanUndoRedo():
+                # Reuse empty default tab
+                p.Text = text
+                self.sql_pages[title] = self.sql_pages.pop(t)
+                self.notebook_sql.SetPageText(0, title)
+            else: self.add_sql_page(title, text)
+            del pp[index]
+        else:
+            category, name = pp[index]["type"], pp[index]["name"]
+            f = self.add_data_page if notebook is self.notebook_data \
+                else self.add_schema_page
+            f(self.db.get_category(category, name))
+
+
+    def on_notebook_menu(self, event):
+        """Handler for right-clicking a notebook header, opens menu."""
+        has_page = not isinstance(event, wx.ContextMenuEvent)
+        nb = event.EventObject if has_page else event.EventObject.Parent
+        page = nb.GetPage(event.Selection) if has_page else None
+
+        def fmtname(item):
+            vv = [item.get(x) for x in ("type", "name")]
+            return " ".join(filter(bool, vv))
+
+        menu, hmenu = wx.Menu(), wx.Menu()
+        item_close = item_save = item_last = None
+
+        pp = self.pages_closed.get(nb, [])
+        if nb is not self.notebook_sql: # Remove stale items
+            for i, item in list(enumerate(pp))[::-1]:
+                if item["name"] not in self.db.schema[item["type"]]: del pp[i]
+
+        if page:
+            item_close = wx.MenuItem(menu, -1, "&Close\t(Ctrl-W)")
+            menu.Bind(wx.EVT_MENU, lambda e: nb.DeletePage(nb.GetPageIndex(page)), item_close)
+            if not isinstance(page, components.SQLPage):
+                item_save = wx.MenuItem(menu, -1, "&Save")
+                if not page.IsChanged() if isinstance(page, components.DataObjectPage) \
+                else page.ReadOnly: item_save.Enable(False)
+                menu.Bind(wx.EVT_MENU, lambda e: page.Save(), item_save)
+
+        if pp:
+            item_last = wx.MenuItem(menu, -1, "Re&open %s\t(Ctrl-Shift-T)" % fmtname(pp[-1]))
+            menu.Bind(wx.EVT_MENU, functools.partial(self.reopen_page, nb, -1), item_last)
+            for i, item in list(enumerate(pp))[::-1]:
+                item_open = wx.MenuItem(hmenu, -1, fmtname(item).capitalize())
+                hmenu.Append(item_open)
+                menu.Bind(wx.EVT_MENU, functools.partial(self.reopen_page, nb, i), item_open)
+
+        if item_close: menu.Append(item_close)
+        if item_save:  menu.Append(item_save)
+
+        if hmenu.MenuItemCount:
+            if menu.MenuItemCount: menu.AppendSeparator()
+            menu.Append(item_last)
+            menu.AppendSubMenu(hmenu, "&Recent pages")
+
+        nb.PopupMenu(menu)
+
+
     def on_dump(self, event=None):
         """
         Handler for saving database dump to file, opens file dialog and saves content.
@@ -4275,6 +4355,10 @@ class DatabasePage(wx.Panel):
             p = components.DataObjectPage(self.notebook_data, self.db, data)
             self.data_pages[data["type"]][data["name"]] = p
             self.notebook_data.InsertPage(0, page=p, text=title, select=True)
+            for i, item in enumerate(self.pages_closed.get(self.notebook_data, [])):
+                if item["type"] == data["type"] and item["name"] == data["name"]:
+                    del self.pages_closed[self.notebook_data][i]
+                    break # for i, item
         finally: self.notebook_data.Thaw()
         self.TopLevelParent.run_console(
             "datapage = page.notebook_data.GetPage(0) # Data object subtab")
@@ -4332,6 +4416,10 @@ class DatabasePage(wx.Panel):
             p = components.SchemaObjectPage(self.notebook_schema, self.db, data)
             self.schema_pages[data["type"]][data.get("name") or str(id(p))] = p
             self.notebook_schema.InsertPage(0, page=p, text=title, select=True)
+            for i, item in enumerate(self.pages_closed.get(self.notebook_schema, [])):
+                if item["type"] == data["type"] and item["name"] == data["name"]:
+                    del self.pages_closed[self.notebook_schema][i]
+                    break # for i, item
         finally: self.notebook_schema.Thaw()
         self.TopLevelParent.run_console(
             "schemapage = page.notebook_schema.GetPage(0) # Schema object subtab")
@@ -4345,6 +4433,8 @@ class DatabasePage(wx.Panel):
 
         for c, k, p in ((c, k, p) for c, m in self.schema_pages.items() for k, p in m.items()):
             if p is page:
+                if p.Name in self.db.schema[c]:
+                    self.pages_closed[self.notebook_schema].append({"name": p.Name, "type": c})
                 self.schema_pages[c].pop(k)
                 break # for c, k, p
         self.update_page_header()
@@ -4370,16 +4460,20 @@ class DatabasePage(wx.Panel):
             if not self.save_underway: self.update_page_header(updated=updated)
         if updated:
             for k, p in self.schema_pages[category].items():
-                if p is event.source:
+                if p is event.source and name != k:
                     self.schema_pages[category].pop(k)
                     self.schema_pages[category][name] = p
+                    for item in self.pages_closed.get(self.notebook_data, []):
+                        if item["name"] == k: item["name"] = name
+                        break # for item
                     break # for k, p
         if updated and not self.save_underway:
             self.reload_schema(count=True, parse=True)
             self.on_update_statistics()
             datapage = self.data_pages.get(category, {}).get(name)
             if datapage:
-                if name in self.db.schema[category]: datapage.Reload()
+                if name in self.db.schema[category]:
+                    if not datapage.IsChanged(): datapage.Reload()
                 else: datapage.Close(force=True)
 
 
@@ -4406,49 +4500,11 @@ class DatabasePage(wx.Panel):
             nb.AddPage(p, text="+")
 
 
-    def on_rclick_sql_page(self, event=None):
-        """Handler for right-click on notebook header, opens closed tabs menu."""
-        if not self.sql_pages_closed: return
-
-        pp = self.sql_pages_closed
-        def reopen(index, *_, **__):
-            title, text = pp[index]
-            t, p = self.sql_pages.items()[0] if len(self.sql_pages) == 1 else None
-            if p and "SQL" == t and not p.Text and not p.CanUndoRedo():
-                # Reuse empty default tab
-                p.Text = text
-                self.sql_pages[title] = self.sql_pages.pop(t)
-                self.notebook_sql.SetPageText(0, title)
-            else: self.add_sql_page(title, text)
-            del pp[index]
-
-        menu, menu_recent = wx.Menu(), wx.Menu()
-
-        item_last = wx.MenuItem(menu, -1, '&Reopen "%s"' % pp[-1][0])
-        menu.Bind(wx.EVT_MENU, functools.partial(reopen, -1), item_last)
-
-        menu.Append(item_last)
-        item_recent = menu.AppendSubMenu(menu_recent, "Recent &tabs")
-
-        for i, (name, _) in enumerate(pp):
-            item = wx.MenuItem(menu_recent, -1, name)
-            menu.Bind(wx.EVT_MENU, functools.partial(reopen, i), item)
-            menu_recent.Append(item)
-
-        self.notebook_sql.PopupMenu(menu)
-
-
     def on_key_sql_page(self, event):
         """
         Handler for keypress in SQL notebook,
-        skips adder-tab on Ctrl+PageUp|PageDown|Tab navigation,
-        reopens last closed tab on Ctrl+Shift+T.
+        skips adder-tab on Ctrl+PageUp|PageDown|Tab navigation.
         """
-        if event.ControlDown() and event.ShiftDown() and ord("T") == event.KeyCode:
-            if self.sql_pages_closed:
-                self.add_sql_page(*self.sql_pages_closed[-1])
-                del self.sql_pages_closed[-1]
-
         if not event.ControlDown() \
         or event.KeyCode not in [wx.WXK_PAGEUP, wx.WXK_PAGEDOWN, wx.WXK_TAB]:
             return event.Skip()
@@ -4478,7 +4534,8 @@ class DatabasePage(wx.Panel):
         try:
             for k, p in self.sql_pages.items():
                 if p is page:
-                    if p.Text.strip(): self.sql_pages_closed.append((k, p.Text))
+                    if p.Text.strip():
+                        self.pages_closed[self.notebook_sql].append({"name": k, "text": p.Text})
                     self.sql_pages.pop(k)
                     break # for k, p
         finally: wx.CallAfter(self.notebook_sql.Thaw)
@@ -4491,6 +4548,7 @@ class DatabasePage(wx.Panel):
 
         for c, k, p in ((c, k, p) for c, m in self.data_pages.items() for k, p in m.items()):
             if p is page:
+                self.pages_closed[self.notebook_data].append({"name": k, "type": c})
                 self.data_pages[c].pop(k)
                 break # for c, k, p
         self.update_page_header()

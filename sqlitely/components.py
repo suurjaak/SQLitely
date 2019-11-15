@@ -2504,6 +2504,12 @@ class SchemaObjectPage(wx.Panel):
     Category = property(GetCategory)
 
 
+    def IsReadOnly(self):
+        """Returns whether page is read-only or in edit mode."""
+        return not self._editmode
+    ReadOnly = property(IsReadOnly)
+
+
     def _AssignColumnIDs(self, meta):
         """Populates table meta coluns with __id__ fields."""
         result, counts = copy.deepcopy(meta), Counter()
