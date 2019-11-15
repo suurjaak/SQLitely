@@ -3291,7 +3291,7 @@ class DatabasePage(wx.Panel):
         try:
             for name, opts in database.Database.PRAGMA.items():
                 texts = [name, opts["label"], opts["short"],
-                         self.pragma_ctrls[name].ToolTip]
+                         self.pragma_ctrls[name].ToolTip.Tip]
                 for kv in opts.get("values", {}).items():
                     texts.extend(map(str, kv))
                 if name in values: texts.append(str(values[name]))
