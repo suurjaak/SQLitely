@@ -4654,6 +4654,7 @@ class DatabasePage(wx.Panel):
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             return wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
+        busy = controls.BusyPanel(self, 'Exporting to "%s".' % filename2)
         entrymsg = ("Name conflict on exporting table %(table)s as %(table2)s.\n"
                     "Database %(filename2)s %(entryheader)s "
                     "table named %(table2)s.\n\nYou can:\n"
@@ -4771,6 +4772,7 @@ class DatabasePage(wx.Panel):
                                    grammar.quote(table), filename2, extra, flash=True)
                     db2_tables_lower.add(t2_lower)
                 except Exception as e:
+                    busy.Close()
                     msg = "Could not export table %s%s." % \
                           (grammar.quote(table), extra)
                     logger.exception(msg); guibase.status(msg, flash=True)
@@ -4780,11 +4782,13 @@ class DatabasePage(wx.Panel):
             else: # nobreak
                 success = True
         except Exception as e:
+            busy.Close()
             msg = "Failed to read database %s." % filename2
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         finally:
+            busy.Close()
             if not is_samefile:
                 try: self.db.execute("DETACH DATABASE %s" % schema2)
                 except Exception: pass
