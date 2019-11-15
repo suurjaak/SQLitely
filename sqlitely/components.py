@@ -1893,7 +1893,7 @@ class DataObjectPage(wx.Panel):
             self._export.Hide()
             self.Layout()
 
-        kws = {}
+        kws = {"close": True}
         if self.IsChanged():
             info = self._grid.Table.GetChangedInfo()
             res = wx.MessageBox(
@@ -1909,8 +1909,7 @@ class DataObjectPage(wx.Panel):
                 if not self._grid.Table.SaveChanges(): return
                 kws["updated"] = True
 
-        if event: self._PostEvent(close=True, **kws)
-        elif kws: self._PostEvent(**kws)
+        self._PostEvent(**kws)
         return True
 
 

@@ -4355,7 +4355,7 @@ class DatabasePage(wx.Panel):
         close, modified, updated = (getattr(event, x, None)
                                     for x in ("close", "modified", "updated"))
         category, name = (event.item.get(x) for x in ("type", "name"))
-        if close:
+        if close and idx >= 0:
             self.notebook_schema.DeletePage(idx)
         if (modified is not None or updated is not None) and event.source:
             if name:
