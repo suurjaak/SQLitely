@@ -125,19 +125,6 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             self.SeekToRow(self.SEEK_CHUNK_LENGTH - 1)
 
 
-    def GetColLabelValue(self, col):
-        """Returns column label, with sort and filter information if any."""
-        label = self.columns[col]["name"]
-        if col == self.sort_column:
-            label += u" ↓" if self.sort_ascending else u" ↑"
-        if col in self.filters:
-            if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
-                label += "\n= %s" % self.filters[col]
-            else:
-                label += '\nlike "%s"' % self.filters[col]
-        return label
-
-
     def GetNumberRows(self, total=False):
         """
         Returns the number of grid rows, currently retrieved if query or filtered
@@ -193,6 +180,24 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         """Returns row label value, with cursor arrow if grid cursor on row."""
         pref = u"\u25ba " if self.View and row == self.View.GridCursorRow else ""
         return "%s%s  " % (pref, row + 1)
+
+
+    def GetColLabelValue(self, col):
+        """
+        Returns column label value, with cursor arrow if grid cursor on col,
+        and sort arrow if grid sorted by column.
+        """
+        label = self.columns[col]["name"]
+        if col == self.sort_column:
+            label += u" ↓" if self.sort_ascending else u" ↑"
+        if col in self.filters:
+            if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
+                label += "\n= %s" % self.filters[col]
+            else:
+                label += '\nlike "%s"' % self.filters[col]
+        pref = u"\u25be" if self.View and col == self.View.GridCursorCol \
+               and self.GetNumberRows() else "  "
+        return u" %s %s  " % (pref, label)
 
 
     def GetValue(self, row, col):
