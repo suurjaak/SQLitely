@@ -3147,7 +3147,7 @@ class SchemaObjectPage(wx.Panel):
 
             sizer_item.Add(ctrl_cols, proportion=1, flag=wx.GROW)
 
-            self._BindDataHandler(self._OnChange, ctrl_cols,     ["constraints", ctrl_cols,     "key", 0, "name"])
+            self._BindDataHandler(self._OnChange, ctrl_cols, ["constraints", ctrl_cols, "key", 0, "name"])
 
             self._ctrls.update({"constraints.columns.%s"  % rowkey: ctrl_cols})
             ctrls = [ctrl_cols]

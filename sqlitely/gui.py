@@ -5138,17 +5138,18 @@ class DatabasePage(wx.Panel):
                             if "index" == subcategory:
                                 t = ", ".join(x.get("name", x.get("expr")) for x in subitem["meta"]["columns"])
                             elif "table" == category == subcategory:
-                                fks = [x["fk"]["key"] for x in subitem["meta"]["columns"]
-                                       if item["name"] == x.get("fk", {}).get("table")]
-                                for x in subitem["meta"].get("constraints") or ():
-                                    if grammar.SQL.FOREIGN_KEY == x["type"] and item["name"] == x["table"]:
-                                        fks.extend(x["key"])
-                                fks += [x["name"] for x in item["meta"]["columns"]
-                                        if subitem["name"] == x.get("fk", {}).get("table")]
-                                for x in item["meta"].get("constraints") or ():
-                                    if grammar.SQL.FOREIGN_KEY == x["type"] and subitem["name"] == x["table"]:
-                                        fks.extend(x["columns"])
-                                if fks: t = "REFERENCES " + ", ".join(sorted(set(fks)))
+                                texts = []
+                                dks, fks = self.db.get_keys(subitem["name"])
+                                fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(grammar.quote, x))
+                                for col in dks:
+                                    for table2, keys2 in col.get("table", {}).items():
+                                        texts.append("%s.%s REFERENCES %s" % (grammar.quote(table2),
+                                            fmtkeys(col["name"]), fmtkeys(keys2)))
+                                for col in fks:
+                                    for table2, keys2 in col.get("table", {}).items():
+                                        texts.append("%s REFERENCES %s.%s" % (fmtkeys(keys2),
+                                            grammar.quote(table2), fmtkeys(col["name"])))
+                                t = ", ".join(texts)
                             elif "trigger" == subcategory:
                                 t = " ".join(filter(bool, (subitem["meta"].get("upon"), subitem["meta"]["action"])))
                                 if is_indirect_item(item, subitem):
