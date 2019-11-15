@@ -5201,13 +5201,16 @@ class DatabasePage(wx.Panel):
                                 dks, fks = self.db.get_keys(subitem["name"])
                                 fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(grammar.quote, x))
                                 for col in dks:
-                                    for table2, keys2 in col.get("table", {}).items():
-                                        texts.append("%s.%s REFERENCES %s" % (grammar.quote(table2),
-                                            fmtkeys(col["name"]), fmtkeys(keys2)))
+                                    for table, keys in col.get("table", {}).items():
+                                        if table != item["name"]: continue
+                                        texts.append("%s REFERENCES %s.%s" % (fmtkeys(keys),
+                                            grammar.quote(subitem["name"]), fmtkeys(col["name"])))
                                 for col in fks:
-                                    for table2, keys2 in col.get("table", {}).items():
-                                        texts.append("%s REFERENCES %s.%s" % (fmtkeys(keys2),
-                                            grammar.quote(table2), fmtkeys(col["name"])))
+                                    for table, keys in col.get("table", {}).items():
+                                        if table != item["name"]: continue
+                                        texts.append("%s.%s REFERENCES %s" % (
+                                        grammar.quote(subitem["name"]), fmtkeys(col["name"]),
+                                        fmtkeys(keys)))
                                 t = ", ".join(texts)
                             elif "trigger" == subcategory:
                                 t = " ".join(filter(bool, (subitem["meta"].get("upon"), subitem["meta"]["action"])))
