@@ -629,11 +629,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Returns ROWID name for table, or None if table is WITHOUT ROWID
         or has columns shadowing all ROWID aliases (ROWID, _ROWID_, OID).
         """
-        meta = self.schema["table"].get(table, {}).get("meta")
-        if not meta or meta.get("without"): return
+        sql = self.schema["table"].get(table, {}).get("sql")
+        if re.search("WITHOUT\s+ROWID\s*$", sql, re.I): return
         ALIASES = ("_rowid_", "rowid", "oid")
-        return next((x for x in ALIASES if not any(c["name"].lower() == x
-                     for c in self.schema["table"][table]["columns"])), None)
+        cols = [c["name"].lower() for c in self.schema["table"][table]["columns"]]
+        return next((x for x in ALIASES if x not in cols), None)
 
 
     def has_view_columns(self):
@@ -820,13 +820,14 @@ WARNING: misuse can easily result in a corrupt database file.""",
         tpl = "SELECT %%s AS count FROM %s LIMIT 1" % grammar.quote(table)
         try:
             rowidname = self.get_rowid(table)
-            result = self.execute(tpl % "MAX(%s)" % rowidname, log=False).fetchone() \
-                     if rowidname else None
-            result["is_count_estimated"] = True
-            if self.filesize < conf.MaxDBSizeForFullCount \
-            or result["count"] < conf.MaxTableRowIDForFullCount:
-                do_full = True
-        except Exception: do_full = self.filesize < conf.MaxDBSizeForFullCount
+            if rowidname:
+                result = self.execute(tpl % "MAX(%s)" % rowidname, log=False).fetchone()
+                result["is_count_estimated"] = True
+                if self.filesize < conf.MaxDBSizeForFullCount \
+                or result["count"] < conf.MaxTableRowIDForFullCount:
+                    do_full = True
+        except Exception:
+            do_full = (self.filesize < conf.MaxDBSizeForFullCount)
 
         try:
             if do_full:
