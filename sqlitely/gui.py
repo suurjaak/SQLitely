@@ -5304,12 +5304,18 @@ class DatabasePage(wx.Panel):
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
         def toggle_items(node, *_, **__):
             tree.ToggleItem(node)
+        def create_object(category, *_, **__):
+            newdata = {"type": category,
+                       "meta": {"__type__": "CREATE %s" % category.upper()}}
+            self.notebook.SetSelection(self.pageorder[self.page_schema])
+            self.add_schema_page(newdata)
 
         boldfont = wx.Font(self.Font.PointSize, wx.FONTFAMILY_SWISS,
             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
 
         menu = wx.Menu()
-        item_file = item_file_single = item_database = item_import = item_truncate = item_drop = None
+        item_file = item_file_single = item_database = item_import = None
+        item_truncate = item_drop = item_drop_all = item_create = None
         if data.get("type") in ("table", "view"): # Single table/view
             item_name = wx.MenuItem(menu, -1, "%s %s" % (
                         data["type"].capitalize(), util.unprint(grammar.quote(data["name"], force=True))))
@@ -5367,15 +5373,29 @@ class DatabasePage(wx.Panel):
             if "table" == data["category"]:
                 item_database = wx.MenuItem(menu, -1, "Export all tables to another &database")
                 item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
+
+            item_drop_all = wx.MenuItem(menu, -1, "Drop all %s" % util.plural(data["category"]))
+            item_create   = wx.MenuItem(menu, -1, "Create &new %s" % data["category"])
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["category"], data["items"]),
+                      item_drop_all)
+            menu.Bind(wx.EVT_MENU, functools.partial(create_object, data["category"]),
+                      item_create)
             if not data["items"]:
                 item_copy.Enable(False)
                 item_file.Enable(False)
                 item_file_single.Enable(False)
                 if item_database: item_database.Enable(False)
+                item_drop_all.Enable(False)
         else: # Root
-            item_dump = wx.MenuItem(menu, -1, "Save database &dump as SQL")
+            item_dump   = wx.MenuItem(menu, -1, "Save database &dump as SQL")
             menu.Bind(wx.EVT_MENU, self.on_dump, item_dump)
             menu.Append(item_dump)
+            submenu = wx.Menu()
+            menu.AppendSubMenu(submenu, text="Create ne&w ..")
+            for category, key in (("table", "t"), ("view", "v")):
+                it = wx.MenuItem(submenu, -1, "New " + category.replace(key, "&" + key, 1))
+                submenu.Append(it)
+                menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), it)
 
         if item_file:
             menu.AppendSeparator()
@@ -5386,6 +5406,10 @@ class DatabasePage(wx.Panel):
             if item_truncate:
                 menu.AppendSeparator()
                 menu.Append(item_truncate)
+            if item_drop_all:
+                menu.AppendSeparator()
+                menu.Append(item_drop_all)
+                menu.Append(item_create)
             if item_drop:
                 menu.Append(item_drop)
             names = data["items"] if "category" == data["type"] else [data["name"]]
@@ -5501,12 +5525,12 @@ class DatabasePage(wx.Panel):
             names = [x["name"] for x in data["items"]]
 
             if names:
-                item_delete = wx.MenuItem(menu, -1, "Drop all %s" % util.plural(data["category"]))
+                item_drop_all = wx.MenuItem(menu, -1, "Drop all %s" % util.plural(data["category"]))
                 item_copy     = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
                 item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % util.plural(data["category"]))
 
                 menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["category"], names),
-                          item_delete)
+                          item_drop_all)
                 menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, lambda: "\n".join(map(grammar.quote, names))),
                           item_copy)
                 menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
@@ -5525,7 +5549,7 @@ class DatabasePage(wx.Panel):
                     menu.Append(item_database_meta)
 
                 menu.AppendSeparator()
-                menu.Append(item_delete)
+                menu.Append(item_drop_all)
             menu.Append(item_create)
             menu.Bind(wx.EVT_MENU, functools.partial(create_object, data["category"]), item_create)
         elif "column" == data["type"]:
