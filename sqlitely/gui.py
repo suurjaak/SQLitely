@@ -4180,7 +4180,7 @@ class DatabasePage(wx.Panel):
         except Exception as e:
             logger.exception("Error saving %s as %s.", self.db, filename2)
             self.db.reopen(filename1)
-            self.reload_grids(pending=True)
+            self.reload_grids(restore=True)
             try: os.unlink(tempname)
             except Exception: pass
             wx.MessageBox("Error saving %s as %s:\n\n%s" %
@@ -4234,7 +4234,7 @@ class DatabasePage(wx.Panel):
                 self.schema_pages[category][key] = self.schema_pages[category].pop(page.Name)
                 page.RestoreBackup()
 
-            self.reload_grids(pending=True)
+            self.reload_grids(restore=True)
 
         try: tempname and os.unlink(tempname)
         except Exception: pass
@@ -4252,12 +4252,12 @@ class DatabasePage(wx.Panel):
         return True
 
 
-    def reload_grids(self, pending=False):
+    def reload_grids(self, restore=False):
         """
         Reloads all grids in data and SQL tabs,
-        optionally retaining pending data changes.
+        optionally restoring last saved changes.
         """
-        for p in self.data_pages["table"].values(): p.Reload(pending=pending)
+        for p in self.data_pages["table"].values(): p.Reload(restore=restore)
         for p in self.sql_pages.values(): p.Reload()
 
 

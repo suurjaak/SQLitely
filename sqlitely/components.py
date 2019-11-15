@@ -1629,7 +1629,7 @@ class DataObjectPage(wx.Panel):
         self._db       = db
         self._category = item["type"]
         self._item     = copy.deepcopy(item)
-        self._backup   = None # Pending changes for Reload(pending=True)
+        self._backup   = None # Pending changes for Reload(restore=True)
         self._ignore_change = False
         self._hovered_cell  = None # (row, col)
 
@@ -1788,7 +1788,7 @@ class DataObjectPage(wx.Panel):
         """
         Saves unsaved changes, if any, returns success.
 
-        @param   backup  back up unsaved changes for Reload(pending=True)
+        @param   backup  back up unsaved changes for Reload(restore=True)
         """
         info = self._grid.Table.GetChangedInfo()
         if not info: return True
@@ -1805,13 +1805,13 @@ class DataObjectPage(wx.Panel):
         return True
 
 
-    def Reload(self, pending=False):
+    def Reload(self, restore=False):
         """
         Reloads current data grid, making a new query.
 
-        @param   pending  retain unsaved pending changes
+        @param   restore  restore last saved changes
         """
-        self._OnRefresh(pending=pending)
+        self._OnRefresh(restore=restore)
 
 
     def Export(self, opts, noclose=True):
@@ -2067,13 +2067,13 @@ class DataObjectPage(wx.Panel):
         self._OnChange(updated=True)
 
 
-    def _OnRefresh(self, event=None, pending=False):
+    def _OnRefresh(self, event=None, restore=False):
         """
         Handler for refreshing grid data, asks for confirmation if changed.
 
-        @param   pending  retain unsaved pending changes
+        @param   restore  restore last saved changes
         """
-        if not pending and self.IsChanged() and wx.YES != controls.YesNoMessageBox(
+        if not restore and self.IsChanged() and wx.YES != controls.YesNoMessageBox(
             "There are unsaved changes (%s).\n\n"
             "Are you sure you want to discard them?" %
             self._grid.Table.GetChangedInfo(),
@@ -2088,7 +2088,7 @@ class DataObjectPage(wx.Panel):
             self._grid.Table = None # Reset grid data to empty
             self._Populate()
 
-            if pending: self._grid.Table.SetChanges(self._backup)
+            if restore: self._grid.Table.SetChanges(self._backup)
             else: self._backup = None
 
             self._grid.Table.SetFilterSort(state)
