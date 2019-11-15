@@ -2938,8 +2938,8 @@ class DatabasePage(wx.Panel):
             self.notebook_schema.SetSelection(self.notebook_schema.GetPageIndex(page))
         elif "drop" == cmd:
             category = args[0]
-            name = args[1:] if len(args) > 1 else list(self.db.schema[category])
-            self.on_delete_items(category, name)
+            names = args[1:] if len(args) > 1 else list(self.db.schema[category])
+            self.on_drop_items(category, names)
         elif "refresh" == cmd:
             self.reload_schema(count=True, parse=True)
             self.update_info_panel()
@@ -4352,11 +4352,13 @@ class DatabasePage(wx.Panel):
     def on_schema_page_event(self, event):
         """Handler for a message from SchemaObjectPage."""
         idx = self.notebook_schema.GetPageIndex(event.source)
-        close, modified, updated = (getattr(event, x, None)
-                                    for x in ("close", "modified", "updated"))
+        close, modified, updated, drop = (getattr(event, x, None)
+                                    for x in ("close", "modified", "updated", "drop"))
         category, name = (event.item.get(x) for x in ("type", "name"))
         if close and idx >= 0:
             self.notebook_schema.DeletePage(idx)
+        if drop:
+            self.on_drop_items(category, [name])
         if (modified is not None or updated is not None) and event.source:
             if name:
                 suffix = "*" if event.source.IsChanged() else ""
@@ -4498,12 +4500,14 @@ class DatabasePage(wx.Panel):
         if getattr(event, "export_db", False):
             return self.on_export_data_base(event.tables, selects=event.selects)
 
-        VARS = ("close", "modified", "updated", "open", "remove", "table", "row", "rows")
+        VARS = ("close", "modified", "updated", "open", "remove", "drop", "table", "row", "rows")
         idx = self.notebook_data.GetPageIndex(event.source)
-        close, modified, updated, open, remove, table, row, rows = (getattr(event, x, None) for x in VARS)
+        close, modified, updated, open, remove, drop, table, row, rows = (getattr(event, x, None) for x in VARS)
         category, name = (event.item.get(x) for x in ("type", "name"))
-        if close:
+        if close and idx >= 0:
             self.notebook_data.DeletePage(idx)
+        if drop:
+            self.on_drop_items(category, [name])
         if (modified is not None or updated is not None) and event.source:
             if name:
                 suffix = "*" if event.source.IsChanged() else ""
@@ -4810,7 +4814,7 @@ class DatabasePage(wx.Panel):
             self.notebook.SetSelection(self.pageorder[self.page_data])
 
 
-    def on_delete_items(self, category, names, event=None):
+    def on_drop_items(self, category, names, event=None):
         """Handler for deleting schema items, confirms choice-"""
         extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
                 if "table" == category else ""
@@ -4855,7 +4859,9 @@ class DatabasePage(wx.Panel):
                 if page: page.Close(force=True)
                 page = self.data_pages.get(category, {}).get(name)
                 if page: page.Close(force=True)
-            if deleteds: self.reload_schema(count=True)
+            if deleteds:
+                self.reload_schema(count=True)
+                self.update_page_header(updated=True)
 
 
     def on_truncate(self, name, event=None):
@@ -5226,7 +5232,7 @@ class DatabasePage(wx.Panel):
             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
 
         menu = wx.Menu()
-        item_file = item_file_single = item_database = item_import = item_truncate = None
+        item_file = item_file_single = item_database = item_import = item_truncate = item_drop = None
         if data.get("type") in ("table", "view"): # Single table/view
             item_name = wx.MenuItem(menu, -1, "%s %s" % (
                         data["type"].capitalize(), util.unprint(grammar.quote(data["name"], force=True))))
@@ -5253,6 +5259,7 @@ class DatabasePage(wx.Panel):
                 item_database = wx.MenuItem(menu, -1, "Export table to another &database")
                 item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
                 item_truncate = wx.MenuItem(menu, -1, "Truncate table")
+            item_drop = wx.MenuItem(menu, -1, "Drop %s" % data["type"])
 
         elif "column" == data.get("type"): # Column
             item_name = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
@@ -5302,6 +5309,8 @@ class DatabasePage(wx.Panel):
             if item_truncate:
                 menu.AppendSeparator()
                 menu.Append(item_truncate)                
+            if item_drop:
+                menu.Append(item_drop)                
             names = data["items"] if "category" == data["type"] else [data["name"]]
             category = data["category"] if "category" == data["type"] else data["type"]
             menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, category, names),
@@ -5318,6 +5327,8 @@ class DatabasePage(wx.Panel):
                 if not self.db.schema["table"][data["name"]].get("count"):
                     item_truncate.Enable(False)
                 menu.Bind(wx.EVT_MENU, functools.partial(self.on_truncate, data["name"]), item_truncate)
+            if item_drop:
+                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["type"], [data["name"]]), item_drop)
 
         if tree.HasChildren(item):
             item_expand   = wx.MenuItem(menu, -1, "&Toggle expanded/collapsed")
@@ -5417,7 +5428,7 @@ class DatabasePage(wx.Panel):
                 item_copy     = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
                 item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % util.plural(data["category"]))
 
-                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_delete_items, data["category"], names),
+                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["category"], names),
                           item_delete)
                 menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, lambda: "\n".join(map(grammar.quote, names))),
                           item_copy)
@@ -5503,7 +5514,7 @@ class DatabasePage(wx.Panel):
             item_copy      = wx.MenuItem(menu, -1, "&Copy name")
             item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s &SQL" % data["type"])
             item_copy_rel  = wx.MenuItem(menu, -1, "Copy all &related SQL")
-            item_delete    = wx.MenuItem(menu, -1, "Drop %s" % data["type"])
+            item_drop      = wx.MenuItem(menu, -1, "Drop %s" % data["type"])
 
             item_name.Font = boldfont
 
@@ -5518,8 +5529,8 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
                       functools.partial(self.db.get_sql, **sqlkws)), item_copy_sql)
             menu.Bind(wx.EVT_MENU, copy_related, item_copy_rel)
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_delete_items, data["type"], [data["name"]]),
-                      item_delete)
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["type"], [data["name"]]),
+                      item_drop)
 
             menu.Append(item_name)
             menu.AppendSeparator()
@@ -5548,7 +5559,7 @@ class DatabasePage(wx.Panel):
                     submenu.Append(it)
                     menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), it)
 
-            menu.Append(item_delete)
+            menu.Append(item_drop)
 
         if tree.HasChildren(item):
             item_expand   = wx.MenuItem(menu, -1, "&Toggle expanded/collapsed")

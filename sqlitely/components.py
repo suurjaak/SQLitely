@@ -1921,20 +1921,25 @@ class DataObjectPage(wx.Panel):
             dlg = ImportDialog(self, self._db)
             dlg.SetTable(self._item["name"], fixed=True)
             dlg.ShowModal()
+        def on_drop(event=None):
+            self._PostEvent(drop=True)
 
         menu = wx.Menu()
         item_export   = wx.MenuItem(menu, -1, "&Export to another database")
         item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
         item_truncate = wx.MenuItem(menu, -1, "Truncate table")
+        item_drop     = wx.MenuItem(menu, -1, "Drop table")
         if not self._grid.Table.GetNumberRows(total=True):
             item_truncate.Enable(False)
         menu.Append(item_export)
         menu.Append(item_import)
         menu.AppendSeparator()
         menu.Append(item_truncate)
+        menu.Append(item_drop)
         menu.Bind(wx.EVT_MENU, self._OnExportToDB, item_export)
         menu.Bind(wx.EVT_MENU, on_import,          item_import)
         menu.Bind(wx.EVT_MENU, self.Truncate,      item_truncate)
+        menu.Bind(wx.EVT_MENU, on_drop,            item_drop)
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
 
 
@@ -2410,7 +2415,7 @@ class SchemaObjectPage(wx.Panel):
         self.Bind(wx.EVT_BUTTON,   self._OnTest,           button_test)
         self.Bind(wx.EVT_BUTTON,   self._OnImportSQL,      button_import)
         self.Bind(wx.EVT_BUTTON,   self._OnToggleEdit,     button_cancel)
-        self.Bind(wx.EVT_BUTTON,   self._OnDelete,         button_delete)
+        self.Bind(wx.EVT_BUTTON,   self._OnDrop,           button_delete)
         self.Bind(wx.EVT_BUTTON,   self._OnClose,          button_close)
         self.Bind(wx.EVT_CHECKBOX, self._OnToggleAlterSQL, check_alter)
         self._BindDataHandler(self._OnChange, edit_name, ["name"])
@@ -4658,42 +4663,9 @@ class SchemaObjectPage(wx.Panel):
         return True
 
 
-    def _OnDelete(self, event=None):
-        """Handler for clicking to delete the item, asks for confirmation."""
-        extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
-                if "table" == self._category else \
-                "\n\nAny associated triggers will be lost." if "view" == self._category else ""
-        if wx.YES != controls.YesNoMessageBox(
-            "Are you sure you want to drop the %s %s?%s" %
-            (self._category, grammar.quote(self._item["name"], force=True), extra),
-            conf.Title, wx.ICON_WARNING, defaultno=True
-        ): return
-
-        if "table" == self._category and self._item.get("count"):
-
-            count, pref = self._item["count"], ""
-            if self._item.get("is_count_estimated"):
-                count, pref = int(math.ceil(count / 100.) * 100), "~"
-            countstr = pref + util.plural("row", count, sep=",")
-            if wx.YES != controls.YesNoMessageBox(
-                "Are you REALLY sure you want to drop the %s %s?\n\n"
-                "It currently contains %s." %
-                (self._category, grammar.quote(self._item["name"], force=True),
-                 countstr),
-                conf.Title, wx.ICON_WARNING, defaultno=True
-            ): return
-
-        if self._db.is_locked(self._category, self._item["name"]):
-            wx.MessageBox("%s %s is currently locked, cannot drop." % 
-                          (self._category.capitalize(),
-                          grammar.quote(self._item["name"], force=True)),
-                          conf.Title, wx.OK | wx.ICON_WARNING)
-            return
-
-        sql = "DROP %s %s" % (self._category, grammar.quote(self._item["name"]))
-        self._db.executeaction(sql, name="DROP")
-        self._editmode = False
-        self._PostEvent(close=True, updated=True)
+    def _OnDrop(self, event=None):
+        """Handler for clicking to drop the item."""
+        self._PostEvent(drop=True)
 
 
 
