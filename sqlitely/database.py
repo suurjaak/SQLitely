@@ -823,9 +823,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
             if rowidname:
                 result = self.execute(tpl % "MAX(%s)" % rowidname, log=False).fetchone()
                 result["is_count_estimated"] = True
-                if self.filesize < conf.MaxDBSizeForFullCount \
-                or result["count"] < conf.MaxTableRowIDForFullCount:
-                    do_full = True
+            if self.filesize < conf.MaxDBSizeForFullCount \
+            or result and result["count"] < conf.MaxTableRowIDForFullCount:
+                do_full = True
         except Exception:
             do_full = (self.filesize < conf.MaxDBSizeForFullCount)
 
