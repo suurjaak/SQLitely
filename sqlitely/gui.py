@@ -4374,9 +4374,10 @@ class DatabasePage(wx.Panel):
         if updated and not self.save_underway:
             self.reload_schema(count=True, parse=True)
             self.on_update_statistics()
-            if name not in self.db.schema[category] \
-            and name in self.data_pages.get(category, {}):
-                self.data_pages[category][name].Close(force=True)
+            datapage = self.data_pages.get(category, {}).get(name)
+            if datapage:
+                if name in self.db.schema[category]: datapage.Reload()
+                else: datapage.Close(force=True)
 
 
     def on_change_sql_page(self, event):
