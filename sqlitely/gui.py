@@ -4630,10 +4630,16 @@ class DatabasePage(wx.Panel):
         wx.YieldIfNeeded() # Allow dialog to disappear
         filename2 = dialog.GetPath()
         sqls = [] # [sql, ]
+        is_samefile = (filename2.lower() == self.db.filename.lower())
 
         try:
-            self.db.execute("ATTACH DATABASE ? AS main2", [filename2])
-            sqls.append("ATTACH DATABASE ? AS main2")
+            if is_samefile: schema2 = "main"
+            else:
+                schemas = [x["name"] for x in
+                           self.db.execute("PRAGMA database_list").fetchall()]
+                schema2 = util.make_unique("main", schemas, suffix="%s")
+                self.db.execute("ATTACH DATABASE ? AS %s" % schema2, [filename2])
+                sqls.append("ATTACH DATABASE ? AS %s" % schema2)
         except Exception as e:
             msg = "Could not load database %s." % filename2
             logger.exception(msg); guibase.status(msg, flash=True)
@@ -4647,12 +4653,12 @@ class DatabasePage(wx.Panel):
                     "- enter another name to export table %(table)s as,\n"
                     "- or set blank to skip table %(table)s.")
         fks_on = self.db.execute("PRAGMA foreign_keys").fetchone()["foreign_keys"]
-        insert_sql, success = "INSERT INTO main2.%s SELECT * FROM main.%s", False
+        insert_sql, success = "INSERT INTO %s.%s SELECT * FROM main.%s", False
         db1_tables = set(self.db.get_category("table"))
         try:
             db2_tables_lower = set(x["name"].lower() for x in self.db.execute(
-                "SELECT name FROM main2.sqlite_master WHERE type = 'table' "
-                "AND sql != '' AND name NOT LIKE 'sqlite_%'"
+                "SELECT name FROM %s.sqlite_master WHERE type = 'table' "
+                "AND sql != '' AND name NOT LIKE 'sqlite_%%'" % schema2
             ).fetchall())
             tables1, tables2, tables2_lower = [], [], []
 
@@ -4695,14 +4701,13 @@ class DatabasePage(wx.Panel):
                         continue # while table2
                     break
 
-                if filename2.lower() == self.db.filename.lower() \
-                and t2_lower in db1_tables: # Needs rename if same file
+                if is_samefile and t2_lower in db1_tables: # Needs rename if same file
                     continue # for table
                 if table2:
                     tables1.append(table); tables2.append(table2)
                     tables2_lower.append(t2_lower)
 
-            renames = {"schema": "main2",
+            renames = {"schema": schema2,
                        "table": {a: b for a, b in zip(tables1, tables2) if a != b}}
 
             if fks_on: self.db.execute("PRAGMA foreign_keys = off")
@@ -4715,17 +4720,17 @@ class DatabasePage(wx.Panel):
                 try:
                     if t2_lower in db2_tables_lower:
                         logger.info("Dropping table %s in %s.", grammar.quote(table2), filename2)
-                        self.db.execute("DROP TABLE main2.%s" % grammar.quote(table2))
+                        self.db.execute("DROP TABLE %s.%s" % (schema2, grammar.quote(table2)))
                     logger.info("Creating table %s in %s, using %s.",
                                 grammar.quote(table2, force=True), filename2, create_sql)
                     self.db.execute(create_sql)
                     sqls.append(create_sql)
                     if data:
                         if selects and table in selects:
-                            myinsert_sql = "INSERT INTO main2.%s %s" % (
-                                           grammar.quote(table2), selects[table])
+                            myinsert_sql = "INSERT INTO %s.%s %s" % (
+                                           schema2, grammar.quote(table2), selects[table])
                         else:
-                            myinsert_sql = insert_sql % (grammar.quote(table2),
+                            myinsert_sql = insert_sql % (schema2, grammar.quote(table2),
                                                          grammar.quote(table))
                         self.db.execute(myinsert_sql)
                         sqls.append(myinsert_sql)
@@ -4733,8 +4738,8 @@ class DatabasePage(wx.Panel):
                     # Copy table indexes and triggers
                     for category, items in self.db.get_related("table", table, associated=True).items():
                         items2 = [x["name"] for x in self.db.execute(
-                            "SELECT name FROM main2.sqlite_master "
-                            "WHERE type = ? AND sql != '' AND name NOT LIKE 'sqlite_%'", [category]
+                            "SELECT name FROM %s.sqlite_master "
+                            "WHERE type = ? AND sql != '' AND name NOT LIKE 'sqlite_%%'" % schema2, [category]
                         ).fetchall()]
                         for item in items:
                             name2 = item["name"]
@@ -4772,8 +4777,9 @@ class DatabasePage(wx.Panel):
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         finally:
-            try: self.db.execute("DETACH DATABASE main2")
-            except Exception: pass
+            if not is_samefile:
+                try: self.db.execute("DETACH DATABASE %s" % schema2)
+                except Exception: pass
             try: fks_on and self.db.execute("PRAGMA foreign_keys = on")
             except Exception: pass
 
@@ -4784,8 +4790,11 @@ class DatabasePage(wx.Panel):
             extra = "" if len(tables1) > 1 or same_name \
                     else " as %s" % grammar.quote(tables2[0], force=True)
             guibase.status("Exported %s to %s%s.", t, filename2, extra, flash=True)
-            self.db.log_query("EXPORT", sqls, filename2)
-            wx.PostEvent(self, OpenDatabaseEvent(self.Id, file=filename2))
+            self.db.log_query("EXPORT", sqls, None if is_samefile else filename2)
+            if is_samefile:
+                self.reload_schema(count=True, parse=True)
+                self.update_page_header(updated=True)
+            else: wx.PostEvent(self, OpenDatabaseEvent(self.Id, file=filename2))
 
 
     def on_import_event(self, event):
