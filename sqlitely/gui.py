@@ -4903,10 +4903,12 @@ class DatabasePage(wx.Panel):
             info = last_search.get("info")
             tabid = wx.NewIdRef().Id if 0 != last_search.get("id") else 0
             self.html_searchall.InsertTab(0, title, tabid, html, info)
-        wx.CallLater(100, self.update_tabheader)
-        wx.CallLater(200, self.load_tree_data)
-        wx.CallLater(300, self.update_info_panel, False)
-        wx.CallLater(400, self.reload_schema, count=True, parse=True)
+
+        self.db.populate_schema(count=True)
+        self.update_tabheader()
+        self.load_tree_data()
+        self.update_info_panel()
+        wx.CallLater(100, self.reload_schema, parse=True)
         self.worker_analyzer.work(self.db.filename)
 
 
