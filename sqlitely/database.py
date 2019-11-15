@@ -1094,19 +1094,18 @@ WARNING: misuse can easily result in a corrupt database file.""",
         table = self.schema["table"][table]["name"]
         col_data = self.schema["table"][table]["columns"]
 
-        where, args = "", {}
+        where, pks = "", [c for c in col_data if "pk" in c]
 
-        if rowid is not None:
+        if rowid is not None and not (len(pks) == 1 and pks[0]["name"] in row):
             key_data = [{"name": "_rowid_"}]
-            keyargs = self.make_args(key_data, {"_rowid_": rowid}, args)
+            keyargs = self.make_args(key_data, {"_rowid_": rowid})
         else: # Use either primary key or all columns to identify row
-            key_data = [c for c in col_data if "pk" in c] or col_data
-            keyargs = self.make_args(key_data, row, args)
+            key_data = pks or col_data
+            keyargs = self.make_args(key_data, row)
         for col, key in zip(key_data, keyargs):
             where += (" AND " if where else "") + "%s IS :%s" % (grammar.quote(col["name"]), key)
-        args.update(keyargs)
         sql = "SELECT * FROM %s WHERE %s" % (grammar.quote(table), where)
-        return self.execute(sql, args).fetchone()
+        return self.execute(sql, keyargs).fetchone()
 
 
     def insert_row(self, table, row):
@@ -1154,11 +1153,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
         where, args = "", self.make_args(changed_cols, row)
         setsql = ", ".join("%s = :%s" % (grammar.quote(changed_cols[i]["name"]), x)
                                          for i, x in enumerate(args))
-        if rowid is not None:
+        pks = [c for c in col_data if "pk" in c]
+        if rowid is not None and not (len(pks) == 1 and pks[0]["name"] in row):
             key_data = [{"name": "_rowid_"}]
             keyargs = self.make_args(key_data, {"_rowid_": rowid}, args)
         else: # Use either primary key or all columns to identify row
-            key_data = [c for c in col_data if "pk" in c] or col_data
+            key_data = pks or col_data
             keyargs = self.make_args(key_data, original_row, args)
         for col, key in zip(key_data, keyargs):
             where += (" AND " if where else "") + \
@@ -1183,27 +1183,26 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     grammar.quote(table), self.name)
         col_data = self.schema["table"][table]["columns"]
 
-        where, args = "", {}
+        where, pks = "", [c for c in col_data if "pk" in c]
 
-        if rowid is not None:
+        if rowid is not None and not (len(pks) == 1 and pks[0]["name"] in row):
             key_data = [{"name": "_rowid_"}]
-            keyargs = self.make_args(key_data, {"_rowid_": rowid}, args)
+            keyargs = self.make_args(key_data, {"_rowid_": rowid})
         else: # Use either primary key or all columns to identify row
             key_data = [c for c in col_data if "pk" in c] or col_data
-            keyargs = self.make_args(key_data, row, args)
+            keyargs = self.make_args(key_data, row)
         for col, key in zip(key_data, keyargs):
             where += (" AND " if where else "") + "%s IS :%s" % (grammar.quote(col["name"]), key)
-        args.update(keyargs)
         self.executeaction("DELETE FROM %s WHERE %s" % (grammar.quote(table), where),
-                           args, name="DELETE")
+                           keyargs, name="DELETE")
         self.last_modified = datetime.datetime.now()
         return True
 
 
     def chunk_args(self, cols, rows):
         """
-        Yields WHERE-clause and arguments in chunks if any argument is a list 
-        with over 1000 items (SQLite can have up to 1000 host parameters).
+        Yields WHERE-clause and arguments in chunks of up to 1000 items
+        (SQLite can have a maximum of 1000 host parameters per query).
 
         @yield    "name IN (:name1, ..)", {"name1": ..}
         """
@@ -1251,9 +1250,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 while queue:
                     table, rows, rowids = queue.pop(0)
                     col_data = self.schema["table"][table]["columns"]
-                    use_rowids = rowids and all(rowids)
-                    key_cols = [{"name": "_rowid_"}] if use_rowids \
-                               else [c for c in col_data if "pk" in c] or col_data
+                    pks = [c for c in col_data if "pk" in c]
+                    use_rowids = rowids and all(rowids) and \
+                                 not (len(pks) == 1 and all(pks[0]["name"] in r for r in rows))
+                    key_cols = [{"name": "_rowid_"}] if use_rowids else pks or col_data
                     key_data, myrows = [], []
 
                     for row, rowid in zip(rows, rowids):
@@ -1289,7 +1289,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                             for where2, args2 in self.chunk_args(key_cols2, key_data2):
                                 sql2 = "%s WHERE %s" % (sqlbase, where2)
                                 myrows2 = self.execute(sql2, args2, cursor=cursor).fetchall()
-                                rowids2 += [x.pop("_rowid_", None) for x in myrows2]
+                                rowids2 += [x.pop("_rowid_") if cols != "*" else None
+                                            for x in myrows2]
                                 rows2.extend(myrows2)
                             if rows2: queue.append((table2, rows2, rowids2))
 

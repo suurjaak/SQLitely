@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.11.2019
+@modified    15.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -727,7 +727,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             else:
                 idx = next((k for i, x in self.rows_backup.items()
                             if all(v == x[k] for k, v in rowdata.items())), None)
-                idx = idx or next((k for i, x in self.rows_all.items()
+                idx = idx or next((i for i, x in self.rows_all.items()
                                    if all(v == x[k] for k, v in rowdata.items())), None)
             if idx is None: continue # for rowdata
 
