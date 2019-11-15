@@ -510,7 +510,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 del self.rows_all[idx]
         self.row_count -= numRows
         self.NotifyViewChange(rows_before)
-        if self.row_iterator: self.SeekAhead()            
+        if self.row_iterator: self.SeekAhead()
         return True
 
 
@@ -776,7 +776,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
                 guibase.status("Copied column%s to clipboard%s", colsuff, cutoff, flash=True)
-            
+
 
         def on_copy_sql(event=None):
             """Copies rows INSERT SQL to clipboard."""
@@ -855,7 +855,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             if len(rows) != len(rowdatas): cutoff = ", stopped at row %s" % len(rowdatas)
 
             if len(rows) > 1: caption = util.plural("row", rows)
-            elif rowdatas[0]["__new__"]: caption = "New row"                
+            elif rowdatas[0]["__new__"]: caption = "New row"
             elif pks: caption = ", ".join("%s %s" % (c["name"], rowdatas[0][c["name"]])
                                           for c in pks)
             elif idxs[0] in self.rowids:
@@ -2075,8 +2075,8 @@ class DataObjectPage(wx.Panel):
         """
         if not pending and self.IsChanged() and wx.YES != controls.YesNoMessageBox(
             "There are unsaved changes (%s).\n\n"
-            "Are you sure you want to discard them?" % 
-            self._grid.Table.GetChangedInfo(), 
+            "Are you sure you want to discard them?" %
+            self._grid.Table.GetChangedInfo(),
             conf.Title, wx.ICON_INFORMATION, defaultno=True
         ): return
 
@@ -2469,7 +2469,7 @@ class SchemaObjectPage(wx.Panel):
     def Reload(self, force=False):
         """Refreshes content if not changed."""
         if not force and self.IsChanged(): return
-            
+
         prevs = {"_types": self._types, "_tables": self._tables,
                  "_views": self._views, "_item": self._item}
         self._types = self._GetColumnTypes()
@@ -3675,9 +3675,9 @@ class SchemaObjectPage(wx.Panel):
                 is_view_trigger = item["meta"]["table"].lower() == old["name"].lower()
                 sql, _ = grammar.transform(item["sql"], renames=renames)
                 if sql == item["sql"] and not is_view_trigger: continue # for item
-                    
+
                 args.setdefault(category, []).append(dict(item, sql=sql))
-                if "view" != category: continue 
+                if "view" != category: continue
 
                 # Re-create view triggers
                 for subitem in self._db.get_related("view", item["name"], associated=True).values():
@@ -4367,7 +4367,7 @@ class SchemaObjectPage(wx.Panel):
         path, flag = path[:-1], path[-1]
         coldata = util.get(self._item["meta"], path[:2])
         data, value = util.get(self._item["meta"], path), event.EventObject.Value
-        if data is None: data = util.set(self._item["meta"], {}, path)            
+        if data is None: data = util.set(self._item["meta"], {}, path)
 
         if value: data[flag] = value if "autoincrement" == flag else {}
         else: data.pop(flag, None)
@@ -4513,7 +4513,7 @@ class SchemaObjectPage(wx.Panel):
                 else: splitter.Unsplit(p1)
             elif "trigger" == self._category:
                 splitter, (p1, p2) = self._panel_splitter, self._panel_splitter.Children
-                if self._item["meta"].get("columns") or (self._editmode 
+                if self._item["meta"].get("columns") or (self._editmode
                 and (grammar.SQL.INSTEAD_OF == self._item["meta"].get("upon")
                 or grammar.SQL.UPDATE == self._item["meta"].get("action"))):
                     splitter.SplitHorizontally(p1, p2, splitter.MinimumPaneSize)
@@ -4626,7 +4626,7 @@ class SchemaObjectPage(wx.Panel):
 
         if not self._newmode \
         and self._db.is_locked(self._category, self._item["name"]):
-            wx.MessageBox("%s %s is currently locked, cannot alter." % 
+            wx.MessageBox("%s %s is currently locked, cannot alter." %
                           (self._category.capitalize(),
                           grammar.quote(self._item["name"], force=True)),
                           conf.Title, wx.OK | wx.ICON_WARNING)
@@ -5098,7 +5098,7 @@ class ImportDialog(wx.Dialog):
             event.Skip()
             EDIT_KEYS = [wx.WXK_F2, wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]
             MOVE_KEYS = [wx.WXK_UP, wx.WXK_DOWN, wx.WXK_PAGEUP, wx.WXK_PAGEDOWN,
-                         wx.WXK_HOME, wx.WXK_END, wx.WXK_NUMPAD_HOME, 
+                         wx.WXK_HOME, wx.WXK_END, wx.WXK_NUMPAD_HOME,
                          wx.WXK_NUMPAD_PAGEUP, wx.WXK_NUMPAD_PAGEDOWN,
                          wx.WXK_NUMPAD_UP, wx.WXK_NUMPAD_DOWN, wx.WXK_NUMPAD_END]
 
@@ -5416,7 +5416,7 @@ class ImportDialog(wx.Dialog):
         """
         idx, self._table = next((i, x) for i, x in enumerate(self._tables)
                                 if x["name"] == table)
-        if self._combo_table.Selection != idx: self._combo_table.Select(idx)            
+        if self._combo_table.Selection != idx: self._combo_table.Select(idx)
         self._table_fixed = fixed
 
         self._cols2 = [{"name": x["name"], "index": i, "skip": False}
@@ -5607,7 +5607,7 @@ class ImportDialog(wx.Dialog):
         """Handler for clicking a move button, updates side columns."""
         l = self._l1 if "source" == side else self._l2
         if l.ReadOnly: return
-            
+
         rows = l.GetSelections()
         if not rows or direction < 0 and not rows[0] \
         or direction > 0 and rows[0] == l.ItemCount - 1: return
@@ -5626,7 +5626,7 @@ class ImportDialog(wx.Dialog):
     def _OnMenuList(self, event):
         """Handler for right-click or menu key on list, opens popup menu."""
         event.Skip()
-        if event.EventObject.ReadOnly: return            
+        if event.EventObject.ReadOnly: return
         rows, l = event.EventObject.GetSelections(), event.EventObject
         if not rows: return
 
@@ -5924,7 +5924,7 @@ class ImportDialog(wx.Dialog):
         if wx.YES == keep: self._PostEvent()
 
         if isinstance(event, wx.CloseEvent): return wx.CallAfter(self.EndModal, wx.CANCEL)
-            
+
         SHOW = (self._button_restart, )
         HIDE = (self._button_ok, self._button_reset)
         if not isinstance(self.Parent, DataObjectPage): SHOW += (self._button_open, )
@@ -6076,7 +6076,7 @@ class ImportDialog(wx.Dialog):
 
         filename = self._dialog_file.GetPath()
         if self._data and filename == self._data["name"]: return
-            
+
         try: data = importexport.get_import_file_data(filename)
         except Exception as e:
             logger.exception("Error reading import file %s.", filename)
@@ -6273,7 +6273,7 @@ class DataDialog(wx.Dialog):
             self._button_next.Enabled = self._row + 1 < gridbase.RowsCount
 
             pks = [c for c in self._columns if "pk" in c]
-            if self._data["__new__"]: rowtitle = "New row"                
+            if self._data["__new__"]: rowtitle = "New row"
             elif pks: rowtitle = ", ".join("%s %s" % (c["name"], self._original[c["name"]])
                                           for c in pks)
             elif self._data["__id__"] in gridbase.rowids:
@@ -6496,7 +6496,7 @@ class HistoryDialog(wx.Dialog):
     def _Convert(self, x):
         """Returns value as string."""
         if isinstance(x, basestring): return x.rstrip()
-        if isinstance(x, datetime.datetime): return str(x)[:-7] 
+        if isinstance(x, datetime.datetime): return str(x)[:-7]
         if isinstance(x, list):
             return "\n\n".join(filter(bool, map(self._Convert, x)))
         if isinstance(x, dict):

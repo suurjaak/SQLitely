@@ -451,7 +451,7 @@ def tuplefy(value):
     """Returns the value in or as a tuple if not already a tuple."""
     return value if isinstance(value, tuple) \
            else tuple(value) if isinstance(value, list) else (value, )
-    
+
 
 def lccmp(x, y):
     """Returns negative if x<y, zero if x==y, positive if x>y, caselessly."""

@@ -2332,7 +2332,7 @@ class DatabasePage(wx.Panel):
         html.Font.PixelSize = (0, 8)
 
         sizer_top.Add(label_html, proportion=1, flag=wx.GROW)
-        sizer_top.Add(tb, border=5, flag=wx.TOP | 
+        sizer_top.Add(tb, border=5, flag=wx.TOP |
                       wx.ALIGN_CENTER_VERTICAL | wx.ALIGN_RIGHT)
         sizer.Add(sizer_top, border=5, flag=wx.TOP | wx.RIGHT | wx.GROW)
         sizer.Add(html, border=5, proportion=1,
@@ -2949,7 +2949,7 @@ class DatabasePage(wx.Panel):
             for p in (y for x in self.schema_pages.values() for y in x.values()):
                 if not p.IsChanged(): p.Reload()
         elif "changes" == cmd:
-            wx.MessageBox("Current unsaved changes:\n\n%s." % 
+            wx.MessageBox("Current unsaved changes:\n\n%s." %
                           format_changes().rstrip(), conf.Title)
         elif "history" == cmd:
             components.HistoryDialog(self, self.db).ShowModal()
@@ -2957,14 +2957,14 @@ class DatabasePage(wx.Panel):
             util.select_file(self.db.filename)
         elif "save" == cmd:
             if wx.OK != wx.MessageBox(
-                "Are you sure you want to save the following changes:\n\n%s." % 
+                "Are you sure you want to save the following changes:\n\n%s." %
                 format_changes().rstrip(), conf.Title
             ): return
 
             self.save_database()
         elif "undo" == cmd:
             if wx.OK != wx.MessageBox(
-                "Are you sure you want to undo the following changes:\n\n%s." % 
+                "Are you sure you want to undo the following changes:\n\n%s." %
                 format_changes().rstrip(), conf.Title
             ): return
 
@@ -3040,7 +3040,7 @@ class DatabasePage(wx.Panel):
             if not notebook: return
             if notebook is self.notebook_sql: # Close SQL grid first
                 page = notebook.GetPage(notebook.GetSelection())
-                if page.HasGrid(): return page.CloseGrid()                    
+                if page.HasGrid(): return page.CloseGrid()
             notebook.DeletePage(notebook.GetSelection())
 
         id_close = wx.NewIdRef().Id
@@ -3562,7 +3562,7 @@ class DatabasePage(wx.Panel):
 
     def on_close(self):
         """
-        Stops worker threads, saves page last configuration 
+        Stops worker threads, saves page last configuration
         like search text and results.
         """
         for worker in self.workers_search.values(): worker.stop()
@@ -4025,7 +4025,7 @@ class DatabasePage(wx.Panel):
         opts["total"] = sum(x["total"] or 0 for x in opts["subtotals"].values())
         if any(x["is_total_estimated"] for x in opts["subtotals"].values()):
             opts["is_total_estimated"] = True
-            
+
         self.Freeze()
         try:
             self.splitter_data.Hide()
@@ -4183,7 +4183,7 @@ class DatabasePage(wx.Panel):
             self.reload_grids(pending=True)
             try: os.unlink(tempname)
             except Exception: pass
-            wx.MessageBox("Error saving %s as %s:\n\n%s" % 
+            wx.MessageBox("Error saving %s as %s:\n\n%s" %
                           (filename1, filename2, util.format_exc(e)),
                           conf.Title, wx.OK | wx.ICON_ERROR)
             return
@@ -4850,7 +4850,7 @@ class DatabasePage(wx.Panel):
         try:
             for name in names:
                 if self.db.is_locked(category, name):
-                    wx.MessageBox("%s %s is currently locked, cannot drop." % 
+                    wx.MessageBox("%s %s is currently locked, cannot drop." %
                                   (category.capitalize(),
                                   grammar.quote(name, force=True)),
                                   conf.Title, wx.OK | wx.ICON_WARNING)
@@ -5007,7 +5007,7 @@ class DatabasePage(wx.Panel):
                     tree.SetItemPyData(child, itemdata)
 
                     if "count" in item:
-                        t = "ERROR" 
+                        t = "ERROR"
                         if item["count"] is None: t = "ERROR"
                         else:
                             count = item["count"]
@@ -5314,9 +5314,9 @@ class DatabasePage(wx.Panel):
             if item_import: menu.Append(item_import)
             if item_truncate:
                 menu.AppendSeparator()
-                menu.Append(item_truncate)                
+                menu.Append(item_truncate)
             if item_drop:
-                menu.Append(item_drop)                
+                menu.Append(item_drop)
             names = data["items"] if "category" == data["type"] else [data["name"]]
             category = data["category"] if "category" == data["type"] else data["type"]
             menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, category, names),

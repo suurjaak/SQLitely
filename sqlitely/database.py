@@ -480,7 +480,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                                               check_same_thread=False)
             self.connection.row_factory = self.row_factory
             self.connection.text_factory = str
-            self.compile_options = [x["compile_option"] for x in 
+            self.compile_options = [x["compile_option"] for x in
                                     self.execute("PRAGMA compile_options", log=False).fetchall()]
             self.populate_schema()
             self.update_fileinfo()
@@ -845,7 +845,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         @param   name      returns only this object,
                            or a dictionary with only these if collection
         @result            CaselessDict{name: {opts}},
-                           or {opts} if single name 
+                           or {opts} if single name
                            or None if no object by single name
         """
         category = category.lower()
@@ -899,7 +899,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def get_keys(self, table):
         """
-        Returns the domestic and foreign keys of a table. Domestic keys are 
+        Returns the domestic and foreign keys of a table. Domestic keys are
         table primary keys, plus any columns used as foreign keys by other tables.
 
         @return   ([{"name": ["col", ], "table": CaselessDict{ftable: ["fcol", ]}}],
@@ -1231,7 +1231,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 wheres.append(where)
 
             yield " AND ".join(wheres), args
-        
+
 
     def delete_cascade(self, table, rows, rowids=()):
         """

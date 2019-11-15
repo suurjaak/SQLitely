@@ -127,7 +127,7 @@ DBsOpen = {}
 
 """Path to SQLite analyzer tool."""
 DBAnalyzer = os.path.join(BinDirectory, "sqlite3_analyzer" + (
-    ".exe" if "win32"  == sys.platform else 
+    ".exe" if "win32"  == sys.platform else
     "_osx" if "darwin" == sys.platform else "_linux"
 ))
 

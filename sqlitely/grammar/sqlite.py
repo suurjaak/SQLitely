@@ -697,7 +697,7 @@ class Parser(object):
         """Returns ctx.conflict_clause value like "ROLLBACK", if any."""
         conflict = ctx.conflict_clause()
         if not conflict: return
-        action = (conflict.K_ROLLBACK() or 
+        action = (conflict.K_ROLLBACK() or
             conflict.K_ABORT() or conflict.K_FAIL() or conflict.K_IGNORE()
         )
         return self.t(action)
@@ -1008,7 +1008,7 @@ def test():
         -- comment
         CREATE TEMP TABLE -- comment
         -- comment
-        IF NOT EXISTS 
+        IF NOT EXISTS
         -- comment
         mytable (
             -- first line comment

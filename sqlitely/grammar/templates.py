@@ -347,7 +347,7 @@ COLUMN_DEFINITION = """
         %endif
         %if data["fk"].get("defer") is not None:
     {{ "NOT" if data["fk"]["defer"].get("not") else "" }}
-    DEFERRABLE 
+    DEFERRABLE
             %if data["fk"]["defer"].get("initial"):
     INITIALLY {{ data["fk"]["defer"]["initial"] }}
             %endif
@@ -462,7 +462,7 @@ TRIGGER
 {{ data.get("action") or "" }}
 
 %if data.get("columns"):
-  OF 
+  OF
     %for i, c in enumerate(data["columns"]):
   {{ Q(c["name"]) }}{{ CM("columns", i, root=root) }}
     %endfor
@@ -600,7 +600,7 @@ if not isdef("i"): i = 0
     %endif
     %if data.get("defer") is not None:
     {{ "NOT" if data["defer"].get("not") else "" }}
-    DEFERRABLE 
+    DEFERRABLE
         %if data["defer"].get("initial"):
     INITIALLY {{ data["defer"]["initial"] }}
         %endif

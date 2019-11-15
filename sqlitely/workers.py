@@ -151,9 +151,9 @@ class SearchThread(WorkerThread):
                 continue # for category
 
             for item in search["db"].get_category(category).values():
-                if (category in kws 
+                if (category in kws
                 and not match_words(item["name"], kws[category], any)
-                or "-" + category in kws 
+                or "-" + category in kws
                 and match_words(item["name"], kws["-" + category], any)):
                     continue # for item
 

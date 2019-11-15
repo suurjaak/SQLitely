@@ -1010,7 +1010,7 @@ class NoteButton(wx.Panel, wx.Button):
         if not self._label and not self._note:
             self._extent_label = self._extent_note = (0, 0)
             return
-            
+
         WORDWRAP = wx.lib.wordwrap.wordwrap
         width, height = self.Size
         if width > 20 and height > 20:
@@ -2220,7 +2220,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         """Sets STC style colours."""
         fgcolour, bgcolour, highcolour = (
             wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
-            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW 
+            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
                       if self.Enabled else wx.SYS_COLOUR_BTNFACE,
                       wx.SYS_COLOUR_HOTLIGHT)
         )
@@ -2270,7 +2270,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.autocomps_added.update(map(unicode, words))
         # A case-insensitive autocomp has to be sorted, will not work
         # properly otherwise. UserList would support arbitrarily sorting.
-        self.autocomps_total = sorted(list(self.autocomps_added) + 
+        self.autocomps_total = sorted(list(self.autocomps_added) +
                                       map(unicode, self.KEYWORDS),
                                       cmp=self.stricmp)
 
@@ -3130,7 +3130,7 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
         fmatch = match if callable(match) else bool
         dmatch = dict(match if isinstance(match, dict) else {}, **kwargs)
         mymatch = match if callable(match) and not dmatch else lambda x: (
-                  fmatch(x) and isinstance(x, dict) 
+                  fmatch(x) and isinstance(x, dict)
                   and all(x.get(k) == dmatch.get(k) for k in dmatch))
 
         item, myitem = self.GetNext(self.GetRootItem()), None

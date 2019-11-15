@@ -116,7 +116,6 @@ class SearchQueryParser(object):
                        {"name": "Item name", "columns": [{"name", "pk", }, ]}
         @return        (SQL string, SQL parameter dict, word and phrase list,
                         keyword map); phrases as tuple-wrapped single strings
-                       
         """
         words = [] # All encountered text words and quoted phrases
         keywords = collections.defaultdict(list) # {"table": [], "column": [], ..}

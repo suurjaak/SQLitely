@@ -806,7 +806,7 @@ except ImportError:
       Search from more than one source by adding more
       <font color="{{ conf.HelpCodeColour }}"><code>table:</code></font> or
       <font color="{{ conf.HelpCodeColour }}"><code>view:</code></font> keywords, or exclude certain
-      sources by adding a <font color="{{ conf.HelpCodeColour }}"><code>-table:</code></font> 
+      sources by adding a <font color="{{ conf.HelpCodeColour }}"><code>-table:</code></font>
       or <font color="{{ conf.HelpCodeColour }}"><code>-view:</code></font> keyword.
       <br />
     </td>
@@ -1407,7 +1407,7 @@ def plot(size):
         pad = pc.center(len(pad), pad[0])
     return bar + pad
 
-widths = {i: max([len(x[i]) for x in vals.values()] + 
+widths = {i: max([len(x[i]) for x in vals.values()] +
                  [len(cols[i])])
           for i in range(len(cols))}
 %>
