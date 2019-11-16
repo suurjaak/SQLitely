@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.11.2019
+@modified    16.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -754,7 +754,6 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
     def OnMenu(self, event):
         """Handler for opening popup menu in grid."""
-        event.Skip()
         menu = wx.Menu()
         menu_fks, menu_dks = wx.Menu(), wx.Menu()
 
@@ -849,6 +848,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 rows, cols = [event.Row], [event.Col]
         if not rows and self.View.GridCursorRow >= 0:
             rows, cols = [self.View.GridCursorRow], [self.View.GridCursorCol]
+        rows, cols = ([x for x in xx if x >= 0] for xx in (rows, cols))
 
         if rows:
             rowdatas = [self.rows_current[i] for i in rows if i < len(self.rows_current)]
@@ -1109,6 +1109,7 @@ class SQLPage(wx.Panel):
         grid.Bind(EVT_GRID_BASE,                          self._OnGridBaseEvent)
         grid.Bind(wx.EVT_CONTEXT_MENU,                    self._OnGridMenu)
         grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK,      self._OnGridMenu)
+        grid.GridWindow.Bind(wx.EVT_RIGHT_UP,             self._OnGridMenu)
         grid.GridWindow.Bind(wx.EVT_MOTION,               self._OnGridMouse)
         grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,            self._OnGridKey)
 
@@ -1709,6 +1710,7 @@ class DataObjectPage(wx.Panel):
         grid.Bind(EVT_GRID_BASE,                       self._OnGridBaseEvent)
         grid.Bind(wx.EVT_CONTEXT_MENU,                 self._OnGridMenu)
         grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK,   self._OnGridMenu)
+        grid.GridWindow.Bind(wx.EVT_RIGHT_UP,          self._OnGridMenu)
         grid.GridWindow.Bind(wx.EVT_MOTION,            self._OnGridMouse)
         grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,         self._OnGridKey)
         self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(lambda: self and (self.Layout(), self.Refresh())))
