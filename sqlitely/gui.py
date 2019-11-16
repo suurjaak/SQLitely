@@ -2385,6 +2385,7 @@ class DatabasePage(wx.Panel):
         tree.Bind(wx.EVT_TREE_ITEM_ACTIVATED,   self.on_change_tree_data)
         tree.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_data)
         tree.Bind(wx.EVT_CONTEXT_MENU,          self.on_rclick_tree_data)
+        tree.Bind(wx.EVT_SIZE,                  self.on_size_tree)
 
         sizer1.Add(sizer_topleft, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
         sizer1.Add(tree, proportion=1,
@@ -2501,6 +2502,7 @@ class DatabasePage(wx.Panel):
         tree.Bind(wx.EVT_TREE_ITEM_ACTIVATED,   self.on_change_tree_schema)
         tree.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_schema)
         tree.Bind(wx.EVT_CONTEXT_MENU,          self.on_rclick_tree_schema)
+        tree.Bind(wx.EVT_SIZE,                  self.on_size_tree)
         self.Bind(components.EVT_SCHEMA_PAGE,   self.on_schema_page_event)
         nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
                 self.on_close_schema_page, nb)
@@ -5273,6 +5275,13 @@ class DatabasePage(wx.Panel):
             tree.Expand(tree.GetItemParent(item))
         else:
             tree.Collapse(item) if tree.IsExpanded(item) else tree.Expand(item)
+
+
+    def on_size_tree(self, event):
+        """Sizes last tree column to available space."""
+        event.Skip()
+        tree = event.EventObject
+        tree.SetColumnWidth(1, tree.Size.width - tree.GetColumnWidth(0) - 30)
 
 
     def on_rclick_tree_data(self, event):
