@@ -2092,6 +2092,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 conf.save()
                 self.Bind(wx.EVT_LIST_DELETE_ALL_ITEMS,
                           self.on_clear_searchall, page.edit_searchall)
+        else:
+            page.handle_command("refresh")
         if page:
             if filename:
                 self.list_db.Select(0, on=False) # Deselect home row
