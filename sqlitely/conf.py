@@ -22,7 +22,7 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev197"
+Version = "1.0.dev198"
 VersionDate = "16.11.2019"
 
 if getattr(sys, "frozen", False):
@@ -51,7 +51,8 @@ OptionalFileDirectives = [
     "MaxConsoleHistory", "MaxDBSizeForFullCount", "MaxTableRowIDForFullCount",
     "MaxHistoryInitialMessages", "MaxRecentFiles", "MaxSearchHistory",
     "MaxSearchResults", "PopupUnexpectedErrors", "SearchResultsChunk",
-    "StatisticsPlotWidth", "StatusFlashLength", "UpdateCheckInterval",
+    "SeekLength", "SeekEndLength", "StatisticsPlotWidth", "StatusFlashLength",
+    "UpdateCheckInterval",
 ]
 OptionalFileDirectiveDefaults = {}
 
@@ -83,6 +84,12 @@ MaxDBSizeForFullCount = 500000000
 
 """Maximum table ROWID for doing full COUNT(*) if database size over MaxDBSizeForFullCount."""
 MaxTableRowIDForFullCount = 1000
+
+"""Number of rows to seek ahead on data grids, when scrolling to end of retrieved rows."""
+SeekLength = 100
+
+"""Number of rows to seek ahead on data grids, when jumping to data grid bottom."""
+SeekEndLength = 10000
 
 """Contents of Recent Files menu."""
 RecentFiles = []

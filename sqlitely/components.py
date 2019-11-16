@@ -62,8 +62,6 @@ class SQLiteGridBase(wx.grid.GridTableBase):
     the results of any SELECT query.
     """
 
-    """How many rows to seek ahead for query grids."""
-    SEEK_CHUNK_LENGTH = 100
 
     """wx.Grid stops working when too many rows."""
     MAX_ROWS = 5000000
@@ -109,7 +107,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             TYPES = dict((v, k) for k, vv in {"INTEGER": (int, long, bool),
                          "REAL": (float, )}.items() for v in vv)
             self.is_seek = True
-            self.SeekToRow(self.SEEK_CHUNK_LENGTH - 1)
+            self.SeekToRow(conf.SeekLength - 1)
             for col in self.columns if self.rows_current else ():
                 # Get column information from first values
                 value = self.rows_current[0][col["name"]]
@@ -121,15 +119,15 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             self.is_seek = data.get("is_count_estimated", False) \
                            or data["count"] is None \
                            or data["count"] != self.row_count
-            self.SeekToRow(self.SEEK_CHUNK_LENGTH - 1)
+            self.SeekToRow(conf.SeekLength - 1)
 
 
-    def GetNumberRows(self, total=False):
+    def GetNumberRows(self, total=False, present=False):
         """
-        Returns the number of grid rows, currently retrieved if query or filtered
-        else total row count.
+        Returns the number of grid rows, currently retrieved if present or query 
+        or filtered else total row count.
         """
-        return len(self.rows_current) if self.filters and not total else self.row_count
+        return len(self.rows_current) if (present or self.filters) and not total else self.row_count
 
 
     def GetNumberCols(self): return len(self.columns)
@@ -142,7 +140,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
     def SeekAhead(self, end=False):
         """Seeks ahead on the query cursor, by chunk length or everything."""
-        seek_count = len(self.rows_current) + self.SEEK_CHUNK_LENGTH - 1
+        seek_count = len(self.rows_current) + conf.SeekLength - 1
         if end: seek_count = sys.maxsize
         self.SeekToRow(seek_count)
 
@@ -169,6 +167,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 self.iterator_index += 1
             else:
                 self.row_iterator = None
+        if self.iterator_index >= self.MAX_ROWS:
+            self.row_iterator = None
         if self.is_seek and self.row_count < self.iterator_index + 1:
             self.row_count = self.iterator_index + 1
         if self.GetNumberRows() != rows_before:
@@ -1418,19 +1418,36 @@ class SQLPage(wx.Panel):
 
 
     def _OnGridKey(self, event):
-        """Handler for grid keypress, copies selection to clipboard on Ctrl-C/Insert."""
-        if not event.ControlDown() \
-        or event.KeyCode not in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT):
-            return event.Skip()
+        """
+        Handler for grid keypress, seeks ahead on Ctrl-Down/End,
+        copies selection to clipboard on Ctrl-C/Insert.
+        """
+        if not event.ControlDown(): return event.Skip()
 
-        rows, cols = get_grid_selection(self._grid)
-        if not rows or not cols: return
+        if event.KeyCode in (wx.WXK_DOWN, wx.WXK_END, wx.WXK_NUMPAD_END) \
+        and not self._grid.Table.IsComplete():
+            # Disallow jumping to the very end, may be a billion rows.
+            row, col = (self._grid.GridCursorRow, self._grid.GridCursorCol)
+            rows_before = self._grid.Table.GetNumberRows(present=True) - 1
+            seekrow = (rows_before / conf.SeekEndLength + 1) * conf.SeekEndLength
+            self._grid.Table.SeekToRow(seekrow)
+            row2 = self._grid.Table.GetNumberRows(present=True) - 1
+            if row2 == seekrow: row2 -= 1 # Stay at #10000, #20000 etc
+            self._grid.GoToCell(row2, col)
+            if event.ShiftDown():
+                self._grid.SelectBlock(row, col, row2, col)
 
-        if wx.TheClipboard.Open():
-            data = [[self._grid.GetCellValue(r, c) for c in cols] for r in rows]
-            text = "\n".join("\t".join(c for c in r) for r in data)
-            d = wx.TextDataObject(text)
-            wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+        elif event.KeyCode in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT) \
+        and not event.ShiftDown():
+            rows, cols = get_grid_selection(self._grid)
+            if not rows or not cols: return
+
+            if wx.TheClipboard.Open():
+                data = [[self._grid.GetCellValue(r, c) for c in cols] for r in rows]
+                text = "\n".join("\t".join(c for c in r) for r in data)
+                d = wx.TextDataObject(text)
+                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+        else: event.Skip()
 
 
     def _OnGridBaseEvent(self, event):
@@ -2186,19 +2203,36 @@ class DataObjectPage(wx.Panel):
 
 
     def _OnGridKey(self, event):
-        """Handler for grid keypress, copies selection to clipboard on Ctrl-C/Insert."""
-        if not event.ControlDown() \
-        or event.KeyCode not in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT):
-            return event.Skip()
+        """
+        Handler for grid keypress, seeks ahead on Ctrl-Down/End,
+        copies selection to clipboard on Ctrl-C/Insert.
+        """
+        if not event.ControlDown(): return event.Skip()
 
-        rows, cols = get_grid_selection(self._grid)
-        if not rows or not cols: return
+        if event.KeyCode in (wx.WXK_DOWN, wx.WXK_END, wx.WXK_NUMPAD_END) \
+        and not self._grid.Table.IsComplete():
+            # Disallow jumping to the very end, may be a billion rows.
+            row, col = (self._grid.GridCursorRow, self._grid.GridCursorCol)
+            rows_before = self._grid.Table.GetNumberRows(present=True) - 1
+            seekrow = (rows_before / conf.SeekEndLength + 1) * conf.SeekEndLength
+            self._grid.Table.SeekToRow(seekrow)
+            row2 = self._grid.Table.GetNumberRows(present=True) - 1
+            if row2 == seekrow: row2 -= 1 # Stay at #10000, #20000 etc
+            self._grid.GoToCell(row2, col)
+            if event.ShiftDown():
+                self._grid.SelectBlock(row, col, row2, col)
 
-        if wx.TheClipboard.Open():
-            data = [[self._grid.GetCellValue(r, c) for c in cols] for r in rows]
-            text = "\n".join("\t".join(c for c in r) for r in data)
-            d = wx.TextDataObject(text)
-            wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+        elif event.KeyCode in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT) \
+        and not event.ShiftDown():
+            rows, cols = get_grid_selection(self._grid)
+            if not rows or not cols: return
+
+            if wx.TheClipboard.Open():
+                data = [[self._grid.GetCellValue(r, c) for c in cols] for r in rows]
+                text = "\n".join("\t".join(c for c in r) for r in data)
+                d = wx.TextDataObject(text)
+                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+        else: event.Skip()
 
 
     def _OnGridBaseEvent(self, event):
