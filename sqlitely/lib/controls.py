@@ -62,7 +62,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    13.11.2019
+@modified    16.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -2466,7 +2466,6 @@ class TabbedHtmlWindow(wx.Panel):
         # [{"title", "content", "id", "info", "scrollpos", "scrollrange"}]
         self._tabs = []
         self._default_page = ""      # Content shown on the blank page
-        self._delete_callback = None # Function called after deleting a tab
         ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
 
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2485,6 +2484,8 @@ class TabbedHtmlWindow(wx.Panel):
         self._html.Bind(wx.EVT_SIZE, self._OnSize)
         notebook.GetTabArea().Bind(wx.EVT_LEFT_DCLICK, self._OnLeftDClickTabArea)
         notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self._OnChangeTab)
+        notebook.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
+                      self._OnMenu)
         notebook.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
                       self._OnDeleteTab)
         notebook.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_DROPPED,
@@ -2501,7 +2502,7 @@ class TabbedHtmlWindow(wx.Panel):
                      "SelectAll", "SelectionToText",
                      "GetBackgroundColour", "SetBackgroundColour"]:
             setattr(self, name, getattr(self._html, name))
-        for name in ["DeletePage", "GetSelection", "GetTabAreaColour", "SetTabAreaColour"]:
+        for name in ["DeletePage", "GetPageCount", "GetTabAreaColour", "SetTabAreaColour"]:
             setattr(self, name, getattr(self._notebook, name))
 
         self._CreateTab(0, "") # Make default empty tab in notebook with no text
@@ -2512,7 +2513,8 @@ class TabbedHtmlWindow(wx.Panel):
         """Fires a TabLeftDClickEvent if a tab header was double-clicked."""
         area = self._notebook.GetTabArea()
         where, tab = area.HitTest(event.GetPosition())
-        if wx.lib.agw.flatnotebook.FNB_TAB == where and tab < len(self._tabs):
+        if wx.lib.agw.flatnotebook.FNB_TAB == where and tab < len(self._tabs) \
+        and self._tabs[tab].get("info"):
             wx.PostEvent(self, TabLeftDClickEvent(Data=self._tabs[tab]))
 
 
@@ -2561,13 +2563,12 @@ class TabbedHtmlWindow(wx.Panel):
     def _OnChangeTab(self, event):
         """Handler for selecting another tab in notebook, loads tab content."""
         if self._tabs:
-            self.SetActiveTab(self._notebook.GetSelection())
-            # Forward event to TabbedHtmlWindow listeners
-            wx.PostEvent(self.GetEventHandler(), event)
+            self.SetSelection(self._notebook.GetSelection())
+            wx.PostEvent(self, event) # Forward event to external listeners
 
 
     def _OnDropTab(self, event):
-        """Handler for dropping a dragged tab."""
+        """Handler for dropping a dragged tab, rearranges internal data."""
         new, old = event.GetSelection(), event.GetOldSelection()
         new = min(new, len(self._tabs) - 1) # Can go over the edge
         if self._tabs and new != old and new >= 0:
@@ -2576,15 +2577,17 @@ class TabbedHtmlWindow(wx.Panel):
 
     def _OnDeleteTab(self, event):
         """Handler for clicking in notebook to close a tab."""
-        if not self._tabs:
-            event.Veto() # User clicked to delete the default page, cancel
-        else:
-            nb = self._notebook
-            tab = self._tabs[event.GetSelection()]
+        if not self._tabs: return event.Veto() # Cancel deleting default page
+
+        nb = self._notebook
+        pagecount = nb.GetPageCount()
+        tab = self._tabs[event.GetSelection()]
+        if 1 == pagecount: event.Veto() # Only page: reuse
+
+        def after():
             self._tabs.remove(tab)
-            if 1 == nb.GetPageCount(): # Was the only page,
-                nb.SetPageText(0, "")  # reuse as default empty tab
-                event.Veto()
+            if 1 == pagecount: # Was the only page, reuse as default
+                nb.SetPageText(0, "")
                 self._SetPage(self._default_page)
                 # Hide dropdown selector, remove X from tab style.
                 style = nb.GetAGWWindowStyleFlag()
@@ -2592,11 +2595,24 @@ class TabbedHtmlWindow(wx.Panel):
                          wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST
                 nb.SetAGWWindowStyleFlag(style)
             else:
-                index = min(nb.GetSelection(), nb.GetPageCount() - 2)
-                self.SetActiveTab(index)
-            if self._delete_callback:
-                self._delete_callback(tab)
+                index = min(nb.GetSelection(), pagecount - 2)
+                self.SetSelection(index)
 
+        if tab.get("info"):
+            evt = wx.lib.agw.flatnotebook.FlatNotebookEvent(event.EventType, self.Id)
+            evt.SetSelection(event.GetSelection())
+            evt.SetEventObject(self)
+            wx.PostEvent(self, evt) # Forward event to external listeners
+        wx.CallLater(0, after)
+
+
+    def _OnMenu(self, event):
+        """Handler for notebook page context menu, forwards event."""
+        evt = wx.lib.agw.flatnotebook.FlatNotebookEvent(event.EventType, self.Id)
+        evt.SetSelection(event.GetSelection())
+        evt.SetEventObject(self)
+        wx.PostEvent(self, evt) # Forward event to external listeners
+        
 
     def _CreateTab(self, index, title):
         """Creates a new tab in the tab container at specified index."""
@@ -2611,21 +2627,17 @@ class TabbedHtmlWindow(wx.Panel):
         ColourManager.Manage(self._html, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
 
 
-    def SetDeleteCallback(self, callback):
-        """Sets the function called after deleting a tab, with tab data."""
-        self._delete_callback = callback
-
-
-    def SetDefaultPage(self, content):
+    def SetCustomPage(self, content):
+        """Sets custom page to show if there are no pages left."""
         self._default_page = content
         if not self._tabs:
             self._SetPage(self._default_page)
 
 
-    def InsertTab(self, index, title, id, content, info):
+    def InsertPage(self, index, content, title, id, info=None):
         """
         Inserts a new tab with the specified title and content at the specified
-        index, and activates the new tab.
+        position, and activates the new tab.
         """
         tab = {"title": title, "content": content, "id": id,
                "scrollpos": [0, 0], "scrollrange": [0, 0], "info": info}
@@ -2646,13 +2658,19 @@ class TabbedHtmlWindow(wx.Panel):
         finally: self._html.Thaw()
 
 
-    def GetTabDataByID(self, id):
-        """Returns the data of the tab with the specified ID, or None."""
-        result = next((x for x in self._tabs if x["id"] == id), None)
-        return result
+    def GetPage(self, page=None, id=None):
+        """Returns the tab at the given position or with given ID, or None."""
+        if page is not None:
+            return self._tabs[page] if 0 <= page < len(self._tabs) else None
+        return next((x for x in self._tabs if x["id"] == id), None)
 
 
-    def SetTabDataByID(self, id, title, content, info, new_id=None):
+    def GetPageIndex(self, win):
+        """Returns the index at which the tab is found."""
+        return next((i for i, x in enumerate(self._tabs) if x == win), -1)
+
+
+    def SetPageData(self, id, title, content, info, new_id=None):
         """
         Sets the title, content and info of the tab with the specified ID.
 
@@ -2674,8 +2692,16 @@ class TabbedHtmlWindow(wx.Panel):
                 finally: self._html.Thaw()
 
 
-    def SetActiveTab(self, index):
-        """Sets active the tab at the specified index."""
+    def GetSelection(self):
+        """Returns the currently selected page, or -1 if none was selected."""
+        return self._notebook.GetSelection()
+
+
+    def SetSelection(self, index=None, id=None):
+        """Sets active the tab at the specified index, or with specified ID."""
+        if id is not None:
+            tab = next((x for x in self._tabs if x["id"] == id), None)
+            index = self._tabs.index(tab)
         tab = self._tabs[index]
         self._notebook.SetSelection(index)
         self._html.Freeze()
@@ -2684,23 +2710,28 @@ class TabbedHtmlWindow(wx.Panel):
             self._html.Scroll(*tab["scrollpos"])
         finally: self._html.Thaw()
 
-
-    def SetActiveTabByID(self, id):
-        """Sets active the tab with the specified ID."""
-        tab = next((x for x in self._tabs if x["id"] == id), None)
-        index = self._tabs.index(tab)
-        self._notebook.SetSelection(index)
-        self._html.Freeze()
-        try:
-            self._SetPage(tab["content"])
-            self._html.Scroll(*tab["scrollpos"])
-        finally: self._html.Thaw()
+    Selection = property(GetSelection, SetSelection)
 
 
     def GetActiveTabData(self):
         """Returns all the data for the active tab."""
         if self._tabs:
             return self._tabs[self._notebook.GetSelection()]
+
+
+    def GetHtmlWindow(self):
+        """Returns HTML window."""
+        return self._html
+
+
+    def GetNotebook(self):
+        """Returns tabbed notebook."""
+        return self._notebook
+
+
+    def GetTabArea(self):
+        """Returns notebook tab area."""
+        return self._notebook.GetTabArea()
 
 
     def GetTabCount(self):

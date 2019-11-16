@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.11.2019
+@modified    16.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2320,26 +2320,28 @@ class DatabasePage(wx.Panel):
         if conf.SearchInMeta:
             self.label_search.Label = "&Search in metadata:"
 
-        html = self.html_searchall = controls.TabbedHtmlWindow(page)
-        default = step.Template(templates.SEARCH_WELCOME_HTML).expand()
-        html.SetDefaultPage(default)
-        html.SetDeleteCallback(self.on_delete_tab_callback)
+        nb = self.notebook_search = controls.TabbedHtmlWindow(page)
+        ColourManager.Manage(nb, "TabAreaColour", "WidgetColour")
+        nb.Font.PixelSize = (0, 8)
+        nb.SetCustomPage(step.Template(templates.SEARCH_WELCOME_HTML).expand())
         label_html.Bind(wx.html.EVT_HTML_LINK_CLICKED,
                         self.on_click_html_link)
-        html.Bind(wx.html.EVT_HTML_LINK_CLICKED,
-                  self.on_click_html_link)
-        html._html.Bind(wx.EVT_RIGHT_UP, self.on_rightclick_searchall)
-        html.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_searchall_tab, html)
-        html.Bind(controls.EVT_TAB_LEFT_DCLICK, self.on_dclick_searchall_tab)
-        self.register_notebook_hotkeys(html)
-        ColourManager.Manage(html, "TabAreaColour", "WidgetColour")
-        html.Font.PixelSize = (0, 8)
+        self.Bind(wx.html.EVT_HTML_LINK_CLICKED, self.on_click_html_link, nb)
+        self.Bind(wx.EVT_RIGHT_UP, self.on_rightclick_searchall, nb.GetHtmlWindow())
+        self.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_searchall_tab, nb)
+        nb.Bind(controls.EVT_TAB_LEFT_DCLICK, self.on_dclick_searchall_tab)
+        self.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
+                  self.on_close_search_page, nb)
+        self.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
+                  self.on_notebook_menu, nb)
+        self.Bind(wx.EVT_CONTEXT_MENU, self.on_notebook_menu, nb.GetTabArea())
+        self.register_notebook_hotkeys(nb)
 
         sizer_top.Add(label_html, proportion=1, flag=wx.GROW)
         sizer_top.Add(tb, border=5, flag=wx.TOP |
                       wx.ALIGN_CENTER_VERTICAL | wx.ALIGN_RIGHT)
         sizer.Add(sizer_top, border=5, flag=wx.TOP | wx.RIGHT | wx.GROW)
-        sizer.Add(html, border=5, proportion=1,
+        sizer.Add(nb, border=5, proportion=1,
                   flag=wx.GROW | wx.LEFT | wx.RIGHT | wx.BOTTOM)
         wx.CallAfter(label_html.Show)
 
@@ -2417,11 +2419,11 @@ class DatabasePage(wx.Panel):
         self.Bind(components.EVT_DATA_PAGE, self.on_data_page_event)
         self.Bind(components.EVT_IMPORT,    self.on_import_event)
         self.Bind(components.EVT_PROGRESS,  self.on_close_data_export)
-        nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
-                self.on_close_data_page, nb)
-        nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
-                self.on_notebook_menu, nb)
-        nb.GetTabArea().Bind(wx.EVT_CONTEXT_MENU, self.on_notebook_menu)
+        self.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
+                  self.on_close_data_page, nb)
+        self.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
+                  self.on_notebook_menu, nb)
+        self.Bind(wx.EVT_CONTEXT_MENU, self.on_notebook_menu, nb.GetTabArea())
         self.register_notebook_hotkeys(nb)
 
 
@@ -2504,11 +2506,11 @@ class DatabasePage(wx.Panel):
         tree.Bind(wx.EVT_CONTEXT_MENU,          self.on_rclick_tree_schema)
         tree.Bind(wx.EVT_SIZE,                  self.on_size_tree)
         self.Bind(components.EVT_SCHEMA_PAGE,   self.on_schema_page_event)
-        nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
-                self.on_close_schema_page, nb)
-        nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
-                self.on_notebook_menu, nb)
-        nb.GetTabArea().Bind(wx.EVT_CONTEXT_MENU, self.on_notebook_menu)
+        self.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
+                  self.on_close_schema_page, nb)
+        self.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
+                  self.on_notebook_menu, nb)
+        self.Bind(wx.EVT_CONTEXT_MENU, self.on_notebook_menu, nb.GetTabArea())
         self.register_notebook_hotkeys(nb)
 
 
@@ -2548,15 +2550,15 @@ class DatabasePage(wx.Panel):
 
         sizer.Add(nb, proportion=1, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
 
-        nb.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_sql_page, nb)
-        nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
-                self.on_close_sql_page, nb)
-        nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_DROPPED,
-                self.on_dragdrop_sql_page, nb)
-        nb.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
-                self.on_notebook_menu, nb)
-        nb.GetTabArea().Bind(wx.EVT_CONTEXT_MENU, self.on_notebook_menu)
-        nb.Bind(wx.EVT_CHAR_HOOK, self.on_key_sql_page)
+        self.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_sql_page, nb)
+        self.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
+                  self.on_close_sql_page, nb)
+        self.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_DROPPED,
+                  self.on_dragdrop_sql_page, nb)
+        self.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
+                  self.on_notebook_menu, nb)
+        self.Bind(wx.EVT_CONTEXT_MENU, self.on_notebook_menu, nb.GetTabArea())
+        self.Bind(wx.EVT_CHAR_HOOK, self.on_key_sql_page, nb)
         self.register_notebook_hotkeys(nb)
 
 
@@ -3039,7 +3041,7 @@ class DatabasePage(wx.Panel):
             self.label_html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNFACE)
             self.label_html.ForegroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
             default = step.Template(templates.SEARCH_WELCOME_HTML).expand()
-            self.html_searchall.SetDefaultPage(default)
+            self.notebook_search.SetCustomPage(default)
             self.populate_statistics()
             self.load_tree_data()
             self.load_tree_schema()
@@ -3604,12 +3606,15 @@ class DatabasePage(wx.Panel):
                         1, conf.MaxSearchHistory)
 
         # Save last search results HTML
-        search_data = self.html_searchall.GetActiveTabData()
+        nb = self.notebook_search
+        search_data = next((nb.GetPage(i) for i in range(nb.GetPageCount())
+                            if (nb.GetPage(i) or {}).get("info")), None)
         if search_data:
             info = {}
             if search_data.get("info"):
-                info["map"] = search_data["info"].get("map")
-                info["text"] = search_data["info"].get("text")
+                info["map"]    = search_data["info"].get("map")
+                info["text"]   = search_data["info"].get("text")
+                info["source"] = search_data["info"].get("source")
             data = {"content": search_data["content"],
                     "id": search_data["id"], "info": info,
                     "title": search_data["title"], }
@@ -3701,28 +3706,28 @@ class DatabasePage(wx.Panel):
         HTML link click handler to check, in order to display a context menu.
         """
         event.Skip()
-        self.html_searchall.is_rightclick = True
+        self.notebook_search.is_rightclick = True
         def reset():
-            if self.html_searchall.is_rightclick: # Flag still up: show menu
+            if self.notebook_search.is_rightclick: # Flag still up: show menu
                 def on_copy(event):
                     if wx.TheClipboard.Open():
-                        text = self.html_searchall.SelectionToText()
+                        text = self.notebook_search.SelectionToText()
                         d = wx.TextDataObject(text)
                         wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
 
                 def on_selectall(event):
-                    self.html_searchall.SelectAll()
-                self.html_searchall.is_rightclick = False
+                    self.notebook_search.SelectAll()
+                self.notebook_search.is_rightclick = False
                 menu = wx.Menu()
                 item_selection = wx.MenuItem(menu, -1, "&Copy selection")
                 item_selectall = wx.MenuItem(menu, -1, "&Select all")
                 menu.Append(item_selection)
                 menu.AppendSeparator()
                 menu.Append(item_selectall)
-                item_selection.Enable(bool(self.html_searchall.SelectionToText()))
+                item_selection.Enable(bool(self.notebook_search.SelectionToText()))
                 menu.Bind(wx.EVT_MENU, on_copy,      item_selection)
                 menu.Bind(wx.EVT_MENU, on_selectall, item_selectall)
-                self.html_searchall.PopupMenu(menu)
+                self.notebook_search.PopupMenu(menu)
         wx.CallAfter(reset)
 
 
@@ -3734,14 +3739,14 @@ class DatabasePage(wx.Panel):
         href = event.GetLinkInfo().Href
         link_data, tab_data = None, None
         if event.EventObject != self.label_html:
-            tab_data = self.html_searchall.GetActiveTabData()
+            tab_data = self.notebook_search.GetPage(self.notebook_search.Selection)
         if tab_data and tab_data.get("info"):
             link_data = tab_data["info"]["map"].get(href, {})
 
         # Workaround for no separate wx.html.HtmlWindow link right click event
-        if getattr(self.html_searchall, "is_rightclick", False):
+        if getattr(self.notebook_search, "is_rightclick", False):
             # Open a pop-up menu with options to copy or select text
-            self.html_searchall.is_rightclick = False
+            self.notebook_search.is_rightclick = False
             def clipboardize(text):
                 if wx.TheClipboard.Open():
                     d = wx.TextDataObject(text)
@@ -3764,9 +3769,9 @@ class DatabasePage(wx.Panel):
                 clipboardize(href)
 
             def on_copyselection(event):
-                clipboardize(self.html_searchall.SelectionToText())
+                clipboardize(self.notebook_search.SelectionToText())
             def on_selectall(event):
-                self.html_searchall.SelectAll()
+                self.notebook_search.SelectAll()
             menu = wx.Menu()
             item_selection = wx.MenuItem(menu, -1, "&Copy selection")
             item_copy = wx.MenuItem(menu, -1, menutitle)
@@ -3774,11 +3779,11 @@ class DatabasePage(wx.Panel):
             menu.Append(item_selection)
             menu.Append(item_copy)
             menu.Append(item_selectall)
-            item_selection.Enable(bool(self.html_searchall.SelectionToText()))
+            item_selection.Enable(bool(self.notebook_search.SelectionToText()))
             menu.Bind(wx.EVT_MENU, on_copyselection, item_selection)
             menu.Bind(wx.EVT_MENU, handler,          item_copy)
             menu.Bind(wx.EVT_MENU, on_selectall,     item_selectall)
-            self.html_searchall.PopupMenu(menu)
+            self.notebook_search.PopupMenu(menu)
         elif href.startswith("file://"):
             # Open the link, or file, or program internal link to table
             filename = path = urllib.url2pathname(href[5:])
@@ -3811,12 +3816,12 @@ class DatabasePage(wx.Panel):
             # Go to database subpage
             page = href[5:]
             if "#help" == page:
-                html = self.html_searchall
-                if html.GetTabDataByID(0):
-                    html.SetActiveTabByID(0)
+                nb = self.notebook_search
+                if nb.GetPage(id=0):
+                    nb.SetSelection(id=0)
                 else:
                     h = step.Template(templates.SEARCH_HELP_LONG_HTML).expand()
-                    html.InsertTab(html.GetTabCount(), "Search help", 0, h, None)
+                    nb.InsertPage(nb.GetTabCount(), h, "Search help", 0)
             elif "#search" == page:
                 self.edit_searchall.SetFocus()
             else:
@@ -3831,7 +3836,6 @@ class DatabasePage(wx.Panel):
 
     def on_searchall_toggle_toolbar(self, event):
         """Handler for toggling new tab setting in search toolbar."""
-        """Handler for toggling a setting in search toolbar."""
         if wx.ID_INDEX == event.Id:
             conf.SearchInMeta = True
             conf.SearchInData = False
@@ -3854,17 +3858,20 @@ class DatabasePage(wx.Panel):
         Handler for clicking to stop a search, signals the search thread to
         close.
         """
-        tab_data = self.html_searchall.GetActiveTabData()
-        if tab_data and tab_data["id"] in self.workers_search:
+        nb = self.notebook_search
+        for tab_data in map(nb.GetPage, range(nb.GetPageCount())):
+            if not tab_data or tab_data["id"] not in self.workers_search:
+                continue # for tab_data
             self.tb_search_settings.SetToolNormalBitmap(
                 wx.ID_STOP, images.ToolbarStopped.Bitmap)
             self.workers_search[tab_data["id"]].stop()
             del self.workers_search[tab_data["id"]]
+            break # for tab_data
 
 
     def on_change_searchall_tab(self, event):
         """Handler for changing a tab in search window, updates stop button."""
-        tab_data = self.html_searchall.GetActiveTabData()
+        tab_data = self.notebook_search.GetPage(self.notebook_search.Selection)
         if tab_data and tab_data["id"] in self.workers_search:
             self.tb_search_settings.SetToolNormalBitmap(
                 wx.ID_STOP, images.ToolbarStop.Bitmap)
@@ -3878,10 +3885,16 @@ class DatabasePage(wx.Panel):
         Handler for double-clicking a search tab header, sets the search box
         value to tab text.
         """
-        text = event.Data and (event.Data.get("info") or {}).get("text")
-        if text:
-            self.edit_searchall.Value = text
-            self.edit_searchall.SetFocus()
+        if not event.Data: return
+
+        text, source = event.Data["info"]["text"], event.Data["info"]["source"]
+        myid = wx.ID_INDEX if "meta" == source else wx.ID_STATIC
+        evt = wx.CommandEvent(wx.wxEVT_COMMAND_TOOL_CLICKED, myid)
+        evt.SetEventObject(self.tb_search_settings)
+        wx.PostEvent(self, evt)
+        self.edit_searchall.Value = text
+        self.edit_searchall.SetFocus()
+        self.edit_searchall.SelectAll()
 
 
     def on_searchall_result(self, event):
@@ -3891,7 +3904,7 @@ class DatabasePage(wx.Panel):
         """
         result = event.result
         search_id, search_done = result.get("search", {}).get("id"), False
-        tab_data = self.html_searchall.GetTabDataByID(search_id)
+        tab_data = self.notebook_search.GetPage(id=search_id)
         if tab_data:
             tab_data["info"]["map"].update(result.get("map", {}))
             tab_data["info"]["partial_html"] += result.get("output", "")
@@ -3903,8 +3916,8 @@ class DatabasePage(wx.Panel):
             text = tab_data["info"]["text"]
             title = text[:50] + ".." if len(text) > 50 else text
             title += " (%s)" % result.get("count", 0)
-            self.html_searchall.SetTabDataByID(search_id, title, html,
-                                               tab_data["info"])
+            self.notebook_search.SetPageData(search_id, title, html,
+                                             tab_data["info"])
         if search_done:
             guibase.status('Finished searching for "%s" in %s.',
                            result["search"]["text"], self.db, flash=True)
@@ -3926,21 +3939,22 @@ class DatabasePage(wx.Panel):
             wx.PostEvent(self, SearchEvent(result=result))
 
 
-    def on_searchall(self, event):
+    def on_searchall(self, event=None, text=None, source=None):
         """
         Handler for clicking to global search the database.
         """
-        text = self.edit_searchall.Value
-        if text.strip():
+        has_focus = self.edit_searchall.HasFocus()
+        text = text or self.edit_searchall.Value.strip()
+        if text:
             guibase.status('Searching for "%s" in %s.',
                            text, self.db, flash=True)
-            html = self.html_searchall
+            nb = self.notebook_search
             data = {"id": wx.NewIdRef().Id, "db": self.db, "text": text,
-                    "map": {}, "width": html.Size.width * 5/9, "partial_html": ""}
-            if conf.SearchInMeta:
+                    "map": {}, "width": nb.Size.width * 5/9, "partial_html": ""}
+            if "meta" == source or conf.SearchInMeta:
                 data["source"] = "meta"
                 fromtext = "database metadata"
-            elif conf.SearchInData:
+            elif "data" == source or conf.SearchInData:
                 data["source"] = "data"
                 fromtext = "database data"
             # Partially assembled HTML for current results
@@ -3955,33 +3969,33 @@ class DatabasePage(wx.Panel):
 
             title = text[:50] + ".." if len(text) > 50 else text
             content = data["partial_html"] + "</table></font>"
-            if conf.SearchUseNewTab or not html.GetTabCount():
-                html.InsertTab(0, title, data["id"], content, data)
+            if conf.SearchUseNewTab or not nb.GetTabCount():
+                nb.InsertPage(0, content, title, data["id"], data)
             else:
                 # Set new ID for the existing reused tab
-                html.SetTabDataByID(html.GetActiveTabData()["id"], title,
-                                    content, data, data["id"])
+                page = self.notebook_search.GetPage(self.notebook_search.Selection)
+                nb.SetPageData(page["id"], title,
+                               content, data, data["id"])
 
             self.notebook.SetSelection(self.pageorder[self.page_search])
-            util.add_unique(conf.SearchHistory, text.strip(), 1,
-                            conf.MaxSearchHistory)
+            util.add_unique(conf.SearchHistory, text, 1, conf.MaxSearchHistory)
             self.edit_searchall.SetChoices(conf.SearchHistory)
-            self.edit_searchall.SetFocus()
+            if has_focus: self.edit_searchall.SetFocus()
             conf.save()
 
 
-    def on_delete_tab_callback(self, tab):
-        """
-        Function called by html_searchall after deleting a tab, stops the
-        ongoing search, if any.
-        """
-        tab_data = self.html_searchall.GetActiveTabData()
-        if tab_data and tab_data["id"] == tab["id"]:
+    def on_close_search_page(self, event):
+        """Handler for closing a search page, stops its ongoing search if any."""
+        tab_data = self.notebook_search.GetPage(event.GetSelection())
+        if tab_data and tab_data.get("info"):
+            item = {"name": tab_data["info"]["text"], "type": tab_data["info"]["source"]}
+            self.pages_closed[self.notebook_search].append(item)
+        if tab_data and tab_data["id"] == tab_data["id"]:
             self.tb_search_settings.SetToolNormalBitmap(
                 wx.ID_STOP, images.ToolbarStopped.Bitmap)
-        if tab["id"] in self.workers_search:
-            self.workers_search[tab["id"]].stop()
-            del self.workers_search[tab["id"]]
+        if tab_data and tab_data["id"] in self.workers_search:
+            self.workers_search[tab_data["id"]].stop()
+            del self.workers_search[tab_data["id"]]
 
 
     def on_copy_sql(self, stc, event=None):
@@ -4032,6 +4046,10 @@ class DatabasePage(wx.Panel):
                 self.notebook_sql.SetPageText(0, title)
             else: self.add_sql_page(title, text)
             del pp[index]
+        elif notebook is self.notebook_search:
+            text, source = pp[index]["name"], pp[index]["type"]
+            self.on_searchall(text=text, source=source)
+            del pp[index]
         else:
             category, name = pp[index]["type"], pp[index]["name"]
             f = self.add_data_page if notebook is self.notebook_data \
@@ -4041,31 +4059,49 @@ class DatabasePage(wx.Panel):
 
     def on_notebook_menu(self, event):
         """Handler for right-clicking a notebook header, opens menu."""
+        nbs = (self.notebook_search, self.notebook_data, self.notebook_schema,
+               self.notebook_sql)
         has_page = not isinstance(event, wx.ContextMenuEvent)
-        nb = event.EventObject if has_page else event.EventObject.Parent
-        page = nb.GetPage(event.Selection) if has_page else None
+        nb = event.EventObject
+        while nb and nb not in nbs: nb = nb.Parent
+        page = nb.GetPage(event.GetSelection()) if has_page else None
 
         def fmtname(item, cap=False):
-            vv = [item.get(x) for x in ("type", "name")]
-            t = "%s %s" % (vv[0], grammar.quote(vv[1])) if all(vv) else vv[-1]
+            vv = tuple(item.get(x) for x in ("type", "name"))
+            if nb is self.notebook_search: t = "%s search: %s" % vv
+            else: t = "%s %s" % (vv[0], grammar.quote(vv[1])) if all(vv) else vv[-1]
             return "%s%s" % (t[0].capitalize(), t[1:]) if cap else t
 
+        def on_take(event=None):
+            text, source = page["info"]["text"], page["info"]["source"]
+            myid = wx.ID_INDEX if "meta" == source else wx.ID_STATIC
+            evt = wx.CommandEvent(wx.wxEVT_COMMAND_TOOL_CLICKED, myid)
+            evt.SetEventObject(self.tb_search_settings)
+            wx.PostEvent(self, evt)
+            self.edit_searchall.Value = text
+            self.edit_searchall.SetFocus()
+            self.edit_searchall.SelectAll()
+
         menu, hmenu = wx.Menu(), wx.Menu()
-        item_close = item_save = item_last = None
+        item_close = item_save = item_last = item_take = None
 
         pp = self.pages_closed.get(nb, [])
-        if nb is not self.notebook_sql: # Remove stale items
+        if nb in (self.notebook_data, self.notebook_schema): # Remove stale items
             for i, item in list(enumerate(pp))[::-1]:
                 if item["name"] not in self.db.schema[item["type"]]: del pp[i]
 
         if page:
             item_close = wx.MenuItem(menu, -1, "&Close\t(Ctrl-W)")
             menu.Bind(wx.EVT_MENU, lambda e: nb.DeletePage(nb.GetPageIndex(page)), item_close)
-            if not isinstance(page, components.SQLPage):
+            if isinstance(page, (components.DataObjectPage, components.SchemaObjectPage)):
                 item_save = wx.MenuItem(menu, -1, "&Save")
                 if not page.IsChanged() if isinstance(page, components.DataObjectPage) \
                 else page.ReadOnly: item_save.Enable(False)
                 menu.Bind(wx.EVT_MENU, lambda e: page.Save(), item_save)
+
+        if nb is self.notebook_search and page and page.get("info"):
+            item_take = wx.MenuItem(menu, -1, "&Take search query")
+            menu.Bind(wx.EVT_MENU, on_take, item_take)
 
         if pp:
             item_last = wx.MenuItem(menu, -1, "Re&open %s\t(Ctrl-Shift-T)" % fmtname(pp[-1]))
@@ -4077,6 +4113,7 @@ class DatabasePage(wx.Panel):
 
         if item_close: menu.Append(item_close)
         if item_save:  menu.Append(item_save)
+        if item_take:  menu.Append(item_take)
 
         if hmenu.MenuItemCount:
             if menu.MenuItemCount: menu.AppendSeparator()
@@ -4977,7 +5014,7 @@ class DatabasePage(wx.Panel):
             html = last_search.get("content", "")
             info = last_search.get("info")
             tabid = wx.NewIdRef().Id if 0 != last_search.get("id") else 0
-            self.html_searchall.InsertTab(0, title, tabid, html, info)
+            self.notebook_search.InsertPage(0, html, title, tabid, info)
 
         self.db.populate_schema(count=True)
         self.update_tabheader()
