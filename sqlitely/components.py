@@ -799,6 +799,19 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             self.NotifyViewChange()
             on_event(refresh=True)
 
+        def on_goto(event=None):
+            dlg = wx.TextEntryDialog(self.View,
+                "Row number to go to:", conf.Title,
+                value=str(rows[0] + 1) if rows else "", style=wx.OK | wx.CANCEL
+            )
+            if wx.ID_OK != dlg.ShowModal(): return
+            v = re.sub(r"[\s\.\,]", "", dlg.GetValue())
+            try:
+                row = int(v) - 1
+                self.SeekToRow(row)
+                self.View.GoToCell(min(row, self.row_count - 1), self.View.GridCursorCol)
+            except Exception: pass
+
         def on_delete_cascade(event=None):
             """Confirms whether to delete row and related rows."""
             inter1 = inter2 = ""
@@ -880,6 +893,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             item_reset  = wx.MenuItem(menu, -1, "&Reset row%s data" % rowsuff)
             item_delete = wx.MenuItem(menu, -1, "Delete row%s" % rowsuff)
             item_delete_cascade = wx.MenuItem(menu, -1, "Delete row%s cascade" % rowsuff)
+        if self.row_count:
+            item_goto   = wx.MenuItem(menu, -1, "&Go to row ..")
 
         if rowdatas:
             boldfont = item_caption.Font
@@ -920,10 +935,10 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                             vals = {a: rowdata[b] for a, b in zip(keys2, c["name"])}
                             valstr = ", ".join("%s %s" % (k, fmtval(v))
                                                for k, v in vals.items())
-                            item_goto = wx.MenuItem(submenu, -1, "Open table %s ON %s" %
+                            item_link = wx.MenuItem(submenu, -1, "Open table %s ON %s" %
                                                     (grammar.quote(table2, force=True), valstr))
-                            menu.Bind(wx.EVT_MENU, functools.partial(on_event, open=True, table=table2, data=vals), item_goto)
-                            submenu.Append(item_goto)
+                            menu.Bind(wx.EVT_MENU, functools.partial(on_event, open=True, table=table2, data=vals), item_link)
+                            submenu.Append(item_link)
                     else:
                         menu2.Append(wx.ID_ANY, itemtitle)
                     titles.append(itemtitle)
@@ -945,6 +960,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             item_delete_cascade.Enabled = has_cascade and any(not x["__new__"] for x in rowdatas)
         elif is_table:
             menu.Append(item_insert)
+        if self.row_count:
+            menu.Append(item_goto)
 
         if is_table:
             menu.Bind(wx.EVT_MENU, functools.partial(on_event, insert=True), item_insert)
@@ -957,6 +974,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             menu.Bind(wx.EVT_MENU, on_reset,    item_reset)
             menu.Bind(wx.EVT_MENU, functools.partial(on_event, delete=True, rows=[i for i in rows if i < len(self.rows_current)]), item_delete)
             menu.Bind(wx.EVT_MENU, on_delete_cascade, item_delete_cascade)
+        if self.row_count:
+            menu.Bind(wx.EVT_MENU, on_goto, item_goto)
 
         self.View.PopupMenu(menu)
 
