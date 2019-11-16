@@ -1690,7 +1690,7 @@ class DataObjectPage(wx.Panel):
 
         button_export  = wx.Button(self, label="Export to fi&le")
         button_export.ToolTip    = "Export to file"
-        button_actions = wx.Button(self, label="Other actions ..")
+        button_actions = wx.Button(self, label="Other &actions ..")
         button_actions.Show("table" == self._category)
 
         grid = self._grid = wx.grid.Grid(self)
@@ -5348,7 +5348,7 @@ class ImportDialog(wx.Dialog):
         button_file.ToolTip = "Choose file to import"
 
         combo_sheet.Enabled = check_header.Enabled = False
-        combo_table.Enabled = button_table.Enabled = True
+        button_table.Enabled = False
 
         combo_table.SetItems(["%s (%s)" % (x["name"], util.plural("column", x["columns"]))
                               for x in self._tables])
@@ -5429,7 +5429,8 @@ class ImportDialog(wx.Dialog):
         self._info_file.Label = info
 
         self._combo_sheet.Enabled = self._check_header.Enabled = True
-        self._combo_table.Enabled = self._button_table.Enabled = not self._table_fixed
+        self._combo_table.Enabled = not self._table_fixed
+        self._button_table.Enabled = False if self._table_fixed else bool(self._cols1)
         self._combo_sheet.SetItems(["%s (%s, %s)" % (
             x["name"], util.plural("column", x["columns"]),
             "rows: file too large to count" if x["rows"] < 0
@@ -5465,7 +5466,7 @@ class ImportDialog(wx.Dialog):
         self._l2.Enable()
         self._l2.SetEditable(self._table.get("new"), columns=[1])
         self._combo_table.Enable(not fixed)
-        self._button_table.Enable(not fixed and not self._has_new
+        self._button_table.Enable(not fixed and not self._has_new and bool(self._cols1)
                                   or bool(self._table.get("new")))
         self._UpdatePK()
         self._UpdateFooter()
@@ -5890,7 +5891,8 @@ class ImportDialog(wx.Dialog):
             self._l2.SetEditable(False)
             self._UpdateFooter()
             self._UpdatePK()
-        self._button_table.Enabled = self._combo_table.Enabled = not self._table_fixed
+        self._combo_table.Enabled = not self._table_fixed
+        self._button_table.Enabled = False if self._table_fixed else bool(self._cols1)
 
         self._Populate()
         self.Layout()
@@ -5912,7 +5914,7 @@ class ImportDialog(wx.Dialog):
             self._combo_table.SetItems(["%s (%s)" % (x["name"], util.plural("column", x["columns"]))
                                         for x in self._tables])
             self._button_table.Label = "&New table"
-            self._button_table.Enable()
+            self._button_table.Enabled = False
             self._button_table.ContainingSizer.Layout()
         self._has_new = False
         self._has_pk = self._check_pk.Value = False
@@ -6129,6 +6131,8 @@ class ImportDialog(wx.Dialog):
                         for i, x in enumerate(self._sheet["columns"])]
         for i, c in enumerate(self._cols2):
             c["skip"] = not i < len(self._cols1)
+        self._button_table.Enabled = False if self._table_fixed else bool(self._table
+                                     and self._table.get("new") if self._has_new else self._cols1)
         self._OnSize()
         self._Populate()
 
