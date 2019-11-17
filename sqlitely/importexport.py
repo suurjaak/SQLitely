@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.11.2019
+@modified    17.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -319,6 +319,7 @@ def get_import_file_data(filename):
     ]}.
     """
     sheets, size = [], os.path.getsize(filename)
+    if not size: raise ValueError("File is empty.")
 
     is_csv  = filename.lower().endswith(".csv")
     is_xls  = filename.lower().endswith(".xls")
