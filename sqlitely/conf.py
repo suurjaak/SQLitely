@@ -22,7 +22,7 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev199"
+Version = "1.0.dev200"
 VersionDate = "17.11.2019"
 
 if getattr(sys, "frozen", False):
@@ -45,14 +45,14 @@ FileDirectives = ["ConsoleHistoryCommands", "DBFiles", "DBSort",
     "SearchInData", "SearchUseNewTab", "SQLWindowTexts", "TrayIconEnabled",
     "UpdateCheckAutomatic", "WindowIconized", "WindowPosition", "WindowSize",
 ]
-"""List of attributes saved if changed from default, user-modifiable."""
+"""List of user-modifiable attributes, saved if changed from default."""
 OptionalFileDirectives = [
     "DBExtensions", "ExportDbTemplate", "LogSQL", "MinWindowSize",
     "MaxConsoleHistory", "MaxDBSizeForFullCount", "MaxTableRowIDForFullCount",
     "MaxHistoryInitialMessages", "MaxRecentFiles", "MaxSearchHistory",
-    "MaxSearchResults", "PopupUnexpectedErrors", "SearchResultsChunk",
-    "SeekLength", "SeekLeapLength", "StatisticsPlotWidth", "StatusFlashLength",
-    "UpdateCheckInterval",
+    "MaxSearchResults", "PopupUnexpectedErrors", "RunChecksums", "RunStatistics", 
+    "SearchResultsChunk", "SeekLength", "SeekLeapLength", "StatisticsPlotWidth",
+    "StatusFlashLength", "UpdateCheckInterval",
 ]
 OptionalFileDirectiveDefaults = {}
 
@@ -93,6 +93,12 @@ SeekLeapLength = 10000
 
 """Contents of Recent Files menu."""
 RecentFiles = []
+
+"""Run checksum calculations automatically (may take a while for large databases)."""
+RunChecksums = True
+
+"""Run statistics analysis automatically (may take a while for large databases)."""
+RunStatistics = True
 
 """
 Texts entered in global search, used for drop down auto-complete.

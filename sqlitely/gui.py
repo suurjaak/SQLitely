@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.11.2019
+@modified    17.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2834,7 +2834,7 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_BUTTON, self.on_vacuum, button_vacuum)
         self.Bind(wx.EVT_BUTTON, lambda e: util.select_file(self.db.filename),
                   button_open_folder)
-        self.Bind(wx.EVT_BUTTON, lambda e: self.update_info_panel(),
+        self.Bind(wx.EVT_BUTTON, lambda e: self.update_info_panel(reload=True),
                   button_refresh)
 
         sizer_info.AddGrowableCol(1, proportion=1)
@@ -2957,6 +2957,7 @@ class DatabasePage(wx.Panel):
         elif "refresh" == cmd:
             self.reload_schema(count=True, parse=True)
             self.update_info_panel()
+            if conf.RunStatistics: self.on_update_statistics()
             self.on_pragma_refresh()
             for p in (y for x in self.data_pages.values() for y in x.values()):
                 if not p.IsChanged(): p.Reload()
@@ -3093,8 +3094,8 @@ class DatabasePage(wx.Panel):
         and tasks worker.
         """
         self.statistics = {}
-        self.populate_statistics()
         self.worker_analyzer.work(self.db.filename)
+        wx.CallAfter(self.populate_statistics)
 
 
     def on_copy_statistics(self, event=None):
@@ -3223,7 +3224,8 @@ class DatabasePage(wx.Panel):
     def populate_statistics(self):
         """Populates statistics HTML window."""
         previous_scrollpos = getattr(self.html_stats, "_last_scroll_pos", None)
-        html = step.Template(templates.STATISTICS_HTML, escape=True).expand(dict(self.statistics))
+        ns = dict(self.statistics, running=self.worker_analyzer.is_working())
+        html = step.Template(templates.STATISTICS_HTML, escape=True).expand(ns)
         self.html_stats.Freeze()
         try:
             self.html_stats.SetPage(html)
@@ -3231,12 +3233,12 @@ class DatabasePage(wx.Panel):
             if previous_scrollpos:
                 self.html_stats.Scroll(*previous_scrollpos)
         finally: self.html_stats.Thaw()
-        self.tb_stats.EnableTool(wx.ID_REFRESH, bool(self.statistics))
+        self.tb_stats.EnableTool(wx.ID_REFRESH, not self.worker_analyzer.is_working())
         self.tb_stats.EnableTool(wx.ID_COPY,   "data" in self.statistics)
         self.tb_stats.EnableTool(wx.ID_SAVE,   "data" in self.statistics)
         self.tb_stats.EnableTool(wx.ID_SAVEAS, "data" in self.statistics)
-        bmp = images.ToolbarStopped.Bitmap if self.worker_analyzer.is_working() \
-              else images.ToolbarStop.Bitmap
+        bmp = images.ToolbarStop.Bitmap if self.worker_analyzer.is_working() \
+              else images.ToolbarStopped.Bitmap
         self.tb_stats.SetToolNormalBitmap(wx.ID_STOP, bmp)
 
 
@@ -3574,6 +3576,7 @@ class DatabasePage(wx.Panel):
             wx.MessageBox(err, conf.Title, wx.OK | wx.ICON_ERROR)
         else:
             self.update_info_panel()
+            if conf.RunStatistics: self.on_update_statistics()
             wx.MessageBox("VACUUM complete.\n\nSize before: %s.\nSize after:    %s." %
                 tuple(util.format_bytes(x, max_units=False) for x in (size1, self.db.filesize)),
                 conf.Title, wx.OK | wx.ICON_INFORMATION)
@@ -3646,11 +3649,13 @@ class DatabasePage(wx.Panel):
                       self.tree_data.SetColumnWidth(1, -1)))
 
 
-    def update_info_panel(self, reload=True):
-        """Updates the Information page panel with current data."""
-        if reload:
-            self.db.populate_schema()
-            self.db.update_fileinfo()
+    def update_info_panel(self, reload=False):
+        """
+        Updates the Information page panel with current data.
+
+        @param   reload  whether to reload checksums
+        """
+        self.db.update_fileinfo()
         for name in ["edit_info_size", "edit_info_created", "edit_info_modified"]:
             getattr(self, name).Value = ""
 
@@ -3668,7 +3673,8 @@ class DatabasePage(wx.Panel):
             self.db.last_modified.strftime("%Y-%m-%d %H:%M:%S")
 
         if (not self.db.temporary or self.db.filesize) \
-        and not self.worker_checksum.is_working():
+        and not self.worker_checksum.is_working() \
+        and (conf.RunChecksums or reload):
             self.edit_info_sha1.Value = "Analyzing.."
             self.edit_info_md5.Value  = "Analyzing.."
             self.button_checksum_stop.Show()
@@ -4514,7 +4520,7 @@ class DatabasePage(wx.Panel):
                     break # for k, p
         if updated and not self.save_underway:
             self.reload_schema(count=True, parse=True)
-            self.on_update_statistics()
+            if conf.RunStatistics: self.on_update_statistics()
             datapage = self.data_pages.get(category, {}).get(name0 or name)
             if datapage:
                 if name in self.db.schema[category]:
@@ -5021,7 +5027,7 @@ class DatabasePage(wx.Panel):
         self.load_tree_data()
         self.update_info_panel()
         wx.CallLater(100, self.reload_schema, parse=True)
-        self.worker_analyzer.work(self.db.filename)
+        if conf.RunStatistics: self.worker_analyzer.work(self.db.filename)
 
 
     def reload_schema(self, count=False, parse=False):

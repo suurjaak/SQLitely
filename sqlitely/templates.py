@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.11.2019
+@modified    16.11.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -918,9 +918,10 @@ For searching from specific tables, add "table:name", and from specific columns,
 """
 Database statistics HTML.
 
-@param   error  error message, if any
-@param   data   {"table": [{name, size, size_total, ?size_index, ?index: []}],
-                 "index": [{name, size, table}]}
+@param   ?error    error message, if any
+@param   ?data     {"table": [{name, size, size_total, ?size_index, ?index: []}],
+                   "index": [{name, size, table}]}
+@param   ?running  whether analysis is currently running
 """
 STATISTICS_HTML = """<%
 from sqlitely.lib.vendor.step import Template
@@ -1025,7 +1026,7 @@ total = index_total + sum(x["size"] for x in data["table"])
     %endif
 
 
-%else:
+%elif isdef("running") and running:
     Analyzing..
 %endif
 
