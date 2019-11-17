@@ -62,7 +62,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    16.11.2019
+@modified    17.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -1365,6 +1365,8 @@ class PropertyDialog(wx.Dialog):
         """Returns value in type expected, or None on failure."""
         try:
             result = typeclass(value)
+            if isinstance(result, (int, long)) and result < 0:
+                raise ValueError() # Reject negative numbers
             isinstance(result, basestring) and result.strip()[0] # Reject empty
             return result
         except Exception:
