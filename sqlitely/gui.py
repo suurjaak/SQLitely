@@ -2876,8 +2876,6 @@ class DatabasePage(wx.Panel):
         tb_stats.Bind(wx.EVT_TOOL, self.on_stop_statistics,     id=wx.ID_STOP)
 
         html_stats = self.html_stats = wx.html.HtmlWindow(panel_stats)
-        html_stats.Bind(wx.EVT_SCROLLWIN, self.on_scroll_html_stats)
-        html_stats.Bind(wx.EVT_SIZE,      self.on_size_html_stats)
 
         tb_sql = self.tb_sql = wx.ToolBar(panel_schema,
                                       style=wx.TB_FLAT | wx.TB_NODIVIDER)
@@ -3173,52 +3171,6 @@ class DatabasePage(wx.Panel):
         self.edit_info_md5.MinSize  = (-1, -1)
         self.button_checksum_stop.Hide()
         self.edit_info_md5.ContainingSizer.Layout()
-
-
-    def on_size_html_stats(self, event):
-        """
-        Handler for sizing html_stats, sets new scroll position based
-        previously stored one (HtmlWindow loses its scroll position on resize).
-        """
-        html = self.html_stats
-        if hasattr(html, "_last_scroll_pos"):
-            for i in range(2):
-                orient = wx.VERTICAL if i else wx.HORIZONTAL
-                # Division can be > 1 on first resizings, bound it to 1.
-                ratio = min(1, util.safedivf(html._last_scroll_pos[i],
-                    html._last_scroll_range[i]
-                ))
-                html._last_scroll_pos[i] = ratio * html.GetScrollRange(orient)
-            # Execute scroll later as something resets it after this handler
-            scroll_func = lambda: html and html.Scroll(*html._last_scroll_pos)
-            wx.CallLater(50, scroll_func)
-        event.Skip() # Allow event to propagate wx handler
-
-
-    def on_scroll_html_stats(self, event):
-        """
-        Handler for scrolling the HTML stats, stores scroll position
-        (HtmlWindow loses it on resize).
-        """
-        wx.CallAfter(self.store_html_stats_scroll)
-        event.Skip() # Allow event to propagate wx handler
-
-
-    def store_html_stats_scroll(self):
-        """
-        Stores the statistics HTML scroll position, needed for getting around
-        its quirky scroll updating.
-        """
-        if not self:
-            return
-        self.html_stats._last_scroll_pos = [
-            self.html_stats.GetScrollPos(wx.HORIZONTAL),
-            self.html_stats.GetScrollPos(wx.VERTICAL)
-        ]
-        self.html_stats._last_scroll_range = [
-            self.html_stats.GetScrollRange(wx.HORIZONTAL),
-            self.html_stats.GetScrollRange(wx.VERTICAL)
-        ]
 
 
     def populate_statistics(self):
