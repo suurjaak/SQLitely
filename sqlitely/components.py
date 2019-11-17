@@ -1129,8 +1129,8 @@ class SQLiteGridBaseMixin(object):
         Handler for grid keypress, seeks ahead on Ctrl-Down/End,
         copies selection to clipboard on Ctrl-C/Insert.
         """
-        if not isinstance(self._grid.Table, SQLiteGridBase): return
-        if not event.ControlDown(): return event.Skip()
+        if not isinstance(self._grid.Table, SQLiteGridBase) \
+        or not event.ControlDown(): return event.Skip()
 
         if event.KeyCode in (wx.WXK_DOWN, wx.WXK_END, wx.WXK_NUMPAD_END) \
         and not self._grid.Table.IsComplete():
@@ -1317,8 +1317,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self.Bind(wx.EVT_BUTTON,   self._OnExecuteScript, button_script)
         self.Bind(wx.EVT_BUTTON,   self._OnExport,        button_export)
         self.Bind(wx.EVT_BUTTON,   self._OnGridClose,     button_close)
-        stc.Bind(wx.EVT_KEY_DOWN,                         self._OnSTCKey)
-        grid.Bind(EVT_GRID_BASE,                          self._OnGridBaseEvent)
+        stc.Bind(wx.EVT_KEY_DOWN,  self._OnSTCKey)
+        self.Bind(EVT_GRID_BASE,   self._OnGridBaseEvent)
         self.Bind(EVT_PROGRESS,    self._OnExportClose)
 
         sizer_header.Add(tb)
@@ -1397,7 +1397,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
     def _OnResult(self, result):
         """Handler for db worker result, updates UI."""
         if self._busy: self._busy.Close()
-        self._button_sql.Enabled    = self._button_script.Enabled = True
+        self._button_sql.Enabled = self._button_script.Enabled = True
         if self._grid.Table: self._tbgrid.Enable()
 
         if "error" in result:
@@ -1464,6 +1464,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         finally:
             self._grid.Thaw()
+            self.Refresh()
 
 
     def Reload(self):
@@ -1780,7 +1781,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self.Bind(wx.EVT_BUTTON, self._OnExport,       button_export)
         self.Bind(wx.EVT_BUTTON, self._OnAction,       button_actions)
         grid.Bind(wx.grid.EVT_GRID_CELL_CHANGED,       self._OnChange)
-        grid.Bind(EVT_GRID_BASE,                       self._OnGridBaseEvent)
+        self.Bind(EVT_GRID_BASE, self._OnGridBaseEvent)
         self.Bind(EVT_PROGRESS,  self._OnExportClose)
         self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(lambda: self and (self.Layout(), self.Refresh())))
 
@@ -6135,12 +6136,12 @@ class DataDialog(wx.Dialog):
 
         for i, coldata in enumerate(self._columns):
             label = wx.StaticText(panel, label=coldata["name"] + ":",
-                                  name="label_" + coldata["name"])
+                                  name="label_data_" + coldata["name"])
             style = wx.TE_RICH
             if gridbase.db.get_affinity(coldata) in ("TEXT", "BLOB"):
                 style |= wx.TE_MULTILINE
                 sizer_columns.AddGrowableRow(i)
-            edit = wx.TextCtrl(panel, name=coldata["name"], style=style)
+            edit = wx.TextCtrl(panel, name="data_" + coldata["name"], style=style)
             edit.SetEditable(self._editable)
             tip = ("%s %s" % (coldata["name"], coldata.get("type"))).strip()
             if self._editable:
