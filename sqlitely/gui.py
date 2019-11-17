@@ -558,6 +558,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                   id2=wx.ID_FILE1 + conf.MaxRecentFiles)
         menu_tray.Check(conf.TrayIconEnabled)
         menu_autoupdate_check.Check(conf.UpdateCheckAutomatic)
+        menu_tools_export_spreadsheet.Enabled = bool(importexport.xlsxwriter)
 
         self.Bind(wx.EVT_MENU_OPEN, self.on_menu_open, menu)
         self.Bind(wx.EVT_MENU, self.on_new_database, menu_new_database)
@@ -5392,6 +5393,7 @@ class DatabasePage(wx.Panel):
                 item_file_single.Enable(False)
                 if item_database: item_database.Enable(False)
                 item_drop_all.Enable(False)
+            if not importexport.xlsxwriter: item_file_single.Enable(False)
         else: # Root
             item_dump   = wx.MenuItem(menu, -1, "Save database &dump as SQL")
             menu.Bind(wx.EVT_MENU, self.on_dump, item_dump)
