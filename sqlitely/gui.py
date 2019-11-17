@@ -3564,7 +3564,7 @@ class DatabasePage(wx.Panel):
         # Save last search results HTML
         nb = self.notebook_search
         search_data = next((nb.GetPage(i) for i in range(nb.GetPageCount())
-                            if (nb.GetPage(i) or {}).get("info")), None)
+                            if ((nb.GetPage(i) or {}).get("info") or {}).get("done")), None)
         if search_data:
             info = {}
             if search_data.get("info"):
@@ -3869,7 +3869,7 @@ class DatabasePage(wx.Panel):
             tab_data["info"]["partial_html"] += result.get("output", "")
             html = tab_data["info"]["partial_html"]
             if "done" in result:
-                search_done = True
+                search_done = tab_data["info"]["done"] = True
             else:
                 html += "</table></font>"
             text = tab_data["info"]["text"]
