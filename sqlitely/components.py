@@ -1190,6 +1190,7 @@ class SQLPage(wx.Panel):
     def ExecuteSQL(self, sql):
         """Executes the SQL query and populates the SQL grid with results."""
         result = False
+        busy = controls.BusyPanel(self, "Running SQL query:\n\n%s" % sql)
         try:
             cursor = self._db.execute(sql)
             if cursor.description is not None: # Result set: populate grid rows
@@ -1225,10 +1226,13 @@ class SQLPage(wx.Panel):
                 self._grid.AutoSizeColLabelSize(i)
             result = True
         except Exception as e:
+            busy.Close()
             logger.exception("Error running SQL %s.", sql)
             guibase.status("Error running SQL.", flash=True)
             error = "Error running SQL:\n\n%s" % util.format_exc(e)
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+        finally:
+            busy.Close()
         return result
 
 
@@ -1540,6 +1544,7 @@ class SQLPage(wx.Panel):
         sql = sql or (self._stc.SelectedText or self._stc.Text).strip()
         if not sql: return
 
+        busy = controls.BusyPanel(self, "Running SQL script:\n\n%s" % sql)
         try:
             logger.info('Executing SQL script "%s".', sql)
             self._db.executescript(sql, name="SQL")
@@ -1557,10 +1562,13 @@ class SQLPage(wx.Panel):
             self._grid.Size = size[0], size[1]-1
             self._grid.Size = size[0], size[1]
         except Exception as e:
+            busy.Close()
             msg = "Error running SQL script."
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+        finally:
+            busy.Close()
 
 
     def _OnRequery(self, event=None):
