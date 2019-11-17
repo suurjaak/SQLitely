@@ -2327,8 +2327,8 @@ class DatabasePage(wx.Panel):
         nb.SetCustomPage(step.Template(templates.SEARCH_WELCOME_HTML).expand())
         label_html.Bind(wx.html.EVT_HTML_LINK_CLICKED,
                         self.on_click_html_link)
-        self.Bind(wx.html.EVT_HTML_LINK_CLICKED, self.on_click_html_link, nb)
-        self.Bind(wx.EVT_RIGHT_UP, self.on_rightclick_searchall, nb.GetHtmlWindow())
+        self.Bind(wx.html.EVT_HTML_LINK_CLICKED, self.on_click_html_link, nb.GetHtmlWindow())
+        nb.GetHtmlWindow().Bind(wx.EVT_RIGHT_UP, self.on_rightclick_searchall)
         self.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_searchall_tab, nb)
         nb.Bind(controls.EVT_TAB_LEFT_DCLICK, self.on_dclick_searchall_tab)
         self.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
