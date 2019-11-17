@@ -195,7 +195,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             else:
                 label += '\nlike "%s"' % self.filters[col]
         pref = u"\u25be" if self.View and col == self.View.GridCursorCol \
-               and self.GetNumberRows() else "  "
+               and len(self.columns) > 1 and self.GetNumberRows() else "  "
         return u" %s %s  " % (pref, label)
 
 
