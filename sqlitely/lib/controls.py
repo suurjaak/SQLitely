@@ -103,11 +103,13 @@ class BusyPanel(wx.Window):
         wx.Window.__init__(self, parent)
         self.Hide()
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
-        label = self._label = wx.StaticText(self, label=label)
+        label = self._label = wx.StaticText(self, label=label, style=wx.ST_ELLIPSIZE_END)
         self.BackgroundColour = self.BACKGROUND_COLOUR
         label.ForegroundColour = self.FOREGROUND_COLOUR
         sizer.Add(label, border=15, flag=wx.ALL | wx.ALIGN_CENTER_HORIZONTAL)
         self.Fit()
+        maxsize = [self.Parent.Size.width / 2, self.Parent.Size.height * 2 / 3]
+        self.Size = tuple(min(a, b) for a, b in zip(self.Size, maxsize))
         self.Layout()
         self.CenterOnParent()
         self.Show()
@@ -116,10 +118,7 @@ class BusyPanel(wx.Window):
 
 
     def Close(self):
-        try:
-            self.Hide()
-            self.Parent.Refresh()
-            self.Destroy()
+        try: self.Hide(); self.Parent.Refresh(); self.Destroy()
         except Exception: pass
 
 
