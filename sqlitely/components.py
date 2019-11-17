@@ -1046,6 +1046,8 @@ class SQLiteGridBaseMixin(object):
         Handler for clicking a table grid row or column label,
         opens data form or sorts table by the column.
         """
+        if not isinstance(self._grid.Table, SQLiteGridBase): return
+
         row, col = event.GetRow(), event.GetCol()
         if row >= 0 and col < 0:
             return DataDialog(self, self._grid.Table, row).ShowModal()
@@ -1095,6 +1097,8 @@ class SQLiteGridBaseMixin(object):
         Handler for scrolling the grid, seeks ahead if nearing the end of
         retrieved rows, constrains scroll to reasonably sized chunks.
         """
+        if not isinstance(self._grid.Table, SQLiteGridBase): return
+            
         SEEKAHEAD_POS_RATIO = 0.8
 
         # Disallow scrolling ahead too much, may be a billion rows.
@@ -1125,6 +1129,7 @@ class SQLiteGridBaseMixin(object):
         Handler for grid keypress, seeks ahead on Ctrl-Down/End,
         copies selection to clipboard on Ctrl-C/Insert.
         """
+        if not isinstance(self._grid.Table, SQLiteGridBase): return
         if not event.ControlDown(): return event.Skip()
 
         if event.KeyCode in (wx.WXK_DOWN, wx.WXK_END, wx.WXK_NUMPAD_END) \
@@ -1155,6 +1160,8 @@ class SQLiteGridBaseMixin(object):
 
     def _OnGridMenu(self, event):
         """Handler for right-click or context menu in grid, opens popup menu."""
+        if not isinstance(self._grid.Table, SQLiteGridBase): return
+
         if not isinstance(self._grid.Table, SQLiteGridBase) \
         or self._grid.IsCellEditControlShown(): event.Skip()
         else: self._grid.Table.OnMenu(event)
@@ -1165,6 +1172,8 @@ class SQLiteGridBaseMixin(object):
         Handler for moving the mouse over a grid, shows datetime tooltip for
         UNIX timestamp cells.
         """
+        if not isinstance(self._grid.Table, SQLiteGridBase): return
+
         tip = ""
         prev_cell = self._hovered_cell
         x, y = self._grid.CalcUnscrolledPosition(event.X, event.Y)
@@ -1224,6 +1233,9 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self._last_sql = "" # Last executed SQL
         self._last_is_script = False # Whether last execution was script
         self._hovered_cell = None # (row, col)
+        self._worker = workers.WorkerThread(self._OnWorker)
+        self._pending = {} # Pending SQL execution state
+        self._busy = None # Current BusyPanel
 
         self._dialog_export = wx.FileDialog(self, defaultDir=os.getcwd(),
             message="Save query as", wildcard=importexport.EXPORT_WILDCARD,
@@ -1261,8 +1273,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         ColourManager.Manage(label_help_stc, "ForegroundColour", "DisabledColour")
 
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
-        button_sql    = wx.Button(panel2, label="Execute S&QL")
-        button_script = wx.Button(panel2, label="Execute sc&ript")
+        button_sql    = self._button_sql    = wx.Button(panel2, label="Execute S&QL")
+        button_script = self._button_script = wx.Button(panel2, label="Execute sc&ript")
 
         tbgrid = self._tbgrid = wx.ToolBar(panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
@@ -1365,49 +1377,74 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             self._stc.AutoCompAddSubWords(word, subwords)
 
 
-    def ExecuteSQL(self, sql, restore=False):
+    def ExecuteSQL(self, sql, script=False, restore=False):
         """
         Executes the SQL query and populates the SQL grid with results.
 
+        @param   script   execute query as script
         @param   restore  restore grid filter and scroll state
         """
+        text = "Running SQL %s:\n\n%s" % ("script" if script else "query", sql)
+        self._busy = controls.BusyPanel(self, text)
+        self._pending = {"sql": sql, "script": script, "restore": restore}
+        self._button_export.Enabled = self._button_close.Enabled  = False
+        self._button_sql.Enabled    = self._button_script.Enabled = False
+        self._tbgrid.Disable()
+        func = self._db.executescript if script else self._db.execute
+        self._worker.work(functools.partial(func, sql))
+
+
+    def _OnResult(self, result):
+        """Handler for db worker result, updates UI."""
+        if self._busy: self._busy.Close()
+        self._button_sql.Enabled    = self._button_script.Enabled = True
+        if self._grid.Table: self._tbgrid.Enable()
+
+        if "error" in result:
+            guibase.status("Error running SQL.", flash=True)
+            error = "Error running SQL:\n\n%s" % result["error"]
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+            return
+
+        cursor = result["result"]
+        sql, script, restore = (self._pending.get(x) for x in ("sql", "script", "restore"))
         if restore:
             scrollpos = map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
             cursorpos = [self._grid.GridCursorRow, self._grid.GridCursorCol]
-            state = self._grid.Table.GetFilterSort()
+            state = self._grid.Table and self._grid.Table.GetFilterSort()
 
         self._grid.Freeze()
-        busy = controls.BusyPanel(self, "Running SQL query:\n\n%s" % sql)
         try:
-            cursor = self._db.execute(sql)
-            if cursor.description is not None: # Result set: populate grid rows
+            if cursor and cursor.description is not None: # Resultset: populate grid
                 grid_data = SQLiteGridBase(self._db, sql=sql, cursor=cursor)
                 self._grid.SetTable(grid_data, takeOwnership=True)
                 self._tbgrid.EnableTool(wx.ID_RESET, True)
                 self._button_export.Enabled = bool(cursor.description)
-            else: # Action query
+                self._button_close.Enabled  = True
+            else: # Action query or script
                 self._db.log_query("SQL", sql)
                 self._grid.Table = None
                 self._tbgrid.EnableTool(wx.ID_RESET, False)
                 self._button_export.Enabled = False
-                if cursor.rowcount >= 0:
+                if cursor and cursor.rowcount >= 0:
                     self._grid.CreateGrid(1, 1)
                     self._grid.SetColLabelValue(0, "Affected rows")
                     self._grid.SetCellValue(0, 0, str(cursor.rowcount))
                     self._grid.SetColSize(0, wx.grid.GRID_AUTOSIZE)
             self._tbgrid.Enable()
-            self._button_close.Enabled = bool(cursor.description)
-            self._label_help.Show(bool(cursor.description))
+            self._button_close.Enabled = bool(cursor and cursor.description)
+            self._label_help.Show(bool(cursor and cursor.description))
             self._label_help.ContainingSizer.Layout()
             guibase.status('Executed SQL "%s" (%s).', sql, self._db,
                            log=True, flash=True)
+
             size = self._grid.Size
             self._grid.Fit()
             # Jiggle size by 1 pixel to refresh scrollbars
             self._grid.Size = size[0], size[1]-1
             self._grid.Size = size[0], size[1]
             self._last_sql = sql
-            self._last_is_script = False
+            self._last_is_script = script
             self._grid.SetColMinimalAcceptableWidth(100)
             for i in range(self._grid.NumberCols):
                 self._grid.AutoSizeColLabelSize(i)
@@ -1421,46 +1458,12 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                 self._grid.SetGridCursor(*cursorpos)
                 self._grid.Scroll(*scrollpos)
         except Exception as e:
-            busy.Close()
             logger.exception("Error running SQL %s.", sql)
             guibase.status("Error running SQL.", flash=True)
             error = "Error running SQL:\n\n%s" % util.format_exc(e)
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         finally:
-            busy.Close()
             self._grid.Thaw()
-
-
-    def ExecuteScript(self, sql):
-        """
-        Handler for clicking to run multiple SQL statements, runs the given SQL,
-        or selected text, or whole edit window contents as an SQL script.
-        """
-        busy = controls.BusyPanel(self, "Running SQL script:\n\n%s" % sql)
-        try:
-            logger.info('Executing SQL script "%s".', sql)
-            self._db.executescript(sql, name="SQL")
-            self._last_sql = sql
-            self._last_is_script = True
-            self._grid.Table = None
-            self._tbgrid.EnableTool(wx.ID_RESET, False)
-            self._tbgrid.Enable()
-            self._button_export.Enabled = False
-            self._label_help.Show()
-            self._label_help.ContainingSizer.Layout()
-            size = self._grid.Size
-            self._grid.Fit()
-            # Jiggle size by 1 pixel to refresh scrollbars
-            self._grid.Size = size[0], size[1]-1
-            self._grid.Size = size[0], size[1]
-        except Exception as e:
-            busy.Close()
-            msg = "Error running SQL script."
-            logger.exception(msg); guibase.status(msg, flash=True)
-            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
-        finally:
-            busy.Close()
 
 
     def Reload(self):
@@ -1496,6 +1499,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
         self._export.Stop()
+        self._worker.stop()
 
         return True
 
@@ -1571,6 +1575,12 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         finally: self.Thaw()
 
 
+    def _OnWorker(self, result):
+        """Handler for db worker result, invokes _OnResult in wx callback."""
+        if not self: return            
+        wx.CallAfter(self._OnResult, result)
+
+
     def _OnResetView(self, event=None):
         """
         Handler for clicking to remove sorting and filtering,
@@ -1592,12 +1602,12 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         Handler for pressing a key in STC, listens for Alt-Enter and
         executes the currently selected line, or currently active line.
         """
-        if self._export.Shown: return
+        if self._export.Shown or self._worker.is_working(): return
         event.Skip() # Allow to propagate to other handlers
         stc = event.GetEventObject()
         if (event.AltDown() or event.ControlDown()) and wx.WXK_RETURN == event.KeyCode:
             sql = (stc.SelectedText or stc.CurLine[0]).strip()
-            if sql: wx.CallAfter(self.ExecuteSQL, sql)
+            if sql: self.ExecuteSQL(sql)
 
 
     def _OnExecuteSQL(self, event=None):
@@ -1608,7 +1618,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         """
         if self._export.Shown: return
         sql = (self._stc.SelectedText or self._stc.Text).strip()
-        if sql: wx.CallAfter(self.ExecuteSQL, sql)
+        if sql: self.ExecuteSQL(sql)
 
 
     def _OnExecuteScript(self, event=None, sql=None):
@@ -1618,17 +1628,17 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         """
         if self._export.Shown: return
         sql = sql or (self._stc.SelectedText or self._stc.Text).strip()
-        if sql: wx.CallAfter(self.ExecuteScript, sql)
+        if sql: self.ExecuteSQL(sql, script=True)
 
 
     def _OnRequery(self, event=None):
         """Handler for re-running grid SQL statement."""
-        if self._last_is_script: wx.CallAfter(self._OnExecuteScript, self._last_sql)
-        else: wx.CallAfter(self.ExecuteSQL, self._last_sql, restore=True)
+        self.ExecuteSQL(self._last_sql, script=self._last_is_script, restore=True)
 
 
     def _OnGridClose(self, event=None):
         """Handler for clicking to close the results grid."""
+        self._worker.stop_work(drop_results=True)
         self._grid.Table = None
         self.Refresh()
         self._button_export.Enabled = False
