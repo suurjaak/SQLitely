@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.11.2019
+@modified    17.11.2019
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -22,8 +22,8 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev198"
-VersionDate = "16.11.2019"
+Version = "1.0.dev199"
+VersionDate = "17.11.2019"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -51,7 +51,7 @@ OptionalFileDirectives = [
     "MaxConsoleHistory", "MaxDBSizeForFullCount", "MaxTableRowIDForFullCount",
     "MaxHistoryInitialMessages", "MaxRecentFiles", "MaxSearchHistory",
     "MaxSearchResults", "PopupUnexpectedErrors", "SearchResultsChunk",
-    "SeekLength", "SeekEndLength", "StatisticsPlotWidth", "StatusFlashLength",
+    "SeekLength", "SeekLeapLength", "StatisticsPlotWidth", "StatusFlashLength",
     "UpdateCheckInterval",
 ]
 OptionalFileDirectiveDefaults = {}
@@ -88,8 +88,8 @@ MaxTableRowIDForFullCount = 1000
 """Number of rows to seek ahead on data grids, when scrolling to end of retrieved rows."""
 SeekLength = 100
 
-"""Number of rows to seek ahead on data grids, when jumping to data grid bottom."""
-SeekEndLength = 10000
+"""Number of rows to seek ahead on data grids, when scrolling freely or jumping to data grid bottom."""
+SeekLeapLength = 10000
 
 """Contents of Recent Files menu."""
 RecentFiles = []

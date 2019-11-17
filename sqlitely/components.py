@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.11.2019
+@modified    17.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -1428,8 +1428,8 @@ class SQLPage(wx.Panel):
         and not self._grid.Table.IsComplete():
             # Disallow jumping to the very end, may be a billion rows.
             row, col = (self._grid.GridCursorRow, self._grid.GridCursorCol)
-            rows_before = self._grid.Table.GetNumberRows(present=True) - 1
-            seekrow = (rows_before / conf.SeekEndLength + 1) * conf.SeekEndLength
+            rows_present = self._grid.Table.GetNumberRows(present=True) - 1
+            seekrow = (rows_present / conf.SeekLeapLength + 1) * conf.SeekLeapLength
             self._grid.Table.SeekToRow(seekrow)
             row2 = self._grid.Table.GetNumberRows(present=True) - 1
             if row2 == seekrow: row2 -= 1 # Stay at #10000, #20000 etc
@@ -2213,8 +2213,8 @@ class DataObjectPage(wx.Panel):
         and not self._grid.Table.IsComplete():
             # Disallow jumping to the very end, may be a billion rows.
             row, col = (self._grid.GridCursorRow, self._grid.GridCursorCol)
-            rows_before = self._grid.Table.GetNumberRows(present=True) - 1
-            seekrow = (rows_before / conf.SeekEndLength + 1) * conf.SeekEndLength
+            rows_present = self._grid.Table.GetNumberRows(present=True)
+            seekrow = (rows_present / conf.SeekLeapLength + 1) * conf.SeekLeapLength
             self._grid.Table.SeekToRow(seekrow)
             row2 = self._grid.Table.GetNumberRows(present=True) - 1
             if row2 == seekrow: row2 -= 1 # Stay at #10000, #20000 etc
@@ -2308,11 +2308,19 @@ class DataObjectPage(wx.Panel):
     def _OnGridScroll(self, event):
         """
         Handler for scrolling the grid, seeks ahead if nearing the end of
-        retrieved rows.
+        retrieved rows, constrains scroll to reasonably sized chunks.
         """
-        if not self: return
-        event.Skip()
         SEEKAHEAD_POS_RATIO = 0.8
+        SCROLLPOS_ROW_RATIO = 0.88235 # Heuristic estimate of scroll pos to row
+
+        # Disallow scrolling ahead too much, may be a billion rows.
+        if isinstance(event, wx.ScrollWinEvent) and not self._grid.Table.IsComplete():
+            rows_scrolled = int(event.GetPosition() * SCROLLPOS_ROW_RATIO)
+            rows_present = self._grid.Table.GetNumberRows(present=True)
+            if rows_scrolled > rows_present:
+                seekrow = (rows_present / conf.SeekLeapLength + 1) * conf.SeekLeapLength
+                self._grid.MakeCellVisible(rows_present, self._grid.GridCursorCol)
+                return self._grid.Table.SeekToRow(seekrow)
 
         def seekahead():
             if not self: return
@@ -2323,6 +2331,7 @@ class DataObjectPage(wx.Panel):
             if scrollpos + scrollpage > scrollrange * SEEKAHEAD_POS_RATIO:
                 self._grid.Table.SeekAhead()
 
+        event.Skip()
         wx.CallLater(50, seekahead) # Give scroll position time to update
 
 
