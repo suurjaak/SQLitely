@@ -1011,7 +1011,188 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
 
 
-class SQLPage(wx.Panel):
+class SQLiteGridBaseMixin(object):
+    """
+    Binds SQLiteGridBase handlers to self._grid.
+    """
+
+    def __init__(self):
+        grid = self._grid
+        grid.SetDefaultEditor(wx.grid.GridCellAutoWrapStringEditor())
+        grid.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
+        ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
+        ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
+        ColourManager.Manage(grid, "LabelBackgroundColour",       wx.SYS_COLOUR_BTNFACE)
+        ColourManager.Manage(grid, "LabelTextColour",             wx.SYS_COLOUR_WINDOWTEXT)
+
+        grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK, self._OnGridLabel)
+        grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK, self._OnFilter)
+        grid.Bind(wx.grid.EVT_GRID_SELECT_CELL,       self._OnGridSelectCell)
+        grid.Bind(wx.grid.EVT_GRID_RANGE_SELECT,      self._OnGridSelectRange)
+        grid.Bind(wx.EVT_SCROLLWIN,                   self._OnGridScroll)
+        grid.Bind(wx.EVT_SCROLL_THUMBRELEASE,         self._OnGridScroll)
+        grid.Bind(wx.EVT_SCROLL_CHANGED,              self._OnGridScroll)
+        grid.Bind(wx.EVT_KEY_DOWN,                    self._OnGridScroll)
+        grid.Bind(wx.EVT_CONTEXT_MENU,                self._OnGridMenu)
+        grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK,  self._OnGridMenu)
+        grid.GridWindow.Bind(wx.EVT_RIGHT_UP,         self._OnGridMenu)
+        grid.GridWindow.Bind(wx.EVT_MOTION,           self._OnGridMouse)
+        grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,        self._OnGridKey)
+
+
+    def _OnGridLabel(self, event):
+        """
+        Handler for clicking a table grid row or column label,
+        opens data form or sorts table by the column.
+        """
+        row, col = event.GetRow(), event.GetCol()
+        if row >= 0 and col < 0:
+            return DataDialog(self, self._grid.Table, row).ShowModal()
+
+        # Remember scroll positions, as grid update loses them
+        scroll_hor = self._grid.GetScrollPos(wx.HORIZONTAL)
+        scroll_ver = self._grid.GetScrollPos(wx.VERTICAL)
+        if row < 0: # Only react to clicks in the header
+            self._grid.Table.SortColumn(col)
+        self.Layout() # React to grid size change
+        self._grid.Scroll(scroll_hor, scroll_ver)
+
+
+    def _OnFilter(self, event):
+        """
+        Handler for right-clicking a table grid column, lets the user
+        change the column filter.
+        """
+        if not isinstance(self._grid.Table, SQLiteGridBase): return
+        row, col = event.GetRow(), event.GetCol()
+        grid_data = self._grid.Table
+        if not grid_data.columns: return
+        if row >= 0: return self._grid.Table.OnMenu(event)
+
+        current_filter = unicode(grid_data.filters[col]) \
+                         if col in grid_data.filters else ""
+        name = grammar.quote(grid_data.columns[col]["name"], force=True)
+        dialog = wx.TextEntryDialog(self,
+            "Filter column %s by:" % name, "Filter", value=current_filter,
+            style=wx.OK | wx.CANCEL)
+        if wx.ID_OK != dialog.ShowModal(): return
+
+        new_filter = dialog.GetValue()
+        if len(new_filter):
+            busy = controls.BusyPanel(self,
+                'Filtering column %s by "%s".' %
+                (name, new_filter))
+            grid_data.AddFilter(col, new_filter)
+            busy.Close()
+        else:
+            grid_data.RemoveFilter(col)
+        self.Layout() # React to grid size change
+
+
+    def _OnGridScroll(self, event):
+        """
+        Handler for scrolling the grid, seeks ahead if nearing the end of
+        retrieved rows.
+        """
+        event.Skip()
+        SEEKAHEAD_POS_RATIO = 0.8
+
+        def seekahead():
+            scrollpos = self._grid.GetScrollPos(wx.VERTICAL)
+            scrollrange = self._grid.GetScrollRange(wx.VERTICAL)
+            if scrollpos > scrollrange * SEEKAHEAD_POS_RATIO:
+                self._grid.Table.SeekAhead()
+
+        wx.CallLater(50, seekahead) # Give scroll position time to update
+
+
+    def _OnGridKey(self, event):
+        """
+        Handler for grid keypress, seeks ahead on Ctrl-Down/End,
+        copies selection to clipboard on Ctrl-C/Insert.
+        """
+        if not event.ControlDown(): return event.Skip()
+
+        if event.KeyCode in (wx.WXK_DOWN, wx.WXK_END, wx.WXK_NUMPAD_END) \
+        and not self._grid.Table.IsComplete():
+            # Disallow jumping to the very end, may be a billion rows.
+            row, col = (self._grid.GridCursorRow, self._grid.GridCursorCol)
+            rows_present = self._grid.Table.GetNumberRows(present=True) - 1
+            seekrow = (rows_present / conf.SeekLeapLength + 1) * conf.SeekLeapLength
+            self._grid.Table.SeekToRow(seekrow)
+            row2 = self._grid.Table.GetNumberRows(present=True) - 1
+            if row2 == seekrow: row2 -= 1 # Stay at #10000, #20000 etc
+            self._grid.GoToCell(row2, col)
+            if event.ShiftDown():
+                self._grid.SelectBlock(row, col, row2, col)
+
+        elif event.KeyCode in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT) \
+        and not event.ShiftDown():
+            rows, cols = get_grid_selection(self._grid)
+            if not rows or not cols: return
+
+            if wx.TheClipboard.Open():
+                data = [[self._grid.GetCellValue(r, c) for c in cols] for r in rows]
+                text = "\n".join("\t".join(c for c in r) for r in data)
+                d = wx.TextDataObject(text)
+                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+        else: event.Skip()
+
+
+    def _OnGridMenu(self, event):
+        """Handler for right-click or context menu in grid, opens popup menu."""
+        if not isinstance(self._grid.Table, SQLiteGridBase) \
+        or self._grid.IsCellEditControlShown(): event.Skip()
+        else: self._grid.Table.OnMenu(event)
+
+
+    def _OnGridMouse(self, event):
+        """
+        Handler for moving the mouse over a grid, shows datetime tooltip for
+        UNIX timestamp cells.
+        """
+        tip = ""
+        prev_cell = self._hovered_cell
+        x, y = self._grid.CalcUnscrolledPosition(event.X, event.Y)
+        row, col = self._grid.XYToCell(x, y)
+        if row >= 0 and col >= 0:
+            value = self._grid.Table.GetValue(row, col)
+            col_name = self._grid.Table.GetColLabelValue(col).lower()
+            if type(value) is int and value > 100000000 \
+            and ("time" in col_name or "date" in col_name):
+                try:
+                    tip = datetime.datetime.fromtimestamp(value).strftime(
+                          "%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    tip = unicode(value)
+            else:
+                tip = unicode(value)
+            tip = tip if len(tip) < 1000 else tip[:1000] + ".."
+        if (row, col) != prev_cell or not (event.EventObject.ToolTip) \
+        or event.EventObject.ToolTip.Tip != tip:
+            event.EventObject.ToolTip = tip
+        self._hovered_cell = (row, col)
+
+
+    def _OnGridSelectCell(self, event):
+        """Handler for selecting grid row, refreshes row labels."""
+        event.Skip()
+        event.EventObject.Refresh()
+
+
+    def _OnGridSelectRange(self, event):
+        """Handler for selecting grid row, moves cursor to selection start."""
+        event.Skip()
+        pos = event.EventObject.GridCursorRow, event.EventObject.GridCursorCol
+        if not event.Selecting(): return
+        row, col = event.TopRow, event.LeftCol
+        pos = event.EventObject.GridCursorRow, event.EventObject.GridCursorCol
+        if row >= 0 and col >= 0 and (row, col) != pos:
+            event.EventObject.SetGridCursor(row, col)
+
+
+
+class SQLPage(wx.Panel, SQLiteGridBaseMixin):
     """
     Component for running SQL queries and seeing results in a grid.
     """
@@ -1091,12 +1272,7 @@ class SQLPage(wx.Panel):
         button_export.Enabled = button_close.Enabled = False
 
         grid = self._grid = wx.grid.Grid(panel2)
-        grid.SetDefaultEditor(wx.grid.GridCellAutoWrapStringEditor())
-        grid.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
-        ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
-        ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
-        ColourManager.Manage(grid, "LabelBackgroundColour",       wx.SYS_COLOUR_BTNFACE)
-        ColourManager.Manage(grid, "LabelTextColour",             wx.SYS_COLOUR_WINDOWTEXT)
+        SQLiteGridBaseMixin.__init__(self)
 
         label_help = self._label_help = wx.StaticText(panel2,
             label="Double-click on column header to sort, right click to filter.")
@@ -1115,22 +1291,9 @@ class SQLPage(wx.Panel):
         self.Bind(wx.EVT_BUTTON,   self._OnExecuteScript, button_script)
         self.Bind(wx.EVT_BUTTON,   self._OnExport,        button_export)
         self.Bind(wx.EVT_BUTTON,   self._OnGridClose,     button_close)
-        self.Bind(EVT_PROGRESS,    self._OnExportClose)
         stc.Bind(wx.EVT_KEY_DOWN,                         self._OnSTCKey)
-        grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,     self._OnGridLabel)
-        grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,     self._OnFilter)
-        grid.Bind(wx.grid.EVT_GRID_SELECT_CELL,           self._OnGridSelectCell)
-        grid.Bind(wx.grid.EVT_GRID_RANGE_SELECT,          self._OnGridSelectRange)
-        grid.Bind(wx.EVT_SCROLLWIN,                       self._OnGridScroll)
-        grid.Bind(wx.EVT_SCROLL_THUMBRELEASE,             self._OnGridScroll)
-        grid.Bind(wx.EVT_SCROLL_CHANGED,                  self._OnGridScroll)
-        grid.Bind(wx.EVT_KEY_DOWN,                        self._OnGridScroll)
         grid.Bind(EVT_GRID_BASE,                          self._OnGridBaseEvent)
-        grid.Bind(wx.EVT_CONTEXT_MENU,                    self._OnGridMenu)
-        grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK,      self._OnGridMenu)
-        grid.GridWindow.Bind(wx.EVT_RIGHT_UP,             self._OnGridMenu)
-        grid.GridWindow.Bind(wx.EVT_MOTION,               self._OnGridMouse)
-        grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,            self._OnGridKey)
+        self.Bind(EVT_PROGRESS,    self._OnExportClose)
 
         sizer_header.Add(tb)
         sizer1.Add(sizer_header, border=5, flag=wx.TOP | wx.BOTTOM)
@@ -1151,6 +1314,7 @@ class SQLPage(wx.Panel):
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
         label_help.Hide()
+
         self.Layout()
         wx_accel.accelerate(self)
         wx.CallAfter(lambda: splitter.SplitHorizontally(panel1, panel2, sashPosition=self.Size[1] * 2/5))
@@ -1344,56 +1508,6 @@ class SQLPage(wx.Panel):
         finally: self.Thaw()
 
 
-    def _OnFilter(self, event):
-        """
-        Handler for right-clicking a table grid column, lets the user
-        change the column filter.
-        """
-        if not isinstance(self._grid.Table, SQLiteGridBase): return
-        row, col = event.GetRow(), event.GetCol()
-        grid_data = self._grid.Table
-        if not grid_data.columns: return
-        if row >= 0: return self._grid.Table.OnMenu(event)
-
-        current_filter = unicode(grid_data.filters[col]) \
-                         if col in grid_data.filters else ""
-        name = grammar.quote(grid_data.columns[col]["name"], force=True)
-        dialog = wx.TextEntryDialog(self,
-            "Filter column %s by:" % name, "Filter", value=current_filter,
-            style=wx.OK | wx.CANCEL)
-        if wx.ID_OK != dialog.ShowModal(): return
-
-        new_filter = dialog.GetValue()
-        if len(new_filter):
-            busy = controls.BusyPanel(self,
-                'Filtering column %s by "%s".' %
-                (name, new_filter))
-            grid_data.AddFilter(col, new_filter)
-            busy.Close()
-        else:
-            grid_data.RemoveFilter(col)
-        self.Layout() # React to grid size change
-
-
-    def _OnGridLabel(self, event):
-        """
-        Handler for clicking a table grid row or column label,
-        opens data form or sorts table by the column.
-        """
-        if not isinstance(self._grid.Table, SQLiteGridBase): return
-        row, col = event.GetRow(), event.GetCol()
-        if row >= 0 and col < 0:
-            return DataDialog(self, self._grid.Table, row).ShowModal()
-
-        # Remember scroll positions, as grid update loses them
-        scroll_hor = self._grid.GetScrollPos(wx.HORIZONTAL)
-        scroll_ver = self._grid.GetScrollPos(wx.VERTICAL)
-        if row < 0: # Only react to clicks in the header
-            self._grid.Table.SortColumn(col)
-        self.Layout() # React to grid size change
-        self._grid.Scroll(scroll_hor, scroll_ver)
-
-
     def _OnResetView(self, event=None):
         """
         Handler for clicking to remove sorting and filtering,
@@ -1404,111 +1518,10 @@ class SQLPage(wx.Panel):
         self.Layout() # React to grid size change
 
 
-    def _OnGridScroll(self, event):
-        """
-        Handler for scrolling the grid, seeks ahead if nearing the end of
-        retrieved rows.
-        """
-        event.Skip()
-        SEEKAHEAD_POS_RATIO = 0.8
-
-        def seekahead():
-            scrollpos = self._grid.GetScrollPos(wx.VERTICAL)
-            scrollrange = self._grid.GetScrollRange(wx.VERTICAL)
-            if scrollpos > scrollrange * SEEKAHEAD_POS_RATIO:
-                self._grid.Table.SeekAhead()
-
-        wx.CallLater(50, seekahead) # Give scroll position time to update
-
-
-    def _OnGridKey(self, event):
-        """
-        Handler for grid keypress, seeks ahead on Ctrl-Down/End,
-        copies selection to clipboard on Ctrl-C/Insert.
-        """
-        if not event.ControlDown(): return event.Skip()
-
-        if event.KeyCode in (wx.WXK_DOWN, wx.WXK_END, wx.WXK_NUMPAD_END) \
-        and not self._grid.Table.IsComplete():
-            # Disallow jumping to the very end, may be a billion rows.
-            row, col = (self._grid.GridCursorRow, self._grid.GridCursorCol)
-            rows_present = self._grid.Table.GetNumberRows(present=True) - 1
-            seekrow = (rows_present / conf.SeekLeapLength + 1) * conf.SeekLeapLength
-            self._grid.Table.SeekToRow(seekrow)
-            row2 = self._grid.Table.GetNumberRows(present=True) - 1
-            if row2 == seekrow: row2 -= 1 # Stay at #10000, #20000 etc
-            self._grid.GoToCell(row2, col)
-            if event.ShiftDown():
-                self._grid.SelectBlock(row, col, row2, col)
-
-        elif event.KeyCode in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT) \
-        and not event.ShiftDown():
-            rows, cols = get_grid_selection(self._grid)
-            if not rows or not cols: return
-
-            if wx.TheClipboard.Open():
-                data = [[self._grid.GetCellValue(r, c) for c in cols] for r in rows]
-                text = "\n".join("\t".join(c for c in r) for r in data)
-                d = wx.TextDataObject(text)
-                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-        else: event.Skip()
-
-
     def _OnGridBaseEvent(self, event):
         """Handler for event from SQLiteGridBase."""
         if getattr(event, "form", False):
             DataDialog(self, self._grid.Table, event.row).ShowModal()
-
-
-    def _OnGridMenu(self, event):
-        """Handler for right-click or context menu in grid, opens popup menu."""
-        if not isinstance(self._grid.Table, SQLiteGridBase) \
-        or self._grid.IsCellEditControlShown(): event.Skip()
-        else: self._grid.Table.OnMenu(event)
-
-
-    def _OnGridMouse(self, event):
-        """
-        Handler for moving the mouse over a grid, shows datetime tooltip for
-        UNIX timestamp cells.
-        """
-        tip = ""
-        prev_cell = self._hovered_cell
-        x, y = self._grid.CalcUnscrolledPosition(event.X, event.Y)
-        row, col = self._grid.XYToCell(x, y)
-        if row >= 0 and col >= 0:
-            value = self._grid.Table.GetValue(row, col)
-            col_name = self._grid.Table.GetColLabelValue(col).lower()
-            if type(value) is int and value > 100000000 \
-            and ("time" in col_name or "date" in col_name):
-                try:
-                    tip = datetime.datetime.fromtimestamp(value).strftime(
-                          "%Y-%m-%d %H:%M:%S")
-                except Exception:
-                    tip = unicode(value)
-            else:
-                tip = unicode(value)
-            tip = tip if len(tip) < 1000 else tip[:1000] + ".."
-        if (row, col) != prev_cell or not (event.EventObject.ToolTip) \
-        or event.EventObject.ToolTip.Tip != tip:
-            event.EventObject.ToolTip = tip
-        self._hovered_cell = (row, col)
-
-
-    def _OnGridSelectCell(self, event):
-        """Handler for selecting grid row, refreshes row labels."""
-        event.Skip()
-        event.EventObject.Refresh()
-
-
-    def _OnGridSelectRange(self, event):
-        """Handler for selecting grid row, moves cursor to selection start."""
-        event.Skip()
-        if not event.Selecting(): return
-        row, col = event.TopRow, event.LeftCol
-        pos = event.EventObject.GridCursorRow, event.EventObject.GridCursorCol
-        if row >= 0 and col >= 0 and (row, col) != pos:
-            event.EventObject.SetGridCursor(row, col)
 
 
     def _OnSTCKey(self, event):
@@ -1663,7 +1676,7 @@ class SQLPage(wx.Panel):
 
 
 
-class DataObjectPage(wx.Panel):
+class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
     """
     Component for viewing and editing data objects like tables and views.
     """
@@ -1719,13 +1732,10 @@ class DataObjectPage(wx.Panel):
         button_actions.Show("table" == self._category)
 
         grid = self._grid = wx.grid.Grid(self)
-        grid.SetDefaultEditor(wx.grid.GridCellAutoWrapStringEditor())
-        grid.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
-        grid.ToolTip = "Double click on column header to sort, right click to filter."
-        ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
-        ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
-        ColourManager.Manage(grid, "LabelBackgroundColour",       wx.SYS_COLOUR_BTNFACE)
-        ColourManager.Manage(grid, "LabelTextColour",             wx.SYS_COLOUR_WINDOWTEXT)
+        SQLiteGridBaseMixin.__init__(self)
+
+        # TODO use or lose:
+        # grid.ToolTip = "Double click on column header to sort, right click to filter."
 
         label_help = wx.StaticText(self, label="Double-click on column header to sort, right click to filter.")
         ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
@@ -1741,22 +1751,9 @@ class DataObjectPage(wx.Panel):
         self.Bind(wx.EVT_TOOL,   self._OnRollback,     id=wx.ID_UNDO)
         self.Bind(wx.EVT_BUTTON, self._OnExport,       button_export)
         self.Bind(wx.EVT_BUTTON, self._OnAction,       button_actions)
-        self.Bind(EVT_PROGRESS,  self._OnExportClose)
-        grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK,  self._OnGridLabel)
-        grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK,  self._OnFilter)
         grid.Bind(wx.grid.EVT_GRID_CELL_CHANGED,       self._OnChange)
-        grid.Bind(wx.grid.EVT_GRID_SELECT_CELL,        self._OnGridSelectCell)
-        grid.Bind(wx.grid.EVT_GRID_RANGE_SELECT,       self._OnGridSelectRange)
-        grid.Bind(wx.EVT_SCROLLWIN,                    self._OnGridScroll)
-        grid.Bind(wx.EVT_SCROLL_THUMBRELEASE,          self._OnGridScroll)
-        grid.Bind(wx.EVT_SCROLL_CHANGED,               self._OnGridScroll)
-        grid.Bind(wx.EVT_KEY_DOWN,                     self._OnGridScroll)
         grid.Bind(EVT_GRID_BASE,                       self._OnGridBaseEvent)
-        grid.Bind(wx.EVT_CONTEXT_MENU,                 self._OnGridMenu)
-        grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK,   self._OnGridMenu)
-        grid.GridWindow.Bind(wx.EVT_RIGHT_UP,          self._OnGridMenu)
-        grid.GridWindow.Bind(wx.EVT_MOTION,            self._OnGridMouse)
-        grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,         self._OnGridKey)
+        self.Bind(EVT_PROGRESS,  self._OnExportClose)
         self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(lambda: self and (self.Layout(), self.Refresh())))
 
         sizer_header.Add(tb)
@@ -2151,53 +2148,6 @@ class DataObjectPage(wx.Panel):
         self._OnChange(updated=True)
 
 
-    def _OnFilter(self, event):
-        """
-        Handler for right-clicking a table grid column, lets the user
-        change the column filter.
-        """
-        row, col = event.GetRow(), event.GetCol()
-        if row >= 0: return self._grid.Table.OnMenu(event)
-
-        grid_data = self._grid.Table
-        current_filter = unicode(grid_data.filters[col]) \
-                         if col in grid_data.filters else ""
-        name = grammar.quote(grid_data.columns[col]["name"], force=True)
-        dialog = wx.TextEntryDialog(self,
-            "Filter column %s by:" % name, "Filter", value=current_filter,
-            style=wx.OK | wx.CANCEL)
-        if wx.ID_OK != dialog.ShowModal(): return
-
-        new_filter = dialog.GetValue()
-        if len(new_filter):
-            busy = controls.BusyPanel(self,
-                'Filtering column %s by "%s".' %
-                (name, new_filter))
-            grid_data.AddFilter(col, new_filter)
-            busy.Close()
-        else:
-            grid_data.RemoveFilter(col)
-        self.Layout() # React to grid size change
-
-
-    def _OnGridLabel(self, event):
-        """
-        Handler for clicking a table grid row or column label,
-        opens data form or sorts table by the column.
-        """
-        row, col = event.GetRow(), event.GetCol()
-        if row >= 0 and col < 0:
-            return DataDialog(self, self._grid.Table, row).ShowModal()
-
-        # Remember scroll positions, as grid update loses them
-        scroll_hor = self._grid.GetScrollPos(wx.HORIZONTAL)
-        scroll_ver = self._grid.GetScrollPos(wx.VERTICAL)
-        if row < 0: # Only react to clicks in the header
-            self._grid.Table.SortColumn(col)
-        self.Layout() # React to grid size change
-        self._grid.Scroll(scroll_hor, scroll_ver)
-
-
     def _OnResetView(self, event):
         """
         Handler for clicking to remove sorting and filtering,
@@ -2206,39 +2156,6 @@ class DataObjectPage(wx.Panel):
         self._grid.Table.ClearFilter()
         self._grid.Table.ClearSort()
         self.Layout() # React to grid size change
-
-
-    def _OnGridKey(self, event):
-        """
-        Handler for grid keypress, seeks ahead on Ctrl-Down/End,
-        copies selection to clipboard on Ctrl-C/Insert.
-        """
-        if not event.ControlDown(): return event.Skip()
-
-        if event.KeyCode in (wx.WXK_DOWN, wx.WXK_END, wx.WXK_NUMPAD_END) \
-        and not self._grid.Table.IsComplete():
-            # Disallow jumping to the very end, may be a billion rows.
-            row, col = (self._grid.GridCursorRow, self._grid.GridCursorCol)
-            rows_present = self._grid.Table.GetNumberRows(present=True)
-            seekrow = (rows_present / conf.SeekLeapLength + 1) * conf.SeekLeapLength
-            self._grid.Table.SeekToRow(seekrow)
-            row2 = self._grid.Table.GetNumberRows(present=True) - 1
-            if row2 == seekrow: row2 -= 1 # Stay at #10000, #20000 etc
-            self._grid.GoToCell(row2, col)
-            if event.ShiftDown():
-                self._grid.SelectBlock(row, col, row2, col)
-
-        elif event.KeyCode in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT) \
-        and not event.ShiftDown():
-            rows, cols = get_grid_selection(self._grid)
-            if not rows or not cols: return
-
-            if wx.TheClipboard.Open():
-                data = [[self._grid.GetCellValue(r, c) for c in cols] for r in rows]
-                text = "\n".join("\t".join(c for c in r) for r in data)
-                d = wx.TextDataObject(text)
-                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-        else: event.Skip()
 
 
     def _OnGridBaseEvent(self, event):
@@ -2258,87 +2175,6 @@ class DataObjectPage(wx.Panel):
             DataDialog(self, self._grid.Table, event.row).ShowModal()
         elif refresh:
             self._OnChange()
-
-
-    def _OnGridMenu(self, event):
-        """Handler for right-click or context menu in grid, opens popup menu."""
-        if self._grid.IsCellEditControlShown(): event.Skip()
-        else: self._grid.Table.OnMenu(event)
-
-
-    def _OnGridMouse(self, event):
-        """
-        Handler for moving the mouse over a grid, shows datetime tooltip for
-        UNIX timestamp cells.
-        """
-        tip = ""
-        prev_cell = self._hovered_cell
-        x, y = self._grid.CalcUnscrolledPosition(event.X, event.Y)
-        row, col = self._grid.XYToCell(x, y)
-        if row >= 0 and col >= 0:
-            value = self._grid.Table.GetValue(row, col)
-            col_name = self._grid.Table.GetColLabelValue(col).lower()
-            if type(value) is int and value > 100000000 \
-            and ("time" in col_name or "date" in col_name):
-                try:
-                    tip = datetime.datetime.fromtimestamp(value).strftime(
-                          "%Y-%m-%d %H:%M:%S")
-                except Exception:
-                    tip = unicode(value)
-            else:
-                tip = unicode(value)
-            tip = tip if len(tip) < 1000 else tip[:1000] + ".."
-        if (row, col) != prev_cell or not (event.EventObject.ToolTip) \
-        or event.EventObject.ToolTip.Tip != tip:
-            event.EventObject.ToolTip = tip
-        self._hovered_cell = (row, col)
-
-
-    def _OnGridSelectCell(self, event):
-        """Handler for selecting grid row, refreshes row labels."""
-        event.Skip()
-        event.EventObject.Refresh()
-
-
-    def _OnGridSelectRange(self, event):
-        """Handler for selecting grid row, moves cursor to selection start."""
-        event.Skip()
-        pos = event.EventObject.GridCursorRow, event.EventObject.GridCursorCol
-        if not event.Selecting(): return
-        row, col = event.TopRow, event.LeftCol
-        pos = event.EventObject.GridCursorRow, event.EventObject.GridCursorCol
-        if row >= 0 and col >= 0 and (row, col) != pos:
-            event.EventObject.SetGridCursor(row, col)
-
-
-    def _OnGridScroll(self, event):
-        """
-        Handler for scrolling the grid, seeks ahead if nearing the end of
-        retrieved rows, constrains scroll to reasonably sized chunks.
-        """
-        SEEKAHEAD_POS_RATIO = 0.8
-        SCROLLPOS_ROW_RATIO = 0.88235 # Heuristic estimate of scroll pos to row
-
-        # Disallow scrolling ahead too much, may be a billion rows.
-        if isinstance(event, wx.ScrollWinEvent) and not self._grid.Table.IsComplete():
-            rows_scrolled = int(event.GetPosition() * SCROLLPOS_ROW_RATIO)
-            rows_present = self._grid.Table.GetNumberRows(present=True)
-            if rows_scrolled > rows_present:
-                seekrow = (rows_present / conf.SeekLeapLength + 1) * conf.SeekLeapLength
-                self._grid.MakeCellVisible(rows_present, self._grid.GridCursorCol)
-                return self._grid.Table.SeekToRow(seekrow)
-
-        def seekahead():
-            if not self: return
-
-            scrollpos = self._grid.GetScrollPos(wx.VERTICAL)
-            scrollrange = self._grid.GetScrollRange(wx.VERTICAL)
-            scrollpage = self._grid.GetScrollPageSize(wx.VERTICAL)
-            if scrollpos + scrollpage > scrollrange * SEEKAHEAD_POS_RATIO:
-                self._grid.Table.SeekAhead()
-
-        event.Skip()
-        wx.CallLater(50, seekahead) # Give scroll position time to update
 
 
 
