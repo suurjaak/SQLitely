@@ -3155,7 +3155,7 @@ class DatabasePage(wx.Panel):
         Handler for getting results from analyzer thread, populates statistics.
         """
         self.statistics = result
-        self.populate_statistics()
+        wx.CallAfter(self.populate_statistics)
 
 
     def on_checksum_result(self, result):
