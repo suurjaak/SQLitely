@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.11.2019
+@modified    18.11.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -670,7 +670,7 @@ from sqlitely import conf
   <td valign="top">
     <a href="page:info"><img src="memory:HelpInfo.png" /></a>
   </td><td valign="center">
-    See information about the database,<br />
+    See information about the database file,<br />
     view general database statistics,<br />
     check database integrity for corruption and recovery.
   </td>
@@ -837,7 +837,7 @@ except ImportError:
     </td>
     <td bgcolor="{{ conf.BgColour }}">
       <br /><br />
-      To find rows from specific time periods (where row has DATE/DATETIME columns), use the keyword
+      To find rows from specific time periods (where source has DATE/DATETIME columns), use the keyword
       <font color="{{ conf.HelpCodeColour }}"><code>date:period</code></font> or
       <font color="{{ conf.HelpCodeColour }}"><code>date:periodstart..periodend</code></font>.
       For the latter, either start or end can be omitted.<br /><br />
@@ -889,7 +889,7 @@ except ImportError:
 
   <br /><br />
   All search texts and keywords are case-insensitive. <br />
-  Keywords are global, even when in (grouped words). <br />
+  Keywords are global, even when in bracketed (grouped words). <br />
   Metadata search supports only <code>table:</code> and <code>view:</code> keywords.
 
 </td></tr></table>
