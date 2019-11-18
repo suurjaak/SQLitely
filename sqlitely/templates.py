@@ -1028,6 +1028,8 @@ total = index_total + sum(x["size"] for x in data["table"])
 
 %elif isdef("running") and running:
     Analyzing..
+%else:
+    Press Refresh to generate statistics.
 %endif
 
 </font>
