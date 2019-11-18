@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.11.2019
+@modified    18.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4024,6 +4024,9 @@ class DatabasePage(wx.Panel):
         nb = event.EventObject
         while nb and nb not in nbs: nb = nb.Parent
         page = nb.GetPage(event.GetSelection()) if has_page else None
+
+        if page and nb is self.notebook_sql and "+" == nb.GetPageText(event.GetSelection()):
+            page = None
 
         def fmtname(item, cap=False):
             vv = tuple(item.get(x) for x in ("type", "name"))
