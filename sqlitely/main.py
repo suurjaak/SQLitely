@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.10.2019
+@modified    18.11.2019
 ------------------------------------------------------------------------------
 """
 import argparse
@@ -87,7 +87,7 @@ def run_gui(filenames):
     app.SetTopWindow(window) # stdout/stderr popup closes with MainWindow
 
     # Override stdout/stderr.write to swallow Gtk warnings
-    swallow = lambda w, s: w(s) if ("Gtk" in s and "eprecat" in s) else None
+    swallow = lambda w, s: None if ("Gtk" in s and "eprecat" in s) else w(s)
     try:
         sys.stdout.write = functools.partial(swallow, sys.stdout.write)
         sys.stderr.write = functools.partial(swallow, sys.stderr.write)
