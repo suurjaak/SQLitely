@@ -793,23 +793,24 @@ class HintedTextCtrl(wx.TextCtrl):
         @param   escape  whether to clear entered value on pressing Escape
         """
         super(self.__class__, self).__init__(parent, **kwargs)
-        self._text_colour = self._desc_colour = None
+        self._text_colour = self._hint_colour = None
         ColourManager.Manage(self, "_text_colour", wx.SYS_COLOUR_BTNTEXT)
         ColourManager.Manage(self, "_desc_colour", wx.SYS_COLOUR_GRAYTEXT)
+        self.SetForegroundColour(self._text_colour)
 
         self._hint = hint
-        self._hint_on = False # Is textbox filled with description?
-        self._ignore_change  = False # Ignore text change in event handlers
+        self._hint_on = False # Whether textbox is filled with hint value
+        self._ignore_change = False # Ignore value change
         if not self.Value:
             self.Value = self._hint
-            self.SetForegroundColour(self._desc_colour)
+            self.SetForegroundColour(self._hint_colour)
             self._hint_on = True
 
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED,  self.OnSysColourChange)
-        self.Bind(wx.EVT_SET_FOCUS,           self.OnFocus,   self)
-        self.Bind(wx.EVT_KILL_FOCUS,          self.OnFocus,   self)
-        self.Bind(wx.EVT_TEXT,                self.OnText,    self)
-        if escape: self.Bind(wx.EVT_KEY_DOWN, self.OnKeyDown, self)
+        self.Bind(wx.EVT_SET_FOCUS,           self.OnFocus)
+        self.Bind(wx.EVT_KILL_FOCUS,          self.OnFocus)
+        self.Bind(wx.EVT_TEXT,                self.OnText)
+        if escape: self.Bind(wx.EVT_KEY_DOWN, self.OnKeyDown)
 
 
     def OnFocus(self, event):
@@ -819,15 +820,18 @@ class HintedTextCtrl(wx.TextCtrl):
         event.Skip() # Allow to propagate to parent, to show having focus
         self._ignore_change = True
         if self and self.FindFocus() == self:
-            if self._hint_on: self.Value = ""
+            if self._hint_on:
+                self.SetForegroundColour(self._text_colour)
+                self.Value = ""
+                self._hint_on = False
             self.SelectAll()
         elif self:
             if self._hint and not self.Value:
                 # Control has been unfocused, set and colour hint
                 wx.TextCtrl.SetValue(self, self._hint)
-                self.SetForegroundColour(self._desc_colour)
+                self.SetForegroundColour(self._hint_colour)
                 self._hint_on = True
-        self._ignore_change = False
+        wx.CallAfter(setattr, self, "_ignore_change", False)
 
 
     def OnKeyDown(self, event):
@@ -835,13 +839,18 @@ class HintedTextCtrl(wx.TextCtrl):
         event.Skip()
         if event.KeyCode in [wx.WXK_ESCAPE] and self.Value:
             self.Value = ""
-            wx.PostEvent(self, wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER))
+            evt = wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER, self.Id)
+            evt.EventObject = self
+            evt.String = self.Value
+            wx.PostEvent(self, evt)
 
 
     def OnText(self, event):
         """Handler for text change, fires TEXT_ENTER event."""
+        event.Skip()
         if self._ignore_change: return
-        evt = wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER)
+        evt = wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER, self.Id)
+        evt.EventObject = self
         evt.String = self.Value
         wx.PostEvent(self, evt)
 
@@ -849,8 +858,23 @@ class HintedTextCtrl(wx.TextCtrl):
     def OnSysColourChange(self, event):
         """Handler for system colour change, updates text colour."""
         event.Skip()
-        colour = self._desc_colour if self._hint_on else self._text_colour
+        colour = self._hint_colour if self._hint_on else self._text_colour
         self.SetForegroundColour(colour)
+
+
+    def GetHint(self):
+        """Returns the current hint."""
+        return self._hint
+    def SetHint(self, hint):
+        """Sets the hint value."""
+        self._hint = hint
+        if self._hint_on or not self.Value and not self.HasFocus():
+            self._ignore_change = True
+            wx.TextCtrl.SetValue(self, self._hint)
+            self.SetForegroundColour(self._hint_colour)
+            self._hint_on = True
+            wx.CallAfter(setattr, self, "_ignore_change", False)
+    Hint = property(GetHint, SetHint)
 
 
     def GetValue(self):
@@ -861,9 +885,12 @@ class HintedTextCtrl(wx.TextCtrl):
         return "" if self._hint_on else wx.TextCtrl.GetValue(self)
     def SetValue(self, value):
         """Sets the value in the text entry field."""
-        self.SetForegroundColour(self._text_colour)
-        self._hint_on = False
-        return wx.TextCtrl.SetValue(self, value)
+        self._ignore_change = True
+        wx.TextCtrl.SetValue(self, value)
+        if value:
+            self.SetForegroundColour(self._text_colour)
+            self._hint_on = False
+        wx.CallAfter(setattr, self, "_ignore_change", False)
     Value = property(GetValue, SetValue)
 
 

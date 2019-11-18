@@ -6133,15 +6133,17 @@ class DataDialog(wx.Dialog):
         self._editable = ("table" == gridbase.category)
         self._edits    = OrderedDict() # {column name: TextCtrl}
         self._cache    = {} # {row index: {data}}
+        self._ignore_change = False # Ignore edit change in handler
 
         sizer_header  = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_footer  = wx.BoxSizer(wx.HORIZONTAL)
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
 
-        button_prev = self._button_prev = wx.Button(self, label="&Previous")
+        button_prev = self._button_prev = wx.Button(self, label="&Previous", size=(-1, 20))
         text_header = self._text_header = wx.StaticText(self)
-        button_next = self._button_next = wx.Button(self, label="&Next")
+        button_next = self._button_next = wx.Button(self, label="&Next", size=(-1, 20))
 
-        panel         = wx.ScrolledWindow(self)
+        panel = wx.ScrolledWindow(self)
         sizer_columns = wx.FlexGridSizer(rows=len(self._columns),
                                          cols=3 if self._editable else 2,
                                          gap=(5, 5))
@@ -6155,26 +6157,29 @@ class DataDialog(wx.Dialog):
             if gridbase.db.get_affinity(coldata) in ("TEXT", "BLOB"):
                 style |= wx.TE_MULTILINE
                 sizer_columns.AddGrowableRow(i)
-            edit = wx.TextCtrl(panel, name="data_" + coldata["name"], style=style)
+            edit = controls.HintedTextCtrl(panel, escape=False, name="data_" + coldata["name"], style=style)
             edit.SetEditable(self._editable)
             tip = ("%s %s" % (coldata["name"], coldata.get("type"))).strip()
             if self._editable:
                 tip = gridbase.db.get_sql(gridbase.category, gridbase.name, coldata["name"])
             edit.ToolTip = label.ToolTip = tip
             self._edits[coldata["name"]] = edit
-            sizer_columns.Add(label, flag=wx.RIGHT)
-            sizer_columns.Add(edit, proportion=1, flag=wx.GROW)
+            sizer_columns.Add(label, flag=wx.GROW)
+            sizer_columns.Add(edit,  flag=wx.GROW)
             if self._editable:
-                button = wx.Button(panel, label="..", size=(20, -1))
+                button = wx.Button(panel, label="..", size=(20, 20))
                 button.AcceptsFocusFromKeyboard = lambda: False # No tabbing
                 button.ToolTip = "Open options menu"
                 sizer_columns.Add(button)
                 self.Bind(wx.EVT_BUTTON, functools.partial(self._OnOptions, i), button)
+                self.Bind(wx.EVT_TEXT_ENTER, functools.partial(self._OnEdit, i), edit)
 
-        button_update = self._button_update = wx.Button(self, label="&Update")
-        button_copy   = self._button_copy   = wx.Button(self, label="&Copy ..")
-        button_reset  = self._button_reset  = wx.Button(self, label="&Reset")
-        button_close  = self._button_close  = wx.Button(self, label="Close", id=wx.CANCEL)
+        button_update = wx.Button(self, label="&Update",  size=(-1, 20))
+        button_reset  = wx.Button(self, label="&Reset",   size=(-1, 20))
+        button_copy   = wx.Button(self, label="&Copy ..", size=(-1, 20))
+
+        button_ok     = wx.Button(self, label="&Accept")
+        button_cancel = wx.Button(self, label="&Close", id=wx.CANCEL)
 
         sizer_header.Add(button_prev)
         sizer_header.AddStretchSpacer()
@@ -6182,20 +6187,28 @@ class DataDialog(wx.Dialog):
         sizer_header.AddStretchSpacer()
         sizer_header.Add(button_next, flag=wx.ALIGN_RIGHT)
 
-        sizer_buttons.Add(button_update, border=5, flag=wx.RIGHT)
-        sizer_buttons.Add(button_copy,   border=5, flag=wx.RIGHT)
-        sizer_buttons.Add(button_reset,  border=5, flag=wx.RIGHT)
-        sizer_buttons.Add(button_close,  border=5)
+        sizer_footer.Add(button_update, border=5, flag=wx.RIGHT)
+        sizer_footer.Add(button_reset,  border=5, flag=wx.RIGHT)
+        sizer_footer.Add(button_copy)
+
+        sizer_buttons.Add(button_ok, border=5, flag=wx.RIGHT)
+        sizer_buttons.AddStretchSpacer()
+        sizer_buttons.Add(button_cancel)
+        if not self._editable: sizer_buttons.AddStretchSpacer()
 
         self.Sizer.Add(sizer_header,  border=5, flag=wx.ALL | wx.GROW)
-        self.Sizer.Add(panel,         border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.GROW)
-        self.Sizer.Add(sizer_buttons, border=5, flag=wx.ALL | wx.ALIGN_CENTER_HORIZONTAL)
+        self.Sizer.Add(panel,         border=5, proportion=1, flag=wx.ALL | wx.GROW)
+        self.Sizer.Add(sizer_footer,  border=5, flag=wx.TOP | wx.BOTTOM | wx.ALIGN_CENTER_HORIZONTAL)
+        self.Sizer.Add(sizer_buttons, border=5, flag=wx.ALL | wx.GROW)
 
+        button_prev.ToolTip   = "Go to previous row"
+        button_next.ToolTip   = "Go to next row"
+        button_ok.ToolTip     = "Set changes to grid and close dialog" if self._editable else "Close dialog"
         button_update.ToolTip = "Set changes to grid"
         button_copy.ToolTip   = "Copy row data or SQL"
         button_reset.ToolTip  = "Restore original values"
-        button_close.ToolTip  = "Close data dialog"
-        button_update.Shown = button_reset.Shown = self._editable
+        button_cancel.ToolTip = "Close data dialog"
+        button_update.Shown = button_reset.Shown = button_ok.Shown = self._editable
         panel.SetScrollRate(0, 20)
         self.SetEscapeId(wx.CANCEL)
 
@@ -6204,12 +6217,13 @@ class DataDialog(wx.Dialog):
         self.Bind(wx.EVT_BUTTON, self._OnUpdate, button_update)
         self.Bind(wx.EVT_BUTTON, self._OnCopy,   button_copy)
         self.Bind(wx.EVT_BUTTON, self._OnReset,  button_reset)
-        self.Bind(wx.EVT_BUTTON, self._OnClose,  button_close)
+        self.Bind(wx.EVT_BUTTON, self._OnAccept, button_ok)
+        self.Bind(wx.EVT_BUTTON, self._OnClose,  button_cancel)
         self.Bind(wx.EVT_CLOSE,  self._OnClose)
-        for n, c in self._edits.items(): self.Bind(wx.EVT_TEXT, self._OnEdit, c)
 
         self._Populate()
 
+        self.MinSize = (250, 250)
         self.Layout()
         self.CenterOnParent()
 
@@ -6247,9 +6261,12 @@ class DataDialog(wx.Dialog):
             else: rowtitle = "Row #%s" % (self._row + 1)
             self._text_header.Label = rowtitle
 
+            self._ignore_change = True
             for n, c in self._edits.items():
                 v = self._data[n]
                 c.Value = "" if v is None else util.to_unicode(v)
+                c.Hint  = "<NULL>" if v is None else ""
+            wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
             self.Layout()
         finally: self.Thaw()
         self.Refresh()
@@ -6257,9 +6274,12 @@ class DataDialog(wx.Dialog):
 
     def _SetValue(self, col, val):
         """Sets the value to column and edit at specified index."""
+        self._ignore_change = True
         name = self._columns[col]["name"]
         self._data[name] = val
         self._edits[name].Value = "" if val is None else util.to_unicode(val)
+        self._edits[name].Hint  = "<NULL>" if val is None else ""
+        wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
 
 
     def _OnRow(self, direction, event=None):
@@ -6275,10 +6295,19 @@ class DataDialog(wx.Dialog):
         self._Populate()
 
 
-    def _OnEdit(self, event):
+    def _OnEdit(self, col, event):
         """Handler for editing a value, updates data structure."""
         event.Skip()
-        self._data[event.EventObject.Name] = event.EventObject.Value
+        name, value = self._columns[col]["name"], event.EventObject.Value
+        if self._ignore_change or not value and self._data[name] is None: return
+        self._data[name] = value
+        event.EventObject.Hint = ""
+
+
+    def _OnAccept(self, event=None):
+        """Handler for closing dialog."""
+        self._OnUpdate()
+        self._OnClose()
 
 
     def _OnUpdate(self, event=None):
@@ -6306,9 +6335,9 @@ class DataDialog(wx.Dialog):
         wx.PostEvent(self.Parent, evt)
 
 
-    def _OnOptions(self, index, event=None):
+    def _OnOptions(self, col, event=None):
         """Handler for opening column options."""
-        coldata = self._columns[index]
+        coldata = self._columns[col]
         menu = wx.Menu()
 
         def on_copy_data(event=None):
@@ -6325,20 +6354,28 @@ class DataDialog(wx.Dialog):
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
                 guibase.status("Copied column SQL to clipboard", flash=True)
         def on_reset(event=None):
-            self._SetValue(index, self._original[coldata["name"]])
+            self._SetValue(col, self._original[coldata["name"]])
         def on_null(event=None):
-            self._SetValue(index, None)
+            self._SetValue(col, None)
+        def on_date(event=None):
+            v = datetime.date.today()
+            self._SetValue(col, v)
+        def on_datetime(event=None):
+            v = datetime.datetime.utcnow().isoformat()[:19]
+            self._SetValue(col, v)
         def on_stamp(event=None):
-            v = datetime.datetime.utcnow().replace(tzinfo=util.UTC)
-            self._SetValue(index, v)
+            v = datetime.datetime.utcnow().replace(tzinfo=util.UTC).isoformat()
+            self._SetValue(col, v)
 
-        item_data  = wx.MenuItem(menu, -1, "&Copy value")
-        item_sql   = wx.MenuItem(menu, -1, "Copy UPDATE &SQL")
-        item_reset = wx.MenuItem(menu, -1, "&Reset")
-        item_null  = wx.MenuItem(menu, -1, "Set &NULL")
-        item_stamp = wx.MenuItem(menu, -1, "Set current &timestamp")
+        item_data     = wx.MenuItem(menu, -1, "&Copy value")
+        item_sql      = wx.MenuItem(menu, -1, "Copy UPDATE &SQL")
+        item_reset    = wx.MenuItem(menu, -1, "&Reset")
+        item_null     = wx.MenuItem(menu, -1, "Set &NULL")
+        item_date     = wx.MenuItem(menu, -1, "Set current &date")
+        item_datetime = wx.MenuItem(menu, -1, "Set current date&time")
+        item_stamp    = wx.MenuItem(menu, -1, "Set current timesta&mp")
 
-        item_null.Enabled = "notnull" not in coldata
+        item_null.Enabled = "notnull" not in coldata and "pk" not in coldata
 
         menu.Append(item_data)
         menu.Append(item_sql)
@@ -6346,12 +6383,16 @@ class DataDialog(wx.Dialog):
         menu.Append(item_reset)
         menu.AppendSeparator()
         menu.Append(item_null)
+        menu.Append(item_date)
+        menu.Append(item_datetime)
         menu.Append(item_stamp)
 
         menu.Bind(wx.EVT_MENU, on_copy_data, item_data)
         menu.Bind(wx.EVT_MENU, on_copy_sql,  item_sql)
         menu.Bind(wx.EVT_MENU, on_reset,     item_reset)
         menu.Bind(wx.EVT_MENU, on_null,      item_null)
+        menu.Bind(wx.EVT_MENU, on_date,      item_date)
+        menu.Bind(wx.EVT_MENU, on_datetime,  item_datetime)
         menu.Bind(wx.EVT_MENU, on_stamp,     item_stamp)
 
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
