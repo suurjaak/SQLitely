@@ -50,7 +50,7 @@ def except_hook(etype, evalue, etrace):
     if not conf.PopupUnexpectedErrors: return
     msg = "An unexpected error has occurred:\n\n%s\n\n" \
           "See log for full details." % util.format_exc(evalue)
-    wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
+    wx.CallAfter(wx.MessageBox, msg, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
 def install_thread_excepthook():
