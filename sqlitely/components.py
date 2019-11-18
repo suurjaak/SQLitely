@@ -1256,9 +1256,9 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN, wx.ART_TOOLBAR, (16, 16))
         bmp3 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
         tb.SetToolBitmapSize(bmp1.Size)
-        tb.AddLabelTool(wx.ID_COPY, "", bitmap=bmp1, shortHelp="Copy SQL to clipboard")
-        tb.AddLabelTool(wx.ID_OPEN, "", bitmap=bmp2, shortHelp="Load SQL from file")
-        tb.AddLabelTool(wx.ID_SAVE, "", bitmap=bmp3, shortHelp="Save SQL to file")
+        tb.AddTool(wx.ID_COPY, "", bmp1, shortHelp="Copy SQL to clipboard")
+        tb.AddTool(wx.ID_OPEN, "", bmp2, shortHelp="Load SQL from file")
+        tb.AddTool(wx.ID_SAVE, "", bmp3, shortHelp="Save SQL to file")
         tb.Realize()
 
         stc = self._stc = controls.SQLiteTextCtrl(panel1,
@@ -1281,9 +1281,9 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         bmp2 = images.ToolbarRefresh.Bitmap
         bmp3 = images.ToolbarClear.Bitmap
         tbgrid.SetToolBitmapSize(bmp1.Size)
-        tbgrid.AddLabelTool(wx.ID_INFO,    "", bitmap=bmp1, shortHelp="Copy executed SQL statement to clipboard")
-        tbgrid.AddLabelTool(wx.ID_REFRESH, "", bitmap=bmp2, shortHelp="Re-execute query")
-        tbgrid.AddLabelTool(wx.ID_RESET,   "", bitmap=bmp3, shortHelp="Reset all applied sorting and filtering")
+        tbgrid.AddTool(wx.ID_INFO,    "", bmp1, shortHelp="Copy executed SQL statement to clipboard")
+        tbgrid.AddTool(wx.ID_REFRESH, "", bmp2, shortHelp="Re-execute query")
+        tbgrid.AddTool(wx.ID_RESET,   "", bmp3, shortHelp="Reset all applied sorting and filtering")
         tbgrid.Realize()
         tbgrid.Disable()
 
@@ -1743,14 +1743,14 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         bmp5 = images.ToolbarCommit.Bitmap
         bmp6 = images.ToolbarRollback.Bitmap
         tb.SetToolBitmapSize(bmp1.Size)
-        tb.AddLabelTool(wx.ID_ADD,     "", bitmap=bmp1, shortHelp="Add new row")
-        tb.AddLabelTool(wx.ID_DELETE,  "", bitmap=bmp2, shortHelp="Delete current row")
+        tb.AddTool(wx.ID_ADD,     "", bmp1, shortHelp="Add new row")
+        tb.AddTool(wx.ID_DELETE,  "", bmp2, shortHelp="Delete current row")
         tb.AddSeparator()
-        tb.AddLabelTool(wx.ID_REFRESH, "", bitmap=bmp3, shortHelp="Reload data")
-        tb.AddLabelTool(wx.ID_RESET,   "", bitmap=bmp4, shortHelp="Reset all applied sorting and filtering")
+        tb.AddTool(wx.ID_REFRESH, "", bmp3, shortHelp="Reload data")
+        tb.AddTool(wx.ID_RESET,   "", bmp4, shortHelp="Reset all applied sorting and filtering")
         tb.AddSeparator()
-        tb.AddLabelTool(wx.ID_SAVE,    "", bitmap=bmp5, shortHelp="Commit changes to database")
-        tb.AddLabelTool(wx.ID_UNDO,    "", bitmap=bmp6, shortHelp="Rollback changes and restore original values")
+        tb.AddTool(wx.ID_SAVE,    "", bmp5, shortHelp="Commit changes to database")
+        tb.AddTool(wx.ID_UNDO,    "", bmp6, shortHelp="Rollback changes and restore original values")
         tb.EnableTool(wx.ID_UNDO, False)
         tb.EnableTool(wx.ID_SAVE, False)
         if "view" == self._category:
@@ -2302,8 +2302,8 @@ class SchemaObjectPage(wx.Panel):
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
         bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
         tb.SetToolBitmapSize(bmp1.Size)
-        tb.AddLabelTool(wx.ID_COPY, "", bitmap=bmp1, shortHelp="Copy SQL to clipboard")
-        tb.AddLabelTool(wx.ID_SAVE, "", bitmap=bmp2, shortHelp="Save SQL to file")
+        tb.AddTool(wx.ID_COPY, "", bmp1, shortHelp="Copy SQL to clipboard")
+        tb.AddTool(wx.ID_SAVE, "", bmp2, shortHelp="Save SQL to file")
         tb.Realize()
 
         stc = self._ctrls["sql"] = controls.SQLiteTextCtrl(panel2,

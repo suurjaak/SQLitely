@@ -2979,7 +2979,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
             choices = self._choices[:]
             choices += ["", self.DROPDOWN_CLEAR_TEXT] if choices else []
             for i, text in enumerate(choices):
-                self._listbox.InsertStringItem(i, text)
+                self._listbox.InsertItem(i, text)
             if choices: # Colour "Clear" item
                 self._listbox.SetItemTextColour(i, self._clear_colour)
 
