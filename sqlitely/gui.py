@@ -3339,7 +3339,9 @@ class DatabasePage(wx.Panel):
             self.tb_pragma.Shown = True
         for name, opts in database.Database.PRAGMA.items():
             ctrl = self.pragma_ctrls[name]
-            if opts.get("write") != False and "table" != opts["type"]:
+            writable = opts.get("write")
+            if callable(writable): writable = writable(self.db) 
+            if writable is not False and "table" != opts["type"]:
                 ctrl.Enable()
         self.page_pragma.Layout()
 

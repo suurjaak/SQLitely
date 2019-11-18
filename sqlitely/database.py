@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.11.2019
+@modified    18.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -57,7 +57,8 @@ class Database(object):
         ?min:         minimum integer value,
         ?max:         maximum integer value,
         ?read:        false if setting is write-only,
-        ?write:       false if setting is read-only,
+        ?write:       false if setting is read-only
+                      or a callable(db) returning false,
         ?col:         result column to select if type "table"
     }.
     """
@@ -74,6 +75,7 @@ class Database(object):
         "label": "Auto-vacuum",
         "type": int,
         "values": {0: "NONE", 1: "FULL", 2: "INCREMENTAL"},
+        "write": lambda db: not db.schema.values(),
         "short": "Auto-vacuum settings",
         "description": """  FULL: truncate deleted rows on every commit.
   INCREMENTAL: truncate on PRAGMA incremental_vacuum.
@@ -203,6 +205,7 @@ class Database(object):
         "name": "encoding",
         "label": "Encoding",
         "type": str,
+        "write": lambda db: not db.schema.values(),
         "short": "Database text encoding",
         "values": {"UTF-8": "UTF-8", "UTF-16": "UTF-16 native byte-ordering", "UTF-16le": "UTF-16 little endian", "UTF-16be": "UTF-16 big endian"},
         "description": "The text encoding used by the database. It is not possible to change the encoding after the database has been created.",
