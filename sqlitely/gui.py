@@ -3004,10 +3004,16 @@ class DatabasePage(wx.Panel):
             and not self.db.schema["table"]: return wx.MessageBox(
                 "No tables to save.", conf.Title, wx.ICON_NONE
             )
+            if arg in ("tables", "single", "dump") \
+            and self.panel_data_export.IsRunning(): return wx.MessageBox(
+                "A global export is already underway.", conf.Title, wx.ICON_NONE
+            )
 
             if "tables" == arg:
+                self.notebook.SetSelection(self.pageorder[self.page_data])
                 self.on_export_data_file("table", list(self.db.schema["table"]))
             elif "single" == arg:
+                self.notebook.SetSelection(self.pageorder[self.page_data])
                 self.on_export_singlefile("table")
             elif "data" == arg:
                 self.on_export_data_base(list(self.db.schema["table"]))
@@ -3027,9 +3033,10 @@ class DatabasePage(wx.Panel):
                 if not any(self.db.schema.values()):    info = ", database is empty"
                 elif "error" in self.statistics:        info = ", analysis failed"
                 elif self.worker_analyzer.is_working(): info = "yet, analysis underway"
-                else: info = ", analysis was cancelled"
+                else: info = ""
                 wx.MessageBox("No statistics to save%s." % info, conf.Title, wx.ICON_NONE)
             elif "dump" == arg:
+                self.notebook.SetSelection(self.pageorder[self.page_data])
                 self.on_dump()
 
 
