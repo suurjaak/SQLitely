@@ -1458,10 +1458,20 @@ DUMP_SQL = """<%
 import itertools
 from sqlitely.lib.vendor.step import Template
 from sqlitely import grammar, templates
+
+PRAGMAS_FIRST = ("auto_vacuum", "encoding")
+pragma_first = {k: v for k, v in pragma.items() if k in PRAGMAS_FIRST}
+pragma_last  = {k: v for k, v in pragma.items() if k not in PRAGMAS_FIRST}
 %>
 -- Database dump.
 -- Source: {{ db.name }}.
 -- {{ templates.export_comment() }}
+%if pragma_first:
+
+-- Initial PRAGMA settings
+{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma_first) }}
+
+%endif
 %if sql:
 
 {{ sql }}
@@ -1481,7 +1491,7 @@ rows = itertools.chain([row], table["rows"])
 %endfor
 
 -- PRAGMA settings
-{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma) }}
+{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma_last) }}
 """
 
 
