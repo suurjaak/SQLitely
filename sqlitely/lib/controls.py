@@ -12,6 +12,9 @@ Stand-alone GUI components for wx:
 - FormDialog(wx.Dialog):
   Dialog for displaying a complex editable form.
 
+- HintedTextCtrl(wx.TextCtrl):
+  Simple search control, with search description.
+
 - NonModalOKDialog(wx.Dialog):
   A simple non-modal dialog with an OK button, stays on top of parent.
 
@@ -26,9 +29,6 @@ Stand-alone GUI components for wx:
 - PropertyDialog(wx.Dialog):
   Dialog for displaying an editable property grid. Supports strings,
   integers, booleans, and tuples interpreted as wx.Size.
-
-- SearchCtrl(wx.TextCtrl):
-  Simple search control, with search description.
 
 - SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                            wx.lib.mixins.listctrl.ColumnSorterMixin):
@@ -59,7 +59,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    17.11.2019
+@modified    18.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -779,6 +779,95 @@ class FormDialog(wx.Dialog):
 
 
 
+class HintedTextCtrl(wx.TextCtrl):
+    """
+    A text control with a hint text shown when no value, hidden when focused.
+    Fires EVT_TEXT_ENTER event on text change.
+    Clears entered value on pressing Escape.
+    """
+
+
+    def __init__(self, parent, hint="", escape=True, **kwargs):
+        """
+        @param   hint    hint text shown when no value and no focus
+        @param   escape  whether to clear entered value on pressing Escape
+        """
+        super(self.__class__, self).__init__(parent, **kwargs)
+        self._text_colour = self._desc_colour = None
+        ColourManager.Manage(self, "_text_colour", wx.SYS_COLOUR_BTNTEXT)
+        ColourManager.Manage(self, "_desc_colour", wx.SYS_COLOUR_GRAYTEXT)
+
+        self._hint = hint
+        self._hint_on = False # Is textbox filled with description?
+        self._ignore_change  = False # Ignore text change in event handlers
+        if not self.Value:
+            self.Value = self._hint
+            self.SetForegroundColour(self._desc_colour)
+            self._hint_on = True
+
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED,  self.OnSysColourChange)
+        self.Bind(wx.EVT_SET_FOCUS,           self.OnFocus,   self)
+        self.Bind(wx.EVT_KILL_FOCUS,          self.OnFocus,   self)
+        self.Bind(wx.EVT_TEXT,                self.OnText,    self)
+        if escape: self.Bind(wx.EVT_KEY_DOWN, self.OnKeyDown, self)
+
+
+    def OnFocus(self, event):
+        """
+        Handler for focusing/unfocusing the control, shows/hides hint.
+        """
+        event.Skip() # Allow to propagate to parent, to show having focus
+        self._ignore_change = True
+        if self and self.FindFocus() == self:
+            if self._hint_on: self.Value = ""
+            self.SelectAll()
+        elif self:
+            if self._hint and not self.Value:
+                # Control has been unfocused, set and colour hint
+                wx.TextCtrl.SetValue(self, self._hint)
+                self.SetForegroundColour(self._desc_colour)
+                self._hint_on = True
+        self._ignore_change = False
+
+
+    def OnKeyDown(self, event):
+        """Handler for keypress, empties text on escape."""
+        event.Skip()
+        if event.KeyCode in [wx.WXK_ESCAPE] and self.Value:
+            self.Value = ""
+            wx.PostEvent(self, wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER))
+
+
+    def OnText(self, event):
+        """Handler for text change, fires TEXT_ENTER event."""
+        if self._ignore_change: return
+        evt = wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER)
+        evt.String = self.Value
+        wx.PostEvent(self, evt)
+
+
+    def OnSysColourChange(self, event):
+        """Handler for system colour change, updates text colour."""
+        event.Skip()
+        colour = self._desc_colour if self._hint_on else self._text_colour
+        self.SetForegroundColour(colour)
+
+
+    def GetValue(self):
+        """
+        Returns the current value in the text field, or empty string if filled
+        with hint.
+        """
+        return "" if self._hint_on else wx.TextCtrl.GetValue(self)
+    def SetValue(self, value):
+        """Sets the value in the text entry field."""
+        self.SetForegroundColour(self._text_colour)
+        self._hint_on = False
+        return wx.TextCtrl.SetValue(self, value)
+    Value = property(GetValue, SetValue)
+
+
+
 class NonModalOKDialog(wx.Dialog):
     """A simple non-modal dialog with an OK button, stays on top of parent."""
 
@@ -1374,97 +1463,6 @@ class PropertyDialog(wx.Dialog):
         value = tuple(value) if isinstance(value, list) else value
         return "" if value is None else value \
                if isinstance(value, (basestring, bool)) else unicode(value)
-
-
-
-class SearchCtrl(wx.TextCtrl):
-    """
-    A text control with search description.
-    Fires EVT_TEXT_ENTER event on text change.
-    """
-
-
-    def __init__(self, parent, description="", **kwargs):
-        """
-        @param   description  description text shown if nothing entered yet
-        """
-        wx.TextCtrl.__init__(self, parent, **kwargs)
-        self._text_colour = self._desc_colour = None
-        ColourManager.Manage(self, "_text_colour", wx.SYS_COLOUR_BTNTEXT)
-        ColourManager.Manage(self, "_desc_colour", wx.SYS_COLOUR_GRAYTEXT)
-
-        self._description = description
-        self._description_on = False # Is textbox filled with description?
-        self._ignore_change  = False # Ignore text change in event handlers
-        if not self.Value:
-            self.Value = self._description
-            self.SetForegroundColour(self._desc_colour)
-            self._description_on = True
-
-        self.Bind(wx.EVT_SET_FOCUS,          self.OnFocus,        self)
-        self.Bind(wx.EVT_KILL_FOCUS,         self.OnFocus,        self)
-        self.Bind(wx.EVT_KEY_DOWN,           self.OnKeyDown,      self)
-        self.Bind(wx.EVT_TEXT,               self.OnText,         self)
-        self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
-
-
-    def OnFocus(self, event):
-        """
-        Handler for focusing/unfocusing the control, shows/hides description.
-        """
-        event.Skip() # Allow to propagate to parent, to show having focus
-        self._ignore_change = True
-        if self and self.FindFocus() == self:
-            if self._description_on:
-                self.Value = ""
-            self.SelectAll()
-        elif self:
-            if self._description and not self.Value:
-                # Control has been unfocused, set and colour description
-                wx.TextCtrl.SetValue(self, self._description)
-                self.SetForegroundColour(self._desc_colour)
-                self._description_on = True
-        self._ignore_change = False
-
-
-    def OnKeyDown(self, event):
-        """Handler for keypress, empties text on escape."""
-        event.Skip()
-        if event.KeyCode in [wx.WXK_ESCAPE] and self.Value:
-            self.Value = ""
-            wx.PostEvent(self, wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER))
-
-
-    def OnText(self, event):
-        """Handler for text change, fires TEXT_ENTER event."""
-        if self._ignore_change: return
-        evt = wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER)
-        evt.String = self.Value
-        wx.PostEvent(self, evt)
-
-
-    def OnSysColourChange(self, event):
-        """Handler for system colour change, updates text colour."""
-        event.Skip()
-        colour = self._desc_colour if self._description_on else self._text_colour
-        self.SetForegroundColour(colour)
-
-
-    def GetValue(self):
-        """
-        Returns the current value in the text field, or empty string if filled
-        with description.
-        """
-        value = wx.TextCtrl.GetValue(self)
-        if self._description_on:
-            value = ""
-        return value
-    def SetValue(self, value):
-        """Sets the value in the text entry field."""
-        self.SetForegroundColour(self._text_colour)
-        self._description_on = False
-        return wx.TextCtrl.SetValue(self, value)
-    Value = property(GetValue, SetValue)
 
 
 

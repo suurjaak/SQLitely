@@ -260,7 +260,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
 
         label_count = self.label_count = wx.StaticText(page)
-        edit_filter = self.edit_filter = controls.SearchCtrl(page, "Filter list")
+        edit_filter = self.edit_filter = controls.HintedTextCtrl(page, "Filter list")
         edit_filter.ToolTip = "Filter database list (Ctrl-F)"
         list_db = self.list_db = controls.SortableUltimateListCtrl(page,
             agwStyle=wx.LC_REPORT | wx.BORDER_NONE)
@@ -2584,7 +2584,7 @@ class DatabasePage(wx.Panel):
         label_header = wx.StaticText(page, label="Database PRAGMA settings")
         label_header.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                     wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
-        edit_filter = self.edit_pragma_filter = controls.SearchCtrl(page, "Filter settings")
+        edit_filter = self.edit_pragma_filter = controls.HintedTextCtrl(page, "Filter settings")
         edit_filter.ToolTip = "Filter PRAGMA directive list (Ctrl-F)"
 
         def on_help(ctrl, text, event):

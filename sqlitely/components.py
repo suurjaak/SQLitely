@@ -6412,7 +6412,7 @@ class HistoryDialog(wx.Dialog):
         sizer_top = wx.BoxSizer(wx.HORIZONTAL)
 
         info   = self._info = wx.StaticText(self)
-        search = self._search = controls.SearchCtrl(self, "Filter list")
+        search = self._search = controls.HintedTextCtrl(self, "Filter list")
         grid   = self._grid = wx.grid.Grid(self)
         button = wx.Button(self, label="OK")
 
