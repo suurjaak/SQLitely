@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.11.2019
+@modified    18.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -2472,6 +2472,13 @@ class SchemaObjectPage(wx.Panel):
         check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
         check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT EXISTS")
         check_rowid  = self._ctrls["without"]   = wx.CheckBox(panel, label="WITHOUT &ROWID")
+        check_temp.ToolTip  = "Table will exist only for the duration of the current session"
+        check_rowid.ToolTip = "Omit the default internal ROWID column. " \
+                              "Table must have a non-autoincrement primary key. " \
+                              "sqlite3_blob_open() will not work.\n\n" \
+                              "Can reduce storage and processing overhead, " \
+                              "suitable for tables with non-integer or composite " \
+                              "primary keys, and not too much data per row."
 
         nb = self._notebook_table = wx.Notebook(panel)
         panel_columnwrapper     = self._MakeColumnsGrid(nb)
@@ -2561,10 +2568,15 @@ class SchemaObjectPage(wx.Panel):
         list_action = self._ctrls["action"] = wx.ComboBox(panel,
             style=wx.CB_DROPDOWN | wx.CB_READONLY, choices=self.ACTION)
         label_table._toggle = "skip"
+        label_upon.ToolTip = "When is trigger executed, defaults to BEFORE.\n\n" \
+                             "INSTEAD OF triggers apply to views, enabling to execute " \
+                             "INSERT, DELETE or UPDATE statements on the view."
 
         check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
         check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT EXISTS")
         check_for    = self._ctrls["for"]       = wx.CheckBox(panel, label="FOR EACH &ROW")
+        check_temp.ToolTip = "Trigger will exist only for the duration of the current session"
+        check_for.ToolTip  = "Not enforced by SQLite, all triggers are FOR EACH ROW by default"
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
         panel1, panel2 = self._MakeColumnsGrid(splitter), wx.Panel(splitter)
@@ -2574,13 +2586,15 @@ class SchemaObjectPage(wx.Panel):
         stc_body   = self._ctrls["body"] = controls.SQLiteTextCtrl(panel2,
             size=(-1, 40),
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
-        label_body.ToolTip = "Trigger body SQL"
+        label_body.ToolTip = "Trigger body SQL, any number of " \
+                             "SELECT-INSERT-UPDATE-DELETE statements."
 
         label_when = wx.StaticText(panel2, label="WHEN:", name="trigger_when_label")
         stc_when   = self._ctrls["when"] = controls.SQLiteTextCtrl(panel2,
             size=(-1, 40), name="trigger_when",
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
-        label_when.ToolTip = "Trigger WHEN expression, trigger executed only if WHEN is true"
+        label_when.ToolTip = "Trigger WHEN expression, trigger executed only if WHEN is true. " \
+                             "Can access the OLD and NEW row references."
 
         sizer_table.Add(label_table, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_table.Add(list_table, flag=wx.GROW)
