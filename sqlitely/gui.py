@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.10.2019
+@modified    18.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2023,7 +2023,7 @@ class DatabasePage(wx.Panel):
         bmp = wx.ArtProvider.GetBitmap(wx.ART_GO_FORWARD, wx.ART_TOOLBAR,
                                        (16, 16))
         tb.SetToolBitmapSize(bmp.Size)
-        tb.AddLabelTool(wx.ID_FIND, "", bitmap=bmp, shortHelp="Start search")
+        tb.AddTool(wx.ID_FIND, "", bmp, shortHelp="Start search")
         tb.Realize()
         self.Bind(wx.EVT_TOOL, self.on_searchall, id=wx.ID_FIND)
         sizer_header.Add(edit_search, border=5,
@@ -2113,10 +2113,10 @@ class DatabasePage(wx.Panel):
         tb.AddRadioTool(wx.ID_INDEX, "Meta", bitmap1=images.ToolbarTitle.Bitmap,
             shortHelp="Search in database CREATE SQL")
         tb.AddSeparator()
-        tb.AddCheckTool(wx.ID_NEW, "Tabs", bitmap1=images.ToolbarTabs.Bitmap,
+        tb.AddCheckTool(wx.ID_NEW, "Tabs", images.ToolbarTabs.Bitmap,
             shortHelp="New tab for each search  (Alt-N)", longHelp="")
-        tb.AddSimpleTool(wx.ID_STOP, bitmap=images.ToolbarStopped.Bitmap,
-            shortHelpString="Stop current search, if any")
+        tb.AddTool(wx.ID_STOP, "", images.ToolbarStopped.Bitmap,
+            shortHelp="Stop current search, if any")
         tb.Realize()
         tb.ToggleTool(wx.ID_INDEX, conf.SearchInMeta)
         tb.ToggleTool(wx.ID_STATIC, conf.SearchInData)
@@ -2485,8 +2485,8 @@ class DatabasePage(wx.Panel):
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY,      wx.ART_TOOLBAR, (16, 16))
         bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
         tb.SetToolBitmapSize(bmp1.Size)
-        tb.AddLabelTool(wx.ID_COPY, "", bitmap=bmp1, shortHelp="Copy pragma SQL to clipboard")
-        tb.AddLabelTool(wx.ID_SAVE, "", bitmap=bmp2, shortHelp="Save pragma SQL to file")
+        tb.AddTool(wx.ID_COPY, "", bmp1, shortHelp="Copy pragma SQL to clipboard")
+        tb.AddTool(wx.ID_SAVE, "", bmp2, shortHelp="Save pragma SQL to file")
         tb.Realize()
         tb.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_pragma, e), id=wx.ID_COPY)
         tb.Bind(wx.EVT_TOOL, lambda e: self.on_save_sql(self.stc_pragma, e), id=wx.ID_SAVE)
@@ -2656,12 +2656,12 @@ class DatabasePage(wx.Panel):
         tb_stats = self.tb_stats = wx.ToolBar(panel_stats,
                                       style=wx.TB_FLAT | wx.TB_NODIVIDER)
         tb_stats.SetToolBitmapSize(bmp1.Size)
-        tb_stats.AddLabelTool(wx.ID_COPY,    "", bitmap=bmp1, shortHelp="Copy statistics to clipboard as text")
-        tb_stats.AddLabelTool(wx.ID_SAVE,    "", bitmap=bmp2, shortHelp="Save statistics as HTML")
-        tb_stats.AddLabelTool(wx.ID_SAVEAS,  "", bitmap=bmp3, shortHelp="Save SQLite analyzer statistics output as SQL")
+        tb_stats.AddTool(wx.ID_COPY,    "", bmp1, shortHelp="Copy statistics to clipboard as text")
+        tb_stats.AddTool(wx.ID_SAVE,    "", bmp2, shortHelp="Save statistics as HTML")
+        tb_stats.AddTool(wx.ID_SAVEAS,  "", bmp3, shortHelp="Save SQLite analyzer statistics output as SQL")
         tb_stats.AddSeparator()
-        tb_stats.AddLabelTool(wx.ID_REFRESH, "", bitmap=bmp4, shortHelp="Refresh statistics")
-        tb_stats.AddLabelTool(wx.ID_STOP,    "", bitmap=bmp5, shortHelp="Stop statistics analysis")
+        tb_stats.AddTool(wx.ID_REFRESH, "", bmp4, shortHelp="Refresh statistics")
+        tb_stats.AddTool(wx.ID_STOP,    "", bmp5, shortHelp="Stop statistics analysis")
         tb_stats.Realize()
         tb_stats.EnableTool(wx.ID_COPY, False)
         tb_stats.EnableTool(wx.ID_SAVE, False)
@@ -2679,9 +2679,9 @@ class DatabasePage(wx.Panel):
         tb_sql = self.tb_sql = wx.ToolBar(panel_schema,
                                       style=wx.TB_FLAT | wx.TB_NODIVIDER)
         tb_sql.SetToolBitmapSize(bmp1.Size)
-        tb_sql.AddLabelTool(wx.ID_REFRESH, "", bitmap=bmp4, shortHelp="Refresh schema SQL")
-        tb_sql.AddLabelTool(wx.ID_COPY,    "", bitmap=bmp1, shortHelp="Copy schema SQL to clipboard")
-        tb_sql.AddLabelTool(wx.ID_SAVE,    "", bitmap=bmp2, shortHelp="Save schema SQL to file")
+        tb_sql.AddTool(wx.ID_REFRESH, "", bmp4, shortHelp="Refresh schema SQL")
+        tb_sql.AddTool(wx.ID_COPY,    "", bmp1, shortHelp="Copy schema SQL to clipboard")
+        tb_sql.AddTool(wx.ID_SAVE,    "", bmp2, shortHelp="Save schema SQL to file")
         tb_sql.Realize()
         tb_sql.EnableTool(wx.ID_COPY, False)
         tb_sql.EnableTool(wx.ID_SAVE, False)
