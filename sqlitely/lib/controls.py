@@ -30,6 +30,10 @@ Stand-alone GUI components for wx:
   Dialog for displaying an editable property grid. Supports strings,
   integers, booleans, and tuples interpreted as wx.Size.
 
+- ResizeWidget(wx.lib.resizewidget.ResizeWidget):
+  A specialized panel that provides a resize handle for a widget,
+  with configurable resize directions.
+
 - SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                            wx.lib.mixins.listctrl.ColumnSorterMixin):
   A sortable list view that can be batch-populated, autosizes its columns,
@@ -59,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    18.11.2019
+@modified    19.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -82,6 +86,7 @@ import wx.lib.embeddedimage
 import wx.lib.gizmos
 import wx.lib.mixins.listctrl
 import wx.lib.newevent
+import wx.lib.resizewidget
 import wx.lib.wordwrap
 import wx.stc
 
@@ -1511,6 +1516,93 @@ class PropertyDialog(wx.Dialog):
 
 
 
+class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
+    """
+    A specialized panel that provides a resize handle for a widget,
+    with configurable resize directions.
+    """
+    BOTH = wx.HORIZONTAL | wx.VERTICAL
+
+
+    def __init__(self, parent, id=wx.ID_ANY, pos=wx.DefaultPosition, size=wx.DefaultSize,
+                 style=wx.TAB_TRAVERSAL, name="", direction=wx.HORIZONTAL | wx.VERTICAL):
+        """
+        @param   direction  either wx.HORIZONTAL and/or wx.VERTICAL to allow
+                            resize in one or both directions
+        """
+        self._direction = direction if direction & self.BOTH else self.BOTH
+        super(self.__class__, self).__init__(parent, id, pos, size, style, name)
+
+
+    def GetDirection(self, direction):
+        """Returns the resize direction of the window."""
+        return self._direction
+    def SetDirection(self, direction):
+        """
+        Sets resize direction of the window,
+        either wx.HORIZONTAL and/or wx.VERTICAL.
+        """
+        self._direction = direction if direction & self.BOTH else self.BOTH
+    Direction = property(GetDirection, SetDirection)
+
+
+    def OnLeftUp(self, evt):
+        """Handles the wx.EVT_LEFT_UP event."""
+        self._dragPos = None
+        if self.HasCapture():
+            self.ReleaseMouse()
+            self.InvalidateBestSize()
+
+
+    def OnMouseLeave(self, event):
+        """Handles the wx.EVT_LEAVE_WINDOW event."""
+        if not self.HasCapture() and self._resizeCursor:
+            self.SetCursor(wx.Cursor(wx.CURSOR_ARROW))
+            self._resizeCursor = False
+
+
+    def OnMouseMove(self, evt):
+        """
+        Handles wx.EVT_MOTION event. Overrides inherited .OnMouseMove
+        to constrain resize to configured directions only.
+        """
+        pos = evt.GetPosition()
+        if self._hitTest(pos) and self._resizeEnabled:
+            if not self._resizeCursor:
+                self.SetCursor(wx.Cursor(wx.CURSOR_SIZENWSE))
+                self._resizeCursor = True
+        elif not self.HasCapture():
+            if self._resizeCursor:
+                self.SetCursor(wx.Cursor(wx.CURSOR_ARROW))
+                self._resizeCursor = False
+
+        if evt.Dragging() and self._dragPos is not None:
+            delta, posDelta = wx.Size(), self._dragPos - pos
+            if self._direction & wx.HORIZONTAL: delta[0] = posDelta[0]
+            if self._direction & wx.VERTICAL:   delta[1] = posDelta[1]
+            newSize = self.GetSize() - delta
+            self._adjustNewSize(newSize)
+            if newSize != self.GetSize():
+                self.SetSize(newSize)
+                self._dragPos = pos
+                self._bestSize = newSize
+                self.InvalidateBestSize()
+                self._sendEvent()
+
+
+    def DoGetBestSize(self):
+        """Returns the best size."""
+        if self.HasCapture(): return self._bestSize
+
+        HANDLE = wx.lib.resizewidget.RW_THICKNESS
+        size, csize = wx.Size(*self._bestSize), self.ManagedChild.EffectiveMinSize
+        # Allow external resizing to function from child size
+        if not self._direction & wx.HORIZONTAL: size[0] = csize[0] + HANDLE
+        if not self._direction & wx.VERTICAL:   size[1] = csize[1] + HANDLE
+        return size
+
+
+
 class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                                wx.lib.mixins.listctrl.ColumnSorterMixin):
     """
@@ -2557,8 +2649,8 @@ class TabbedHtmlWindow(wx.Panel):
                 self._SetPage(self._default_page)
                 # Hide dropdown selector, remove X from tab style.
                 style = nb.GetAGWWindowStyleFlag()
-                style ^= wx.lib.agw.flatnotebook.FNB_X_ON_TAB | \
-                         wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST
+                style &= ~wx.lib.agw.flatnotebook.FNB_X_ON_TAB & \
+                         ~wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST
                 nb.SetAGWWindowStyleFlag(style)
             else:
                 index = min(nb.GetSelection(), pagecount - 2)

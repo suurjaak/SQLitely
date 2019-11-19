@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.11.2019
+@modified    19.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -28,6 +28,7 @@ import wx.grid
 import wx.lib
 import wx.lib.mixins.listctrl
 import wx.lib.newevent
+import wx.lib.resizewidget
 import wx.stc
 
 from . lib import controls
@@ -305,7 +306,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                     accepted = True
                 except Exception:
                     col_value, accepted = val, True
-        elif "BLOB" == self.db.get_affinity(self.columns[col]):
+        elif "BLOB" == self.db.get_affinity(self.columns[col]) and val:
             # Text editor does not support control characters or null bytes.
             try: col_value, accepted = val.decode("unicode-escape"), True
             except UnicodeError: pass # Text is not valid escaped Unicode
@@ -6138,7 +6139,7 @@ class DataDialog(wx.Dialog):
         text_header = self._text_header = wx.StaticText(self)
         button_next = self._button_next = wx.Button(self, label="&Next", size=(-1, 20))
 
-        panel = wx.ScrolledWindow(self)
+        panel = self._panel = wx.ScrolledWindow(self)
         sizer_columns = wx.FlexGridSizer(rows=len(self._columns),
                                          cols=3 if self._editable else 2,
                                          gap=(5, 5))
@@ -6148,19 +6149,24 @@ class DataDialog(wx.Dialog):
         for i, coldata in enumerate(self._columns):
             label = wx.StaticText(panel, label=coldata["name"] + ":",
                                   name="label_data_" + coldata["name"])
-            style = wx.TE_RICH
-            if gridbase.db.get_affinity(coldata) in ("TEXT", "BLOB"):
-                style |= wx.TE_MULTILINE
-                sizer_columns.AddGrowableRow(i)
-            edit = controls.HintedTextCtrl(panel, escape=False, name="data_" + coldata["name"], style=style)
+            resizable, rw = gridbase.db.get_affinity(coldata) in ("TEXT", "BLOB"), None
+            style = wx.TE_RICH | (wx.TE_MULTILINE if resizable else 0)
+            edit = controls.HintedTextCtrl(panel, escape=False, style=style,
+                                           name="data_" + coldata["name"])
             edit.SetEditable(self._editable)
             tip = ("%s %s" % (coldata["name"], coldata.get("type"))).strip()
             if self._editable:
                 tip = gridbase.db.get_sql(gridbase.category, gridbase.name, coldata["name"])
             edit.ToolTip = label.ToolTip = tip
+            edit.SetMargins(5, -1)
             self._edits[coldata["name"]] = edit
+            if resizable:
+                rw = controls.ResizeWidget(panel, direction=wx.VERTICAL)
+                rw.SetManagedChild(edit)
+                edit.MinSize = (100, 21)
             sizer_columns.Add(label, flag=wx.GROW)
-            sizer_columns.Add(edit,  flag=wx.GROW)
+            sizer_columns.Add(rw if resizable else edit, border=wx.lib.resizewidget.RW_THICKNESS,
+                              flag=wx.GROW | (0 if resizable else wx.RIGHT))
             if self._editable:
                 button = wx.Button(panel, label="..", size=(20, 20))
                 button.AcceptsFocusFromKeyboard = lambda: False # No tabbing
@@ -6215,6 +6221,7 @@ class DataDialog(wx.Dialog):
         self.Bind(wx.EVT_BUTTON, self._OnAccept, button_ok)
         self.Bind(wx.EVT_BUTTON, self._OnClose,  button_cancel)
         self.Bind(wx.EVT_CLOSE,  self._OnClose)
+        self.Bind(wx.lib.resizewidget.EVT_RW_LAYOUT_NEEDED, self._OnResize)
 
         self._Populate()
 
@@ -6317,6 +6324,11 @@ class DataDialog(wx.Dialog):
         self._data = copy.deepcopy(self._original)
         self._Populate()
         self._OnUpdate()
+
+
+    def _OnResize(self, event=None):
+        """Handler for resizing a widget, updates dialog layout."""
+        self.SendSizeEvent()
 
 
     def _OnClose(self, event=None):
