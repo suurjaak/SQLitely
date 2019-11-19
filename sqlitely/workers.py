@@ -37,7 +37,8 @@ class WorkerThread(threading.Thread):
 
     def __init__(self, callback=None):
         """
-        @param   callback  function to call with result chunks
+        @param   callback  function to invoke with {done, result, callable}
+                           or {error, callable}
         """
         threading.Thread.__init__(self)
         self.daemon = True
@@ -48,15 +49,15 @@ class WorkerThread(threading.Thread):
         self._queue = Queue.Queue()
 
 
-    def work(self, data):
+    def work(self, function, **kws):
         """
-        Registers new work to process. Stops current work, if any. Starts
-        thread if not running.
+        Registers new work to process. Starts thread if not running.
 
-        @param   data  a dict with work data
+        @param   function  callable to invoke as work
+        @param   kws       any additional parameters, will be returned
+                           in callback(data, **kws)
         """
-        self._is_working = False
-        self._queue.put(data)
+        self._queue.put((function, kws) if kws else function)
         if not self._is_running: self.start()
 
 
@@ -82,32 +83,33 @@ class WorkerThread(threading.Thread):
         return self._is_working
 
 
-    def postback(self, data):
+    def postback(self, data, **kws):
+        """Invokes given callback with work result."""
         # Check whether callback is still bound to a valid object instance
         if callable(self._callback) and getattr(self._callback, "__self__", True):
-            self._callback(data)
+            self._callback(data, **kws)
 
 
     def run(self):
         """Generic runner, expects a callable to invoke."""
         self._is_running = True
         while self._is_running:
-            func = self._queue.get()
+            func, kws = self._queue.get(), {}
             if not func: continue # while self._is_running
+            if isinstance(func, tuple): func, kws = func
 
             result, error = None, None
-
             self._is_working, self._drop_results = True, False
             try: result = func()
             except Exception as e:
-                if self._is_running:
-                    logger.exception("Error running %s.", func)
-                    error = util.format_exc(e)
-
+                if self._is_running: logger.exception("Error running %s.", func)
+                error = util.format_exc(e)
             if self._drop_results: continue # while self._is_running
-            if error: self.postback({"error": error, "callable": func})
-            else:
-                self.postback({"done": True, "result": result, "callable": func})
+
+            data = {"callable": func}
+            if error: data = {"callable": func, "error": error}
+            else: data = {"callable": func, "done": True, "result": result}
+            self.postback(data, **kws)
             self._is_working = False
 
 

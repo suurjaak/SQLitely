@@ -1233,7 +1233,6 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self._last_is_script = False # Whether last execution was script
         self._hovered_cell = None # (row, col)
         self._worker = workers.WorkerThread(self._OnWorker)
-        self._pending = {} # Pending SQL execution state
         self._busy = None # Current BusyPanel
 
         self._dialog_export = wx.FileDialog(self, defaultDir=os.getcwd(),
@@ -1385,16 +1384,16 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         """
         text = "Running SQL %s:\n\n%s" % ("script" if script else "query", sql)
         self._busy = controls.BusyPanel(self._panel2, text)
-        self._pending = {"sql": sql, "script": script, "restore": restore}
         self._button_export.Enabled = self._button_close.Enabled  = False
         self._button_sql.Enabled    = self._button_script.Enabled = False
         self._tbgrid.Disable()
         self._grid.Disable()
         func = self._db.executescript if script else self._db.execute
-        self._worker.work(functools.partial(func, sql))
+        kws = {"sql": sql, "script": script, "restore": restore}
+        self._worker.work(functools.partial(func, sql), **kws)
 
 
-    def _OnResult(self, result):
+    def _OnResult(self, result, sql, script=False, restore=False):
         """Handler for db worker result, updates UI."""
         if self._busy: self._busy.Close()
         self._button_sql.Enabled = self._button_script.Enabled = True
@@ -1408,7 +1407,6 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             return
 
         cursor = result["result"]
-        sql, script, restore = (self._pending.get(x) for x in ("sql", "script", "restore"))
         if restore:
             scrollpos = map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
             cursorpos = [self._grid.GridCursorRow, self._grid.GridCursorCol]
@@ -1577,10 +1575,10 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         finally: self.Thaw()
 
 
-    def _OnWorker(self, result):
+    def _OnWorker(self, result, **kwargs):
         """Handler for db worker result, invokes _OnResult in wx callback."""
         if not self: return            
-        wx.CallAfter(self._OnResult, result)
+        wx.CallAfter(self._OnResult, result, **kwargs)
 
 
     def _OnResetView(self, event=None):
@@ -4843,9 +4841,9 @@ class ExportProgressPanel(wx.Panel):
             self._ctrls[index]["subgauge"].Pulse()
         self.Layout()
         self.Thaw()
-        opts["callable"] = functools.partial(opts["callable"],
-                           progress=functools.partial(self.OnProgress, index))
-        self._worker.work(opts["callable"])
+        progress = functools.partial(self.OnProgress, index)
+        callable = functools.partial(opts["callable"], progress=progress)
+        self._worker.work(callable, index=index)
 
 
     def _OnClose(self, event):
@@ -4875,18 +4873,14 @@ class ExportProgressPanel(wx.Panel):
         if self._tasks[index]["pending"]: self._OnResult(self._tasks[index])
 
 
-    def _OnResult(self, result):
+    def _OnResult(self, result, index=None):
         """
         Handler for task result, shows error if any, starts next if any.
         Cancels task if no "done" or "error" in result.
 
-        @param   result  {callable, ?done, ?error}
+        @param   result  {?done, ?error}
         """
-        if not self or not self._tasks: return
-
-        index = next((i for i, x in enumerate(self._tasks)
-                      if x["callable"] == result["callable"]), None)
-        if index is None: return
+        if not self or not self._tasks or index is None: return
 
         self.Freeze()
         opts, ctrls = (x[index] for x in (self._tasks, self._ctrls))
@@ -4939,9 +4933,9 @@ class ExportProgressPanel(wx.Panel):
         util.select_file(self._tasks[index]["filename"])
 
 
-    def _OnWorker(self, result):
+    def _OnWorker(self, result, **kws):
         """Handler for task worker report, invokes _OnResult in a callafter."""
-        wx.CallAfter(self._OnResult, result)
+        wx.CallAfter(self._OnResult, result, **kws)
 
 
 
