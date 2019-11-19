@@ -1527,7 +1527,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if wx.YES != controls.YesNoMessageBox(
                 "There are unsaved changes in %s:\n\n%s\n\n"
                 "Are you sure you want to discard them?" % (
-                    util.plural(unsaved_pages, single="this"),
+                    util.plural("page", unsaved_pages, single="this"),
                     "\n".join(sorted(unsaved_pages.values()))
                 ),
                 conf.Title, wx.ICON_INFORMATION, defaultno=True
@@ -1548,13 +1548,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 page = next((k for k, v in self.db_pages.items()
                              if v.filename == filename), None)
                 if page:
+                    page.on_close()
                     self.notebook.DeletePage(self.notebook.GetPageIndex(page))
-
                 os.unlink(filename)
 
                 for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
                     if filename in lst: lst.remove(filename)
-                for dct in conf.LastSearchResults, self.dbs:
+                for dct in conf.LastSearchResults, conf.SQLWindowTexts, self.dbs:
                     dct.pop(filename, None)
                 self.db_datas.get(filename, {}).pop("name", None)
 
