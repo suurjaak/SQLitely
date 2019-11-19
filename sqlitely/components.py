@@ -4560,7 +4560,15 @@ class SchemaObjectPage(wx.Panel):
         if not errors and self.IsChanged():
             if not self._newmode: sql = self._GetAlterSQL()
             sql2 = "PRAGMA foreign_keys = off;\n\nSAVEPOINT test;\n\n" \
-                   "%s;\n\nROLLBACK TO SAVEPOINT test;\n" % sql
+                   "%s;\n\nROLLBACK TO SAVEPOINT test;" % sql
+            if ("table" == self._category and not self._newmode 
+                or "index" == self._category) \
+            and wx.YES != controls.YesNoMessageBox(
+                "Test the following schema change? "
+                "This may take some time.\n\n%s" % sql,
+                conf.Title, wx.ICON_INFORMATION, defaultno=True
+            ): return
+
             logger.info("Executing test SQL:\n\n%s", sql2)
             try: self._db.executescript(sql2)
             except Exception as e:
