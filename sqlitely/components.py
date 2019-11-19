@@ -805,6 +805,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 "Row number to go to:", conf.Title,
                 value=str(rows[0] + 1) if rows else "", style=wx.OK | wx.CANCEL
             )
+            dlg.CenterOnParent()
             if wx.ID_OK != dlg.ShowModal(): return
             v = re.sub(r"[\s\.\,]", "", dlg.GetValue())
             try:
@@ -1076,12 +1077,13 @@ class SQLiteGridBaseMixin(object):
         current_filter = unicode(grid_data.filters[col]) \
                          if col in grid_data.filters else ""
         name = grammar.quote(grid_data.columns[col]["name"], force=True)
-        dialog = wx.TextEntryDialog(self,
-            "Filter column %s by:" % name, "Filter", value=current_filter,
-            style=wx.OK | wx.CANCEL)
-        if wx.ID_OK != dialog.ShowModal(): return
+        dlg = wx.TextEntryDialog(self,
+                  "Filter column %s by:" % name, "Filter", value=current_filter,
+                  style=wx.OK | wx.CANCEL)
+        dlg.CenterOnParent()
+        if wx.ID_OK != dlg.ShowModal(): return
 
-        new_filter = dialog.GetValue()
+        new_filter = dlg.GetValue()
         if len(new_filter):
             busy = controls.BusyPanel(self, 'Filtering column %s by "%s".' %
                                       (name, new_filter))
@@ -1543,6 +1545,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                     "Enter table name for SQL INSERT statements:",
                     conf.Title, style=wx.OK | wx.CANCEL
                 )
+                dlg.CenterOnParent()
                 if wx.ID_OK != dlg.ShowModal(): return
                 name = dlg.GetValue().strip()
                 if not name: return
