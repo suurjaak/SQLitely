@@ -3454,7 +3454,6 @@ class DatabasePage(wx.Panel):
         msg = "Checking integrity of %s." % self.db.filename
         guibase.status(msg, log=True, flash=True)
         busy = controls.BusyPanel(self, msg)
-        wx.YieldIfNeeded()
         try:
             errors = self.db.check_integrity()
         except Exception as e:

@@ -1384,7 +1384,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         @param   restore  restore grid filter and scroll state
         """
         text = "Running SQL %s:\n\n%s" % ("script" if script else "query", sql)
-        self._busy = controls.BusyPanel(self, text)
+        self._busy = controls.BusyPanel(self._panel2, text)
         self._pending = {"sql": sql, "script": script, "restore": restore}
         self._button_export.Enabled = self._button_close.Enabled  = False
         self._button_sql.Enabled    = self._button_script.Enabled = False
