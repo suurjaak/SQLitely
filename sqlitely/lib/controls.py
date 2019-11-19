@@ -130,7 +130,8 @@ class BusyPanel(wx.Window):
         self.Layout()
         self.CenterOnParent()
         self.Show()
-        # parent.Refresh()
+        parent.Refresh()
+        wx.Yield()
         timer.Start(self.REFRESH_INTERVAL)
 
 
