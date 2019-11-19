@@ -1082,11 +1082,10 @@ class SQLiteGridBaseMixin(object):
 
         new_filter = dialog.GetValue()
         if len(new_filter):
-            busy = controls.BusyPanel(self,
-                'Filtering column %s by "%s".' %
-                (name, new_filter))
-            grid_data.AddFilter(col, new_filter)
-            busy.Close()
+            busy = controls.BusyPanel(self, 'Filtering column %s by "%s".' %
+                                      (name, new_filter))
+            try: grid_data.AddFilter(col, new_filter)
+            finally: busy.Close()
         else:
             grid_data.RemoveFilter(col)
         self.Layout() # React to grid size change
@@ -1390,6 +1389,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self._button_export.Enabled = self._button_close.Enabled  = False
         self._button_sql.Enabled    = self._button_script.Enabled = False
         self._tbgrid.Disable()
+        self._grid.Disable()
         func = self._db.executescript if script else self._db.execute
         self._worker.work(functools.partial(func, sql))
 
@@ -1399,6 +1399,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         if self._busy: self._busy.Close()
         self._button_sql.Enabled = self._button_script.Enabled = True
         if self._grid.Table: self._tbgrid.Enable()
+        self._grid.Enable()
 
         if "error" in result:
             guibase.status("Error running SQL.", flash=True)
