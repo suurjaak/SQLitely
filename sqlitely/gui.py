@@ -3560,6 +3560,8 @@ class DatabasePage(wx.Panel):
                      for i in range(self.notebook_sql.GetPageCount() - 1)]
         for p in self.sql_pages.values():
             p.Close(force=True)
+        try: self.db.connection.interrupt()
+        except Exception: pass
 
         if self.db.temporary: return
 
