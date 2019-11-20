@@ -1620,7 +1620,15 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         and saves values.
         """
         dialog = controls.PropertyDialog(self, title="Advanced options")
-        def get_field_doc(name, tree=ast.parse(inspect.getsource(conf))):
+
+        try: source = inspect.getsource(conf)
+        except Exception:
+            try:
+                with open(os.path.join(conf.BinDirectory, "..", "conf.py")) as f:
+                    source = f.read()
+            except Exception: source = ""
+
+        def get_field_doc(name, tree=ast.parse(source)):
             """Returns the docstring immediately before name assignment."""
             for i, node in enumerate(tree.body):
                 if i and ast.Assign == type(node) and node.targets[0].id == name:
