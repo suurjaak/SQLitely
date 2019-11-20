@@ -1099,7 +1099,7 @@ class SQLiteGridBaseMixin(object):
         Handler for scrolling the grid, seeks ahead if nearing the end of
         retrieved rows, constrains scroll to reasonably sized chunks.
         """
-        if not isinstance(self._grid.Table, SQLiteGridBase): return
+        if not isinstance(self._grid.Table, SQLiteGridBase): return event.Skip()
             
         SEEKAHEAD_POS_RATIO = 0.8
 
