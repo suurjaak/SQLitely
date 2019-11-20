@@ -22,7 +22,7 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev206"
+Version = "1.0.dev207"
 VersionDate = "20.11.2019"
 
 if getattr(sys, "frozen", False):
@@ -30,13 +30,15 @@ if getattr(sys, "frozen", False):
     ApplicationDirectory = os.path.dirname(sys.executable)
     ResourceDirectory = os.path.join(getattr(sys, "_MEIPASS", ""), "media")
     BinDirectory = os.path.join(getattr(sys, "_MEIPASS", ""), "bin")
+    EtcDirectory = ApplicationDirectory
 else:
     ApplicationDirectory = os.path.realpath(os.path.dirname(__file__))
     ResourceDirectory = os.path.join(ApplicationDirectory, "media")
     BinDirectory = os.path.join(ApplicationDirectory, "bin")
+    EtcDirectory = os.path.join(ApplicationDirectory, "etc")
 
 """Name of file where FileDirectives are kept."""
-ConfigFile = "%s.ini" % os.path.join(ApplicationDirectory, "etc", Title.lower())
+ConfigFile = "%s.ini" % os.path.join(EtcDirectory, Title.lower())
 
 """List of attribute names that can be saved to and loaded from ConfigFile."""
 FileDirectives = ["ConsoleHistoryCommands", "DBFiles", "DBSort",
