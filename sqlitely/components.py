@@ -6339,6 +6339,13 @@ class DataDialog(wx.Dialog):
         event.Skip()
         name, value = self._columns[col]["name"], event.EventObject.Value
         if self._ignore_change or not value and self._data[name] is None: return
+
+        if database.Database.get_affinity(self._columns[col]) in ("INTEGER", "REAL"):
+            try: # Try converting to number
+                valc = value.replace(",", ".") # Allow comma separator
+                value = float(valc) if ("." in valc) else int(value)
+            except Exception: pass
+
         self._data[name] = value
         event.EventObject.Hint = ""
         bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
