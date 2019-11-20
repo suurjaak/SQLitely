@@ -1659,7 +1659,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnGridClose(self, event=None):
         """Handler for clicking to close the results grid."""
-        self._worker.stop_work(drop_results=True)
+        self._worker.stop_work()
         self._grid.Table = None
         self.Refresh()
         self._button_export.Enabled = False
@@ -4767,7 +4767,7 @@ class ExportProgressPanel(wx.Panel):
 
     def Stop(self):
         """Stops running tasks, if any."""
-        self._worker.stop_work(drop_results=True)
+        self._worker.stop_work()
         self._tasks = []
         self._current = None
 
@@ -4938,7 +4938,7 @@ class ExportProgressPanel(wx.Panel):
             ctrls["title"].Label = 'Export to "%s".' % opts["filename"]
             ctrls["text"].Label = "Cancelled"
             if index == self._current:
-                self._worker.stop_work(drop_results=True)
+                self._worker.stop_work()
                 self._current = None
 
         ctrls["cancel"].Hide()

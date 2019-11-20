@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.11.2019
+@modified    20.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -61,21 +61,24 @@ class WorkerThread(threading.Thread):
         if not self._is_running: self.start()
 
 
-    def stop(self):
-        """Stops the worker thread."""
+    def stop(self, drop=True):
+        """
+        Stops the worker thread. Obtained results will be posted back,
+        unless drop is false.
+        """
         self._is_running = False
         self._is_working = False
-        self._drop_results = True
+        self._drop_results = drop
         self._queue.put(None) # To wake up thread waiting on queue
 
 
-    def stop_work(self, drop_results=False):
+    def stop_work(self, drop=True):
         """
         Signals to stop the currently ongoing work, if any. Obtained results
-        will be posted back, unless drop_results is True.
+        will be posted back, unless drop is false.
         """
-        self._is_working = False
-        self._drop_results = drop_results
+        self._is_working = drop
+        self._drop_results = drop
 
 
     def is_working(self):
@@ -196,7 +199,8 @@ class SearchThread(WorkerThread):
 
         for category in "table", "view":
             if category not in kws \
-            and ("table" if "view" == category else "view") in kws:
+            and ("table" if "view" == category else "view") in kws \
+            or not search["db"].schema.get(category):
                 continue # for category
 
             mytexts = []
@@ -244,8 +248,7 @@ class SearchThread(WorkerThread):
                     conf.LinkColour, util.plural("result", count)
                 ))
                 if not self._is_working \
-                or result["count"] >= conf.MaxSearchResults:
-                    break # for item
+                or result["count"] >= conf.MaxSearchResults: break # for item
 
             infotext += "%s%s: %s" % ("; " if infotext else "",
                 util.plural(category, mytexts, numbers=False),
@@ -273,7 +276,6 @@ class SearchThread(WorkerThread):
                            else self.search_data
                 for infotext, result in searcher(search):
                     if not self._drop_results: self.postback(result)
-                    if not self._is_working: break # for result
 
                 if not result["count"]: final_text = "No matches found."
                 else: final_text = "Finished searching %s." % infotext
@@ -375,19 +377,19 @@ class AnalyzerThread(WorkerThread):
         self._process = None # subprocess.Popen
 
 
-    def stop(self):
+    def stop(self, drop=True):
         """Stops the worker thread."""
-        super(AnalyzerThread, self).stop()
+        super(AnalyzerThread, self).stop(drop)
         try: self._process.kill()
         except Exception: pass
         self._process = None
 
 
-    def stop_work(self, drop_results=False):
+    def stop_work(self, drop=True):
         """
         Signals to stop the currently ongoing work, if any.
         """
-        super(AnalyzerThread, self).stop_work(drop_results)
+        super(AnalyzerThread, self).stop_work(drop)
         try: self._process.kill()
         except Exception: pass
         self._process = None

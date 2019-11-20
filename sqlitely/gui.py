@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.11.2019
+@modified    20.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3167,7 +3167,7 @@ class DatabasePage(wx.Panel):
         """Stops current analyzer work."""
         if not self.worker_analyzer.is_working(): return
 
-        self.worker_analyzer.stop_work(drop_results=True)
+        self.worker_analyzer.stop_work()
         self.html_stats.SetPage("")
         self.html_stats.BackgroundColour = conf.BgColour
         self.tb_stats.EnableTool(wx.ID_REFRESH, True)
@@ -3681,7 +3681,7 @@ class DatabasePage(wx.Panel):
 
     def on_checksum_stop(self, event=None):
         """Stops current checksum analysis."""
-        self.worker_checksum.stop_work(drop_results=True)
+        self.worker_checksum.stop_work()
         self.on_checksum_result({"sha1": "Cancelled", "md5": "Cancelled"})
 
 
@@ -3854,7 +3854,7 @@ class DatabasePage(wx.Panel):
                 continue # for tab_data
             self.tb_search_settings.SetToolNormalBitmap(
                 wx.ID_STOP, images.ToolbarStopped.Bitmap)
-            self.workers_search[tab_data["id"]].stop()
+            self.workers_search[tab_data["id"]].stop(drop=False)
             del self.workers_search[tab_data["id"]]
             break # for tab_data
 
