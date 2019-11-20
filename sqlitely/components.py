@@ -178,11 +178,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
     def GetRowLabelValue(self, row):
         """Returns row label value, with cursor arrow if grid cursor on row."""
-        pref = ""
-        if self.View and row == self.View.GridCursorRow: pref = u"\u25ba "
-        else:
-            rowdata = self.rows_current[row]
-            pref = "* " if rowdata["__changed__"] or rowdata["__new__"] else ""
+        pref = u"\u25ba " if self.View and row == self.View.GridCursorRow else ""
         return "%s%s  " % (pref, row + 1)
 
 
