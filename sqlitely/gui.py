@@ -4011,7 +4011,8 @@ class DatabasePage(wx.Panel):
 
         filename = dialog.GetPath()
         try:
-            title = "PRAGMA settings." if "PRAGMA" == title else "Database schema."
+            title = "PRAGMA settings." if "PRAGMA" == title else \
+                    "Database %s." % (title or "schema")
             importexport.export_sql(filename, self.db, sql, title)
             util.start_file(filename)
         except Exception as e:
@@ -5549,10 +5550,14 @@ class DatabasePage(wx.Panel):
         if "schema" == data["type"]:
             submenu, keys = wx.Menu(), []
             if any(self.db.schema.values()):
-                item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % data["type"])
+                item_copy_sql = wx.MenuItem(menu, -1, "Copy schema &SQL")
+                item_save_sql = wx.MenuItem(menu, -1, "Save schema SQL to fi&le")
                 menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, self.db.get_sql),
                           item_copy_sql)
+                menu.Bind(wx.EVT_MENU, lambda e: self.save_sql(self.db.get_sql()),
+                          item_save_sql)
                 menu.Append(item_copy_sql)
+                menu.Append(item_save_sql)
 
             menu.AppendSubMenu(submenu, text="Create ne&w ..")
             for category in database.Database.CATEGORIES:
@@ -5570,6 +5575,7 @@ class DatabasePage(wx.Panel):
                 item_drop_all = wx.MenuItem(menu, -1, "Drop all %s" % util.plural(data["category"]))
                 item_copy     = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
                 item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % util.plural(data["category"]))
+                item_save_sql = wx.MenuItem(menu, -1, "Save %s SQL to fi&le" % util.plural(data["category"]))
 
                 menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["category"], names),
                           item_drop_all)
@@ -5577,12 +5583,14 @@ class DatabasePage(wx.Panel):
                           item_copy)
                 menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
                           functools.partial(self.db.get_sql, **sqlkws)), item_copy_sql)
+                menu.Bind(wx.EVT_MENU, lambda e: self.save_sql(self.db.get_sql(**sqlkws), util.plural(data["category"])), item_save_sql)
 
             item_create = wx.MenuItem(menu, -1, "Create &new %s" % data["category"])
 
             if names:
                 menu.Append(item_copy)
                 menu.Append(item_copy_sql)
+                menu.Append(item_save_sql)
 
                 if "table" == data["category"]:
                     item_database_meta = wx.MenuItem(menu, -1, "Export all %s str&uctures to another database" % data["category"])
