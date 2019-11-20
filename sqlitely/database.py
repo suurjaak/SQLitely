@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.11.2019
+@modified    18.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -20,6 +20,7 @@ import re
 import sqlite3
 import tempfile
 
+from . lib.util import CaselessDict
 from . lib import util
 from . import conf
 from . import grammar
@@ -56,7 +57,8 @@ class Database(object):
         ?min:         minimum integer value,
         ?max:         maximum integer value,
         ?read:        false if setting is write-only,
-        ?write:       false if setting is read-only,
+        ?write:       false if setting is read-only
+                      or a callable(db) returning false,
         ?col:         result column to select if type "table"
     }.
     """
@@ -73,6 +75,7 @@ class Database(object):
         "label": "Auto-vacuum",
         "type": int,
         "values": {0: "NONE", 1: "FULL", 2: "INCREMENTAL"},
+        "write": lambda db: not db.schema.values(),
         "short": "Auto-vacuum settings",
         "description": """  FULL: truncate deleted rows on every commit.
   INCREMENTAL: truncate on PRAGMA incremental_vacuum.
@@ -202,6 +205,7 @@ class Database(object):
         "name": "encoding",
         "label": "Encoding",
         "type": str,
+        "write": lambda db: not db.schema.values(),
         "short": "Database text encoding",
         "values": {"UTF-8": "UTF-8", "UTF-16": "UTF-16 native byte-ordering", "UTF-16le": "UTF-16 little endian", "UTF-16be": "UTF-16 big endian"},
         "description": "The text encoding used by the database. It is not possible to change the encoding after the database has been created.",
@@ -454,15 +458,16 @@ WARNING: misuse can easily result in a corrupt database file.""",
         self.filesize = None
         self.date_created = None
         self.last_modified = None
+        self.log = [] # [{timestamp, action, sql: "" or [""], ?params: x or [x]}]
         self.compile_options = []
         self.consumers = set() # Registered objects using this database
-        # {category: {name.lower(): set()}}
+        # {category: {name.lower(): set(lock key, )}}
         self.locks = defaultdict(lambda: defaultdict(set))
         # {"table|index|view|trigger":
-        #   {name.lower():
-        #     {name: str, sql: str, table: str, ?columns: [], ?count: int,
+        #   {name:
+        #     {name: str, sql: str, ?table: str, ?columns: [], ?count: int,
         #      ?meta: {full metadata}}}}
-        self.schema = defaultdict(OrderedDict)
+        self.schema = defaultdict(CaselessDict)
         self.connection = None
         self.open(log_error=log_error)
 
@@ -478,7 +483,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                                               check_same_thread=False)
             self.connection.row_factory = self.row_factory
             self.connection.text_factory = str
-            self.compile_options = [x["compile_option"] for x in 
+            self.compile_options = [x["compile_option"] for x in
                                     self.execute("PRAGMA compile_options", log=False).fetchall()]
             self.populate_schema()
             self.update_fileinfo()
@@ -527,17 +532,20 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         @return  a list of encountered errors, if any
         """
-        result = []
+        result, sqls = [], []
         with open(filename, "w") as _: pass # Truncate file
         self.execute("ATTACH DATABASE ? AS new", (filename, ))
+        sqls.append("ATTACH DATABASE ? AS new")
         fks = self.execute("PRAGMA foreign_keys").fetchone()["foreign_keys"]
         if fks: self.execute("PRAGMA foreign_keys = FALSE")
 
         # Create structure for all tables
-        for name, opts in sorted(self.schema["table"].items()):
+        for name, opts in self.schema["table"].items():
             try:
                 sql, err = grammar.transform(opts["sql"], renames={"schema": "new"})
-                if sql: self.execute(sql)
+                if sql:
+                    sqls.append(sql)
+                    self.execute(sql)
                 else: result.append(err)
             except Exception as e:
                 result.append(util.format_exc(e))
@@ -545,10 +553,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
                                  grammar.quote(name), filename)
 
         # Copy data from all tables
-        for name, opts in sorted(self.schema["table"].items()):
-            sql = "INSERT INTO new.%s SELECT * FROM main.%s" % ((grammar.quote(opts["name"]),) * 2)
+        for name, opts in self.schema["table"].items():
+            sql = "INSERT INTO new.%s SELECT * FROM main.%s" % ((grammar.quote(name),) * 2)
             try:
                 self.execute(sql)
+                sqls.append(sql)
             except Exception as e:
                 result.append(util.format_exc(e))
                 logger.exception("Error copying table %s from %s to %s.",
@@ -556,10 +565,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         # Create indexes-triggers-views
         for category in "index", "trigger", "view":
-            for name, opts in sorted(self.schema[category].items()):
+            for name, opts in self.schema[category].items():
                 try:
                     sql, err = grammar.transform(opts["sql"], renames={"schema": "new"})
-                    if sql: self.execute(sql)
+                    if sql:
+                        self.execute(sql)
+                        sqls.append(sql)
                     else: result.append(err)
                 except Exception as e:
                     result.append(util.format_exc(e))
@@ -567,6 +578,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                                      category, grammar.quote(name), filename)
         if fks: self.execute("PRAGMA foreign_keys = TRUE")
         self.execute("DETACH DATABASE new")
+        sqls.append("DETACH DATABASE new")
+        self.log_query("RECOVER", sqls, filename)
         return result
 
 
@@ -614,10 +627,16 @@ WARNING: misuse can easily result in a corrupt database file.""",
                else self.locks.get(category) if not name and category else self.locks
 
 
-    def has_rowid(self, table):
-        """Returns whether the table has ROWID, or is WITHOUT ROWID."""
-        meta = self.schema["table"].get(table.lower(), {}).get("meta")
-        return not meta.get("without") if meta else None
+    def get_rowid(self, table):
+        """
+        Returns ROWID name for table, or None if table is WITHOUT ROWID
+        or has columns shadowing all ROWID aliases (ROWID, _ROWID_, OID).
+        """
+        sql = self.schema["table"].get(table, {}).get("sql")
+        if re.search("WITHOUT\s+ROWID\s*$", sql, re.I): return
+        ALIASES = ("_rowid_", "rowid", "oid")
+        cols = [c["name"].lower() for c in self.schema["table"][table]["columns"]]
+        return next((x for x in ALIASES if x not in cols), None)
 
 
     def has_view_columns(self):
@@ -638,26 +657,52 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return sqlite3.sqlite_version_info >= (3, 25)
 
 
-    def execute(self, sql, params=(), log=True):
-        """Shorthand for self.connection.execute()."""
+    def execute(self, sql, params=(), log=True, cursor=None):
+        """
+        Shorthand for self.connection.execute(), returns cursor.
+        Uses given cursor else creates new.
+        """
         result = None
-        if self.connection:
+        if cursor or self.connection:
             if log and conf.LogSQL:
                 logger.info("SQL: %s%s", sql,
                             ("\nParameters: %s" % params) if params else "")
-            result = self.connection.execute(sql, params)
+            result = (cursor or self.connection).execute(sql, params)
         return result
 
 
-    def execute_action(self, sql):
+    def executeaction(self, sql, params=(), log=True, name=None, cursor=None):
         """
         Executes the specified SQL INSERT/UPDATE/DELETE statement and returns
-        the number of affected rows.
+        the number of affected rows. Uses given cursor else creates new.
         """
-        res = self.execute(sql)
-        affected_rows = res.rowcount
-        if self.connection.isolation_level is not None: self.connection.commit()
-        return affected_rows
+        result = 0
+        if cursor or self.connection:
+            if log and conf.LogSQL:
+                logger.info("SQL: %s%s", sql,
+                            ("\nParameters: %s" % params) if params else "")
+            result = (cursor or self.connection).execute(sql, params).rowcount
+            if self.connection.isolation_level is not None: self.connection.commit()
+            if name: self.log_query(name, sql, params)
+            self.last_modified = datetime.datetime.now()
+        return result
+
+
+    def executescript(self, sql, log=True, name=None, cursor=None):
+        """
+        Executes the specified SQL as script. Uses given cursor else creates new.
+        """
+        if cursor or self.connection:
+            if log and conf.LogSQL: logger.info("SQL: %s", sql)
+            (cursor or self.connection).executescript(sql)
+            if name: self.log_query(name, sql)
+
+
+    def log_query(self, action, sql, params=None):
+        """Adds the query to action log."""
+        item = {"timestamp": datetime.datetime.now(), "action": action, "sql": sql}
+        if params: item["params"] = params
+        self.log.append(item)
 
 
     def is_open(self):
@@ -686,10 +731,6 @@ WARNING: misuse can easily result in a corrupt database file.""",
     def populate_schema(self, count=False, parse=False, category=None, name=None):
         """
         Retrieves metadata on all database tables, triggers etc.
-
-        Returns the names and rowcounts of all tables in the database,
-        as [{"name": "tablename", "sql": CREATE SQL}, ].
-        Uses already retrieved cached values if possible, unless refreshing.
 
         @param   count      populate table row counts
         @param   parse      parse all CREATE statements in full, complete metadata
@@ -722,17 +763,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     continue # for row
 
             row["sql"] = row["sql0"] = row["sql"].strip()
-            self.schema[row["type"]][row["name"].lower()] = row
-
-        for mycategory in self.schema: # Ensure item order
-            items = self.schema[mycategory].items()
-            self.schema[mycategory].clear()
-            self.schema[mycategory].update(sorted(items))
+            self.schema[row["type"]][row["name"]] = row
 
         for mycategory, itemmap in self.schema.items():
             if category and category != mycategory: continue # for mycategory
             for myname, opts in itemmap.items():
-                if category and name and myname != name: continue # for myname
+                if category and name and myname.lower() != name: continue # for myname
 
                 opts0 = schema0.get(mycategory, {}).get(myname, {})
 
@@ -740,13 +776,13 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if mycategory in ("table", "view") and opts0 and opts["sql0"] == opts0["sql0"]:
                     opts["columns"] = opts0.get("columns") or []
                 elif mycategory in ("table", "view"):
-                    sql = "PRAGMA table_info(%s)" % grammar.quote(opts["name"])
+                    sql = "PRAGMA table_info(%s)" % grammar.quote(myname)
                     try:
                         rows = self.execute(sql, log=False).fetchall()
                     except Exception:
                         opts.update(columns=[])
                         logger.exception("Error fetching columns for %s %s.",
-                                         mycategory, grammar.quote(opts["name"]))
+                                         mycategory, grammar.quote(myname))
                     else:
                         opts["columns"] = []
                         for row in rows:
@@ -770,7 +806,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
                 # Retrieve table row counts
                 if "table" == mycategory and count:
-                    opts.update(self.get_count(opts["name"]))
+                    opts.update(self.get_count(myname))
                 elif "table" == mycategory and opts0 and "count" in opts0:
                     opts["count"] = opts0["count"]
                     if "is_count_estimated" in opts0:
@@ -786,12 +822,15 @@ WARNING: misuse can easily result in a corrupt database file.""",
         result, do_full = {"count": None}, False
         tpl = "SELECT %%s AS count FROM %s LIMIT 1" % grammar.quote(table)
         try:
-            result = self.execute(tpl % "MAX(ROWID)", log=False).fetchone()
-            result["is_count_estimated"] = True
+            rowidname = self.get_rowid(table)
+            if rowidname:
+                result = self.execute(tpl % "MAX(%s)" % rowidname, log=False).fetchone()
+                result["is_count_estimated"] = True
             if self.filesize < conf.MaxDBSizeForFullCount \
-            or result["count"] < conf.MaxTableRowIDForFullCount:
+            or result and result["count"] < conf.MaxTableRowIDForFullCount:
                 do_full = True
-        except Exception: do_full = self.filesize < conf.MaxDBSizeForFullCount
+        except Exception:
+            do_full = (self.filesize < conf.MaxDBSizeForFullCount)
 
         try:
             if do_full:
@@ -802,22 +841,25 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
-    def get_category(self, category, name=None, table=None):
+    def get_category(self, category, name=None):
         """
         Returns database objects in specified category.
 
         @param   category  "table"|"index"|"trigger"|"view"
-        @param   name      returns only this object
-        @result            OrderedDict({name_lower: {opts}}),
-                           or {opts} if name or None if no object by such name
+        @param   name      returns only this object,
+                           or a dictionary with only these if collection
+        @result            CaselessDict{name: {opts}},
+                           or {opts} if single name
+                           or None if no object by single name
         """
-        category, name = (x.lower() if x else x for x in (category, name))
+        category = category.lower()
 
-        if name is not None:
+        if isinstance(name, basestring):
             return copy.deepcopy(self.schema.get(category, {}).get(name))
 
-        result = OrderedDict()
+        result = CaselessDict()
         for myname, opts in self.schema.get(category, {}).items():
+            if name and myname not in name: continue # for myname
             result[myname] = opts
         return copy.deepcopy(result)
 
@@ -837,7 +879,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                              that query them in view or trigger body,
                              also foreign tables for tables
         """
-        result = OrderedDict()
+        result = CaselessDict()
         category, name = category.lower(), name.lower()
         SUBCATEGORIES = {"table":   ["table", "index", "view", "trigger"],
                          "index":   ["table"],
@@ -848,15 +890,56 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         for subcategory in SUBCATEGORIES.get(category, []):
             for subname, subitem in self.schema[subcategory].items():
-                is_assoc = (subitem["meta"].get("table", "").lower() == name) \
-                           or (item["meta"].get("table", "").lower() == subname)
+                is_assoc = not util.lccmp(subitem["meta"].get("table", ""), name) \
+                           or not util.lccmp(item["meta"].get("table", ""), subname)
                 is_related = name in subitem["meta"]["__tables__"] \
-                             or subname in item["meta"]["__tables__"]
+                             or subname.lower() in item["meta"]["__tables__"]
                 if not is_related or associated is not None and associated != is_assoc:
                     continue # for subname, subitem
 
-                result.setdefault(subcategory, []).append(subitem)
+                result.setdefault(subcategory, []).append(copy.deepcopy(subitem))
         return result
+
+
+    def get_keys(self, table):
+        """
+        Returns the domestic and foreign keys of a table. Domestic keys are
+        table primary keys, plus any columns used as foreign keys by other tables.
+
+        @return   ([{"name": ["col", ], "table": CaselessDict{ftable: ["fcol", ]}}],
+                   [{"name": ["col", ], "table": CaselessDict{ftable: ["fcol", ]}}])
+        """
+        table = table.lower()
+        item = self.schema["table"].get(table)
+        if not item: return [], []
+
+        def get_fks(item):
+            cc = [c for c in item["columns"] if "fk" in c] + [
+                dict(name=c["columns"], fk=c)
+                for c in item["meta"].get("constraints", [])
+                if grammar.SQL.FOREIGN_KEY == c["type"]
+            ]
+            return [dict(name=util.tuplefy(c["name"]), table=CaselessDict(
+                {c["fk"]["table"]: util.tuplefy(c["fk"]["key"])}
+            )) for c in cc]
+
+        mykeys = CaselessDict((util.tuplefy(c["name"]),
+                               dict(name=util.tuplefy(c["name"]), pk=c.get("pk")))
+                              for c in item["columns"] if "pk" in c)
+        for item2 in self.get_related("table", table, False).get("table", []):
+            for fk in [x for x in get_fks(item2) if table in x["table"]]:
+                keys = fk["table"][table]
+                dk = mykeys.get(keys) or {"name": keys}
+                dk.setdefault("table", CaselessDict())[item2["name"]] = fk["name"]
+                mykeys[keys] = dk
+        dks = sorted(mykeys.values(), key=lambda x: (len(x["name"]), "pk" not in x, x["name"]))
+
+        fks = get_fks(item)
+        fks.sort(key=lambda x: (len(x["name"]), x["name"])) # Singulars first
+        fks = [x for x in fks]
+
+        return dks, fks
+
 
 
     def get_sql(self, category=None, name=None, column=None, indent="  ",
@@ -884,20 +967,19 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         sqls = OrderedDict() # {category: []}
         category, column = (x.lower() if x else x for x in (category, column))
-        names = [name.lower()] if isinstance(name, basestring) \
-                else [x.lower() for x in name] if isinstance(name, (list, tuple)) else []
+        names = [x.lower() for x in ([] if name is None else util.tuplefy(name))]
 
         for mycategory in self.CATEGORIES:
             if category and category != mycategory \
             or not self.schema.get(mycategory): continue # for mycategory
 
             for myname, opts in self.schema[mycategory].items():
-                if names and myname not in names:
+                if names and myname.lower() not in names:
                     continue # for myname, opts
 
                 if names and column and "table" == mycategory:
                     col = next((c for c in opts["columns"]
-                                if c["name"].lower() == column.lower()), None)
+                                if c["name"].lower() == column), None)
                     if not col: continue # for myname, opts
                     sql, err = grammar.generate(dict(col, __type__="column"), indent=False)
                     if err: raise Exception(err)
@@ -944,7 +1026,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Tables must not start with "sqlite_", no limitations otherwise.
         """
         result = False
-        if table:    result = not table[:7].lower().startswith("sqlite_")
+        if table:    result = table[:7].lower() != "sqlite_"
         elif column: result = True
         return result
 
@@ -998,13 +1080,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
                            for unique
         """
         result = OrderedDict()
+        existing = dict(existing or {})
         for c in cols:
             if isinstance(c, dict): c = c["name"]
-            name = base = re.sub(r"\W", "", c, flags=re.I)
-            count = 1
-            while name in result or existing and name in existing:
-                name, count = "%s_%s" % (base, count), count + 1
-            result[name] = data[c]
+            name = re.sub(r"\W", "", c, flags=re.I)
+            name = util.make_unique(name, existing, counter=1)
+            result[name] = existing[name] = data[c]
         return result
 
 
@@ -1016,22 +1097,22 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         if not self.is_open(): return
 
-        table, where = table.lower(), ""
+        table = self.schema["table"][table]["name"]
         col_data = self.schema["table"][table]["columns"]
 
-        where, args = "", {}
+        where, pks = "", [c for c in col_data if "pk" in c]
 
-        if rowid is not None:
-            key_data = [{"name": "rowid"}]
-            keyargs = self.make_args(key_data, {"rowid": rowid}, args)
+        if rowid is not None and not (len(pks) == 1 and pks[0]["name"] in row):
+            rowidname = self.get_rowid(table)
+            key_data = [{"name": rowidname}]
+            keyargs = self.make_args(key_data, {rowidname: rowid})
         else: # Use either primary key or all columns to identify row
-            key_data = [c for c in col_data if "pk" in c] or col_data
-            keyargs = self.make_args(key_data, row, args)
+            key_data = pks or col_data
+            keyargs = self.make_args(key_data, row)
         for col, key in zip(key_data, keyargs):
             where += (" AND " if where else "") + "%s IS :%s" % (grammar.quote(col["name"]), key)
-        args.update(keyargs)
         sql = "SELECT * FROM %s WHERE %s" % (grammar.quote(table), where)
-        return self.execute(sql, args).fetchone()
+        return self.execute(sql, keyargs).fetchone()
 
 
     def insert_row(self, table, row):
@@ -1042,10 +1123,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         if not self.is_open(): return
 
-        table = table.lower()
+        table = self.schema["table"][table]["name"]
         logger.info("Inserting 1 row into table %s, %s.",
-                    grammar.quote(self.schema["table"][table]["name"]),
-                    self.name)
+                    grammar.quote(table), self.name)
         col_data = self.schema["table"][table]["columns"]
         fields = [col["name"] for col in col_data]
         row = self.blobs_to_binary(row, fields, col_data)
@@ -1053,9 +1133,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
         str_cols = ", ".join(map(grammar.quote, fields))
         str_vals = ":" + ", :".join(args)
 
-        cursor = self.execute("INSERT INTO %s (%s) VALUES (%s)" %
-                              (grammar.quote(table), str_cols, str_vals), args)
+        sql = "INSERT INTO %s (%s) VALUES (%s)" % \
+              (grammar.quote(table), str_cols, str_vals)
+        cursor = self.execute(sql, args)
         if self.connection.isolation_level is not None: self.connection.commit()
+        self.log_query("INSERT", sql, args)
         self.last_modified = datetime.datetime.now()
         return cursor.lastrowid
 
@@ -1068,30 +1150,30 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         if not self.is_open(): return
 
-        table, where = table.lower(), ""
+        table = self.schema["table"][table]["name"]
         logger.info("Updating 1 row in table %s, %s.",
-                    grammar.quote(self.schema["table"][table]["name"]), self.name)
+                    grammar.quote(table), self.name)
         col_data = self.schema["table"][table]["columns"]
 
         changed_cols = [x for x in col_data
-                            if row[x["name"]] != original_row[x["name"]]]
+                        if row[x["name"]] != original_row[x["name"]]]
         where, args = "", self.make_args(changed_cols, row)
         setsql = ", ".join("%s = :%s" % (grammar.quote(changed_cols[i]["name"]), x)
                                          for i, x in enumerate(args))
-        if rowid is not None:
-            key_data = [{"name": "rowid"}]
-            keyargs = self.make_args(key_data, {"rowid": rowid}, args)
+        pks = [c for c in col_data if "pk" in c]
+        if rowid is not None and not (len(pks) == 1 and pks[0]["name"] in row):
+            key_data = [{"name": "_rowid_"}]
+            keyargs = self.make_args(key_data, {"_rowid_": rowid}, args)
         else: # Use either primary key or all columns to identify row
-            key_data = [c for c in col_data if "pk" in c] or col_data
+            key_data = pks or col_data
             keyargs = self.make_args(key_data, original_row, args)
         for col, key in zip(key_data, keyargs):
             where += (" AND " if where else "") + \
                      "%s IS :%s" % (grammar.quote(col["name"]), key)
         args.update(keyargs)
-        self.execute("UPDATE %s SET %s WHERE %s" %
-                     (grammar.quote(table), setsql, where), args)
-        if self.connection.isolation_level is not None: self.connection.commit()
-        self.last_modified = datetime.datetime.now()
+        self.executeaction("UPDATE %s SET %s WHERE %s" %
+                           (grammar.quote(table), setsql, where), args,
+                           name="UPDATE")
 
 
     def delete_row(self, table, row, rowid=None):
@@ -1103,27 +1185,133 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         if not self.is_open(): return
 
-        table, where = table.lower(), ""
+        table = self.schema["table"][table]["name"]
         logger.info("Deleting 1 row from table %s, %s.",
-                    grammar.quote(self.schema["table"][table]["name"]),
-                    self.name)
+                    grammar.quote(table), self.name)
         col_data = self.schema["table"][table]["columns"]
 
-        where, args = "", {}
+        where, pks = "", [c for c in col_data if "pk" in c]
 
-        if rowid is not None:
-            key_data = [{"name": "rowid"}]
-            keyargs = self.make_args(key_data, {"rowid": rowid}, args)
+        if rowid is not None and not (len(pks) == 1 and pks[0]["name"] in row):
+            rowidname = self.get_rowid(table)
+            key_data = [{"name": rowidname}]
+            keyargs = self.make_args(key_data, {rowidname: rowid})
         else: # Use either primary key or all columns to identify row
             key_data = [c for c in col_data if "pk" in c] or col_data
-            keyargs = self.make_args(key_data, row, args)
+            keyargs = self.make_args(key_data, row)
         for col, key in zip(key_data, keyargs):
             where += (" AND " if where else "") + "%s IS :%s" % (grammar.quote(col["name"]), key)
-        args.update(keyargs)
-        self.execute("DELETE FROM %s WHERE %s" % (grammar.quote(table), where), args)
-        if self.connection.isolation_level is not None: self.connection.commit()
+        self.executeaction("DELETE FROM %s WHERE %s" % (grammar.quote(table), where),
+                           keyargs, name="DELETE")
         self.last_modified = datetime.datetime.now()
         return True
+
+
+    def chunk_args(self, cols, rows):
+        """
+        Yields WHERE-clause and arguments in chunks of up to 1000 items
+        (SQLite can have a maximum of 1000 host parameters per query).
+
+        @yield    "name IN (:name1, ..)", {"name1": ..}
+        """
+        MAX = 1000
+        for rows in [rows[i:i + MAX] for i in range(0, len(rows), MAX)]:
+            wheres, args, names = [], OrderedDict(), set()
+
+            for col in cols:
+                base = re.sub(r"\W", "", col["name"], flags=re.I)
+                name = base = util.make_unique(base, names)
+                names.add(base)
+                if len(rows) == 1:
+                    where = "%s = :%s" % (grammar.quote(col["name"]), name)
+                    args[name] = rows[0][col["name"]]
+                else:
+                    mynames = []
+                    for i, row in enumerate(rows):
+                        name = util.make_unique(base, names, counter=1)
+                        args[name] = row[col["name"]]
+                        mynames.append(name); names.add(name)
+                    where = "%s IN (:%s)" % (grammar.quote(col["name"]), ", :".join(mynames))
+                wheres.append(where)
+
+            yield " AND ".join(wheres), args
+
+
+    def delete_cascade(self, table, rows, rowids=()):
+        """
+        Deletes the table rows from the database, cascading delete to any
+        related rows in foreign tables, and their related rows, etc.
+
+        @return   [(table, [{identifying column: value}])] in order of deletion
+        """
+        if not self.is_open(): return
+        result, queue = [], [(self.schema["table"][table]["name"], rows, rowids)]
+
+        queries = [] # [(sql, params)]
+        try:
+            isolevel = self.connection.isolation_level
+            self.connection.isolation_level = None # Disable autocommit
+            with self.connection:
+                cursor = self.connection.cursor()
+                self.execute("BEGIN TRANSACTION", cursor=cursor)
+
+                while queue:
+                    table, rows, rowids = queue.pop(0)
+                    col_data = self.schema["table"][table]["columns"]
+                    pks = [c for c in col_data if "pk" in c]
+                    rowidname = self.get_rowid(table)
+                    use_rowids = rowidname and rowids and all(rowids) and \
+                                 not (len(pks) == 1 and all(pks[0]["name"] in r for r in rows))
+                    key_cols = [{"name": "_rowid_"}] if use_rowids else pks or col_data
+                    key_data, myrows = [], []
+
+                    for row, rowid in zip(rows, rowids):
+                        data = {rowidname: rowid} if use_rowids else \
+                               {c["name"]: row[c["name"]] for c in key_cols}
+                        if not any(data in xx for t, xx in result if t == table):
+                            key_data.append(data); myrows.append(row)
+                    if not key_data: continue # while queue
+
+                    logger.info("Deleting %s from table %s, %s.",
+                                util.plural("row", key_data), grammar.quote(table), self.name)
+                    for where, args in self.chunk_args(key_cols, key_data):
+                        sql = "DELETE FROM %s WHERE %s" % (grammar.quote(table), where)
+                        self.execute(sql, args, cursor=cursor)
+                        queries.append((sql, args))
+                    result.append((table, key_data))
+
+                    for dk in self.get_keys(table)[0]:
+                        if "table" not in dk: continue # for dk
+                        dkrows = [x for x in myrows
+                                  if all(x[c] is not None for c in dk["name"])]
+                        if not dkrows: continue # for dk
+                        for table2, keys2 in dk["table"].items():
+                            table2 = self.schema["table"][table2]["name"]
+
+                            key_cols2 = [{"name": x} for x in keys2]
+                            key_data2 = [{x: row[y] for x, y in zip(keys2, dk["name"])}
+                                         for row in dkrows]
+                            cols = "*"
+                            rowidname2 = self.get_rowid(table2)
+                            if rowidname2: cols = "%s AS %s, *" % ((rowidname2, ) * 2)
+                            sqlbase = "SELECT %s FROM %s" % (cols, grammar.quote(table2))
+                            rows2, rowids2 = [], []
+                            for where2, args2 in self.chunk_args(key_cols2, key_data2):
+                                sql2 = "%s WHERE %s" % (sqlbase, where2)
+                                myrows2 = self.execute(sql2, args2, cursor=cursor).fetchall()
+                                rowids2 += [x.pop(rowidname2) if rowidname2 else None
+                                            for x in myrows2]
+                                rows2.extend(myrows2)
+                            if rows2: queue.append((table2, rows2, rowids2))
+
+                self.execute("COMMIT", cursor=cursor)
+                self.log_query("DELETE CASCADE", [x for x, _ in queries],
+                               [x for _, x in queries])
+                self.last_modified = datetime.datetime.now()
+        finally:
+            self.connection.isolation_level = isolevel
+
+        return result
 
 
     def get_pragma_values(self):

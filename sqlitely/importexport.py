@@ -8,12 +8,13 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.11.2019
+@modified    17.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
 import csv
 import datetime
+import itertools
 import logging
 import os
 import re
@@ -78,7 +79,7 @@ def export_data(make_iterable, filename, title, db, columns,
     @param   make_iterable   function returning iterable sequence yielding rows
     @param   filename        full path and filename of resulting file, file extension
                              .html|.csv|.sql|.xslx determines file format
-    @param   title           title used in HTML
+    @param   title           title used in HTML and spreadsheet
     @param   db              Database instance
     @param   columns         iterable columns, as [name, ] or [{"name": name}, ]
     @param   query           the SQL query producing the data, if any
@@ -202,6 +203,60 @@ def export_data(make_iterable, filename, title, db, columns,
     return result
 
 
+def export_data_single(filename, title, db, category, progress=None):
+    """
+    Exports database data from multiple tables/views to a single spreadsheet.
+
+    @param   filename        full path and filename of resulting file
+    @param   title           spreadsheet title
+    @param   db              Database instance
+    @param   category        category producing the data, "table" or "view"
+    @param   progress        callback(name, count) to report progress,
+                             returning false if export should cancel
+    """
+    result = True
+    items = db.schema[category]
+    try:
+        props = {"title": title, "comments": templates.export_comment()}
+        writer = xlsx_writer(filename, next(iter(items), None), props=props)
+
+        for n in items: db.lock(category, n, filename)
+        for idx, (name, item) in enumerate(items.items()):
+            count = 0
+            if progress and not progress(name=name, count=count):
+                result = False
+                break # for idx, (name, item)
+            if idx: writer.add_sheet(name)
+            colnames = [x["name"] for x in item["columns"]]
+            writer.set_header(True)
+            writer.writerow(colnames, "bold")
+            writer.set_header(False)
+
+            sql = "SELECT * FROM %s" % grammar.quote(name)
+            for i, row in enumerate(db.execute(sql), 1):
+                count = i
+                writer.writerow([row[c] for c in colnames])
+                if not i % 100 and progress and not progress(name=name, count=i):
+                    result = False
+                    break # for i, row
+            if not result: break # for idx, (name, item)
+            if progress and not progress(name=name, count=count):
+                result = False
+                break # for idx, (name, item)
+        writer.close()
+        if progress: progress(done=True)
+    except Exception as e:
+        logger.exception("Error exporting %s from %s to %s.",
+                         util.plural(category), db, filename)
+        if progress: progress(error=util.format_exc(e), done=True)
+        result = False
+    finally:
+        for n in items: db.unlock(category, n, filename)
+        if not result: util.try_until(lambda: os.unlink(filename))
+
+    return result
+
+
 def export_sql(filename, db, sql, title=None):
     """Exports arbitrary SQL to file."""
     template = step.Template(templates.CREATE_SQL, strip=False)
@@ -221,6 +276,37 @@ def export_stats(filename, db, data, filetype="html"):
     return True
 
 
+def export_dump(filename, db, progress=None):
+    """
+    Exports full database dump to SQL file.
+
+    @param   progress        callback(name, count) to report progress,
+                             returning false if export should cancel
+    """
+    result = False
+    tables = db.schema["table"]
+    try:
+        with open(filename, "w") as f:
+            for t in tables: db.lock("table", t, filename)
+            namespace = {
+                "db":       db,
+                "sql":      db.get_sql(),
+                "data":     [{"name": t, "columns": [x["name"] for x in opts["columns"]],
+                              "rows": iter(db.execute("SELECT * FROM %s" % grammar.quote(t)))}
+                             for t, opts in tables.items()],
+                "pragma":   db.get_pragma_values(),
+                "progress": progress,
+            }
+            template = step.Template(templates.DUMP_SQL, strip=False)
+            template.stream(f, namespace)
+            result = progress() if progress else True
+    finally:
+        for t in tables: db.unlock("table", t, filename)
+        if not result: util.try_until(lambda: os.unlink(filename))
+
+    return result
+
+
 def get_import_file_data(filename):
     """
     Returns import file metadata, as {
@@ -233,6 +319,7 @@ def get_import_file_data(filename):
     ]}.
     """
     sheets, size = [], os.path.getsize(filename)
+    if not size: raise ValueError("File is empty.")
 
     is_csv  = filename.lower().endswith(".csv")
     is_xls  = filename.lower().endswith(".xls")
@@ -356,7 +443,10 @@ def import_data(filename, db, table, columns,
                                     " and rolling back" if result is None else "")
                         if result is None: cursor.execute("ROLLBACK")
                         break # for row
-            if result: cursor.execute("COMMIT")
+            if result:
+                cursor.execute("COMMIT")
+                db.log_query("IMPORT", [create_sql, sql] if create_sql else [sql],
+                             util.plural("row", count))
             logger.info("Finished importing %s from %s%s to table %s.",
                         util.plural("row", count),
                         filename, (" sheet '%s'" % sheet) if sheet else "",

@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.10.2019
+@modified    18.11.2019
 ------------------------------------------------------------------------------
 """
 import argparse
@@ -50,7 +50,7 @@ def except_hook(etype, evalue, etrace):
     if not conf.PopupUnexpectedErrors: return
     msg = "An unexpected error has occurred:\n\n%s\n\n" \
           "See log for full details." % util.format_exc(evalue)
-    wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
+    wx.CallAfter(wx.MessageBox, msg, conf.Title, wx.OK | wx.ICON_ERROR)
 
 
 def install_thread_excepthook():
@@ -87,7 +87,7 @@ def run_gui(filenames):
     app.SetTopWindow(window) # stdout/stderr popup closes with MainWindow
 
     # Override stdout/stderr.write to swallow Gtk warnings
-    swallow = lambda w, s: w(s) if ("Gtk" in s and "eprecat" in s) else None
+    swallow = lambda w, s: None if ("Gtk" in s and "eprecat" in s) else w(s)
     try:
         sys.stdout.write = functools.partial(swallow, sys.stdout.write)
         sys.stderr.write = functools.partial(swallow, sys.stderr.write)

@@ -8,11 +8,12 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.10.2019
+@modified    08.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
 import ctypes
+import datetime
 import io
 import locale
 import math
@@ -26,6 +27,111 @@ import warnings
 
 try: import wx
 except ImportError: pass
+
+
+class CaselessDict(dict):
+    """
+    A case-insensitive dict for string keys, keys are returned in original case
+    in case-insensitive order. Keys can be strings, or tuples of strings.
+    """
+
+    def __init__(self, iterable=None, **kwargs):
+        self._data  = {} # {lowercase key: value}
+        self._keys = {}  # {lowercase key: original key}
+        self.update(iterable, **kwargs)
+
+    def clear(self): self._data.clear(), self._keys.clear()
+
+    def copy(self): return type(self)((k, self[k]) for k in self)
+
+    @staticmethod
+    def fromkeys(S, v=None): return CaselessDict((k, v) for k in S)
+
+    def get(self, key, value=None): return self[key] if key in self else value
+
+    def has_key(self, key): return key in self
+
+    def items(self): return [(k, self[k]) for k in self]
+
+    def iteritems(self): return ((k, self[k]) for k in self)
+
+    def iterkeys(self): return (k for k in self)
+
+    def itervalues(self): return (self[k] for k in self)
+
+    def keys(self): return list(self.__iter__())
+
+    def pop(self, key, *args):
+        if len(args) > 1:
+            raise TypeError("pop expected at most 2 arguments, got %s" %
+                            (len(args) + 1))
+        if key in self:
+            v = self[key]
+            del self[key]
+            return v
+        elif args: return args[0]
+        else: raise KeyError(key)
+
+    def popitem(self):
+        if not self: raise KeyError("popitem(): dictionary is empty")
+        k = next(iter(self))
+        v = self[k]
+        del self[k]
+        return k, v
+
+    def setdefault(self, key, value=None):
+        if key not in self: self[key] = value
+        return self[key]
+
+    def update(self, iterable=None, **kwargs):
+        if callable(getattr(iterable, "keys", None)):
+            iterable = [(k, iterable[k]) for k in iterable.keys()]
+        for k, v in iterable or (): self[k] = v
+        for k, v in kwargs.items(): self[k] = v
+
+    def values(self): return [self[k] for k in self]
+
+    def __bool__(self): return bool(self._data)
+
+    def __contains__(self, key): return self._(key) in self._data
+
+    def __delitem__(self, key):
+        lc = self._(key)
+        del self._data[lc], self._keys[lc]
+
+    def __getitem__(self, key): return self._data[self._(key)]
+
+    def __len__(self): return len(self._data)
+
+    def __iter__(self):
+        sortkey = lambda (a, b): a if isinstance(a, tuple) else (a, )
+        return iter(x for _, x in sorted(self._keys.items(), key=sortkey))
+
+    def __setitem__(self, key, value):
+        lc, self._keys[lc], self._data[lc] = self._(key), key, value
+
+    def _(self, key):
+        if isinstance(key, basestring): return key.lower()
+        else: return tuple(x.lower() for x in key)
+
+    def __str__(self): return repr(self)
+
+    def __repr__(self): return "%s(%s)" % (type(self).__name__, self.items())
+
+
+
+class tzinfo_utc(datetime.tzinfo):
+    """datetime.tzinfo class representing UTC timezone."""
+    ZERO = datetime.timedelta(0)
+    __reduce__ = object.__reduce__
+
+    def utcoffset(self, dt): return self.ZERO
+    def dst(self, dt):       return self.ZERO
+    def tzname(self, dt):    return "UTC"
+    def __ne__(self, other): return not self.__eq__(other)
+    def __repr__(self):      return "%s()" % self.__class__.__name__
+    def __eq__(self, other): return isinstance(other, self.__class__)
+UTC = tzinfo_utc() # UTC timezone singleton
 
 
 def m(o, name, case_insensitive=True):
@@ -133,22 +239,6 @@ def plural(word, items=None, numbers=True, single="1", sep=""):
                             for i, x in enumerate(str(count)[::-1])][::-1]) \
                    if sep else count
         result = "%s %s" % (single if 1 == count else fmtcount, result)
-    return result
-
-
-def cmp_dicts(dict1, dict2):
-    """
-    Returns True if dict2 has all the keys and matching values as dict1.
-    List values are converted to tuples before comparing.
-    """
-    result = True
-    for key, v1 in dict1.items():
-        result, v2 = key in dict2, dict2.get(key)
-        if result:
-            v1, v2 = (tuple(x) if isinstance(x, list) else x for x in [v1, v2])
-            result = (v1 == v2)
-        if not result:
-            break # for key, v1
     return result
 
 
@@ -260,16 +350,6 @@ def divide_delta(td1, td2):
     return us1 / us2
 
 
-def img_wx_to_raw(img, format="PNG"):
-    """Returns the wx.Image or wx.Bitmap as raw data of specified type."""
-    stream = io.BytesIO()
-    img = img if isinstance(img, wx.Image) else img.ConvertToImage()
-    fmttype = getattr(wx, "BITMAP_TYPE_" + format.upper(), wx.BITMAP_TYPE_PNG)
-    img.SaveStream(stream, fmttype)
-    result = stream.getvalue()
-    return result
-
-
 def timedelta_seconds(timedelta):
     """Returns the total timedelta duration in seconds."""
     if hasattr(timedelta, "total_seconds"):
@@ -365,6 +445,17 @@ def walk(data, callback):
             if isinstance(data, collections.Mapping): k, v = v, data[v]
             callback(k, v, data)
             walk(v, callback)
+
+
+def tuplefy(value):
+    """Returns the value in or as a tuple if not already a tuple."""
+    return value if isinstance(value, tuple) \
+           else tuple(value) if isinstance(value, list) else (value, )
+
+
+def lccmp(x, y):
+    """Returns negative if x<y, zero if x==y, positive if x>y, caselessly."""
+    return cmp(x.lower(), y.lower())
 
 
 def get_locale_day_date(dt):

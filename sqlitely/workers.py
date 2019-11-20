@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.11.2019
+@modified    20.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -26,7 +26,7 @@ from . lib import util
 from . lib.vendor import step
 from . import conf
 from . import database
-from . import searchparser
+from . searchparser import flatten, match_words, SearchQueryParser
 from . import templates
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,8 @@ class WorkerThread(threading.Thread):
 
     def __init__(self, callback=None):
         """
-        @param   callback  function to call with result chunks
+        @param   callback  function to invoke with {done, result, callable}
+                           or {error, callable}
         """
         threading.Thread.__init__(self)
         self.daemon = True
@@ -48,33 +49,36 @@ class WorkerThread(threading.Thread):
         self._queue = Queue.Queue()
 
 
-    def work(self, data):
+    def work(self, function, **kws):
         """
-        Registers new work to process. Stops current work, if any. Starts
-        thread if not running.
+        Registers new work to process. Starts thread if not running.
 
-        @param   data  a dict with work data
+        @param   function  callable to invoke as work
+        @param   kws       any additional parameters, will be returned
+                           in callback(data, **kws)
         """
-        self._is_working = False
-        self._queue.put(data)
+        self._queue.put((function, kws) if kws else function)
         if not self._is_running: self.start()
 
 
-    def stop(self):
-        """Stops the worker thread."""
+    def stop(self, drop=True):
+        """
+        Stops the worker thread. Obtained results will be posted back,
+        unless drop is false.
+        """
         self._is_running = False
         self._is_working = False
-        self._drop_results = True
+        self._drop_results = drop
         self._queue.put(None) # To wake up thread waiting on queue
 
 
-    def stop_work(self, drop_results=False):
+    def stop_work(self, drop=True):
         """
         Signals to stop the currently ongoing work, if any. Obtained results
-        will be posted back, unless drop_results is True.
+        will be posted back, unless drop is false.
         """
-        self._is_working = False
-        self._drop_results = drop_results
+        self._is_working = drop
+        self._drop_results = drop
 
 
     def is_working(self):
@@ -82,32 +86,33 @@ class WorkerThread(threading.Thread):
         return self._is_working
 
 
-    def postback(self, data):
+    def postback(self, data, **kws):
+        """Invokes given callback with work result."""
         # Check whether callback is still bound to a valid object instance
         if callable(self._callback) and getattr(self._callback, "__self__", True):
-            self._callback(data)
+            self._callback(data, **kws)
 
 
     def run(self):
         """Generic runner, expects a callable to invoke."""
         self._is_running = True
         while self._is_running:
-            func = self._queue.get()
+            func, kws = self._queue.get(), {}
             if not func: continue # while self._is_running
+            if isinstance(func, tuple): func, kws = func
 
             result, error = None, None
-
             self._is_working, self._drop_results = True, False
             try: result = func()
             except Exception as e:
-                if self._is_running:
-                    logger.exception("Error running %s.", func)
-                    error = util.format_exc(e)
-
+                if self._is_running: logger.exception("Error running %s.", func)
+                error = util.format_exc(e)
             if self._drop_results: continue # while self._is_running
-            if error: self.postback({"error": error})
-            else:
-                self.postback({"done": True, "result": result, "callable": func})
+
+            data = {"callable": func}
+            if error: data = {"callable": func, "error": error}
+            else: data = {"callable": func, "done": True, "result": result}
+            self.postback(data, **kws)
             self._is_working = False
 
 
@@ -122,30 +127,14 @@ class SearchThread(WorkerThread):
 
     def __init__(self, callback):
         super(self.__class__, self).__init__(callback)
-        self.parser = searchparser.SearchQueryParser()
-
-
-    def match_all(self, text, words):
-        """Returns whether the text contains all the specified words."""
-        text_lower = text.lower()
-        result = all(w in text_lower for w in words)
-        return result
-
-
-    def match_any(self, text, words):
-        """Returns whether the text contains any of the specified words."""
-        text_lower = text.lower()
-        result = any(w in text_lower for w in words)
-        return result
+        self.parser = SearchQueryParser()
 
 
     def make_replacer(self, words):
         """Returns word/phrase matcher regex."""
-
-        # Turn wildcard characters * into regex-compatible .*
-        words_re = [".*".join(re.escape(step.escape_html(x))
-                              for w in words for x in
-                              ([w] if " " in w else w.split("*")))]
+        words_re = [x if isinstance(w, tuple) else x.replace(r"\*", ".*")
+                    for w in words
+                    for x in [re.escape(step.escape_html(flatten(w)[0]))]]
         patterns = "(%s)" % "|".join(words_re)
         # For replacing matching words with <b>words</b>
         pattern_replace = re.compile(patterns, re.IGNORECASE)
@@ -161,21 +150,21 @@ class SearchThread(WorkerThread):
         result = {"output": "", "map": {}, "search": search, "count": 0}
 
         counts = OrderedDict() # {category: count}
-        for category in database.Database.CATEGORIES if words else ():
+        for category in database.Database.CATEGORIES if (words or kws) else ():
             othercats = set(database.Database.CATEGORIES) - set([category])
             if category not in kws and othercats & set(kws):
                 continue # for category
 
             for item in search["db"].get_category(category).values():
-                if (category in kws 
-                and not self.match_any(item["name"], kws[category])
-                or "-" + category in kws 
-                and self.match_any(item["name"], kws["-" + category])):
+                if (category in kws
+                and not match_words(item["name"], kws[category], any)
+                or "-" + category in kws
+                and match_words(item["name"], kws["-" + category], any)):
                     continue # for item
 
-                matches = self.match_all(item["sql"], words)
-                if not self._is_working: break # for item
-                if not matches: continue # for item
+                if not match_words(item["sql"], words) \
+                and (words or category not in kws):
+                    continue # for item
 
                 counts[category] = counts.get(category, 0) + 1
                 result["count"] += 1
@@ -188,10 +177,11 @@ class SearchThread(WorkerThread):
                 if not result["count"] % conf.SearchResultsChunk:
                     yield "", result
                     result = dict(result, output="", map={})
+                if not self._is_working: break # for item
             if not self._is_working: break # for category
         if counts: infotext += ": found %s; %s in total" % (
             ", ".join("<a href='#%s'><font color='%s'>%s</font></a>" %
-                      (k, conf.LinkColoura, util.plural(k, v))
+                      (k, conf.LinkColour, util.plural(k, v))
                       for k, v in counts.items()),
             util.plural("result", result["count"])
         )
@@ -209,7 +199,8 @@ class SearchThread(WorkerThread):
 
         for category in "table", "view":
             if category not in kws \
-            and ("table" if "view" == category else "table") in kws:
+            and ("table" if "view" == category else "view") in kws \
+            or not search["db"].schema.get(category):
                 continue # for category
 
             mytexts = []
@@ -257,8 +248,7 @@ class SearchThread(WorkerThread):
                     conf.LinkColour, util.plural("result", count)
                 ))
                 if not self._is_working \
-                or result["count"] >= conf.MaxSearchResults:
-                    break # for item
+                or result["count"] >= conf.MaxSearchResults: break # for item
 
             infotext += "%s%s: %s" % ("; " if infotext else "",
                 util.plural(category, mytexts, numbers=False),
@@ -286,7 +276,6 @@ class SearchThread(WorkerThread):
                            else self.search_data
                 for infotext, result in searcher(search):
                     if not self._drop_results: self.postback(result)
-                    if not self._is_working: break # for result
 
                 if not result["count"]: final_text = "No matches found."
                 else: final_text = "Finished searching %s." % infotext
@@ -388,19 +377,19 @@ class AnalyzerThread(WorkerThread):
         self._process = None # subprocess.Popen
 
 
-    def stop(self):
+    def stop(self, drop=True):
         """Stops the worker thread."""
-        super(AnalyzerThread, self).stop()
+        super(AnalyzerThread, self).stop(drop)
         try: self._process.kill()
         except Exception: pass
         self._process = None
 
 
-    def stop_work(self, drop_results=False):
+    def stop_work(self, drop=True):
         """
         Signals to stop the currently ongoing work, if any.
         """
-        super(AnalyzerThread, self).stop_work(drop_results)
+        super(AnalyzerThread, self).stop_work(drop)
         try: self._process.kill()
         except Exception: pass
         self._process = None

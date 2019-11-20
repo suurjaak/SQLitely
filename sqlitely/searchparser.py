@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.10.2019
+@modified    04.11.2019
 """
 import calendar
 import collections
@@ -114,11 +114,12 @@ class SearchQueryParser(object):
         @param   item  if set, search is performed on all the fields of this
                        specific table or view
                        {"name": "Item name", "columns": [{"name", "pk", }, ]}
-        @return        (SQL string, SQL parameter dict, word and phrase list, keyword map)
+        @return        (SQL string, SQL parameter dict, word and phrase list,
+                        keyword map); phrases as tuple-wrapped single strings
         """
         words = [] # All encountered text words and quoted phrases
         keywords = collections.defaultdict(list) # {"table": [], "column": [], ..}
-        sql_params = {} # Parameters for SQL query {"column_like0": "%word%", ..}
+        params = {} # Parameters for SQL query {"column_like0": "%word%", ..}
 
         try:
             parse_results = self._grammar.parseString(query, parseAll=True)
@@ -138,20 +139,20 @@ class SearchQueryParser(object):
             except NameError: # pyparsing.ParseResults not available
                 parse_results = split_words
 
-        self._makeSQL(parse_results, [], keywords, {}, item) # Populate keywords
-        result = self._makeSQL(parse_results, words, keywords, sql_params, item)
-        match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
+        words, keywords = self._parseWords(parse_results, words, keywords)
+        result, params = self._makeSQL(parse_results, params, keywords, item)
+        match_kw = lambda k, x: match_words(x["name"], keywords[k], any)
         if item:
             skip_item = False
             for kw in keywords:
-                if (item["type"]  == kw and not match_kw(item["type"], item)) \
+                if (item["type"] == kw and not match_kw(item["type"], item)) \
                 or ("-" + item["type"] == kw and match_kw("-" + item["type"], item)):
                     skip_item = True
                     break # for kw
             if skip_item:
                 result = ""
             else:
-                kw_sql = self._makeKeywordsSQL(keywords, sql_params, item)
+                kw_sql = self._makeKeywordsSQL(keywords, params, item)
                 result = "SELECT * FROM %s WHERE %s %s%s" % (
                          grammar.quote(item["name"]), result,
                          " AND " if result and kw_sql else "", kw_sql)
@@ -162,30 +163,54 @@ class SearchQueryParser(object):
                     for c in sorted(pk_cols, key=lambda x: x["pk"])
                 )
         else:
-            kw_sql = self._makeKeywordsSQL(keywords, sql_params, item)
+            kw_sql = self._makeKeywordsSQL(keywords, params, item)
         if not item and kw_sql:
             result = "%s%s" % ("%s AND " % result if result else "", kw_sql)
 
-        return result, sql_params, words, keywords
+        return result, params, words, keywords
 
 
-    def _makeSQL(self, parseresult, words, keywords, sql_params,
-                 item=None, parent_name=None):
+    def _parseWords(self, parseresult, words, keywords, parent_name=None):
+        """Populates the words and keywords collections."""
+        if isinstance(parseresult, basestring):
+            words.append(parseresult if "QUOTES" != parent_name else (parseresult, ))
+            return words, keywords
+
+        # ParseResults instance
+        name = hasattr(parseresult, "getName") and parseresult.getName()
+        elements, negation = parseresult, ("NOT" == name)
+        if "KEYWORD" == name:
+            key, word = (x.lower() for x in elements[0].split(":", 1))
+            if key in ["table",  "-table",  "view", "-view",
+                       "column", "-column", "date", "-date"]:
+                if getattr(elements, "QUOTES", None): word = (word, )
+                keywords[key].append(word)
+                return words, keywords
+        elif "PARENTHESIS" == name:
+            name_elem0 = getattr(elements[0], "getName", lambda: "")()
+            if len(elements) and "NOT_PARENTHESIS" == name_elem0:
+                negation = bool(elements[0])
+                elements = elements[1:] # Drop the optional "-" in front
+        elif "QUOTES" == name:
+            elements = flatten(elements)
+        mywords = [] if negation else words # No words from negations
+        for elem in elements: self._parseWords(elem, mywords, keywords, name)
+        return words, keywords
+
+
+    def _makeSQL(self, parseresult, params, keywords, item, parent_name=None):
         """
-        Returns the ParseResults item as an SQL string, appending
-        words and phrases to words list, and keyword and sql parameter values
-        to argument dictionaries.
+        Returns the ParseResults item as an SQL string,
+        appending parameter values to params.
         """
         result = ""
-        match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
+        if not item: return result, params
+        match_kw = lambda k, x: match_words(x["name"], keywords[k], any)
 
         if isinstance(parseresult, basestring):
-            words.append(parseresult)
-            safe = self._escape(parseresult, ("*" if "QUOTES" != parent_name else ""))
-            if not item:
-                item = {"name": "m", "columns": [{"name": "n"}]}
+            safe = escape(parseresult, ("" if "QUOTES" == parent_name else "*"))
 
-            i = len(sql_params)
+            i = len(params)
             for col in item["columns"]:
                 if (keywords.get("column") and not match_kw("column", col)) \
                 or (keywords.get("-column") and match_kw("-column", col)):
@@ -195,162 +220,160 @@ class SearchQueryParser(object):
                 if len(safe) > len(parseresult):
                     result_col += " ESCAPE '%s'" % ESCAPE_CHAR
                 result += (" OR " if result else "") + result_col
-            if not result:
-                return "1 = 0" # No matching columns
+            if not result: return "1 = 0", params # No matching columns
 
             if len(item["columns"]) > 1: result = "(%s)" % result
-            sql_params["column_like%s" % i] = "%" + safe + "%"
+            params["column_like%s" % i] = "%" + safe + "%"
         else:
             elements = parseresult
-            parsed_elements = []
             name = hasattr(parseresult, "getName") and parseresult.getName()
-            do_recurse = True
             negation = ("NOT" == name)
-            if "KEYWORD" == name:
-                key, word = elements[0].split(":", 1)
-                if key.lower() in ["table", "-table", "view", "-view", "column", "-column", "date", "-date"]:
-                    keywords[key.lower()].append(word.lower())
-                    do_recurse = False
+            if "KEYWORD" == name: return result, params
             elif "PARENTHESIS" == name:
                 name_elem0 = getattr(elements[0], "getName", lambda: "")()
                 if len(elements) and "NOT_PARENTHESIS" == name_elem0:
                     negation = bool(elements[0])
                     elements = elements[1:] # Drop the optional "-" in front
             elif "QUOTES" == name:
-                elements = self._flatten(elements)
-            if do_recurse:
-                words_ptr = [] if negation else words # No words from negations
-                for i in elements:
-                    sql = self._makeSQL(i, words_ptr, keywords, sql_params,
-                                       item, name)
-                    parsed_elements.append(sql)
-                or_names = ["OR_OPERAND", "OR_EXPRESSION"]
-                glue = " OR " if name in or_names else " AND "
-                result, count = self._join_strings(parsed_elements, glue)
-                result = "(%s)"   % result if count > 1 else result
-                result = "NOT %s" % result if negation else result
-        return result
+                elements = flatten(elements)
+            parseds = [self._makeSQL(x, params, keywords, item, name)[0]
+                       for x in elements]
+            glue = " OR " if name in ("OR_OPERAND", "OR_EXPRESSION") else " AND "
+            result, count = join_strings(parseds, glue)
+            result = "(%s)"   % result if count > 1 else result
+            result = "NOT %s" % result if negation else result
+        return result, params
 
 
-    def _makeKeywordsSQL(self, keywords, sql_params, item):
+    def _makeKeywordsSQL(self, keywords, params, item):
         """
         Returns the keywords as an SQL string, appending SQL argument values
         to parameters dictionary.
         """
         result = ""
-        match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
+        match_kw = lambda k, x: match_words(x["name"], keywords[k], any)
+        kw_sqls  = {} # {"date": [], "-date": []}
 
-        for keyword, words in keywords.items():
-            kw_sql = ""
-            for word in words:
-                sql = ""
-                if keyword.endswith("date"): # date:2002..2003-11-21
-                    datecols = [c for c in (item or {}).get("columns", [])
-                        if c.get("type") in ("DATE", "DATETIME")
-                        and (not keywords.get("column")  or match_kw("column", c))
-                        and (not keywords.get("-column") or not match_kw("-column", c))
-                    ]
-                    if not datecols:
-                        kw_sql += (" OR " if kw_sql else "") + "1 = 0"
-                        break # for word
+        for keyword, word in ((k, w) for k, ww in keywords.items() for w in ww):
+            if not keyword.endswith("date"): continue # Only dates go into SQL
 
-                    date_words, dates = [None] * 2, [None] * 2
-                    if ".." not in word:
-                        # Single date value given: use strftime matching
-                        ymd = list(map(util.to_int, word.split("-")[:3]))
-                        while len(ymd) < 3: ymd.append(None) # Ensure 3 values
-                        if not any(ymd): # No valid values given: skip
-                            continue # for word
-                        format, value = "", ""
-                        for j, (frm, val) in enumerate(zip("Ymd", ymd)):
-                            if val is None: continue # for j, (frm, val)
-                            format += ("-" if format else "") + "%" + frm
-                            value += ("-" if value else "")
-                            value += "%02d" % val if j else "%04d" % val
-                        param = "timestamp_%s" % len(sql_params)
-                        sql_params[param] = value
-                        for j, col in enumerate(datecols):
-                            temp = "STRFTIME('%s', %s) = :%s"
-                            x = temp % (format, grammar.quote(col["name"]), param)
-                            sql += (" OR " if j else "") + x
-                        if len(datecols) > 1: sql = "(%s)" % sql
+            datecols = [c for c in (item or {}).get("columns", [])
+                if c.get("type") in ("DATE", "DATETIME")
+                and (not keywords.get("column")  or     match_kw( "column", c))
+                and (not keywords.get("-column") or not match_kw("-column", c))
+            ]
+            if not datecols: return "1 = 0" # Force 0 results from query
 
-                    else:
-                        # Date range given: use timestamp matching
-                        date_words = word.split("..", 1)
+            sql, date_words, dates = "", [None] * 2, [None] * 2
+            if ".." not in word:
+                # Single date value given: use strftime matching
+                ymd = list(map(util.to_int, word.split("-")[:3]))
+                while len(ymd) < 3: ymd.append(None) # Ensure 3 values
+                if not any(ymd): # No valid values given: skip
+                    continue # for word
+                format, value = "", ""
+                for j, (frm, val) in enumerate(zip("Ymd", ymd)):
+                    if val is None: continue # for j, (frm, val)
+                    format += ("-" if format else "") + "%" + frm
+                    value += ("-" if value else "")
+                    value += "%02d" % val if j else "%04d" % val
+                param = "timestamp_%s" % len(params)
+                params[param] = value
+                for j, col in enumerate(datecols):
+                    temp = "STRFTIME('%s', %s) = :%s"
+                    x = temp % (format, grammar.quote(col["name"]), param)
+                    sql += (" OR " if j else "") + x
+                if len(datecols) > 1: sql = "(%s)" % sql
 
-                    for i, d in ((i, d) for i, d in enumerate(date_words) if d):
-                        parts = filter(None, d.split("-")[:3])
-                        ymd = list(map(util.to_int, parts))
-                        if not ymd or ymd[0] is None:
-                            continue # for i, d
-                        while len(ymd) < 3: ymd.append(None) # Ensure 3 values
-                        ymd[0] = max(min(ymd[0], 9999), 1) # Year in 1..9999
-                        # Force month into legal range
-                        if ymd[1] is None:
-                            ymd[1] = [1, 12][i]
-                        else:
-                            ymd[1] = max(min(ymd[1], 12), 1) # Month in 1..12
-                        # Force day into legal range
-                        day_max = calendar.monthrange(*ymd[:2])[1]
-                        if ymd[2] is None:
-                            ymd[2] = day_max if i else 1
-                        else:
-                            ymd[2] = max(min(ymd[2], day_max), 1)
-                        dates[i] = datetime.date(*ymd)
-                    for i, d in ((i, d) for i, d in enumerate(dates) if d):
-                        param = "timestamp_%s" % len(sql_params)
-                        sql_params[param] = d
-                        colsql = ""
-                        for j, col in enumerate(datecols):
-                            colsql += (" OR " if j else "")
-                            colsql += "%s %s :%s" % (
-                                      grammar.quote(col["name"]), [">=", "<="][i], param)
-                        sql += (" AND " if sql else "")
-                        sql += "(%s)" % (colsql) if len(datecols) > 1 else colsql
+            else:
+                # Date range given: use timestamp matching
+                date_words = word.split("..", 1)
 
-                if sql: kw_sql += (" OR " if kw_sql else "") + sql
-            if kw_sql:
-                negation = keyword.startswith("-")
-                result += " AND " if result else ""
-                result += "%s(%s)" % ("NOT " if negation else "", kw_sql)
+            for i, d in ((i, d) for i, d in enumerate(date_words) if d):
+                parts = filter(None, d.split("-")[:3])
+                ymd = list(map(util.to_int, parts))
+                if not ymd or ymd[0] is None:
+                    continue # for i, d
+                while len(ymd) < 3: ymd.append(None) # Ensure 3 values
+                ymd[0] = max(min(ymd[0], 9999), 1) # Year in 1..9999
+                # Force month into legal range
+                if ymd[1] is None:
+                    ymd[1] = [1, 12][i]
+                else:
+                    ymd[1] = max(min(ymd[1], 12), 1) # Month in 1..12
+                # Force day into legal range
+                day_max = calendar.monthrange(*ymd[:2])[1]
+                if ymd[2] is None:
+                    ymd[2] = day_max if i else 1
+                else:
+                    ymd[2] = max(min(ymd[2], day_max), 1)
+                dates[i] = datetime.date(*ymd)
+            for i, d in ((i, d) for i, d in enumerate(dates) if d):
+                param = "timestamp_%s" % len(params)
+                params[param] = d
+                colsql = ""
+                for j, col in enumerate(datecols):
+                    colsql += (" OR " if j else "")
+                    colsql += "%s %s :%s" % (
+                              grammar.quote(col["name"]), [">=", "<="][i], param)
+                sql += (" AND " if sql else "")
+                sql += "(%s)" % (colsql) if len(datecols) > 1 else colsql
+
+            if sql: kw_sqls.setdefault(keyword, []).append(sql)
+
+        for keyword, sqls in kw_sqls.items():
+            negation = keyword.startswith("-")
+            result += " AND " if result else ""
+            result += "%s(%s)" % ("NOT " if negation else "", " OR ".join(sqls))
         return result
 
 
-    def _flatten(self, items):
-        """
-        Flattens the list to a single level, if possible,
-        e.g. [[['a', 'b']]] to ['a', 'b'].
-        """
-        result = items
-        while len(result) == 1 and not isinstance(result, basestring):
-            result = result[0]
-        result = [result]
-        return result
+def flatten(items):
+    """
+    Flattens the list to a single level, if possible,
+    e.g. [[['a', 'b']]] to ['a', 'b'].
+    """
+    result = items
+    while len(result) == 1 and isinstance(result, (list, tuple, ParseResults)):
+        result = result[0]
+    result = [result]
+    return result
 
 
-    def _escape(self, item, wildcards=""):
-        """
-        Escapes special SQLite characters _% in item.
+def escape(item, wildcards=""):
+    """
+    Escapes special SQLite characters _% in item.
 
-        @param   wildcards  characters to replace with SQL wildcard %
-        """
-        result   = item.replace("%", ESCAPE_CHAR + "%")
-        result = result.replace("_", ESCAPE_CHAR + "_")
-        if wildcards:
-            result = "".join(result.replace(c, "%") for c in wildcards)
-        return result
+    @param   wildcards  characters to replace with SQL wildcard %
+    """
+    result = item.replace("%", ESCAPE_CHAR + "%").replace("_", ESCAPE_CHAR + "_")
+    if wildcards:
+        result = "".join(result.replace(c, "%") for c in wildcards)
+    return result
 
 
-    def _join_strings(self, strings, glue=" AND "):
-        """
-        Returns the non-empty strings joined together with the specified glue.
+def join_strings(strings, glue=" AND "):
+    """
+    Returns the non-empty strings joined together with the specified glue.
 
-        @param   glue  separator used as glue between strings
-        @return        (joined string, number of strings actually used)
-        """
-        strings = list(filter(None, strings))
-        return glue.join(strings), len(strings)
+    @param   glue  separator used as glue between strings
+    @return        (joined string, number of strings actually used)
+    """
+    strings = list(filter(None, strings))
+    return glue.join(strings), len(strings)
+
+
+def match_words(text, words, when=all):
+    """
+    Returns whether all words match given text.
+
+    @param   words  [string matched as regex, (string matched as-is), ]
+    @param   when   truth function to use, like all or any
+    """
+    words_re = [x if isinstance(w, tuple) else x.replace(r"\*", ".*")
+                for w in words for x in [re.escape(flatten(w)[0])]]
+    text_lower = text.lower()
+    return when(re.search(y, text_lower) for y in words_re)
 
 
 
@@ -381,14 +404,14 @@ def test():
     loglines = [] # Cached trace lines
     def makeSQLLogger(func):
         level = [0] # List as workaround: enclosing scope cannot be reassigned
-        def inner(parseresult, words, keywords, sql_params, item=None, parent_name=None):
+        def inner(parseresult, params, keywords, item=None, parent_name=None):
             txt = "%s_makeSQL(<%s> %s, parent_name=%s)" % \
                   ("  " * level[0], parseresult.__class__.__name__, item, parent_name)
             if hasattr(parseresult, "getName"):
                 txt += ", name=%s" % parseresult.getName()
             loglines.append(txt)
             level[0] += 1
-            result = func(parseresult, words, keywords, sql_params, item, parent_name)
+            result = func(parseresult, params, keywords, item, parent_name)
             level[0] -= 1
             loglines.append("%s = %s." % (txt, result))
             return result
@@ -396,17 +419,19 @@ def test():
     if DO_TRACE:
         parser._makeSQL = makeSQLLogger(parser._makeSQL)
 
-    for i, item in enumerate(TEST_QUERIES):
+    item = {"name": "m", "type": "table",
+            "columns": [{"name": "n"}, {"name": "d", "type": "DATETIME"}]}
+    for i, text in enumerate(TEST_QUERIES):
         del loglines[:]
         print("\n%s\n" % ("-" * 60) if i else "")
-        print("QUERY: %s" % repr(item))
+        print("QUERY: %s" % repr(text))
         d1 = datetime.datetime.now()
-        r = parser.Parse(item)
+        r = parser.Parse(text, item)
         d2 = datetime.datetime.now()
         print("\n".join(loglines))
         print("PARSE DURATION: %s" % (d2 - d1))
         try:
-            parsetree = parser._grammar.parseString(item, parseAll=True)
+            parsetree = parser._grammar.parseString(text, parseAll=True)
             print("PARSE TREE: %s" % parsetree)
         except Exception as e:
             print("PARSE TREE: FAILED: %s" % e)
@@ -420,7 +445,8 @@ def test():
         print("SQL: %s" % "\n".join(wrapper.wrap(sql)))
         print("PARAMS: %s" % "\n".join(wrapper.wrap(repr(params))))
         print("WORDS: %s" % repr(words))
-        print("QUERY: %s" % item)
+        print("KEYWORDS: %s" % repr(keywords))
+        print("QUERY: %s" % text)
 
 
 

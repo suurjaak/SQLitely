@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.11.2019
+@modified    20.11.2019
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -22,8 +22,8 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev169"
-VersionDate = "03.11.2019"
+Version = "1.0.dev206"
+VersionDate = "20.11.2019"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -45,15 +45,16 @@ FileDirectives = ["ConsoleHistoryCommands", "DBFiles", "DBSort",
     "SearchInData", "SearchUseNewTab", "SQLWindowTexts", "TrayIconEnabled",
     "UpdateCheckAutomatic", "WindowIconized", "WindowPosition", "WindowSize",
 ]
-"""List of attributes saved if changed from default, user-modifiable."""
+"""List of user-modifiable attributes, saved if changed from default."""
 OptionalFileDirectives = [
     "DBExtensions", "ExportDbTemplate", "LogSQL", "MinWindowSize",
     "MaxConsoleHistory", "MaxDBSizeForFullCount", "MaxTableRowIDForFullCount",
     "MaxHistoryInitialMessages", "MaxRecentFiles", "MaxSearchHistory",
-    "MaxSearchResults", "PopupUnexpectedErrors", "SearchResultsChunk",
-    "StatisticsPlotWidth", "StatusFlashLength", "UpdateCheckInterval",
+    "MaxSearchResults", "PopupUnexpectedErrors", "RunChecksums", "RunStatistics", 
+    "SearchResultsChunk", "SeekLength", "SeekLeapLength", "StatisticsPlotWidth",
+    "StatusFlashLength", "UpdateCheckInterval",
 ]
-OptionalFileDirectiveDefaults = {}
+Defaults = {}
 
 """---------------------------- FileDirectives: ----------------------------"""
 
@@ -84,8 +85,20 @@ MaxDBSizeForFullCount = 500000000
 """Maximum table ROWID for doing full COUNT(*) if database size over MaxDBSizeForFullCount."""
 MaxTableRowIDForFullCount = 1000
 
+"""Number of rows to seek ahead on data grids, when scrolling to end of retrieved rows."""
+SeekLength = 100
+
+"""Number of rows to seek ahead on data grids, when scrolling freely or jumping to data grid bottom."""
+SeekLeapLength = 10000
+
 """Contents of Recent Files menu."""
 RecentFiles = []
+
+"""Run checksum calculations automatically (may take a while for large databases)."""
+RunChecksums = True
+
+"""Run statistics analysis automatically (may take a while for large databases)."""
+RunStatistics = True
 
 """
 Texts entered in global search, used for drop down auto-complete.
@@ -127,7 +140,7 @@ DBsOpen = {}
 
 """Path to SQLite analyzer tool."""
 DBAnalyzer = os.path.join(BinDirectory, "sqlite3_analyzer" + (
-    ".exe" if "win32"  == sys.platform else 
+    ".exe" if "win32"  == sys.platform else
     "_osx" if "darwin" == sys.platform else "_linux"
 ))
 
@@ -221,17 +234,14 @@ SearchDescription = "Search for.."
 """Foreground colour for error labels."""
 LabelErrorColour = "#CC3232"
 
-"""Color set to database table list tables that have been changed."""
-DBTableChangedColour = "blue"
-
 """Colour set to table/list rows that have been changed."""
 GridRowChangedColour = "#FFCCCC"
 
 """Colour set to table/list rows that have been inserted."""
-GridRowInsertedColour = "#88DDFF"
+GridRowInsertedColour = "#B9EAFF"
 
 """Colour set to table/list cells that have been changed."""
-GridCellChangedColour = "#FF7777"
+GridCellChangedColour = "#FFA5A5"
 
 """Width of the database statistics plots, in pixels."""
 StatisticsPlotWidth = 200
@@ -258,8 +268,13 @@ FontXlsxBoldFile = os.path.join(ResourceDirectory, "CarlitoBold.ttf")
 
 def load():
     """Loads FileDirectives from ConfigFile into this module's attributes."""
+    global Defaults
     section = "*"
     module = sys.modules[__name__]
+    VARTYPES = (basestring, bool, int, long, list, tuple, dict, type(None))
+    Defaults = {k: v for k, v in vars(module).items() if not k.startswith("_")
+                and isinstance(v, VARTYPES)}
+
     parser = RawConfigParser()
     parser.optionxform = str # Force case-sensitivity on names
     try:
@@ -279,7 +294,6 @@ def load():
         for name in FileDirectives:
             [setattr(module, name, v) for v, s in [parse_value(name)] if s]
         for name in OptionalFileDirectives:
-            OptionalFileDirectiveDefaults[name] = getattr(module, name, None)
             [setattr(module, name, v) for v, s in [parse_value(name)] if s]
     except Exception:
         pass # Fail silently
@@ -302,7 +316,7 @@ def save():
         for name in OptionalFileDirectives:
             try:
                 value = getattr(module, name, None)
-                if OptionalFileDirectiveDefaults.get(name) != value:
+                if Defaults.get(name) != value:
                     parser.set(section, name, json.dumps(value))
             except Exception: pass
         parser.write(f)

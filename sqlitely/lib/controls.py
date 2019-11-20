@@ -12,6 +12,9 @@ Stand-alone GUI components for wx:
 - FormDialog(wx.Dialog):
   Dialog for displaying a complex editable form.
 
+- HintedTextCtrl(wx.TextCtrl):
+  Simple search control, with search description.
+
 - NonModalOKDialog(wx.Dialog):
   A simple non-modal dialog with an OK button, stays on top of parent.
 
@@ -27,11 +30,9 @@ Stand-alone GUI components for wx:
   Dialog for displaying an editable property grid. Supports strings,
   integers, booleans, and tuples interpreted as wx.Size.
 
-- ScrollingHtmlWindow(wx.html.HtmlWindow):
-  HtmlWindow that remembers its scroll position on resize and append.
-
-- SearchCtrl(wx.TextCtrl):
-  Simple search control, with search description.
+- ResizeWidget(wx.lib.resizewidget.ResizeWidget):
+  A specialized panel that provides a resize handle for a widget,
+  with configurable resize directions.
 
 - SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                            wx.lib.mixins.listctrl.ColumnSorterMixin):
@@ -62,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    03.11.2019
+@modified    19.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -85,6 +86,7 @@ import wx.lib.embeddedimage
 import wx.lib.gizmos
 import wx.lib.mixins.listctrl
 import wx.lib.newevent
+import wx.lib.resizewidget
 import wx.lib.wordwrap
 import wx.stc
 
@@ -101,28 +103,46 @@ class BusyPanel(wx.Window):
     """
     FOREGROUND_COLOUR = wx.WHITE
     BACKGROUND_COLOUR = wx.Colour(110, 110, 110, 255)
+    REFRESH_INTERVAL  = 500
 
     def __init__(self, parent, label):
         wx.Window.__init__(self, parent)
-        self.Hide()
-        sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
-        label = self._label = wx.StaticText(self, label=label)
-        self.BackgroundColour = self.BACKGROUND_COLOUR
+        self.Hide() # Avoid initial flicker
+
+        timer = self._timer = wx.Timer(self)
+
+        label = wx.StaticText(self, label=label, style=wx.ST_ELLIPSIZE_END)
+
+        self.BackgroundColour  = self.BACKGROUND_COLOUR
         label.ForegroundColour = self.FOREGROUND_COLOUR
-        sizer.Add(label, border=15, flag=wx.ALL | wx.ALIGN_CENTER_HORIZONTAL)
+
+        self.Sizer = wx.BoxSizer(wx.VERTICAL)
+        self.Sizer.Add(label, border=15, flag=wx.ALL | wx.ALIGN_CENTER_HORIZONTAL)
         self.Fit()
+
+        maxsize = [self.Parent.Size.width / 2, self.Parent.Size.height * 2 / 3]
+        self.Size = tuple(min(a, b) for a, b in zip(self.Size, maxsize))
+
+        self.Bind(wx.EVT_PAINT, lambda e: (e.Skip(), self.Refresh()))
+        self.Bind(wx.EVT_TIMER, lambda e: (e.Skip(), self.Refresh()))
+        self.Bind(wx.EVT_WINDOW_DESTROY, self._OnDestroy)
+
         self.Layout()
         self.CenterOnParent()
         self.Show()
         parent.Refresh()
-        wx.YieldIfNeeded()
+        wx.Yield()
+        timer.Start(self.REFRESH_INTERVAL)
+
+
+    def _OnDestroy(self, event):
+        event.Skip()
+        try: self._timer.Stop()
+        except Exception: pass
 
 
     def Close(self):
-        try:
-            self.Hide()
-            self.Parent.Refresh()
-            self.Destroy()
+        try: self.Destroy(); self.Parent.Refresh()
         except Exception: pass
 
 
@@ -282,7 +302,8 @@ class FormDialog(wx.Dialog):
        ?component     specific wx component to use
        ?toggle:       if true, field is toggle-able and children hidden when off
        ?children:     [{field}, ]
-       ?link:         "name" of linked field, cleared and repopulated on change
+       ?link:         "name" of linked field, cleared and repopulated on change,
+                      or callable(data) doing required change and returning field name
        ?tb:           [{type, ?help}] for SQLiteTextCtrl component, adds toolbar,
                       supported toolbar buttons "open" and "paste"
     }]
@@ -644,8 +665,13 @@ class FormDialog(wx.Dialog):
         or not value.strip()): value = value.strip()
         self._SetValue(field, value, path)
         if field.get("link"):
-            linkfield = self._GetField(field["link"], path)
-            self._DelValue(linkfield, path)
+            name = field["link"]
+            if callable(name):
+                name = field["link"](self._data)
+                linkfield = self._GetField(name, path)
+            else:
+                linkfield = self._GetField(name, path)
+                self._DelValue(linkfield, path)
             self._PopulateField(linkfield, path)
 
 
@@ -732,6 +758,15 @@ class FormDialog(wx.Dialog):
             c.Show(fon)
         if on and self._GetValue(field, path) is None:
             self._SetValue(field, {} if field.get("children") else "", path)
+        if field.get("link"):
+            name = field["link"]
+            if callable(name):
+                name = field["link"](self._data)
+                linkfield = self._GetField(name, path)
+            else:
+                linkfield = self._GetField(name, path)
+                self._DelValue(linkfield, path)
+            self._PopulateField(linkfield, path)
         self.Layout()
 
 
@@ -765,6 +800,124 @@ class FormDialog(wx.Dialog):
         """Handler for clicking OK/Cancel, hides the dialog."""
         self.Hide()
         self.IsModal() and self.EndModal(event.GetId())
+
+
+
+class HintedTextCtrl(wx.TextCtrl):
+    """
+    A text control with a hint text shown when no value, hidden when focused.
+    Fires EVT_TEXT_ENTER event on text change.
+    Clears entered value on pressing Escape.
+    """
+
+
+    def __init__(self, parent, hint="", escape=True, **kwargs):
+        """
+        @param   hint    hint text shown when no value and no focus
+        @param   escape  whether to clear entered value on pressing Escape
+        """
+        super(self.__class__, self).__init__(parent, **kwargs)
+        self._text_colour = self._hint_colour = None
+        ColourManager.Manage(self, "_text_colour", wx.SYS_COLOUR_BTNTEXT)
+        ColourManager.Manage(self, "_hint_colour", wx.SYS_COLOUR_GRAYTEXT)
+        self.SetForegroundColour(self._text_colour)
+
+        self._hint = hint
+        self._hint_on = False # Whether textbox is filled with hint value
+        self._ignore_change = False # Ignore value change
+        if not self.Value:
+            self.Value = self._hint
+            self.SetForegroundColour(self._hint_colour)
+            self._hint_on = True
+
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED,  self.OnSysColourChange)
+        self.Bind(wx.EVT_SET_FOCUS,           self.OnFocus)
+        self.Bind(wx.EVT_KILL_FOCUS,          self.OnFocus)
+        self.Bind(wx.EVT_TEXT,                self.OnText)
+        if escape: self.Bind(wx.EVT_KEY_DOWN, self.OnKeyDown)
+
+
+    def OnFocus(self, event):
+        """
+        Handler for focusing/unfocusing the control, shows/hides hint.
+        """
+        event.Skip() # Allow to propagate to parent, to show having focus
+        self._ignore_change = True
+        if self and self.FindFocus() == self:
+            if self._hint_on:
+                self.SetForegroundColour(self._text_colour)
+                self.Value = ""
+                self._hint_on = False
+            self.SelectAll()
+        elif self:
+            if self._hint and not self.Value:
+                # Control has been unfocused, set and colour hint
+                wx.TextCtrl.SetValue(self, self._hint)
+                self.SetForegroundColour(self._hint_colour)
+                self._hint_on = True
+        wx.CallAfter(setattr, self, "_ignore_change", False)
+
+
+    def OnKeyDown(self, event):
+        """Handler for keypress, empties text on escape."""
+        event.Skip()
+        if event.KeyCode in [wx.WXK_ESCAPE] and self.Value:
+            self.Value = ""
+            evt = wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER, self.Id)
+            evt.EventObject = self
+            evt.String = self.Value
+            wx.PostEvent(self, evt)
+
+
+    def OnText(self, event):
+        """Handler for text change, fires TEXT_ENTER event."""
+        event.Skip()
+        if self._ignore_change: return
+        evt = wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER, self.Id)
+        evt.EventObject = self
+        evt.String = self.Value
+        wx.PostEvent(self, evt)
+
+
+    def OnSysColourChange(self, event):
+        """Handler for system colour change, updates text colour."""
+        event.Skip()
+        def after():
+            colour = self._hint_colour if self._hint_on else self._text_colour
+            self.SetForegroundColour(colour)
+        wx.CallAfter(after)
+
+
+    def GetHint(self):
+        """Returns the current hint."""
+        return self._hint
+    def SetHint(self, hint):
+        """Sets the hint value."""
+        self._hint = hint
+        if self._hint_on or not self.Value and not self.HasFocus():
+            self._ignore_change = True
+            wx.TextCtrl.SetValue(self, self._hint)
+            self.SetForegroundColour(self._hint_colour)
+            self._hint_on = True
+            wx.CallAfter(setattr, self, "_ignore_change", False)
+    Hint = property(GetHint, SetHint)
+
+
+    def GetValue(self):
+        """
+        Returns the current value in the text field, or empty string if filled
+        with hint.
+        """
+        return "" if self._hint_on else wx.TextCtrl.GetValue(self)
+    def SetValue(self, value):
+        """Sets the value in the text entry field."""
+        self._ignore_change = True
+        wx.TextCtrl.SetValue(self, value)
+        if value:
+            self.SetForegroundColour(self._text_colour)
+            self._hint_on = False
+        wx.CallAfter(setattr, self, "_ignore_change", False)
+    Value = property(GetValue, SetValue)
 
 
 
@@ -995,7 +1148,7 @@ class NoteButton(wx.Panel, wx.Button):
         if not self._label and not self._note:
             self._extent_label = self._extent_note = (0, 0)
             return
-            
+
         WORDWRAP = wx.lib.wordwrap.wordwrap
         width, height = self.Size
         if width > 20 and height > 20:
@@ -1350,6 +1503,8 @@ class PropertyDialog(wx.Dialog):
         """Returns value in type expected, or None on failure."""
         try:
             result = typeclass(value)
+            if isinstance(result, (int, long)) and result < 0:
+                raise ValueError() # Reject negative numbers
             isinstance(result, basestring) and result.strip()[0] # Reject empty
             return result
         except Exception:
@@ -1364,169 +1519,90 @@ class PropertyDialog(wx.Dialog):
 
 
 
-class ScrollingHtmlWindow(wx.html.HtmlWindow):
+class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
     """
-    HtmlWindow that remembers its scroll position on resize and append.
+    A specialized panel that provides a resize handle for a widget,
+    with configurable resize directions.
     """
-
-    def __init__(self, *args, **kwargs):
-        wx.html.HtmlWindow.__init__(self, *args, **kwargs)
-        self.Bind(wx.EVT_SCROLLWIN, self._OnScroll)
-        self.Bind(wx.EVT_SIZE, self._OnSize)
-        self._last_scroll_pos = [0, 0]
-        self._last_scroll_range = [0, 1]
+    BOTH = wx.HORIZONTAL | wx.VERTICAL
 
 
-    def _OnSize(self, event):
+    def __init__(self, parent, id=wx.ID_ANY, pos=wx.DefaultPosition, size=wx.DefaultSize,
+                 style=wx.TAB_TRAVERSAL, name="", direction=wx.HORIZONTAL | wx.VERTICAL):
         """
-        Handler for sizing the HtmlWindow, sets new scroll position based
-        previously stored one (HtmlWindow loses its scroll position on resize).
+        @param   direction  either wx.HORIZONTAL and/or wx.VERTICAL to allow
+                            resize in one or both directions
         """
-        event.Skip() # Allow event to propagate wx handler
-        for i in range(2):
-            orient = wx.VERTICAL if i else wx.HORIZONTAL
-            # Division can be > 1 on first resizings, bound it to 1.
-            pos, rng = self._last_scroll_pos[i], self._last_scroll_range[i]
-            ratio = pos / float(rng) if rng else 0.0
-            ratio = min(1, pos / float(rng) if rng else 0.0)
-            self._last_scroll_pos[i] = ratio * self.GetScrollRange(orient)
-        try:
-            # Execute scroll later as something resets it after this handler
-            wx.CallLater(50, lambda:
-                self.Scroll(*self._last_scroll_pos) if self else None)
-        except Exception:
-            pass # CallLater fails if not called from the main thread
+        self._direction = direction if direction & self.BOTH else self.BOTH
+        super(self.__class__, self).__init__(parent, id, pos, size, style, name)
 
 
-    def _OnScroll(self, event=None):
+    def GetDirection(self, direction):
+        """Returns the resize direction of the window."""
+        return self._direction
+    def SetDirection(self, direction):
         """
-        Handler for scrolling the window, stores scroll position
-        (HtmlWindow loses it on resize).
+        Sets resize direction of the window,
+        either wx.HORIZONTAL and/or wx.VERTICAL.
         """
-        if event: event.Skip() # Allow event to propagate wx handler
-        p, r = self.GetScrollPos, self.GetScrollRange
-        self._last_scroll_pos   = [p(x) for x in (wx.HORIZONTAL, wx.VERTICAL)]
-        self._last_scroll_range = [r(x) for x in (wx.HORIZONTAL, wx.VERTICAL)]
+        self._direction = direction if direction & self.BOTH else self.BOTH
+    Direction = property(GetDirection, SetDirection)
 
 
-    def Scroll(self, x, y):
-        """Scrolls the window so the view start is at the given point."""
-        self._last_scroll_pos = [x, y]
-        return super(ScrollingHtmlWindow, self).Scroll(x, y)
+    def OnLeftUp(self, evt):
+        """Handles the wx.EVT_LEFT_UP event."""
+        self._dragPos = None
+        if self.HasCapture():
+            self.ReleaseMouse()
+            self.InvalidateBestSize()
 
 
-    def SetPage(self, source):
-        """Sets the source of a page and displays it."""
-        self._last_scroll_pos, self._last_scroll_range = [0, 0], [0, 1]
-        return super(ScrollingHtmlWindow, self).SetPage(source)
+    def OnMouseLeave(self, event):
+        """Handles the wx.EVT_LEAVE_WINDOW event."""
+        if not self.HasCapture() and self._resizeCursor:
+            self.SetCursor(wx.Cursor(wx.CURSOR_ARROW))
+            self._resizeCursor = False
 
 
-    def AppendToPage(self, source):
+    def OnMouseMove(self, evt):
         """
-        Appends HTML fragment to currently displayed text, refreshes the window
-        and restores scroll position.
+        Handles wx.EVT_MOTION event. Overrides inherited .OnMouseMove
+        to constrain resize to configured directions only.
         """
-        p, r, s = self.GetScrollPos, self.GetScrollRange, self.GetScrollPageSize
-        self.Freeze()
-        try:
-            pos, rng, size = (x(wx.VERTICAL) for x in [p, r, s])
-            result = super(ScrollingHtmlWindow, self).AppendToPage(source)
-            if size != s(wx.VERTICAL) or pos + size >= rng:
-                pos = r(wx.VERTICAL) # Keep scroll at bottom edge
-            self.Scroll(0, pos), self._OnScroll()
-        finally: self.Thaw()
-        return result
+        pos = evt.GetPosition()
+        if self._hitTest(pos) and self._resizeEnabled:
+            if not self._resizeCursor:
+                self.SetCursor(wx.Cursor(wx.CURSOR_SIZENWSE))
+                self._resizeCursor = True
+        elif not self.HasCapture():
+            if self._resizeCursor:
+                self.SetCursor(wx.Cursor(wx.CURSOR_ARROW))
+                self._resizeCursor = False
+
+        if evt.Dragging() and self._dragPos is not None:
+            delta, posDelta = wx.Size(), self._dragPos - pos
+            if self._direction & wx.HORIZONTAL: delta[0] = posDelta[0]
+            if self._direction & wx.VERTICAL:   delta[1] = posDelta[1]
+            newSize = self.GetSize() - delta
+            self._adjustNewSize(newSize)
+            if newSize != self.GetSize():
+                self.SetSize(newSize)
+                self._dragPos = pos
+                self._bestSize = newSize
+                self.InvalidateBestSize()
+                self._sendEvent()
 
 
+    def DoGetBestSize(self):
+        """Returns the best size."""
+        if self.HasCapture(): return self._bestSize
 
-class SearchCtrl(wx.TextCtrl):
-    """
-    A text control with search description.
-    Fires EVT_TEXT_ENTER event on text change.
-    """
-
-
-    def __init__(self, parent, description="", **kwargs):
-        """
-        @param   description  description text shown if nothing entered yet
-        """
-        wx.TextCtrl.__init__(self, parent, **kwargs)
-        self._text_colour = self._desc_colour = None
-        ColourManager.Manage(self, "_text_colour", wx.SYS_COLOUR_BTNTEXT)
-        ColourManager.Manage(self, "_desc_colour", wx.SYS_COLOUR_GRAYTEXT)
-
-        self._description = description
-        self._description_on = False # Is textbox filled with description?
-        self._ignore_change  = False # Ignore text change in event handlers
-        if not self.Value:
-            self.Value = self._description
-            self.SetForegroundColour(self._desc_colour)
-            self._description_on = True
-
-        self.Bind(wx.EVT_SET_FOCUS,          self.OnFocus,        self)
-        self.Bind(wx.EVT_KILL_FOCUS,         self.OnFocus,        self)
-        self.Bind(wx.EVT_KEY_DOWN,           self.OnKeyDown,      self)
-        self.Bind(wx.EVT_TEXT,               self.OnText,         self)
-        self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
-
-
-    def OnFocus(self, event):
-        """
-        Handler for focusing/unfocusing the control, shows/hides description.
-        """
-        event.Skip() # Allow to propagate to parent, to show having focus
-        self._ignore_change = True
-        if self and self.FindFocus() == self:
-            if self._description_on:
-                self.Value = ""
-            self.SelectAll()
-        elif self:
-            if self._description and not self.Value:
-                # Control has been unfocused, set and colour description
-                wx.TextCtrl.SetValue(self, self._description)
-                self.SetForegroundColour(self._desc_colour)
-                self._description_on = True
-        self._ignore_change = False
-
-
-    def OnKeyDown(self, event):
-        """Handler for keypress, empties text on escape."""
-        event.Skip()
-        if event.KeyCode in [wx.WXK_ESCAPE] and self.Value:
-            self.Value = ""
-            wx.PostEvent(self, wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER))
-
-
-    def OnText(self, event):
-        """Handler for text change, fires TEXT_ENTER event."""
-        if self._ignore_change: return
-        evt = wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER)
-        evt.String = self.Value
-        wx.PostEvent(self, evt)
-
-
-    def OnSysColourChange(self, event):
-        """Handler for system colour change, updates text colour."""
-        event.Skip()
-        colour = self._desc_colour if self._description_on else self._text_colour
-        self.SetForegroundColour(colour)
-
-
-    def GetValue(self):
-        """
-        Returns the current value in the text field, or empty string if filled
-        with description.
-        """
-        value = wx.TextCtrl.GetValue(self)
-        if self._description_on:
-            value = ""
-        return value
-    def SetValue(self, value):
-        """Sets the value in the text entry field."""
-        self.SetForegroundColour(self._text_colour)
-        self._description_on = False
-        return wx.TextCtrl.SetValue(self, value)
-    Value = property(GetValue, SetValue)
+        HANDLE = wx.lib.resizewidget.RW_THICKNESS
+        size, csize = wx.Size(*self._bestSize), self.ManagedChild.EffectiveMinSize
+        # Allow external resizing to function from child size
+        if not self._direction & wx.HORIZONTAL: size[0] = csize[0] + HANDLE
+        if not self._direction & wx.VERTICAL:   size[1] = csize[1] + HANDLE
+        return size
 
 
 
@@ -2205,7 +2281,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         """Sets STC style colours."""
         fgcolour, bgcolour, highcolour = (
             wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
-            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW 
+            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
                       if self.Enabled else wx.SYS_COLOUR_BTNFACE,
                       wx.SYS_COLOUR_HOTLIGHT)
         )
@@ -2255,7 +2331,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.autocomps_added.update(map(unicode, words))
         # A case-insensitive autocomp has to be sorted, will not work
         # properly otherwise. UserList would support arbitrarily sorting.
-        self.autocomps_total = sorted(list(self.autocomps_added) + 
+        self.autocomps_total = sorted(list(self.autocomps_added) +
                                       map(unicode, self.KEYWORDS),
                                       cmp=self.stricmp)
 
@@ -2451,7 +2527,6 @@ class TabbedHtmlWindow(wx.Panel):
         # [{"title", "content", "id", "info", "scrollpos", "scrollrange"}]
         self._tabs = []
         self._default_page = ""      # Content shown on the blank page
-        self._delete_callback = None # Function called after deleting a tab
         ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
 
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2470,6 +2545,8 @@ class TabbedHtmlWindow(wx.Panel):
         self._html.Bind(wx.EVT_SIZE, self._OnSize)
         notebook.GetTabArea().Bind(wx.EVT_LEFT_DCLICK, self._OnLeftDClickTabArea)
         notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self._OnChangeTab)
+        notebook.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
+                      self._OnMenu)
         notebook.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
                       self._OnDeleteTab)
         notebook.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_DROPPED,
@@ -2486,7 +2563,7 @@ class TabbedHtmlWindow(wx.Panel):
                      "SelectAll", "SelectionToText",
                      "GetBackgroundColour", "SetBackgroundColour"]:
             setattr(self, name, getattr(self._html, name))
-        for name in ["DeletePage", "GetSelection", "GetTabAreaColour", "SetTabAreaColour"]:
+        for name in ["DeletePage", "GetPageCount", "GetTabAreaColour", "SetTabAreaColour"]:
             setattr(self, name, getattr(self._notebook, name))
 
         self._CreateTab(0, "") # Make default empty tab in notebook with no text
@@ -2497,7 +2574,8 @@ class TabbedHtmlWindow(wx.Panel):
         """Fires a TabLeftDClickEvent if a tab header was double-clicked."""
         area = self._notebook.GetTabArea()
         where, tab = area.HitTest(event.GetPosition())
-        if wx.lib.agw.flatnotebook.FNB_TAB == where and tab < len(self._tabs):
+        if wx.lib.agw.flatnotebook.FNB_TAB == where and tab < len(self._tabs) \
+        and self._tabs[tab].get("info"):
             wx.PostEvent(self, TabLeftDClickEvent(Data=self._tabs[tab]))
 
 
@@ -2546,13 +2624,12 @@ class TabbedHtmlWindow(wx.Panel):
     def _OnChangeTab(self, event):
         """Handler for selecting another tab in notebook, loads tab content."""
         if self._tabs:
-            self.SetActiveTab(self._notebook.GetSelection())
-            # Forward event to TabbedHtmlWindow listeners
-            wx.PostEvent(self.GetEventHandler(), event)
+            self.SetSelection(self._notebook.GetSelection())
+            wx.PostEvent(self, event) # Forward event to external listeners
 
 
     def _OnDropTab(self, event):
-        """Handler for dropping a dragged tab."""
+        """Handler for dropping a dragged tab, rearranges internal data."""
         new, old = event.GetSelection(), event.GetOldSelection()
         new = min(new, len(self._tabs) - 1) # Can go over the edge
         if self._tabs and new != old and new >= 0:
@@ -2561,27 +2638,42 @@ class TabbedHtmlWindow(wx.Panel):
 
     def _OnDeleteTab(self, event):
         """Handler for clicking in notebook to close a tab."""
-        if not self._tabs:
-            event.Veto() # User clicked to delete the default page, cancel
-        else:
-            nb = self._notebook
-            tab = self._tabs[event.GetSelection()]
+        if not self._tabs: return event.Veto() # Cancel deleting default page
+
+        nb = self._notebook
+        pagecount = nb.GetPageCount()
+        tab = self._tabs[event.GetSelection()]
+        if 1 == pagecount: event.Veto() # Only page: reuse
+
+        def after():
             self._tabs.remove(tab)
-            if 1 == nb.GetPageCount(): # Was the only page,
-                nb.SetPageText(0, "")  # reuse as default empty tab
-                event.Veto()
+            if 1 == pagecount: # Was the only page, reuse as default
+                nb.SetPageText(0, "")
                 self._SetPage(self._default_page)
                 # Hide dropdown selector, remove X from tab style.
                 style = nb.GetAGWWindowStyleFlag()
-                style ^= wx.lib.agw.flatnotebook.FNB_X_ON_TAB | \
-                         wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST
+                style &= ~wx.lib.agw.flatnotebook.FNB_X_ON_TAB & \
+                         ~wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST
                 nb.SetAGWWindowStyleFlag(style)
             else:
-                index = min(nb.GetSelection(), nb.GetPageCount() - 2)
-                self.SetActiveTab(index)
-            if self._delete_callback:
-                self._delete_callback(tab)
+                index = min(nb.GetSelection(), pagecount - 2)
+                self.SetSelection(index)
 
+        if tab.get("info"):
+            evt = wx.lib.agw.flatnotebook.FlatNotebookEvent(event.EventType, self.Id)
+            evt.SetSelection(event.GetSelection())
+            evt.SetEventObject(self)
+            wx.PostEvent(self, evt) # Forward event to external listeners
+        wx.CallLater(0, after)
+
+
+    def _OnMenu(self, event):
+        """Handler for notebook page context menu, forwards event."""
+        evt = wx.lib.agw.flatnotebook.FlatNotebookEvent(event.EventType, self.Id)
+        evt.SetSelection(event.GetSelection())
+        evt.SetEventObject(self)
+        wx.PostEvent(self, evt) # Forward event to external listeners
+        
 
     def _CreateTab(self, index, title):
         """Creates a new tab in the tab container at specified index."""
@@ -2596,21 +2688,17 @@ class TabbedHtmlWindow(wx.Panel):
         ColourManager.Manage(self._html, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
 
 
-    def SetDeleteCallback(self, callback):
-        """Sets the function called after deleting a tab, with tab data."""
-        self._delete_callback = callback
-
-
-    def SetDefaultPage(self, content):
+    def SetCustomPage(self, content):
+        """Sets custom page to show if there are no pages left."""
         self._default_page = content
         if not self._tabs:
             self._SetPage(self._default_page)
 
 
-    def InsertTab(self, index, title, id, content, info):
+    def InsertPage(self, index, content, title, id, info=None):
         """
         Inserts a new tab with the specified title and content at the specified
-        index, and activates the new tab.
+        position, and activates the new tab.
         """
         tab = {"title": title, "content": content, "id": id,
                "scrollpos": [0, 0], "scrollrange": [0, 0], "info": info}
@@ -2631,13 +2719,19 @@ class TabbedHtmlWindow(wx.Panel):
         finally: self._html.Thaw()
 
 
-    def GetTabDataByID(self, id):
-        """Returns the data of the tab with the specified ID, or None."""
-        result = next((x for x in self._tabs if x["id"] == id), None)
-        return result
+    def GetPage(self, page=None, id=None):
+        """Returns the tab at the given position or with given ID, or None."""
+        if page is not None:
+            return self._tabs[page] if 0 <= page < len(self._tabs) else None
+        return next((x for x in self._tabs if x["id"] == id), None)
 
 
-    def SetTabDataByID(self, id, title, content, info, new_id=None):
+    def GetPageIndex(self, win):
+        """Returns the index at which the tab is found."""
+        return next((i for i, x in enumerate(self._tabs) if x == win), -1)
+
+
+    def SetPageData(self, id, title, content, info, new_id=None):
         """
         Sets the title, content and info of the tab with the specified ID.
 
@@ -2659,8 +2753,16 @@ class TabbedHtmlWindow(wx.Panel):
                 finally: self._html.Thaw()
 
 
-    def SetActiveTab(self, index):
-        """Sets active the tab at the specified index."""
+    def GetSelection(self):
+        """Returns the currently selected page, or -1 if none was selected."""
+        return self._notebook.GetSelection()
+
+
+    def SetSelection(self, index=None, id=None):
+        """Sets active the tab at the specified index, or with specified ID."""
+        if id is not None:
+            tab = next((x for x in self._tabs if x["id"] == id), None)
+            index = self._tabs.index(tab)
         tab = self._tabs[index]
         self._notebook.SetSelection(index)
         self._html.Freeze()
@@ -2669,23 +2771,28 @@ class TabbedHtmlWindow(wx.Panel):
             self._html.Scroll(*tab["scrollpos"])
         finally: self._html.Thaw()
 
-
-    def SetActiveTabByID(self, id):
-        """Sets active the tab with the specified ID."""
-        tab = next((x for x in self._tabs if x["id"] == id), None)
-        index = self._tabs.index(tab)
-        self._notebook.SetSelection(index)
-        self._html.Freeze()
-        try:
-            self._SetPage(tab["content"])
-            self._html.Scroll(*tab["scrollpos"])
-        finally: self._html.Thaw()
+    Selection = property(GetSelection, SetSelection)
 
 
     def GetActiveTabData(self):
         """Returns all the data for the active tab."""
         if self._tabs:
             return self._tabs[self._notebook.GetSelection()]
+
+
+    def GetHtmlWindow(self):
+        """Returns HTML window."""
+        return self._html
+
+
+    def GetNotebook(self):
+        """Returns tabbed notebook."""
+        return self._notebook
+
+
+    def GetTabArea(self):
+        """Returns notebook tab area."""
+        return self._notebook.GetTabArea()
 
 
     def GetTabCount(self):
@@ -2985,7 +3092,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
             choices = self._choices[:]
             choices += ["", self.DROPDOWN_CLEAR_TEXT] if choices else []
             for i, text in enumerate(choices):
-                self._listbox.InsertStringItem(i, text)
+                self._listbox.InsertItem(i, text)
             if choices: # Colour "Clear" item
                 self._listbox.SetItemTextColour(i, self._clear_colour)
 
@@ -3076,6 +3183,11 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
         self._handlers = collections.defaultdict(list) # {event type: [handler, ]}
         super(TreeListCtrl, self).__init__(parent, id, pos, size, style,
                                            agwStyle, validator, name)
+        self.Bind(wx.EVT_KEY_UP, self._OnKey)
+        self.GetMainWindow().Bind(wx.EVT_KEY_UP, self._OnKey)
+
+
+    RootItem = property(lambda x: x.GetRootItem())
 
 
     def AppendItem(self, *args, **kwargs):
@@ -3096,7 +3208,7 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
         super(TreeListCtrl, self).Bind(event, handler, source, id, id2)
 
 
-    def FindAndActivateItem(self, match=None, expand=False, **kwargs):
+    def FindAndActivateItem(self, match=None, **kwargs):
         """
         Selects tree item where match returns true for item data, and invokes
         handlers registered for wx.EVT_TREE_ITEM_ACTIVATED. Expands all item
@@ -3104,14 +3216,13 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
 
         @param    match   callback(data associated with item): bool
                           or {key: value} to match in associated data dict
-        @param    expand  expand matched item
         @param    kwargs  additional keyword arguments to match in data
         @return           success
         """
         fmatch = match if callable(match) else bool
         dmatch = dict(match if isinstance(match, dict) else {}, **kwargs)
         mymatch = match if callable(match) and not dmatch else lambda x: (
-                  fmatch(x) and isinstance(x, dict) 
+                  fmatch(x) and isinstance(x, dict)
                   and all(x.get(k) == dmatch.get(k) for k in dmatch))
 
         item, myitem = self.GetNext(self.GetRootItem()), None
@@ -3125,7 +3236,6 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
                 parent, _ = self.GetItemParent(parent), self.Expand(parent)
 
             self.SelectItem(myitem)
-            if expand: self.Expand(myitem)
             evt = self.DummyEvent(myitem)
             for f in self._handlers.get(wx.EVT_TREE_ITEM_ACTIVATED): f(evt)
         return bool(myitem)
@@ -3144,7 +3254,16 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
             for x in items: self.Collapse(x)
         else: self.ExpandAllChildren(item)
 
-    RootItem = property(lambda x: x.GetRootItem())
+
+    def _OnKey(self, event):
+        """Fires EVT_TREE_ITEM_ACTIVATED event on pressing enter."""
+        event.Skip()
+        if event.KeyCode not in [wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]: return
+        item = self.GetSelection()
+        if item and item.IsOk():
+            evt = self.DummyEvent(item)
+            for f in self._handlers.get(wx.EVT_TREE_ITEM_ACTIVATED): f(evt)
+
 
 
 def YesNoMessageBox(message, caption, icon=wx.ICON_NONE, defaultno=False):

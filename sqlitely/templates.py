@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.11.2019
+@modified    18.11.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -17,8 +17,8 @@ import re
 from . import conf
 
 # Modules imported inside templates:
-#import os, pyparsing, sys, wx
-#from sqlitely import conf, grammar, images, templates
+#import itertools, os, pyparsing, sys, wx
+#from sqlitely import conf, grammar, images, searchparser, templates
 #from sqlitely.lib import util
 
 """Regex for matching unprintable characters (\x00 etc)."""
@@ -251,7 +251,7 @@ namespace["row_count"] += 1
 %endfor
 </tr>
 <%
-if not i % 100 and isdef("progress") and not progress(count=i):
+if not i % 100 and isdef("progress") and progress and not progress(count=i):
     break # for i, row
 %>
 %endfor
@@ -327,9 +327,9 @@ TXT SQL insert statements export template for the rows part.
 
 @param   rows       iterable
 @param   columns    [name, ]
-@param   namespace  {"row_count"}
 @param   name       table name
-@param   ?progress  callback(count) returning whether to cancel, if any
+@param   ?namespace  {"row_count"}
+@param   ?progress  callback(name, count) returning whether to cancel, if any
 """
 DATA_ROWS_SQL = """<%
 from sqlitely import grammar, templates
@@ -338,34 +338,12 @@ str_cols = ", ".join(map(grammar.quote, columns))
 %>
 %for i, row in enumerate(rows, 1):
 <%
-values = []
-namespace["row_count"] += 1
+if isdef("namespace"): namespace["row_count"] += 1
+values = [grammar.format(row[col]) for col in columns]
 %>
-%for col in columns:
-<%
-value = row[col]
-if isinstance(value, basestring):
-    if templates.SAFEBYTE_RGX.search(value):
-        if isinstance(value, unicode):
-            try:
-                value = value.encode("latin1")
-            except UnicodeError:
-                value = value.encode("utf-8", errors="replace")
-        value = "X'%s'" % value.encode("hex").upper()
-    else:
-        if isinstance(value, unicode):
-            value = value.encode("utf-8")
-        value = '"%s"' % (value.encode("string-escape").replace('\"', '""'))
-elif value is None:
-    value = "NULL"
-else:
-    value = str(value)
-values.append(value)
-%>
-%endfor
 INSERT INTO {{ name }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
 <%
-if not i % 100 and isdef("progress") and not progress(count=i):
+if not i % 100 and isdef("progress") and progress and not progress(name=name, count=i):
     break # for i, row
 %>
 %endfor
@@ -454,7 +432,7 @@ values.append((value.ljust if columnjusts[col] else value.rjust)(columnwidths[co
 %endfor
 | {{ " | ".join(values) }} |
 <%
-if not i % 100 and isdef("progress") and not progress(count=i):
+if not i % 100 and isdef("progress") and progress and not progress(count=i):
     break # for i, row
 %>
 %endfor
@@ -531,9 +509,9 @@ HTML template for search result of data row; HTML table row.
 @param   pattern_replace  regex for matching search words
 """
 SEARCH_ROW_DATA_HTML = """<%
-from sqlitely import conf, templates
+from sqlitely import conf, searchparser, templates
 
-match_kw = lambda k, x: any(y in x["name"].lower() for y in keywords[k])
+match_kw = lambda k, x: searchparser.match_words(x["name"], keywords[k], any)
 wrap_b = lambda x: "<b>%s</b>" % x.group(0)
 %>
 <tr>
@@ -692,7 +670,7 @@ from sqlitely import conf
   <td valign="top">
     <a href="page:info"><img src="memory:HelpInfo.png" /></a>
   </td><td valign="center">
-    See information about the database,<br />
+    See information about the database file,<br />
     view general database statistics,<br />
     check database integrity for corruption and recovery.
   </td>
@@ -828,7 +806,7 @@ except ImportError:
       Search from more than one source by adding more
       <font color="{{ conf.HelpCodeColour }}"><code>table:</code></font> or
       <font color="{{ conf.HelpCodeColour }}"><code>view:</code></font> keywords, or exclude certain
-      sources by adding a <font color="{{ conf.HelpCodeColour }}"><code>-table:</code></font> 
+      sources by adding a <font color="{{ conf.HelpCodeColour }}"><code>-table:</code></font>
       or <font color="{{ conf.HelpCodeColour }}"><code>-view:</code></font> keyword.
       <br />
     </td>
@@ -859,7 +837,7 @@ except ImportError:
     </td>
     <td bgcolor="{{ conf.BgColour }}">
       <br /><br />
-      To find rows from specific time periods (where row has DATE/DATETIME columns), use the keyword
+      To find rows from specific time periods (where source has DATE/DATETIME columns), use the keyword
       <font color="{{ conf.HelpCodeColour }}"><code>date:period</code></font> or
       <font color="{{ conf.HelpCodeColour }}"><code>date:periodstart..periodend</code></font>.
       For the latter, either start or end can be omitted.<br /><br />
@@ -911,7 +889,8 @@ except ImportError:
 
   <br /><br />
   All search texts and keywords are case-insensitive. <br />
-  Keywords are global, even when in (grouped words).
+  Keywords are global, even when in bracketed (grouped words). <br />
+  Metadata search supports only <code>table:</code> and <code>view:</code> keywords.
 
 </td></tr></table>
 </font>
@@ -939,9 +918,10 @@ For searching from specific tables, add "table:name", and from specific columns,
 """
 Database statistics HTML.
 
-@param   error  error message, if any
-@param   data   {"table": [{name, size, size_total, ?size_index, ?index: []}],
-                 "index": [{name, size, table}]}
+@param   ?error    error message, if any
+@param   ?data     {"table": [{name, size, size_total, ?size_index, ?index: []}],
+                   "index": [{name, size, table}]}
+@param   ?running  whether analysis is currently running
 """
 STATISTICS_HTML = """<%
 from sqlitely.lib.vendor.step import Template
@@ -1046,8 +1026,10 @@ total = index_total + sum(x["size"] for x in data["table"])
     %endif
 
 
-%else:
+%elif isdef("running") and running:
     Analyzing..
+%else:
+    Press Refresh to generate statistics.
 %endif
 
 </font>
@@ -1428,7 +1410,7 @@ def plot(size):
         pad = pc.center(len(pad), pad[0])
     return bar + pad
 
-widths = {i: max([len(x[i]) for x in vals.values()] + 
+widths = {i: max([len(x[i]) for x in vals.values()] +
                  [len(cols[i])])
           for i in range(len(cols))}
 %>
@@ -1459,4 +1441,98 @@ from sqlitely import conf, templates
 
 
 {{! sql.replace("\\r", "") }}
+"""
+
+
+
+"""
+Database dump SQL template.
+
+@param   db         database.Database instance
+@param   sql        schema SQL
+@param   data       [{name, columns, rows}]
+@param   pragma     PRAGMA values as {name: value}
+@param   ?progress  callback(count) returning whether to cancel, if any
+"""
+DUMP_SQL = """<%
+import itertools
+from sqlitely.lib.vendor.step import Template
+from sqlitely import grammar, templates
+
+PRAGMAS_FIRST = ("auto_vacuum", "encoding")
+pragma_first = {k: v for k, v in pragma.items() if k in PRAGMAS_FIRST}
+pragma_last  = {k: v for k, v in pragma.items() if k not in PRAGMAS_FIRST}
+%>
+-- Database dump.
+-- Source: {{ db.name }}.
+-- {{ templates.export_comment() }}
+%if pragma_first:
+
+-- Initial PRAGMA settings
+{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma_first) }}
+
+%endif
+%if sql:
+
+{{ sql }}
+
+%endif
+
+%for table in data:
+<%
+if progress and not progress(): break # for table
+row = next(table["rows"], None)
+if not row: continue # for table
+rows = itertools.chain([row], table["rows"])
+%>
+-- Table {{ grammar.quote(table["name"], force=True) }} data:
+{{! Template(templates.DATA_ROWS_SQL).expand(dict(table, progress=progress, rows=rows)) }}
+
+%endfor
+
+-- PRAGMA settings
+{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma_last) }}
+"""
+
+
+
+"""
+Database PRAGMA statements SQL template.
+
+@param   pragma   PRAGMA values as {name: value}
+"""
+PRAGMA_SQL = """<%
+from sqlitely import database
+
+pragma = dict(pragma)
+for name, opts in database.Database.PRAGMA.items():
+    if opts.get("read") or opts.get("write") is False:
+        pragma.pop(name, None)
+
+lastopts, count = {}, 0
+sortkey = lambda x: (bool(x[1].get("deprecated")), x[1]["label"])
+%>
+%for name, opts in sorted(database.Database.PRAGMA.items(), key=sortkey):
+<%
+if name not in pragma:
+    lastopts = opts
+    continue # for name, opts
+
+%>
+    %if opts.get("deprecated") and bool(lastopts.get("deprecated")) != bool(opts.get("deprecated")):
+
+-- DEPRECATED:
+    %endif
+<%
+value = pragma[name]
+if isinstance(value, basestring):
+    value = '"%s"' % value.replace('"', '""')
+elif isinstance(value, bool): value = str(value).upper()
+lastopts = opts
+%>
+{{ "\\n" if count else "" }}PRAGMA {{ name }} = {{ value }};
+<%
+count += 1
+%>
+%endfor
 """

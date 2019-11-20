@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    03.11.2019
+@modified    12.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -25,6 +25,9 @@ from .. lib.vendor import step
 from . import templates
 from . SQLiteLexer import SQLiteLexer
 from . SQLiteParser import SQLiteParser
+
+"""Regex for matching unprintable characters (\x00 etc)."""
+SAFEBYTE_RGX = re.compile(r"[\x00-\x1f\x7f-\xa0]")
 
 logger = logging.getLogger(__name__)
 
@@ -117,19 +120,29 @@ def unquote(val):
     return result
 
 
+def format(value):
+    """Formats a value for use in an SQL statement like INSERT."""
+    if isinstance(value, basestring):
+        if SAFEBYTE_RGX.search(value):
+            if isinstance(value, unicode):
+                try:
+                    value = value.encode("latin1")
+                except UnicodeError:
+                    value = value.encode("utf-8", errors="replace")
+            value = "X'%s'" % value.encode("hex").upper()
+        else:
+            if isinstance(value, unicode):
+                value = value.encode("utf-8")
+            value = '"%s"' % (value.encode("string-escape").replace('\"', '""'))
+    else:
+        value = "NULL" if value is None else str(value)
+    return value
+
+
 def uni(x, encoding="utf-8"):
     """Convert anything to Unicode, except None."""
     if x is None or isinstance(x, unicode): return x
     return unicode(str(x), encoding, errors="replace")
-
-
-def first(sql):
-    """
-    Returns the first token of the SQL statement, uppercased, leading comments 
-    and whitespace stripped. E.g. "SELECT" for "/** */--single\n select*FROM'mytable'".
-    """
-    sql = re.sub("(/\*(.|[\r\n])*?\*/)|(--(.*|[\r\n]))", "", sql)
-    return re.split("\W", sql.lstrip(), 1)[0].upper()
 
 
 
@@ -684,7 +697,7 @@ class Parser(object):
         """Returns ctx.conflict_clause value like "ROLLBACK", if any."""
         conflict = ctx.conflict_clause()
         if not conflict: return
-        action = (conflict.K_ROLLBACK() or 
+        action = (conflict.K_ROLLBACK() or
             conflict.K_ABORT() or conflict.K_FAIL() or conflict.K_IGNORE()
         )
         return self.t(action)
@@ -995,7 +1008,7 @@ def test():
         -- comment
         CREATE TEMP TABLE -- comment
         -- comment
-        IF NOT EXISTS 
+        IF NOT EXISTS
         -- comment
         mytable (
             -- first line comment
