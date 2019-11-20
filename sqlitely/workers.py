@@ -410,8 +410,8 @@ class AnalyzerThread(WorkerThread):
             try:
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                pargs = dict(stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                             startupinfo=startupinfo)
+                pargs = dict(stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, startupinfo=startupinfo)
                 paths = [path]
                 if filesize and "nt" == os.name and isinstance(path, unicode):
                     paths.append(util.shortpath(path))
