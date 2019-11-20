@@ -343,15 +343,15 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         sizer_labels.AddGrowableRow(3, proportion=1)
 
         BUTTONS_DETAIL = [
-            ("open", "&Open", images.ButtonOpen,
+            ("button_open", "&Open", images.ButtonOpen,
              "Open the database."),
-            ("saveas", "Save &as..", images.ButtonSaveAs,
+            ("button_saveas", "Save &as..", images.ButtonSaveAs,
              "Save a copy under another name."),
-            ("remove", "Remove", images.ButtonRemove,
+            ("button_remove", "Remove", images.ButtonRemove,
              "Remove from list."), ]
         for name, label, img, note in BUTTONS_DETAIL:
             button = controls.NoteButton(panel_detail, label, note, img.Bitmap)
-            setattr(self, "button_" + name, button)
+            setattr(self, name, button)
 
         children = list(panel_main.Children) + list(panel_detail.Children)
         for c in [panel_main, panel_detail] + children:
@@ -1014,7 +1014,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         elif self.list_db.GetFirstSelected() >= 0 and self.dbs_selected \
         and not event.AltDown() \
         and event.KeyCode in [wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]:
-            for f in self.dbs_selected: self.load_database_page(f)
+            self.load_database_pages(self.dbs_selected, clearselection=False)
         elif event.KeyCode in [wx.WXK_DELETE] and self.dbs_selected:
             self.on_remove_database(None)
 
@@ -1773,7 +1773,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_open_current_database(self, event):
         """Handler for clicking to open selected files from database list."""
-        for f in self.dbs_selected: self.load_database_page(f)
+        self.load_database_pages(self.dbs_selected)
 
 
     def on_open_from_list_db(self, event):
@@ -2111,11 +2111,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         return page
 
 
-    def load_database_pages(self, filenames):
+    def load_database_pages(self, filenames, clearselection=True):
         """
         Tries to load the specified databases, if not already open, create
         subpages for them, if not already created, and focus the subpages.
         Skips files that are not SQLite databases, adds others to databae list.
+
+        @param   clearselection  clear previously selected files in database list
         """
         db_filenames, notdb_filenames = [], []
         for f in filenames:
@@ -2124,6 +2126,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 notdb_filenames.append(f)
                 guibase.status("%s is not a valid SQLite database.", f,
                                log=True, flash=True)
+
+        if db_filenames and clearselection:
+            while self.list_db.GetSelectedItemCount():
+                self.list_db.Select(self.list_db.GetFirstSelected(), False)
+
         if len(db_filenames) == 1:
             self.update_database_list(db_filenames)
             self.load_database_page(db_filenames[0])
