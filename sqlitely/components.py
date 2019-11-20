@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.11.2019
+@modified    20.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -4581,8 +4581,8 @@ class SchemaObjectPage(wx.Panel):
             if ("table" == self._category and not self._newmode 
                 or "index" == self._category) \
             and wx.YES != controls.YesNoMessageBox(
-                "Test the following schema change? "
-                "This may take some time.\n\n%s" % sql,
+                "Make a full test run of the schema change without committing? "
+                "This may take some time:\n\n%s" % sql,
                 conf.Title, wx.ICON_INFORMATION, defaultno=True
             ): return
 
