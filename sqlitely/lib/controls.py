@@ -819,7 +819,7 @@ class HintedTextCtrl(wx.TextCtrl):
         super(self.__class__, self).__init__(parent, **kwargs)
         self._text_colour = self._hint_colour = None
         ColourManager.Manage(self, "_text_colour", wx.SYS_COLOUR_BTNTEXT)
-        ColourManager.Manage(self, "_desc_colour", wx.SYS_COLOUR_GRAYTEXT)
+        ColourManager.Manage(self, "_hint_colour", wx.SYS_COLOUR_GRAYTEXT)
         self.SetForegroundColour(self._text_colour)
 
         self._hint = hint
@@ -882,8 +882,10 @@ class HintedTextCtrl(wx.TextCtrl):
     def OnSysColourChange(self, event):
         """Handler for system colour change, updates text colour."""
         event.Skip()
-        colour = self._hint_colour if self._hint_on else self._text_colour
-        self.SetForegroundColour(colour)
+        def after():
+            colour = self._hint_colour if self._hint_on else self._text_colour
+            self.SetForegroundColour(colour)
+        wx.CallAfter(after)
 
 
     def GetHint(self):
