@@ -2630,7 +2630,7 @@ class DatabasePage(wx.Panel):
             label = wx.StaticText(panel_pragma, label=opts["label"], name=label_name)
             if "table" == opts["type"]:
                 ctrl = wx.TextCtrl(panel_pragma, name=ctrl_name, style=wx.TE_MULTILINE,
-                                   value="\n".join(str(x) for x in value or ()))
+                                   value="\n".join(util.to_unicode(x) for x in value or ()))
                 ctrl.SetEditable(False)
                 ctrl.SetInitialSize((200, -1)) # Size to fit vertical content
             elif bool == opts["type"]:
@@ -2643,7 +2643,7 @@ class DatabasePage(wx.Panel):
                 ctrl.Bind(wx.EVT_CHECKBOX, self.on_pragma_change)
             elif opts.get("values"):
                 items = sorted(opts["values"].items(), key=lambda x: x[1])
-                choices = [str(v) for k, v in items]
+                choices = [util.to_unicode(v) for k, v in items]
                 ctrl = wx.Choice(panel_pragma, name=ctrl_name, choices=choices)
                 ctrl.Selection = [k for k, v in items].index(value)
                 ctrl.Bind(wx.EVT_CHOICE, self.on_pragma_change)
@@ -3232,7 +3232,7 @@ class DatabasePage(wx.Panel):
         if isinstance(ctrl, wx.Choice):
             vals = database.Database.PRAGMA[name]["values"]
             value = ctrl.GetString(ctrl.Selection)
-            value = next(k for k, v in vals.items() if str(v) == value)
+            value = next(k for k, v in vals.items() if util.to_unicode(v) == value)
         else:
             value = ctrl.Value
             if isinstance(ctrl, wx.CheckBox) and ctrl.Is3State():
@@ -3295,8 +3295,8 @@ class DatabasePage(wx.Panel):
                 texts = [name, opts["label"], opts["short"],
                          self.pragma_ctrls[name].ToolTip.Tip]
                 for kv in opts.get("values", {}).items():
-                    texts.extend(map(str, kv))
-                if name in values: texts.append(str(values[name]))
+                    texts.extend(map(util.to_unicode, kv))
+                if name in values: texts.append(util.to_unicode(values[name]))
                 show = all(any(re.search(p, x, re.I | re.U) for x in texts)
                            for p in patterns)
                 if opts.get("deprecated"): show_deprecated |= show
@@ -3377,7 +3377,7 @@ class DatabasePage(wx.Panel):
             value = self.pragma_changes[name] if name in self.pragma_changes \
                     else self.pragma.get(name)
             if "table" == opts["type"]:
-                ctrl.Value = "\n".join(str(x) for x in value or ())
+                ctrl.Value = "\n".join(util.to_unicode(x) for x in value or ())
             elif bool == opts["type"]:
                 if value is not None: ctrl.Value = value
                 elif ctrl.Is3State(): ctrl.Set3StateValue(wx.CHK_UNDETERMINED)
