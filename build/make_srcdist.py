@@ -4,7 +4,7 @@ sqlitely\. Sets execute flag permission on .sh files.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  21.08.2019
+@modified  20.11.2019
 """
 import glob
 import os
@@ -15,15 +15,16 @@ import zlib
 
 
 if "__main__" == __name__:
+    NAME = "sqlitely"
     INITIAL_DIR = os.getcwd()
     PACKAGING_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__)))
     os.chdir(os.path.join(os.path.dirname(__file__), ".."))
-    sys.path.append("sqlitely")
+    sys.path.append(NAME)
     import conf
 
     BASE_DIR = ""
-    ZIP_DIR = "sqlitely_%s" % conf.Version
-    DEST_FILE = "sqlitely_%s-src.zip" % conf.Version
+    ZIP_DIR = "%s_%s" % (NAME, conf.Version)
+    DEST_FILE = "%s_%s-src.zip" % (NAME, conf.Version)
     print("Creating source distribution %s.\n" % DEST_FILE)
 
     def pathjoin(*args):
@@ -51,18 +52,19 @@ if "__main__" == __name__:
 
     with zipfile.ZipFile(os.path.join(INITIAL_DIR, DEST_FILE), mode="w") as zf:
         size = 0
-        for subdir, wildcard in [("res", "*"),
-        ("sqlitely", "*.py"), ("sqlitely", "sqlitely.ini"),
-        ("dist", "*"), (pathjoin("sqlitely", "third_party"), "*.py")]:
+        for subdir, wildcard in [("build", "*"), ("res", "*"),
+        (NAME, "*.py"), (pathjoin(NAME, "bin"), "*"),
+        (pathjoin(NAME, "grammar"), "*"), (pathjoin(NAME, "lib"), "*.py"), 
+        (pathjoin(NAME, "lib", "vendor"), "*.py"), (pathjoin(NAME, "media"), "*"), 
+        (pathjoin(NAME, "etc"), "%s.ini" % NAME)]:
             entries = glob.glob(os.path.join(BASE_DIR, subdir, wildcard))
             files = sorted([os.path.basename(x) for x in entries
                           if os.path.isfile(x)], key=str.lower)
             files = filter(lambda x: not x.lower().endswith(".zip"), files)
             files = filter(lambda x: not x.lower().endswith(".pyc"), files)
             size += add_files(zf, files, subdir)
-        rootfiles = ["CHANGELOG.md", "INSTALL.md", "LICENSE.md", "MANIFEST.in",
-                     "README.md", "requirements.txt", "setup.py",
-                     "sqlitely.bat", "sqlitely.sh"]
+        rootfiles = ["LICENSE.md", "MANIFEST.in", "README.md",
+                     "requirements.txt", "setup.py", "%s.bat" % NAME, "%s.sh" % NAME]
         size += add_files(zf, rootfiles)
 
     os.chdir(INITIAL_DIR)
