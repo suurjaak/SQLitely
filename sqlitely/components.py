@@ -4586,6 +4586,13 @@ class SchemaObjectPage(wx.Panel):
                 conf.Title, wx.ICON_INFORMATION, defaultno=True
             ): return
 
+            if self._db.is_locked(self._category, self._item["name"]):
+                wx.MessageBox("%s %s is currently locked, cannot test." %
+                              (self._category.capitalize(),
+                              grammar.quote(self._item["name"], force=True)),
+                              conf.Title, wx.OK | wx.ICON_WARNING)
+                return
+
             logger.info("Executing test SQL:\n\n%s", sql2)
             try: self._db.executescript(sql2)
             except Exception as e:
