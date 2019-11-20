@@ -6194,7 +6194,7 @@ class DataDialog(wx.Dialog):
                 edit.MinSize = (100, 21)
             sizer_columns.Add(label, flag=wx.GROW)
             sizer_columns.Add(rw if resizable else edit, border=wx.lib.resizewidget.RW_THICKNESS,
-                              flag=wx.GROW | (0 if resizable else wx.RIGHT))
+                              flag=wx.GROW | (0 if resizable else wx.RIGHT | wx.BOTTOM))
             if self._editable:
                 button = wx.Button(panel, label="..", size=(20, 20))
                 button.AcceptsFocusFromKeyboard = lambda: False # No tabbing
@@ -6249,6 +6249,7 @@ class DataDialog(wx.Dialog):
         self.Bind(wx.EVT_BUTTON, self._OnAccept, button_ok)
         self.Bind(wx.EVT_BUTTON, self._OnClose,  button_cancel)
         self.Bind(wx.EVT_CLOSE,  self._OnClose)
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self._OnSysColourChange)
         self.Bind(wx.lib.resizewidget.EVT_RW_LAYOUT_NEEDED, self._OnResize)
 
         self._Populate()
@@ -6292,10 +6293,14 @@ class DataDialog(wx.Dialog):
             self._text_header.Label = rowtitle
 
             self._ignore_change = True
+            bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
             for n, c in self._edits.items():
+                c.BackgroundColour = bg
                 v = self._data[n]
                 c.Value = "" if v is None else util.to_unicode(v)
                 c.Hint  = "<NULL>" if v is None else ""
+                if v != self._original[n]:
+                    c.BackgroundColour = wx.Colour(conf.GridRowChangedColour)
             wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
             self.Layout()
         finally: self.Thaw()
@@ -6303,12 +6308,16 @@ class DataDialog(wx.Dialog):
 
 
     def _SetValue(self, col, val):
-        """Sets the value to column and edit at specified index."""
+        """Sets the value to column data and edit at specified index."""
         self._ignore_change = True
         name = self._columns[col]["name"]
         self._data[name] = val
         self._edits[name].Value = "" if val is None else util.to_unicode(val)
         self._edits[name].Hint  = "<NULL>" if val is None else ""
+        bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
+        if val != self._original[name]:
+           bg = wx.Colour(conf.GridRowChangedColour)
+        self._edits[name].BackgroundColour = bg
         wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
 
 
@@ -6332,6 +6341,10 @@ class DataDialog(wx.Dialog):
         if self._ignore_change or not value and self._data[name] is None: return
         self._data[name] = value
         event.EventObject.Hint = ""
+        bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
+        if value != self._original[name]:
+           bg = wx.Colour(conf.GridRowChangedColour)
+        event.EventObject.BackgroundColour = bg
 
 
     def _OnAccept(self, event=None):
@@ -6357,6 +6370,12 @@ class DataDialog(wx.Dialog):
     def _OnResize(self, event=None):
         """Handler for resizing a widget, updates dialog layout."""
         self.SendSizeEvent()
+
+
+    def _OnSysColourChange(self, event):
+        """Handler for system colour change, refreshes dialog."""
+        event.Skip()
+        wx.CallAfter(self._Populate)
 
 
     def _OnClose(self, event=None):
