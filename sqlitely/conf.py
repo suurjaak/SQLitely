@@ -153,7 +153,7 @@ LogEnabled = True
 LogSQL = False
 
 """Whether to pop up message dialogs for unhandled errors."""
-PopupUnexpectedErrors = False
+PopupUnexpectedErrors = True
 
 """URLs for download list, changelog, submitting feedback and homepage."""
 DownloadURL  = "https://erki.lap.ee/downloads/SQLitely/"
