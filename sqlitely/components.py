@@ -470,6 +470,15 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         return attr
 
 
+    def ClearAttrs(self):
+        """Clears all current row attributes and refreshes grid."""
+        self.attrs.clear()
+        if not self.View: return
+        for row in range(len(self.rows_current)):
+            for col in range(len(self.columns)): self.View.RefreshAttr(row, col)
+        self.View.Refresh()
+
+
     def InsertRows(self, row, numRows):
         """Inserts new, unsaved rows at position 0 (row is ignored)."""
         rows_before = self.GetNumberRows()
@@ -1045,6 +1054,7 @@ class SQLiteGridBaseMixin(object):
         grid.GridWindow.Bind(wx.EVT_RIGHT_UP,         self._OnGridMenu)
         grid.GridWindow.Bind(wx.EVT_MOTION,           self._OnGridMouse)
         grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,        self._OnGridKey)
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED,          self._OnSysColourChange)
 
 
     def _OnGridLabel(self, event):
@@ -1218,6 +1228,13 @@ class SQLiteGridBaseMixin(object):
         pos = event.EventObject.GridCursorRow, event.EventObject.GridCursorCol
         if row >= 0 and col >= 0 and (row, col) != pos:
             event.EventObject.SetGridCursor(row, col)
+
+
+    def _OnSysColourChange(self, event):
+        """Handler for system colour change, refreshes grid colours."""
+        event.Skip()
+        if not isinstance(self._grid.Table, SQLiteGridBase): return
+        self._grid.Table.ClearAttrs()
 
 
 
