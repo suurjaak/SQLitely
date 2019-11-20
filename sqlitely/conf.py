@@ -54,7 +54,7 @@ OptionalFileDirectives = [
     "SearchResultsChunk", "SeekLength", "SeekLeapLength", "StatisticsPlotWidth",
     "StatusFlashLength", "UpdateCheckInterval",
 ]
-OptionalFileDirectiveDefaults = {}
+Defaults = {}
 
 """---------------------------- FileDirectives: ----------------------------"""
 
@@ -234,17 +234,14 @@ SearchDescription = "Search for.."
 """Foreground colour for error labels."""
 LabelErrorColour = "#CC3232"
 
-"""Color set to database table list tables that have been changed."""
-DBTableChangedColour = "blue"
-
 """Colour set to table/list rows that have been changed."""
 GridRowChangedColour = "#FFCCCC"
 
 """Colour set to table/list rows that have been inserted."""
-GridRowInsertedColour = "#88DDFF"
+GridRowInsertedColour = "#B9EAFF"
 
 """Colour set to table/list cells that have been changed."""
-GridCellChangedColour = "#FF7777"
+GridCellChangedColour = "#FFA5A5"
 
 """Width of the database statistics plots, in pixels."""
 StatisticsPlotWidth = 200
@@ -271,8 +268,13 @@ FontXlsxBoldFile = os.path.join(ResourceDirectory, "CarlitoBold.ttf")
 
 def load():
     """Loads FileDirectives from ConfigFile into this module's attributes."""
+    global Defaults
     section = "*"
     module = sys.modules[__name__]
+    VARTYPES = (basestring, bool, int, long, list, tuple, dict, type(None))
+    Defaults = {k: v for k, v in vars(module).items() if not k.startswith("_")
+                and isinstance(v, VARTYPES)}
+
     parser = RawConfigParser()
     parser.optionxform = str # Force case-sensitivity on names
     try:
@@ -292,7 +294,6 @@ def load():
         for name in FileDirectives:
             [setattr(module, name, v) for v, s in [parse_value(name)] if s]
         for name in OptionalFileDirectives:
-            OptionalFileDirectiveDefaults[name] = getattr(module, name, None)
             [setattr(module, name, v) for v, s in [parse_value(name)] if s]
     except Exception:
         pass # Fail silently
@@ -315,7 +316,7 @@ def save():
         for name in OptionalFileDirectives:
             try:
                 value = getattr(module, name, None)
-                if OptionalFileDirectiveDefaults.get(name) != value:
+                if Defaults.get(name) != value:
                     parser.set(section, name, json.dumps(value))
             except Exception: pass
         parser.write(f)

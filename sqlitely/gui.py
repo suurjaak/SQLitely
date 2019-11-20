@@ -75,18 +75,15 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         wx.Frame.__init__(self, parent=None, title=conf.Title, size=conf.WindowSize)
         guibase.TemplateFrameMixIn.__init__(self)
 
-        ColourManager.Init(self, conf, {
+        ColourManager.Init(self, conf, colourmap={
             "FgColour":                wx.SYS_COLOUR_BTNTEXT,
             "BgColour":                wx.SYS_COLOUR_WINDOW,
             "DisabledColour":          wx.SYS_COLOUR_GRAYTEXT,
             "MainBgColour":            wx.SYS_COLOUR_WINDOW,
             "WidgetColour":            wx.SYS_COLOUR_BTNFACE,
-        }, {
+        }, darkcolourmap={
             "DBListForegroundColour":  wx.SYS_COLOUR_BTNTEXT,
             "DBListBackgroundColour":  wx.SYS_COLOUR_WINDOW,
-            "GridRowInsertedColour":   wx.SYS_COLOUR_HIGHLIGHTTEXT,
-            "GridRowChangedColour":    wx.SYS_COLOUR_GRAYTEXT,
-            "GridCellChangedColour":   wx.RED,
             "LinkColour":              wx.SYS_COLOUR_HOTLIGHT,
             "TitleColour":             wx.SYS_COLOUR_HOTLIGHT,
             "MainBgColour":            wx.SYS_COLOUR_BTNFACE,
@@ -155,6 +152,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.memoryfs = {"files": {}, "handler": wx.MemoryFSHandler()}
         wx.FileSystem.AddHandler(self.memoryfs["handler"])
         self.load_fs_images()
+        self.adapt_colours()
 
         self.worker_detection = \
             workers.DetectDatabaseThread(self.on_detect_databases_callback)
@@ -874,7 +872,23 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def on_sys_colour_change(self, event):
         """Handler for system colour change, updates filesystem images."""
         event.Skip()
+        self.adapt_colours()
         wx.CallAfter(self.load_fs_images) # Postpone to allow conf update
+
+
+    def adapt_colours(self):
+        """Adapts configuration colours to better fit current theme."""
+        COLOURS = ["GridRowInsertedColour", "GridRowChangedColour",
+                   "GridCellChangedColour"]
+        frgb = tuple(ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT))[:3]
+        brgb = tuple(ColourManager.GetColour(wx.SYS_COLOUR_WINDOW ))[:3]
+        for n in COLOURS:
+            rgb = tuple(wx.Colour(conf.Defaults.get(n)))[:3]
+            delta = tuple(255 - x for x in rgb)
+            direction = 1 if (sum(frgb) > sum(brgb)) else -1
+            rgb2 = tuple(a + int(b * direction) for a, b in zip(brgb, delta))
+            rgb2 = tuple(min(255, max(0, x)) for x in rgb2)
+            setattr(conf, n, wx.Colour(rgb2).GetAsString(wx.C2S_HTML_SYNTAX))
 
 
     def load_fs_images(self):
@@ -1626,7 +1640,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         for name in sorted(conf.OptionalFileDirectives):
             value, help = getattr(conf, name, None), get_field_doc(name)
-            default = conf.OptionalFileDirectiveDefaults.get(name)
+            default = conf.Defaults.get(name)
             if value is None and default is None:
                 continue # for name
 
