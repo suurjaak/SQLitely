@@ -65,9 +65,7 @@ Installation
 Windows: download and launch the latest setup from
 https://suurjaak.github.io/SQLitely/downloads.html.
 
-Mac/Linux/other: install Python, wxPython, pip, and run
-`pip install sqlitely`
-
+From source code: install Python, pip, and run `pip install sqlitely`. 
 The pip installation will add the `sqlitely` command to path.
 
 Windows installers have been provided for convenience. The program itself 
