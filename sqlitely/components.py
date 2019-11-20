@@ -4583,7 +4583,7 @@ class SchemaObjectPage(wx.Panel):
             and wx.YES != controls.YesNoMessageBox(
                 "Make a full test run of the schema change without committing? "
                 "This may take some time:\n\n%s" % sql,
-                conf.Title, wx.ICON_INFORMATION, defaultno=True
+                conf.Title, defaultno=True
             ): return
 
             if self._db.is_locked(self._category, self._item["name"]):
