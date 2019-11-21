@@ -8,13 +8,14 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    12.11.2019
+@modified    21.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
 import logging
 import os
 import re
+import sys
 import traceback
 import uuid
 
@@ -133,7 +134,7 @@ def format(value):
         else:
             if isinstance(value, unicode):
                 value = value.encode("utf-8")
-            value = '"%s"' % (value.encode("string-escape").replace('\"', '""'))
+            value = "'%s'" % value.replace("'", "''")
     else:
         value = "NULL" if value is None else str(value)
     return value
@@ -267,6 +268,8 @@ class Parser(object):
                   "virtual table":  SQL.CREATE_VIRTUAL_TABLE}
     TRIGGER_BODY_CTXS = [CTX.DELETE, CTX.INSERT, CTX.SELECT, CTX.UPDATE]
 
+    class ReparseException(Exception): pass
+
 
     def __init__(self):
         self._category = None
@@ -314,7 +317,9 @@ class Parser(object):
 
         self._category = name
         if renames: self.recurse_rename([ctx], renames)
-        result = self.BUILDERS[name](self, ctx)
+        try: result = self.BUILDERS[name](self, ctx)
+        except self.ReparseException as e:
+            return self.parse(e.message, category, renames)
         result["__type__"] = name
         result["__tables__"] = self.recurse_collect(
             [ctx], [CTX.FOREIGN_TABLE] if SQL.CREATE_TABLE == name else [CTX.TABLE_NAME]
@@ -560,6 +565,27 @@ class Parser(object):
         result["name"] = self.u(ctx.column_name().any_name)
         if ctx.type_name():
             result["type"] = " ".join(self.u(x).upper() for x in ctx.type_name().name())
+
+            type_raw = self.r(ctx.type_name()).upper()
+            if '"' in type_raw and "DEFAULT" in type_raw:
+                # Workaround for SQLite allowing double-quotes for literals,
+                # resulting in DEFAULT and everything preceding being parsed
+                # as type if DEFAULT value is double-quoted.
+                start, end = ctx.type_name().getSourceInterval()
+                sql1  = self._stream.getText((0, start - 1))
+                inter = self._stream.getText((start, end))
+                sql2  = self._stream.getText((end + 1, sys.maxint))
+
+                xstart = type_raw.find("DEFAULT") + 7
+                repl, in_quotes, i = inter[:xstart], False, xstart
+                while i < len(inter):
+                    c, nxt = inter[i], (inter[i + 1] if i < len(inter) - 1 else "")
+                    if '"' == c:
+                        if not in_quotes: c, in_quotes = "'", True # Start single quote
+                        elif '"' == nxt: i += 1 # "-escaped ", insert single "
+                        else: c, in_quotes = "'", False # End quote
+                    repl, i = repl + c, i + 1
+                raise self.ReparseException(sql1 + repl + sql2)
 
         for c in ctx.column_constraint():
             conflict = self.get_conflict(c)
@@ -1030,7 +1056,7 @@ def test():
             mytablekey    INTEGER NOT NULL DEFAULT (mytablecol1),
             mytablecol1   INTEGER NOT NULL ON CONFLICT ABORT DEFAULT /* uhuu */ -666.5 UNIQUE ON CONFLICT ROLLBACK,
             mytablecol2   INTEGER CHECK (mytablecol3 IS /* hoho */ NULL) COLLATE /* haha */ BiNARY,
-            mytablecol3   TEXT NOT NULL CHECK (LENGTH(mytable.mytablecol1) > 0),
+            mytablecol3   TEXT NOT NULL DEFAULT "double "" quoted" CHECK (LENGTH(mytable.mytablecol1) > 0),
             mytablecol4   TIMESTAMP WITH TIME ZONE,
             mytablefk     INTEGER REFERENCES mytable2 (mytable2key) ON delete cascade on update no action match SIMPLE,
             mytablefk2    INTEGER,

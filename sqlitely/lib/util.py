@@ -155,7 +155,7 @@ def safe_filename(filename):
 
 def unprint(s, escape=True):
     """Returns string with unprintable characters escaped or stripped."""
-    enc = "unicode-escape" if isinstance(s, unicode) else "string-escape"
+    enc = "unicode_escape" if isinstance(s, unicode) else "string_escape"
     repl = (lambda m: m.group(0).encode(enc)) if escape else ""
     return re.sub(r"[\x00-\x1f]", repl, s)
 

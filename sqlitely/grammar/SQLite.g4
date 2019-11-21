@@ -31,7 +31,9 @@
  * Updates:       unicode identifiers; added column_name to CREATE VIEW;
  *                added table_function_name; dropped cte_table_name;
  *                fixed multi-word column type; dropped keywords in table_alias;
- *                more use of with_clause; Python-specific exception on error.
+ *                more use of with_clause; dropped Java-specific exception;
+ *                double quotes allowed in string_literal; fixed module arguments;
+ *                only ROWID allowed after WITHOUT; no name on column constraint.
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019
  */
@@ -43,9 +45,6 @@ parse
 
 error
  : UNEXPECTED_CHAR 
-   { 
-raise ValueError("UNEXPECTED_CHAR=" + $UNEXPECTED_CHAR.text); 
-   }
  ;
 
 sql_stmt_list
@@ -124,7 +123,7 @@ create_index_stmt
 create_table_stmt
  : K_CREATE ( K_TEMP | K_TEMPORARY )? K_TABLE ( K_IF K_NOT K_EXISTS )?
    ( database_name '.' )? table_name
-   ( '(' column_def ( ',' column_def )*? ( ',' table_constraint )* ')' ( K_WITHOUT IDENTIFIER )?
+   ( '(' column_def ( ',' column_def )*? ( ',' table_constraint )* ')' ( K_WITHOUT C_ROWID )?
    | K_AS select_stmt 
    )
  ;
@@ -279,13 +278,11 @@ column_def
  ;
 
 type_name
- : name+? ( '(' signed_number ')'
-          | '(' signed_number ',' signed_number ')' )?
+ : name+? ( '(' signed_number ')' | '(' signed_number ',' signed_number ')' )?
  ;
 
 column_constraint
- : ( K_CONSTRAINT name )?
-   ( K_PRIMARY K_KEY ( K_ASC | K_DESC )? conflict_clause K_AUTOINCREMENT?
+ : ( K_PRIMARY K_KEY ( K_ASC | K_DESC )? conflict_clause K_AUTOINCREMENT?
    | K_NOT? K_NULL conflict_clause
    | K_UNIQUE conflict_clause
    | K_CHECK '(' expr ')'
@@ -474,9 +471,11 @@ error_message
  : STRING_LITERAL
  ;
 
-module_argument // TODO check what exactly is permitted here
- : expr
- | column_def
+module_argument
+ : keyword
+ | signed_number
+ | IDENTIFIER
+ | STRING_LITERAL
  ;
 
 column_alias
@@ -845,6 +844,8 @@ K_WHERE : W H E R E;
 K_WITH : W I T H;
 K_WITHOUT : W I T H O U T;
 
+C_ROWID : R O W I D;
+
 IDENTIFIER
  : '"' (~'"' | '""')* '"'
  | '`' (~'`' | '``')* '`'
@@ -863,7 +864,8 @@ BIND_PARAMETER
  ;
 
 STRING_LITERAL
- : '\'' ( ~'\'' | '\'\'' )* '\''
+ : '\'' (~'\'' | '\'\'')* '\''
+ | '"'  (~'"'  | '""'  )* '"'
  ;
 
 BLOB_LITERAL
