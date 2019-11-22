@@ -2265,6 +2265,7 @@ class SchemaObjectPage(wx.Panel):
 
         self._db       = db
         self._category = item["type"]
+        self._hasmeta  = "meta" in item
         self._newmode  = "name" not in item
         self._editmode = self._newmode
 
@@ -2273,7 +2274,7 @@ class SchemaObjectPage(wx.Panel):
                                         **item.get("meta", {})))
             names = sum(map(list, db.schema.values()), [])
             item["meta"]["name"] = util.make_unique(item["meta"]["name"], names)
-        item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
+        item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
         self._item     = copy.deepcopy(item)
         self._original = copy.deepcopy(item)
 
@@ -2386,10 +2387,14 @@ class SchemaObjectPage(wx.Panel):
         if "sql" not in self._original and "sql" in self._item:
             self._original["sql"] = self._item["sql"]
 
-        splitter.SetMinimumPaneSize(100)
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
-        splitter.SplitHorizontally(panel1, panel2, splitter.Size[1] - 200)
+        size, pos = (100, splitter.Size[1] - 200) if self._hasmeta else (30, 30)
+        for x in list(panel1.Children)[2:]: x.Shown = self._hasmeta
+        splitter.SetMinimumPaneSize(size)
+        splitter.SplitHorizontally(panel1, panel2, pos)
+        splitter.SashInvisible = not self._hasmeta
         wx_accel.accelerate(self)
+        button_edit.Enabled = self._hasmeta
         def after():
             if not self: return
             if self._newmode: edit_name.SetFocus(), edit_name.SelectAll()
@@ -2439,7 +2444,7 @@ class SchemaObjectPage(wx.Panel):
         self._views  = [x["name"] for x in self._db.get_category("view").values()]
         item = self._db.get_category(self._category, self._item["name"])
         if not item: return
-        item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
+        item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
         self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
         if any(prevs[x] != getattr(self, x) for x in prevs): self._Populate()
 
@@ -2475,7 +2480,7 @@ class SchemaObjectPage(wx.Panel):
     def _AssignColumnIDs(self, meta):
         """Populates table meta coluns with __id__ fields."""
         result, counts = copy.deepcopy(meta), Counter()
-        if result["__type__"] in (grammar.SQL.CREATE_TABLE, grammar.SQL.CREATE_VIEW):
+        if result.get("__type__") in (grammar.SQL.CREATE_TABLE, grammar.SQL.CREATE_VIEW):
             for c in result.get("columns", []):
                 name = c.get("name", "").lower()
                 c["__id__"] = "%s_%s" % (name, counts[name])
@@ -2877,7 +2882,8 @@ class SchemaObjectPage(wx.Panel):
         self._ignore_change = True
         self.Freeze()
         try:
-            self._ctrls["name"].Value = meta.get("name") or ""
+            name = (meta.get("name") if self._hasmeta else data["name"]) or ""
+            self._ctrls["name"].Value = name
 
             self._sizers.clear()
             if   "table"   == data["type"]: self._PopulateTable()
@@ -3470,6 +3476,7 @@ class SchemaObjectPage(wx.Panel):
         """Populates CREATE SQL window."""
         sql, _ = grammar.generate(self._item["meta"])
         if sql is not None: self._item["sql"] = sql
+        elif not self._hasmeta: sql = self._item["sql"]
         if self._show_alter: sql = self._GetAlterSQL()
         if sql is None: return
         scrollpos = self._ctrls["sql"].GetScrollPos(wx.VERTICAL)
@@ -4387,7 +4394,7 @@ class SchemaObjectPage(wx.Panel):
         Handler for saving SQL to file, opens file dialog and saves content.
         """
         action, category = "CREATE", self._category.upper()
-        name = self._item["meta"].get("name") or ""
+        name = self._item["meta"].get("name") or self._item["name"]
         if self._show_alter:
             action, name = "ALTER", self._item["name"]
         filename = " ".join((action, category, name))
@@ -4450,7 +4457,7 @@ class SchemaObjectPage(wx.Panel):
                 conf.Title, wx.OK | wx.ICON_ERROR
             )
             if item:
-                item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
+                item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
                 self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
 
         if not event or any(prevs[x] != getattr(self, x) for x in prevs):

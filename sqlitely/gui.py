@@ -4462,7 +4462,7 @@ class DatabasePage(wx.Panel):
             self.schema_pages[data["type"]][data.get("name") or str(id(p))] = p
             self.notebook_schema.InsertPage(0, page=p, text=title, select=True)
             for i, item in enumerate(self.pages_closed.get(self.notebook_schema, [])):
-                if item["type"] == data["type"] and item["name"] == data["name"]:
+                if item["type"] == data["type"] and item["name"] == data.get("name"):
                     del self.pages_closed[self.notebook_schema][i]
                     break # for i, item
         finally: self.notebook_schema.Thaw()
@@ -5161,7 +5161,7 @@ class DatabasePage(wx.Panel):
             def is_indirect_item(a, b):
                 trg = next((x for x in (a, b) if x["type"] == "trigger"), None)
                 tbv = next((x for x in (a, b) if x["type"] in ("table", "view")), None)
-                return trg and tbv and trg["meta"]["table"].lower() != tbv["name"].lower()
+                return trg and tbv and trg["tbl_name"].lower() != tbv["name"].lower()
 
             italicfont = tree.Font
             italicfont.SetStyle(wx.FONTSTYLE_ITALIC)
@@ -5192,9 +5192,9 @@ class DatabasePage(wx.Panel):
                         subcategories, emptysubs = ["table", "index", "trigger", "view"], True
                         childtext = util.plural("column", columns)
                     elif "index" == category:
-                        childtext = "ON " + grammar.quote(item["meta"]["table"])
+                        childtext = "ON " + grammar.quote(item["tbl_name"])
                         columns = copy.deepcopy(item["meta"].get("columns") or [])
-                        table = self.db.get_category("table", item["meta"]["table"])
+                        table = self.db.get_category("table", item["tbl_name"])
                         for col in columns:
                             if table.get("columns") and col.get("name"):
                                 tcol = next((x for x in table["columns"]
@@ -5202,12 +5202,15 @@ class DatabasePage(wx.Panel):
                                 if tcol: col["type"] = tcol.get("type", "")
                         subcategories, emptysubs = ["table"], True
                     elif "trigger" == category:
-                        childtext = " ".join(filter(bool, (item["meta"].get("upon"), item["meta"]["action"],
-                                                           "ON", grammar.quote(item["meta"]["table"]))))
+                        if "meta" in item: childtext = " ".join(filter(bool,
+                            (item["meta"].get("upon"), item["meta"]["action"],
+                             "ON", grammar.quote(item["meta"]["table"]))
+                        ))
                         subcategories, emptysubs = ["table", "view"], False
                     elif "view" == category:
-                        childtext = "ON " + ", ".join(grammar.quote(x)
-                            for x in item["meta"].get("__tables__") or [])
+                        if "meta" in item: childtext = "ON " + ", ".join(
+                            grammar.quote(x) for x in item["meta"].get("__tables__") or []
+                        )
                         columns = item.get("columns") or []
                         subcategories, emptysubs = ["table", "trigger", "view"], False
 
@@ -5260,9 +5263,10 @@ class DatabasePage(wx.Panel):
                                         fmtkeys(keys)))
                                 t = ", ".join(texts)
                             elif "trigger" == subcategory:
-                                t = " ".join(filter(bool, (subitem["meta"].get("upon"), subitem["meta"]["action"])))
+                                if "meta" in subitem:
+                                    t = " ".join(filter(bool, (subitem["meta"].get("upon"), subitem["meta"]["action"])))
                                 if is_indirect_item(item, subitem):
-                                    t += " ON %s" % grammar.quote(subitem["meta"]["table"])
+                                    t += " ON %s" % grammar.quote(subitem["tbl_name"])
                             tree.SetItemText(subchild, t, 1)
                             if is_indirect_item(item, subitem): tree.SetItemFont(subchild, italicfont)
 
@@ -5616,7 +5620,7 @@ class DatabasePage(wx.Panel):
                 has_sql = False
             elif "index" == data["parent"]["type"]:
                 has_name = "name" in data
-                table = self.db.get_category("table", data["parent"]["meta"]["table"])
+                table = self.db.get_category("table", data["parent"]["tbl_name"])
                 sqltext = " ".join(filter(bool, (
                     grammar.quote(data["name"]) if has_name else data.get("expr"),
                     "COLLATE %s" % data["collate"] if data.get("collate") else "",
@@ -5655,9 +5659,9 @@ class DatabasePage(wx.Panel):
             if has_sql:
                 menu.Append(item_copy_sql)
         elif "columns" == data["type"]:
-            cols = data["parent"].get("columns") or data["parent"]["meta"]["columns"]
+            cols = data["parent"].get("columns") or data["parent"].get("meta", {}).get("columns", [])
             names = [x["name"] for x in cols]
-            item_copy     = wx.MenuItem(menu, -1, "&Copy column names")
+            item_copy = wx.MenuItem(menu, -1, "&Copy column names")
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, lambda: "\n".join(map(grammar.quote, names))),
                       item_copy)
             menu.Append(item_copy)

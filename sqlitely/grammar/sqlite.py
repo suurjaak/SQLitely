@@ -212,35 +212,6 @@ class CTX(object):
 
 
 
-class ErrorListener(object):
-    """Collects errors during parsing."""
-    def __init__(self): self._errors, self._stack = [], []
-
-    def reportAmbiguity(self, *_, **__): pass
-
-    def reportAttemptingFullContext(self, *_, **__): pass
-
-    def reportContextSensitivity(self, *_, **__): pass
-
-    def syntaxError(self, recognizer, offendingToken, line, column, msg, e):
-        err = "%sine %s:%s %s" % (
-            "L" if not e else "%s: l" % util.format_exc(e), line, column, msg
-        )
-        self._errors.append(err)
-        if not self._stack:
-            stack = traceback.extract_stack()[:-1]
-            for i, (f, l, fn, t) in enumerate(stack):
-                if f == __file__:
-                    del stack[:max(i-1, 0)]
-                    break # for i, (..)
-            self._stack = traceback.format_list(stack)
-
-    def getErrors(self, stack=False):
-        if not stack: return "\n\n".join(self._errors)
-        return "%s\n%s" % ("\n\n".join(self._errors), "".join(self._stack))
-
-
-
 class Parser(object):
     """
     SQL statement parser.
@@ -270,6 +241,34 @@ class Parser(object):
 
     class ReparseException(Exception): pass
 
+    class ErrorListener(object):
+        """Collects errors during parsing."""
+        def __init__(self): self._errors, self._stack = [], []
+
+        def reportAmbiguity(self, *_, **__): pass
+
+        def reportAttemptingFullContext(self, *_, **__): pass
+
+        def reportContextSensitivity(self, *_, **__): pass
+
+        def syntaxError(self, recognizer, offendingToken, line, column, msg, e):
+            err = "%sine %s:%s %s" % (
+                "L" if not e else "%s: l" % util.format_exc(e), line, column, msg
+            )
+            self._errors.append(err)
+            if not self._stack:
+                stack = traceback.extract_stack()[:-1]
+                for i, (f, l, fn, t) in enumerate(stack):
+                    if f == __file__:
+                        del stack[:max(i-1, 0)]
+                        break # for i, (..)
+                self._stack = traceback.format_list(stack)
+
+        def getErrors(self, stack=False):
+            if not stack: return "\n\n".join(self._errors)
+            return "%s\n%s" % ("\n\n".join(self._errors), "".join(self._stack))
+
+
 
     def __init__(self):
         self._category = None
@@ -296,7 +295,8 @@ class Parser(object):
 
         """
         self._stream  = CommonTokenStream(SQLiteLexer(InputStream(sql)))
-        parser, listener = SQLiteParser(self._stream), ErrorListener()
+        parser, listener = SQLiteParser(self._stream), self.ErrorListener()
+        parser.removeErrorListeners()
         parser.addErrorListener(listener)
         tree = parser.parse()
         if parser.getNumberOfSyntaxErrors():

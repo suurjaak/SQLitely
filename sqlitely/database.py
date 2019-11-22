@@ -886,10 +886,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
                          "trigger": ["table", "view"],
                          "view":    ["table", "view", "trigger"]}
         item = self.get_category(category, name)
-        if not item or category not in SUBCATEGORIES: return result
+        if not item or category not in SUBCATEGORIES or "meta" not in item:
+            return result
 
         for subcategory in SUBCATEGORIES.get(category, []):
             for subname, subitem in self.schema[subcategory].items():
+                if "meta" not in subitem: continue # for subname, subitem                    
                 is_assoc = not util.lccmp(subitem["meta"].get("table", ""), name) \
                            or not util.lccmp(item["meta"].get("table", ""), subname)
                 is_related = name in subitem["meta"]["__tables__"] \
@@ -916,7 +918,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         def get_fks(item):
             cc = [c for c in item["columns"] if "fk" in c] + [
                 dict(name=c["columns"], fk=c)
-                for c in item["meta"].get("constraints", [])
+                for c in item.get("meta", {}).get("constraints", [])
                 if grammar.SQL.FOREIGN_KEY == c["type"]
             ]
             return [dict(name=util.tuplefy(c["name"]), table=CaselessDict(
@@ -990,7 +992,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
                        if transform and x in transform}
                 if not opts.get("meta") or kws or indent != "  ":
                     sql, err = grammar.transform(sql, indent=indent, **kws)
-                    if err: raise Exception(err)
+                    if err: 
+                        sql = opts["sql"]
+                        # raise Exception(err) TODO use or lose
                 sqls.setdefault(category, []).append(sql)
 
         return "\n\n".join("\n\n".join(v + ";" for v in vv) for vv in sqls.values())
