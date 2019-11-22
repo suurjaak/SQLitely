@@ -4708,11 +4708,9 @@ class DatabasePage(wx.Panel):
             })
 
         if isinstance(item, basestring): # Chose one specific table to export
-            page, noclose = self.data_pages[category].get(item), True
-            if not page:
-                page = self.add_data_page(self.db.get_category(category, item))
-                noclose = False
-            page.Export(exports, noclose=noclose)
+            page = self.data_pages[category].get(item) or \
+                   self.add_data_page(self.db.get_category(category, item))
+            page.Export(exports)
             return
 
         self.Freeze()
@@ -4732,6 +4730,7 @@ class DatabasePage(wx.Panel):
 
         @param   selects  {table name: SELECT SQL if not using default}
         """
+        tables = [tables] if isinstance(tables, basestring) else tables
         exts = ";".join("*" + x for x in conf.DBExtensions)
         wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
         dialog = wx.FileDialog(
@@ -5469,7 +5468,7 @@ class DatabasePage(wx.Panel):
                 menu.Append(item_create)
             if item_drop:
                 menu.Append(item_drop)
-            names = data["items"] if "category" == data["type"] else [data["name"]]
+            names = data["items"] if "category" == data["type"] else data["name"]
             category = data["category"] if "category" == data["type"] else data["type"]
             menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, category, names),
                      item_file)

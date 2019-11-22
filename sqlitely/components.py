@@ -1910,17 +1910,13 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._OnRefresh(restore=restore, item=item)
 
 
-    def Export(self, opts, noclose=True):
-        """
-        Opens export panel using given options, and starts export.
-
-        @param   noclose  whether export panel should not show "close" button
-        """
+    def Export(self, opts):
+        """Opens export panel using given options, and starts export."""
         self.Freeze()
         try:
             for x in self.Children: x.Hide()
             self._export.Show()
-            self._export.Run(opts, noclose)
+            self._export.Run(opts)
             self.Layout()
         finally: self.Thaw()
 
@@ -4741,7 +4737,7 @@ class ExportProgressPanel(wx.Panel):
         sizer.Add(sizer_buttons, border=16, flag=wx.ALL | wx.ALIGN_RIGHT)
 
 
-    def Run(self, tasks, noclose=False):
+    def Run(self, tasks):
         """
         Run tasks.
 
@@ -4755,14 +4751,12 @@ class ExportProgressPanel(wx.Panel):
                             ?subtotals: {name: {total, ?is_total_estimated}}
                                         for subtasks,
                           }]
-        @param   noclose  whether close-button should not be shown
         """
         self.Stop()
         if isinstance(tasks, dict): tasks = [tasks]
         self._tasks = [dict(x, count=0, pending=True) for x in tasks]
         for x in self._tasks:
             if x.get("multi"): x["subtotals"] = dict(x.get("subtotals", {}))
-        self._button_close.Show(not noclose)
         self._Populate()
         self._RunNext()
 
