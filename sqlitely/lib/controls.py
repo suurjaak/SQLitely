@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    19.11.2019
+@modified    22.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -458,19 +458,22 @@ class FormDialog(wx.Dialog):
         level, fpath = len(path), path + (field["name"], )
 
         col = 0
-        if field.get("toggle") and self._editmode:
-            toggle = wx.CheckBox(parent, label=field["label"] if "label" in field else field["name"])
+        if field.get("toggle"):
+            toggle = wx.CheckBox(parent)
             if field.get("help"): toggle.ToolTip = field["help"]
-            sizer.Add(toggle, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
+            if self._editmode:
+                toggle.Label = label=field["label"] if "label" in field else field["name"]
+                sizer.Add(toggle, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
+            else: # Show ordinary label in view mode, checkbox goes very gray
+                label = wx.StaticText(parent, label=field["label"] if "label" in field else field["name"])
+                if field.get("help"): label.ToolTip = field["help"]
+                mysizer = wx.BoxSizer(wx.HORIZONTAL)
+                mysizer.Add(toggle, border=5, flag=wx.RIGHT)
+                mysizer.Add(label)
+                sizer.Add(mysizer, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
             self._comps[fpath].append(toggle)
             self._toggles[tuple(field.get("path") or fpath)] = toggle
             self._BindHandler(self._OnToggleField, toggle, field, path, toggle)
-            col += 2
-        elif field.get("toggle"):
-            # Show ordinary label in view mode, checkbox goes very gray
-            label = wx.StaticText(parent, label=field["label"] if "label" in field else field["name"])
-            if field.get("help"): label.ToolTip = field["help"]
-            sizer.Add(label, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
             col += 2
 
         if callback: callback(self, field, parent, self._data)
@@ -622,8 +625,16 @@ class FormDialog(wx.Dialog):
                     ctrl.Wheelable   = False
                     ctrl.SetCaretLineVisible(False)
             elif bool is field.get("type"):
-                ctrl = wx.CheckBox(parent, label=label) if self._editmode \
-                       else wx.StaticText(parent, label=label)
+                if self._editmode:
+                    ctrl = wx.CheckBox(parent, label=label)
+                else: # Show ordinary label in view mode, checkbox goes very gray
+                    myctrl = wx.CheckBox(parent)
+                    mylabel = wx.StaticText(parent, label=label)
+                    ctrl = wx.BoxSizer(wx.HORIZONTAL)
+                    ctrl.Add(myctrl, border=5, flag=wx.RIGHT)
+                    ctrl.Add(mylabel)
+                    self._comps[fpath].append(myctrl)
+                    if field.get("help"): myctrl.ToolTip = field["help"]
             elif "choices" in field:
                 style = wx.CB_DROPDOWN | (0 if field.get("choicesedit") else wx.CB_READONLY)
                 ctrl = wx.ComboBox(parent, style=style)
@@ -631,7 +642,8 @@ class FormDialog(wx.Dialog):
                 ctrl = wx.TextCtrl(parent)
 
             result.append(ctrl)
-            self._BindHandler(self._OnChange, ctrl, field, path)
+            if isinstance(ctrl, wx.Control):
+                self._BindHandler(self._OnChange, ctrl, field, path)
 
         for i, x in enumerate(result):
             if not isinstance(x, wx.Window): continue # for i, x
