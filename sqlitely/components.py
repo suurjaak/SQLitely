@@ -920,7 +920,6 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             menu.Append(item_copy)
             menu.Append(item_copy_col)
             if is_table: menu.Append(item_copy_sql)
-            menu.Append(item_open)
         if is_table and rowdatas:
             menu.Append(item_reset)
             item_reset.Enabled = any(x in self.idx_changed for x in idxs)
@@ -971,6 +970,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             item_delete_cascade.Enabled = has_cascade and any(not x["__new__"] for x in rowdatas)
         elif is_table:
             menu.Append(item_insert)
+        if rowdatas:
+            menu.Append(item_open)
         if self.row_count:
             menu.Append(item_goto)
 
