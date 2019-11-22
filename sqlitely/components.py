@@ -3771,7 +3771,7 @@ class SchemaObjectPage(wx.Panel):
                 {"name": "DELETE", "label": "ON DELETE", "toggle": True, "choices": self.ON_ACTION, "path": ["fk", "action"]},
                 {"name": "UPDATE", "label": "ON UPDATE", "toggle": True, "choices": self.ON_ACTION, "path": ["fk", "action"]},
                 {"name": "match",   "label": "MATCH", "toggle": True, "choices": self.MATCH,
-                 "help": "Not enforced by SQLite."},
+                 "choicesedit": True, "help": "Not enforced by SQLite."},
                 {"name": "defer",  "label": "DEFERRABLE", "toggle": True,
                  "help": "Foreign key constraint enforced on COMMIT vs immediately",
                  "children": [
@@ -3793,7 +3793,7 @@ class SchemaObjectPage(wx.Panel):
             {"name": "DELETE",  "label": "ON DELETE", "toggle": True, "choices": self.ON_ACTION, "path": ["action"]},
             {"name": "UPDATE",  "label": "ON UPDATE", "toggle": True, "choices": self.ON_ACTION, "path": ["action"]},
             {"name": "match",   "label": "MATCH", "toggle": True, "choices": self.MATCH,
-             "help": "Not enforced by SQLite."},
+             "choicesedit": True, "help": "Not enforced by SQLite."},
             {"name": "defer",   "label": "DEFERRABLE", "toggle": True,
              "help": "Foreign key constraint enforced on COMMIT vs immediately",
              "children": [
