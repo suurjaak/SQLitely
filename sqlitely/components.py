@@ -4612,7 +4612,8 @@ class SchemaObjectPage(wx.Panel):
             if ("table" == self._category and not self._newmode 
                 or "index" == self._category) \
             and wx.YES != controls.YesNoMessageBox(
-                "Make a full test run of the schema change without committing? "
+                "Make a full test run of the following schema change, "
+                "rolling it all back without committing? "
                 "This may take some time:\n\n%s" % sql,
                 conf.Title, defaultno=True
             ): return
