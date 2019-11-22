@@ -6555,7 +6555,7 @@ class HistoryDialog(wx.Dialog):
         info   = self._info = wx.StaticText(self)
         search = self._search = controls.HintedTextCtrl(self, "Filter list")
         grid   = self._grid = wx.grid.Grid(self)
-        button = wx.Button(self, label="OK")
+        button = wx.Button(self, label="Close")
 
         sizer_top.Add(info, flag=wx.ALIGN_CENTER_VERTICAL)
         sizer_top.AddStretchSpacer()
