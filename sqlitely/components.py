@@ -893,7 +893,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         colsuff = "" if len(cols)     == 1 else "s"
         if rowdatas: item_caption = wx.MenuItem(menu, -1, caption)
         if rowdatas:
-            item_copy     = wx.MenuItem(menu, -1, "&Copy row%s" % rowsuff)
+            item_copy     = wx.MenuItem(menu, -1, "Copy &row%s" % rowsuff)
             item_copy_col = wx.MenuItem(menu, -1, "Copy co&lumn%s" % colsuff)
             item_copy_sql = wx.MenuItem(menu, -1, "Copy row%s INSERT &SQL" % rowsuff)
             item_open     = wx.MenuItem(menu, -1, "&Open form")
