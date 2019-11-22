@@ -865,12 +865,12 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         caption, rowdatas, idxs, cutoff = "", [], [], ""
         rows, cols = get_grid_selection(self.View, cursor=False)
         if not rows:
-            if isinstance(event, wx.MouseEvent):
+            if isinstance(event, wx.MouseEvent) and event.Position != wx.DefaultPosition:
                 xy = self.View.CalcUnscrolledPosition(event.Position)
                 rows, cols = ([x] for x in self.View.XYToCell(xy))
             elif isinstance(event, wx.grid.GridEvent):
                 rows, cols = [event.Row], [event.Col]
-        if not rows and self.View.GridCursorRow >= 0:
+        if not rows and self.View.NumberRows and self.View.GridCursorRow >= 0:
             rows, cols = [self.View.GridCursorRow], [self.View.GridCursorCol]
         rows, cols = ([x for x in xx if x >= 0] for xx in (rows, cols))
 
@@ -1046,7 +1046,6 @@ class SQLiteGridBaseMixin(object):
         grid.Bind(wx.EVT_SCROLL_THUMBRELEASE,         self._OnGridScroll)
         grid.Bind(wx.EVT_SCROLL_CHANGED,              self._OnGridScroll)
         grid.Bind(wx.EVT_KEY_DOWN,                    self._OnGridScroll)
-        grid.Bind(wx.EVT_CONTEXT_MENU,                self._OnGridMenu)
         grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK,  self._OnGridMenu)
         grid.GridWindow.Bind(wx.EVT_RIGHT_UP,         self._OnGridMenu)
         grid.GridWindow.Bind(wx.EVT_MOTION,           self._OnGridMouse)
@@ -1175,8 +1174,7 @@ class SQLiteGridBaseMixin(object):
         """Handler for right-click or context menu in grid, opens popup menu."""
         if not isinstance(self._grid.Table, SQLiteGridBase): return
 
-        if not isinstance(self._grid.Table, SQLiteGridBase) \
-        or self._grid.IsCellEditControlShown(): event.Skip()
+        if self._grid.IsCellEditControlShown(): event.Skip()
         else: self._grid.Table.OnMenu(event)
 
 
