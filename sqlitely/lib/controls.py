@@ -597,7 +597,7 @@ class FormDialog(wx.Dialog):
                 opts = OPTS[prop["type"]]
                 bmp = wx.ArtProvider.GetBitmap(opts["bmp"], wx.ART_TOOLBAR, (16, 16))
                 tb.SetToolBitmapSize(bmp.Size)
-                tb.AddLabelTool(opts["id"], "", bitmap=bmp, shortHelp=prop.get("help", ""))
+                tb.AddTool(opts["id"], "", bmp, shortHelp=prop.get("help", ""))
                 tb.Bind(wx.EVT_TOOL, functools.partial(opts["handler"], field, path), id=opts["id"])
             tb.Realize()
             ctrl.SetName(accname)
