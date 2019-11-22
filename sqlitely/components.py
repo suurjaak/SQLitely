@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.11.2019
+@modified    22.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -2387,12 +2387,26 @@ class SchemaObjectPage(wx.Panel):
         if "sql" not in self._original and "sql" in self._item:
             self._original["sql"] = self._item["sql"]
 
+        has_cols = self._hasmeta or self._category in ("table", "index", "view")
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
-        size, pos = (100, splitter.Size[1] - 200) if self._hasmeta else (30, 30)
-        for x in list(panel1.Children)[2:]: x.Shown = self._hasmeta
+        size, pos = (100, splitter.Size[1] - 200) if has_cols else (30, 30)
+        if not self._hasmeta and "view" == self._category: pos = 200
+
+        for x in list(panel1.Children)[2:] if not self._hasmeta else ():
+            showntype = wx.ScrolledWindow if "index" == self._category else \
+                        wx.Notebook       if "table" == self._category else False
+            for y in x.Children:
+                y.Shown = showntype and isinstance(y, showntype)
+        if not self._hasmeta:
+            if "trigger" != self._category:
+                self._panel_columnswrapper.Parent.Shown = True
+                self._panel_columnswrapper.Shown = True
+            if "view" == self._category:
+                for x in self._ctrls["select"].Parent.Children: x.Shown = False
+
         splitter.SetMinimumPaneSize(size)
         splitter.SplitHorizontally(panel1, panel2, pos)
-        splitter.SashInvisible = not self._hasmeta
+        splitter.SashInvisible = not has_cols
         wx_accel.accelerate(self)
         button_edit.Enabled = self._hasmeta
         def after():
@@ -2506,7 +2520,7 @@ class SchemaObjectPage(wx.Panel):
                               "primary keys, and not too much data per row."
 
         nb = self._notebook_table = wx.Notebook(panel)
-        panel_columnwrapper     = self._MakeColumnsGrid(nb)
+        panel_columnwrapper = self._MakeColumnsGrid(nb)
         panel_constraintwrapper = self._MakeConstraintsGrid(nb)
 
         sizer_flags.Add(check_temp)
@@ -2515,8 +2529,9 @@ class SchemaObjectPage(wx.Panel):
         sizer_flags.Add(100, 0)
         sizer_flags.Add(check_rowid)
 
-        nb.AddPage(panel_columnwrapper,     "Columns")
-        nb.AddPage(panel_constraintwrapper, "Constraints")
+        nb.AddPage(panel_columnwrapper, "Columns")
+        if self._hasmeta: nb.AddPage(panel_constraintwrapper, "Constraints")
+        else: panel_constraintwrapper.Shown = False
 
         sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
         sizer.Add(nb, proportion=1, border=5, flag=wx.TOP | wx.GROW)
@@ -2704,7 +2719,7 @@ class SchemaObjectPage(wx.Panel):
     def _MakeColumnsGrid(self, parent):
         """Returns panel with columns header, grid and column management buttons."""
         s1, s2 = (0, wx.BORDER_STATIC) if "table" == self._category else (wx.BORDER_STATIC, 0)
-        panel = wx.ScrolledWindow(parent, style=s1)
+        panel = self._panel_columnswrapper = wx.ScrolledWindow(parent, style=s1)
         panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         panel.SetScrollRate(20, 0)
 
@@ -2769,7 +2784,7 @@ class SchemaObjectPage(wx.Panel):
         button_add_column._toggle = "show"
         if "index" == self._category:
             button_add_column._toggle = button_add_expr._toggle = lambda: (
-                "disable" if not self._item["meta"].get("table") else "show"
+                "disable" if self._hasmeta and not self._item["meta"].get("table") else "show"
             )
         button_move_up._toggle    = lambda: "show disable" if not grid.NumberRows or grid.GridCursorRow <= 0 else "show"
         button_move_down._toggle  = lambda: "show disable" if not grid.NumberRows or grid.GridCursorRow == grid.NumberRows - 1 else "show"
@@ -2907,18 +2922,21 @@ class SchemaObjectPage(wx.Panel):
         self._ctrls["without"].Value   = bool(meta.get("without"))
 
         for i, grid in enumerate((self._grid_columns, self._grid_constraints)):
+            if i and not self._hasmeta: continue # for i, grid                
             panel = self._panel_constraints     if i else self._panel_columns
             adder = self._AddRowTableConstraint if i else self._AddRowTable
             collection = "constraints" if i else "columns"
+            items = (meta.get(collection) if self._hasmeta else
+                     self._item.get(collection)) or ()
 
             row, col = grid.GridCursorRow, grid.GridCursorCol
             if grid.NumberRows:
                 grid.SetGridCursor(-1, col)
                 grid.DeleteRows(0, grid.NumberRows)
-            grid.AppendRows(len(meta.get(collection) or ()))
+            grid.AppendRows(len(items))
 
             self._EmptyControl(panel)
-            for j, opts in enumerate(meta.get(collection) or ()):
+            for j, opts in enumerate(items):
                 adder([collection], j, opts)
             if grid.NumberRows:
                 row = min(max(0, row), grid.NumberRows - 1)
@@ -2927,8 +2945,9 @@ class SchemaObjectPage(wx.Panel):
             panel.Layout()
 
         lencol, lencnstr =  (len(meta.get(x) or ()) for x in ("columns", "constraints"))
-        self._notebook_table.SetPageText(0, "Columns"     if not lencol   else "Columns (%s)" % lencol)
-        self._notebook_table.SetPageText(1, "Constraints" if not lencnstr else "Constraints (%s)" % lencnstr)
+        self._notebook_table.SetPageText(0, "Columns" if not lencol else "Columns (%s)" % lencol)
+        if self._hasmeta:
+            self._notebook_table.SetPageText(1, "Constraints" if not lencnstr else "Constraints (%s)" % lencnstr)
         self._notebook_table.Layout()
 
 
@@ -2941,15 +2960,17 @@ class SchemaObjectPage(wx.Panel):
         self._ctrls["unique"].Value = bool(meta.get("unique"))
         self._ctrls["exists"].Value = bool(meta.get("exists"))
         self._ctrls["where"].SetText(meta.get("where") or "")
+        items = (meta.get("columns") if self._hasmeta \
+                 else self._item.get("columns")) or ()
 
         row, col = self._grid_columns.GridCursorRow, self._grid_columns.GridCursorCol
         if self._grid_columns.NumberRows:
             self._grid_columns.SetGridCursor(-1, col)
             self._grid_columns.DeleteRows(0, self._grid_columns.NumberRows)
-        self._grid_columns.AppendRows(len(meta.get("columns") or ()))
+        self._grid_columns.AppendRows(len(items))
 
         self._EmptyControl(self._panel_columns)
-        for i, coldata in enumerate(meta.get("columns") or ()):
+        for i, coldata in enumerate(items):
             self._AddRowIndex(["columns"], i, coldata)
         if self._grid_columns.NumberRows:
             row = min(max(0, row), self._grid_columns.NumberRows - 1)
@@ -3008,6 +3029,8 @@ class SchemaObjectPage(wx.Panel):
         if self._grid_columns.NumberRows:
             self._grid_columns.SetGridCursor(-1, col)
             self._grid_columns.DeleteRows(0, self._grid_columns.NumberRows)
+        items = (meta.get("columns") if self._hasmeta
+                 else self._item.get("columns")) or ()
 
         self._ctrls["temporary"].Value = bool(meta.get("temporary"))
         self._ctrls["exists"].Value = bool(meta.get("exists"))
@@ -3015,10 +3038,10 @@ class SchemaObjectPage(wx.Panel):
 
         self._EmptyControl(self._panel_columns)
         p1, p2 = self._panel_splitter.Children
-        if self._db.has_view_columns() and (meta.get("columns") or self._editmode):
+        if self._db.has_view_columns() and (items or self._editmode):
             self._panel_splitter.SplitHorizontally(p1, p2, self._panel_splitter.MinimumPaneSize)
-            self._grid_columns.AppendRows(len(meta.get("columns") or ()))
-            for i, coldata in enumerate(meta.get("columns") or ()):
+            self._grid_columns.AppendRows(len(items))
+            for i, coldata in enumerate(items):
                 self._AddRowView(["columns"], i, coldata)
             if self._grid_columns.NumberRows:
                 row = min(max(0, row), self._grid_columns.NumberRows - 1)
@@ -3053,7 +3076,7 @@ class SchemaObjectPage(wx.Panel):
         text_name.MinSize    = (150, -1)
         list_type.MinSize    = (100, -1)
         text_default.MinSize = (100, text_name.Size[1])
-        button_open._toggle = "skip"
+        button_open._toggle = lambda: "skip" if self._hasmeta else ""
         button_open.ToolTip = "Open advanced options"
 
         text_name.Value     = col.get("name") or ""
@@ -3238,7 +3261,7 @@ class SchemaObjectPage(wx.Panel):
         tablecols = [x["name"] for x in table.get("columns") or ()]
         panel = self._panel_columns
 
-        if "name" in col:
+        if self._hasmeta and "name" in col:
             ctrl_index = wx.ComboBox(panel, choices=tablecols,
                 style=wx.CB_DROPDOWN | wx.CB_READONLY)
         else:
@@ -3247,7 +3270,7 @@ class SchemaObjectPage(wx.Panel):
         list_collate  = wx.ComboBox(panel, choices=self.COLLATE, style=wx.CB_DROPDOWN)
         list_order    = wx.ComboBox(panel, choices=self.ORDER, style=wx.CB_DROPDOWN | wx.CB_READONLY)
 
-        ctrl_index.MinSize =   (250, -1 if "name" in col else list_collate.Size[1])
+        ctrl_index.MinSize =   (250, -1 if self._hasmeta and "name" in col else list_collate.Size[1])
         list_collate.MinSize = ( 80, -1)
         list_order.MinSize =   ( 60, -1)
 
@@ -3430,7 +3453,8 @@ class SchemaObjectPage(wx.Panel):
             self.Freeze()
             try:
                 for n, c in vars(self).items():
-                    if n.startswith("_panel_"): c.ContainingSizer.Layout()
+                    if n.startswith("_panel_") and c.ContainingSizer:
+                        c.ContainingSizer.Layout()
             finally: self.Thaw()
         layout_panels()
         self.Layout()
@@ -4656,7 +4680,8 @@ class SchemaObjectPage(wx.Panel):
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
             return
 
-        self._item.update(name=meta2["name"], meta=self._AssignColumnIDs(meta2))
+        self._item.update(name=meta2["name"], meta=self._AssignColumnIDs(meta2),
+                          tbl_name=meta2["name" if "table" == self._category else "table"])
         self._original = copy.deepcopy(self._item)
         if self._show_alter: self._OnToggleAlterSQL()
         self._has_alter = True

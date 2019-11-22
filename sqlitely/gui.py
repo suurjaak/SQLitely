@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.11.2019
+@modified    22.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5193,7 +5193,8 @@ class DatabasePage(wx.Panel):
                         childtext = util.plural("column", columns)
                     elif "index" == category:
                         childtext = "ON " + grammar.quote(item["tbl_name"])
-                        columns = copy.deepcopy(item["meta"].get("columns") or [])
+                        columns = copy.deepcopy(item.get("meta", {}).get("columns")
+                                                or item.get("columns") or [])
                         table = self.db.get_category("table", item["tbl_name"])
                         for col in columns:
                             if table.get("columns") and col.get("name"):
@@ -5245,7 +5246,8 @@ class DatabasePage(wx.Panel):
                             tree.SetItemPyData(subchild, dict(subitem, parent=itemdata, level=item["name"]))
                             t = ""
                             if "index" == subcategory:
-                                t = ", ".join(x.get("name", x.get("expr")) for x in subitem["meta"]["columns"])
+                                t = ", ".join(x.get("name", x.get("expr"))
+                                              for x in subitem.get("meta", {}).get("columns", subitem.get("columns", [])))
                             elif "table" == category == subcategory:
                                 texts = []
                                 dks, fks = self.db.get_keys(subitem["name"])

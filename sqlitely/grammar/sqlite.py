@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    21.11.2019
+@modified    22.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -59,6 +59,7 @@ def generate(data, indent="  "):
                      result is not indented in any, including linefeeds.
     @return          (SQL string, None) or (None, error)
     """
+    if not data: return None, "Empty schema item"
     result, err, generator = None, None, Generator(indent)
     try:
         result, err = generator.generate(data)
