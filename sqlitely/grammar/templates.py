@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    20.10.2019
+@modified    22.11.2019
 ------------------------------------------------------------------------------
 """
 
@@ -36,11 +36,14 @@ Simple ALTER TABLE.
              name2:     table new name if renamed else old name,
              ?columns:  [(column name in old, column name in new)]
              ?add:      [{column data}],
+             ?no_tx:    whether to not include savepoint
          }
 """
 ALTER_TABLE = """
+%if not data.get("no_tx"):
 SAVEPOINT alter_table;{{ LF() }}
 
+%endif
 %if data["name"] != data["name2"]:
 {{ LF() }}
 ALTER TABLE {{ Q(data["name"]) }} RENAME TO {{ Q(data["name2"]) }};{{ LF() }}
@@ -62,7 +65,9 @@ ALTER TABLE {{ Q(data["name"]) }} ADD COLUMN{{ WS(" ") }}
 %endfor
 
 {{ LF() }}
+%if not data.get("no_tx"):
 RELEASE SAVEPOINT alter_table;{{ LF() }}
+%endif
 """
 
 
@@ -99,6 +104,7 @@ copy rows from existing to new, drop existing, rename new to existing. Steps:
              ?index:    [{related index {name, sql}, using new names}, ]
              ?trigger:  [{related trigger {name, sql}, using new names}, ]
              ?view:     [{related view {name, sql}, using new names}, ]
+             ?no_tx:    whether to not include savepoint
          }
 """
 ALTER_TABLE_COMPLEX = """<%
@@ -110,9 +116,11 @@ PRAGMA foreign_keys = off;{{ LF() }}
 {{ LF() }}
 
 %endif
+%if not data.get("no_tx"):
 SAVEPOINT alter_table;{{ LF() }}
 {{ LF() }}
 
+%endif
 {{ Template(templates.CREATE_TABLE).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
 {{ LF() }}
 
@@ -168,8 +176,10 @@ DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
 {{ LF() }}
 %endif
 
+%if not data.get("no_tx"):
 RELEASE SAVEPOINT alter_table;{{ LF() }}
 {{ LF() }}
+%endif
 %if data["fks"]:
 
 PRAGMA foreign_keys = on;{{ LF() }}
@@ -190,20 +200,25 @@ ALTER INDEX: re-create index.
              name:      index old name,
              name2:     index new name if renamed else old name,
              meta:      {index CREATE metainfo, using new name}
+             ?no_tx:    whether to not include savepoint
          }
 """
 ALTER_INDEX = """
+%if not data.get("no_tx"):
 SAVEPOINT alter_index;{{ LF() }}
 {{ LF() }}
 
+%endif
 DROP INDEX {{ Q(data["name"]) }};{{ LF() }}
 {{ LF() }}
 
 {{ Template(templates.CREATE_INDEX).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
 {{ LF() }}
 
+%if not data.get("no_tx"):
 RELEASE SAVEPOINT alter_index;{{ LF() }}
 {{ LF() }}
+%endif
 """
 
 
@@ -220,20 +235,25 @@ ALTER TRIGGER: re-create trigger.
              name:      trigger old name,
              name2:     trigger new name if renamed else old name,
              meta:      {trigger CREATE metainfo, using new name}
+             ?no_tx:    whether to not include savepoint
          }
 """
 ALTER_TRIGGER = """
+%if not data.get("no_tx"):
 SAVEPOINT alter_trigger;{{ LF() }}
 {{ LF() }}
 
+%endif
 DROP TRIGGER {{ Q(data["name"]) }};{{ LF() }}
 {{ LF() }}
 
 {{ Template(templates.CREATE_TRIGGER).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
 {{ LF() }}
 
+%if not data.get("no_tx"):
 RELEASE SAVEPOINT alter_trigger;{{ LF() }}
 {{ LF() }}
+%endif
 """
 
 
@@ -254,15 +274,18 @@ ALTER VIEW: re-create view, re-create triggers and other views using this view.
              meta:      {view CREATE metainfo, using new name}
              ?trigger:  [{related trigger {name, sql}, using new names}, ]
              ?view:     [{related view {name, sql}, using new names}, ]
+             ?no_tx:    whether to not include savepoint
          }
 """
 ALTER_VIEW = """<%
 CATEGORIES = ["view", "trigger"]
 
 %>
+%if not data.get("no_tx"):
 SAVEPOINT alter_view;{{ LF() }}
 {{ LF() }}
 
+%endif
 DROP VIEW {{ Q(data["name"]) }};{{ LF() }}
 {{ LF() }}
 
@@ -287,8 +310,10 @@ DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
 {{ LF() }}
 %endif
 
+%if not data.get("no_tx"):
 RELEASE SAVEPOINT alter_view;{{ LF() }}
 {{ LF() }}
+%endif
 """
 
 

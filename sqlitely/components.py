@@ -3501,7 +3501,7 @@ class SchemaObjectPage(wx.Panel):
         sql, _ = grammar.generate(self._item["meta"])
         if sql is not None: self._item["sql"] = sql
         elif not self._hasmeta: sql = self._item["sql"]
-        if self._show_alter: sql = self._GetAlterSQL()
+        if self._show_alter: sql, _ = self._GetAlterSQL()
         if sql is None: return
         scrollpos = self._ctrls["sql"].GetScrollPos(wx.VERTICAL)
         self._ctrls["sql"].SetReadOnly(False)
@@ -3512,7 +3512,8 @@ class SchemaObjectPage(wx.Panel):
 
     def _GetAlterSQL(self):
         """
-        Returns ALTER SQL for carrying out schema changes.
+        Returns ALTER SQLs for carrying out schema changes,
+        as (sql, full sql with savepoints).
         """
         if   "table"   == self._category: return self._GetAlterTableSQL()
         elif "index"   == self._category: return self._GetAlterIndexSQL()
@@ -3521,8 +3522,8 @@ class SchemaObjectPage(wx.Panel):
 
 
     def _GetAlterTableSQL(self):
-        """Returns SQL for carrying out table change."""
-        result = ""
+        """Returns SQLs for carrying out table change."""
+        result = "", ""
         if self._original["sql"] == self._item["sql"]: return result
 
         can_simple = True
@@ -3633,37 +3634,40 @@ class SchemaObjectPage(wx.Panel):
                                      if renames else (subitem["sql"], None)
                             args.setdefault(subcategory, []).append(dict(subitem, sql=sql))
 
-        result, _ = grammar.generate(args)
-        return result
+        short, _ = grammar.generate(dict(args, no_tx=True))
+        full,  _ = grammar.generate(args)
+        return short, full
 
 
     def _GetAlterIndexSQL(self):
-        """Returns SQL for carrying out index change."""
-        result = ""
+        """Returns SQLs for carrying out index change."""
+        result = "", ""
         if self._original["sql"] == self._item["sql"]: return result
 
         old, new = self._original["meta"], self._item["meta"]
         args = {"name": old["name"], "name2": new["name"],
                 "meta": new, "__type__": "ALTER INDEX"}
-        result, _ = grammar.generate(args)
-        return result
+        short, _ = grammar.generate(dict(args, no_tx=True))
+        full,  _ = grammar.generate(args)
+        return short, full
 
 
     def _GetAlterTriggerSQL(self):
-        """Returns SQL for carrying out triggre change."""
-        result = ""
+        """Returns SQLs for carrying out triggre change."""
+        result = "", ""
         if self._original["sql"] == self._item["sql"]: return result
 
         old, new = self._original["meta"], self._item["meta"]
         args = {"name": old["name"], "name2": new["name"],
                 "meta": new, "__type__": "ALTER TRIGGER"}
-        result, _ = grammar.generate(args)
-        return result
+        short, _ = grammar.generate(dict(args, no_tx=True))
+        full,  _ = grammar.generate(args)
+        return short, full
 
 
     def _GetAlterViewSQL(self):
-        """Returns SQL for carrying out view change."""
-        result = ""
+        """Returns SQLs for carrying out view change."""
+        result = "", ""
         if self._original["sql"] == self._item["sql"]: return result
 
         renames = {}
@@ -3697,8 +3701,9 @@ class SchemaObjectPage(wx.Panel):
                     sql, _ = grammar.transform(subitem["sql"], renames=renames)
                     args.setdefault(subitem["type"], []).append(dict(subitem, sql=sql))
 
-        result, _ = grammar.generate(args)
-        return result
+        short, _ = grammar.generate(dict(args, no_tx=True))
+        full,  _ = grammar.generate(args)
+        return short, full
 
 
     def _GetColumnTypes(self):
@@ -4606,7 +4611,7 @@ class SchemaObjectPage(wx.Panel):
         errors, sql = [], self._item["sql"]
         if self.IsChanged(): errors, _ = self._Validate()
         if not errors and self.IsChanged():
-            if not self._newmode: sql = self._GetAlterSQL()
+            if not self._newmode: sql, _ = self._GetAlterSQL()
             sql2 = "PRAGMA foreign_keys = off;\n\nSAVEPOINT test;\n\n" \
                    "%s;\n\nROLLBACK TO SAVEPOINT test;" % sql
             if ("table" == self._category and not self._newmode 
@@ -4661,16 +4666,17 @@ class SchemaObjectPage(wx.Panel):
                           conf.Title, wx.OK | wx.ICON_WARNING)
             return
 
-        sql = self._item["sql"] if self._newmode else self._GetAlterSQL()
+        sql1 = sql2 = self._item["sql"]
+        if not self._newmode: sql1, sql2 = self._GetAlterSQL()
 
         if wx.YES != controls.YesNoMessageBox(
-            "Execute the following schema change?\n\n%s" % sql.strip(),
+            "Execute the following schema change?\n\n%s" % sql1.strip(),
             conf.Title, wx.ICON_INFORMATION
         ): return
 
 
-        logger.info("Executing schema SQL:\n\n%s", sql)
-        try: self._db.executescript(sql, name="CREATE" if self._newmode else "ALTER")
+        logger.info("Executing schema SQL:\n\n%s", sql2)
+        try: self._db.executescript(sql2, name="CREATE" if self._newmode else "ALTER")
         except Exception as e:
             logger.exception("Error executing SQL.")
             try: self._db.execute("ROLLBACK")
