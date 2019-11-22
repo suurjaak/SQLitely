@@ -1360,7 +1360,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         self.Layout()
         wx_accel.accelerate(self)
-        wx.CallAfter(lambda: splitter.SplitHorizontally(panel1, panel2, sashPosition=self.Size[1] * 2/5))
+        wx.CallAfter(lambda: self and splitter.SplitHorizontally(
+                     panel1, panel2, sashPosition=self.Size[1] * 2/5))
 
 
     def GetSQL(self):
@@ -1414,6 +1415,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnResult(self, result, sql, script=False, restore=False):
         """Handler for db worker result, updates UI."""
+        if not self: return
+
         if self._busy: self._busy.Close()
         self._button_sql.Enabled = self._button_script.Enabled = True
         if self._grid.Table: self._tbgrid.Enable()
@@ -1895,7 +1898,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         self._OnChange(updated=True)
         # Refresh cell colours; without CallLater wx 2.8 can crash
-        wx.CallLater(0, self._grid.ForceRefresh)
+        wx.CallLater(0, lambda: self and self._grid.ForceRefresh())
         return True
 
 
@@ -2098,7 +2101,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._grid.GoToCell(0, 0)
         self._grid.Refresh()
         # Refresh scrollbars; without CallAfter wx 2.8 can crash
-        wx.CallAfter(self.Layout)
+        wx.CallAfter(lambda: self and self.Layout())
         self._OnChange()
 
 
@@ -2137,7 +2140,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._backup = None
         self._OnChange(updated=True)
         # Refresh cell colours; without CallLater wx 2.8 can crash
-        wx.CallLater(0, self._grid.ForceRefresh)
+        wx.CallLater(0, lambda: self and self._grid.ForceRefresh())
 
 
     def _OnRollback(self, event=None):
@@ -2150,8 +2153,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         self._grid.Table.UndoChanges()
         # Refresh scrollbars and colours; without CallAfter wx 2.8 can crash
-        wx.CallLater(0, lambda: (self._grid.ContainingSizer.Layout(),
-                                 self._grid.ForceRefresh()))
+        wx.CallLater(0, lambda: self and (self._grid.ContainingSizer.Layout(),
+                                          self._grid.ForceRefresh()))
         self._backup = None
         self._OnChange(updated=True)
 
@@ -2935,7 +2938,7 @@ class SchemaObjectPage(wx.Panel):
                 adder([collection], j, opts)
             if grid.NumberRows:
                 row = min(max(0, row), grid.NumberRows - 1)
-                wx.CallLater(0, grid.SetGridCursor, row, col)
+                wx.CallLater(0, lambda: self and grid.SetGridCursor(row, col))
                 if i: wx.CallAfter(self._SizeConstraintsGrid)
             panel.Layout()
 
@@ -3410,6 +3413,7 @@ class SchemaObjectPage(wx.Panel):
 
     def _SizeConstraintsGrid(self):
         """Sizes constraints grid rows to fit items."""
+        if not self: return
         sizer = self._panel_constraints.Sizer
         for i in range(self._grid_constraints.NumberRows):
             self._grid_constraints.SetRowSize(i, sizer.Children[3 * i + 1].Size[1])
@@ -4312,6 +4316,7 @@ class SchemaObjectPage(wx.Panel):
 
     def _OnCascadeColumnUpdates(self):
         """Handler for column updates, rebuilds constraints on rename/remove."""
+        if not self: return            
         self._col_updater = None
         constraints = self._item["meta"].get("constraints") or []
         changed, renames = False, {} # {old column name: new name}
@@ -4894,6 +4899,7 @@ class ExportProgressPanel(wx.Panel):
 
     def _RunNext(self):
         """Starts next pending task, if any."""
+        if not self: return            
         index = next((i for i, x in enumerate(self._tasks)
                       if x["pending"]), None)
         if index is None: return
@@ -4987,7 +4993,7 @@ class ExportProgressPanel(wx.Panel):
         opts["pending"] = False
 
         if self._current is None: wx.CallAfter(self._RunNext)
-        wx.CallAfter(self.Layout)
+        wx.CallAfter(lambda: self and self.Layout())
         self.Thaw()
 
 
@@ -5129,6 +5135,7 @@ class ImportDialog(wx.Dialog):
 
             pos0 = self.GetScrollPos(wx.VERTICAL)
             def fire_scroll():
+                if not self: return                    
                 pos = self.GetScrollPos(wx.VERTICAL)
                 if pos == pos0: return
                 e = wx.ScrollWinEvent(wx.wxEVT_SCROLLWIN_THUMBTRACK, pos, wx.VERTICAL)
@@ -5807,6 +5814,7 @@ class ImportDialog(wx.Dialog):
                 result = self._importing = False if wx.ID_YES == res else None
 
         def after():
+            if not self: return                
             if count is not None:
                 total = self._sheet["rows"]
                 if total < 0: text = util.plural("row", count)
@@ -6045,6 +6053,7 @@ class ImportDialog(wx.Dialog):
         """Handler for window size change, resizes list columns and footer."""
         event and event.Skip()
         def after():
+            if not self: return                
             self.Freeze()
             for i, l in enumerate([self._l1, self._l2]):
                 l.SetColumnWidth(0, 0)
@@ -6298,7 +6307,7 @@ class DataDialog(wx.Dialog):
         self.CenterOnParent()
 
         wx_accel.accelerate(self)
-        wx.CallLater(0, self._edits.values()[0].SetFocus)
+        wx.CallLater(0, lambda: self and self._edits.values()[0].SetFocus())
 
 
     def _Populate(self):
@@ -6597,7 +6606,7 @@ class HistoryDialog(wx.Dialog):
         self.CenterOnParent()
         self.MinSize = (400, 400)
         grid.SetFocus()
-        wx.CallLater(0, grid.GoToCell, grid.NumberRows - 1, 0)
+        wx.CallLater(0, lambda: self and grid.GoToCell(grid.NumberRows - 1, 0))
 
 
     def _Convert(self, x):
@@ -6621,6 +6630,7 @@ class HistoryDialog(wx.Dialog):
         if search == self._filter: return
 
         def do_filter(search):
+            if not self: return                
             self._filter_timer = None
             if search != self._filter: return
             self._Populate()

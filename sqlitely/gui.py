@@ -206,6 +206,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 return True
 
             def ProcessFiles(self, filenames):
+                if not self: return                    
                 folders   = filter(os.path.isdir,  filenames)
                 filenames = filter(os.path.isfile, filenames)
                 if folders:
@@ -680,8 +681,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         from last check has passed, and opens a dialog for upgrading
         if new version available. Schedules a new check on due date.
         """
-        if not conf.UpdateCheckAutomatic:
-            return
+        if not self or not conf.UpdateCheckAutomatic: return
         interval = datetime.timedelta(days=conf.UpdateCheckInterval)
         due_date = datetime.datetime.now() - interval
         if not (conf.WindowIconized or support.update_window) \
@@ -701,6 +701,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_toggle_iconize(self, event=None):
         """Handler for toggling main window to tray and back."""
+        if not self: return            
         conf.WindowIconized = not conf.WindowIconized
         if conf.WindowIconized:
             self.Iconize(), self.Hide()
@@ -893,6 +894,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def load_fs_images(self):
         """Loads content to MemoryFS."""
+        if not self: return            
         abouticon = "%s.png" % conf.Title.lower() # Program icon shown in About window
         img = images.Icon48x48_32bit
         if abouticon in self.memoryfs["files"]:
@@ -1037,6 +1039,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for sorting dblist, saves sort state."""
         event.Skip()
         def save_sort_state():
+            if not self: return                
             conf.DBSort = self.list_db.GetSortState()
             conf.save()
         wx.CallAfter(save_sort_state) # Allow list to update sort state
@@ -1082,7 +1085,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             menu.Append(item_missing)
             menu.Append(item_clear)
 
-            return wx.CallAfter(self.list_db.PopupMenu, menu)
+            return self.list_db.PopupMenu(menu)
 
 
         def clipboard_copy(*a, **kw):
@@ -1132,7 +1135,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu.Append(item_missing)
         menu.Append(item_delete)
 
-        wx.CallAfter(self.list_db.PopupMenu, menu)
+        self.list_db.PopupMenu(menu)
 
 
     def on_drag_list_db(self, event):
@@ -1153,6 +1156,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if search == self.db_filter: return
 
         def do_filter(search):
+            if not self: return                
             self.db_filter_timer = None
             if search != self.db_filter: return
             self.list_db.SetFilter(search)
@@ -1232,6 +1236,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         Inserts all databases into the list, updates UI buttons.
         """
+        if not self: return            
         items, selected_files = [], []
         for filename in conf.DBFiles:
             filename = util.to_unicode(filename)
@@ -1325,6 +1330,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def update_database_detail(self):
         """Updates database detail panel with current database information."""
+        if not self: return            
         self.label_db.Value = self.label_path.Value = ""
         self.label_size.Value = self.label_modified.Value = ""
         self.label_tables.Value = ""
@@ -1365,7 +1371,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         for name in ["path", "size", "modified", "tables"]:
             getattr(self, "label_%s" % name).MinSize = (-1, -1)
-        wx.CallLater(100, self.panel_db_detail.Layout)
+        wx.CallLater(100, lambda: self and self.panel_db_detail.Layout())
 
 
     def on_clear_databases(self, event):
@@ -1806,6 +1812,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def update_database_stats(self, filename):
         """Opens the database and updates main page UI with database info."""
+        if not self: return            
         db = None
         try:
             db = self.dbs.get(filename) or database.Database(filename)
@@ -2304,7 +2311,7 @@ class DatabasePage(wx.Panel):
             busy.Close()
         wx_accel.accelerate(self)
         self.edit_searchall.SetFocus()
-        wx.CallAfter(self.edit_searchall.SelectAll)
+        wx.CallAfter(lambda: self and self.edit_searchall.SelectAll())
         if "linux2" == sys.platform and wx.version().startswith("2.8"):
             wx.CallAfter(self.split_panels)
 
@@ -2373,7 +2380,7 @@ class DatabasePage(wx.Panel):
         sizer.Add(sizer_top, border=5, flag=wx.TOP | wx.RIGHT | wx.GROW)
         sizer.Add(nb, border=5, proportion=1,
                   flag=wx.GROW | wx.LEFT | wx.RIGHT | wx.BOTTOM)
-        wx.CallAfter(label_html.Show)
+        wx.CallAfter(lambda: self and label_html.Show())
 
 
     def create_page_data(self, notebook):
@@ -3073,6 +3080,7 @@ class DatabasePage(wx.Panel):
         """Handler for system colour change, refreshes content."""
         event.Skip()
         def dorefresh():
+            if not self: return                
             self.label_html.SetPage(step.Template(templates.SEARCH_HELP_SHORT_HTML).expand())
             self.label_html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNFACE)
             self.label_html.ForegroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
@@ -3212,6 +3220,7 @@ class DatabasePage(wx.Panel):
 
     def populate_statistics(self):
         """Populates statistics HTML window."""
+        if not self: return            
         previous_scrollpos = getattr(self.html_stats, "_last_scroll_pos", None)
         ns = dict(self.statistics, running=self.worker_analyzer.is_working())
         html = step.Template(templates.STATISTICS_HTML, escape=True).expand(ns)
@@ -3706,6 +3715,7 @@ class DatabasePage(wx.Panel):
         event.Skip()
         self.notebook_search.is_rightclick = True
         def reset():
+            if not self: return                
             if self.notebook_search.is_rightclick: # Flag still up: show menu
                 def on_copy(event):
                     if wx.TheClipboard.Open():
@@ -4532,7 +4542,7 @@ class DatabasePage(wx.Panel):
             try:
                 self.add_sql_page()
                 self.update_autocomp()
-            finally: wx.CallAfter(self.notebook_sql.Thaw)
+            finally: wx.CallAfter(lambda: self and self.notebook_sql.Thaw())
 
 
     def on_dragdrop_sql_page(self, event):
@@ -4586,7 +4596,7 @@ class DatabasePage(wx.Panel):
                         self.pages_closed[self.notebook_sql].append({"name": k, "text": p.Text})
                     self.sql_pages.pop(k)
                     break # for k, p
-        finally: wx.CallAfter(self.notebook_sql.Thaw)
+        finally: wx.CallAfter(lambda: self and self.notebook_sql.Thaw())
 
 
     def on_close_data_page(self, event):
@@ -4929,6 +4939,7 @@ class DatabasePage(wx.Panel):
 
     def on_drop_items(self, category, names, event=None):
         """Handler for deleting schema items, confirms choice-"""
+        if not self: return            
         extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
                 if "table" == category else ""
         itemtext = util.plural(category, names)
@@ -5341,6 +5352,7 @@ class DatabasePage(wx.Panel):
         if not data: return
 
         def select_item(item, *_, **__):
+            if not self: return                
             tree.SelectItem(item)
         def open_data(data, *_, **__):
             tree.FindAndActivateItem(type=data["type"], name=data["name"])
@@ -5512,6 +5524,7 @@ class DatabasePage(wx.Panel):
         if not data: return
 
         def select_item(it, *_, **__):
+            if not self: return                
             tree.SelectItem(it)
         def clipboard_copy(text, *_, **__):
             if wx.TheClipboard.Open():
@@ -5791,6 +5804,7 @@ class AboutDialog(wx.Dialog):
         """Handler for system colour change, refreshes content."""
         event.Skip()
         def dorefresh():
+            if not self: return                
             self.html.SetPage(self.content() if callable(self.content) else self.content)
             self.html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
             self.html.ForegroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)

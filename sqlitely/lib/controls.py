@@ -895,6 +895,7 @@ class HintedTextCtrl(wx.TextCtrl):
         """Handler for system colour change, updates text colour."""
         event.Skip()
         def after():
+            if not self: return                
             colour = self._hint_colour if self._hint_on else self._text_colour
             self.SetForegroundColour(colour)
         wx.CallAfter(after)
@@ -2025,8 +2026,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         class HackEvent(object): # UltimateListCtrl hack to cancel drag.
             def __init__(self, pos=wx.Point()): self._position = pos
             def GetPosition(self): return self._position
-        try: wx.CallAfter(self.Children[0].DragFinish, HackEvent())
-        except: raise
+        wx.CallAfter(lambda: self and self.Children[0].DragFinish(HackEvent()))
 
 
     def _CreateImageList(self):
@@ -2075,6 +2075,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         self.SetItemTextColour(0, self.ForegroundColour)
 
         def resize():
+            if not self: return                
             w = sum((self.GetColumnWidth(i) for i in range(1, len(self._columns))), 0)
             width = self.Size[0] - w - 5 # Space for padding
             if self.GetScrollRange(wx.VERTICAL) > 1:
@@ -2608,7 +2609,7 @@ class TabbedHtmlWindow(wx.Panel):
                 tab["scrollpos"][i] = ratio * self.GetScrollRange(orient)
             # Execute scroll later as something resets it after this handler
             try:
-                wx.CallLater(50, lambda:
+                wx.CallLater(50, lambda: self and
                              self.Scroll(*tab["scrollpos"]) if self else None)
             except Exception:
                 pass # CallLater fails if not called from the main thread
@@ -2658,6 +2659,7 @@ class TabbedHtmlWindow(wx.Panel):
         if 1 == pagecount: event.Veto() # Only page: reuse
 
         def after():
+            if not self: return                
             self._tabs.remove(tab)
             if 1 == pagecount: # Was the only page, reuse as default
                 nb.SetPageText(0, "")
