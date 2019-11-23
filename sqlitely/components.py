@@ -63,7 +63,6 @@ class SQLiteGridBase(wx.grid.GridTableBase):
     the results of any SELECT query.
     """
 
-
     """wx.Grid stops working when too many rows."""
     MAX_ROWS = 5000000
 
@@ -114,11 +113,11 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 value = self.rows_current[0][col["name"]]
                 col["type"] = TYPES.get(type(value), col.get("type", ""))
         else:
-            data = self.db.get_count(self.name)
-            if data["count"] is not None:
+            data = self.db.get_count(self.name) if "table" == category else {}
+            if data.get("count") is not None:
                 self.row_count = min(data["count"], self.MAX_ROWS)
             self.is_seek = data.get("is_count_estimated", False) \
-                           or data["count"] is None \
+                           or data.get("count") is None \
                            or data["count"] != self.row_count
             self.SeekToRow(conf.SeekLength - 1)
 
@@ -148,7 +147,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
     def SeekToRow(self, row):
         """Seeks ahead on the row iterator to the specified row."""
-        rows_before = self.GetNumberRows()
+        rows_before, post = self.GetNumberRows(), False
         while self.row_iterator and row >= len(self.rows_current):
             rowdata = None
             try: rowdata = self.row_iterator.next()
@@ -167,13 +166,15 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 self.idx_all.append(myid)
                 self.iterator_index += 1
             else:
-                self.row_iterator = None
+                self.row_iterator, post = None, True
         if self.iterator_index >= self.MAX_ROWS:
-            self.row_iterator = None
+            self.row_iterator, post = None, True
         if self.is_seek and self.row_count < self.iterator_index + 1:
             self.row_count = self.iterator_index + 1
         if self.GetNumberRows() != rows_before:
             self.NotifyViewChange(rows_before)
+        elif post and self.View:
+            wx.PostEvent(self.View, GridBaseEvent(wx.ID_ANY, refresh=True))
 
 
     def GetRowLabelValue(self, row):
@@ -547,6 +548,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         args = [self, wx.grid.GRIDTABLE_REQUEST_VIEW_GET_VALUES]
         self.View.ProcessTableMessage(wx.grid.GridTableMessage(*args))
         self.View.EndBatch()
+        wx.PostEvent(self.View, GridBaseEvent(wx.ID_ANY, refresh=True))
 
 
     def AddFilter(self, col, val):
@@ -1232,6 +1234,30 @@ class SQLiteGridBaseMixin(object):
         self._grid.Table.ClearAttrs()
 
 
+    def _PopulateCount(self, reload=False):
+        """Populates row count in self._label_rows."""
+        if not self or not hasattr(self, "_label_rows") \
+        or not isinstance(self._grid.Table, SQLiteGridBase): return
+        gridbase = self._grid.Table
+        count, pref, suff = gridbase.GetNumberRows(), "", ""
+        if not gridbase.IsComplete() and not gridbase.filters:
+            if "table" == getattr(self, "_category", None):
+                data = self._db.schema["table"].get(self.Name, {})
+                if reload or not data.get("count"): data = self._db.get_count(self.Name)
+                if data and data["count"] is not None:
+                    count = data["count"]
+                    if data.get("is_count_estimated"):
+                        count, pref = int(math.ceil(count / 100.) * 100), "~" 
+                    count += len(gridbase.idx_new) - len(gridbase.rows_deleted)
+                else: suff = "+"
+            else: suff = "+"
+        elif not gridbase.IsComplete(): suff = "+"
+        t = pref + util.plural("row", count, sep=",")
+        if suff: t = t.replace(" ", suff + " ")            
+        self._label_rows.Label = t
+        self._label_rows.Parent.Layout()
+
+
 
 class SQLPage(wx.Panel, SQLiteGridBaseMixin):
     """
@@ -1267,6 +1293,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         panel1 = self._panel1 = wx.Panel(splitter)
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_footer = wx.BoxSizer(wx.HORIZONTAL)
 
         tb = self._tb = wx.ToolBar(panel1, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY,      wx.ART_TOOLBAR, (16, 16))
@@ -1319,7 +1346,9 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         label_help = self._label_help = wx.StaticText(panel2,
             label="Double-click on column header to sort, right click to filter.")
+        label_rows = self._label_rows = wx.StaticText(panel2)
         ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
+        ColourManager.Manage(label_rows, "ForegroundColour", wx.SYS_COLOUR_WINDOWTEXT)
 
         panel_export = self._export = ExportProgressPanel(panel2)
         panel_export.Hide()
@@ -1349,10 +1378,14 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         sizer_buttons.Add(button_export, border=5, flag=wx.RIGHT | wx.ALIGN_RIGHT)
         sizer_buttons.Add(button_close, flag=wx.ALIGN_RIGHT)
 
+        sizer_footer.Add(label_help)
+        sizer_footer.AddStretchSpacer()
+        sizer_footer.Add(label_rows, flag=wx.ALIGN_RIGHT)
+
         sizer2.Add(label_help_stc, border=5, flag=wx.BOTTOM | wx.GROW)
         sizer2.Add(sizer_buttons, border=5, flag=wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer2.Add(grid, proportion=1, flag=wx.GROW)
-        sizer2.Add(label_help, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
+        sizer2.Add(sizer_footer, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer2.Add(panel_export, proportion=1, flag=wx.ALIGN_CENTER_HORIZONTAL | wx.GROW)
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
@@ -1455,7 +1488,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             self._tbgrid.Enable()
             self._button_close.Enabled = bool(cursor and cursor.description)
             self._label_help.Show(bool(cursor and cursor.description))
-            self._label_help.ContainingSizer.Layout()
+            self._label_rows.Show(bool(cursor and cursor.description))
+            self._label_help.Parent.Layout()
             guibase.status('Executed SQL "%s" (%s).', sql, self._db,
                            log=True, flash=True)
 
@@ -1507,6 +1541,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             cursorpos = [min(x) for x in zip(cursorpos, maxpos)]
             self._grid.SetGridCursor(*cursorpos)
         finally: self._grid.Thaw()
+        self._PopulateCount()
 
 
     def Close(self, force=False):
@@ -1612,12 +1647,15 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self._grid.Table.ClearFilter()
         self._grid.Table.ClearSort()
         self.Layout() # React to grid size change
+        self._PopulateCount()
 
 
     def _OnGridBaseEvent(self, event):
         """Handler for event from SQLiteGridBase."""
         if getattr(event, "form", False):
             DataDialog(self, self._grid.Table, event.row).ShowModal()
+        if getattr(event, "refresh", False):
+            self._PopulateCount()
 
 
     def _OnSTCKey(self, event):
@@ -1668,7 +1706,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self._tbgrid.Disable()
         self._button_close.Enabled = False
         self._label_help.Hide()
-        self._label_help.ContainingSizer.Layout()
+        self._label_rows.Hide()
+        self._label_help.Parent.Layout()
 
 
     def _OnCopyGridSQL(self, event=None):
@@ -1756,6 +1795,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_header       = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_footer       = wx.BoxSizer(wx.HORIZONTAL)
 
         tb = self._tb = wx.ToolBar(self, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = images.ToolbarInsert.Bitmap
@@ -1789,7 +1829,9 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         SQLiteGridBaseMixin.__init__(self)
 
         label_help = wx.StaticText(self, label="Double-click on column header to sort, right click to filter.")
+        label_rows = self._label_rows = wx.StaticText(self)
         ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
+        ColourManager.Manage(label_rows, "ForegroundColour", wx.SYS_COLOUR_WINDOWTEXT)
 
         panel_export = self._export = ExportProgressPanel(self, self._category)
         panel_export.Hide()
@@ -1812,9 +1854,13 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         sizer_header.Add(button_export, border=5, flag=wx.LEFT)
         sizer_header.Add(button_actions, border=5, flag=wx.LEFT)
 
+        sizer_footer.Add(label_help)
+        sizer_footer.AddStretchSpacer()
+        sizer_footer.Add(label_rows, flag=wx.ALIGN_RIGHT)
+
         sizer.Add(sizer_header, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer.Add(grid, proportion=1, flag=wx.GROW)
-        sizer.Add(label_help, border=5, flag=wx.TOP | wx.BOTTOM)
+        sizer.Add(sizer_footer, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer.Add(panel_export, proportion=1, flag=wx.ALIGN_CENTER_HORIZONTAL | wx.GROW)
         try: self._Populate()
         except Exception:
@@ -1955,12 +2001,14 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         col_range = range(grid_data.GetNumberCols())
         [self._grid.AutoSizeColLabelSize(x) for x in col_range]
         self._grid.SetGridCursor(0, 0)
+        self._PopulateCount(reload=True)
 
 
     def _PostEvent(self, **kwargs):
         """Posts an EVT_DATA_PAGE event to parent."""
         evt = DataPageEvent(self.Id, source=self, item=self._item, **kwargs)
         wx.PostEvent(self.Parent, evt)
+        self._PopulateCount()
 
 
     def _OnChange(self, event=None, **kwargs):
@@ -2203,6 +2251,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._grid.Table.ClearFilter()
         self._grid.Table.ClearSort()
         self.Layout() # React to grid size change
+        self._PopulateCount()
 
 
     def _OnGridBaseEvent(self, event):
