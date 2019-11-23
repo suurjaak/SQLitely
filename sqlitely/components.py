@@ -1948,14 +1948,15 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         return True
 
 
-    def Reload(self, restore=False, item=None):
+    def Reload(self, force=False, restore=False, item=None):
         """
         Reloads current data grid, making a new query.
 
+        @param   force    discard changes silently
         @param   restore  restore last saved changes
         @param   item     schema item (e.g. for when name changed)
         """
-        self._OnRefresh(restore=restore, item=item)
+        self._OnRefresh(force=force, restore=restore, item=item)
 
 
     def Export(self, opts):
@@ -2207,14 +2208,15 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._OnChange(updated=True)
 
 
-    def _OnRefresh(self, event=None, restore=False, item=None):
+    def _OnRefresh(self, event=None, force=False, restore=False, item=None):
         """
         Handler for refreshing grid data, asks for confirmation if changed.
 
+        @param   force    discard changes silently
         @param   restore  restore last saved changes
         @param   item     schema item (e.g. for when name changed)
         """
-        if not restore and self.IsChanged() and wx.YES != controls.YesNoMessageBox(
+        if not force and not restore and self.IsChanged() and wx.YES != controls.YesNoMessageBox(
             "There are unsaved changes (%s).\n\n"
             "Are you sure you want to discard them?" %
             self._grid.Table.GetChangedInfo(),
@@ -2508,6 +2510,7 @@ class SchemaObjectPage(wx.Panel):
         item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
         self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
         if any(prevs[x] != getattr(self, x) for x in prevs): self._Populate()
+        self._PostEvent(modified=True)
 
 
     def RestoreBackup(self):

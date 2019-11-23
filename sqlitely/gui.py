@@ -3006,22 +3006,22 @@ class DatabasePage(wx.Panel):
         elif "folder" == cmd:
             util.select_file(self.db.filename)
         elif "save" == cmd:
-            if wx.OK != wx.MessageBox(
+            if wx.YES != controls.YesNoMessageBox(
                 "Are you sure you want to save the following changes:\n\n%s." %
-                format_changes().rstrip(), conf.Title
+                format_changes().rstrip(), conf.Title, wx.ICON_INFORMATION, defaultno=True
             ): return
 
             self.save_database()
         elif "undo" == cmd:
-            if wx.OK != wx.MessageBox(
+            if wx.YES != controls.YesNoMessageBox(
                 "Are you sure you want to undo the following changes:\n\n%s." %
-                format_changes().rstrip(), conf.Title
+                format_changes().rstrip(), conf.Title, wx.ICON_INFORMATION, defaultno=True
             ): return
 
             self.on_pragma_cancel()
-            for p in (x for xx in self.data_pages.values() for x in xx):
-                if p.IsChanged(): p.Reload()
-            for p in (x for xx in self.schema_pages.values() for x in xx):
+            for p in (y for x in self.data_pages.values() for y in x.values()):
+                if p.IsChanged(): p.Reload(force=True)
+            for p in (y for x in self.schema_pages.values() for y in x.values()):
                 if p.IsChanged(): p.Reload(force=True)
         elif "optimize" == cmd:
             self.on_optimize()
