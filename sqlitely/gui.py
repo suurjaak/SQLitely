@@ -5037,7 +5037,7 @@ class DatabasePage(wx.Panel):
         self.load_tree_data()
         self.update_info_panel()
         wx.CallLater(100, self.reload_schema, parse=True)
-        if conf.RunStatistics: self.worker_analyzer.work(self.db.filename)
+        if conf.RunStatistics: self.on_update_statistics()
 
 
     def reload_schema(self, count=False, parse=False):
