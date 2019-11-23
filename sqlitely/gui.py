@@ -4464,8 +4464,10 @@ class DatabasePage(wx.Panel):
         """Opens and returns schema object page for specified object data."""
         if "name" in data:
             title = "%s %s" % (data["type"].capitalize(), grammar.quote(data["name"]))
+            busy = controls.BusyPanel(self.notebook_schema, "Opening %s %s." %
+                                      (data["type"], grammar.quote(data["name"], force=True)))
         else:
-            title = "* New %s *" % data["type"]
+            title, busy = "* New %s *" % data["type"], None
         self.notebook_schema.Freeze()
         try:
             p = components.SchemaObjectPage(self.notebook_schema, self.db, data)
@@ -4475,7 +4477,9 @@ class DatabasePage(wx.Panel):
                 if item["type"] == data["type"] and item["name"] == data.get("name"):
                     del self.pages_closed[self.notebook_schema][i]
                     break # for i, item
-        finally: self.notebook_schema.Thaw()
+        finally:
+            self.notebook_schema.Thaw()
+            if busy: busy.Close()                
         self.TopLevelParent.run_console(
             "schemapage = page.notebook_schema.GetPage(0) # Schema object subtab")
         return p
