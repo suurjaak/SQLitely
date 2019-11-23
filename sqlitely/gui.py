@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.11.2019
+@modified    23.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -973,7 +973,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                             conf.MaxRecentFiles)
             conf.save()
 
-        if modified or updated:
+        if modified is not None or updated:
             self.db_menustate[event.source.db.filename] = {}
             if updated: self.db_menustate[event.source.db.filename]["full"] = True
 
