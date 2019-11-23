@@ -1152,7 +1152,9 @@ class SQLiteGridBaseMixin(object):
             row, col = (self._grid.GridCursorRow, self._grid.GridCursorCol)
             rows_present = self._grid.Table.GetNumberRows(present=True) - 1
             seekrow = (rows_present / conf.SeekLeapLength + 1) * conf.SeekLeapLength
-            self._grid.Table.SeekToRow(seekrow)
+            busy = controls.BusyPanel(self, "Seeking..")
+            try: self._grid.Table.SeekToRow(seekrow)
+            finally: busy.Close()
             row2 = self._grid.Table.GetNumberRows(present=True) - 1
             if row2 == seekrow: row2 -= 1 # Stay at #10000, #20000 etc
             self._grid.GoToCell(row2, col)
