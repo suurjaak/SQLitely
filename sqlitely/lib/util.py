@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.11.2019
+@modified    24.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -32,7 +32,7 @@ except ImportError: pass
 class CaselessDict(dict):
     """
     A case-insensitive dict for string keys, keys are returned in original case
-    in case-insensitive order. Keys can be strings, or tuples of strings.
+    in case-insensitive order. Keys can be strings, or tuples of strings, or None.
     """
 
     def __init__(self, iterable=None, **kwargs):
@@ -111,8 +111,9 @@ class CaselessDict(dict):
         lc, self._keys[lc], self._data[lc] = self._(key), key, value
 
     def _(self, key):
+        if key is None: return key
         if isinstance(key, basestring): return key.lower()
-        else: return tuple(x.lower() for x in key)
+        return tuple(x.lower() if isinstance(x, basestring) else x for x in key)
 
     def __str__(self): return repr(self)
 
