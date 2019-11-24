@@ -3493,7 +3493,7 @@ class DatabasePage(wx.Panel):
         """
         msg = "Running optimize on %s." % self.db.filename
         guibase.status(msg, log=True, flash=True)
-        self.db.executeaction("PRAGMA optimize", name="OPTIMIZE")
+        self.db.executeaction("PRAGMA optimize", name="PRAGMA")
         guibase.status("")
         wx.MessageBox("Optimize complete.", conf.Title, wx.OK | wx.ICON_INFORMATION)
 
