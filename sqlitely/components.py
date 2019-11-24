@@ -1514,6 +1514,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                 cursorpos = [max(0, min(x)) for x in zip(cursorpos, maxpos)]
                 self._grid.SetGridCursor(*cursorpos)
                 self._grid.Scroll(*scrollpos)
+            self._PopulateCount()
         except Exception as e:
             logger.exception("Error running SQL %s.", sql)
             guibase.status("Error running SQL.", flash=True)
