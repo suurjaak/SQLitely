@@ -3384,10 +3384,15 @@ class DatabasePage(wx.Panel):
         self.page_pragma.Layout()
 
 
-    def on_pragma_refresh(self, event=None):
+    def on_pragma_refresh(self, event=None, reload=False):
         """Handler for clicking to refresh PRAGMA settings."""
+        if not self: return            
         editmode = self.pragma_edit
-        self.pragma.update(self.db.get_pragma_values())
+        if event or reload:
+            try: self.pragma.update(self.db.get_pragma_values())
+            except Exception:
+                if not reload: raise                    
+                logger.exception("Error refreshing PRAGMA values.")
         self.pragma_edit = False # Ignore change events in edit handler
         for name, opts in database.Database.PRAGMA.items():
             ctrl = self.pragma_ctrls[name]
@@ -3427,6 +3432,7 @@ class DatabasePage(wx.Panel):
             if "table" != opts["type"]: self.pragma_ctrls[name].Disable()
         self.page_pragma.Layout()
         self.update_page_header()
+        wx.CallLater(0, self.on_pragma_refresh, reload=True)
 
 
     def on_check_fks(self, event=None):
