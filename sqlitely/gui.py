@@ -3203,6 +3203,7 @@ class DatabasePage(wx.Panel):
         self.statistics = result
         self.db.unlock(None, None, self.db)
         wx.CallAfter(self.populate_statistics)
+        wx.CallAfter(guibase.status, "Statistics analysis complete.", flash=True)
 
 
     def on_checksum_result(self, result):
