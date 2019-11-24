@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.11.2019
+@modified    25.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -99,7 +99,7 @@ def export_data(make_iterable, filename, title, db, columns,
     tmpfile, tmpname = None, None # Temporary file for exported rows
     try:
         with open(filename, "w") as f:
-            if category and name: db.lock(category, name, make_iterable)
+            if category and name: db.lock(category, name, make_iterable, label="export")
             count = 0
 
             if is_csv or is_xlsx:
@@ -220,7 +220,7 @@ def export_data_single(filename, title, db, category, progress=None):
         props = {"title": title, "comments": templates.export_comment()}
         writer = xlsx_writer(filename, next(iter(items), None), props=props)
 
-        for n in items: db.lock(category, n, filename)
+        for n in items: db.lock(category, n, filename, label="export")
         for idx, (name, item) in enumerate(items.items()):
             count = 0
             if progress and not progress(name=name, count=count):
@@ -287,7 +287,7 @@ def export_dump(filename, db, progress=None):
     tables = db.schema["table"]
     try:
         with open(filename, "w") as f:
-            for t in tables: db.lock("table", t, filename)
+            db.lock(None, None, filename, label="database dump")
             namespace = {
                 "db":       db,
                 "sql":      db.get_sql(),
@@ -301,7 +301,7 @@ def export_dump(filename, db, progress=None):
             template.stream(f, namespace)
             result = progress() if progress else True
     finally:
-        for t in tables: db.unlock("table", t, filename)
+        db.unlock(None, None, filename)
         if not result: util.try_until(lambda: os.unlink(filename))
 
     return result
@@ -409,7 +409,7 @@ def import_data(filename, db, table, columns,
                 logger.info("Creating new table %s.",
                             grammar.quote(table, force=True))
                 cursor.execute(create_sql)
-            db.lock("table", table, filename)
+            db.lock("table", table, filename, label="import")
             logger.info("Running import from %s%s to table %s.",
                         filename, (" sheet '%s'" % sheet) if sheet else "",
                         grammar.quote(table, force=True))

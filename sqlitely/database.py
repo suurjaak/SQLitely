@@ -642,7 +642,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
         "Database is currently locked (statistics analysis)" or
         "Table "foo" is currently locked" if querying category and name.
 
-        @param   *(?category, ?name) or **{category, name}
+        @param   *(?category, ?name) or **{category, name} for specific lock
+                 *(None) or **{category=None} for global lock
+                 no arguments for any lock
         """
         if "category" not in kwargs and args: kwargs["category"]  = args[0]
         if "name" not in kwargs and len(args) > 1: kwargs["name"] = args[1]
@@ -667,7 +669,27 @@ WARNING: misuse can easily result in a corrupt database file.""",
             result, keys = "Database is currently locked", self.locklabels.keys()
 
         if result and keys:
-            result += " (%s)" % ", ".join(filter(bool, map(self.locklabels.get, keys)))
+            labels = filter(bool, map(self.locklabels.get, keys))
+            if labels: result += " (%s)" % ", ".join(sorted(labels))
+        return result
+
+
+    def get_locks(self):
+        """
+        Returns user-friendly information on all current locks, as 
+        ["global lock (statistics analysis)", "table "MyTable" (export)", ].
+        """
+        result = []
+        for category in sorted(self.locks):
+            for name, keys in sorted(self.locks[category].items()):
+                t, labels = "", filter(bool, map(self.locklabels.get, keys))
+                if category and name:
+                    name = self.schema.get(category, {}).get(name, {}).get("name", name)
+                    t = "%s %s" % (category, grammar.quote(name, force=True))
+                elif category: t = util.plural(category)
+                else: t = "global lock"
+                if labels: t += " (%s)" % ", ".join(sorted(labels))
+                result.append(t)
         return result
 
 

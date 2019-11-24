@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.11.2019
+@modified    24.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -443,6 +443,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             "&Refresh", "Refresh all data")
         menu_view_folder = self.menu_view_folder = menu_view.Append(wx.ID_ANY,
             "Show in &folder", "Open database file directory")
+        menu_view_locks = self.menu_view_locks = menu_view.Append(
+            wx.ID_ANY, "Current &locks", "Show all current database locks")
         menu_view_changes = self.menu_view_changes = menu_view.Append(
             wx.ID_ANY, "&Unsaved changes", "Show unsaved changes")
         menu_view_history = self.menu_view_history = menu_view.Append(
@@ -578,6 +580,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["refresh"]), menu_view_refresh)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["folder"]),  menu_view_folder)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["locks"]),   menu_view_locks)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["changes"]), menu_view_changes)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["history"]), menu_view_history)
 
@@ -2998,6 +3001,10 @@ class DatabasePage(wx.Panel):
                 if not p.IsChanged(): p.Reload()
             for p in (y for x in self.schema_pages.values() for y in x.values()):
                 if not p.IsChanged(): p.Reload()
+        elif "locks" == cmd:
+            locks = self.db.get_locks()
+            wx.MessageBox(("Current database locks:\n\n- %s." % "\n- ".join(locks))
+                          if locks else "Database is currently unlocked.", conf.Title)
         elif "changes" == cmd:
             wx.MessageBox("Current unsaved changes:\n\n%s." %
                           format_changes().rstrip(), conf.Title)
@@ -3138,7 +3145,7 @@ class DatabasePage(wx.Panel):
         """
         self.statistics = {}
         self.worker_analyzer.work(self.db.filename)
-        self.db.lock(None, None, self.db, "statistics analysis")
+        self.db.lock(None, None, self.db, label="statistics analysis")
         wx.CallAfter(self.populate_statistics)
 
 
