@@ -1459,9 +1459,9 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         if "error" in result:
             guibase.status("Error running SQL.", flash=True)
-            error = "Error running SQL:\n\n%s" % result["error"]
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
-            return
+            lock = self._db.get_lock(category=None)
+            error = "Error running SQL:\n\n%s" % (lock or result["error"])
+            return wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
         cursor = result["result"]
         if restore:
