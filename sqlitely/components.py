@@ -4686,6 +4686,7 @@ class SchemaObjectPage(wx.Panel):
                                          conf.Title, wx.OK | wx.ICON_WARNING)
 
             logger.info("Executing test SQL:\n\n%s", sql2)
+            busy = controls.BusyPanel(self, "Testing..")
             try: self._db.executescript(sql2)
             except Exception as e:
                 logger.exception("Error executing test SQL.")
@@ -4694,6 +4695,7 @@ class SchemaObjectPage(wx.Panel):
                 try: self._fks_on and self._db.execute("PRAGMA foreign_keys = on")
                 except Exception: pass
                 errors = [util.format_exc(e)]
+            finally: busy.Close()
 
         if errors: wx.MessageBox("Errors:\n\n%s" % "\n\n".join(errors),
                                  conf.Title, wx.OK | wx.ICON_WARNING)
@@ -4728,6 +4730,7 @@ class SchemaObjectPage(wx.Panel):
 
 
         logger.info("Executing schema SQL:\n\n%s", sql2)
+        busy = controls.BusyPanel(self, "Saving..")
         try: self._db.executescript(sql2, name="CREATE" if self._newmode else "ALTER")
         except Exception as e:
             logger.exception("Error executing SQL.")
@@ -4738,6 +4741,7 @@ class SchemaObjectPage(wx.Panel):
             msg = "Error saving changes:\n\n%s" % util.format_exc(e)
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
             return
+        finally: busy.Close()
 
         self._item.update(name=meta2["name"], meta=self._AssignColumnIDs(meta2),
                           tbl_name=meta2["name" if "table" == self._category else "table"])
