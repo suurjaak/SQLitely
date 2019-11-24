@@ -3138,6 +3138,7 @@ class DatabasePage(wx.Panel):
         """
         self.statistics = {}
         self.worker_analyzer.work(self.db.filename)
+        self.db.lock(None, None, self.db, "statistics analysis")
         wx.CallAfter(self.populate_statistics)
 
 
@@ -3184,6 +3185,7 @@ class DatabasePage(wx.Panel):
         if not self.worker_analyzer.is_working(): return
 
         self.worker_analyzer.stop_work()
+        self.db.unlock(None, None, self.db)
         self.html_stats.SetPage("")
         self.html_stats.BackgroundColour = conf.BgColour
         self.tb_stats.EnableTool(wx.ID_REFRESH, True)
@@ -3199,6 +3201,7 @@ class DatabasePage(wx.Panel):
         Handler for getting results from analyzer thread, populates statistics.
         """
         self.statistics = result
+        self.db.unlock(None, None, self.db)
         wx.CallAfter(self.populate_statistics)
 
 
@@ -3345,6 +3348,10 @@ class DatabasePage(wx.Panel):
             "Save PRAGMA changes?\n\n%s" % sql, conf.Title,
             wx.ICON_INFORMATION, defaultno=True
         ): return
+
+        lock = self.db.get_lock(category=None)
+        if lock: return wx.MessageBox("%s, cannot save." % lock,
+                                      conf.Title, wx.OK | wx.ICON_WARNING)
 
         try:
             mysql = "SAVEPOINT save_pragma;\n\n%s\n" \
@@ -3557,10 +3564,9 @@ class DatabasePage(wx.Panel):
         """
         Handler for vacuuming the database.
         """
-        if self.db.is_locked(): return wx.MessageBox(
-            "Database is currently locked, cannot vacuum.",
-            conf.Title, wx.OK | wx.ICON_INFORMATION
-        )
+        lock = self.db.get_lock()
+        if lock: return wx.MessageBox("%s, cannot vacuum." % lock,
+                                      conf.Title, wx.OK | wx.ICON_INFORMATION)
 
         size1 = self.db.filesize
         msg = "Vacuuming %s." % self.db.name
@@ -4976,13 +4982,16 @@ class DatabasePage(wx.Panel):
                  util.plural("row", count, sep=",")),
                 conf.Title, wx.ICON_WARNING, defaultno=True
             ): return
+        lock = self.db.get_lock(category=None)
+        if lock: return wx.MessageBox("%s, cannot drop." % lock,
+                                      conf.Title, wx.OK | wx.ICON_WARNING)
+
         deleteds = []
         try:
             for name in names:
-                if self.db.is_locked(category, name):
-                    wx.MessageBox("%s %s is currently locked, cannot drop." %
-                                  (category.capitalize(),
-                                  grammar.quote(name, force=True)),
+                lock = self.db.get_lock(category, name)
+                if lock:
+                    wx.MessageBox("%s, cannot drop." % lock,
                                   conf.Title, wx.OK | wx.ICON_WARNING)
                     continue # for name
                 self.db.executeaction("DROP %s %s" % (category.upper(), grammar.quote(name)), name="DROP")
@@ -5008,6 +5017,10 @@ class DatabasePage(wx.Panel):
             "This action is not undoable.",
             conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
+
+        lock = self.db.get_lock("table", name)
+        if lock: return wx.MessageBox("%s, cannot truncate." % lock,
+                                      conf.Title, wx.OK | wx.ICON_WARNING)
 
         sql = "DELETE FROM %s" % grammar.quote(name)
         count = self.db.executeaction(sql, name="TRUNCATE")

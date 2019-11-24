@@ -2184,6 +2184,10 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             info, conf.Title, wx.ICON_INFORMATION
         ): return
 
+        lock = self._db.get_lock(self._category, self._item["name"])
+        if lock: return wx.MessageBox("%s, cannot commit." % lock,
+                                      conf.Title, wx.OK | wx.ICON_WARNING)
+
         logger.info("Committing %s in table %s (%s).", info,
                     grammar.quote(self._item["name"], force=True), self._db)
         if not self._grid.Table.SaveChanges(): return
@@ -4677,12 +4681,9 @@ class SchemaObjectPage(wx.Panel):
                 conf.Title, defaultno=True
             ): return
 
-            if self._db.is_locked(self._category, self._item["name"]):
-                wx.MessageBox("%s %s is currently locked, cannot test." %
-                              (self._category.capitalize(),
-                              grammar.quote(self._item["name"], force=True)),
-                              conf.Title, wx.OK | wx.ICON_WARNING)
-                return
+            lock = self._db.get_lock(self._category, self._item["name"])
+            if lock: return wx.MessageBox("%s, cannot test." % lock,
+                                         conf.Title, wx.OK | wx.ICON_WARNING)
 
             logger.info("Executing test SQL:\n\n%s", sql2)
             try: self._db.executescript(sql2)
@@ -4712,13 +4713,10 @@ class SchemaObjectPage(wx.Panel):
                           conf.Title, wx.OK | wx.ICON_WARNING)
             return
 
-        if not self._newmode \
-        and self._db.is_locked(self._category, self._item["name"]):
-            wx.MessageBox("%s %s is currently locked, cannot alter." %
-                          (self._category.capitalize(),
-                          grammar.quote(self._item["name"], force=True)),
-                          conf.Title, wx.OK | wx.ICON_WARNING)
-            return
+        if not self._newmode:
+            lock = self._db.get_lock(self._category, self._item["name"])
+            if lock: return wx.MessageBox("%s, cannot alter." % lock,
+                                          conf.Title, wx.OK | wx.ICON_WARNING)
 
         sql1 = sql2 = self._item["sql"]
         if not self._newmode: sql1, sql2 = self._GetAlterSQL()
@@ -5815,6 +5813,10 @@ class ImportDialog(wx.Dialog):
 
     def _OnImport(self, event=None):
         """Handler for clicking to start import, launches process, updates UI."""
+        lock = self._db.get_lock("table", self._table["name"])
+        if lock: return wx.MessageBox("%s, cannot import." % lock,
+                                      conf.Title, wx.OK | wx.ICON_WARNING)
+
         self._importing = True
         self._progress.clear()
         SKIP = (self._gauge, self._info_gauge, self._info_file,

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.11.2019
+@modified    24.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -463,6 +463,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         self.consumers = set() # Registered objects using this database
         # {category: {name.lower(): set(lock key, )}}
         self.locks = defaultdict(lambda: defaultdict(set))
+        self.locklabels = {} # {lock key: label}
         # {"table|index|view|trigger":
         #   {name:
         #     {name: str, sql: str, ?table: str, ?columns: [], ?count: int,
@@ -603,16 +604,24 @@ WARNING: misuse can easily result in a corrupt database file.""",
                or any(x.values() for x in self.locks.values())
 
 
-    def lock(self, category, name, key):
-        """Locks a schema object for altering or deleting."""
-        category, name = category.lower(), name.lower()
+    def lock(self, category, name, key, label=None):
+        """
+        Locks a schema object for altering or deleting.
+
+        @param   category  x
+        @param   key       any hashable to identify lock by
+        @param   label     an informational label for lock
+        """
+        category, name = (x.lower() if x else x for x in (category, name))
         self.locks[category][name].add(key)
+        if label: self.locklabels[key] = label
 
 
     def unlock(self, category, name, key):
         """Unlocks a schema object for altering or deleting."""
-        category, name = category.lower(), name.lower()
+        category, name = (x.lower() if x else x for x in (category, name))
         self.locks[category][name].discard(key)
+        self.locklabels.pop(key, None)
         if not self.locks[category][name]: self.locks[category].pop(name)
         if not self.locks[category]:       self.locks.pop(category)
 
@@ -625,6 +634,41 @@ WARNING: misuse can easily result in a corrupt database file.""",
         category, name = (x.lower() if x else x for x in (category, name))
         return self.locks[category].get(name) if name and category in self.locks \
                else self.locks.get(category) if not name and category else self.locks
+
+
+    def get_lock(self, *args, **kwargs):
+        """
+        Returns user-friendly information on current lock status, as 
+        "Database is currently locked (statistics analysis)" or
+        "Table "foo" is currently locked" if querying category and name.
+
+        @param   *(?category, ?name) or **{category, name}
+        """
+        if "category" not in kwargs and args: kwargs["category"]  = args[0]
+        if "name" not in kwargs and len(args) > 1: kwargs["name"] = args[1]
+        for k, v in kwargs.items():
+            if isinstance(v, basestring): kwargs[k] = v.lower()
+        result, keys = "", ()
+
+        if kwargs.get("category") and kwargs.get("name"):
+            category, name = kwargs["category"], kwargs["name"]
+            keys = self.locks.get(category, {}).get(name)
+            if keys: result = "%s %s is currently locked" % \
+                              (category.capitalize(), grammar.quote(name, force=True))
+        elif kwargs.get("category"): # Check for lock on any item in category
+            category = kwargs["category"]
+            keys = set.union(*(x for x in self.locks.get(category, {}).values()))
+            if keys: result = "%s are currently locked" % util.plural(category.capitalize())
+
+        if not result: # Check for global lock
+            keys = self.locks.get(None, {}).get(None)
+            if keys: result = "Database is currently locked"
+        if not kwargs and not result and self.locks: # No args: check for any lock
+            result, keys = "Database is currently locked", self.locklabels.keys()
+
+        if result and keys:
+            result += " (%s)" % ", ".join(filter(bool, map(self.locklabels.get, keys)))
+        return result
 
 
     def get_rowid(self, table):
