@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.11.2019
+@modified    24.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -6313,6 +6313,7 @@ class DataDialog(wx.Dialog):
 
         button_update = wx.Button(self, label="&Update",  size=(-1, 20))
         button_reset  = wx.Button(self, label="&Reset",   size=(-1, 20))
+        button_delete = wx.Button(self, label="Delete",   size=(-1, 20))
         button_copy   = wx.Button(self, label="&Copy ..", size=(-1, 20))
 
         button_ok     = wx.Button(self, label="&Accept")
@@ -6326,6 +6327,7 @@ class DataDialog(wx.Dialog):
 
         sizer_footer.Add(button_update, border=5, flag=wx.RIGHT)
         sizer_footer.Add(button_reset,  border=5, flag=wx.RIGHT)
+        sizer_footer.Add(button_delete, border=5, flag=wx.RIGHT)
         sizer_footer.Add(button_copy)
 
         sizer_buttons.Add(button_ok, border=5, flag=wx.RIGHT)
@@ -6345,7 +6347,7 @@ class DataDialog(wx.Dialog):
         button_copy.ToolTip   = "Copy row data or SQL"
         button_reset.ToolTip  = "Restore original values"
         button_cancel.ToolTip = "Close data dialog"
-        button_update.Shown = button_reset.Shown = button_ok.Shown = self._editable
+        button_update.Shown = button_reset.Shown = button_delete.Shown = button_ok.Shown = self._editable
         panel.SetScrollRate(0, 20)
         self.SetEscapeId(wx.CANCEL)
 
@@ -6354,6 +6356,7 @@ class DataDialog(wx.Dialog):
         self.Bind(wx.EVT_BUTTON, self._OnUpdate, button_update)
         self.Bind(wx.EVT_BUTTON, self._OnCopy,   button_copy)
         self.Bind(wx.EVT_BUTTON, self._OnReset,  button_reset)
+        self.Bind(wx.EVT_BUTTON, self._OnDelete, button_delete)
         self.Bind(wx.EVT_BUTTON, self._OnAccept, button_ok)
         self.Bind(wx.EVT_BUTTON, self._OnClose,  button_cancel)
         self.Bind(wx.EVT_CLOSE,  self._OnClose)
@@ -6468,6 +6471,17 @@ class DataDialog(wx.Dialog):
         self._OnClose()
 
 
+    def _OnDelete(self, event=None):
+        """Handler for deleting the row, confirms choice."""
+        if wx.YES != controls.YesNoMessageBox(
+            "Are you sure you want to delete this row?", conf.Title,
+            wx.ICON_INFORMATION, defaultno=True
+        ): return
+        
+        wx.PostEvent(self.Parent, GridBaseEvent(-1, delete=True, rows=[self._row]))
+        self._OnClose()    
+
+
     def _OnUpdate(self, event=None):
         """Handler for updating grid."""
         for col, coldata in enumerate(self._columns):
@@ -6496,12 +6510,6 @@ class DataDialog(wx.Dialog):
     def _OnClose(self, event=None):
         """Handler for closing dialog."""
         wx.CallAfter(self.EndModal, wx.CANCEL)
-
-
-    def _PostEvent(self, **kwargs):
-        """Posts an EVT_IMPORT event to parent."""
-        evt = ImportEvent(self.Id, table=self._table["name"], **kwargs)
-        wx.PostEvent(self.Parent, evt)
 
 
     def _OnOptions(self, col, event=None):
