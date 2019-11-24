@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.11.2019
+@modified    24.11.2019
 """
 import calendar
 import collections
@@ -216,7 +216,9 @@ class SearchQueryParser(object):
                 or (keywords.get("-column") and match_kw("-column", col)):
                     continue # for col
 
-                result_col = "%s LIKE :column_like%s" % (grammar.quote(col["name"]), i)
+                cname = grammar.quote(col["name"])
+                if "notnull" not in col: cname = "COALESCE(%s, '')" % cname
+                result_col = "%s LIKE :column_like%s" % (cname, i)
                 if len(safe) > len(parseresult):
                     result_col += " ESCAPE '%s'" % ESCAPE_CHAR
                 result += (" OR " if result else "") + result_col
@@ -281,6 +283,7 @@ class SearchQueryParser(object):
                 params[param] = value
                 for j, col in enumerate(datecols):
                     temp = "STRFTIME('%s', %s) = :%s"
+                    if "notnull" not in col: temp = "COALESCE(STRFTIME('%s', %s), '') = :%s"
                     x = temp % (format, grammar.quote(col["name"]), param)
                     sql += (" OR " if j else "") + x
                 if len(datecols) > 1: sql = "(%s)" % sql
@@ -313,9 +316,11 @@ class SearchQueryParser(object):
                 params[param] = d
                 colsql = ""
                 for j, col in enumerate(datecols):
+                    cname = grammar.quote(col["name"])
+                    if "notnull" not in col: cname = "COALESCE(%s, '')" % cname                        
                     colsql += (" OR " if j else "")
                     colsql += "%s %s :%s" % (
-                              grammar.quote(col["name"]), [">=", "<="][i], param)
+                              cname, [">=", "<="][i], param)
                 sql += (" AND " if sql else "")
                 sql += "(%s)" % (colsql) if len(datecols) > 1 else colsql
 
