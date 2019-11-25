@@ -3597,7 +3597,6 @@ class DatabasePage(wx.Panel):
             wx.MessageBox(err, conf.Title, wx.OK | wx.ICON_ERROR)
         else:
             self.update_info_panel()
-            if conf.RunStatistics: self.on_update_statistics()
             wx.MessageBox("VACUUM complete.\n\nSize before: %s.\nSize after:    %s." %
                 tuple(util.format_bytes(x, max_units=False) for x in (size1, self.db.filesize)),
                 conf.Title, wx.OK | wx.ICON_INFORMATION)
@@ -4554,7 +4553,6 @@ class DatabasePage(wx.Panel):
                     break # for k, p
         if updated and not self.save_underway:
             self.reload_schema(count=True, parse=True)
-            if conf.RunStatistics: self.on_update_statistics()
             datapage = self.data_pages.get(category, {}).get(name0 or name)
             if datapage:
                 if name in self.db.schema[category]:
