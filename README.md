@@ -84,7 +84,7 @@ and the following 3rd-party Python packages:
 * antlr4-python2-runtime (https://pypi.org/project/antlr4-python2-runtime)
 * openpyxl (https://pypi.org/project/openpyxl)
 * pyparsing (https://pypi.org/project/pyparsing)
-* wxPython 4.0+ (https://wxpython.org/)
+* wxPython 4.0+ (https://wxpython.org)
 * xlrd (https://pypi.org/project/xlrd)
 * XlsxWriter (https://pypi.org/project/XlsxWriter)
 
@@ -104,9 +104,9 @@ Includes sqlite_analyzer, a command-line utility for table space analysis,
 Includes a modified version of step, Simple Template Engine for Python,
 (c) 2012, Daniele Mazzocchio, https://github.com/dotpy/step.
 
-Includes a modified version of SQLite.g4 from antlr4-grammars,
-(c) 2014, Bart Kiers,
-https://github.com/antlr/grammars-v4/blob/master/sqlite/SQLite.g4.
+Includes a modified version of SQLite.g4 from sqlite-parser,
+(c) 2013, Bart Kiers,
+https://github.com/bkiers/sqlite-parser.
 
 SQL lexer and parser generated with ANTLR v4.7.2,
 (c) 2012 The ANTLR Project, https://github.com/antlr/antlr4.
@@ -114,7 +114,7 @@ SQL lexer and parser generated with ANTLR v4.7.2,
 Includes several icons from Fugue Icons,
 (c) 2010 Yusuke Kamiyamane, https://p.yusukekamiyamane.com.
 
-Includes fonts Carlito Regular and Carlito bold,
+Includes fonts Carlito Regular and Carlito Bold,
 https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts.
 
 Binaries compiled with PyInstaller, https://www.pyinstaller.org.
