@@ -2388,6 +2388,9 @@ class SchemaObjectPage(wx.Panel):
         stc.SetReadOnly(True)
         stc._toggle = "skip"
 
+        label_error = self._label_error = wx.StaticText(panel2)
+        ColourManager.Manage(label_error, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
+
         button_edit    = self._buttons["edit"]    = wx.Button(panel2, label="Edit")
         button_refresh = self._buttons["refresh"] = wx.Button(panel2, label="Refresh")
         button_test    = self._buttons["test"]    = wx.Button(panel2, label="Test")
@@ -2424,6 +2427,7 @@ class SchemaObjectPage(wx.Panel):
         panel1.Sizer.Add(categorypanel,    border=10, proportion=2, flag=wx.RIGHT | wx.GROW)
         panel2.Sizer.Add(sizer_sql_header, border=10, flag=wx.RIGHT | wx.GROW)
         panel2.Sizer.Add(stc,              border=10, proportion=1, flag=wx.RIGHT | wx.GROW)
+        panel2.Sizer.Add(label_error,      border=5,  flag=wx.TOP)
         panel2.Sizer.Add(sizer_buttons,    border=10, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
         tb.Bind(wx.EVT_TOOL, self._OnCopySQL, id=wx.ID_COPY)
@@ -2454,11 +2458,14 @@ class SchemaObjectPage(wx.Panel):
             for y in x.Children:
                 y.Shown = showntype and isinstance(y, showntype)
         if not self._hasmeta:
+            label_error.Label = "Error parsing SQL"
             if "trigger" != self._category:
                 self._panel_columnswrapper.Parent.Shown = True
                 self._panel_columnswrapper.Shown = True
             if "view" == self._category:
                 for x in self._ctrls["select"].Parent.Children: x.Shown = False
+        else:
+            label_error.Hide()
 
         splitter.SetMinimumPaneSize(size)
         splitter.SplitHorizontally(panel1, panel2, pos)
@@ -4587,7 +4594,8 @@ class SchemaObjectPage(wx.Panel):
             self.Freeze()
             try:
                 for n, c in vars(self).items():
-                    if n.startswith("_panel_"): c.ContainingSizer.Layout()
+                    if n.startswith("_panel_") and c.ContainingSizer:
+                        c.ContainingSizer.Layout()
             finally: self.Thaw()
 
 
