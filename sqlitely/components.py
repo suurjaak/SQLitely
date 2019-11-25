@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.11.2019
+@modified    25.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -2621,7 +2621,12 @@ class SchemaObjectPage(wx.Panel):
         stc_where   = self._ctrls["where"] = controls.SQLiteTextCtrl(panel,
             size=(-1, 40),
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
-        label_where.ToolTip = "Optional WHERE-clause to create a partial index"
+        label_where.ToolTip = "Optional WHERE-clause to create a partial index, " \
+                              "on rows for which WHERE evaluates to true.\n\n" \
+                              "May contain operators, literal values, and names " \
+                              "of columns in the table being indexed. " \
+                              "May not contain subqueries, references to other tables, " \
+                              "or functions whose result might change, like random()."
 
         sizer_table.Add(label_table, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_table.Add(list_table, flag=wx.GROW)
@@ -2683,15 +2688,20 @@ class SchemaObjectPage(wx.Panel):
         stc_body   = self._ctrls["body"] = controls.SQLiteTextCtrl(panel2,
             size=(-1, 40),
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
+        label_body.MinSize = (35, -1)
         label_body.ToolTip = "Trigger body SQL, any number of " \
-                             "SELECT-INSERT-UPDATE-DELETE statements."
+                             "SELECT-INSERT-UPDATE-DELETE statements. " \
+                             "Can access OLD row reference on UPDATE and DELETE, " \
+                             "and NEW row reference on INSERT and UPDATE."
 
         label_when = wx.StaticText(panel2, label="WHEN:", name="trigger_when_label")
+        label_when.MinSize = (35, -1)
         stc_when   = self._ctrls["when"] = controls.SQLiteTextCtrl(panel2,
             size=(-1, 40), name="trigger_when",
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
         label_when.ToolTip = "Trigger WHEN expression, trigger executed only if WHEN is true. " \
-                             "Can access the OLD and NEW row references."
+                             "Can access OLD row reference on UPDATE and DELETE, " \
+                             "and NEW row reference on INSERT and UPDATE."
 
         sizer_table.Add(label_table, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_table.Add(list_table, flag=wx.GROW)
@@ -2743,10 +2753,11 @@ class SchemaObjectPage(wx.Panel):
 
         check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
         check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT EXISTS")
+        check_temp.ToolTip = "View will exist only for the duration of the current session"
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
         panel1, panel2 = self._MakeColumnsGrid(splitter), wx.Panel(splitter)
-        panel2.Sizer = wx.BoxSizer(wx.HORIZONTAL)
+        panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         label_body = wx.StaticText(panel2, label="Se&lect:")
         stc_body = self._ctrls["select"] = controls.SQLiteTextCtrl(panel2,
@@ -2758,7 +2769,7 @@ class SchemaObjectPage(wx.Panel):
         sizer_flags.Add(100, 0)
         sizer_flags.Add(check_exists)
 
-        panel2.Sizer.Add(label_body, border=5, flag=wx.RIGHT)
+        panel2.Sizer.Add(label_body)
         panel2.Sizer.Add(stc_body, proportion=1, flag=wx.GROW)
 
         sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
@@ -2801,14 +2812,28 @@ class SchemaObjectPage(wx.Panel):
             sizer_headers.Add(wx.StaticText(panel, label="Default", size=(100, -1)))
             sizer_headers.Add(sizer_columnflags, border=5, flag=wx.LEFT | wx.RIGHT)
             sizer_headers.Add(wx.StaticText(panel, label="Options", size=(50, -1)))
+            sizer_headers.GetItem(3).Window.ToolTip = \
+                "String or numeric constant, NULL, CURRENT_TIME, CURRENT_DATE, " \
+                "CURRENT_TIMESTAMP, or (constant expression)"
         elif "index" == self._category:
-            sizer_headers.Add(wx.StaticText(panel, label="Column or expression",  size=(250, -1)), border=7, flag=wx.LEFT)
+            sizer_headers.Add(wx.StaticText(panel, label="Column",  size=(250, -1)), border=7, flag=wx.LEFT)
             sizer_headers.Add(wx.StaticText(panel, label="Collate", size=( 80, -1)))
             sizer_headers.Add(wx.StaticText(panel, label="Order",   size=( 60, -1)))
+            sizer_headers.GetItem(1).Window.ToolTip = \
+                "Table column or an expression to index"
+            sizer_headers.GetItem(2).Window.ToolTip = \
+                "Ordering sequence to use for text values, defaults to the " \
+                "collating sequence defined for the table column, or BINARY"
+            sizer_headers.GetItem(3).Window.ToolTip = \
+                "Index sort order"
         elif "trigger" == self._category:
             sizer_headers.Add(wx.StaticText(panel, label="Column",  size=(200, -1)), border=7, flag=wx.LEFT)
+            sizer_headers.GetItem(1).Window.ToolTip = \
+                "Column UPDATE to trigger on"
         elif "view" == self._category:
             sizer_headers.Add(wx.StaticText(panel, label="Column",  size=(200, -1)), border=7, flag=wx.LEFT)
+            sizer_headers.GetItem(1).Window.ToolTip = \
+                "Name of the view column, if not deriving names from SELECT results"
 
         grid = self._grid_columns = wx.grid.Grid(panel_grid)
         grid.DisableDragRowSize()
@@ -3074,7 +3099,6 @@ class SchemaObjectPage(wx.Panel):
                 self._grid_columns.SetGridCursor(row, col)
         else:
             self._panel_splitter.Unsplit(p1)
-        self._PopulateAutoComp()
         self._panel_category.Layout()
 
 
@@ -3118,6 +3142,8 @@ class SchemaObjectPage(wx.Panel):
         list_type     = wx.ComboBox(panel, choices=self._types, style=wx.CB_DROPDOWN)
         text_default  = controls.SQLiteTextCtrl(panel, traversable=True, wheelable=False)
         text_default.SetCaretLineVisible(False)
+        text_default.ToolTip = "String or numeric constant, NULL, CURRENT_TIME, " \
+                               "CURRENT_DATE, CURRENT_TIMESTAMP, or (constant expression)"
 
         check_pk      = wx.CheckBox(panel)
         check_autoinc = wx.CheckBox(panel)
@@ -3321,11 +3347,20 @@ class SchemaObjectPage(wx.Panel):
         if self._hasmeta and "name" in col:
             ctrl_index = wx.ComboBox(panel, choices=tablecols,
                 style=wx.CB_DROPDOWN | wx.CB_READONLY)
+            ctrl_index.ToolTip = "Table column to index"
         else:
             ctrl_index = controls.SQLiteTextCtrl(panel, traversable=True, wheelable=False)
             ctrl_index.SetCaretLineVisible(False)
+            ctrl_index.ToolTip = "May not reference other tables, or use subqueries " \
+                                 "or functions whose result might change, like random()."
         list_collate  = wx.ComboBox(panel, choices=self.COLLATE, style=wx.CB_DROPDOWN)
         list_order    = wx.ComboBox(panel, choices=self.ORDER, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+        if self._hasmeta and "name" in col:
+            list_collate.ToolTip = "Ordering sequence to use for text values, defaults to the " \
+                                   "collating sequence defined for the table column, or BINARY"
+        else:
+            list_collate.ToolTip = "Ordering sequence to use for text values, defaults to BINARY"
+        list_order.ToolTip = "Index sort order"
 
         ctrl_index.MinSize =   (250, -1 if self._hasmeta and "name" in col else list_collate.Size[1])
         list_collate.MinSize = ( 80, -1)
@@ -3533,9 +3568,7 @@ class SchemaObjectPage(wx.Panel):
                 if not item.get("columns"): continue # for item
                 ww = [grammar.quote(c["name"]) for c in item["columns"]]
 
-                if "table" == self._category \
-                and item["name"] == self._original.get("name") \
-                or self._category in ("index", "trigger") \
+                if self._category in ("index", "trigger") \
                 and item["name"] == self._item["meta"].get("table"):
                     singlewords = ww
                 if self._category in ("trigger", "view"): subwords[myname] = ww
@@ -3546,10 +3579,8 @@ class SchemaObjectPage(wx.Panel):
         for c in self._ctrls.values():
             if not isinstance(c, controls.SQLiteTextCtrl): continue # for c
             c.AutoCompClearAdded()
-            if c is self._ctrls.get("when"):
-                for w in "OLD", "NEW": c.AutoCompAddSubWords(w, singlewords)
-            elif not words or c.IsTraversable(): c.AutoCompAddWords(singlewords)
-            elif words:
+            if singlewords and c.IsTraversable(): c.AutoCompAddWords(singlewords)
+            elif words and not c.IsTraversable():
                 c.AutoCompAddWords(words)
                 for w, ww in subwords.items(): c.AutoCompAddSubWords(w, ww)
 
@@ -4046,6 +4077,7 @@ class SchemaObjectPage(wx.Panel):
             if count: label = "%s (%s)" % (label, count)
             self._notebook_table.SetPageText(0 if ["columns"] == path else 1, label)
         panel.Parent.ContainingSizer.Layout()
+        self._PopulateAutoComp()
         return ctrls
 
 
@@ -4265,6 +4297,7 @@ class SchemaObjectPage(wx.Panel):
                 self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
         elif ["table"] == path:
             rebuild = meta.get("columns") or "index" == self._category
+            if not rebuild: self._PopulateAutoComp()
             meta.pop("columns", None)
 
         self._Populate() if rebuild else self._PopulateSQL()
@@ -4682,7 +4715,7 @@ class SchemaObjectPage(wx.Panel):
                 conf.Title, defaultno=True
             ): return
 
-            lock = self._db.get_lock(self._category, self._item["name"])
+            lock = self._db.get_lock(*filter(bool, [self._category, self._item.get("name")]))
             if lock: return wx.MessageBox("%s, cannot test." % lock,
                                          conf.Title, wx.OK | wx.ICON_WARNING)
 
@@ -4716,10 +4749,10 @@ class SchemaObjectPage(wx.Panel):
                           conf.Title, wx.OK | wx.ICON_WARNING)
             return
 
-        if not self._newmode:
-            lock = self._db.get_lock(self._category, self._item["name"])
-            if lock: return wx.MessageBox("%s, cannot alter." % lock,
-                                          conf.Title, wx.OK | wx.ICON_WARNING)
+        lock = self._db.get_lock(*filter(bool, [self._category, self._item.get("name")]))
+        if lock: return wx.MessageBox("%s, cannot %s." %
+                                      (lock, "create" if self._newmode else "alter"),
+                                      conf.Title, wx.OK | wx.ICON_WARNING)
 
         sql1 = sql2 = self._item["sql"]
         if not self._newmode: sql1, sql2 = self._GetAlterSQL()
