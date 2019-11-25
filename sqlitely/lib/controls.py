@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    22.11.2019
+@modified    25.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -2369,7 +2369,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     def AutoCompClearAdded(self):
         """Clears words added in AutoCompAddWords and AutoCompAddSubWords."""
         self.autocomps_added &= set(["sqlite_master"])
-        del self.autocomps_total[:]
+        self.autocomps_total = self.KEYWORDS[:]
         self.autocomps_subwords.clear()
 
 
