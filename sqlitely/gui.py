@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.11.2019
+@modified    25.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2239,6 +2239,7 @@ class DatabasePage(wx.Panel):
         sizer_header.AddStretchSpacer()
 
         self.label_search = wx.StaticText(self, -1, "&Search in data:")
+        self.label_search.ToolTip = "Search in all columns of all database tables and views"
         sizer_header.Add(self.label_search, border=5,
                          flag=wx.RIGHT | wx.TOP | wx.ALIGN_RIGHT)
         edit_search = self.edit_searchall = controls.TextCtrlAutoComplete(
@@ -2359,6 +2360,7 @@ class DatabasePage(wx.Panel):
         self.label_search.Label = "&Search in data:"
         if conf.SearchInMeta:
             self.label_search.Label = "&Search in metadata:"
+            self.label_search.ToolTip = "Search in database CREATE SQL"
 
         nb = self.notebook_search = controls.TabbedHtmlWindow(page)
         ColourManager.Manage(nb, "TabAreaColour", "WidgetColour")
@@ -3868,10 +3870,12 @@ class DatabasePage(wx.Panel):
             conf.SearchInMeta = True
             conf.SearchInData = False
             self.label_search.Label = "&Search in metadata:"
+            self.label_search.ToolTip = "Search in database CREATE SQL"
         elif wx.ID_STATIC == event.Id:
             conf.SearchInData = True
             conf.SearchInMeta = False
             self.label_search.Label = "&Search in data:"
+            self.label_search.ToolTip = "Search in all columns of all database tables and views"
         self.label_search.ContainingSizer.Layout()
         if wx.ID_NEW == event.Id:
             conf.SearchUseNewTab = event.EventObject.GetToolState(event.Id)
