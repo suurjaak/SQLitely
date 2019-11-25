@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.11.2019
+@modified    25.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -659,7 +659,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                               (category.capitalize(), grammar.quote(name, force=True))
         elif kwargs.get("category"): # Check for lock on any item in category
             category = kwargs["category"]
-            keys = set.union(*(x for x in self.locks.get(category, {}).values()))
+            keys = set(y for x in self.locks.get(category, {}).values() for y in x)
             if keys: result = "%s are currently locked" % util.plural(category.capitalize())
 
         if not result: # Check for global lock
