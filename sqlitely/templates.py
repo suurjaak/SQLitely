@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.11.2019
+@modified    25.11.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -572,13 +572,15 @@ under the MIT License.
       <a href="https://www.python.org/"><font color="{{ conf.LinkColour }}">python.org</font></a></li>
   <li>SQLite,
       <a href="https://www.sqlite.org/"><font color="{{ conf.LinkColour }}">sqlite.org</font></a></li>
+  <li>sqlite-parser,
+      <a href="https://github.com/bkiers/sqlite-parser"><font color="{{ conf.LinkColour }}">github.com/bkiers/sqlite-parser</font></a></li>
   <li>step, Simple Template Engine for Python,
       <a href="https://github.com/dotpy/step"><font color="{{ conf.LinkColour }}">github.com/dotpy/step</font></a></li>
   <li>wxPython{{ " %s" % getattr(wx, "__version__", "") if getattr(sys, 'frozen', False) else "" }},
       <a href="http://wxpython.org"><font color="{{ conf.LinkColour }}">wxpython.org</font></a></li>
-  <li>xrld,
-      <a href="https://pypi.org/project/xrld"><font color="{{ conf.LinkColour }}">
-          pypi.org/project/xrld</font></a></li>
+  <li>xlrd,
+      <a href="https://pypi.org/project/xlrd"><font color="{{ conf.LinkColour }}">
+          pypi.org/project/xlrd</font></a></li>
   <li>XlsxWriter,
       <a href="https://pypi.org/project/XlsxWriter"><font color="{{ conf.LinkColour }}">
           pypi.org/project/XlsxWriter</font></a></li>

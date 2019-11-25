@@ -8,13 +8,14 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    12.11.2019
+@modified    22.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
 import logging
 import os
 import re
+import sys
 import traceback
 import uuid
 
@@ -58,6 +59,7 @@ def generate(data, indent="  "):
                      result is not indented in any, including linefeeds.
     @return          (SQL string, None) or (None, error)
     """
+    if not data: return None, "Empty schema item"
     result, err, generator = None, None, Generator(indent)
     try:
         result, err = generator.generate(data)
@@ -133,7 +135,7 @@ def format(value):
         else:
             if isinstance(value, unicode):
                 value = value.encode("utf-8")
-            value = '"%s"' % (value.encode("string-escape").replace('\"', '""'))
+            value = "'%s'" % value.replace("'", "''")
     else:
         value = "NULL" if value is None else str(value)
     return value
@@ -211,35 +213,6 @@ class CTX(object):
 
 
 
-class ErrorListener(object):
-    """Collects errors during parsing."""
-    def __init__(self): self._errors, self._stack = [], []
-
-    def reportAmbiguity(self, *_, **__): pass
-
-    def reportAttemptingFullContext(self, *_, **__): pass
-
-    def reportContextSensitivity(self, *_, **__): pass
-
-    def syntaxError(self, recognizer, offendingToken, line, column, msg, e):
-        err = "%sine %s:%s %s" % (
-            "L" if not e else "%s: l" % util.format_exc(e), line, column, msg
-        )
-        self._errors.append(err)
-        if not self._stack:
-            stack = traceback.extract_stack()[:-1]
-            for i, (f, l, fn, t) in enumerate(stack):
-                if f == __file__:
-                    del stack[:max(i-1, 0)]
-                    break # for i, (..)
-            self._stack = traceback.format_list(stack)
-
-    def getErrors(self, stack=False):
-        if not stack: return "\n\n".join(self._errors)
-        return "%s\n%s" % ("\n\n".join(self._errors), "".join(self._stack))
-
-
-
 class Parser(object):
     """
     SQL statement parser.
@@ -267,6 +240,36 @@ class Parser(object):
                   "virtual table":  SQL.CREATE_VIRTUAL_TABLE}
     TRIGGER_BODY_CTXS = [CTX.DELETE, CTX.INSERT, CTX.SELECT, CTX.UPDATE]
 
+    class ReparseException(Exception): pass
+
+    class ErrorListener(object):
+        """Collects errors during parsing."""
+        def __init__(self): self._errors, self._stack = [], []
+
+        def reportAmbiguity(self, *_, **__): pass
+
+        def reportAttemptingFullContext(self, *_, **__): pass
+
+        def reportContextSensitivity(self, *_, **__): pass
+
+        def syntaxError(self, recognizer, offendingToken, line, column, msg, e):
+            err = "%sine %s:%s %s" % (
+                "L" if not e else "%s: l" % util.format_exc(e), line, column, msg
+            )
+            self._errors.append(err)
+            if not self._stack:
+                stack = traceback.extract_stack()[:-1]
+                for i, (f, l, fn, t) in enumerate(stack):
+                    if f == __file__:
+                        del stack[:max(i-1, 0)]
+                        break # for i, (..)
+                self._stack = traceback.format_list(stack)
+
+        def getErrors(self, stack=False):
+            if not stack: return "\n\n".join(self._errors)
+            return "%s\n%s" % ("\n\n".join(self._errors), "".join(self._stack))
+
+
 
     def __init__(self):
         self._category = None
@@ -293,7 +296,8 @@ class Parser(object):
 
         """
         self._stream  = CommonTokenStream(SQLiteLexer(InputStream(sql)))
-        parser, listener = SQLiteParser(self._stream), ErrorListener()
+        parser, listener = SQLiteParser(self._stream), self.ErrorListener()
+        parser.removeErrorListeners()
         parser.addErrorListener(listener)
         tree = parser.parse()
         if parser.getNumberOfSyntaxErrors():
@@ -314,7 +318,9 @@ class Parser(object):
 
         self._category = name
         if renames: self.recurse_rename([ctx], renames)
-        result = self.BUILDERS[name](self, ctx)
+        try: result = self.BUILDERS[name](self, ctx)
+        except self.ReparseException as e:
+            return self.parse(e.message, category, renames)
         result["__type__"] = name
         result["__tables__"] = self.recurse_collect(
             [ctx], [CTX.FOREIGN_TABLE] if SQL.CREATE_TABLE == name else [CTX.TABLE_NAME]
@@ -560,6 +566,27 @@ class Parser(object):
         result["name"] = self.u(ctx.column_name().any_name)
         if ctx.type_name():
             result["type"] = " ".join(self.u(x).upper() for x in ctx.type_name().name())
+
+            type_raw = self.r(ctx.type_name()).upper()
+            if '"' in type_raw and "DEFAULT" in type_raw:
+                # Workaround for SQLite allowing double-quotes for literals,
+                # resulting in DEFAULT and everything preceding being parsed
+                # as type if DEFAULT value is double-quoted.
+                start, end = ctx.type_name().getSourceInterval()
+                sql1  = self._stream.getText((0, start - 1))
+                inter = self._stream.getText((start, end))
+                sql2  = self._stream.getText((end + 1, sys.maxint))
+
+                xstart = type_raw.find("DEFAULT") + 7
+                repl, in_quotes, i = inter[:xstart], False, xstart
+                while i < len(inter):
+                    c, nxt = inter[i], (inter[i + 1] if i < len(inter) - 1 else "")
+                    if '"' == c:
+                        if not in_quotes: c, in_quotes = "'", True # Start single quote
+                        elif '"' == nxt: i += 1 # "-escaped ", insert single "
+                        else: c, in_quotes = "'", False # End quote
+                    repl, i = repl + c, i + 1
+                raise self.ReparseException(sql1 + repl + sql2)
 
         for c in ctx.column_constraint():
             conflict = self.get_conflict(c)
@@ -1030,7 +1057,7 @@ def test():
             mytablekey    INTEGER NOT NULL DEFAULT (mytablecol1),
             mytablecol1   INTEGER NOT NULL ON CONFLICT ABORT DEFAULT /* uhuu */ -666.5 UNIQUE ON CONFLICT ROLLBACK,
             mytablecol2   INTEGER CHECK (mytablecol3 IS /* hoho */ NULL) COLLATE /* haha */ BiNARY,
-            mytablecol3   TEXT NOT NULL CHECK (LENGTH(mytable.mytablecol1) > 0),
+            mytablecol3   TEXT NOT NULL DEFAULT "double "" quoted" CHECK (LENGTH(mytable.mytablecol1) > 0),
             mytablecol4   TIMESTAMP WITH TIME ZONE,
             mytablefk     INTEGER REFERENCES mytable2 (mytable2key) ON delete cascade on update no action match SIMPLE,
             mytablefk2    INTEGER,

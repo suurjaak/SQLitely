@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.11.2019
+@modified    25.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -63,7 +63,6 @@ class SQLiteGridBase(wx.grid.GridTableBase):
     the results of any SELECT query.
     """
 
-
     """wx.Grid stops working when too many rows."""
     MAX_ROWS = 5000000
 
@@ -114,11 +113,11 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 value = self.rows_current[0][col["name"]]
                 col["type"] = TYPES.get(type(value), col.get("type", ""))
         else:
-            data = self.db.get_count(self.name)
-            if data["count"] is not None:
+            data = self.db.get_count(self.name) if "table" == category else {}
+            if data.get("count") is not None:
                 self.row_count = min(data["count"], self.MAX_ROWS)
             self.is_seek = data.get("is_count_estimated", False) \
-                           or data["count"] is None \
+                           or data.get("count") is None \
                            or data["count"] != self.row_count
             self.SeekToRow(conf.SeekLength - 1)
 
@@ -148,7 +147,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
     def SeekToRow(self, row):
         """Seeks ahead on the row iterator to the specified row."""
-        rows_before = self.GetNumberRows()
+        rows_before, post = self.GetNumberRows(), False
         while self.row_iterator and row >= len(self.rows_current):
             rowdata = None
             try: rowdata = self.row_iterator.next()
@@ -167,13 +166,15 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 self.idx_all.append(myid)
                 self.iterator_index += 1
             else:
-                self.row_iterator = None
+                self.row_iterator, post = None, True
         if self.iterator_index >= self.MAX_ROWS:
-            self.row_iterator = None
+            self.row_iterator, post = None, True
         if self.is_seek and self.row_count < self.iterator_index + 1:
             self.row_count = self.iterator_index + 1
         if self.GetNumberRows() != rows_before:
             self.NotifyViewChange(rows_before)
+        elif post and self.View:
+            wx.PostEvent(self.View, GridBaseEvent(wx.ID_ANY, refresh=True))
 
 
     def GetRowLabelValue(self, row):
@@ -547,6 +548,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         args = [self, wx.grid.GRIDTABLE_REQUEST_VIEW_GET_VALUES]
         self.View.ProcessTableMessage(wx.grid.GridTableMessage(*args))
         self.View.EndBatch()
+        wx.PostEvent(self.View, GridBaseEvent(wx.ID_ANY, refresh=True))
 
 
     def AddFilter(self, col, val):
@@ -865,12 +867,12 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         caption, rowdatas, idxs, cutoff = "", [], [], ""
         rows, cols = get_grid_selection(self.View, cursor=False)
         if not rows:
-            if isinstance(event, wx.MouseEvent):
+            if isinstance(event, wx.MouseEvent) and event.Position != wx.DefaultPosition:
                 xy = self.View.CalcUnscrolledPosition(event.Position)
                 rows, cols = ([x] for x in self.View.XYToCell(xy))
             elif isinstance(event, wx.grid.GridEvent):
                 rows, cols = [event.Row], [event.Col]
-        if not rows and self.View.GridCursorRow >= 0:
+        if not rows and self.View.NumberRows and self.View.GridCursorRow >= 0:
             rows, cols = [self.View.GridCursorRow], [self.View.GridCursorCol]
         rows, cols = ([x for x in xx if x >= 0] for xx in (rows, cols))
 
@@ -893,7 +895,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         colsuff = "" if len(cols)     == 1 else "s"
         if rowdatas: item_caption = wx.MenuItem(menu, -1, caption)
         if rowdatas:
-            item_copy     = wx.MenuItem(menu, -1, "&Copy row%s" % rowsuff)
+            item_copy     = wx.MenuItem(menu, -1, "Copy &row%s" % rowsuff)
             item_copy_col = wx.MenuItem(menu, -1, "Copy co&lumn%s" % colsuff)
             item_copy_sql = wx.MenuItem(menu, -1, "Copy row%s INSERT &SQL" % rowsuff)
             item_open     = wx.MenuItem(menu, -1, "&Open form")
@@ -920,7 +922,6 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             menu.Append(item_copy)
             menu.Append(item_copy_col)
             if is_table: menu.Append(item_copy_sql)
-            menu.Append(item_open)
         if is_table and rowdatas:
             menu.Append(item_reset)
             item_reset.Enabled = any(x in self.idx_changed for x in idxs)
@@ -971,6 +972,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             item_delete_cascade.Enabled = has_cascade and any(not x["__new__"] for x in rowdatas)
         elif is_table:
             menu.Append(item_insert)
+        if rowdatas:
+            menu.Append(item_open)
         if self.row_count:
             menu.Append(item_goto)
 
@@ -1045,7 +1048,6 @@ class SQLiteGridBaseMixin(object):
         grid.Bind(wx.EVT_SCROLL_THUMBRELEASE,         self._OnGridScroll)
         grid.Bind(wx.EVT_SCROLL_CHANGED,              self._OnGridScroll)
         grid.Bind(wx.EVT_KEY_DOWN,                    self._OnGridScroll)
-        grid.Bind(wx.EVT_CONTEXT_MENU,                self._OnGridMenu)
         grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK,  self._OnGridMenu)
         grid.GridWindow.Bind(wx.EVT_RIGHT_UP,         self._OnGridMenu)
         grid.GridWindow.Bind(wx.EVT_MOTION,           self._OnGridMouse)
@@ -1150,7 +1152,9 @@ class SQLiteGridBaseMixin(object):
             row, col = (self._grid.GridCursorRow, self._grid.GridCursorCol)
             rows_present = self._grid.Table.GetNumberRows(present=True) - 1
             seekrow = (rows_present / conf.SeekLeapLength + 1) * conf.SeekLeapLength
-            self._grid.Table.SeekToRow(seekrow)
+            busy = controls.BusyPanel(self, "Seeking..")
+            try: self._grid.Table.SeekToRow(seekrow)
+            finally: busy.Close()
             row2 = self._grid.Table.GetNumberRows(present=True) - 1
             if row2 == seekrow: row2 -= 1 # Stay at #10000, #20000 etc
             self._grid.GoToCell(row2, col)
@@ -1174,8 +1178,7 @@ class SQLiteGridBaseMixin(object):
         """Handler for right-click or context menu in grid, opens popup menu."""
         if not isinstance(self._grid.Table, SQLiteGridBase): return
 
-        if not isinstance(self._grid.Table, SQLiteGridBase) \
-        or self._grid.IsCellEditControlShown(): event.Skip()
+        if self._grid.IsCellEditControlShown(): event.Skip()
         else: self._grid.Table.OnMenu(event)
 
 
@@ -1233,6 +1236,30 @@ class SQLiteGridBaseMixin(object):
         self._grid.Table.ClearAttrs()
 
 
+    def _PopulateCount(self, reload=False):
+        """Populates row count in self._label_rows."""
+        if not self or not hasattr(self, "_label_rows") \
+        or not isinstance(self._grid.Table, SQLiteGridBase): return
+        gridbase = self._grid.Table
+        count, pref, suff = gridbase.GetNumberRows(), "", ""
+        if not gridbase.IsComplete() and not gridbase.filters:
+            if "table" == getattr(self, "_category", None):
+                data = self._db.schema["table"].get(self.Name, {})
+                if reload or not data.get("count"): data = self._db.get_count(self.Name)
+                if data and data["count"] is not None:
+                    count = data["count"]
+                    if data.get("is_count_estimated"):
+                        count, pref = int(math.ceil(count / 100.) * 100), "~" 
+                    count += len(gridbase.idx_new) - len(gridbase.rows_deleted)
+                else: suff = "+"
+            else: suff = "+"
+        elif not gridbase.IsComplete(): suff = "+"
+        t = pref + util.plural("row", count, sep=",")
+        if suff: t = t.replace(" ", suff + " ")            
+        self._label_rows.Label = t
+        self._label_rows.Parent.Layout()
+
+
 
 class SQLPage(wx.Panel, SQLiteGridBaseMixin):
     """
@@ -1268,6 +1295,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         panel1 = self._panel1 = wx.Panel(splitter)
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_footer = wx.BoxSizer(wx.HORIZONTAL)
 
         tb = self._tb = wx.ToolBar(panel1, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY,      wx.ART_TOOLBAR, (16, 16))
@@ -1320,7 +1348,9 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         label_help = self._label_help = wx.StaticText(panel2,
             label="Double-click on column header to sort, right click to filter.")
+        label_rows = self._label_rows = wx.StaticText(panel2)
         ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
+        ColourManager.Manage(label_rows, "ForegroundColour", wx.SYS_COLOUR_WINDOWTEXT)
 
         panel_export = self._export = ExportProgressPanel(panel2)
         panel_export.Hide()
@@ -1350,10 +1380,14 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         sizer_buttons.Add(button_export, border=5, flag=wx.RIGHT | wx.ALIGN_RIGHT)
         sizer_buttons.Add(button_close, flag=wx.ALIGN_RIGHT)
 
+        sizer_footer.Add(label_help)
+        sizer_footer.AddStretchSpacer()
+        sizer_footer.Add(label_rows, flag=wx.ALIGN_RIGHT)
+
         sizer2.Add(label_help_stc, border=5, flag=wx.BOTTOM | wx.GROW)
         sizer2.Add(sizer_buttons, border=5, flag=wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer2.Add(grid, proportion=1, flag=wx.GROW)
-        sizer2.Add(label_help, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
+        sizer2.Add(sizer_footer, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer2.Add(panel_export, proportion=1, flag=wx.ALIGN_CENTER_HORIZONTAL | wx.GROW)
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
@@ -1361,7 +1395,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         self.Layout()
         wx_accel.accelerate(self)
-        wx.CallAfter(lambda: splitter.SplitHorizontally(panel1, panel2, sashPosition=self.Size[1] * 2/5))
+        wx.CallAfter(lambda: self and splitter.SplitHorizontally(
+                     panel1, panel2, sashPosition=self.Size[1] * 2/5))
 
 
     def GetSQL(self):
@@ -1415,6 +1450,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnResult(self, result, sql, script=False, restore=False):
         """Handler for db worker result, updates UI."""
+        if not self: return
+
         if self._busy: self._busy.Close()
         self._button_sql.Enabled = self._button_script.Enabled = True
         if self._grid.Table: self._tbgrid.Enable()
@@ -1422,9 +1459,9 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         if "error" in result:
             guibase.status("Error running SQL.", flash=True)
-            error = "Error running SQL:\n\n%s" % result["error"]
-            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
-            return
+            lock = self._db.get_lock(category=None)
+            error = "Error running SQL:\n\n%s" % (lock or result["error"])
+            return wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
         cursor = result["result"]
         if restore:
@@ -1453,7 +1490,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             self._tbgrid.Enable()
             self._button_close.Enabled = bool(cursor and cursor.description)
             self._label_help.Show(bool(cursor and cursor.description))
-            self._label_help.ContainingSizer.Layout()
+            self._label_rows.Show(bool(cursor and cursor.description))
+            self._label_help.Parent.Layout()
             guibase.status('Executed SQL "%s" (%s).', sql, self._db,
                            log=True, flash=True)
 
@@ -1476,6 +1514,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                 cursorpos = [max(0, min(x)) for x in zip(cursorpos, maxpos)]
                 self._grid.SetGridCursor(*cursorpos)
                 self._grid.Scroll(*scrollpos)
+            self._PopulateCount()
         except Exception as e:
             logger.exception("Error running SQL %s.", sql)
             guibase.status("Error running SQL.", flash=True)
@@ -1505,6 +1544,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             cursorpos = [min(x) for x in zip(cursorpos, maxpos)]
             self._grid.SetGridCursor(*cursorpos)
         finally: self._grid.Thaw()
+        self._PopulateCount()
 
 
     def Close(self, force=False):
@@ -1610,12 +1650,15 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self._grid.Table.ClearFilter()
         self._grid.Table.ClearSort()
         self.Layout() # React to grid size change
+        self._PopulateCount()
 
 
     def _OnGridBaseEvent(self, event):
         """Handler for event from SQLiteGridBase."""
         if getattr(event, "form", False):
             DataDialog(self, self._grid.Table, event.row).ShowModal()
+        if getattr(event, "refresh", False):
+            self._PopulateCount()
 
 
     def _OnSTCKey(self, event):
@@ -1666,7 +1709,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self._tbgrid.Disable()
         self._button_close.Enabled = False
         self._label_help.Hide()
-        self._label_help.ContainingSizer.Layout()
+        self._label_rows.Hide()
+        self._label_help.Parent.Layout()
 
 
     def _OnCopyGridSQL(self, event=None):
@@ -1754,6 +1798,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_header       = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_footer       = wx.BoxSizer(wx.HORIZONTAL)
 
         tb = self._tb = wx.ToolBar(self, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = images.ToolbarInsert.Bitmap
@@ -1787,7 +1832,9 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         SQLiteGridBaseMixin.__init__(self)
 
         label_help = wx.StaticText(self, label="Double-click on column header to sort, right click to filter.")
+        label_rows = self._label_rows = wx.StaticText(self)
         ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
+        ColourManager.Manage(label_rows, "ForegroundColour", wx.SYS_COLOUR_WINDOWTEXT)
 
         panel_export = self._export = ExportProgressPanel(self, self._category)
         panel_export.Hide()
@@ -1810,9 +1857,13 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         sizer_header.Add(button_export, border=5, flag=wx.LEFT)
         sizer_header.Add(button_actions, border=5, flag=wx.LEFT)
 
+        sizer_footer.Add(label_help)
+        sizer_footer.AddStretchSpacer()
+        sizer_footer.Add(label_rows, flag=wx.ALIGN_RIGHT)
+
         sizer.Add(sizer_header, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer.Add(grid, proportion=1, flag=wx.GROW)
-        sizer.Add(label_help, border=5, flag=wx.TOP | wx.BOTTOM)
+        sizer.Add(sizer_footer, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer.Add(panel_export, proportion=1, flag=wx.ALIGN_CENTER_HORIZONTAL | wx.GROW)
         try: self._Populate()
         except Exception:
@@ -1896,31 +1947,28 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         self._OnChange(updated=True)
         # Refresh cell colours; without CallLater wx 2.8 can crash
-        wx.CallLater(0, self._grid.ForceRefresh)
+        wx.CallLater(0, lambda: self and self._grid.ForceRefresh())
         return True
 
 
-    def Reload(self, restore=False, item=None):
+    def Reload(self, force=False, restore=False, item=None):
         """
         Reloads current data grid, making a new query.
 
+        @param   force    discard changes silently
         @param   restore  restore last saved changes
         @param   item     schema item (e.g. for when name changed)
         """
-        self._OnRefresh(restore=restore, item=item)
+        self._OnRefresh(force=force, restore=restore, item=item)
 
 
-    def Export(self, opts, noclose=True):
-        """
-        Opens export panel using given options, and starts export.
-
-        @param   noclose  whether export panel should not show "close" button
-        """
+    def Export(self, opts):
+        """Opens export panel using given options, and starts export."""
         self.Freeze()
         try:
             for x in self.Children: x.Hide()
             self._export.Show()
-            self._export.Run(opts, noclose)
+            self._export.Run(opts)
             self.Layout()
         finally: self.Thaw()
 
@@ -1957,12 +2005,14 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         col_range = range(grid_data.GetNumberCols())
         [self._grid.AutoSizeColLabelSize(x) for x in col_range]
         self._grid.SetGridCursor(0, 0)
+        self._PopulateCount(reload=True)
 
 
     def _PostEvent(self, **kwargs):
         """Posts an EVT_DATA_PAGE event to parent."""
         evt = DataPageEvent(self.Id, source=self, item=self._item, **kwargs)
         wx.PostEvent(self.Parent, evt)
+        self._PopulateCount()
 
 
     def _OnChange(self, event=None, **kwargs):
@@ -2103,7 +2153,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._grid.GoToCell(0, 0)
         self._grid.Refresh()
         # Refresh scrollbars; without CallAfter wx 2.8 can crash
-        wx.CallAfter(self.Layout)
+        wx.CallAfter(lambda: self and self.Layout())
         self._OnChange()
 
 
@@ -2135,6 +2185,10 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             info, conf.Title, wx.ICON_INFORMATION
         ): return
 
+        lock = self._db.get_lock(self._category, self._item["name"])
+        if lock: return wx.MessageBox("%s, cannot commit." % lock,
+                                      conf.Title, wx.OK | wx.ICON_WARNING)
+
         logger.info("Committing %s in table %s (%s).", info,
                     grammar.quote(self._item["name"], force=True), self._db)
         if not self._grid.Table.SaveChanges(): return
@@ -2142,7 +2196,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._backup = None
         self._OnChange(updated=True)
         # Refresh cell colours; without CallLater wx 2.8 can crash
-        wx.CallLater(0, self._grid.ForceRefresh)
+        wx.CallLater(0, lambda: self and self._grid.ForceRefresh())
 
 
     def _OnRollback(self, event=None):
@@ -2155,20 +2209,21 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         self._grid.Table.UndoChanges()
         # Refresh scrollbars and colours; without CallAfter wx 2.8 can crash
-        wx.CallLater(0, lambda: (self._grid.ContainingSizer.Layout(),
-                                 self._grid.ForceRefresh()))
+        wx.CallLater(0, lambda: self and (self._grid.ContainingSizer.Layout(),
+                                          self._grid.ForceRefresh()))
         self._backup = None
         self._OnChange(updated=True)
 
 
-    def _OnRefresh(self, event=None, restore=False, item=None):
+    def _OnRefresh(self, event=None, force=False, restore=False, item=None):
         """
         Handler for refreshing grid data, asks for confirmation if changed.
 
+        @param   force    discard changes silently
         @param   restore  restore last saved changes
         @param   item     schema item (e.g. for when name changed)
         """
-        if not restore and self.IsChanged() and wx.YES != controls.YesNoMessageBox(
+        if not force and not restore and self.IsChanged() and wx.YES != controls.YesNoMessageBox(
             "There are unsaved changes (%s).\n\n"
             "Are you sure you want to discard them?" %
             self._grid.Table.GetChangedInfo(),
@@ -2205,6 +2260,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._grid.Table.ClearFilter()
         self._grid.Table.ClearSort()
         self.Layout() # React to grid size change
+        self._PopulateCount()
 
 
     def _OnGridBaseEvent(self, event):
@@ -2265,6 +2321,7 @@ class SchemaObjectPage(wx.Panel):
 
         self._db       = db
         self._category = item["type"]
+        self._hasmeta  = "meta" in item
         self._newmode  = "name" not in item
         self._editmode = self._newmode
 
@@ -2273,7 +2330,7 @@ class SchemaObjectPage(wx.Panel):
                                         **item.get("meta", {})))
             names = sum(map(list, db.schema.values()), [])
             item["meta"]["name"] = util.make_unique(item["meta"]["name"], names)
-        item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
+        item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
         self._item     = copy.deepcopy(item)
         self._original = copy.deepcopy(item)
 
@@ -2331,6 +2388,9 @@ class SchemaObjectPage(wx.Panel):
         stc.SetReadOnly(True)
         stc._toggle = "skip"
 
+        label_error = self._label_error = wx.StaticText(panel2)
+        ColourManager.Manage(label_error, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
+
         button_edit    = self._buttons["edit"]    = wx.Button(panel2, label="Edit")
         button_refresh = self._buttons["refresh"] = wx.Button(panel2, label="Refresh")
         button_test    = self._buttons["test"]    = wx.Button(panel2, label="Test")
@@ -2367,6 +2427,7 @@ class SchemaObjectPage(wx.Panel):
         panel1.Sizer.Add(categorypanel,    border=10, proportion=2, flag=wx.RIGHT | wx.GROW)
         panel2.Sizer.Add(sizer_sql_header, border=10, flag=wx.RIGHT | wx.GROW)
         panel2.Sizer.Add(stc,              border=10, proportion=1, flag=wx.RIGHT | wx.GROW)
+        panel2.Sizer.Add(label_error,      border=5,  flag=wx.TOP)
         panel2.Sizer.Add(sizer_buttons,    border=10, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
         tb.Bind(wx.EVT_TOOL, self._OnCopySQL, id=wx.ID_COPY)
@@ -2386,10 +2447,31 @@ class SchemaObjectPage(wx.Panel):
         if "sql" not in self._original and "sql" in self._item:
             self._original["sql"] = self._item["sql"]
 
-        splitter.SetMinimumPaneSize(100)
+        has_cols = self._hasmeta or self._category in ("table", "index", "view")
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
-        splitter.SplitHorizontally(panel1, panel2, splitter.Size[1] - 200)
+        size, pos = (100, splitter.Size[1] - 200) if has_cols else (30, 30)
+        if not self._hasmeta and "view" == self._category: pos = 200
+
+        for x in list(panel1.Children)[2:] if not self._hasmeta else ():
+            showntype = wx.ScrolledWindow if "index" == self._category else \
+                        wx.Notebook       if "table" == self._category else False
+            for y in x.Children:
+                y.Shown = showntype and isinstance(y, showntype)
+        if not self._hasmeta:
+            label_error.Label = "Error parsing SQL"
+            if "trigger" != self._category:
+                self._panel_columnswrapper.Parent.Shown = True
+                self._panel_columnswrapper.Shown = True
+            if "view" == self._category:
+                for x in self._ctrls["select"].Parent.Children: x.Shown = False
+        else:
+            label_error.Hide()
+
+        splitter.SetMinimumPaneSize(size)
+        splitter.SplitHorizontally(panel1, panel2, pos)
+        splitter.SashInvisible = not has_cols
         wx_accel.accelerate(self)
+        button_edit.Enabled = self._hasmeta
         def after():
             if not self: return
             if self._newmode: edit_name.SetFocus(), edit_name.SelectAll()
@@ -2439,9 +2521,10 @@ class SchemaObjectPage(wx.Panel):
         self._views  = [x["name"] for x in self._db.get_category("view").values()]
         item = self._db.get_category(self._category, self._item["name"])
         if not item: return
-        item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
+        item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
         self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
         if any(prevs[x] != getattr(self, x) for x in prevs): self._Populate()
+        self._PostEvent(modified=True)
 
 
     def RestoreBackup(self):
@@ -2475,7 +2558,7 @@ class SchemaObjectPage(wx.Panel):
     def _AssignColumnIDs(self, meta):
         """Populates table meta coluns with __id__ fields."""
         result, counts = copy.deepcopy(meta), Counter()
-        if result["__type__"] in (grammar.SQL.CREATE_TABLE, grammar.SQL.CREATE_VIEW):
+        if result.get("__type__") in (grammar.SQL.CREATE_TABLE, grammar.SQL.CREATE_VIEW):
             for c in result.get("columns", []):
                 name = c.get("name", "").lower()
                 c["__id__"] = "%s_%s" % (name, counts[name])
@@ -2501,7 +2584,7 @@ class SchemaObjectPage(wx.Panel):
                               "primary keys, and not too much data per row."
 
         nb = self._notebook_table = wx.Notebook(panel)
-        panel_columnwrapper     = self._MakeColumnsGrid(nb)
+        panel_columnwrapper = self._MakeColumnsGrid(nb)
         panel_constraintwrapper = self._MakeConstraintsGrid(nb)
 
         sizer_flags.Add(check_temp)
@@ -2510,8 +2593,9 @@ class SchemaObjectPage(wx.Panel):
         sizer_flags.Add(100, 0)
         sizer_flags.Add(check_rowid)
 
-        nb.AddPage(panel_columnwrapper,     "Columns")
-        nb.AddPage(panel_constraintwrapper, "Constraints")
+        nb.AddPage(panel_columnwrapper, "Columns")
+        if self._hasmeta: nb.AddPage(panel_constraintwrapper, "Constraints")
+        else: panel_constraintwrapper.Shown = False
 
         sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
         sizer.Add(nb, proportion=1, border=5, flag=wx.TOP | wx.GROW)
@@ -2544,7 +2628,12 @@ class SchemaObjectPage(wx.Panel):
         stc_where   = self._ctrls["where"] = controls.SQLiteTextCtrl(panel,
             size=(-1, 40),
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
-        label_where.ToolTip = "Optional WHERE-clause to create a partial index"
+        label_where.ToolTip = "Optional WHERE-clause to create a partial index, " \
+                              "on rows for which WHERE evaluates to true.\n\n" \
+                              "May contain operators, literal values, and names " \
+                              "of columns in the table being indexed. " \
+                              "May not contain subqueries, references to other tables, " \
+                              "or functions whose result might change, like random()."
 
         sizer_table.Add(label_table, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_table.Add(list_table, flag=wx.GROW)
@@ -2606,15 +2695,20 @@ class SchemaObjectPage(wx.Panel):
         stc_body   = self._ctrls["body"] = controls.SQLiteTextCtrl(panel2,
             size=(-1, 40),
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
+        label_body.MinSize = (35, -1)
         label_body.ToolTip = "Trigger body SQL, any number of " \
-                             "SELECT-INSERT-UPDATE-DELETE statements."
+                             "SELECT-INSERT-UPDATE-DELETE statements. " \
+                             "Can access OLD row reference on UPDATE and DELETE, " \
+                             "and NEW row reference on INSERT and UPDATE."
 
         label_when = wx.StaticText(panel2, label="WHEN:", name="trigger_when_label")
+        label_when.MinSize = (35, -1)
         stc_when   = self._ctrls["when"] = controls.SQLiteTextCtrl(panel2,
             size=(-1, 40), name="trigger_when",
             style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
         label_when.ToolTip = "Trigger WHEN expression, trigger executed only if WHEN is true. " \
-                             "Can access the OLD and NEW row references."
+                             "Can access OLD row reference on UPDATE and DELETE, " \
+                             "and NEW row reference on INSERT and UPDATE."
 
         sizer_table.Add(label_table, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_table.Add(list_table, flag=wx.GROW)
@@ -2666,10 +2760,11 @@ class SchemaObjectPage(wx.Panel):
 
         check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
         check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT EXISTS")
+        check_temp.ToolTip = "View will exist only for the duration of the current session"
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
         panel1, panel2 = self._MakeColumnsGrid(splitter), wx.Panel(splitter)
-        panel2.Sizer = wx.BoxSizer(wx.HORIZONTAL)
+        panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         label_body = wx.StaticText(panel2, label="Se&lect:")
         stc_body = self._ctrls["select"] = controls.SQLiteTextCtrl(panel2,
@@ -2681,7 +2776,7 @@ class SchemaObjectPage(wx.Panel):
         sizer_flags.Add(100, 0)
         sizer_flags.Add(check_exists)
 
-        panel2.Sizer.Add(label_body, border=5, flag=wx.RIGHT)
+        panel2.Sizer.Add(label_body)
         panel2.Sizer.Add(stc_body, proportion=1, flag=wx.GROW)
 
         sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
@@ -2699,7 +2794,7 @@ class SchemaObjectPage(wx.Panel):
     def _MakeColumnsGrid(self, parent):
         """Returns panel with columns header, grid and column management buttons."""
         s1, s2 = (0, wx.BORDER_STATIC) if "table" == self._category else (wx.BORDER_STATIC, 0)
-        panel = wx.ScrolledWindow(parent, style=s1)
+        panel = self._panel_columnswrapper = wx.ScrolledWindow(parent, style=s1)
         panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         panel.SetScrollRate(20, 0)
 
@@ -2724,14 +2819,28 @@ class SchemaObjectPage(wx.Panel):
             sizer_headers.Add(wx.StaticText(panel, label="Default", size=(100, -1)))
             sizer_headers.Add(sizer_columnflags, border=5, flag=wx.LEFT | wx.RIGHT)
             sizer_headers.Add(wx.StaticText(panel, label="Options", size=(50, -1)))
+            sizer_headers.GetItem(3).Window.ToolTip = \
+                "String or numeric constant, NULL, CURRENT_TIME, CURRENT_DATE, " \
+                "CURRENT_TIMESTAMP, or (constant expression)"
         elif "index" == self._category:
-            sizer_headers.Add(wx.StaticText(panel, label="Column or expression",  size=(250, -1)), border=7, flag=wx.LEFT)
+            sizer_headers.Add(wx.StaticText(panel, label="Column",  size=(250, -1)), border=7, flag=wx.LEFT)
             sizer_headers.Add(wx.StaticText(panel, label="Collate", size=( 80, -1)))
             sizer_headers.Add(wx.StaticText(panel, label="Order",   size=( 60, -1)))
+            sizer_headers.GetItem(1).Window.ToolTip = \
+                "Table column or an expression to index"
+            sizer_headers.GetItem(2).Window.ToolTip = \
+                "Ordering sequence to use for text values, defaults to the " \
+                "collating sequence defined for the table column, or BINARY"
+            sizer_headers.GetItem(3).Window.ToolTip = \
+                "Index sort order"
         elif "trigger" == self._category:
             sizer_headers.Add(wx.StaticText(panel, label="Column",  size=(200, -1)), border=7, flag=wx.LEFT)
+            sizer_headers.GetItem(1).Window.ToolTip = \
+                "Column UPDATE to trigger on"
         elif "view" == self._category:
             sizer_headers.Add(wx.StaticText(panel, label="Column",  size=(200, -1)), border=7, flag=wx.LEFT)
+            sizer_headers.GetItem(1).Window.ToolTip = \
+                "Name of the view column, if not deriving names from SELECT results"
 
         grid = self._grid_columns = wx.grid.Grid(panel_grid)
         grid.DisableDragRowSize()
@@ -2764,7 +2873,7 @@ class SchemaObjectPage(wx.Panel):
         button_add_column._toggle = "show"
         if "index" == self._category:
             button_add_column._toggle = button_add_expr._toggle = lambda: (
-                "disable" if not self._item["meta"].get("table") else "show"
+                "disable" if self._hasmeta and not self._item["meta"].get("table") else "show"
             )
         button_move_up._toggle    = lambda: "show disable" if not grid.NumberRows or grid.GridCursorRow <= 0 else "show"
         button_move_down._toggle  = lambda: "show disable" if not grid.NumberRows or grid.GridCursorRow == grid.NumberRows - 1 else "show"
@@ -2877,7 +2986,8 @@ class SchemaObjectPage(wx.Panel):
         self._ignore_change = True
         self.Freeze()
         try:
-            self._ctrls["name"].Value = meta.get("name") or ""
+            name = (meta.get("name") if self._hasmeta else data["name"]) or ""
+            self._ctrls["name"].Value = name
 
             self._sizers.clear()
             if   "table"   == data["type"]: self._PopulateTable()
@@ -2901,28 +3011,32 @@ class SchemaObjectPage(wx.Panel):
         self._ctrls["without"].Value   = bool(meta.get("without"))
 
         for i, grid in enumerate((self._grid_columns, self._grid_constraints)):
+            if i and not self._hasmeta: continue # for i, grid                
             panel = self._panel_constraints     if i else self._panel_columns
             adder = self._AddRowTableConstraint if i else self._AddRowTable
             collection = "constraints" if i else "columns"
+            items = (meta.get(collection) if self._hasmeta else
+                     self._item.get(collection)) or ()
 
             row, col = grid.GridCursorRow, grid.GridCursorCol
             if grid.NumberRows:
                 grid.SetGridCursor(-1, col)
                 grid.DeleteRows(0, grid.NumberRows)
-            grid.AppendRows(len(meta.get(collection) or ()))
+            grid.AppendRows(len(items))
 
             self._EmptyControl(panel)
-            for j, opts in enumerate(meta.get(collection) or ()):
+            for j, opts in enumerate(items):
                 adder([collection], j, opts)
             if grid.NumberRows:
                 row = min(max(0, row), grid.NumberRows - 1)
-                wx.CallLater(0, grid.SetGridCursor, row, col)
+                wx.CallLater(0, lambda: self and grid.SetGridCursor(row, col))
                 if i: wx.CallAfter(self._SizeConstraintsGrid)
             panel.Layout()
 
         lencol, lencnstr =  (len(meta.get(x) or ()) for x in ("columns", "constraints"))
-        self._notebook_table.SetPageText(0, "Columns"     if not lencol   else "Columns (%s)" % lencol)
-        self._notebook_table.SetPageText(1, "Constraints" if not lencnstr else "Constraints (%s)" % lencnstr)
+        self._notebook_table.SetPageText(0, "Columns" if not lencol else "Columns (%s)" % lencol)
+        if self._hasmeta:
+            self._notebook_table.SetPageText(1, "Constraints" if not lencnstr else "Constraints (%s)" % lencnstr)
         self._notebook_table.Layout()
 
 
@@ -2935,15 +3049,17 @@ class SchemaObjectPage(wx.Panel):
         self._ctrls["unique"].Value = bool(meta.get("unique"))
         self._ctrls["exists"].Value = bool(meta.get("exists"))
         self._ctrls["where"].SetText(meta.get("where") or "")
+        items = (meta.get("columns") if self._hasmeta \
+                 else self._item.get("columns")) or ()
 
         row, col = self._grid_columns.GridCursorRow, self._grid_columns.GridCursorCol
         if self._grid_columns.NumberRows:
             self._grid_columns.SetGridCursor(-1, col)
             self._grid_columns.DeleteRows(0, self._grid_columns.NumberRows)
-        self._grid_columns.AppendRows(len(meta.get("columns") or ()))
+        self._grid_columns.AppendRows(len(items))
 
         self._EmptyControl(self._panel_columns)
-        for i, coldata in enumerate(meta.get("columns") or ()):
+        for i, coldata in enumerate(items):
             self._AddRowIndex(["columns"], i, coldata)
         if self._grid_columns.NumberRows:
             row = min(max(0, row), self._grid_columns.NumberRows - 1)
@@ -2990,7 +3106,6 @@ class SchemaObjectPage(wx.Panel):
                 self._grid_columns.SetGridCursor(row, col)
         else:
             self._panel_splitter.Unsplit(p1)
-        self._PopulateAutoComp()
         self._panel_category.Layout()
 
 
@@ -3002,6 +3117,8 @@ class SchemaObjectPage(wx.Panel):
         if self._grid_columns.NumberRows:
             self._grid_columns.SetGridCursor(-1, col)
             self._grid_columns.DeleteRows(0, self._grid_columns.NumberRows)
+        items = (meta.get("columns") if self._hasmeta
+                 else self._item.get("columns")) or ()
 
         self._ctrls["temporary"].Value = bool(meta.get("temporary"))
         self._ctrls["exists"].Value = bool(meta.get("exists"))
@@ -3009,10 +3126,10 @@ class SchemaObjectPage(wx.Panel):
 
         self._EmptyControl(self._panel_columns)
         p1, p2 = self._panel_splitter.Children
-        if self._db.has_view_columns() and (meta.get("columns") or self._editmode):
+        if self._db.has_view_columns() and (items or self._editmode):
             self._panel_splitter.SplitHorizontally(p1, p2, self._panel_splitter.MinimumPaneSize)
-            self._grid_columns.AppendRows(len(meta.get("columns") or ()))
-            for i, coldata in enumerate(meta.get("columns") or ()):
+            self._grid_columns.AppendRows(len(items))
+            for i, coldata in enumerate(items):
                 self._AddRowView(["columns"], i, coldata)
             if self._grid_columns.NumberRows:
                 row = min(max(0, row), self._grid_columns.NumberRows - 1)
@@ -3032,6 +3149,8 @@ class SchemaObjectPage(wx.Panel):
         list_type     = wx.ComboBox(panel, choices=self._types, style=wx.CB_DROPDOWN)
         text_default  = controls.SQLiteTextCtrl(panel, traversable=True, wheelable=False)
         text_default.SetCaretLineVisible(False)
+        text_default.ToolTip = "String or numeric constant, NULL, CURRENT_TIME, " \
+                               "CURRENT_DATE, CURRENT_TIMESTAMP, or (constant expression)"
 
         check_pk      = wx.CheckBox(panel)
         check_autoinc = wx.CheckBox(panel)
@@ -3047,7 +3166,7 @@ class SchemaObjectPage(wx.Panel):
         text_name.MinSize    = (150, -1)
         list_type.MinSize    = (100, -1)
         text_default.MinSize = (100, text_name.Size[1])
-        button_open._toggle = "skip"
+        button_open._toggle = lambda: "skip" if self._hasmeta else ""
         button_open.ToolTip = "Open advanced options"
 
         text_name.Value     = col.get("name") or ""
@@ -3232,16 +3351,25 @@ class SchemaObjectPage(wx.Panel):
         tablecols = [x["name"] for x in table.get("columns") or ()]
         panel = self._panel_columns
 
-        if "name" in col:
+        if self._hasmeta and "name" in col:
             ctrl_index = wx.ComboBox(panel, choices=tablecols,
                 style=wx.CB_DROPDOWN | wx.CB_READONLY)
+            ctrl_index.ToolTip = "Table column to index"
         else:
             ctrl_index = controls.SQLiteTextCtrl(panel, traversable=True, wheelable=False)
             ctrl_index.SetCaretLineVisible(False)
+            ctrl_index.ToolTip = "May not reference other tables, or use subqueries " \
+                                 "or functions whose result might change, like random()."
         list_collate  = wx.ComboBox(panel, choices=self.COLLATE, style=wx.CB_DROPDOWN)
         list_order    = wx.ComboBox(panel, choices=self.ORDER, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+        if self._hasmeta and "name" in col:
+            list_collate.ToolTip = "Ordering sequence to use for text values, defaults to the " \
+                                   "collating sequence defined for the table column, or BINARY"
+        else:
+            list_collate.ToolTip = "Ordering sequence to use for text values, defaults to BINARY"
+        list_order.ToolTip = "Index sort order"
 
-        ctrl_index.MinSize =   (250, -1 if "name" in col else list_collate.Size[1])
+        ctrl_index.MinSize =   (250, -1 if self._hasmeta and "name" in col else list_collate.Size[1])
         list_collate.MinSize = ( 80, -1)
         list_order.MinSize =   ( 60, -1)
 
@@ -3386,6 +3514,7 @@ class SchemaObjectPage(wx.Panel):
 
     def _SizeConstraintsGrid(self):
         """Sizes constraints grid rows to fit items."""
+        if not self: return
         sizer = self._panel_constraints.Sizer
         for i in range(self._grid_constraints.NumberRows):
             self._grid_constraints.SetRowSize(i, sizer.Children[3 * i + 1].Size[1])
@@ -3424,7 +3553,8 @@ class SchemaObjectPage(wx.Panel):
             self.Freeze()
             try:
                 for n, c in vars(self).items():
-                    if n.startswith("_panel_"): c.ContainingSizer.Layout()
+                    if n.startswith("_panel_") and c.ContainingSizer:
+                        c.ContainingSizer.Layout()
             finally: self.Thaw()
         layout_panels()
         self.Layout()
@@ -3445,9 +3575,7 @@ class SchemaObjectPage(wx.Panel):
                 if not item.get("columns"): continue # for item
                 ww = [grammar.quote(c["name"]) for c in item["columns"]]
 
-                if "table" == self._category \
-                and item["name"] == self._original.get("name") \
-                or self._category in ("index", "trigger") \
+                if self._category in ("index", "trigger") \
                 and item["name"] == self._item["meta"].get("table"):
                     singlewords = ww
                 if self._category in ("trigger", "view"): subwords[myname] = ww
@@ -3458,10 +3586,8 @@ class SchemaObjectPage(wx.Panel):
         for c in self._ctrls.values():
             if not isinstance(c, controls.SQLiteTextCtrl): continue # for c
             c.AutoCompClearAdded()
-            if c is self._ctrls.get("when"):
-                for w in "OLD", "NEW": c.AutoCompAddSubWords(w, singlewords)
-            elif not words or c.IsTraversable(): c.AutoCompAddWords(singlewords)
-            elif words:
+            if singlewords and c.IsTraversable(): c.AutoCompAddWords(singlewords)
+            elif words and not c.IsTraversable():
                 c.AutoCompAddWords(words)
                 for w, ww in subwords.items(): c.AutoCompAddSubWords(w, ww)
 
@@ -3470,7 +3596,8 @@ class SchemaObjectPage(wx.Panel):
         """Populates CREATE SQL window."""
         sql, _ = grammar.generate(self._item["meta"])
         if sql is not None: self._item["sql"] = sql
-        if self._show_alter: sql = self._GetAlterSQL()
+        elif not self._hasmeta: sql = self._item["sql"]
+        if self._show_alter: sql, _ = self._GetAlterSQL()
         if sql is None: return
         scrollpos = self._ctrls["sql"].GetScrollPos(wx.VERTICAL)
         self._ctrls["sql"].SetReadOnly(False)
@@ -3481,7 +3608,8 @@ class SchemaObjectPage(wx.Panel):
 
     def _GetAlterSQL(self):
         """
-        Returns ALTER SQL for carrying out schema changes.
+        Returns ALTER SQLs for carrying out schema changes,
+        as (sql, full sql with savepoints).
         """
         if   "table"   == self._category: return self._GetAlterTableSQL()
         elif "index"   == self._category: return self._GetAlterIndexSQL()
@@ -3490,8 +3618,8 @@ class SchemaObjectPage(wx.Panel):
 
 
     def _GetAlterTableSQL(self):
-        """Returns SQL for carrying out table change."""
-        result = ""
+        """Returns SQLs for carrying out table change."""
+        result = "", ""
         if self._original["sql"] == self._item["sql"]: return result
 
         can_simple = True
@@ -3602,37 +3730,40 @@ class SchemaObjectPage(wx.Panel):
                                      if renames else (subitem["sql"], None)
                             args.setdefault(subcategory, []).append(dict(subitem, sql=sql))
 
-        result, _ = grammar.generate(args)
-        return result
+        short, _ = grammar.generate(dict(args, no_tx=True))
+        full,  _ = grammar.generate(args)
+        return short, full
 
 
     def _GetAlterIndexSQL(self):
-        """Returns SQL for carrying out index change."""
-        result = ""
+        """Returns SQLs for carrying out index change."""
+        result = "", ""
         if self._original["sql"] == self._item["sql"]: return result
 
         old, new = self._original["meta"], self._item["meta"]
         args = {"name": old["name"], "name2": new["name"],
                 "meta": new, "__type__": "ALTER INDEX"}
-        result, _ = grammar.generate(args)
-        return result
+        short, _ = grammar.generate(dict(args, no_tx=True))
+        full,  _ = grammar.generate(args)
+        return short, full
 
 
     def _GetAlterTriggerSQL(self):
-        """Returns SQL for carrying out triggre change."""
-        result = ""
+        """Returns SQLs for carrying out triggre change."""
+        result = "", ""
         if self._original["sql"] == self._item["sql"]: return result
 
         old, new = self._original["meta"], self._item["meta"]
         args = {"name": old["name"], "name2": new["name"],
                 "meta": new, "__type__": "ALTER TRIGGER"}
-        result, _ = grammar.generate(args)
-        return result
+        short, _ = grammar.generate(dict(args, no_tx=True))
+        full,  _ = grammar.generate(args)
+        return short, full
 
 
     def _GetAlterViewSQL(self):
-        """Returns SQL for carrying out view change."""
-        result = ""
+        """Returns SQLs for carrying out view change."""
+        result = "", ""
         if self._original["sql"] == self._item["sql"]: return result
 
         renames = {}
@@ -3666,8 +3797,9 @@ class SchemaObjectPage(wx.Panel):
                     sql, _ = grammar.transform(subitem["sql"], renames=renames)
                     args.setdefault(subitem["type"], []).append(dict(subitem, sql=sql))
 
-        result, _ = grammar.generate(args)
-        return result
+        short, _ = grammar.generate(dict(args, no_tx=True))
+        full,  _ = grammar.generate(args)
+        return short, full
 
 
     def _GetColumnTypes(self):
@@ -3735,7 +3867,7 @@ class SchemaObjectPage(wx.Panel):
                 {"name": "DELETE", "label": "ON DELETE", "toggle": True, "choices": self.ON_ACTION, "path": ["fk", "action"]},
                 {"name": "UPDATE", "label": "ON UPDATE", "toggle": True, "choices": self.ON_ACTION, "path": ["fk", "action"]},
                 {"name": "match",   "label": "MATCH", "toggle": True, "choices": self.MATCH,
-                 "help": "Not enforced by SQLite."},
+                 "choicesedit": True, "help": "Not enforced by SQLite."},
                 {"name": "defer",  "label": "DEFERRABLE", "toggle": True,
                  "help": "Foreign key constraint enforced on COMMIT vs immediately",
                  "children": [
@@ -3757,7 +3889,7 @@ class SchemaObjectPage(wx.Panel):
             {"name": "DELETE",  "label": "ON DELETE", "toggle": True, "choices": self.ON_ACTION, "path": ["action"]},
             {"name": "UPDATE",  "label": "ON UPDATE", "toggle": True, "choices": self.ON_ACTION, "path": ["action"]},
             {"name": "match",   "label": "MATCH", "toggle": True, "choices": self.MATCH,
-             "help": "Not enforced by SQLite."},
+             "choicesedit": True, "help": "Not enforced by SQLite."},
             {"name": "defer",   "label": "DEFERRABLE", "toggle": True,
              "help": "Foreign key constraint enforced on COMMIT vs immediately",
              "children": [
@@ -3952,6 +4084,7 @@ class SchemaObjectPage(wx.Panel):
             if count: label = "%s (%s)" % (label, count)
             self._notebook_table.SetPageText(0 if ["columns"] == path else 1, label)
         panel.Parent.ContainingSizer.Layout()
+        self._PopulateAutoComp()
         return ctrls
 
 
@@ -4171,6 +4304,7 @@ class SchemaObjectPage(wx.Panel):
                 self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
         elif ["table"] == path:
             rebuild = meta.get("columns") or "index" == self._category
+            if not rebuild: self._PopulateAutoComp()
             meta.pop("columns", None)
 
         self._Populate() if rebuild else self._PopulateSQL()
@@ -4281,6 +4415,7 @@ class SchemaObjectPage(wx.Panel):
 
     def _OnCascadeColumnUpdates(self):
         """Handler for column updates, rebuilds constraints on rename/remove."""
+        if not self: return            
         self._col_updater = None
         constraints = self._item["meta"].get("constraints") or []
         changed, renames = False, {} # {old column name: new name}
@@ -4387,7 +4522,7 @@ class SchemaObjectPage(wx.Panel):
         Handler for saving SQL to file, opens file dialog and saves content.
         """
         action, category = "CREATE", self._category.upper()
-        name = self._item["meta"].get("name") or ""
+        name = self._item["meta"].get("name") or self._item["name"]
         if self._show_alter:
             action, name = "ALTER", self._item["name"]
         filename = " ".join((action, category, name))
@@ -4450,7 +4585,7 @@ class SchemaObjectPage(wx.Panel):
                 conf.Title, wx.OK | wx.ICON_ERROR
             )
             if item:
-                item = dict(item, meta=self._AssignColumnIDs(item["meta"]))
+                item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
                 self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
 
         if not event or any(prevs[x] != getattr(self, x) for x in prevs):
@@ -4459,7 +4594,8 @@ class SchemaObjectPage(wx.Panel):
             self.Freeze()
             try:
                 for n, c in vars(self).items():
-                    if n.startswith("_panel_"): c.ContainingSizer.Layout()
+                    if n.startswith("_panel_") and c.ContainingSizer:
+                        c.ContainingSizer.Layout()
             finally: self.Thaw()
 
 
@@ -4575,25 +4711,24 @@ class SchemaObjectPage(wx.Panel):
         errors, sql = [], self._item["sql"]
         if self.IsChanged(): errors, _ = self._Validate()
         if not errors and self.IsChanged():
-            if not self._newmode: sql = self._GetAlterSQL()
+            if not self._newmode: sql, _ = self._GetAlterSQL()
             sql2 = "PRAGMA foreign_keys = off;\n\nSAVEPOINT test;\n\n" \
                    "%s;\n\nROLLBACK TO SAVEPOINT test;" % sql
             if ("table" == self._category and not self._newmode 
                 or "index" == self._category) \
             and wx.YES != controls.YesNoMessageBox(
-                "Make a full test run of the schema change without committing? "
+                "Make a full test run of the following schema change, "
+                "rolling it all back without committing? "
                 "This may take some time:\n\n%s" % sql,
-                conf.Title, wx.ICON_INFORMATION, defaultno=True
+                conf.Title, defaultno=True
             ): return
 
-            if self._db.is_locked(self._category, self._item["name"]):
-                wx.MessageBox("%s %s is currently locked, cannot test." %
-                              (self._category.capitalize(),
-                              grammar.quote(self._item["name"], force=True)),
-                              conf.Title, wx.OK | wx.ICON_WARNING)
-                return
+            lock = self._db.get_lock(*filter(bool, [self._category, self._item.get("name")]))
+            if lock: return wx.MessageBox("%s, cannot test." % lock,
+                                         conf.Title, wx.OK | wx.ICON_WARNING)
 
             logger.info("Executing test SQL:\n\n%s", sql2)
+            busy = controls.BusyPanel(self, "Testing..")
             try: self._db.executescript(sql2)
             except Exception as e:
                 logger.exception("Error executing test SQL.")
@@ -4602,6 +4737,7 @@ class SchemaObjectPage(wx.Panel):
                 try: self._fks_on and self._db.execute("PRAGMA foreign_keys = on")
                 except Exception: pass
                 errors = [util.format_exc(e)]
+            finally: busy.Close()
 
         if errors: wx.MessageBox("Errors:\n\n%s" % "\n\n".join(errors),
                                  conf.Title, wx.OK | wx.ICON_WARNING)
@@ -4621,24 +4757,23 @@ class SchemaObjectPage(wx.Panel):
                           conf.Title, wx.OK | wx.ICON_WARNING)
             return
 
-        if not self._newmode \
-        and self._db.is_locked(self._category, self._item["name"]):
-            wx.MessageBox("%s %s is currently locked, cannot alter." %
-                          (self._category.capitalize(),
-                          grammar.quote(self._item["name"], force=True)),
-                          conf.Title, wx.OK | wx.ICON_WARNING)
-            return
+        lock = self._db.get_lock(*filter(bool, [self._category, self._item.get("name")]))
+        if lock: return wx.MessageBox("%s, cannot %s." %
+                                      (lock, "create" if self._newmode else "alter"),
+                                      conf.Title, wx.OK | wx.ICON_WARNING)
 
-        sql = self._item["sql"] if self._newmode else self._GetAlterSQL()
+        sql1 = sql2 = self._item["sql"]
+        if not self._newmode: sql1, sql2 = self._GetAlterSQL()
 
         if wx.YES != controls.YesNoMessageBox(
-            "Execute the following schema change?\n\n%s" % sql.strip(),
+            "Execute the following schema change?\n\n%s" % sql1.strip(),
             conf.Title, wx.ICON_INFORMATION
         ): return
 
 
-        logger.info("Executing schema SQL:\n\n%s", sql)
-        try: self._db.executescript(sql, name="CREATE" if self._newmode else "ALTER")
+        logger.info("Executing schema SQL:\n\n%s", sql2)
+        busy = controls.BusyPanel(self, "Saving..")
+        try: self._db.executescript(sql2, name="CREATE" if self._newmode else "ALTER")
         except Exception as e:
             logger.exception("Error executing SQL.")
             try: self._db.execute("ROLLBACK")
@@ -4648,8 +4783,10 @@ class SchemaObjectPage(wx.Panel):
             msg = "Error saving changes:\n\n%s" % util.format_exc(e)
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
             return
+        finally: busy.Close()
 
-        self._item.update(name=meta2["name"], meta=self._AssignColumnIDs(meta2))
+        self._item.update(name=meta2["name"], meta=self._AssignColumnIDs(meta2),
+                          tbl_name=meta2["name" if "table" == self._category else "table"])
         self._original = copy.deepcopy(self._item)
         if self._show_alter: self._OnToggleAlterSQL()
         self._has_alter = True
@@ -4702,7 +4839,7 @@ class ExportProgressPanel(wx.Panel):
         sizer.Add(sizer_buttons, border=16, flag=wx.ALL | wx.ALIGN_RIGHT)
 
 
-    def Run(self, tasks, noclose=False):
+    def Run(self, tasks):
         """
         Run tasks.
 
@@ -4716,14 +4853,12 @@ class ExportProgressPanel(wx.Panel):
                             ?subtotals: {name: {total, ?is_total_estimated}}
                                         for subtasks,
                           }]
-        @param   noclose  whether close-button should not be shown
         """
         self.Stop()
         if isinstance(tasks, dict): tasks = [tasks]
         self._tasks = [dict(x, count=0, pending=True) for x in tasks]
         for x in self._tasks:
             if x.get("multi"): x["subtotals"] = dict(x.get("subtotals", {}))
-        self._button_close.Show(not noclose)
         self._Populate()
         self._RunNext()
 
@@ -4862,6 +4997,7 @@ class ExportProgressPanel(wx.Panel):
 
     def _RunNext(self):
         """Starts next pending task, if any."""
+        if not self: return            
         index = next((i for i, x in enumerate(self._tasks)
                       if x["pending"]), None)
         if index is None: return
@@ -4955,7 +5091,7 @@ class ExportProgressPanel(wx.Panel):
         opts["pending"] = False
 
         if self._current is None: wx.CallAfter(self._RunNext)
-        wx.CallAfter(self.Layout)
+        wx.CallAfter(lambda: self and self.Layout())
         self.Thaw()
 
 
@@ -5097,6 +5233,7 @@ class ImportDialog(wx.Dialog):
 
             pos0 = self.GetScrollPos(wx.VERTICAL)
             def fire_scroll():
+                if not self: return                    
                 pos = self.GetScrollPos(wx.VERTICAL)
                 if pos == pos0: return
                 e = wx.ScrollWinEvent(wx.wxEVT_SCROLLWIN_THUMBTRACK, pos, wx.VERTICAL)
@@ -5722,6 +5859,10 @@ class ImportDialog(wx.Dialog):
 
     def _OnImport(self, event=None):
         """Handler for clicking to start import, launches process, updates UI."""
+        lock = self._db.get_lock("table", self._table["name"])
+        if lock: return wx.MessageBox("%s, cannot import." % lock,
+                                      conf.Title, wx.OK | wx.ICON_WARNING)
+
         self._importing = True
         self._progress.clear()
         SKIP = (self._gauge, self._info_gauge, self._info_file,
@@ -5775,6 +5916,7 @@ class ImportDialog(wx.Dialog):
                 result = self._importing = False if wx.ID_YES == res else None
 
         def after():
+            if not self: return                
             if count is not None:
                 total = self._sheet["rows"]
                 if total < 0: text = util.plural("row", count)
@@ -6013,6 +6155,7 @@ class ImportDialog(wx.Dialog):
         """Handler for window size change, resizes list columns and footer."""
         event and event.Skip()
         def after():
+            if not self: return                
             self.Freeze()
             for i, l in enumerate([self._l1, self._l2]):
                 l.SetColumnWidth(0, 0)
@@ -6212,6 +6355,7 @@ class DataDialog(wx.Dialog):
 
         button_update = wx.Button(self, label="&Update",  size=(-1, 20))
         button_reset  = wx.Button(self, label="&Reset",   size=(-1, 20))
+        button_delete = wx.Button(self, label="Delete",   size=(-1, 20))
         button_copy   = wx.Button(self, label="&Copy ..", size=(-1, 20))
 
         button_ok     = wx.Button(self, label="&Accept")
@@ -6225,6 +6369,7 @@ class DataDialog(wx.Dialog):
 
         sizer_footer.Add(button_update, border=5, flag=wx.RIGHT)
         sizer_footer.Add(button_reset,  border=5, flag=wx.RIGHT)
+        sizer_footer.Add(button_delete, border=5, flag=wx.RIGHT)
         sizer_footer.Add(button_copy)
 
         sizer_buttons.Add(button_ok, border=5, flag=wx.RIGHT)
@@ -6244,7 +6389,7 @@ class DataDialog(wx.Dialog):
         button_copy.ToolTip   = "Copy row data or SQL"
         button_reset.ToolTip  = "Restore original values"
         button_cancel.ToolTip = "Close data dialog"
-        button_update.Shown = button_reset.Shown = button_ok.Shown = self._editable
+        button_update.Shown = button_reset.Shown = button_delete.Shown = button_ok.Shown = self._editable
         panel.SetScrollRate(0, 20)
         self.SetEscapeId(wx.CANCEL)
 
@@ -6253,6 +6398,7 @@ class DataDialog(wx.Dialog):
         self.Bind(wx.EVT_BUTTON, self._OnUpdate, button_update)
         self.Bind(wx.EVT_BUTTON, self._OnCopy,   button_copy)
         self.Bind(wx.EVT_BUTTON, self._OnReset,  button_reset)
+        self.Bind(wx.EVT_BUTTON, self._OnDelete, button_delete)
         self.Bind(wx.EVT_BUTTON, self._OnAccept, button_ok)
         self.Bind(wx.EVT_BUTTON, self._OnClose,  button_cancel)
         self.Bind(wx.EVT_CLOSE,  self._OnClose)
@@ -6266,7 +6412,7 @@ class DataDialog(wx.Dialog):
         self.CenterOnParent()
 
         wx_accel.accelerate(self)
-        wx.CallLater(0, self._edits.values()[0].SetFocus)
+        wx.CallLater(0, lambda: self and self._edits.values()[0].SetFocus())
 
 
     def _Populate(self):
@@ -6367,6 +6513,17 @@ class DataDialog(wx.Dialog):
         self._OnClose()
 
 
+    def _OnDelete(self, event=None):
+        """Handler for deleting the row, confirms choice."""
+        if wx.YES != controls.YesNoMessageBox(
+            "Are you sure you want to delete this row?", conf.Title,
+            wx.ICON_INFORMATION, defaultno=True
+        ): return
+        
+        wx.PostEvent(self.Parent, GridBaseEvent(-1, delete=True, rows=[self._row]))
+        self._OnClose()    
+
+
     def _OnUpdate(self, event=None):
         """Handler for updating grid."""
         for col, coldata in enumerate(self._columns):
@@ -6395,12 +6552,6 @@ class DataDialog(wx.Dialog):
     def _OnClose(self, event=None):
         """Handler for closing dialog."""
         wx.CallAfter(self.EndModal, wx.CANCEL)
-
-
-    def _PostEvent(self, **kwargs):
-        """Posts an EVT_IMPORT event to parent."""
-        evt = ImportEvent(self.Id, table=self._table["name"], **kwargs)
-        wx.PostEvent(self.Parent, evt)
 
 
     def _OnOptions(self, col, event=None):
@@ -6523,7 +6674,7 @@ class HistoryDialog(wx.Dialog):
         info   = self._info = wx.StaticText(self)
         search = self._search = controls.HintedTextCtrl(self, "Filter list")
         grid   = self._grid = wx.grid.Grid(self)
-        button = wx.Button(self, label="OK")
+        button = wx.Button(self, label="Close")
 
         sizer_top.Add(info, flag=wx.ALIGN_CENTER_VERTICAL)
         sizer_top.AddStretchSpacer()
@@ -6565,7 +6716,7 @@ class HistoryDialog(wx.Dialog):
         self.CenterOnParent()
         self.MinSize = (400, 400)
         grid.SetFocus()
-        wx.CallLater(0, grid.GoToCell, grid.NumberRows - 1, 0)
+        wx.CallLater(0, lambda: self and grid.GoToCell(grid.NumberRows - 1, 0))
 
 
     def _Convert(self, x):
@@ -6589,6 +6740,7 @@ class HistoryDialog(wx.Dialog):
         if search == self._filter: return
 
         def do_filter(search):
+            if not self: return                
             self._filter_timer = None
             if search != self._filter: return
             self._Populate()

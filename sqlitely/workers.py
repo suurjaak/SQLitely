@@ -77,7 +77,7 @@ class WorkerThread(threading.Thread):
         Signals to stop the currently ongoing work, if any. Obtained results
         will be posted back, unless drop is false.
         """
-        self._is_working = drop
+        self._is_working = False
         self._drop_results = drop
 
 
@@ -107,7 +107,9 @@ class WorkerThread(threading.Thread):
             except Exception as e:
                 if self._is_running: logger.exception("Error running %s.", func)
                 error = util.format_exc(e)
-            if self._drop_results: continue # while self._is_running
+            if self._drop_results:
+                self._is_working = False
+                continue # while self._is_running
 
             data = {"callable": func}
             if error: data = {"callable": func, "error": error}
@@ -410,8 +412,8 @@ class AnalyzerThread(WorkerThread):
             try:
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                pargs = dict(stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                             startupinfo=startupinfo)
+                pargs = dict(stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, startupinfo=startupinfo)
                 paths = [path]
                 if filesize and "nt" == os.name and isinstance(path, unicode):
                     paths.append(util.shortpath(path))
@@ -454,7 +456,9 @@ class AnalyzerThread(WorkerThread):
             if not rows and not error and self._is_working:
                 error = "Database is empty."
 
-            if self._drop_results: continue # while self._is_running
+            if self._drop_results:
+                self._is_working = False
+                continue # while self._is_running
             if error:
                 self.postback({"error": error})
             else:
@@ -473,7 +477,6 @@ class AnalyzerThread(WorkerThread):
                                  if "index" in item else None
                     item["size_total"] = item["size"] + (size_index or 0)
                     if size_index is not None: item["size_index"] = size_index
-
 
                 self.postback({"data": data})
             self._is_working = False
@@ -513,7 +516,9 @@ class ChecksumThread(WorkerThread):
                     logger.exception("Error calculating checksum for %s.", path)
                     error = util.format_exc(e)
 
-            if self._drop_results: continue # while self._is_running
+            if self._drop_results:
+                self._is_working = False
+                continue # while self._is_running
             if error: self.postback({"error": error})
             elif self._is_working:
                 self.postback({"sha1": sha1.hexdigest(), "md5": md5.hexdigest()})

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.11.2019
+@modified    25.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -463,6 +463,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         self.consumers = set() # Registered objects using this database
         # {category: {name.lower(): set(lock key, )}}
         self.locks = defaultdict(lambda: defaultdict(set))
+        self.locklabels = {} # {lock key: label}
         # {"table|index|view|trigger":
         #   {name:
         #     {name: str, sql: str, ?table: str, ?columns: [], ?count: int,
@@ -603,16 +604,24 @@ WARNING: misuse can easily result in a corrupt database file.""",
                or any(x.values() for x in self.locks.values())
 
 
-    def lock(self, category, name, key):
-        """Locks a schema object for altering or deleting."""
-        category, name = category.lower(), name.lower()
+    def lock(self, category, name, key, label=None):
+        """
+        Locks a schema object for altering or deleting.
+
+        @param   category  x
+        @param   key       any hashable to identify lock by
+        @param   label     an informational label for lock
+        """
+        category, name = (x.lower() if x else x for x in (category, name))
         self.locks[category][name].add(key)
+        if label: self.locklabels[key] = label
 
 
     def unlock(self, category, name, key):
         """Unlocks a schema object for altering or deleting."""
-        category, name = category.lower(), name.lower()
+        category, name = (x.lower() if x else x for x in (category, name))
         self.locks[category][name].discard(key)
+        self.locklabels.pop(key, None)
         if not self.locks[category][name]: self.locks[category].pop(name)
         if not self.locks[category]:       self.locks.pop(category)
 
@@ -625,6 +634,63 @@ WARNING: misuse can easily result in a corrupt database file.""",
         category, name = (x.lower() if x else x for x in (category, name))
         return self.locks[category].get(name) if name and category in self.locks \
                else self.locks.get(category) if not name and category else self.locks
+
+
+    def get_lock(self, *args, **kwargs):
+        """
+        Returns user-friendly information on current lock status, as 
+        "Database is currently locked (statistics analysis)" or
+        "Table "foo" is currently locked" if querying category and name.
+
+        @param   *(?category, ?name) or **{category, name} for specific lock
+                 *(None) or **{category=None} for global lock
+                 no arguments for any lock
+        """
+        if "category" not in kwargs and args: kwargs["category"]  = args[0]
+        if "name" not in kwargs and len(args) > 1: kwargs["name"] = args[1]
+        for k, v in kwargs.items():
+            if isinstance(v, basestring): kwargs[k] = v.lower()
+        result, keys = "", ()
+
+        if kwargs.get("category") and kwargs.get("name"):
+            category, name = kwargs["category"], kwargs["name"]
+            keys = self.locks.get(category, {}).get(name)
+            if keys: result = "%s %s is currently locked" % \
+                              (category.capitalize(), grammar.quote(name, force=True))
+        elif kwargs.get("category"): # Check for lock on any item in category
+            category = kwargs["category"]
+            keys = set(y for x in self.locks.get(category, {}).values() for y in x)
+            if keys: result = "%s are currently locked" % util.plural(category.capitalize())
+
+        if not result: # Check for global lock
+            keys = self.locks.get(None, {}).get(None)
+            if keys: result = "Database is currently locked"
+        if not kwargs and not result and self.locks: # No args: check for any lock
+            result, keys = "Database is currently locked", self.locklabels.keys()
+
+        if result and keys:
+            labels = filter(bool, map(self.locklabels.get, keys))
+            if labels: result += " (%s)" % ", ".join(sorted(labels))
+        return result
+
+
+    def get_locks(self):
+        """
+        Returns user-friendly information on all current locks, as 
+        ["global lock (statistics analysis)", "table "MyTable" (export)", ].
+        """
+        result = []
+        for category in sorted(self.locks):
+            for name, keys in sorted(self.locks[category].items()):
+                t, labels = "", filter(bool, map(self.locklabels.get, keys))
+                if category and name:
+                    name = self.schema.get(category, {}).get(name, {}).get("name", name)
+                    t = "%s %s" % (category, grammar.quote(name, force=True))
+                elif category: t = util.plural(category)
+                else: t = "global lock"
+                if labels: t += " (%s)" % ", ".join(sorted(labels))
+                result.append(t)
+        return result
 
 
     def get_rowid(self, table):
@@ -775,8 +841,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 # Retrieve metainfo from PRAGMA
                 if mycategory in ("table", "view") and opts0 and opts["sql0"] == opts0["sql0"]:
                     opts["columns"] = opts0.get("columns") or []
-                elif mycategory in ("table", "view"):
-                    sql = "PRAGMA table_info(%s)" % grammar.quote(myname)
+                elif mycategory in ("table", "index", "view"):
+                    pragma = "index_info" if "index" == mycategory else "table_info"
+                    sql = "PRAGMA %s(%s)" % (pragma, grammar.quote(myname))
                     try:
                         rows = self.execute(sql, log=False).fetchall()
                     except Exception:
@@ -786,11 +853,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     else:
                         opts["columns"] = []
                         for row in rows:
-                            col = {"name": row["name"], "type": row["type"].upper()}
-                            if row["dflt_value"] is not None:
+                            col = {"name": row["name"]}
+                            if "type" in row: col["type"] = row["type"].upper()
+                            if row.get("dflt_value") is not None:
                                 col["default"] = row["dflt_value"]
-                            if row["notnull"]: col["notnull"] = {}
-                            if row["pk"]:      col["pk"]      = {}
+                            if row.get("notnull"): col["notnull"] = {}
+                            if row.get("pk"):      col["pk"]      = {}
                             opts["columns"].append(col)
 
                 # Parse metainfo from SQL
@@ -886,10 +954,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
                          "trigger": ["table", "view"],
                          "view":    ["table", "view", "trigger"]}
         item = self.get_category(category, name)
-        if not item or category not in SUBCATEGORIES: return result
+        if not item or category not in SUBCATEGORIES or "meta" not in item:
+            return result
 
         for subcategory in SUBCATEGORIES.get(category, []):
             for subname, subitem in self.schema[subcategory].items():
+                if "meta" not in subitem: continue # for subname, subitem                    
                 is_assoc = not util.lccmp(subitem["meta"].get("table", ""), name) \
                            or not util.lccmp(item["meta"].get("table", ""), subname)
                 is_related = name in subitem["meta"]["__tables__"] \
@@ -916,7 +986,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         def get_fks(item):
             cc = [c for c in item["columns"] if "fk" in c] + [
                 dict(name=c["columns"], fk=c)
-                for c in item["meta"].get("constraints", [])
+                for c in item.get("meta", {}).get("constraints", [])
                 if grammar.SQL.FOREIGN_KEY == c["type"]
             ]
             return [dict(name=util.tuplefy(c["name"]), table=CaselessDict(
@@ -990,7 +1060,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
                        if transform and x in transform}
                 if not opts.get("meta") or kws or indent != "  ":
                     sql, err = grammar.transform(sql, indent=indent, **kws)
-                    if err: raise Exception(err)
+                    if err: 
+                        sql = opts["sql"]
+                        # raise Exception(err) TODO use or lose
                 sqls.setdefault(category, []).append(sql)
 
         return "\n\n".join("\n\n".join(v + ";" for v in vv) for vv in sqls.values())

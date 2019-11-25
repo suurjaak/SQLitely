@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    19.11.2019
+@modified    25.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -458,19 +458,22 @@ class FormDialog(wx.Dialog):
         level, fpath = len(path), path + (field["name"], )
 
         col = 0
-        if field.get("toggle") and self._editmode:
-            toggle = wx.CheckBox(parent, label=field["label"] if "label" in field else field["name"])
+        if field.get("toggle"):
+            toggle = wx.CheckBox(parent)
             if field.get("help"): toggle.ToolTip = field["help"]
-            sizer.Add(toggle, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
+            if self._editmode:
+                toggle.Label = label=field["label"] if "label" in field else field["name"]
+                sizer.Add(toggle, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
+            else: # Show ordinary label in view mode, checkbox goes very gray
+                label = wx.StaticText(parent, label=field["label"] if "label" in field else field["name"])
+                if field.get("help"): label.ToolTip = field["help"]
+                mysizer = wx.BoxSizer(wx.HORIZONTAL)
+                mysizer.Add(toggle, border=5, flag=wx.RIGHT)
+                mysizer.Add(label)
+                sizer.Add(mysizer, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
             self._comps[fpath].append(toggle)
             self._toggles[tuple(field.get("path") or fpath)] = toggle
             self._BindHandler(self._OnToggleField, toggle, field, path, toggle)
-            col += 2
-        elif field.get("toggle"):
-            # Show ordinary label in view mode, checkbox goes very gray
-            label = wx.StaticText(parent, label=field["label"] if "label" in field else field["name"])
-            if field.get("help"): label.ToolTip = field["help"]
-            sizer.Add(label, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
             col += 2
 
         if callback: callback(self, field, parent, self._data)
@@ -594,7 +597,7 @@ class FormDialog(wx.Dialog):
                 opts = OPTS[prop["type"]]
                 bmp = wx.ArtProvider.GetBitmap(opts["bmp"], wx.ART_TOOLBAR, (16, 16))
                 tb.SetToolBitmapSize(bmp.Size)
-                tb.AddLabelTool(opts["id"], "", bitmap=bmp, shortHelp=prop.get("help", ""))
+                tb.AddTool(opts["id"], "", bmp, shortHelp=prop.get("help", ""))
                 tb.Bind(wx.EVT_TOOL, functools.partial(opts["handler"], field, path), id=opts["id"])
             tb.Realize()
             ctrl.SetName(accname)
@@ -622,8 +625,16 @@ class FormDialog(wx.Dialog):
                     ctrl.Wheelable   = False
                     ctrl.SetCaretLineVisible(False)
             elif bool is field.get("type"):
-                ctrl = wx.CheckBox(parent, label=label) if self._editmode \
-                       else wx.StaticText(parent, label=label)
+                if self._editmode:
+                    ctrl = wx.CheckBox(parent, label=label)
+                else: # Show ordinary label in view mode, checkbox goes very gray
+                    myctrl = wx.CheckBox(parent)
+                    mylabel = wx.StaticText(parent, label=label)
+                    ctrl = wx.BoxSizer(wx.HORIZONTAL)
+                    ctrl.Add(myctrl, border=5, flag=wx.RIGHT)
+                    ctrl.Add(mylabel)
+                    self._comps[fpath].append(myctrl)
+                    if field.get("help"): myctrl.ToolTip = field["help"]
             elif "choices" in field:
                 style = wx.CB_DROPDOWN | (0 if field.get("choicesedit") else wx.CB_READONLY)
                 ctrl = wx.ComboBox(parent, style=style)
@@ -631,7 +642,8 @@ class FormDialog(wx.Dialog):
                 ctrl = wx.TextCtrl(parent)
 
             result.append(ctrl)
-            self._BindHandler(self._OnChange, ctrl, field, path)
+            if isinstance(ctrl, wx.Control):
+                self._BindHandler(self._OnChange, ctrl, field, path)
 
         for i, x in enumerate(result):
             if not isinstance(x, wx.Window): continue # for i, x
@@ -883,6 +895,7 @@ class HintedTextCtrl(wx.TextCtrl):
         """Handler for system colour change, updates text colour."""
         event.Skip()
         def after():
+            if not self: return                
             colour = self._hint_colour if self._hint_on else self._text_colour
             self.SetForegroundColour(colour)
         wx.CallAfter(after)
@@ -2013,8 +2026,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         class HackEvent(object): # UltimateListCtrl hack to cancel drag.
             def __init__(self, pos=wx.Point()): self._position = pos
             def GetPosition(self): return self._position
-        try: wx.CallAfter(self.Children[0].DragFinish, HackEvent())
-        except: raise
+        wx.CallAfter(lambda: self and self.Children[0].DragFinish(HackEvent()))
 
 
     def _CreateImageList(self):
@@ -2063,6 +2075,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         self.SetItemTextColour(0, self.ForegroundColour)
 
         def resize():
+            if not self: return                
             w = sum((self.GetColumnWidth(i) for i in range(1, len(self._columns))), 0)
             width = self.Size[0] - w - 5 # Space for padding
             if self.GetScrollRange(wx.VERTICAL) > 1:
@@ -2356,7 +2369,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     def AutoCompClearAdded(self):
         """Clears words added in AutoCompAddWords and AutoCompAddSubWords."""
         self.autocomps_added &= set(["sqlite_master"])
-        del self.autocomps_total[:]
+        self.autocomps_total = self.KEYWORDS[:]
         self.autocomps_subwords.clear()
 
 
@@ -2596,7 +2609,7 @@ class TabbedHtmlWindow(wx.Panel):
                 tab["scrollpos"][i] = ratio * self.GetScrollRange(orient)
             # Execute scroll later as something resets it after this handler
             try:
-                wx.CallLater(50, lambda:
+                wx.CallLater(50, lambda: self and
                              self.Scroll(*tab["scrollpos"]) if self else None)
             except Exception:
                 pass # CallLater fails if not called from the main thread
@@ -2646,6 +2659,7 @@ class TabbedHtmlWindow(wx.Panel):
         if 1 == pagecount: event.Veto() # Only page: reuse
 
         def after():
+            if not self: return                
             self._tabs.remove(tab)
             if 1 == pagecount: # Was the only page, reuse as default
                 nb.SetPageText(0, "")
