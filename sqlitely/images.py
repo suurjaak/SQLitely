@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.11.2019
+@modified    26.11.2019
 ------------------------------------------------------------------------------
 """
 try:
@@ -1756,6 +1756,17 @@ PageSearch = PyEmbeddedImage(
     "3sW38LPTC/jW4/u7PfMv/nTBPU8hGtlJjO3cBZtKUQDtc37wUb2yKNX/7dj7KdcjgI5qWC+t"
     "0nUb+O4z9+PbnzrY/ThtP7979ZI7+3oRV5Y3aD4a1Iatb+OEtNNokKGTHl52VZtC+8907bvd"
     "bgYmZ6gIP8vm96bw2SMLeOqxhc69/wd0rhV4d9yO5gAAAABJRU5ErkJggg=="
+)
+
+
+"""Toolbar icon for case-insensitive toggle button in data grids."""
+ToolbarCase = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA8UlEQVQ4y+3SMUoDUAzG8V9a"
+    "dRLqItRBC+Lg4A0cRFCX4uYiCJ1cvYCLZxCkJxBRJw8h4t5BF0HcnUWHuKQgbQdB3QyE9/Il"
+    "+fPyCP82ZhHRj4j+d+unRpo7eMdSRHQy87n0NZx8Kb3OzEtojAC3cI/pug9tH4+ZuYeHik0C"
+    "bOCuIBtDMTOPM/M4IrYLPjMGiIhlfKCFFyyWJiLaEXGOXo09M+kFXaziDIdV1K3cKQaZeYBB"
+    "5VqjgB30MnM9M9dxWxqsYA4L2MRsRLS/zn6F5zrnsV3xUDvCU/kubnDxO3szIW6UN/H2U0Cz"
+    "fr2J1z9Z/U+ezzpfbRKKFAAAAABJRU5ErkJggg=="
 )
 
 
