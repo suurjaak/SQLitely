@@ -22,7 +22,7 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev217"
+Version = "1.0.dev218"
 VersionDate = "26.11.2019"
 
 if getattr(sys, "frozen", False):
@@ -44,8 +44,9 @@ ConfigFile = "%s.ini" % os.path.join(EtcDirectory, Title.lower())
 FileDirectives = ["ConsoleHistoryCommands", "DBFiles", "DBSort",
     "LastActivePage", "LastSearchResults", "LastSelectedFiles",
     "LastUpdateCheck", "RecentFiles", "SearchHistory", "SearchInMeta",
-    "SearchInData", "SearchUseNewTab", "SQLWindowTexts", "TrayIconEnabled",
-    "UpdateCheckAutomatic", "WindowIconized", "WindowPosition", "WindowSize",
+    "SearchInData", "SearchUseNewTab", "SearchCaseSensitive", "SQLWindowTexts",
+    "TrayIconEnabled", "UpdateCheckAutomatic",
+    "WindowIconized", "WindowPosition", "WindowSize",
 ]
 """List of user-modifiable attributes, saved if changed from default."""
 OptionalFileDirectives = [
@@ -110,6 +111,9 @@ SearchHistory = []
 
 """Whether to create a new tab for each search or reuse current."""
 SearchUseNewTab = True
+
+"""Whether to do case-sensitive search."""
+SearchCaseSensitive = False
 
 """Whether to search in database CREATE SQL."""
 SearchInMeta = False

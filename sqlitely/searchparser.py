@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.11.2019
+@modified    26.11.2019
 """
 import calendar
 import collections
@@ -52,7 +52,7 @@ ALLWORDCHARS = re.sub("[\x00-\x1f\x7f-\xa0]", "", u"".join(
 ))
 ALLCHARS = ALLWORDCHARS + string.whitespace
 WORDCHARS = ALLWORDCHARS.replace("(", "").replace(")", "").replace("\"", "")
-ESCAPE_CHAR = "\\" # Character used to escape SQLite special characters like _%
+ESCAPE_LIKE = "\\" # Character used to escape SQLite LIKE special characters _%
 
 
 class SearchQueryParser(object):
@@ -107,10 +107,11 @@ class SearchQueryParser(object):
             self._grammar = query
 
 
-    def Parse(self, query, item=None):
+    def Parse(self, query, case=False, item=None):
         """
         Parses the query string and returns (sql, sql params, words).
 
+        @param   case  whether search is case-sensitive
         @param   item  if set, search is performed on all the fields of this
                        specific table or view
                        {"name": "Item name", "columns": [{"name", "pk", }, ]}
@@ -119,7 +120,7 @@ class SearchQueryParser(object):
         """
         words = [] # All encountered text words and quoted phrases
         keywords = collections.defaultdict(list) # {"table": [], "column": [], ..}
-        params = {} # Parameters for SQL query {"column_like0": "%word%", ..}
+        params = {} # Parameters for SQL query {"like0": "%word%", ..}
 
         try:
             parse_results = self._grammar.parseString(query, parseAll=True)
@@ -132,16 +133,16 @@ class SearchQueryParser(object):
                 if self.PATTERN_KEYWORD.match(word):
                     _, negation, key, value, _ = self.PATTERN_KEYWORD.split(word)
                     key = negation + key
-                    keywords[key.lower()].append(value.lower())
+                    keywords[key.lower()].append(value if case else value.lower())
                     split_words.remove(word)
             try:
                 parse_results = ParseResults(split_words)
             except NameError: # pyparsing.ParseResults not available
                 parse_results = split_words
 
-        words, keywords = self._parseWords(parse_results, words, keywords)
-        result, params = self._makeSQL(parse_results, params, keywords, item)
-        match_kw = lambda k, x: match_words(x["name"], keywords[k], any)
+        words, keywords = self._parseWords(parse_results, words, keywords, case)
+        result, params = self._makeSQL(parse_results, params, keywords, case, item)
+        match_kw = lambda k, x: match_words(x["name"], keywords[k], any, case)
         if item:
             skip_item = False
             for kw in keywords:
@@ -170,7 +171,7 @@ class SearchQueryParser(object):
         return result, params, words, keywords
 
 
-    def _parseWords(self, parseresult, words, keywords, parent_name=None):
+    def _parseWords(self, parseresult, words, keywords, case=False, parent_name=None):
         """Populates the words and keywords collections."""
         if isinstance(parseresult, basestring):
             words.append(parseresult if "QUOTES" != parent_name else (parseresult, ))
@@ -180,7 +181,8 @@ class SearchQueryParser(object):
         name = hasattr(parseresult, "getName") and parseresult.getName()
         elements, negation = parseresult, ("NOT" == name)
         if "KEYWORD" == name:
-            key, word = (x.lower() for x in elements[0].split(":", 1))
+            key, word = elements[0].split(":", 1)
+            key, word = key.lower(), (word if case else word.lower())
             if key in ["table",  "-table",  "view", "-view",
                        "column", "-column", "date", "-date"]:
                 if getattr(elements, "QUOTES", None): word = (word, )
@@ -194,21 +196,22 @@ class SearchQueryParser(object):
         elif "QUOTES" == name:
             elements = flatten(elements)
         mywords = [] if negation else words # No words from negations
-        for elem in elements: self._parseWords(elem, mywords, keywords, name)
+        for elem in elements: self._parseWords(elem, mywords, keywords, case, name)
         return words, keywords
 
 
-    def _makeSQL(self, parseresult, params, keywords, item, parent_name=None):
+    def _makeSQL(self, parseresult, params, keywords, case, item, parent_name=None):
         """
         Returns the ParseResults item as an SQL string,
         appending parameter values to params.
         """
         result = ""
         if not item: return result, params
-        match_kw = lambda k, x: match_words(x["name"], keywords[k], any)
+        match_kw = lambda k, x: match_words(x["name"], keywords[k], any, case)
 
         if isinstance(parseresult, basestring):
-            safe = escape(parseresult, ("" if "QUOTES" == parent_name else "*"))
+            op, wild = ("GLOB", "*") if case else ("LIKE", "%")
+            safe = escape(parseresult, "QUOTES" == parent_name)
 
             i = len(params)
             for col in item["columns"]:
@@ -218,14 +221,14 @@ class SearchQueryParser(object):
 
                 cname = grammar.quote(col["name"])
                 if "notnull" not in col: cname = "COALESCE(%s, '')" % cname
-                result_col = "%s LIKE :column_like%s" % (cname, i)
-                if len(safe) > len(parseresult):
-                    result_col += " ESCAPE '%s'" % ESCAPE_CHAR
+                result_col = "%s %s :like%s" % (cname, op, i)
+                if not case and len(safe) > len(parseresult):
+                    result_col += " ESCAPE '%s'" % ESCAPE_LIKE
                 result += (" OR " if result else "") + result_col
             if not result: return "1 = 0", params # No matching columns
 
             if len(item["columns"]) > 1: result = "(%s)" % result
-            params["column_like%s" % i] = "%" + safe + "%"
+            params["like%s" % i] = wild + safe + wild
         else:
             elements = parseresult
             name = hasattr(parseresult, "getName") and parseresult.getName()
@@ -238,7 +241,7 @@ class SearchQueryParser(object):
                     elements = elements[1:] # Drop the optional "-" in front
             elif "QUOTES" == name:
                 elements = flatten(elements)
-            parseds = [self._makeSQL(x, params, keywords, item, name)[0]
+            parseds = [self._makeSQL(x, params, keywords, case, item, name)[0]
                        for x in elements]
             glue = " OR " if name in ("OR_OPERAND", "OR_EXPRESSION") else " AND "
             result, count = join_strings(parseds, glue)
@@ -345,15 +348,21 @@ def flatten(items):
     return result
 
 
-def escape(item, wildcards=""):
+def escape(item, op="LIKE", exact=False):
     """
-    Escapes special SQLite characters _% in item.
+    Prepares string as parameter for SQLite LIKE/GLOB operator.
 
-    @param   wildcards  characters to replace with SQL wildcard %
+    @param   op         target SQL operator, "LIKE" or "GLOB"
+    @param   exact      whether to do exact match, or to escape
+                        LIKE/GLOB special characters %_ and *?
+    @param   wildcards  characters to replace with SQL LIKE wildcard %
     """
-    result = item.replace("%", ESCAPE_CHAR + "%").replace("_", ESCAPE_CHAR + "_")
-    if wildcards:
-        result = "".join(result.replace(c, "%") for c in wildcards)
+    if "GLOB" == op: # Replace GLOB specials ?[ with single-char classes [?] [[]
+        result = item.replace("[", "[[]").replace("?", "[?]")
+        if exact: result = result.replace("*", "[*]")
+    else: # Escape LIKE specials %_ with \% \_
+        result = item.replace("%", ESCAPE_LIKE + "%").replace("_", ESCAPE_LIKE + "_")
+        if exact: result = result.replace("*", "%") # Swap user-entered * with %
     return result
 
 
@@ -368,17 +377,18 @@ def join_strings(strings, glue=" AND "):
     return glue.join(strings), len(strings)
 
 
-def match_words(text, words, when=all):
+def match_words(text, words, when=all, case=False):
     """
     Returns whether all words match given text.
 
     @param   words  [string matched as regex, (string matched as-is), ]
     @param   when   truth function to use, like all or any
+    @param   case   whether match is case-sensitive
     """
     words_re = [x if isinstance(w, tuple) else x.replace(r"\*", ".*")
                 for w in words for x in [re.escape(flatten(w)[0])]]
-    text_lower = text.lower()
-    return when(re.search(y, text_lower) for y in words_re)
+    text_search, flags = (text, 0) if case else (text.lower(), re.I)
+    return when(re.search(y, text_search, flags) for y in words_re)
 
 
 
@@ -409,14 +419,14 @@ def test():
     loglines = [] # Cached trace lines
     def makeSQLLogger(func):
         level = [0] # List as workaround: enclosing scope cannot be reassigned
-        def inner(parseresult, params, keywords, item=None, parent_name=None):
+        def inner(parseresult, params, keywords, case=False, item=None, parent_name=None):
             txt = "%s_makeSQL(<%s> %s, parent_name=%s)" % \
                   ("  " * level[0], parseresult.__class__.__name__, item, parent_name)
             if hasattr(parseresult, "getName"):
                 txt += ", name=%s" % parseresult.getName()
             loglines.append(txt)
             level[0] += 1
-            result = func(parseresult, params, keywords, item, parent_name)
+            result = func(parseresult, params, keywords, case, item, parent_name)
             level[0] -= 1
             loglines.append("%s = %s." % (txt, result))
             return result

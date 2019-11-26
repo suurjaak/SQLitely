@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.11.2019
+@modified    26.11.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -507,12 +507,13 @@ HTML template for search result of data row; HTML table row.
 @param   count            search result index
 @param   keywords         {"column": [], ..}
 @param   pattern_replace  regex for matching search words
+@param   search           {?case}
 """
 SEARCH_ROW_DATA_HTML = """<%
 from sqlitely import conf, searchparser, templates
 
-match_kw = lambda k, x: searchparser.match_words(x["name"], keywords[k], any)
-wrap_b = lambda x: "<b>%s</b>" % x.group(0)
+match_kw = lambda k, x: searchparser.match_words(x["name"], keywords[k], any, search.get("case"))
+wrap_b   = lambda x: "<b>%s</b>" % x.group(0)
 %>
 <tr>
 <td align="right" valign="top">
@@ -715,7 +716,7 @@ except ImportError:
     </td>
     <td bgcolor="{{ conf.BgColour }}">
       <br /><br />
-      Row is matched if for all words a match is found in at least one column.
+      Row is matched if each word finds a match in at least one column.
       <br />
     </td>
   </tr>
@@ -729,7 +730,7 @@ except ImportError:
       <br /><br />
       Use quotes (<font color="{{ conf.HelpCodeColour }}"><code>"</code></font>) to search for
       an exact phrase or word. Quoted text is searched exactly as entered,
-      leaving whitespace as-is and ignoring any wildcard characters.
+      leaving empty space as-is and ignoring any wildcard characters.
       <br />
     </td>
   </tr>
@@ -758,7 +759,7 @@ except ImportError:
     <td bgcolor="{{ conf.BgColour }}">
       <br /><br />
       Surround words with round brackets to group them for <code>OR</code>
-      queries or for excluding from results.
+      queries, or for excluding from results.
       <br />
     </td>
   </tr>
@@ -772,7 +773,7 @@ except ImportError:
       <br /><br />
       Use an asterisk (<font color="{{ conf.HelpCodeColour }}"><code>*</code></font>) to make a
       wildcard query: the wildcard will match any text between its front and
-      rear characters (including other words and whitespace).
+      rear characters (including empty space and other words).
       <br />
     </td>
   </tr>
@@ -890,7 +891,7 @@ except ImportError:
   </ul>
 
   <br /><br />
-  All search texts and keywords are case-insensitive. <br />
+  All search texts and keywords are case-insensitive by default. <br />
   Keywords are global, even when in bracketed (grouped words). <br />
   Metadata search supports only <code>table:</code> and <code>view:</code> keywords.
 

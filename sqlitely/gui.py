@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.11.2019
+@modified    26.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2346,15 +2346,19 @@ class DatabasePage(wx.Panel):
         tb.AddSeparator()
         tb.AddCheckTool(wx.ID_NEW, "Tabs", images.ToolbarTabs.Bitmap,
             shortHelp="New tab for each search  (Alt-N)", longHelp="")
+        tb.AddCheckTool(wx.ID_CONVERT, "", images.ToolbarCase.Bitmap,
+            shortHelp="Case-sensitive search", longHelp="")
         tb.AddTool(wx.ID_STOP, "", images.ToolbarStopped.Bitmap,
             shortHelp="Stop current search, if any")
         tb.Realize()
-        tb.ToggleTool(wx.ID_INDEX, conf.SearchInMeta)
-        tb.ToggleTool(wx.ID_STATIC, conf.SearchInData)
-        tb.ToggleTool(wx.ID_NEW, conf.SearchUseNewTab)
+        tb.ToggleTool(wx.ID_INDEX,   conf.SearchInMeta)
+        tb.ToggleTool(wx.ID_STATIC,  conf.SearchInData)
+        tb.ToggleTool(wx.ID_NEW,     conf.SearchUseNewTab)
+        tb.ToggleTool(wx.ID_CONVERT, conf.SearchCaseSensitive)
         self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_INDEX)
         self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_STATIC)
         self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_NEW)
+        self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_CONVERT)
         self.Bind(wx.EVT_TOOL, self.on_searchall_stop, id=wx.ID_STOP)
 
         self.label_search.Label = "&Search in data:"
@@ -3637,9 +3641,8 @@ class DatabasePage(wx.Panel):
         if search_data:
             info = {}
             if search_data.get("info"):
-                info["map"]    = search_data["info"].get("map")
-                info["text"]   = search_data["info"].get("text")
-                info["source"] = search_data["info"].get("source")
+                info.update({x: search_data["info"].get(x)
+                            for x in ("map", "text", "source", "case")})
             data = {"content": search_data["content"],
                     "id": search_data["id"], "info": info,
                     "title": search_data["title"], }
@@ -3878,6 +3881,8 @@ class DatabasePage(wx.Panel):
         self.label_search.ContainingSizer.Layout()
         if wx.ID_NEW == event.Id:
             conf.SearchUseNewTab = event.EventObject.GetToolState(event.Id)
+        elif wx.ID_CONVERT == event.Id:
+            conf.SearchCaseSensitive = event.EventObject.GetToolState(event.Id)
         elif not event.EventObject.GetToolState(event.Id):
             # All others are radio tools and state might be toggled off by
             # shortkey key adapter
@@ -3981,7 +3986,8 @@ class DatabasePage(wx.Panel):
                            text, self.db, flash=True)
             nb = self.notebook_search
             data = {"id": wx.NewIdRef().Id, "db": self.db, "text": text,
-                    "map": {}, "width": nb.Size.width * 5/9, "partial_html": ""}
+                    "map": {}, "width": nb.Size.width * 5/9, "partial_html": "",
+                    "case": conf.SearchCaseSensitive}
             if "meta" == source or conf.SearchInMeta:
                 data["source"] = "meta"
                 fromtext = "database metadata"
@@ -4108,11 +4114,14 @@ class DatabasePage(wx.Panel):
             return "%s%s" % (t[0].capitalize(), t[1:]) if cap else t
 
         def on_take(event=None):
-            text, source = page["info"]["text"], page["info"]["source"]
+            text, source, case = (page["info"].get(x) for x in ["text", "source", "case"])
             myid = wx.ID_INDEX if "meta" == source else wx.ID_STATIC
             evt = wx.CommandEvent(wx.wxEVT_COMMAND_TOOL_CLICKED, myid)
             evt.SetEventObject(self.tb_search_settings)
             wx.PostEvent(self, evt)
+            if bool(case) != conf.SearchCaseSensitive:
+                conf.SearchCaseSensitive = bool(case)
+                self.tb_search_settings.ToggleTool(wx.ID_CONVERT, bool(case))
             self.edit_searchall.Value = text
             self.edit_searchall.SetFocus()
             self.edit_searchall.SelectAll()
