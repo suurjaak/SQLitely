@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.11.2019
+@modified    26.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -2575,13 +2575,14 @@ class SchemaObjectPage(wx.Panel):
         check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
         check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT EXISTS")
         check_rowid  = self._ctrls["without"]   = wx.CheckBox(panel, label="WITHOUT &ROWID")
-        check_temp.ToolTip  = "Table will exist only for the duration of the current session"
-        check_rowid.ToolTip = "Omit the default internal ROWID column. " \
-                              "Table must have a non-autoincrement primary key. " \
-                              "sqlite3_blob_open() will not work.\n\n" \
-                              "Can reduce storage and processing overhead, " \
-                              "suitable for tables with non-integer or composite " \
-                              "primary keys, and not too much data per row."
+        check_temp.ToolTip   = "Table will exist only for the duration of the current session"
+        check_exists.ToolTip = 'Include "IF NOT EXISTS" in the CREATE statement'
+        check_rowid.ToolTip  = "Omit the default internal ROWID column. " \
+                               "Table must have a non-autoincrement primary key. " \
+                               "sqlite3_blob_open() will not work.\n\n" \
+                               "Can reduce storage and processing overhead, " \
+                               "suitable for tables with non-integer or composite " \
+                               "primary keys, and not too much data per row."
 
         nb = self._notebook_table = wx.Notebook(panel)
         panel_columnwrapper = self._MakeColumnsGrid(nb)
@@ -2621,6 +2622,7 @@ class SchemaObjectPage(wx.Panel):
 
         check_unique = self._ctrls["unique"] = wx.CheckBox(panel, label="&UNIQUE")
         check_exists = self._ctrls["exists"] = wx.CheckBox(panel, label="IF NOT EXISTS")
+        check_exists.ToolTip = 'Include "IF NOT EXISTS" in the CREATE statement'
 
         panel_wrapper = self._MakeColumnsGrid(panel)
 
@@ -2684,8 +2686,9 @@ class SchemaObjectPage(wx.Panel):
         check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
         check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT EXISTS")
         check_for    = self._ctrls["for"]       = wx.CheckBox(panel, label="FOR EACH &ROW")
-        check_temp.ToolTip = "Trigger will exist only for the duration of the current session"
-        check_for.ToolTip  = "Not enforced by SQLite, all triggers are FOR EACH ROW by default"
+        check_temp.ToolTip   = "Trigger will exist only for the duration of the current session"
+        check_exists.ToolTip = 'Include "IF NOT EXISTS" in the CREATE statement'
+        check_for.ToolTip    = "Not enforced by SQLite, all triggers are FOR EACH ROW by default"
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
         panel1, panel2 = self._MakeColumnsGrid(splitter), wx.Panel(splitter)
@@ -2760,7 +2763,8 @@ class SchemaObjectPage(wx.Panel):
 
         check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
         check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT EXISTS")
-        check_temp.ToolTip = "View will exist only for the duration of the current session"
+        check_temp.ToolTip   = "View will exist only for the duration of the current session"
+        check_exists.ToolTip = 'Include "IF NOT EXISTS" in the CREATE statement'
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
         panel1, panel2 = self._MakeColumnsGrid(splitter), wx.Panel(splitter)
