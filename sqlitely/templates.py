@@ -441,6 +441,35 @@ if not i % 100 and isdef("progress") and progress and not progress(count=i):
 
 
 """
+TXT data export template for copying row as page.
+
+@param   rows          iterable
+@param   columns       [name, ]
+"""
+DATA_ROWS_PAGE_TXT = """<%
+from sqlitely import templates
+
+colwidth = max(map(len, columns))
+%>
+%for i, row in enumerate(rows):
+%if i:
+
+%endif
+%for col in columns:
+<%
+raw = row[col]
+value = "" if raw is None \
+        else raw if isinstance(raw, basestring) else str(raw)
+value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
+%>
+{{ col.ljust(colwidth) }} = {{ value }}
+%endfor
+%endfor
+"""
+
+
+
+"""
 HTML template for search results header.
 
 @param   text      search query
