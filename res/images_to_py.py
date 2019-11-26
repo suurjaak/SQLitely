@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  03.11.2019
+@modified  25.11.2019
 ------------------------------------------------------------------------------
 """
 import base64
@@ -77,6 +77,8 @@ IMAGES = {
         "Icon for the Search page in a database tab.",
     "PageSQL.png":
         "Icon for the SQL Window page in a database tab.",
+    "ToolbarCase.png":
+        "Toolbar icon for case-insensitive toggle button in data grids.",
     "ToolbarClear.png":
         "Toolbar icon for reset sort/filter button in data grids.",
     "ToolbarCommit.png":
