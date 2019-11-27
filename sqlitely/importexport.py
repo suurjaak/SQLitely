@@ -189,7 +189,7 @@ def export_data(make_iterable, filename, title, db, columns,
                     namespace["create_sql"], _ = grammar.generate(meta)
                 elif name:
                     # Add CREATE statement
-                    transform = {"exists": True} if is_sql else None
+                    transform = {"flags": {"exists": True}} if is_sql else None
                     create_sql = db.get_sql(category, name, transform=transform)
                     namespace["create_sql"] = create_sql
 
