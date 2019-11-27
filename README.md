@@ -9,8 +9,9 @@ It can:
 - create new databases
 - create and modify tables, indexes, triggers and views
 - free-form search over all database data and metadata
-- view and export data and metadata in various formats
+- export data and metadata in various formats
   (text, HTML, spreadsheet, JSON, SQL)
+- import data to table from spreadsheet or JSON
 - view database table and index size statistics
 - copy tables from one database to another
 - modify table data
@@ -93,7 +94,7 @@ If openpyxl or pyparsing or xlrd or XlsxWriter are not available,
 the program will function regardless, only with lesser service - 
 lacking Excel import-export or full search syntax.
 
-Python 2.6 will need the argparse library. Python 3 is yet unsupported.
+Python 3 is yet unsupported.
 
 
 Attribution

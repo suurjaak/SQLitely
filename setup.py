@@ -45,7 +45,6 @@ setuptools.setup(
         "Topic :: Desktop Environment",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 2",
-        "Programming Language :: Python :: 2.6",
         "Programming Language :: Python :: 2.7",
     ],
 

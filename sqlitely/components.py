@@ -5352,7 +5352,7 @@ class ImportDialog(wx.Dialog):
         self._tables = db.get_category("table").values()
         self._sheet  = None # {name, rows, columns}
         self._table  = None # {table opts} to import into
-        self._has_header  = True  # Whether using first row as header
+        self._has_header  = True  # Whether using first row as header, None if inappicable
         self._has_new     = False # Whether a new table has been added
         self._has_pk      = False # Whether new table has auto-increment primary key
         self._importing   = False # Whether import underway
@@ -5589,15 +5589,16 @@ class ImportDialog(wx.Dialog):
                        for i, x in enumerate(self._sheet["columns"])]
         for i, c in enumerate(self._cols2): c["skip"] = i >= len(self._cols1)
 
-        info = "Import from %s.\nSize: %s (%s).\nWorksheets: %s." % (
+        has_sheets = not data["name"].lower().endswith(".json")
+        info = "Import from %s.\nSize: %s (%s).%s" % (
             data["name"],
             util.format_bytes(data["size"]),
             util.format_bytes(data["size"], max_units=False),
-            len(data["sheets"]),
+            ("\nWorksheets: %s." % len(data["sheets"])) if has_sheets else "",
         )
         self._info_file.Label = info
 
-        self._combo_sheet.Enabled = self._check_header.Enabled = True
+        self._combo_sheet.Enabled = self._check_header.Enabled = has_sheets
         self._combo_table.Enabled = not self._table_fixed
         self._button_table.Enabled = False if self._table_fixed else bool(self._cols1)
         self._combo_sheet.SetItems(["%s (%s, %s)" % (
@@ -5606,6 +5607,8 @@ class ImportDialog(wx.Dialog):
             else util.plural("row", x["rows"]),
         ) for x in data["sheets"]])
         self._combo_sheet.Select(idx)
+        self._has_header = has_sheets or None
+        self._check_header.Value = bool(self._has_header)
 
         self._l1.Enable()
         self._OnSize()
@@ -5677,7 +5680,8 @@ class ImportDialog(wx.Dialog):
             l.SetBackgroundColour(discardbgcolour if l.ReadOnly else bgcolour)
             for j, c in enumerate(cc):
                 if c["skip"] and (not j or not cc[j-1]["skip"]): add_separator(l, i)
-                name = c["name"] if i or self._has_header else self._MakeColumnName(i, c)
+                name = c["name"] if i or self._has_header in (True, None) \
+                       else self._MakeColumnName(i, c)
                 add_row(l, name, c["index"] + 1, j)
                 if c["skip"]:
                     l.SetItemTextColour(l.ItemCount - 1, discardcolour)
@@ -6175,7 +6179,7 @@ class ImportDialog(wx.Dialog):
         if not self._has_new:
             self._cols2, allcols = [], []
             for i, c in enumerate(self._cols1):
-                if not self._has_header: cname = self._MakeColumnName(1, {"index": i})
+                if self._has_header is False: cname = self._MakeColumnName(1, {"index": i})
                 else:
                     cname = util.make_unique(c["name"] or "col", allcols)
                     allcols.append(cname)
