@@ -3,10 +3,13 @@
 Pyinstaller spec file for SQLitely, produces a 32-bit or 64-bit executable,
 depending on current environment.
 
-@created   03.04.2012
-@modified  20.11.2019
+Pyinstaller-provided names and variables: Analysis, EXE, PYZ, SPEC, TOC.
+
+@created   23.08.2019
+@modified  27.11.2019
 """
 import os
+import struct
 import sys
 
 DEBUG = False
@@ -15,17 +18,19 @@ BUILDPATH = os.path.dirname(os.path.abspath(SPEC))
 APPPATH   = os.path.join(os.path.dirname(BUILDPATH), NAME)
 ROOTPATH  = os.path.dirname(APPPATH)
 
+ANALYZER = "sqlite3_analyzer.exe" if "nt"  == os.name else \
+           "sqlite3_analyzer_osx" if "os2" == os.name else "sqlite3_analyzer_linux"
+
 os.chdir("..")
 a = Analysis(
     [os.path.join(ROOTPATH, "launch.py")],
     excludes=["FixTk", "numpy", "tcl", "tk", "_tkinter", "tkinter", "Tkinter"],
 )
-a.datas += [("conf.py", "sqlitely/conf.py", "DATA"), # For configuration docstrings
-            ("bin/sqlite3_analyzer.exe", "sqlitely/bin/sqlite3_analyzer.exe", "DATA"),
-            ("bin/sqlite3_analyzer_linux", "sqlitely/bin/sqlite3_analyzer_linux", "DATA"),
-            ("bin/sqlite3_analyzer_osx", "sqlitely/bin/sqlite3_analyzer_osx", "DATA"),
-            ("res/Carlito.ttf", "sqlitely/media/Carlito.ttf", "DATA"),
-            ("res/CarlitoBold.ttf", "sqlitely/media/CarlitoBold.ttf", "DATA"), ]
+# conf.py for configuration docstrings in advanced options
+a.datas += [("conf.py",             "%s/conf.py" % NAME,               "DATA"),
+            ("bin/" + ANALYZER,     "%s/bin/%s" % (NAME, ANALYZER),    "DATA"),
+            ("res/Carlito.ttf",     "%s/media/Carlito.ttf" % NAME,     "DATA"),
+            ("res/CarlitoBold.ttf", "%s/media/CarlitoBold.ttf" % NAME, "DATA"), ]
 a.binaries = a.binaries - TOC([
     ('tcl85.dll', None, None),
     ('tk85.dll',  None, None),
@@ -37,7 +42,7 @@ pyz = PYZ(a.pure)
 sys.path.append(APPPATH)
 from sqlitely import conf
 
-is_64bit = "PROCESSOR_ARCHITEW6432" in os.environ
+is_64bit = (struct.calcsize("P") * 8 == 64)
 ext = ".exe" if "nt" == os.name else ""
 app_file = "%s_%s%s%s" % (NAME, conf.Version, "_x64" if is_64bit else "", ext)
 
