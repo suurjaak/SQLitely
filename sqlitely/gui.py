@@ -2985,11 +2985,19 @@ class DatabasePage(wx.Panel):
 
 
         if "data" == cmd:
+            self.notebook.SetSelection(self.pageorder[self.page_data])
             category, name = args
             page = self.data_pages[category].get(name) or \
                    self.add_data_page(self.db.get_category(category, name))
             self.notebook_data.SetSelection(self.notebook_data.GetPageIndex(page))
+        elif "create" == cmd:
+            self.notebook.SetSelection(self.pageorder[self.page_schema])
+            category = args[0]
+            newdata = {"type": category,
+                       "meta": {"__type__": "CREATE %s" % category.upper()}}
+            self.add_schema_page(newdata)
         elif "schema" == cmd:
+            self.notebook.SetSelection(self.pageorder[self.page_schema])
             category, name = args
             page = self.schema_pages[category].get(name) or \
                    self.add_schema_page(self.db.get_category(category, name))
