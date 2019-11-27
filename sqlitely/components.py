@@ -15,6 +15,7 @@ from collections import Counter, OrderedDict
 import copy
 import datetime
 import functools
+import json
 import logging
 import math
 import pickle
@@ -791,7 +792,6 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
                 guibase.status("Copied column%s to clipboard%s", colsuff, cutoff, flash=True)
 
-
         def on_copy_sql(event=None):
             """Copies rows INSERT SQL to clipboard."""
             tpl = step.Template(templates.DATA_ROWS_SQL, strip=False)
@@ -811,6 +811,17 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
                 guibase.status("Copied row%s text to clipboard%s", rowsuff, cutoff, flash=True)
+
+        def on_copy_json(event=None):
+            """Copies rows to clipboard as JSON."""
+            mydatas = [OrderedDict((c["name"], x[c["name"]]) for c in self.columns)
+                       for x in rowdatas]
+            data = mydatas if len(mydatas) > 1 else mydatas[0]
+            text = json.dumps(data, indent=2)
+            if wx.TheClipboard.Open():
+                d = wx.TextDataObject(text)
+                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+                guibase.status("Copied row%s JSON to clipboard%s", rowsuff, cutoff, flash=True)
 
         def on_reset(event=None):
             """Resets row changes."""
@@ -905,11 +916,12 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         colsuff = "" if len(cols)     == 1 else "s"
         if rowdatas: item_caption = wx.MenuItem(menu, -1, caption)
         if rowdatas:
-            item_copy     = wx.MenuItem(menu,      -1, "&Copy row%s" % rowsuff)
-            item_copy_col = wx.MenuItem(menu_copy, -1, "Copy co&lumn%s" % colsuff)
-            item_copy_sql = wx.MenuItem(menu_copy, -1, "Copy row%s INSERT &SQL" % rowsuff)
-            item_copy_txt = wx.MenuItem(menu_copy, -1, "Copy row%s as &text" % colsuff)
-            item_open     = wx.MenuItem(menu,      -1, "&Open form")
+            item_copy      = wx.MenuItem(menu,      -1, "&Copy row%s" % rowsuff)
+            item_copy_col  = wx.MenuItem(menu_copy, -1, "Copy selected co&lumn%s" % colsuff)
+            item_copy_sql  = wx.MenuItem(menu_copy, -1, "Copy row%s INSERT &SQL" % rowsuff)
+            item_copy_txt  = wx.MenuItem(menu_copy, -1, "Copy row%s as &text" % colsuff)
+            item_copy_json = wx.MenuItem(menu_copy, -1, "Copy row%s as &JSON" % colsuff)
+            item_open      = wx.MenuItem(menu,      -1, "&Open form")
 
         if is_table:
             item_insert = wx.MenuItem(menu, -1, "Add &new row")
@@ -934,6 +946,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             menu_copy.Append(item_copy_col)
             menu_copy.Append(item_copy_sql)
             menu_copy.Append(item_copy_txt)
+            menu_copy.Append(item_copy_json)
             menu.Append(wx.ID_ANY, "Co&py ..", menu_copy)
         if is_table and rowdatas:
             menu.Append(item_reset)
@@ -993,10 +1006,11 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         if is_table:
             menu.Bind(wx.EVT_MENU, functools.partial(on_event, insert=True), item_insert)
         if rowdatas:
-            menu.Bind(wx.EVT_MENU, on_copy,     item_copy)
-            menu.Bind(wx.EVT_MENU, on_copy_col, item_copy_col)
-            menu.Bind(wx.EVT_MENU, on_copy_sql, item_copy_sql)
-            menu.Bind(wx.EVT_MENU, on_copy_txt, item_copy_txt)
+            menu.Bind(wx.EVT_MENU, on_copy,      item_copy)
+            menu.Bind(wx.EVT_MENU, on_copy_col,  item_copy_col)
+            menu.Bind(wx.EVT_MENU, on_copy_sql,  item_copy_sql)
+            menu.Bind(wx.EVT_MENU, on_copy_txt,  item_copy_txt)
+            menu.Bind(wx.EVT_MENU, on_copy_json, item_copy_json)
             menu.Bind(wx.EVT_MENU, functools.partial(on_event, form=True, row=rows[0]), item_open)
         if is_table and rowdatas:
             menu.Bind(wx.EVT_MENU, on_reset, item_reset)
