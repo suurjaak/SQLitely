@@ -53,7 +53,7 @@ OptionalFileDirectives = [
     "DBExtensions", "ExportDbTemplate", "LogSQL", "MinWindowSize",
     "MaxConsoleHistory", "MaxDBSizeForFullCount", "MaxTableRowIDForFullCount",
     "MaxHistoryInitialMessages", "MaxRecentFiles", "MaxSearchHistory",
-    "MaxSearchResults", "PopupUnexpectedErrors", "RunChecksums", "RunStatistics", 
+    "MaxSearchResults", "PopupUnexpectedErrors", "RunChecksums", "RunStatistics",
     "SearchResultsChunk", "SeekLength", "SeekLeapLength", "StatisticsPlotWidth",
     "StatusFlashLength", "UpdateCheckInterval",
 ]

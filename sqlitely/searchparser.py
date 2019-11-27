@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.11.2019
+@modified    27.11.2019
 """
 import calendar
 import collections
@@ -320,7 +320,7 @@ class SearchQueryParser(object):
                 colsql = ""
                 for j, col in enumerate(datecols):
                     cname = grammar.quote(col["name"])
-                    if "notnull" not in col: cname = "COALESCE(%s, '')" % cname                        
+                    if "notnull" not in col: cname = "COALESCE(%s, '')" % cname
                     colsql += (" OR " if j else "")
                     colsql += "%s %s :%s" % (
                               cname, [">=", "<="][i], param)

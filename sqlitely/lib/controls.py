@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    25.11.2019
+@modified    27.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -895,7 +895,7 @@ class HintedTextCtrl(wx.TextCtrl):
         """Handler for system colour change, updates text colour."""
         event.Skip()
         def after():
-            if not self: return                
+            if not self: return
             colour = self._hint_colour if self._hint_on else self._text_colour
             self.SetForegroundColour(colour)
         wx.CallAfter(after)
@@ -2075,7 +2075,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         self.SetItemTextColour(0, self.ForegroundColour)
 
         def resize():
-            if not self: return                
+            if not self: return
             w = sum((self.GetColumnWidth(i) for i in range(1, len(self._columns))), 0)
             width = self.Size[0] - w - 5 # Space for padding
             if self.GetScrollRange(wx.VERTICAL) > 1:
@@ -2659,7 +2659,7 @@ class TabbedHtmlWindow(wx.Panel):
         if 1 == pagecount: event.Veto() # Only page: reuse
 
         def after():
-            if not self: return                
+            if not self: return
             self._tabs.remove(tab)
             if 1 == pagecount: # Was the only page, reuse as default
                 nb.SetPageText(0, "")
@@ -2687,7 +2687,7 @@ class TabbedHtmlWindow(wx.Panel):
         evt.SetSelection(event.GetSelection())
         evt.SetEventObject(self)
         wx.PostEvent(self, evt) # Forward event to external listeners
-        
+
 
     def _CreateTab(self, index, title):
         """Creates a new tab in the tab container at specified index."""

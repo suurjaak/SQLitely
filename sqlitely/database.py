@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.11.2019
+@modified    27.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -638,7 +638,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def get_lock(self, *args, **kwargs):
         """
-        Returns user-friendly information on current lock status, as 
+        Returns user-friendly information on current lock status, as
         "Database is currently locked (statistics analysis)" or
         "Table "foo" is currently locked" if querying category and name.
 
@@ -676,7 +676,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def get_locks(self):
         """
-        Returns user-friendly information on all current locks, as 
+        Returns user-friendly information on all current locks, as
         ["global lock (statistics analysis)", "table "MyTable" (export)", ].
         """
         result = []
@@ -959,7 +959,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         for subcategory in SUBCATEGORIES.get(category, []):
             for subname, subitem in self.schema[subcategory].items():
-                if "meta" not in subitem: continue # for subname, subitem                    
+                if "meta" not in subitem: continue # for subname, subitem
                 is_assoc = not util.lccmp(subitem["meta"].get("table", ""), name) \
                            or not util.lccmp(item["meta"].get("table", ""), subname)
                 is_related = name in subitem["meta"]["__tables__"] \
@@ -1011,7 +1011,6 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return dks, fks
 
 
-
     def get_sql(self, category=None, name=None, column=None, indent="  ",
                 transform=None):
         """
@@ -1060,7 +1059,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                        if transform and x in transform}
                 if not opts.get("meta") or kws or indent != "  ":
                     sql, err = grammar.transform(sql, indent=indent, **kws)
-                    if err: 
+                    if err:
                         sql = opts["sql"]
                         # raise Exception(err) TODO use or lose
                 sqls.setdefault(category, []).append(sql)

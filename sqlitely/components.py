@@ -135,7 +135,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
     def GetNumberRows(self, total=False, present=False):
         """
-        Returns the number of grid rows, currently retrieved if present or query 
+        Returns the number of grid rows, currently retrieved if present or query
         or filtered else total row count.
         """
         return len(self.rows_current) if (present or self.filters) and not total else self.row_count
@@ -1221,7 +1221,7 @@ class SQLiteGridBaseMixin(object):
         retrieved rows, constrains scroll to reasonably sized chunks.
         """
         if not isinstance(self._grid.Table, SQLiteGridBase): return event.Skip()
-            
+
         SEEKAHEAD_POS_RATIO = 0.8
 
         # Disallow scrolling ahead too much, may be a billion rows.
@@ -1363,13 +1363,13 @@ class SQLiteGridBaseMixin(object):
                 if data and data["count"] is not None:
                     count = data["count"]
                     if data.get("is_count_estimated"):
-                        count, pref = int(math.ceil(count / 100.) * 100), "~" 
+                        count, pref = int(math.ceil(count / 100.) * 100), "~"
                     count += len(gridbase.idx_new) - len(gridbase.rows_deleted)
                 else: suff = "+"
             else: suff = "+"
         elif not gridbase.IsComplete(): suff = "+"
         t = pref + util.plural("row", count, sep=",")
-        if suff: t = t.replace(" ", suff + " ")            
+        if suff: t = t.replace(" ", suff + " ")
         self._label_rows.Label = t
         self._label_rows.Parent.Layout()
 
@@ -1752,7 +1752,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnWorker(self, result, **kwargs):
         """Handler for db worker result, invokes _OnResult in wx callback."""
-        if not self: return            
+        if not self: return
         wx.CallAfter(self._OnResult, result, **kwargs)
 
 
@@ -2344,7 +2344,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             conf.Title, wx.ICON_INFORMATION, defaultno=True
         ): return
 
-        if item: self._item = copy.deepcopy(item)            
+        if item: self._item = copy.deepcopy(item)
 
         scrollpos = map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
         cursorpos = [self._grid.GridCursorRow, self._grid.GridCursorCol]
@@ -3129,7 +3129,7 @@ class SchemaObjectPage(wx.Panel):
         self._ctrls["without"].Value   = bool(meta.get("without"))
 
         for i, grid in enumerate((self._grid_columns, self._grid_constraints)):
-            if i and not self._hasmeta: continue # for i, grid                
+            if i and not self._hasmeta: continue # for i, grid
             panel = self._panel_constraints     if i else self._panel_columns
             adder = self._AddRowTableConstraint if i else self._AddRowTable
             collection = "constraints" if i else "columns"
@@ -4533,7 +4533,7 @@ class SchemaObjectPage(wx.Panel):
 
     def _OnCascadeColumnUpdates(self):
         """Handler for column updates, rebuilds constraints on rename/remove."""
-        if not self: return            
+        if not self: return
         self._col_updater = None
         constraints = self._item["meta"].get("constraints") or []
         changed, renames = False, {} # {old column name: new name}
@@ -4832,7 +4832,7 @@ class SchemaObjectPage(wx.Panel):
             if not self._newmode: sql, _ = self._GetAlterSQL()
             sql2 = "PRAGMA foreign_keys = off;\n\nSAVEPOINT test;\n\n" \
                    "%s;\n\nROLLBACK TO SAVEPOINT test;" % sql
-            if ("table" == self._category and not self._newmode 
+            if ("table" == self._category and not self._newmode
                 or "index" == self._category) \
             and wx.YES != controls.YesNoMessageBox(
                 "Make a full test run of the following schema change, "
@@ -5115,7 +5115,7 @@ class ExportProgressPanel(wx.Panel):
 
     def _RunNext(self):
         """Starts next pending task, if any."""
-        if not self: return            
+        if not self: return
         index = next((i for i, x in enumerate(self._tasks)
                       if x["pending"]), None)
         if index is None: return
@@ -5351,7 +5351,7 @@ class ImportDialog(wx.Dialog):
 
             pos0 = self.GetScrollPos(wx.VERTICAL)
             def fire_scroll():
-                if not self: return                    
+                if not self: return
                 pos = self.GetScrollPos(wx.VERTICAL)
                 if pos == pos0: return
                 e = wx.ScrollWinEvent(wx.wxEVT_SCROLLWIN_THUMBTRACK, pos, wx.VERTICAL)
@@ -6038,7 +6038,7 @@ class ImportDialog(wx.Dialog):
                 result = self._importing = False if wx.ID_YES == res else None
 
         def after():
-            if not self: return                
+            if not self: return
             if count is not None:
                 total = self._sheet["rows"]
                 if total < 0: text = util.plural("row", count)
@@ -6277,7 +6277,7 @@ class ImportDialog(wx.Dialog):
         """Handler for window size change, resizes list columns and footer."""
         event and event.Skip()
         def after():
-            if not self: return                
+            if not self: return
             self.Freeze()
             for i, l in enumerate([self._l1, self._l2]):
                 l.SetColumnWidth(0, 0)
@@ -6641,9 +6641,9 @@ class DataDialog(wx.Dialog):
             "Are you sure you want to delete this row?", conf.Title,
             wx.ICON_INFORMATION, defaultno=True
         ): return
-        
+
         wx.PostEvent(self.Parent, GridBaseEvent(-1, delete=True, rows=[self._row]))
-        self._OnClose()    
+        self._OnClose()
 
 
     def _OnUpdate(self, event=None):
@@ -6903,7 +6903,7 @@ class HistoryDialog(wx.Dialog):
         if search == self._filter: return
 
         def do_filter(search):
-            if not self: return                
+            if not self: return
             self._filter_timer = None
             if search != self._filter: return
             self._Populate()
