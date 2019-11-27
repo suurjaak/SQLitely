@@ -6681,19 +6681,21 @@ class DataDialog(wx.Dialog):
         coldata = self._columns[col]
         menu = wx.Menu()
 
-        def on_copy_data(event=None):
+        def copy(text, status, *args):
             if wx.TheClipboard.Open():
-                text = util.to_unicode(self._data[coldata["name"]])
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status("Copied column data to clipboard", flash=True)
+                guibase.status(status, *args, flash=True)
+        def on_copy_data(event=None):
+            text = util.to_unicode(self._data[coldata["name"]])
+            copy(text, "Copied column data to clipboard")
+        def on_copy_name(event=None):
+            text = util.to_unicode(coldata["name"])
+            copy(text, "Copied column name to clipboard")
         def on_copy_sql(event=None):
             text = "%s = %s" % (grammar.quote(coldata["name"]),
                                 grammar.format(self._data[coldata["name"]]))
-            if wx.TheClipboard.Open():
-                d = wx.TextDataObject(text)
-                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status("Copied column SQL to clipboard", flash=True)
+            copy(text, "Copied column UPDATE SQL to clipboard")
         def on_reset(event=None):
             self._SetValue(col, self._original[coldata["name"]])
         def on_null(event=None):
@@ -6709,7 +6711,8 @@ class DataDialog(wx.Dialog):
             self._SetValue(col, v)
 
         item_data     = wx.MenuItem(menu, -1, "&Copy value")
-        item_sql      = wx.MenuItem(menu, -1, "Copy UPDATE &SQL")
+        item_name     = wx.MenuItem(menu, -1, "Copy co&lumn name")
+        item_sql      = wx.MenuItem(menu, -1, "Copy SET &SQL")
         item_reset    = wx.MenuItem(menu, -1, "&Reset")
         item_null     = wx.MenuItem(menu, -1, "Set &NULL")
         item_date     = wx.MenuItem(menu, -1, "Set current &date")
@@ -6719,6 +6722,7 @@ class DataDialog(wx.Dialog):
         item_null.Enabled = "notnull" not in coldata and "pk" not in coldata
 
         menu.Append(item_data)
+        menu.Append(item_name)
         menu.Append(item_sql)
         menu.AppendSeparator()
         menu.Append(item_reset)
@@ -6729,6 +6733,7 @@ class DataDialog(wx.Dialog):
         menu.Append(item_stamp)
 
         menu.Bind(wx.EVT_MENU, on_copy_data, item_data)
+        menu.Bind(wx.EVT_MENU, on_copy_name, item_name)
         menu.Bind(wx.EVT_MENU, on_copy_sql,  item_sql)
         menu.Bind(wx.EVT_MENU, on_reset,     item_reset)
         menu.Bind(wx.EVT_MENU, on_null,      item_null)
@@ -6743,30 +6748,66 @@ class DataDialog(wx.Dialog):
         """Handler for opening popup menu for copying row."""
         menu = wx.Menu()
 
-        def on_copy_data(event=None):
+        def copy(text, status, *args):
             if wx.TheClipboard.Open():
-                text = "\t".join(util.to_unicode(self._data[c["name"]])
-                                 for c in self._columns)
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status("Copied row data to clipboard", flash=True)
-        def on_copy_sql(event=None):
+                guibase.status(status, *args, flash=True)
+
+        def on_copy_data(event=None):
+            text = "\t".join(util.to_unicode(self._data[c["name"]])
+                             for c in self._columns)
+            copy(text, "Copied row data to clipboard")
+
+        def on_copy_insert(event=None):
             tpl = step.Template(templates.DATA_ROWS_SQL, strip=False)
             text = tpl.expand(name=self._gridbase.name, rows=[self._data],
                               columns=[x["name"] for x in self._columns])
-            if wx.TheClipboard.Open():
-                d = wx.TextDataObject(text)
-                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status("Copied row SQL to clipboard", flash=True)
+            copy(text, "Copied row INSERT SQL to clipboard")
 
-        item_data = wx.MenuItem(menu, -1, "Copy &data")
-        item_sql = wx.MenuItem(menu, -1, "Copy INSERT &SQL")
+        def on_copy_update(event=None):
+            tpl = step.Template(templates.DATA_ROWS_UPDATE_SQL, strip=False)
+            mydata, mydata0 = self._data, self._original
+            mypks = [c["name"] for c in self._columns if "pk" in c]
+            if not mypks and self._gridbase.rowid_name:
+                mypks = [self._gridbase.rowid_name]
+                rowid = self._gridbase.rowids.get(mydata[self.KEY_ID])
+                if rowid is not None:
+                    mydata  = dict(mydata,  **{mypks[0]: rowid})
+                    mydata0 = dict(mydata0, **{mypks[0]: rowid})
+            text = tpl.expand(name=self._gridbase.name, rows=[mydata], originals=[mydata0],
+                              columns=[x["name"] for x in self._columns], pks=mypks)
+            copy(text, "Copied row UPDATE SQL to clipboard")
+
+        def on_copy_txt(event=None):
+            tpl = step.Template(templates.DATA_ROWS_PAGE_TXT, strip=False)
+            text = tpl.expand(name=self._gridbase.name, rows=[self._data],
+                              columns=[x["name"] for x in self._columns])
+            copy(text, "Copied row text to clipboard")
+
+        def on_copy_json(event=None):
+            mydata = OrderedDict((c["name"], self._data[c["name"]]) for c in self._columns)
+            text = json.dumps(mydata, indent=2)
+            copy(text, "Copied row JSON to clipboard")
+
+
+        item_data   = wx.MenuItem(menu, -1, "Copy row &data")
+        item_insert = wx.MenuItem(menu, -1, "Copy &INSERT SQL")
+        item_update = wx.MenuItem(menu, -1, "Copy &UPDATE SQL")
+        item_text   = wx.MenuItem(menu, -1, "Copy row as &text")
+        item_json   = wx.MenuItem(menu, -1, "Copy row as &JSON")
 
         menu.Append(item_data)
-        menu.Append(item_sql)
+        menu.Append(item_insert)
+        menu.Append(item_update)
+        menu.Append(item_text)
+        menu.Append(item_json)
 
-        menu.Bind(wx.EVT_MENU, on_copy_data, item_data)
-        menu.Bind(wx.EVT_MENU, on_copy_sql,  item_sql)
+        menu.Bind(wx.EVT_MENU, on_copy_data,   item_data)
+        menu.Bind(wx.EVT_MENU, on_copy_insert, item_insert)
+        menu.Bind(wx.EVT_MENU, on_copy_update, item_update)
+        menu.Bind(wx.EVT_MENU, on_copy_txt,    item_text)
+        menu.Bind(wx.EVT_MENU, on_copy_json,   item_json)
 
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
 
