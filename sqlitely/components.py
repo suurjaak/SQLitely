@@ -8,13 +8,14 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.11.2019
+@modified    27.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
 import copy
 import datetime
 import functools
+import json
 import logging
 import math
 import pickle
@@ -66,6 +67,12 @@ class SQLiteGridBase(wx.grid.GridTableBase):
     """wx.Grid stops working when too many rows."""
     MAX_ROWS = 5000000
 
+    """Magic row attributes, made unique if conflicting with column name."""
+    KEY_ID      = "__id__"
+    KEY_CHANGED = "__changed__"
+    KEY_NEW     = "__new__"
+    KEY_DELETED = "__deleted__"
+
 
     def __init__(self, db, category="", name="", sql="", cursor=None):
         super(SQLiteGridBase, self).__init__()
@@ -99,19 +106,14 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             if "table" == category: self.rowid_name = db.get_rowid(name)
             cols = ("%s AS %s, *" % ((self.rowid_name, ) * 2)) if self.rowid_name else "*"
             self.sql = "SELECT %s FROM %s" % (cols, grammar.quote(name))
-        self.row_iterator = cursor or self.db.execute(self.sql)
 
+        self.row_iterator = cursor or self.db.execute(self.sql)
         if self.is_query:
             self.columns = [{"name": c[0], "type": "TEXT"}
                             for c in self.row_iterator.description or ()]
             TYPES = dict((v, k) for k, vv in {"INTEGER": (int, long, bool),
                          "REAL": (float, )}.items() for v in vv)
             self.is_seek = True
-            self.SeekToRow(conf.SeekLength - 1)
-            for col in self.columns if self.rows_current else ():
-                # Get column information from first values
-                value = self.rows_current[0][col["name"]]
-                col["type"] = TYPES.get(type(value), col.get("type", ""))
         else:
             data = self.db.get_count(self.name) if "table" == category else {}
             if data.get("count") is not None:
@@ -119,7 +121,16 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             self.is_seek = data.get("is_count_estimated", False) \
                            or data.get("count") is None \
                            or data["count"] != self.row_count
-            self.SeekToRow(conf.SeekLength - 1)
+
+        names = [x["name"] for x in self.columns] # Ensure unique magic keys
+        for key in "KEY_ID", "KEY_CHANGED", "KEY_NEW", "KEY_DELETED":
+            setattr(self, key, util.make_unique(getattr(self, key), names))
+
+        self.SeekToRow(conf.SeekLength - 1)
+        for col in self.columns if self.is_query and self.rows_current else ():
+            # Get column information from first values
+            value = self.rows_current[0][col["name"]]
+            col["type"] = TYPES.get(type(value), col.get("type", ""))
 
 
     def GetNumberRows(self, total=False, present=False):
@@ -156,10 +167,10 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 myid = self.id_counter = self.id_counter + 1
                 if not self.is_query and self.rowid_name in rowdata:
                     self.rowids[myid] = rowdata.pop(self.rowid_name)
-                rowdata["__id__"] = myid
-                rowdata["__changed__"] = False
-                rowdata["__new__"] = False
-                rowdata["__deleted__"] = False
+                rowdata[self.KEY_ID]      = myid
+                rowdata[self.KEY_CHANGED] = False
+                rowdata[self.KEY_NEW]     = False
+                rowdata[self.KEY_DELETED] = False
                 self.rows_all[myid] = rowdata
                 if not self._IsRowFiltered(rowdata):
                     self.rows_current.append(rowdata)
@@ -230,8 +241,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         if row < self.GetNumberRows(): self.SeekToRow(row)
         if row < len(self.rows_current): result = self.rows_current[row]
         else: result = None
-        if original and result and result["__id__"] in self.rows_backup:
-            result = self.rows_backup[result["__id__"]]
+        if original and result and result[self.KEY_ID] in self.rows_backup:
+            result = self.rows_backup[result[self.KEY_ID]]
         return copy.deepcopy(result)
 
 
@@ -318,8 +329,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             data = self.rows_current[row]
             if col_value == data[self.columns[col]["name"]]: return
 
-            idx = data["__id__"]
-            if not data["__new__"]:
+            idx = data[self.KEY_ID]
+            if not data[self.KEY_NEW]:
                 backup = self.rows_backup.get(idx)
                 if backup:
                     data[self.columns[col]["name"]] = col_value
@@ -327,11 +338,11 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                            for c in self.columns):
                         del self.rows_backup[idx]
                         self.idx_changed.remove(idx)
-                        data["__changed__"] = False
+                        data[self.KEY_CHANGED] = False
                         return self._RefreshAttrs([idx])
                 else: # Backup only existing rows, rollback drops new rows anyway
                     self.rows_backup[idx] = data.copy()
-                data["__changed__"] = True
+                data[self.KEY_CHANGED] = True
                 self.idx_changed.add(idx)
             data[self.columns[col]["name"]] = col_value
             if self.View:
@@ -367,13 +378,13 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
         max_index = 0
         for k in (k for k in ("changed", "deleted") if k in changes):
-            max_index = max(max_index, max(x["__id__"] for x in changes[k]))
+            max_index = max(max_index, max(x[self.KEY_ID] for x in changes[k]))
         self.SeekToRow(max_index)
 
         if changes.get("changed"):
-            self.idx_changed = set(x["__id__"] for x in changes["changed"])
+            self.idx_changed = set(x[self.KEY_ID] for x in changes["changed"])
             for row in changes["changed"]:
-                idx = row["__id__"]
+                idx = row[self.KEY_ID]
                 if idx in self.rows_all:
                     if idx not in self.rows_backup:
                         self.rows_backup[idx] = copy.deepcopy(self.rows_all[idx])
@@ -381,9 +392,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                     refresh_idxs.append(idx)
 
         if changes.get("deleted"):
-            rowmap = {x["__id__"]: x for x in changes["deleted"]}
-            idxs = {r["__id__"]: i for i, r in enumerate(self.rows_current)
-                    if r["__id__"] in rowmap}
+            rowmap = {x[self.KEY_ID]: x for x in changes["deleted"]}
+            idxs = {r[self.KEY_ID]: i for i, r in enumerate(self.rows_current)
+                    if r[self.KEY_ID] in rowmap}
             for idx in sorted(idxs.values(), reverse=True):
                 del self.rows_current[idx]
             self.rows_deleted = {x: rowmap[x] for x in idxs}
@@ -391,7 +402,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
         if changes.get("new"):
             for row in reversed(changes["new"]):
-                idx = row["__id__"]
+                idx = row[self.KEY_ID]
                 self.idx_all.insert(0, idx)
                 self.rows_current.insert(0, row)
                 self.rows_all[idx] = row
@@ -456,12 +467,12 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
         name = "default"
         if row < len(self.rows_current):
-            if self.rows_current[row]["__changed__"]:
-                idx = self.rows_current[row]["__id__"]
+            if self.rows_current[row][self.KEY_CHANGED]:
+                idx = self.rows_current[row][self.KEY_ID]
                 value = self.rows_current[row][self.columns[col]["name"]]
                 backup = self.rows_backup[idx][self.columns[col]["name"]]
                 name = "row_changed" if backup == value else "cell_changed"
-            elif self.rows_current[row]["__new__"]: name = "new"
+            elif self.rows_current[row][self.KEY_NEW]: name = "new"
         attr = self.attrs[name]
         attr.IncRef()
         return attr
@@ -483,10 +494,10 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             # Construct empty dict from column names
             rowdata = dict((col["name"], None) for col in self.columns)
             idx = self.id_counter = self.id_counter + 1
-            rowdata["__id__"] = idx
-            rowdata["__changed__"] = False
-            rowdata["__new__"] = True
-            rowdata["__deleted__"] = False
+            rowdata[self.KEY_ID]      = idx
+            rowdata[self.KEY_CHANGED] = False
+            rowdata[self.KEY_NEW]     = True
+            rowdata[self.KEY_DELETED] = False
             # Insert rows at the beginning, so that they can be edited
             # immediately, otherwise would need to retrieve all rows first.
             self.idx_all.insert(0, idx)
@@ -507,16 +518,16 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         rows_before = self.GetNumberRows()
         for _ in range(numRows):
             data = self.rows_current[row]
-            idx = data["__id__"]
+            idx = data[self.KEY_ID]
             del self.rows_current[row]
             if idx in self.rows_backup:
                 # If row was changed, switch to its backup data
                 data = self.rows_backup.pop(idx)
                 self.idx_changed.remove(idx)
-            if not data["__new__"]:
+            if not data[self.KEY_NEW]:
                 # Drop new rows on delete, rollback can't restore them.
-                data["__changed__"] = False
-                data["__deleted__"] = True
+                data[self.KEY_CHANGED] = False
+                data[self.KEY_DELETED] = True
                 self.rows_deleted[idx] = data
             else:
                 self.idx_new.remove(idx)
@@ -596,7 +607,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         is_sorted = (self.sort_column is not None)
         self.sort_column, self.sort_ascending = None, None
         if not refresh or not is_sorted: return
-        self.rows_current.sort(key=lambda x: self.idx_all.index(x["__id__"]))
+        self.rows_current.sort(key=lambda x: self.idx_all.index(x[self.KEY_ID]))
         if self.View: self.View.ForceRefresh()
 
 
@@ -606,7 +617,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         """
         del self.rows_current[:]
         for idx, row in sorted(self.rows_all.items()):
-            if not row["__deleted__"] and not self._IsRowFiltered(row):
+            if not row[self.KEY_DELETED] and not self._IsRowFiltered(row):
                 self.rows_current.append(row)
         if self.sort_column is None:
             pagesize = self.View.Size[1] / self.View.GetDefaultRowSize()
@@ -636,7 +647,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                               else False if self.sort_ascending else None
         if self.sort_ascending is None:
             self.sort_column = None
-            self.rows_current.sort(key=lambda x: self.idx_all.index(x["__id__"]))
+            self.rows_current.sort(key=lambda x: self.idx_all.index(x[self.KEY_ID]))
         else:
             self.sort_column = col
             self.rows_current.sort(cmp=compare, reverse=not self.sort_ascending)
@@ -657,7 +668,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 row = self.rows_all[idx]
                 self.db.update_row(self.name, row, self.rows_backup[idx],
                                    self.rowids.get(idx))
-                row["__changed__"] = False
+                row[self.KEY_CHANGED] = False
                 self.idx_changed.remove(idx)
                 del self.rows_backup[idx]
                 refresh_idxs.append(idx)
@@ -674,7 +685,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                     row[pks[0]] = insert_id
                 if self.rowid_name and insert_id is not None:
                     self.rowids[idx] = insert_id
-                row["__new__"] = False
+                row[self.KEY_NEW] = False
                 self.idx_new.remove(idx)
                 refresh_idxs.append(idx)
                 if grammar.SQL.INSERT in actions: reload_idxs.append(idx)
@@ -706,7 +717,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         # Restore all changed row data from backup
         for idx in self.idx_changed.copy():
             row = self.rows_backup[idx]
-            row["__changed__"] = False
+            row[self.KEY_CHANGED] = False
             self.rows_all[idx].update(row)
             self.idx_changed.remove(idx)
             del self.rows_backup[idx]
@@ -721,7 +732,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             self.row_count -= 1
         # Undelete all newly deleted items
         for idx, row in self.rows_deleted.items():
-            row["__deleted__"] = False
+            row[self.KEY_DELETED] = False
             self.rows_all[idx].update(row)
             del self.rows_deleted[idx]
             self.row_count += 1
@@ -764,10 +775,44 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         self.NotifyViewChange(rows_before)
 
 
+    def Paste(self):
+        """
+        Pastes current clipboard data to current position, with tabs in data
+        going to next column, and linefeeds in data going to next row.
+        """
+        data = None
+        if "table" == self.category and self.View and wx.TheClipboard.Open():
+            if wx.TheClipboard.IsSupported(wx.DataFormat(wx.DF_TEXT)):
+                o = wx.TextDataObject()
+                wx.TheClipboard.GetData(o)
+                data = o.Text
+            wx.TheClipboard.Close()
+        if not data: return
+
+        row, col = self.View.GridCursorRow, self.View.GridCursorCol
+        rowdatas = [x.split("\t") for x in data.split("\n")]
+        for i, rowdata in enumerate(rowdatas):
+            if row + i >= self.GetNumberRows(): break # for i, rowdata
+            for j, value in enumerate(rowdata):
+                if col + j >= self.GetNumberCols(): break # for j, value
+                self.SetValue(row + i, col + j, value)
+        self.View.GoToCell(min(row + len(rowdatas)    - 1, self.GetNumberRows() - 1),
+                           min(col + len(rowdatas[0]) - 1, self.GetNumberCols() - 1))
+        wx.PostEvent(self.View, GridBaseEvent(wx.ID_ANY, refresh=True))
+
+
     def OnMenu(self, event):
         """Handler for opening popup menu in grid."""
         menu = wx.Menu()
-        menu_fks, menu_dks = wx.Menu(), wx.Menu()
+        menu_copy, menu_cols = wx.Menu(), wx.Menu()
+        menu_fks,  menu_dks  = wx.Menu(), wx.Menu()
+
+
+        def copy(text, status, *args):
+            if wx.TheClipboard.Open():
+                d = wx.TextDataObject(text)
+                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+                guibase.status(status, *args, flash=True)
 
         def on_event(event=None, **kwargs):
             """Fires event to parent grid."""
@@ -775,36 +820,56 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
         def on_copy(event=None):
             """Copies rows data to clipboard."""
-            if wx.TheClipboard.Open():
-                text = "\n".join("\t".join(util.to_unicode(x[c["name"]])
-                                           for c in self.columns) for x in rowdatas)
-                d = wx.TextDataObject(text)
-                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status("Copied row%s to clipboard%s", rowsuff, cutoff, flash=True)
+            text = "\n".join("\t".join(util.to_unicode(x[c["name"]])
+                                       for c in self.columns) for x in rowdatas)
+            copy(text, "Copied row%s data to clipboard%s", rowsuff, cutoff)
 
         def on_copy_col(event=None):
             """Copies columns data to clipboard."""
-            if wx.TheClipboard.Open():
-                text = "\n".join("\t".join(util.to_unicode(x[self.columns[i]["name"]])
-                                           for i in cols) for x in rowdatas)
-                d = wx.TextDataObject(text)
-                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status("Copied column%s to clipboard%s", colsuff, cutoff, flash=True)
+            text = "\n".join("\t".join(util.to_unicode(x[self.columns[i]["name"]])
+                                       for i in cols) for x in rowdatas)
+            copy(text, "Copied column%s data to clipboard%s", colsuff, cutoff)
 
-
-        def on_copy_sql(event=None):
+        def on_copy_insert(event=None):
             """Copies rows INSERT SQL to clipboard."""
             tpl = step.Template(templates.DATA_ROWS_SQL, strip=False)
             text = tpl.expand(name=self.name, rows=rowdatas,
                               columns=[x["name"] for x in self.columns])
-            if wx.TheClipboard.Open():
-                d = wx.TextDataObject(text)
-                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status("Copied SQL to clipboard%s", cutoff, flash=True)
+            copy(text, "Copied INSERT SQL to clipboard%s", cutoff)
+
+        def on_copy_update(event=None):
+            """Copies rows INSERT SQL to clipboard."""
+            tpl = step.Template(templates.DATA_ROWS_UPDATE_SQL, strip=False)
+            mydatas, mydatas0, mypks = rowdatas, rowdatas0, [c["name"] for c in pks]
+            if not mypks and self.rowid_name:
+                mypks = [self.rowid_name]
+                for i, (row, row0) in enumerate(zip(mydatas, mydatas0)):
+                    rowid = self.rowids.get(row[self.KEY_ID])
+                    if rowid is not None:
+                        mydatas[i]  = dict(row,  **{self.rowid_name: rowid})
+                        mydatas0[i] = dict(row0, **{self.rowid_name: rowid})
+            text = tpl.expand(name=self.name, rows=rowdatas, originals=rowdatas0,
+                              columns=[x["name"] for x in self.columns], pks=mypks)
+            copy(text, "Copied UPDATE SQL to clipboard%s", cutoff)
+
+        def on_copy_txt(event=None):
+            """Copies rows to clipboard as text."""
+            tpl = step.Template(templates.DATA_ROWS_PAGE_TXT, strip=False)
+            text = tpl.expand(name=self.name, rows=rowdatas,
+                              columns=[x["name"] for x in self.columns])
+            copy(text, "Copied row%s text to clipboard%s", rowsuff, cutoff)
+
+        def on_copy_json(event=None):
+            """Copies rows to clipboard as JSON."""
+            mydatas = [OrderedDict((c["name"], x[c["name"]]) for c in self.columns)
+                       for x in rowdatas]
+            data = mydatas if len(mydatas) > 1 else mydatas[0]
+            text = json.dumps(data, indent=2)
+            copy(text, "Copied row%s JSON to clipboard%s", rowsuff, cutoff)
 
         def on_reset(event=None):
             """Resets row changes."""
-            for idx, rowdata in zip(idxs, rowdatas):
+            for idx, rowdata in zip(idxs, rowdatas0):
                 self.rows_all[idx].update(rowdata)
                 self.idx_changed.discard(idx)
                 self._RefreshAttrs([idx])
@@ -828,7 +893,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         def on_delete_cascade(event=None):
             """Confirms whether to delete row and related rows."""
             inter1 = inter2 = ""
-            name = "this rows" if len(rowdatas) == 1 else "these rows"
+            name = "this rows" if len(rowdatas0) == 1 else "these rows"
             if any("table" in x for x in dks):
                 inter1 = " and all its related rows"
                 inter2 = "Table %s is referenced by:\n- %s.\n\n" \
@@ -847,7 +912,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             if wx.YES != controls.YesNoMessageBox(msg, "Delete %s" % caption, wx.ICON_WARNING,
             defaultno=True): return
 
-            result = self.db.delete_cascade(self.name, rowdatas, [self.rowids.get(x) for x in idxs])
+            result = self.db.delete_cascade(self.name, rowdatas0, [self.rowids.get(x) for x in idxs])
             self.DropRows([x for t, xx in result if t == self.name for x in xx])
             others = OrderedDict() # {table: [{row data}, ]}
             for t, xx in result:
@@ -860,11 +925,23 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 msg += "\n- %s in table %s" % (util.plural("row", xx), grammar.quote(t, force=True))
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_INFORMATION)
 
+        def on_col_copy(col, event=None):
+            text = "\n".join(util.to_unicode(x[self.columns[col]["name"]])
+                             for x in rowdatas)
+            copy(text, "Copied column data to clipboard%s", cutoff)
+
+        def on_col_name(col, event=None):
+            text = self.columns[col]["name"]
+            copy(text, "Copied column name to clipboard%s", cutoff)
+
+        def on_col_goto(col, event=None):
+            self.View.GoToCell(self.View.GridCursorRow, col)
+
 
         pks = [c for c in self.columns if "pk" in c]
         dks, fks = self.db.get_keys(self.name)
         is_table = ("table" == self.category)
-        caption, rowdatas, idxs, cutoff = "", [], [], ""
+        caption, rowdatas, rowdatas0, idxs, cutoff = "", [], [], [], ""
         rows, cols = get_grid_selection(self.View, cursor=False)
         if not rows:
             if isinstance(event, wx.MouseEvent) and event.Position != wx.DefaultPosition:
@@ -878,14 +955,15 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
         if rows:
             rowdatas = [self.rows_current[i] for i in rows if i < len(self.rows_current)]
-            idxs     = [x["__id__"] for x in rowdatas]
+            rowdatas0 = list(rowdatas)
+            idxs     = [x[self.KEY_ID] for x in rowdatas]
             for i, idx in enumerate(idxs):
-                if idx in self.rows_backup: rowdatas[i] = self.rows_backup[idx]
+                if idx in self.rows_backup: rowdatas0[i] = self.rows_backup[idx]
             if len(rows) != len(rowdatas): cutoff = ", stopped at row %s" % len(rowdatas)
 
             if len(rows) > 1: caption = util.plural("row", rows)
-            elif rowdatas[0]["__new__"]: caption = "New row"
-            elif pks: caption = ", ".join("%s %s" % (c["name"], rowdatas[0][c["name"]])
+            elif rowdatas[0][self.KEY_NEW]: caption = "New row"
+            elif pks: caption = ", ".join("%s %s" % (c["name"], rowdatas0[0][c["name"]])
                                           for c in pks)
             elif idxs[0] in self.rowids:
                 caption = "ROWID %s" % self.rowids[idxs[0]]
@@ -895,10 +973,14 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         colsuff = "" if len(cols)     == 1 else "s"
         if rowdatas: item_caption = wx.MenuItem(menu, -1, caption)
         if rowdatas:
-            item_copy     = wx.MenuItem(menu, -1, "Copy &row%s" % rowsuff)
-            item_copy_col = wx.MenuItem(menu, -1, "Copy co&lumn%s" % colsuff)
-            item_copy_sql = wx.MenuItem(menu, -1, "Copy row%s INSERT &SQL" % rowsuff)
-            item_open     = wx.MenuItem(menu, -1, "&Open form")
+            item_copy        = wx.MenuItem(menu,      -1, "&Copy row%s" % rowsuff)
+            item_paste       = wx.MenuItem(menu,      -1, "Paste")
+            item_copy_col    = wx.MenuItem(menu_copy, -1, "Copy selected co&lumn%s" % colsuff)
+            item_copy_insert = wx.MenuItem(menu_copy, -1, "Copy row%s &INSERT SQL" % rowsuff)
+            item_copy_update = wx.MenuItem(menu_copy, -1, "Copy row%s &UPDATE SQL" % rowsuff)
+            item_copy_txt    = wx.MenuItem(menu_copy, -1, "Copy row%s as &text" % colsuff)
+            item_copy_json   = wx.MenuItem(menu_copy, -1, "Copy row%s as &JSON" % colsuff)
+            item_open        = wx.MenuItem(menu,      -1, "&Open form")
 
         if is_table:
             item_insert = wx.MenuItem(menu, -1, "Add &new row")
@@ -920,8 +1002,14 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             menu.Append(item_caption)
             menu.AppendSeparator()
             menu.Append(item_copy)
-            menu.Append(item_copy_col)
-            if is_table: menu.Append(item_copy_sql)
+            menu_copy.Append(item_copy_col)
+            menu_copy.Append(item_copy_insert)
+            menu_copy.Append(item_copy_update)
+            menu_copy.Append(item_copy_txt)
+            menu_copy.Append(item_copy_json)
+            menu.Append(wx.ID_ANY, "Co&py ..", menu_copy)
+            menu.Append(item_paste)
+            item_paste.Enabled = wx.TheClipboard.IsSupported(wx.DataFormat(wx.DF_TEXT))
         if is_table and rowdatas:
             menu.Append(item_reset)
             item_reset.Enabled = any(x in self.idx_changed for x in idxs)
@@ -935,7 +1023,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         has_cascade = False
         for is_fks, (keys, menu2) in enumerate([(dks, menu_dks), (fks, menu_fks)]):
             titles = []
-            for rowdata in rowdatas:
+            for rowdata in rowdatas0:
                 for c in keys:
                     itemtitle = ", ".join(c["name"]) + " " + fmtvals(rowdata, c["name"])
                     if itemtitle in titles: continue # for c
@@ -957,11 +1045,26 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 if len(titles) >= 20:
                     menu2.Append(wx.ID_ANY, "..").Enable(False)
                     break # for rowdata
+        for col, coldata in enumerate(self.columns):
+            submenu = wx.Menu()
+            tip = self.db.get_sql(self.category, self.name, coldata["name"])
+            menu_cols.Append(wx.ID_ANY, coldata["name"], submenu, tip)
+            item_col_copy = wx.MenuItem(submenu, -1, "&Copy column")
+            item_col_name = wx.MenuItem(submenu, -1, "Copy column &name")
+            item_col_goto = wx.MenuItem(submenu, -1, "&Go to column")
+            submenu.Append(item_col_copy)
+            submenu.Append(item_col_name)
+            submenu.Append(item_col_goto)
+            menu.Bind(wx.EVT_MENU, functools.partial(on_col_copy, col), item_col_copy)
+            menu.Bind(wx.EVT_MENU, functools.partial(on_col_name, col), item_col_name)
+            menu.Bind(wx.EVT_MENU, functools.partial(on_col_goto, col), item_col_goto)
+
 
         if is_table and rowdatas:
             menu.AppendSeparator()
             item_dks = menu.AppendSubMenu(menu_dks, "&Domestic keys")
             item_fks = menu.AppendSubMenu(menu_fks, "&Foreign keys")
+            menu.AppendSubMenu(menu_cols, "Co&lumns")
             menu.AppendSeparator()
             menu.Append(item_insert)
             menu.Append(item_delete)
@@ -969,9 +1072,11 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 menu.Append(item_delete_cascade)
             if not dks: item_dks.Enabled = False
             if not fks: item_fks.Enabled = False
-            item_delete_cascade.Enabled = has_cascade and any(not x["__new__"] for x in rowdatas)
+            item_delete_cascade.Enabled = has_cascade and any(not x[self.KEY_NEW] for x in rowdatas)
         elif is_table:
             menu.Append(item_insert)
+        else:
+            menu.AppendSubMenu(menu_cols, "Co&lumns")
         if rowdatas:
             menu.Append(item_open)
         if self.row_count:
@@ -980,12 +1085,16 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         if is_table:
             menu.Bind(wx.EVT_MENU, functools.partial(on_event, insert=True), item_insert)
         if rowdatas:
-            menu.Bind(wx.EVT_MENU, on_copy,     item_copy)
-            menu.Bind(wx.EVT_MENU, on_copy_col, item_copy_col)
+            menu.Bind(wx.EVT_MENU, on_copy,        item_copy)
+            menu.Bind(wx.EVT_MENU, on_copy_col,    item_copy_col)
+            menu.Bind(wx.EVT_MENU, on_copy_insert, item_copy_insert)
+            menu.Bind(wx.EVT_MENU, on_copy_update, item_copy_update)
+            menu.Bind(wx.EVT_MENU, on_copy_txt,    item_copy_txt)
+            menu.Bind(wx.EVT_MENU, on_copy_json,   item_copy_json)
+            menu.Bind(wx.EVT_MENU, lambda e: self.Paste(), item_paste)
             menu.Bind(wx.EVT_MENU, functools.partial(on_event, form=True, row=rows[0]), item_open)
         if is_table and rowdatas:
-            menu.Bind(wx.EVT_MENU, on_copy_sql, item_copy_sql)
-            menu.Bind(wx.EVT_MENU, on_reset,    item_reset)
+            menu.Bind(wx.EVT_MENU, on_reset, item_reset)
             menu.Bind(wx.EVT_MENU, functools.partial(on_event, delete=True, rows=[i for i in rows if i < len(self.rows_current)]), item_delete)
             menu.Bind(wx.EVT_MENU, on_delete_cascade, item_delete_cascade)
         if self.row_count:
@@ -999,7 +1108,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         if not self.View: return
         for idx in idxs:
             row = next((i for i, x in enumerate(self.rows_current)
-                        if x["__id__"] == idx), -1)
+                        if x[self.KEY_ID] == idx), -1)
             for col in range(len(self.columns)) if row >= 0 else ():
                 self.View.RefreshAttr(row, col)
         self.View.Refresh()
@@ -1141,13 +1250,18 @@ class SQLiteGridBaseMixin(object):
     def _OnGridKey(self, event):
         """
         Handler for grid keypress, seeks ahead on Ctrl-Down/End,
-        copies selection to clipboard on Ctrl-C/Insert.
+        copies selection to clipboard on Ctrl-C/Insert,
+        pastes data to grid cells on Ctrl-V/Shift-Insert.
         """
-        if not isinstance(self._grid.Table, SQLiteGridBase) \
-        or not event.ControlDown(): return event.Skip()
+        if not isinstance(self._grid.Table, SQLiteGridBase): return event.Skip()
 
-        if event.KeyCode in (wx.WXK_DOWN, wx.WXK_END, wx.WXK_NUMPAD_END) \
-        and not self._grid.Table.IsComplete():
+        if event.ControlDown() and event.KeyCode == ord("V") \
+        or not event.ControlDown() and event.ShiftDown() \
+        and event.KeyCode in (wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT):
+            self._grid.Table.Paste()
+
+        elif event.ControlDown() and not self._grid.Table.IsComplete() \
+        and event.KeyCode in (wx.WXK_DOWN, wx.WXK_END, wx.WXK_NUMPAD_END):
             # Disallow jumping to the very end, may be a billion rows.
             row, col = (self._grid.GridCursorRow, self._grid.GridCursorCol)
             rows_present = self._grid.Table.GetNumberRows(present=True) - 1
@@ -1161,8 +1275,8 @@ class SQLiteGridBaseMixin(object):
             if event.ShiftDown():
                 self._grid.SelectBlock(row, col, row2, col)
 
-        elif event.KeyCode in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT) \
-        and not event.ShiftDown():
+        elif event.ControlDown() and not event.ShiftDown() \
+        and event.KeyCode in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT):
             rows, cols = get_grid_selection(self._grid)
             if not rows or not cols: return
 
@@ -5283,7 +5397,7 @@ class ImportDialog(wx.Dialog):
         self._tables = db.get_category("table").values()
         self._sheet  = None # {name, rows, columns}
         self._table  = None # {table opts} to import into
-        self._has_header  = True  # Whether using first row as header
+        self._has_header  = True  # Whether using first row as header, None if inappicable
         self._has_new     = False # Whether a new table has been added
         self._has_pk      = False # Whether new table has auto-increment primary key
         self._importing   = False # Whether import underway
@@ -5520,15 +5634,16 @@ class ImportDialog(wx.Dialog):
                        for i, x in enumerate(self._sheet["columns"])]
         for i, c in enumerate(self._cols2): c["skip"] = i >= len(self._cols1)
 
-        info = "Import from %s.\nSize: %s (%s).\nWorksheets: %s." % (
+        has_sheets = not data["name"].lower().endswith(".json")
+        info = "Import from %s.\nSize: %s (%s).%s" % (
             data["name"],
             util.format_bytes(data["size"]),
             util.format_bytes(data["size"], max_units=False),
-            len(data["sheets"]),
+            ("\nWorksheets: %s." % len(data["sheets"])) if has_sheets else "",
         )
         self._info_file.Label = info
 
-        self._combo_sheet.Enabled = self._check_header.Enabled = True
+        self._combo_sheet.Enabled = self._check_header.Enabled = has_sheets
         self._combo_table.Enabled = not self._table_fixed
         self._button_table.Enabled = False if self._table_fixed else bool(self._cols1)
         self._combo_sheet.SetItems(["%s (%s, %s)" % (
@@ -5537,6 +5652,8 @@ class ImportDialog(wx.Dialog):
             else util.plural("row", x["rows"]),
         ) for x in data["sheets"]])
         self._combo_sheet.Select(idx)
+        self._has_header = has_sheets or None
+        self._check_header.Value = bool(self._has_header)
 
         self._l1.Enable()
         self._OnSize()
@@ -5608,7 +5725,8 @@ class ImportDialog(wx.Dialog):
             l.SetBackgroundColour(discardbgcolour if l.ReadOnly else bgcolour)
             for j, c in enumerate(cc):
                 if c["skip"] and (not j or not cc[j-1]["skip"]): add_separator(l, i)
-                name = c["name"] if i or self._has_header else self._MakeColumnName(i, c)
+                name = c["name"] if i or self._has_header in (True, None) \
+                       else self._MakeColumnName(i, c)
                 add_row(l, name, c["index"] + 1, j)
                 if c["skip"]:
                     l.SetItemTextColour(l.ItemCount - 1, discardcolour)
@@ -6106,7 +6224,7 @@ class ImportDialog(wx.Dialog):
         if not self._has_new:
             self._cols2, allcols = [], []
             for i, c in enumerate(self._cols1):
-                if not self._has_header: cname = self._MakeColumnName(1, {"index": i})
+                if self._has_header is False: cname = self._MakeColumnName(1, {"index": i})
                 else:
                     cname = util.make_unique(c["name"] or "col", allcols)
                     allcols.append(cname)
@@ -6441,11 +6559,11 @@ class DataDialog(wx.Dialog):
             self._button_next.Enabled = self._row + 1 < gridbase.RowsCount
 
             pks = [c for c in self._columns if "pk" in c]
-            if self._data["__new__"]: rowtitle = "New row"
+            if self._data[gridbase.KEY_NEW]: rowtitle = "New row"
             elif pks: rowtitle = ", ".join("%s %s" % (c["name"], self._original[c["name"]])
                                           for c in pks)
-            elif self._data["__id__"] in gridbase.rowids:
-                rowtitle = "ROWID %s" % gridbase.rowids[self._data["__id__"]]
+            elif self._data[gridbase.KEY_ID] in gridbase.rowids:
+                rowtitle = "ROWID %s" % gridbase.rowids[self._data[gridbase.KEY_ID]]
             else: rowtitle = "Row #%s" % (self._row + 1)
             self._text_header.Label = rowtitle
 
@@ -6563,19 +6681,21 @@ class DataDialog(wx.Dialog):
         coldata = self._columns[col]
         menu = wx.Menu()
 
-        def on_copy_data(event=None):
+        def copy(text, status, *args):
             if wx.TheClipboard.Open():
-                text = util.to_unicode(self._data[coldata["name"]])
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status("Copied column data to clipboard", flash=True)
+                guibase.status(status, *args, flash=True)
+        def on_copy_data(event=None):
+            text = util.to_unicode(self._data[coldata["name"]])
+            copy(text, "Copied column data to clipboard")
+        def on_copy_name(event=None):
+            text = util.to_unicode(coldata["name"])
+            copy(text, "Copied column name to clipboard")
         def on_copy_sql(event=None):
             text = "%s = %s" % (grammar.quote(coldata["name"]),
                                 grammar.format(self._data[coldata["name"]]))
-            if wx.TheClipboard.Open():
-                d = wx.TextDataObject(text)
-                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status("Copied column SQL to clipboard", flash=True)
+            copy(text, "Copied column UPDATE SQL to clipboard")
         def on_reset(event=None):
             self._SetValue(col, self._original[coldata["name"]])
         def on_null(event=None):
@@ -6591,7 +6711,8 @@ class DataDialog(wx.Dialog):
             self._SetValue(col, v)
 
         item_data     = wx.MenuItem(menu, -1, "&Copy value")
-        item_sql      = wx.MenuItem(menu, -1, "Copy UPDATE &SQL")
+        item_name     = wx.MenuItem(menu, -1, "Copy co&lumn name")
+        item_sql      = wx.MenuItem(menu, -1, "Copy SET &SQL")
         item_reset    = wx.MenuItem(menu, -1, "&Reset")
         item_null     = wx.MenuItem(menu, -1, "Set &NULL")
         item_date     = wx.MenuItem(menu, -1, "Set current &date")
@@ -6601,6 +6722,7 @@ class DataDialog(wx.Dialog):
         item_null.Enabled = "notnull" not in coldata and "pk" not in coldata
 
         menu.Append(item_data)
+        menu.Append(item_name)
         menu.Append(item_sql)
         menu.AppendSeparator()
         menu.Append(item_reset)
@@ -6611,6 +6733,7 @@ class DataDialog(wx.Dialog):
         menu.Append(item_stamp)
 
         menu.Bind(wx.EVT_MENU, on_copy_data, item_data)
+        menu.Bind(wx.EVT_MENU, on_copy_name, item_name)
         menu.Bind(wx.EVT_MENU, on_copy_sql,  item_sql)
         menu.Bind(wx.EVT_MENU, on_reset,     item_reset)
         menu.Bind(wx.EVT_MENU, on_null,      item_null)
@@ -6625,30 +6748,66 @@ class DataDialog(wx.Dialog):
         """Handler for opening popup menu for copying row."""
         menu = wx.Menu()
 
-        def on_copy_data(event=None):
+        def copy(text, status, *args):
             if wx.TheClipboard.Open():
-                text = "\t".join(util.to_unicode(self._data[c["name"]])
-                                 for c in self._columns)
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status("Copied row data to clipboard", flash=True)
-        def on_copy_sql(event=None):
+                guibase.status(status, *args, flash=True)
+
+        def on_copy_data(event=None):
+            text = "\t".join(util.to_unicode(self._data[c["name"]])
+                             for c in self._columns)
+            copy(text, "Copied row data to clipboard")
+
+        def on_copy_insert(event=None):
             tpl = step.Template(templates.DATA_ROWS_SQL, strip=False)
             text = tpl.expand(name=self._gridbase.name, rows=[self._data],
                               columns=[x["name"] for x in self._columns])
-            if wx.TheClipboard.Open():
-                d = wx.TextDataObject(text)
-                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status("Copied row SQL to clipboard", flash=True)
+            copy(text, "Copied row INSERT SQL to clipboard")
 
-        item_data = wx.MenuItem(menu, -1, "Copy &data")
-        item_sql = wx.MenuItem(menu, -1, "Copy INSERT &SQL")
+        def on_copy_update(event=None):
+            tpl = step.Template(templates.DATA_ROWS_UPDATE_SQL, strip=False)
+            mydata, mydata0 = self._data, self._original
+            mypks = [c["name"] for c in self._columns if "pk" in c]
+            if not mypks and self._gridbase.rowid_name:
+                mypks = [self._gridbase.rowid_name]
+                rowid = self._gridbase.rowids.get(mydata[self.KEY_ID])
+                if rowid is not None:
+                    mydata  = dict(mydata,  **{mypks[0]: rowid})
+                    mydata0 = dict(mydata0, **{mypks[0]: rowid})
+            text = tpl.expand(name=self._gridbase.name, rows=[mydata], originals=[mydata0],
+                              columns=[x["name"] for x in self._columns], pks=mypks)
+            copy(text, "Copied row UPDATE SQL to clipboard")
+
+        def on_copy_txt(event=None):
+            tpl = step.Template(templates.DATA_ROWS_PAGE_TXT, strip=False)
+            text = tpl.expand(name=self._gridbase.name, rows=[self._data],
+                              columns=[x["name"] for x in self._columns])
+            copy(text, "Copied row text to clipboard")
+
+        def on_copy_json(event=None):
+            mydata = OrderedDict((c["name"], self._data[c["name"]]) for c in self._columns)
+            text = json.dumps(mydata, indent=2)
+            copy(text, "Copied row JSON to clipboard")
+
+
+        item_data   = wx.MenuItem(menu, -1, "Copy row &data")
+        item_insert = wx.MenuItem(menu, -1, "Copy &INSERT SQL")
+        item_update = wx.MenuItem(menu, -1, "Copy &UPDATE SQL")
+        item_text   = wx.MenuItem(menu, -1, "Copy row as &text")
+        item_json   = wx.MenuItem(menu, -1, "Copy row as &JSON")
 
         menu.Append(item_data)
-        menu.Append(item_sql)
+        menu.Append(item_insert)
+        menu.Append(item_update)
+        menu.Append(item_text)
+        menu.Append(item_json)
 
-        menu.Bind(wx.EVT_MENU, on_copy_data, item_data)
-        menu.Bind(wx.EVT_MENU, on_copy_sql,  item_sql)
+        menu.Bind(wx.EVT_MENU, on_copy_data,   item_data)
+        menu.Bind(wx.EVT_MENU, on_copy_insert, item_insert)
+        menu.Bind(wx.EVT_MENU, on_copy_update, item_update)
+        menu.Bind(wx.EVT_MENU, on_copy_txt,    item_text)
+        menu.Bind(wx.EVT_MENU, on_copy_json,   item_json)
 
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
 

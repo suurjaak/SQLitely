@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.11.2019
+@modified    27.11.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -17,7 +17,7 @@ import re
 from . import conf
 
 # Modules imported inside templates:
-#import itertools, os, pyparsing, sys, wx
+#import collections, itertools, json, os, pyparsing, sys, wx
 #from sqlitely import conf, grammar, images, searchparser, templates
 #from sqlitely.lib import util
 
@@ -286,6 +286,74 @@ from sqlitely import conf, templates
 
 
 """
+JSON export template.
+
+@param   title        export title
+@param   db_filename  database path or temporary name
+@param   row_count    number of rows
+@param   sql          SQL query giving export data, if any
+@param   create_sql   CREATE SQL statement for export object, if any
+@param   data_buffer  iterable yielding rows data in text chunks
+"""
+DATA_JSON = """<%
+from sqlitely.lib import util
+from sqlitely import conf, templates
+
+%>// {{ title }}.
+// Source: {{ db_filename }}.
+// {{ templates.export_comment() }}
+// {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
+%if sql:
+//
+// SQL: {{ sql.replace("\\n", "\\n//      ") }};
+//
+%endif
+%if isdef("create_sql") and create_sql:
+//
+// {{ create_sql.rstrip(";").replace("\\n", "\\n//  ") }};
+//
+%endif
+
+[
+<%
+for chunk in data_buffer:
+    echo(chunk)
+%>
+]
+"""
+
+
+
+"""
+JSON export template for the rows part.
+
+@param   rows       iterable
+@param   columns    [name, ]
+@param   name       table name
+@param   ?namespace  {"row_count"}
+@param   ?progress  callback(name, count) returning whether to cancel, if any
+"""
+DATA_ROWS_JSON = """<%
+import collections, json
+from sqlitely import templates
+
+rows = iter(rows)
+i, row, nextrow = 1, next(rows, None), next(rows, None)
+indent = "  " if nextrow else ""
+while row:
+    namespace["row_count"] += 1
+    data = collections.OrderedDict(((c, row[c]) for c in columns))
+    text = json.dumps(data, indent=2)
+    echo("  " + text.replace("\\n", "\\n  ") + (",\\n" if nextrow else "\\n"))
+
+    i, row, nextrow = i + 1, nextrow, next(rows, None)
+    if not i % 100 and isdef("progress") and progress and not progress(count=i):
+        break # while row
+%>"""
+
+
+
+"""
 TXT SQL insert statements export template.
 
 @param   title        export title
@@ -346,6 +414,33 @@ INSERT INTO {{ name }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
 if not i % 100 and isdef("progress") and progress and not progress(name=name, count=i):
     break # for i, row
 %>
+%endfor
+"""
+
+
+
+"""
+TXT SQL update statements export template.
+
+@param   rows       iterable
+@param   originals  original rows iterable
+@param   columns    [name, ]
+@param   pks        [name, ]
+@param   name       table name
+"""
+DATA_ROWS_UPDATE_SQL = """<%
+from sqlitely import grammar, templates
+
+str_cols = ", ".join(map(grammar.quote, columns))
+%>
+%for row, original in zip(rows, originals):
+<%
+setstr = ", ".join("%s = %s" % (grammar.quote(col), grammar.format(row[col]))
+                   for col in columns if col not in pks or row[col] != original[col])
+wherestr = " AND ".join("%s = %s" % (grammar.quote(col), grammar.format(original[col]))
+                   for col in pks if col in original)
+%>
+UPDATE {{ name }} SET {{ setstr }}{{ (" WHERE " + wherestr) if wherestr else "" }};
 %endfor
 """
 
@@ -441,6 +536,35 @@ if not i % 100 and isdef("progress") and progress and not progress(count=i):
 
 
 """
+TXT data export template for copying row as page.
+
+@param   rows          iterable
+@param   columns       [name, ]
+"""
+DATA_ROWS_PAGE_TXT = """<%
+from sqlitely import templates
+
+colwidth = max(map(len, columns))
+%>
+%for i, row in enumerate(rows):
+%if i:
+
+%endif
+%for col in columns:
+<%
+raw = row[col]
+value = "" if raw is None \
+        else raw if isinstance(raw, basestring) else str(raw)
+value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
+%>
+{{ col.ljust(colwidth) }} = {{ value }}
+%endfor
+%endfor
+"""
+
+
+
+"""
 HTML template for search results header.
 
 @param   text      search query
@@ -507,12 +631,13 @@ HTML template for search result of data row; HTML table row.
 @param   count            search result index
 @param   keywords         {"column": [], ..}
 @param   pattern_replace  regex for matching search words
+@param   search           {?case}
 """
 SEARCH_ROW_DATA_HTML = """<%
 from sqlitely import conf, searchparser, templates
 
-match_kw = lambda k, x: searchparser.match_words(x["name"], keywords[k], any)
-wrap_b = lambda x: "<b>%s</b>" % x.group(0)
+match_kw = lambda k, x: searchparser.match_words(x["name"], keywords[k], any, search.get("case"))
+wrap_b   = lambda x: "<b>%s</b>" % x.group(0)
 %>
 <tr>
 <td align="right" valign="top">
@@ -715,7 +840,7 @@ except ImportError:
     </td>
     <td bgcolor="{{ conf.BgColour }}">
       <br /><br />
-      Row is matched if for all words a match is found in at least one column.
+      Row is matched if each word finds a match in at least one column.
       <br />
     </td>
   </tr>
@@ -729,7 +854,7 @@ except ImportError:
       <br /><br />
       Use quotes (<font color="{{ conf.HelpCodeColour }}"><code>"</code></font>) to search for
       an exact phrase or word. Quoted text is searched exactly as entered,
-      leaving whitespace as-is and ignoring any wildcard characters.
+      leaving empty space as-is and ignoring any wildcard characters.
       <br />
     </td>
   </tr>
@@ -758,7 +883,7 @@ except ImportError:
     <td bgcolor="{{ conf.BgColour }}">
       <br /><br />
       Surround words with round brackets to group them for <code>OR</code>
-      queries or for excluding from results.
+      queries, or for excluding from results.
       <br />
     </td>
   </tr>
@@ -772,7 +897,7 @@ except ImportError:
       <br /><br />
       Use an asterisk (<font color="{{ conf.HelpCodeColour }}"><code>*</code></font>) to make a
       wildcard query: the wildcard will match any text between its front and
-      rear characters (including other words and whitespace).
+      rear characters (including empty space and other words).
       <br />
     </td>
   </tr>
@@ -890,7 +1015,7 @@ except ImportError:
   </ul>
 
   <br /><br />
-  All search texts and keywords are case-insensitive. <br />
+  All search texts and keywords are case-insensitive by default. <br />
   Keywords are global, even when in bracketed (grouped words). <br />
   Metadata search supports only <code>table:</code> and <code>view:</code> keywords.
 

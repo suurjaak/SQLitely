@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.11.2019
+@modified    26.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -132,22 +132,21 @@ class SearchThread(WorkerThread):
         self.parser = SearchQueryParser()
 
 
-    def make_replacer(self, words):
+    def make_replacer(self, words, case=False):
         """Returns word/phrase matcher regex."""
         words_re = [x if isinstance(w, tuple) else x.replace(r"\*", ".*")
                     for w in words
                     for x in [re.escape(step.escape_html(flatten(w)[0]))]]
         patterns = "(%s)" % "|".join(words_re)
         # For replacing matching words with <b>words</b>
-        pattern_replace = re.compile(patterns, re.IGNORECASE)
-        return pattern_replace
+        return re.compile(patterns, 0 if case else re.IGNORECASE)
 
 
     def search_meta(self, search):
         """Searches database metadata, yielding (infotext, result)."""
-        infotext = "database metadata"
-        _, _, words, kws = self.parser.Parse(search["text"])
-        pattern_replace = self.make_replacer(words)
+        infotext, case = "database metadata", search.get("case")
+        _, _, words, kws = self.parser.Parse(search["text"], case)
+        pattern_replace = self.make_replacer(words, case)
         tpl = step.Template(templates.SEARCH_ROW_META_HTML, escape=True)
         result = {"output": "", "map": {}, "search": search, "count": 0}
 
@@ -159,18 +158,18 @@ class SearchThread(WorkerThread):
 
             for item in search["db"].get_category(category).values():
                 if (category in kws
-                and not match_words(item["name"], kws[category], any)
+                and not match_words(item["name"], kws[category], any, case)
                 or "-" + category in kws
-                and match_words(item["name"], kws["-" + category], any)):
+                and match_words(item["name"], kws["-" + category], any, case)):
                     continue # for item
 
-                if not match_words(item["sql"], words) \
+                if not match_words(item["sql"], words, all, case) \
                 and (words or category not in kws):
                     continue # for item
 
                 counts[category] = counts.get(category, 0) + 1
                 result["count"] += 1
-                ns = dict(category=category, item=item,
+                ns = dict(category=category, item=item, search=search,
                           pattern_replace=pattern_replace)
                 result["output"] += tpl.expand(ns)
                 key = "%s:%s" % (category, item["name"])
@@ -192,9 +191,9 @@ class SearchThread(WorkerThread):
 
     def search_data(self, search):
         """Searches database data, yielding (infotext, result)."""
-        infotext = ""
-        _, _, words, kws = self.parser.Parse(search["text"])
-        pattern_replace = self.make_replacer(words)
+        infotext, case = "", search.get("case")
+        _, _, words, kws = self.parser.Parse(search["text"], case)
+        pattern_replace = self.make_replacer(words, case)
         tpl_item = step.Template(templates.SEARCH_ROW_DATA_HEADER_HTML, escape=True)
         tpl_row  = step.Template(templates.SEARCH_ROW_DATA_HTML, escape=True)
         result = {"output": "", "map": {}, "search": search, "count": 0}
@@ -207,7 +206,7 @@ class SearchThread(WorkerThread):
 
             mytexts = []
             for item in search["db"].get_category(category).values():
-                sql, params, _, _ = self.parser.Parse(search["text"], item)
+                sql, params, _, _ = self.parser.Parse(search["text"], case, item)
                 if not self._is_working: break # for item
                 if not sql: continue # for item
 
@@ -223,7 +222,7 @@ class SearchThread(WorkerThread):
                     result["count"], count = result["count"] + 1, count + 1
 
                     ns = dict(category=category, item=item, row=row,
-                              keywords=kws, count=count,
+                              keywords=kws, count=count, search=search,
                               pattern_replace=pattern_replace)
                     result["output"] += tpl_row.expand(ns)
                     key = "%s:%s:%s" % (category, item["name"], count)

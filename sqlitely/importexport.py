@@ -8,13 +8,15 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.11.2019
+@modified    27.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
 import csv
 import datetime
+import functools
 import itertools
+import json
 import logging
 import os
 import re
@@ -47,7 +49,10 @@ except Exception: # Fall back to a simple mono-spaced calculation if no PIL
 
 """Wildcards for import file dialog."""
 EXCEL_EXTS = (["xls"] if xlrd else []) + (["xlsx"] if openpyxl else [])
-IMPORT_WILDCARD = "%s%sCSV spreadsheet (*.csv)|*.csv" % (
+IMPORT_WILDCARD = "All supported formats (%s)|%s|%s%s"\
+                  "CSV spreadsheet (*.csv)|*.csv|JSON data (*.json)|*.json" % (
+    ";".join("*." + x for x in EXCEL_EXTS + ["csv"] + ["json"]),
+    ";".join("*." + x for x in EXCEL_EXTS + ["csv"] + ["json"]),
     "All spreadsheets ({0})|{0}|".format(";".join("*." + x for x in EXCEL_EXTS + ["csv"])),
     "Excel workbook ({0})|{0}|".format(";".join("*." + x for x in EXCEL_EXTS))
     if EXCEL_EXTS else ""
@@ -58,11 +63,12 @@ XLSX_WILDCARD = "Excel workbook (*.xlsx)|*.xlsx|" if xlsxwriter else ""
 
 """Wildcards for export file dialog."""
 EXPORT_WILDCARD = ("HTML document (*.html)|*.html|"
+                   "JSON data (*.json)|*.json|"
                    "Text document (*.txt)|*.txt|"
                    "SQL INSERT statements (*.sql)|*.sql|"
                    "%sCSV spreadsheet (*.csv)|*.csv" % XLSX_WILDCARD)
-EXPORT_EXTS = ["html", "txt", "sql", "xlsx", "csv"] if xlsxwriter \
-               else ["html", "txt", "sql", "csv"]
+EXPORT_EXTS = ["html", "json", "txt", "sql", "xlsx", "csv"] if xlsxwriter \
+               else ["html", "json", "txt", "sql", "csv"]
 
 """Maximum file size to do full row count for."""
 MAX_IMPORT_FILESIZE_FOR_COUNT = 10 * 1e6
@@ -90,8 +96,9 @@ def export_data(make_iterable, filename, title, db, columns,
     """
     result = False
     f = None
-    is_html = filename.lower().endswith(".html")
     is_csv  = filename.lower().endswith(".csv")
+    is_html = filename.lower().endswith(".html")
+    is_json = filename.lower().endswith(".json")
     is_sql  = filename.lower().endswith(".sql")
     is_txt  = filename.lower().endswith(".txt")
     is_xlsx = filename.lower().endswith(".xlsx")
@@ -168,7 +175,8 @@ def export_data(make_iterable, filename, title, db, columns,
                 tmpname = util.unique_path("%s.rows" % filename)
                 tmpfile = open(tmpname, "wb+")
                 template = step.Template(templates.DATA_ROWS_HTML if is_html else
-                           templates.DATA_ROWS_SQL if is_sql else templates.DATA_ROWS_TXT,
+                           templates.DATA_ROWS_SQL if is_sql else templates.DATA_ROWS_JSON
+                           if is_json else templates.DATA_ROWS_TXT,
                            strip=False, escape=is_html)
                 template.stream(tmpfile, namespace)
 
@@ -188,7 +196,8 @@ def export_data(make_iterable, filename, title, db, columns,
                 tmpfile.flush(), tmpfile.seek(0)
                 namespace["data_buffer"] = iter(lambda: tmpfile.read(65536), "")
                 template = step.Template(templates.DATA_HTML if is_html else
-                           templates.DATA_SQL if is_sql else templates.DATA_TXT,
+                           templates.DATA_SQL if is_sql else templates.DATA_JSON
+                           if is_json else templates.DATA_TXT,
                            strip=False, escape=is_html)
                 template.stream(f, namespace)
                 count = namespace["row_count"]
@@ -313,15 +322,17 @@ def get_import_file_data(filename):
         "name":        file name and path}.
         "size":        file size in bytes,
         "sheets":      [
-            "name":    sheet name or None if CSV,
+            "name":    sheet name or None if CSV or JSON,
             "rows":    count or -1 if file too large,
             "columns": [first row cell value, ],
     ]}.
     """
+    logger.info("Getting import data from %s.", filename)
     sheets, size = [], os.path.getsize(filename)
     if not size: raise ValueError("File is empty.")
 
     is_csv  = filename.lower().endswith(".csv")
+    is_json = filename.lower().endswith(".json")
     is_xls  = filename.lower().endswith(".xls")
     is_xlsx = filename.lower().endswith(".xlsx")
     if is_csv:
@@ -338,6 +349,28 @@ def get_import_file_data(filename):
                 firstline = firstline.encode("latin1", errors="xmlcharrefreplace")
         csvfile = csv.reader([firstline], csv.Sniffer().sniff(firstline, ",;\t"))
         sheets.append({"rows": rows, "columns": next(csvfile), "name": "<no name>"})
+    elif is_json:
+        rows, columns, buffer, started = 0, {}, "", False
+        decoder = json.JSONDecoder(object_pairs_hook=collections.OrderedDict)
+        with open(filename, "rbU") as f:
+            for chunk in iter(functools.partial(f.read, 2**16), ""):
+                buffer += chunk
+                if not started: # Strip line comments and list start from beginning
+                    buffer = re.sub("^//[^\n]*$", "", buffer.lstrip(), flags=re.M).lstrip()
+                    if buffer[:1] == "[": buffer, started = buffer[1:].lstrip(), True
+                while started and buffer:
+                    try:
+                        data, index = decoder.raw_decode(buffer)
+                        if isinstance(data, collections.OrderedDict):
+                            columns, rows = columns or data, rows + 1
+                        # Strip interleaving commas from between dicts
+                        buffer = re.sub(r"^\s*[,]\s*", "", buffer[index:])
+                    except ValueError: # Not enough data to decode, read more
+                        break # while started and buffer
+                if columns and f.tell() > MAX_IMPORT_FILESIZE_FOR_COUNT:
+                    break # for chunk
+            if rows and f.tell() < size: rows = -1
+        sheets.append({"rows": rows, "columns": columns, "name": "<JSON data>"})
     elif is_xls:
         with xlrd.open_workbook(filename, on_demand=True) as wb:
             for sheet in wb.sheets():
@@ -372,7 +405,7 @@ def import_data(filename, db, table, columns,
     @param   columns     mapping of file columns to table columns,
                          as OrderedDict(file column index: table columm name)
     @param   sheet       sheet name to import from, if applicable
-    @param   has_header  whether the file has a header row
+    @param   has_header  whether the spreadsheet file has a header row
     @param   pk          name of auto-increment primary key to add
                          for new table, if any
     @param   progress    callback(?count, ?done, ?error, ?errorcount, ?index) to report
@@ -479,7 +512,9 @@ def iter_file_rows(filename, columns, sheet=None):
     @param   columns     list of column indexes to return
     @param   sheet       sheet name to read from, if applicable
     """
+    size = os.path.getsize(filename)
     is_csv  = filename.lower().endswith(".csv")
+    is_json = filename.lower().endswith(".json")
     is_xls  = filename.lower().endswith(".xls")
     is_xlsx = filename.lower().endswith(".xlsx")
     if is_csv:
@@ -497,6 +532,25 @@ def iter_file_rows(filename, columns, sheet=None):
             csvfile = csv.reader(iterable, csv.Sniffer().sniff(firstline, ",;\t"))
             for row in csvfile:
                 yield [row[i] for i in columns]
+    elif is_json:
+        started, buffer = False, ""
+        decoder = json.JSONDecoder(object_pairs_hook=collections.OrderedDict)
+        with open(filename, "rbU") as f:
+            for chunk in iter(functools.partial(f.read, 2**16), ""):
+                buffer += chunk
+                if not started: # Strip line comments and list start from beginning
+                    buffer = re.sub("^//[^\n]*$", "", buffer.lstrip(), flags=re.M).lstrip()
+                    if buffer[:1] == "[": buffer, started = buffer[1:].lstrip(), True
+                while started and buffer:
+                    try:
+                        data, index = decoder.raw_decode(buffer)
+                        # Strip interleaving commas from between dicts
+                        buffer = re.sub(r"^\s*[,]\s*", "", buffer[index:])
+                        if isinstance(data, collections.OrderedDict):
+                            yield data.values()
+                    except ValueError: # Not enough data to decode, read more
+                        break # while started and buffer
+                if f.tell() >= size: break # for chunk
     elif is_xls:
         with xlrd.open_workbook(filename, on_demand=True) as wb:
             for row in wb.sheet_by_name(sheet).get_rows():
