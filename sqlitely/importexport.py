@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.11.2019
+@modified    26.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -58,11 +58,12 @@ XLSX_WILDCARD = "Excel workbook (*.xlsx)|*.xlsx|" if xlsxwriter else ""
 
 """Wildcards for export file dialog."""
 EXPORT_WILDCARD = ("HTML document (*.html)|*.html|"
+                   "JSON data (*.json)|*.json|"
                    "Text document (*.txt)|*.txt|"
                    "SQL INSERT statements (*.sql)|*.sql|"
                    "%sCSV spreadsheet (*.csv)|*.csv" % XLSX_WILDCARD)
-EXPORT_EXTS = ["html", "txt", "sql", "xlsx", "csv"] if xlsxwriter \
-               else ["html", "txt", "sql", "csv"]
+EXPORT_EXTS = ["html", "json", "txt", "sql", "xlsx", "csv"] if xlsxwriter \
+               else ["html", "json", "txt", "sql", "csv"]
 
 """Maximum file size to do full row count for."""
 MAX_IMPORT_FILESIZE_FOR_COUNT = 10 * 1e6
@@ -90,8 +91,9 @@ def export_data(make_iterable, filename, title, db, columns,
     """
     result = False
     f = None
-    is_html = filename.lower().endswith(".html")
     is_csv  = filename.lower().endswith(".csv")
+    is_html = filename.lower().endswith(".html")
+    is_json = filename.lower().endswith(".json")
     is_sql  = filename.lower().endswith(".sql")
     is_txt  = filename.lower().endswith(".txt")
     is_xlsx = filename.lower().endswith(".xlsx")
@@ -168,7 +170,8 @@ def export_data(make_iterable, filename, title, db, columns,
                 tmpname = util.unique_path("%s.rows" % filename)
                 tmpfile = open(tmpname, "wb+")
                 template = step.Template(templates.DATA_ROWS_HTML if is_html else
-                           templates.DATA_ROWS_SQL if is_sql else templates.DATA_ROWS_TXT,
+                           templates.DATA_ROWS_SQL if is_sql else templates.DATA_ROWS_JSON
+                           if is_json else templates.DATA_ROWS_TXT,
                            strip=False, escape=is_html)
                 template.stream(tmpfile, namespace)
 
@@ -188,7 +191,8 @@ def export_data(make_iterable, filename, title, db, columns,
                 tmpfile.flush(), tmpfile.seek(0)
                 namespace["data_buffer"] = iter(lambda: tmpfile.read(65536), "")
                 template = step.Template(templates.DATA_HTML if is_html else
-                           templates.DATA_SQL if is_sql else templates.DATA_TXT,
+                           templates.DATA_SQL if is_sql else templates.DATA_JSON
+                           if is_json else templates.DATA_TXT,
                            strip=False, escape=is_html)
                 template.stream(f, namespace)
                 count = namespace["row_count"]

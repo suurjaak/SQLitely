@@ -17,7 +17,7 @@ import re
 from . import conf
 
 # Modules imported inside templates:
-#import itertools, os, pyparsing, sys, wx
+#import collections, itertools, json, os, pyparsing, sys, wx
 #from sqlitely import conf, grammar, images, searchparser, templates
 #from sqlitely.lib import util
 
@@ -282,6 +282,74 @@ from sqlitely import conf, templates
 
 {{ sql }}
 """
+
+
+
+"""
+JSON export template.
+
+@param   title        export title
+@param   db_filename  database path or temporary name
+@param   row_count    number of rows
+@param   sql          SQL query giving export data, if any
+@param   create_sql   CREATE SQL statement for export object, if any
+@param   data_buffer  iterable yielding rows data in text chunks
+"""
+DATA_JSON = """<%
+from sqlitely.lib import util
+from sqlitely import conf, templates
+
+%>// {{ title }}.
+// Source: {{ db_filename }}.
+// {{ templates.export_comment() }}
+// {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
+%if sql:
+//
+// SQL: {{ sql.replace("\\n", "\\n//      ") }};
+//
+%endif
+%if isdef("create_sql") and create_sql:
+//
+// {{ create_sql.rstrip(";").replace("\\n", "\\n//  ") }};
+//
+%endif
+
+[
+<%
+for chunk in data_buffer:
+    echo(chunk)
+%>
+]
+"""
+
+
+
+"""
+JSON export template for the rows part.
+
+@param   rows       iterable
+@param   columns    [name, ]
+@param   name       table name
+@param   ?namespace  {"row_count"}
+@param   ?progress  callback(name, count) returning whether to cancel, if any
+"""
+DATA_ROWS_JSON = """<%
+import collections, json
+from sqlitely import templates
+
+rows = iter(rows)
+i, row, nextrow = 1, next(rows, None), next(rows, None)
+indent = "  " if nextrow else ""
+while row:
+    namespace["row_count"] += 1
+    data = collections.OrderedDict(((c, row[c]) for c in columns))
+    text = json.dumps(data, indent=2)
+    echo("  " + text.replace("\\n", "\\n  ") + (",\\n" if nextrow else "\\n"))
+
+    i, row, nextrow = i + 1, nextrow, next(rows, None)
+    if not i % 100 and isdef("progress") and progress and not progress(count=i):
+        break # while row
+%>"""
 
 
 

@@ -10,6 +10,7 @@ It can:
 - create and modify tables, indexes, triggers and views
 - free-form search over all database data and metadata
 - view and export data and metadata in various formats
+  (text, HTML, spreadsheet, JSON, SQL)
 - view database table and index size statistics
 - copy tables from one database to another
 - modify table data
@@ -45,8 +46,8 @@ SQLitely can show disk space usage for each table and index,
 in bytes and overall percentage. (Depending on the size of the database,
 this analysis can take a while.)
 
-Fixing database corruption: SQLitely will copy as much data as possible
-over into a new database.
+Fixing database corruption: SQLitely can check database integrity, and copy
+as much data as possible over into a new database.
 
 
 SQLitely has been tested under Windows 7, Windows Vista, Windows XP and
