@@ -67,6 +67,12 @@ class SQLiteGridBase(wx.grid.GridTableBase):
     """wx.Grid stops working when too many rows."""
     MAX_ROWS = 5000000
 
+    """Magic row attributes, made unique if conflicting with column name."""
+    KEY_ID      = "__id__"
+    KEY_CHANGED = "__changed__"
+    KEY_NEW     = "__new__"
+    KEY_DELETED = "__deleted__"
+
 
     def __init__(self, db, category="", name="", sql="", cursor=None):
         super(SQLiteGridBase, self).__init__()
@@ -100,19 +106,14 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             if "table" == category: self.rowid_name = db.get_rowid(name)
             cols = ("%s AS %s, *" % ((self.rowid_name, ) * 2)) if self.rowid_name else "*"
             self.sql = "SELECT %s FROM %s" % (cols, grammar.quote(name))
-        self.row_iterator = cursor or self.db.execute(self.sql)
 
+        self.row_iterator = cursor or self.db.execute(self.sql)
         if self.is_query:
             self.columns = [{"name": c[0], "type": "TEXT"}
                             for c in self.row_iterator.description or ()]
             TYPES = dict((v, k) for k, vv in {"INTEGER": (int, long, bool),
                          "REAL": (float, )}.items() for v in vv)
             self.is_seek = True
-            self.SeekToRow(conf.SeekLength - 1)
-            for col in self.columns if self.rows_current else ():
-                # Get column information from first values
-                value = self.rows_current[0][col["name"]]
-                col["type"] = TYPES.get(type(value), col.get("type", ""))
         else:
             data = self.db.get_count(self.name) if "table" == category else {}
             if data.get("count") is not None:
@@ -120,7 +121,16 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             self.is_seek = data.get("is_count_estimated", False) \
                            or data.get("count") is None \
                            or data["count"] != self.row_count
-            self.SeekToRow(conf.SeekLength - 1)
+
+        names = [x["name"] for x in self.columns] # Ensure unique magic keys
+        for key in "KEY_ID", "KEY_CHANGED", "KEY_NEW", "KEY_DELETED":
+            setattr(self, key, util.make_unique(getattr(self, key), names))
+
+        self.SeekToRow(conf.SeekLength - 1)
+        for col in self.columns if self.is_query and self.rows_current else ():
+            # Get column information from first values
+            value = self.rows_current[0][col["name"]]
+            col["type"] = TYPES.get(type(value), col.get("type", ""))
 
 
     def GetNumberRows(self, total=False, present=False):
@@ -157,10 +167,10 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 myid = self.id_counter = self.id_counter + 1
                 if not self.is_query and self.rowid_name in rowdata:
                     self.rowids[myid] = rowdata.pop(self.rowid_name)
-                rowdata["__id__"] = myid
-                rowdata["__changed__"] = False
-                rowdata["__new__"] = False
-                rowdata["__deleted__"] = False
+                rowdata[self.KEY_ID]      = myid
+                rowdata[self.KEY_CHANGED] = False
+                rowdata[self.KEY_NEW]     = False
+                rowdata[self.KEY_DELETED] = False
                 self.rows_all[myid] = rowdata
                 if not self._IsRowFiltered(rowdata):
                     self.rows_current.append(rowdata)
@@ -231,8 +241,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         if row < self.GetNumberRows(): self.SeekToRow(row)
         if row < len(self.rows_current): result = self.rows_current[row]
         else: result = None
-        if original and result and result["__id__"] in self.rows_backup:
-            result = self.rows_backup[result["__id__"]]
+        if original and result and result[self.KEY_ID] in self.rows_backup:
+            result = self.rows_backup[result[self.KEY_ID]]
         return copy.deepcopy(result)
 
 
@@ -319,8 +329,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             data = self.rows_current[row]
             if col_value == data[self.columns[col]["name"]]: return
 
-            idx = data["__id__"]
-            if not data["__new__"]:
+            idx = data[self.KEY_ID]
+            if not data[self.KEY_NEW]:
                 backup = self.rows_backup.get(idx)
                 if backup:
                     data[self.columns[col]["name"]] = col_value
@@ -328,11 +338,11 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                            for c in self.columns):
                         del self.rows_backup[idx]
                         self.idx_changed.remove(idx)
-                        data["__changed__"] = False
+                        data[self.KEY_CHANGED] = False
                         return self._RefreshAttrs([idx])
                 else: # Backup only existing rows, rollback drops new rows anyway
                     self.rows_backup[idx] = data.copy()
-                data["__changed__"] = True
+                data[self.KEY_CHANGED] = True
                 self.idx_changed.add(idx)
             data[self.columns[col]["name"]] = col_value
             if self.View:
@@ -368,13 +378,13 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
         max_index = 0
         for k in (k for k in ("changed", "deleted") if k in changes):
-            max_index = max(max_index, max(x["__id__"] for x in changes[k]))
+            max_index = max(max_index, max(x[self.KEY_ID] for x in changes[k]))
         self.SeekToRow(max_index)
 
         if changes.get("changed"):
-            self.idx_changed = set(x["__id__"] for x in changes["changed"])
+            self.idx_changed = set(x[self.KEY_ID] for x in changes["changed"])
             for row in changes["changed"]:
-                idx = row["__id__"]
+                idx = row[self.KEY_ID]
                 if idx in self.rows_all:
                     if idx not in self.rows_backup:
                         self.rows_backup[idx] = copy.deepcopy(self.rows_all[idx])
@@ -382,9 +392,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                     refresh_idxs.append(idx)
 
         if changes.get("deleted"):
-            rowmap = {x["__id__"]: x for x in changes["deleted"]}
-            idxs = {r["__id__"]: i for i, r in enumerate(self.rows_current)
-                    if r["__id__"] in rowmap}
+            rowmap = {x[self.KEY_ID]: x for x in changes["deleted"]}
+            idxs = {r[self.KEY_ID]: i for i, r in enumerate(self.rows_current)
+                    if r[self.KEY_ID] in rowmap}
             for idx in sorted(idxs.values(), reverse=True):
                 del self.rows_current[idx]
             self.rows_deleted = {x: rowmap[x] for x in idxs}
@@ -392,7 +402,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
         if changes.get("new"):
             for row in reversed(changes["new"]):
-                idx = row["__id__"]
+                idx = row[self.KEY_ID]
                 self.idx_all.insert(0, idx)
                 self.rows_current.insert(0, row)
                 self.rows_all[idx] = row
@@ -457,12 +467,12 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
         name = "default"
         if row < len(self.rows_current):
-            if self.rows_current[row]["__changed__"]:
-                idx = self.rows_current[row]["__id__"]
+            if self.rows_current[row][self.KEY_CHANGED]:
+                idx = self.rows_current[row][self.KEY_ID]
                 value = self.rows_current[row][self.columns[col]["name"]]
                 backup = self.rows_backup[idx][self.columns[col]["name"]]
                 name = "row_changed" if backup == value else "cell_changed"
-            elif self.rows_current[row]["__new__"]: name = "new"
+            elif self.rows_current[row][self.KEY_NEW]: name = "new"
         attr = self.attrs[name]
         attr.IncRef()
         return attr
@@ -484,10 +494,10 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             # Construct empty dict from column names
             rowdata = dict((col["name"], None) for col in self.columns)
             idx = self.id_counter = self.id_counter + 1
-            rowdata["__id__"] = idx
-            rowdata["__changed__"] = False
-            rowdata["__new__"] = True
-            rowdata["__deleted__"] = False
+            rowdata[self.KEY_ID]      = idx
+            rowdata[self.KEY_CHANGED] = False
+            rowdata[self.KEY_NEW]     = True
+            rowdata[self.KEY_DELETED] = False
             # Insert rows at the beginning, so that they can be edited
             # immediately, otherwise would need to retrieve all rows first.
             self.idx_all.insert(0, idx)
@@ -508,16 +518,16 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         rows_before = self.GetNumberRows()
         for _ in range(numRows):
             data = self.rows_current[row]
-            idx = data["__id__"]
+            idx = data[self.KEY_ID]
             del self.rows_current[row]
             if idx in self.rows_backup:
                 # If row was changed, switch to its backup data
                 data = self.rows_backup.pop(idx)
                 self.idx_changed.remove(idx)
-            if not data["__new__"]:
+            if not data[self.KEY_NEW]:
                 # Drop new rows on delete, rollback can't restore them.
-                data["__changed__"] = False
-                data["__deleted__"] = True
+                data[self.KEY_CHANGED] = False
+                data[self.KEY_DELETED] = True
                 self.rows_deleted[idx] = data
             else:
                 self.idx_new.remove(idx)
@@ -597,7 +607,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         is_sorted = (self.sort_column is not None)
         self.sort_column, self.sort_ascending = None, None
         if not refresh or not is_sorted: return
-        self.rows_current.sort(key=lambda x: self.idx_all.index(x["__id__"]))
+        self.rows_current.sort(key=lambda x: self.idx_all.index(x[self.KEY_ID]))
         if self.View: self.View.ForceRefresh()
 
 
@@ -607,7 +617,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         """
         del self.rows_current[:]
         for idx, row in sorted(self.rows_all.items()):
-            if not row["__deleted__"] and not self._IsRowFiltered(row):
+            if not row[self.KEY_DELETED] and not self._IsRowFiltered(row):
                 self.rows_current.append(row)
         if self.sort_column is None:
             pagesize = self.View.Size[1] / self.View.GetDefaultRowSize()
@@ -637,7 +647,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                               else False if self.sort_ascending else None
         if self.sort_ascending is None:
             self.sort_column = None
-            self.rows_current.sort(key=lambda x: self.idx_all.index(x["__id__"]))
+            self.rows_current.sort(key=lambda x: self.idx_all.index(x[self.KEY_ID]))
         else:
             self.sort_column = col
             self.rows_current.sort(cmp=compare, reverse=not self.sort_ascending)
@@ -658,7 +668,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 row = self.rows_all[idx]
                 self.db.update_row(self.name, row, self.rows_backup[idx],
                                    self.rowids.get(idx))
-                row["__changed__"] = False
+                row[self.KEY_CHANGED] = False
                 self.idx_changed.remove(idx)
                 del self.rows_backup[idx]
                 refresh_idxs.append(idx)
@@ -675,7 +685,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                     row[pks[0]] = insert_id
                 if self.rowid_name and insert_id is not None:
                     self.rowids[idx] = insert_id
-                row["__new__"] = False
+                row[self.KEY_NEW] = False
                 self.idx_new.remove(idx)
                 refresh_idxs.append(idx)
                 if grammar.SQL.INSERT in actions: reload_idxs.append(idx)
@@ -707,7 +717,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         # Restore all changed row data from backup
         for idx in self.idx_changed.copy():
             row = self.rows_backup[idx]
-            row["__changed__"] = False
+            row[self.KEY_CHANGED] = False
             self.rows_all[idx].update(row)
             self.idx_changed.remove(idx)
             del self.rows_backup[idx]
@@ -722,7 +732,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             self.row_count -= 1
         # Undelete all newly deleted items
         for idx, row in self.rows_deleted.items():
-            row["__deleted__"] = False
+            row[self.KEY_DELETED] = False
             self.rows_all[idx].update(row)
             del self.rows_deleted[idx]
             self.row_count += 1
@@ -808,7 +818,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             if not mypks and self.rowid_name:
                 mypks = [self.rowid_name]
                 for i, (row, row0) in enumerate(zip(mydatas, mydatas0)):
-                    rowid = self.rowids.get(row["__id__"])
+                    rowid = self.rowids.get(row[self.KEY_ID])
                     if rowid is not None:
                         mydatas[i]  = dict(row,  **{self.rowid_name: rowid})
                         mydatas0[i] = dict(row0, **{self.rowid_name: rowid})
@@ -920,13 +930,13 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         if rows:
             rowdatas = [self.rows_current[i] for i in rows if i < len(self.rows_current)]
             rowdatas0 = list(rowdatas)
-            idxs     = [x["__id__"] for x in rowdatas]
+            idxs     = [x[self.KEY_ID] for x in rowdatas]
             for i, idx in enumerate(idxs):
                 if idx in self.rows_backup: rowdatas0[i] = self.rows_backup[idx]
             if len(rows) != len(rowdatas): cutoff = ", stopped at row %s" % len(rowdatas)
 
             if len(rows) > 1: caption = util.plural("row", rows)
-            elif rowdatas[0]["__new__"]: caption = "New row"
+            elif rowdatas[0][self.KEY_NEW]: caption = "New row"
             elif pks: caption = ", ".join("%s %s" % (c["name"], rowdatas0[0][c["name"]])
                                           for c in pks)
             elif idxs[0] in self.rowids:
@@ -1033,7 +1043,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 menu.Append(item_delete_cascade)
             if not dks: item_dks.Enabled = False
             if not fks: item_fks.Enabled = False
-            item_delete_cascade.Enabled = has_cascade and any(not x["__new__"] for x in rowdatas)
+            item_delete_cascade.Enabled = has_cascade and any(not x[self.KEY_NEW] for x in rowdatas)
         elif is_table:
             menu.Append(item_insert)
         else:
@@ -1068,7 +1078,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         if not self.View: return
         for idx in idxs:
             row = next((i for i, x in enumerate(self.rows_current)
-                        if x["__id__"] == idx), -1)
+                        if x[self.KEY_ID] == idx), -1)
             for col in range(len(self.columns)) if row >= 0 else ():
                 self.View.RefreshAttr(row, col)
         self.View.Refresh()
@@ -6514,11 +6524,11 @@ class DataDialog(wx.Dialog):
             self._button_next.Enabled = self._row + 1 < gridbase.RowsCount
 
             pks = [c for c in self._columns if "pk" in c]
-            if self._data["__new__"]: rowtitle = "New row"
+            if self._data[gridbase.KEY_NEW]: rowtitle = "New row"
             elif pks: rowtitle = ", ".join("%s %s" % (c["name"], self._original[c["name"]])
                                           for c in pks)
-            elif self._data["__id__"] in gridbase.rowids:
-                rowtitle = "ROWID %s" % gridbase.rowids[self._data["__id__"]]
+            elif self._data[gridbase.KEY_ID] in gridbase.rowids:
+                rowtitle = "ROWID %s" % gridbase.rowids[self._data[gridbase.KEY_ID]]
             else: rowtitle = "Row #%s" % (self._row + 1)
             self._text_header.Label = rowtitle
 
