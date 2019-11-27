@@ -4974,6 +4974,7 @@ class DatabasePage(wx.Panel):
         """
         table, open = (getattr(event, x, None) for x in ("table", "open"))
         self.reload_schema(count=True, parse=True)
+        self.update_page_header(updated=True)
         if table in self.data_pages["table"]:
             self.data_pages["table"][table].Reload()
         elif open and self.tree_data.FindAndActivateItem(type="table", name=table):
