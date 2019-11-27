@@ -6,13 +6,15 @@ SQLitely is an SQLite database tool, written in Python.
 It can:
 
 - detect and manage SQLite databases in bulk
-- create new databases
-- create and modify tables, indexes, triggers and views
+- create new or temporary databases
+- create and alter tables, indexes, triggers and views
+- modify table data
 - free-form search over all database data and metadata
-- view and export data and metadata in various formats
+- export data and metadata in various formats
+  (text, HTML, spreadsheet, JSON, SQL)
+- import data to tables from spreadsheet or JSON
 - view database table and index size statistics
 - copy tables from one database to another
-- modify table data
 - execute direct SQL queries
 - manage database PRAGMA directives
 - fix database corruption
@@ -20,19 +22,9 @@ It can:
 Downloads, help texts, and more screenshots at
 http://suurjaak.github.io/SQLitely.
 
-[![Screenshots](https://raw.github.com/suurjaak/SQLitely/gh-pages/img/th_collage.png)](https://raw.github.com/suurjaak/SQLitely/gh-pages/img/collage.png)
-
 
 Using The Program
 -----------------
-
-SQLitely offers a convenient way for complex ALTER TABLE operations.
-Columns and constraints can be changed, reordered, added, dropped;
-the program automatically performs the multiple steps required for SQLite table
-modifications while retaining existing data (creating a temporary table,
-copying data, dropping old table, and renaming temporary table as old).
-Additionally, when renaming tables or columns, all related tables, indexes,
-triggers and views are altered automatically.
 
 SQLitely can search over all columns of all tables with a simple
 [query syntax](http://suurjaak.github.io/SQLitely/help.html).
@@ -45,8 +37,16 @@ SQLitely can show disk space usage for each table and index,
 in bytes and overall percentage. (Depending on the size of the database,
 this analysis can take a while.)
 
-Fixing database corruption: SQLitely will copy as much data as possible
-over into a new database.
+SQLitely offers a convenient way for complex ALTER TABLE operations.
+Columns and constraints can be changed, reordered, added, dropped;
+the program automatically performs the multiple steps required for SQLite table
+modifications while retaining existing data (creating a temporary table,
+copying data, dropping old table, and renaming temporary table as old).
+Additionally, when renaming tables or columns, all related tables, indexes,
+triggers and views are altered automatically.
+
+SQLitely can check database integrity for corruption, and copy as much data
+as possible over into a new database.
 
 
 SQLitely has been tested under Windows 7, Windows Vista, Windows XP and
@@ -66,6 +66,7 @@ Windows: download and launch the latest setup from
 https://suurjaak.github.io/SQLitely/downloads.html.
 
 From source code: install Python, pip, and run `pip install sqlitely`. 
+
 The pip installation will add the `sqlitely` command to path.
 
 Windows installers have been provided for convenience. The program itself 
@@ -90,7 +91,7 @@ If openpyxl or pyparsing or xlrd or XlsxWriter are not available,
 the program will function regardless, only with lesser service - 
 lacking Excel import-export or full search syntax.
 
-Python 2.6 will need the argparse library. Python 3 is yet unsupported.
+Python 3 is yet unsupported.
 
 
 Attribution
@@ -103,8 +104,7 @@ Includes a modified version of step, Simple Template Engine for Python,
 (c) 2012, Daniele Mazzocchio, https://github.com/dotpy/step.
 
 Includes a modified version of SQLite.g4 from sqlite-parser,
-(c) 2013, Bart Kiers,
-https://github.com/bkiers/sqlite-parser.
+(c) 2013, Bart Kiers, https://github.com/bkiers/sqlite-parser.
 
 SQL lexer and parser generated with ANTLR v4.7.2,
 (c) 2012 The ANTLR Project, https://github.com/antlr/antlr4.
