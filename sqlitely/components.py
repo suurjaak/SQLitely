@@ -768,7 +768,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
     def OnMenu(self, event):
         """Handler for opening popup menu in grid."""
         menu = wx.Menu()
-        menu_copy, menu_fks, menu_dks = wx.Menu(), wx.Menu(), wx.Menu()
+        menu_copy, menu_cols = wx.Menu(), wx.Menu()
+        menu_fks,  menu_dks  = wx.Menu(), wx.Menu()
 
         def on_event(event=None, **kwargs):
             """Fires event to parent grid."""
@@ -781,7 +782,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                                            for c in self.columns) for x in rowdatas)
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status("Copied row%s to clipboard%s", rowsuff, cutoff, flash=True)
+                guibase.status("Copied row%s data to clipboard%s", rowsuff, cutoff, flash=True)
 
         def on_copy_col(event=None):
             """Copies columns data to clipboard."""
@@ -790,7 +791,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                                            for i in cols) for x in rowdatas)
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status("Copied column%s to clipboard%s", colsuff, cutoff, flash=True)
+                guibase.status("Copied column%s data to clipboard%s", colsuff, cutoff, flash=True)
 
         def on_copy_sql(event=None):
             """Copies rows INSERT SQL to clipboard."""
@@ -880,6 +881,24 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             for t, xx in result:
                 msg += "\n- %s in table %s" % (util.plural("row", xx), grammar.quote(t, force=True))
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_INFORMATION)
+
+        def on_col_copy(col, event=None):
+            text = "\n".join(util.to_unicode(x[self.columns[col]["name"]])
+                             for x in rowdatas)
+            if wx.TheClipboard.Open():
+                d = wx.TextDataObject(text)
+                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+                guibase.status("Copied column data to clipboard%s", cutoff, flash=True)
+
+        def on_col_name(col, event=None):
+            text = self.columns[col]["name"]
+            if wx.TheClipboard.Open():
+                d = wx.TextDataObject(text)
+                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+                guibase.status("Copied column name to clipboard%s", cutoff, flash=True)
+
+        def on_col_goto(col, event=None):
+            self.View.GoToCell(self.View.GridCursorRow, col)
 
 
         pks = [c for c in self.columns if "pk" in c]
@@ -983,11 +1002,26 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 if len(titles) >= 20:
                     menu2.Append(wx.ID_ANY, "..").Enable(False)
                     break # for rowdata
+        for col, coldata in enumerate(self.columns):
+            submenu = wx.Menu()
+            tip = self.db.get_sql(self.category, self.name, coldata["name"])
+            menu_cols.Append(wx.ID_ANY, coldata["name"], submenu, tip)
+            item_col_copy = wx.MenuItem(submenu, -1, "&Copy column")
+            item_col_name = wx.MenuItem(submenu, -1, "Copy column &name")
+            item_col_goto = wx.MenuItem(submenu, -1, "&Go to column")
+            submenu.Append(item_col_copy)
+            submenu.Append(item_col_name)
+            submenu.Append(item_col_goto)
+            menu.Bind(wx.EVT_MENU, functools.partial(on_col_copy, col), item_col_copy)
+            menu.Bind(wx.EVT_MENU, functools.partial(on_col_name, col), item_col_name)
+            menu.Bind(wx.EVT_MENU, functools.partial(on_col_goto, col), item_col_goto)
+
 
         if is_table and rowdatas:
             menu.AppendSeparator()
             item_dks = menu.AppendSubMenu(menu_dks, "&Domestic keys")
             item_fks = menu.AppendSubMenu(menu_fks, "&Foreign keys")
+            menu.AppendSubMenu(menu_cols, "Co&lumns")
             menu.AppendSeparator()
             menu.Append(item_insert)
             menu.Append(item_delete)
@@ -998,6 +1032,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             item_delete_cascade.Enabled = has_cascade and any(not x["__new__"] for x in rowdatas)
         elif is_table:
             menu.Append(item_insert)
+        else:
+            menu.AppendSubMenu(menu_cols, "Co&lumns")
         if rowdatas:
             menu.Append(item_open)
         if self.row_count:
