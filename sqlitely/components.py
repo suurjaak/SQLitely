@@ -775,6 +775,32 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         self.NotifyViewChange(rows_before)
 
 
+    def Paste(self):
+        """
+        Pastes current clipboard data to current position, with tabs in data
+        going to next column, and linefeeds in data going to next row.
+        """
+        data = None
+        if "table" == self.category and self.View and wx.TheClipboard.Open():
+            if wx.TheClipboard.IsSupported(wx.DataFormat(wx.DF_TEXT)):
+                o = wx.TextDataObject()
+                wx.TheClipboard.GetData(o)
+                data = o.Text
+            wx.TheClipboard.Close()
+        if not data: return
+
+        row, col = self.View.GridCursorRow, self.View.GridCursorCol
+        rowdatas = [x.split("\t") for x in data.split("\n")]
+        for i, rowdata in enumerate(rowdatas):
+            if row + i >= self.GetNumberRows(): break # for i, rowdata
+            for j, value in enumerate(rowdata):
+                if col + j >= self.GetNumberCols(): break # for j, value
+                self.SetValue(row + i, col + j, value)
+        self.View.GoToCell(min(row + len(rowdatas)    - 1, self.GetNumberRows() - 1),
+                           min(col + len(rowdatas[0]) - 1, self.GetNumberCols() - 1))
+        wx.PostEvent(self.View, GridBaseEvent(wx.ID_ANY, refresh=True))
+
+
     def OnMenu(self, event):
         """Handler for opening popup menu in grid."""
         menu = wx.Menu()
@@ -948,6 +974,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         if rowdatas: item_caption = wx.MenuItem(menu, -1, caption)
         if rowdatas:
             item_copy        = wx.MenuItem(menu,      -1, "&Copy row%s" % rowsuff)
+            item_paste       = wx.MenuItem(menu,      -1, "Paste")
             item_copy_col    = wx.MenuItem(menu_copy, -1, "Copy selected co&lumn%s" % colsuff)
             item_copy_insert = wx.MenuItem(menu_copy, -1, "Copy row%s &INSERT SQL" % rowsuff)
             item_copy_update = wx.MenuItem(menu_copy, -1, "Copy row%s &UPDATE SQL" % rowsuff)
@@ -981,6 +1008,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             menu_copy.Append(item_copy_txt)
             menu_copy.Append(item_copy_json)
             menu.Append(wx.ID_ANY, "Co&py ..", menu_copy)
+            menu.Append(item_paste)
+            item_paste.Enabled = wx.TheClipboard.IsSupported(wx.DataFormat(wx.DF_TEXT))
         if is_table and rowdatas:
             menu.Append(item_reset)
             item_reset.Enabled = any(x in self.idx_changed for x in idxs)
@@ -1062,6 +1091,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             menu.Bind(wx.EVT_MENU, on_copy_update, item_copy_update)
             menu.Bind(wx.EVT_MENU, on_copy_txt,    item_copy_txt)
             menu.Bind(wx.EVT_MENU, on_copy_json,   item_copy_json)
+            menu.Bind(wx.EVT_MENU, lambda e: self.Paste(), item_paste)
             menu.Bind(wx.EVT_MENU, functools.partial(on_event, form=True, row=rows[0]), item_open)
         if is_table and rowdatas:
             menu.Bind(wx.EVT_MENU, on_reset, item_reset)
@@ -1220,13 +1250,18 @@ class SQLiteGridBaseMixin(object):
     def _OnGridKey(self, event):
         """
         Handler for grid keypress, seeks ahead on Ctrl-Down/End,
-        copies selection to clipboard on Ctrl-C/Insert.
+        copies selection to clipboard on Ctrl-C/Insert,
+        pastes data to grid cells on Ctrl-V/Shift-Insert.
         """
-        if not isinstance(self._grid.Table, SQLiteGridBase) \
-        or not event.ControlDown(): return event.Skip()
+        if not isinstance(self._grid.Table, SQLiteGridBase): return event.Skip()
 
-        if event.KeyCode in (wx.WXK_DOWN, wx.WXK_END, wx.WXK_NUMPAD_END) \
-        and not self._grid.Table.IsComplete():
+        if event.ControlDown() and event.KeyCode == ord("V") \
+        or not event.ControlDown() and event.ShiftDown() \
+        and event.KeyCode in (wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT):
+            self._grid.Table.Paste()
+
+        elif event.ControlDown() and not self._grid.Table.IsComplete() \
+        and event.KeyCode in (wx.WXK_DOWN, wx.WXK_END, wx.WXK_NUMPAD_END):
             # Disallow jumping to the very end, may be a billion rows.
             row, col = (self._grid.GridCursorRow, self._grid.GridCursorCol)
             rows_present = self._grid.Table.GetNumberRows(present=True) - 1
@@ -1240,8 +1275,8 @@ class SQLiteGridBaseMixin(object):
             if event.ShiftDown():
                 self._grid.SelectBlock(row, col, row2, col)
 
-        elif event.KeyCode in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT) \
-        and not event.ShiftDown():
+        elif event.ControlDown() and not event.ShiftDown() \
+        and event.KeyCode in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT):
             rows, cols = get_grid_selection(self._grid)
             if not rows or not cols: return
 
