@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.11.2019
+@modified    27.11.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -414,6 +414,33 @@ INSERT INTO {{ name }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
 if not i % 100 and isdef("progress") and progress and not progress(name=name, count=i):
     break # for i, row
 %>
+%endfor
+"""
+
+
+
+"""
+TXT SQL update statements export template.
+
+@param   rows       iterable
+@param   originals  original rows iterable
+@param   columns    [name, ]
+@param   pks        [name, ]
+@param   name       table name
+"""
+DATA_ROWS_UPDATE_SQL = """<%
+from sqlitely import grammar, templates
+
+str_cols = ", ".join(map(grammar.quote, columns))
+%>
+%for row, original in zip(rows, originals):
+<%
+setstr = ", ".join("%s = %s" % (grammar.quote(col), grammar.format(row[col]))
+                   for col in columns if col not in pks or row[col] != original[col])
+wherestr = " AND ".join("%s = %s" % (grammar.quote(col), grammar.format(original[col]))
+                   for col in pks if col in original)
+%>
+UPDATE {{ name }} SET {{ setstr }}{{ (" WHERE " + wherestr) if wherestr else "" }};
 %endfor
 """
 
