@@ -5592,7 +5592,7 @@ class ImportDialog(wx.Dialog):
         gauge.SetForegroundColour(conf.GaugeColour)
         gauge.Shown = info_gauge.Shown = False
 
-        button_ok.ToolTip      = "Start importing data"
+        button_ok.ToolTip      = "Confirm data import"
         button_reset.ToolTip   = "Reset form to initial state"
         button_restart.ToolTip = "Run another import"
         button_open.ToolTip    = "Close dialog and open table data"
@@ -5984,6 +5984,13 @@ class ImportDialog(wx.Dialog):
         lock = self._db.get_lock("table", self._table["name"])
         if lock: return wx.MessageBox("%s, cannot import." % lock,
                                       conf.Title, wx.OK | wx.ICON_WARNING)
+
+        if wx.YES != controls.YesNoMessageBox(
+            "Start import into %stable %s?" % 
+            ("new " if self._table.get("new") else "",
+             grammar.quote(self._table["name"], force=True)), conf.Title,
+             wx.ICON_INFORMATION
+        ): return
 
         self._importing = True
         self._progress.clear()
