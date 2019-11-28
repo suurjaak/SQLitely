@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    27.11.2019
+@modified    28.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -1449,7 +1449,7 @@ class PropertyDialog(wx.Dialog):
         tip.ForegroundColour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)
         tipfont, tipfont.PixelSize = tip.Font, (0, 9)
         tip.Font = tipfont
-        tip.Wrap(self.panel.Size[0] - 20)
+        tip.Wrap(self.panel.Size[0] - 30)
         for x in (label, tip): x.Bind(wx.EVT_LEFT_UP, label_handler)
 
         self.sizer_items.Add(label, pos=(row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
