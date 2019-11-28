@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.11.2019
+@modified    28.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -6337,12 +6337,15 @@ class ImportDialog(wx.Dialog):
         filename = self._dialog_file.GetPath()
         if self._data and filename == self._data["name"]: return
 
+        busy = controls.BusyPanel(self, "Reading file..")
         try: data = importexport.get_import_file_data(filename)
         except Exception as e:
+            busy.Close()
             logger.exception("Error reading import file %s.", filename)
             wx.MessageBox("Error reading file:\n\n%s" % util.format_exc(e),
                           conf.Title, wx.OK | wx.ICON_ERROR)
             return
+        finally: busy.Close()
         self.SetFile(data)
 
 
