@@ -464,7 +464,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_edit.AppendSeparator()
         menu_edit_save = self.menu_edit_save = menu_edit.Append(
             wx.ID_ANY, "&Save unsaved changes", "Save all unsaved changes")
-        menu_edit_undo = self.menu_edit_undo = menu_edit.Append(
+        menu_edit_cancel = self.menu_edit_cancel = menu_edit.Append(
             wx.ID_ANY, "&Cancel unsaved changes", "Roll back all unsaved changes")
         menu_edit.AppendSeparator()
         self.menu_edit_drop    = menu_edit.AppendSubMenu(menu_edit_drop,    "&Drop")
@@ -586,8 +586,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["changes"]), menu_view_changes)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["history"]), menu_view_history)
 
-        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["save"]), menu_edit_save)
-        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["undo"]), menu_edit_undo)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["save"]),   menu_edit_save)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["cancel"]), menu_edit_cancel)
 
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["optimize"]),  menu_tools_optimize)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["vacuum"]),    menu_tools_vacuum)
@@ -609,17 +609,18 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def populate_menu(self):
         """Updates program menu for currently selected tab."""
         page = self.notebook.GetSelection() and self.page_db_latest
-        db = page.db if page else None
+        db, changes = (page.db, page.get_unsaved()) if page else (None, None)
 
         for x in self.menu_view.MenuItems:  x.Enable(bool(db))
         for x in self.menu_edit.MenuItems:  x.Enable(bool(db))
         for x in self.menu_tools.MenuItems: x.Enable(bool(db))
-        self.menu_save_database.Enable(bool(page and (db.temporary or page.get_unsaved())))
+        self.menu_save_database.Enable(bool(page and (db.temporary or changes)))
         self.menu_save_database_as.Enable(bool(page))
         if not db: return
 
-        self.menu_view_changes.Enabled = self.menu_edit_save.Enabled = \
-        self.menu_edit_undo.Enabled = bool(page.get_unsaved())
+        changes.pop("temporary", None)
+        self.menu_view_changes.Enabled = bool(db.temporary or changes)
+        self.menu_edit_save.Enabled = self.menu_edit_cancel.Enabled = bool(changes)
         self.menu_view_folder.Enabled = not db.temporary
 
         EDITMENUS = {"table":   self.menu_edit_table,   "index": self.menu_edit_index,
@@ -2962,27 +2963,23 @@ class DatabasePage(wx.Panel):
     def handle_command(self, cmd, *args):
         """Handles a command, like "drop", ["table", name]."""
 
-        def format_changes():
+        def format_changes(temp=False):
             """Returns unsaved changes as readable text."""
-            changes = self.get_unsaved()
-            if changes.pop("temporary", None) and not changes:
-                info = "%s has modifications" % self.db
-            else:
-                info = ""
-                if changes.get("pragma"): info += "PRAGMA settings\n\n"
-                if changes.get("table"):
-                    info += "Unsaved data in tables:\n- "
-                    info += "\n- ".join(map(grammar.quote, changes["table"]))
-                if changes.get("schema"):
-                    info += "Schema items:\n"
-                    names = {}
-                    for x in changes["schema"]:
-                        names.setdefault(x.Category, []).append(x.Name)
-                    for category in self.db.CATEGORIES:
-                        for name in names.get(category) or ():
-                            info += "- %s %s\n" % (category, grammar.quote(name))
-                if changes.get("temporary"):
-                    info += "Is a temporary file"
+            info, changes = "", self.get_unsaved()
+            if changes.get("table"):
+                info += "Unsaved data in tables:\n- "
+                info += "\n- ".join(map(grammar.quote, changes["table"]))
+            if changes.get("schema"):
+                info += "%sUnsaved schema changes:\n- " % ("\n\n" if info else "")
+                names = {}
+                for x in changes["schema"]:
+                    names.setdefault(x.Category, []).append(x.Name)
+                info += "\n- ".join("%s %s" % (c, grammar.quote(n))
+                        for c in self.db.CATEGORIES for n in names.get(c, ()))
+            if changes.get("pragma"):
+                info += "%sPRAGMA settings" % ("\n\n" if info else "")
+            if temp and self.db.temporary:
+                info += "%s%s is a temporary file." % ("\n\n" if info else "", self.db)
             return info
 
 
@@ -3022,23 +3019,23 @@ class DatabasePage(wx.Panel):
             wx.MessageBox(("Current database locks:\n\n- %s." % "\n- ".join(locks))
                           if locks else "Database is currently unlocked.", conf.Title)
         elif "changes" == cmd:
-            wx.MessageBox("Current unsaved changes:\n\n%s." %
-                          format_changes().rstrip(), conf.Title)
+            wx.MessageBox("Current unsaved changes:\n\n%s" %
+                          format_changes(temp=True), conf.Title)
         elif "history" == cmd:
             components.HistoryDialog(self, self.db).ShowModal()
         elif "folder" == cmd:
             util.select_file(self.db.filename)
         elif "save" == cmd:
             if wx.YES != controls.YesNoMessageBox(
-                "Are you sure you want to save the following changes:\n\n%s." %
-                format_changes().rstrip(), conf.Title, wx.ICON_INFORMATION, defaultno=True
+                "Are you sure you want to save the following changes:\n\n%s" %
+                format_changes(), conf.Title, wx.ICON_INFORMATION, defaultno=True
             ): return
 
             self.save_database()
-        elif "undo" == cmd:
+        elif "cancel" == cmd:
             if wx.YES != controls.YesNoMessageBox(
-                "Are you sure you want to undo the following changes:\n\n%s." %
-                format_changes().rstrip(), conf.Title, wx.ICON_INFORMATION, defaultno=True
+                "Are you sure you want to cancel the following changes:\n\n%s" %
+                format_changes(), conf.Title, wx.ICON_INFORMATION, defaultno=True
             ): return
 
             self.on_pragma_cancel()
@@ -4285,6 +4282,8 @@ class DatabasePage(wx.Panel):
         Returns whether page has unsaved changes,
         as {?"pragma": [pragma_name, ], ?"table": [table, ],
             ?"schema": True, ?"temporary"? True}.
+        Temporary-flag is populated only if there are no pending changes
+        but database is not pristine.
         """
         result = {}
         if not hasattr(self, "data_pages"): # Closed before fully created
