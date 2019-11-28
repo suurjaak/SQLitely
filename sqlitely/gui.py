@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.11.2019
+@modified    28.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1090,7 +1090,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             menu.Append(item_missing)
             menu.Append(item_clear)
 
-            return self.list_db.PopupMenu(menu)
+            # Needs callback, actions can modify list while mouse event ongoing
+            return wx.CallAfter(self.list_db.PopupMenu, menu)
 
 
         def clipboard_copy(*a, **kw):
@@ -1140,7 +1141,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu.Append(item_missing)
         menu.Append(item_delete)
 
-        self.list_db.PopupMenu(menu)
+        # Needs callback, actions can modify list while mouse event ongoing
+        wx.CallAfter(self.list_db.PopupMenu, menu)
 
 
     def on_drag_list_db(self, event):
