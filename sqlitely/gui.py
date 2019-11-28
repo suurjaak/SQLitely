@@ -968,8 +968,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.update_database_list(event.filename2)
             for i in range(1, self.list_db.GetItemCount()):
                 fn = self.list_db.GetItemText(i)
-                if fn in (event.filename1, event.filename2):
-                    self.list_db.Select(i, on=(fn == event.filename2))
+                self.list_db.Select(i, on=(fn == event.filename2))
             if event.filename2 in conf.RecentFiles: # Remove earlier position
                 idx = conf.RecentFiles.index(event.filename2)
                 try: self.history_file.RemoveFileFromHistory(idx)
