@@ -5191,9 +5191,15 @@ class DatabasePage(wx.Panel):
                     else: t = "" if "view" == category else "Counting.."
                     tree.SetItemText(child, t, 1)
 
+                    dks, fks = self.db.get_keys(item["name"]) if "table" == category else [(), ()]
                     for col in item["columns"]:
                         subchild = tree.AppendItem(child, util.unprint(col["name"]))
-                        tree.SetItemText(subchild, col.get("type", ""), 1)
+                        mytype = col.get("type", "")
+                        if any(col["name"] in x["name"] for x in dks):
+                            mytype = u"\u1d18\u1d0b  " + mytype # Unicode small caps "PK"
+                        elif any(col["name"] in x["name"] for x in fks):
+                            mytype = u"\u1da0\u1d4f  " + mytype # Unicode small "fk"
+                        tree.SetItemText(subchild, mytype, 1)
                         tree.SetItemPyData(subchild, dict(col, parent=item, type="column"))
 
             tree.Expand(root)
@@ -5284,9 +5290,15 @@ class DatabasePage(wx.Panel):
                         colchild = tree.AppendItem(child, "Columns (%s)" % len(columns))
                         tree.SetItemPyData(colchild, {"type": "columns", "parent": itemdata})
                         tree.SetItemImage(colchild, imgs["columns"], wx.TreeItemIcon_Normal)
+                        dks, fks = self.db.get_keys(item["name"]) if "table" == category else [(), ()]
                         for col in columns:
                             subchild = tree.AppendItem(colchild, util.unprint(col["name"]))
-                            tree.SetItemText(subchild, col.get("type", ""), 1)
+                            mytype = col.get("type", "")
+                            if any(col["name"] in x["name"] for x in dks):
+                                mytype = u"\u1d18\u1d0b  " + mytype # Unicode small caps "PK"
+                            elif any(col["name"] in x["name"] for x in fks):
+                                mytype = u"\u1da0\u1d4f  " + mytype # Unicode small "fk"
+                            tree.SetItemText(subchild, mytype, 1)
                             tree.SetItemPyData(subchild, dict(col, parent=itemdata, type="column", level=item["name"]))
                     for subcategory in subcategories:
                         subitems = relateds.get(subcategory, [])
