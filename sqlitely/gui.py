@@ -463,9 +463,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.menu_edit_view    = menu_edit.AppendSubMenu(menu_edit_view,    "&View")
         menu_edit.AppendSeparator()
         menu_edit_save = self.menu_edit_save = menu_edit.Append(
-            wx.ID_ANY, "&Save all changes", "Save all unsaved changes")
+            wx.ID_ANY, "&Save unsaved changes", "Save all unsaved changes")
         menu_edit_undo = self.menu_edit_undo = menu_edit.Append(
-            wx.ID_ANY, "&Undo all changes", "Roll back all unsaved changes")
+            wx.ID_ANY, "&Cancel unsaved changes", "Roll back all unsaved changes")
         menu_edit.AppendSeparator()
         self.menu_edit_drop    = menu_edit.AppendSubMenu(menu_edit_drop,    "&Drop")
         menu_edit_drop_table   = wx.Menu()
@@ -505,11 +505,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             "Export all tables to a single Excel spreadsheet, "
             "each table in separate worksheet")
         menu_tools_export_data = self.menu_tools_export_data = menu_tools_export.Append(
-            wx.ID_ANY, "All tables to another database",
+            wx.ID_ANY, "All tables to &another database",
             "Export table schemas and data to another SQLite database")
         menu_tools_export_structure = self.menu_tools_export_structure = menu_tools_export.Append(
             wx.ID_ANY, "All table str&uctures to another database",
             "Export table schemas to another SQLite database")
+        menu_tools_export.AppendSeparator()
         menu_tools_export_pragma = self.menu_tools_export_pragma = menu_tools_export.Append(
             wx.ID_ANY, "&PRAGMA settings as SQL",
             "Export database PRAGMA settings as SQL")
@@ -519,6 +520,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_tools_export_dump = self.menu_tools_export_dump = menu_tools_export.Append(
             wx.ID_ANY, "Full database &dump as SQL",
             "Dump entire database as SQL")
+        menu_tools_export.AppendSeparator()
         menu_tools_export_stats = self.menu_tools_export_stats = menu_tools_export.Append(
             wx.ID_ANY, "Database &statistics as HTML",
             "Export database statistics as HTML")
