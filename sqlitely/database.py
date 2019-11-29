@@ -941,11 +941,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
                              like table's own indexes and triggers for table,
                              view's own triggers for views,
                              index's own table for index,
-                             and trigger's own tables and views for triggers;
+                             and trigger's own table or view for triggers;
                              if False, returns only indirectly associated items,
                              like views and triggers for tables and views
                              that query them in view or trigger body,
-                             also foreign tables for tables
+                             also foreign tables for tables;
+                             if None, returns all relations
         """
         result = CaselessDict()
         category, name = category.lower(), name.lower()

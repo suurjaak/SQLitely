@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.11.2019
+@modified    29.11.2019
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -438,6 +438,8 @@ class AnalyzerThread(WorkerThread):
                 if output and not output.strip().startswith("/**"):
                     output, error = "", output.split("\n")[0].strip()
                     logger.info("Error getting statistics for %s: %s.", path, error)
+                else:
+                    logger.info("Finished statistics analysis for %s.", path)
             self._process = None
 
             try:
@@ -511,6 +513,7 @@ class ChecksumThread(WorkerThread):
                             sha1.update(buf), md5.update(buf)
                             buf = f.read(BLOCKSIZE)
                             if not self._is_working: break # while len
+                    logger.info("Finished checksum calculation for %s.", path)
                 except Exception as e:
                     logger.exception("Error calculating checksum for %s.", path)
                     error = util.format_exc(e)

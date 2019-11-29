@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.11.2019
+@modified    29.11.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -522,8 +522,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             "Dump entire database as SQL")
         menu_tools_export.AppendSeparator()
         menu_tools_export_stats = self.menu_tools_export_stats = menu_tools_export.Append(
-            wx.ID_ANY, "Database &statistics as HTML",
-            "Export database statistics as HTML")
+            wx.ID_ANY, "Database &schema as HTML",
+            "Export database schema information as HTML")
 
         menu_help = wx.Menu()
         menu.Append(menu_help, "&Help")
@@ -622,6 +622,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.menu_view_changes.Enabled = bool(db.temporary or changes)
         self.menu_edit_save.Enabled = self.menu_edit_cancel.Enabled = bool(changes)
         self.menu_view_folder.Enabled = not db.temporary
+        label = "Database &schema and statistics as HTML"
+        help  = "Export database schema information and statistics as HTML"
+        if "data" not in page.statistics:
+            label = "Database &schema as HTML"
+            help  = "Export database schema information as HTML"
+        self.menu_tools_export_stats.ItemLabel, self.menu_tools_export_stats.Help = label, help
 
         EDITMENUS = {"table":   self.menu_edit_table,   "index": self.menu_edit_index,
                      "trigger": self.menu_edit_trigger, "view": self.menu_edit_view}
@@ -3085,13 +3091,8 @@ class DatabasePage(wx.Panel):
 
                 wx.MessageBox("No schema to save.", conf.Title, wx.ICON_NONE)
             elif "statistics" == arg:
-                if "data" in self.statistics: return self.on_save_statistics("html")
-
-                if not any(self.db.schema.values()):    info = ", database is empty"
-                elif "error" in self.statistics:        info = ", analysis failed"
-                elif self.worker_analyzer.is_working(): info = "yet, analysis underway"
-                else: info = ""
-                wx.MessageBox("No statistics to save%s." % info, conf.Title, wx.ICON_NONE)
+                if any(self.db.schema.values()): return self.on_save_statistics("html")
+                wx.MessageBox("No statistics to save, database is empty.", conf.Title, wx.ICON_NONE)
             elif "dump" == arg:
                 self.notebook.SetSelection(self.pageorder[self.page_data])
                 self.on_dump()
@@ -3225,6 +3226,7 @@ class DatabasePage(wx.Panel):
         self.db.unlock(None, None, self.db)
         wx.CallAfter(self.populate_statistics)
         wx.CallAfter(guibase.status, "Statistics analysis complete.", flash=True)
+        self.update_page_header(updated=True)
 
 
     def on_checksum_result(self, result):
@@ -5329,12 +5331,12 @@ class DatabasePage(wx.Panel):
                                 fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(grammar.quote, x))
                                 for col in dks:
                                     for table, keys in col.get("table", {}).items():
-                                        if table != item["name"]: continue
+                                        if table != item["name"]: continue # for table, keys
                                         texts.append("%s REFERENCES %s.%s" % (fmtkeys(keys),
                                             grammar.quote(subitem["name"]), fmtkeys(col["name"])))
                                 for col in fks:
                                     for table, keys in col.get("table", {}).items():
-                                        if table != item["name"]: continue
+                                        if table != item["name"]: continue # for table, keys
                                         texts.append("%s.%s REFERENCES %s" % (
                                         grammar.quote(subitem["name"]), fmtkeys(col["name"]),
                                         fmtkeys(keys)))

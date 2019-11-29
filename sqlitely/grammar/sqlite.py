@@ -279,7 +279,7 @@ class Parser(object):
     def parse(self, sql, category=None, renames=None):
         """
         Parses the SQL statement and returns data structure.
-        Result will have "__tables__" as a list of all the table names
+        Result will have "__tables__" as a list of all the table and view names
         the SQL statement refers to, in lowercase.
 
         @param   sql       source SQL string
