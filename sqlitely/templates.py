@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.11.2019
+@modified    01.12.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1914,7 +1914,7 @@ def plot(size):
     if len(bar) - len(pc) > 3:
         bar = pc.center(len(bar), bar[0])
     else:
-        pad = pc.center(len(pad), pad[0])
+        pad = pc.center(len(pad) - len(bar), pad[0]) + pad[0] * len(bar)
     return bar + pad
 
 widths = {i: max([len(x[i]) for x in vals.values()] +
