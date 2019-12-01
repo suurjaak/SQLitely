@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.11.2019
+@modified    01.12.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -378,15 +378,18 @@ def add_unique(lst, item, direction=1, maxlen=sys.maxint):
     return lst
 
 
-def make_unique(value, existing, suffix="_%s", counter=2):
+def make_unique(value, existing, suffix="_%s", counter=2, case=False):
     """
     Returns a unique string, appending suffix % counter as necessary.
 
     @param   existing  collection of existing strings to check
+    @oaram   case      whether uniqueness should be case-sensitive
     """
-    result = value
-    while result in existing:
-        result, counter = value + suffix % counter, counter + 1
+    result, is_present = value, (lambda: result in existing)
+    if not case:
+        existing = [x.lower() for x in existing]
+        is_present = lambda: result.lower() in existing
+    while is_present(): result, counter = value + suffix % counter, counter + 1
     return result
 
 

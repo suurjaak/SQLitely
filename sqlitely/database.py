@@ -1156,7 +1156,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         for c in cols:
             if isinstance(c, dict): c = c["name"]
             name = re.sub(r"\W", "", c, flags=re.I)
-            name = util.make_unique(name, existing, counter=1)
+            name = util.make_unique(name, existing, counter=1, case=True)
             result[name] = existing[name] = data[c]
         return result
 
@@ -1292,7 +1292,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
             for col in cols:
                 base = re.sub(r"\W", "", col["name"], flags=re.I)
-                name = base = util.make_unique(base, names)
+                name = base = util.make_unique(base, names, case=True)
                 names.add(base)
                 if len(rows) == 1:
                     where = "%s = :%s" % (grammar.quote(col["name"]), name)
@@ -1300,7 +1300,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 else:
                     mynames = []
                     for i, row in enumerate(rows):
-                        name = util.make_unique(base, names, counter=1)
+                        name = util.make_unique(base, names, counter=1, case=True)
                         args[name] = row[col["name"]]
                         mynames.append(name); names.add(name)
                     where = "%s IN (:%s)" % (grammar.quote(col["name"]), ", :".join(mynames))

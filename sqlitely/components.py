@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.11.2019
+@modified    01.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -124,7 +124,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
         names = [x["name"] for x in self.columns] # Ensure unique magic keys
         for key in "KEY_ID", "KEY_CHANGED", "KEY_NEW", "KEY_DELETED":
-            setattr(self, key, util.make_unique(getattr(self, key), names))
+            setattr(self, key, util.make_unique(getattr(self, key), names, case=True))
 
         self.SeekToRow(conf.SeekLength - 1)
         for col in self.columns if self.is_query and self.rows_current else ():
@@ -3777,7 +3777,8 @@ class SchemaObjectPage(wx.Panel):
             can_simple = (cols1_sqls == cols2_sqls) # Column definition changed
 
         if can_simple and old["name"] != new["name"] and not self._db.has_full_rename_table():
-            can_simple = bool(self._db.get_related("table", old["name"], associated=False))
+            can_simple = False if old["name"].lower() == new["name"].lower() else \
+                         bool(self._db.get_related("table", old["name"], associated=False))
 
         if can_simple:
             # Possible to use just simple ALTER TABLE statements

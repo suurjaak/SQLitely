@@ -2200,7 +2200,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             title = "..%s" % title[-conf.MaxTabTitleLength:]
         all_titles = [self.notebook.GetPageText(i)
                       for i in range(self.notebook.GetPageCount())]
-        return util.make_unique(title, all_titles, suffix=" (%s)")
+        return util.make_unique(title, all_titles, suffix=" (%s)", case=True)
 
 
 
@@ -4731,7 +4731,7 @@ class DatabasePage(wx.Panel):
             path, _ = os.path.split(path)
             filenames, names_unique = [], []
             for t in items:
-                name = util.safe_filename("%s %s" % (category.capitalize(),  t))
+                name = util.safe_filename("%s %s" % (category.capitalize(), t))
                 name = util.make_unique(name, names_unique, suffix=" (%s)")
                 filenames.append(os.path.join(path, name + "." + extname))
                 names_unique.append(name)
