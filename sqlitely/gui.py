@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.11.2019
+@modified    01.12.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5232,7 +5232,9 @@ class DatabasePage(wx.Panel):
             def is_indirect_item(a, b):
                 trg = next((x for x in (a, b) if x["type"] == "trigger"), None)
                 tbv = next((x for x in (a, b) if x["type"] in ("table", "view")), None)
-                return trg and tbv and trg["tbl_name"].lower() != tbv["name"].lower()
+                if trg and tbv: return trg["tbl_name"].lower() != tbv["name"].lower()
+                return a["type"] == b["type"] == "view" and \
+                       b["name"].lower() not in a.get("meta", {}).get("__tables__", ())
 
             italicfont = tree.Font
             italicfont.SetStyle(wx.FONTSTYLE_ITALIC)
@@ -5280,9 +5282,11 @@ class DatabasePage(wx.Panel):
                         ))
                         subcategories, emptysubs = ["table", "view"], False
                     elif "view" == category:
-                        if "meta" in item: childtext = "ON " + ", ".join(
-                            grammar.quote(x) for x in item["meta"].get("__tables__") or []
-                        )
+                        if "meta" in item:
+                            names = [self.db.schema["table"][x]["name"] if x in self.db.schema["table"]
+                                     else self.db.schema["view"][x]["name"] if x in self.db.schema["view"]
+                                     else x for x in item["meta"].get("__tables__", ())]
+                            childtext = "ON " + ", ".join(map(grammar.quote, names))
                         columns = item.get("columns") or []
                         subcategories, emptysubs = ["table", "trigger", "view"], False
 
