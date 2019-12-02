@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.12.2019
+@modified    02.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -4904,8 +4904,9 @@ class SchemaObjectPage(wx.Panel):
             return
         finally: busy.Close()
 
-        self._item.update(name=meta2["name"], meta=self._AssignColumnIDs(meta2),
-                          tbl_name=meta2["name" if "table" == self._category else "table"])
+        self._item.update(name=meta2["name"], meta=self._AssignColumnIDs(meta2))
+        if "view" != self._category: self._item.update(
+            tbl_name=meta2["name" if "table" == self._category else "table"])
         self._original = copy.deepcopy(self._item)
         if self._show_alter: self._OnToggleAlterSQL()
         self._has_alter = True
