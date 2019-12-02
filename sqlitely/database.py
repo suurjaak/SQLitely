@@ -53,7 +53,12 @@ class Database(object):
         short:        "short text",
         description:  "long text",
         ?values:      {primitive: label},
+        ?default:     directive default value,
         ?deprecated:  whether directive is deprecated,
+        ?dump:        whether directive should be included in db dump
+                      and statistics export,
+        ?stats:       whether directive should be included in statistics export,
+        ?initial:     True if directive should be issued before creating schema,
         ?min:         minimum integer value,
         ?max:         maximum integer value,
         ?read:        false if setting is write-only,
@@ -67,6 +72,8 @@ class Database(object):
         "name": "application_id",
         "label": "Application ID",
         "type": int,
+        "default": 0,
+        "dump": True,
         "short": "Application-specified unique integer",
         "description": "Applications can set a unique integer so that utilities can determine the specific file type.",
       },
@@ -75,7 +82,10 @@ class Database(object):
         "label": "Auto-vacuum",
         "type": int,
         "values": {0: "NONE", 1: "FULL", 2: "INCREMENTAL"},
-        "write": lambda db: not db.schema.values(),
+        "default": 0,
+        "dump": True,
+        "initial": True,
+        "write": lambda db: not db.schema.values() and not db.filesize,
         "short": "Auto-vacuum settings",
         "description": """  FULL: truncate deleted rows on every commit.
   INCREMENTAL: truncate on PRAGMA incremental_vacuum.
@@ -182,7 +192,9 @@ class Database(object):
         "name": "default_cache_size",
         "label": "Default cache size",
         "type": int,
+        "default": -2000,
         "deprecated": True,
+        "dump": True,
         "short": "Suggested number of disk cache pages",
         "description": "The suggested maximum number of pages of disk cache that will be allocated per open database file; persists across database connections.",
       },
@@ -205,7 +217,9 @@ class Database(object):
         "name": "encoding",
         "label": "Encoding",
         "type": str,
-        "write": lambda db: not db.schema.values(),
+        "dump": True,
+        "initial": True,
+        "write": lambda db: not db.schema.values() and not db.filesize,
         "short": "Database text encoding",
         "values": {"UTF-8": "UTF-8", "UTF-16": "UTF-16 native byte-ordering", "UTF-16le": "UTF-16 little endian", "UTF-16be": "UTF-16 big endian"},
         "description": "The text encoding used by the database. It is not possible to change the encoding after the database has been created.",
@@ -221,6 +235,7 @@ class Database(object):
         "name": "freelist_count",
         "label": "Freelist count",
         "type": int,
+        "stats": True,
         "write": False,
         "short": "Unused pages",
         "description": "The number of unused pages in the database file.",
@@ -304,6 +319,7 @@ class Database(object):
         "name": "page_count",
         "label": "Page count",
         "type": int,
+        "stats": False,
         "write": False,
         "short": "Total number of pages",
         "description": "The total number of pages in the database file.",
@@ -313,6 +329,8 @@ class Database(object):
         "label": "Page size",
         "type": int,
         "values": {512: 512, 1024: 1024, 2048: 2048, 4096: 4096, 8192: 8192, 16384: 16384, 32768: 32768, 65536: 65536},
+        "dump": True,
+        "initial": True,
         "short": "Database page byte size",
         "description": "The page size of the database. Specifying a new size does not change the page size immediately. Instead, the new page size is remembered and is used to set the page size when the database is first created, if it does not already exist when the page_size pragma is issued, or at the next VACUUM command that is run on the same database connection while not in WAL mode.",
       },
@@ -342,6 +360,7 @@ class Database(object):
         "label": "Schema version",
         "type": int,
         "min": 0,
+        "dump": True,
         "short": "Database schema-version",
         "description": "SQLite automatically increments the schema-version whenever the schema changes or VACUUM is performed. As each SQL statement runs, the schema version is checked to ensure that the schema has not changed since the SQL statement was prepared. Subverting this mechanism by changing schema_version may cause SQL statement to run using an obsolete schema, which can lead to incorrect answers and/or database corruption.",
       },
@@ -376,6 +395,8 @@ class Database(object):
         "label": "Temporary store",
         "type": int,
         "values": {0: "DEFAULT", 1: "FILE", 2: "MEMORY"},
+        "default": 0,
+        "dump": True,
         "short": "Location of temporary tables and indexes",
         "description": """  DEFAULT: the compile-time C preprocessor macro SQLITE_TEMP_STORE is used to determine where temporary tables and indexes are stored.
   FILE: temporary tables and indexes are stored in a file. The temp_store_directory pragma can be used to specify the directory containing temporary files when FILE is specified. 
@@ -404,6 +425,8 @@ class Database(object):
         "label": "User version",
         "type": int,
         "min": 0,
+        "default": 0,
+        "dump": True,
         "short": "User-defined database version number",
         "description": "User-defined version number for the database.",
       },
@@ -1386,26 +1409,31 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
-    def get_pragma_values(self):
+    def get_pragma_values(self, dump=False, stats=False):
         """
         Returns values for all defined and available PRAGMA settings, as
         {pragma_name: scalar value or [{row}, ]}.
+
+        @param   dump   if True, returns only directives for db dump
+        @param   stats  if True, returns only directives for statistics export
         """
         result = {}
         for name, opts in self.PRAGMA.items():
             if opts.get("read") == False: continue # for name, opts
+            if dump  and not opts.get("dump") \
+            or stats and not opts.get("dump") and not opts.get("stats"):
+                continue # for name, opts
 
             rows = self.execute("PRAGMA %s" % name, log=False).fetchall()
             if not rows:
-                if callable(opts["type"]): result[name] = opts["type"]()
-                continue # for name, opts
-
-            if "table" == opts["type"]:
-                result[name] = [x[opts["col"]] for x in rows]
+                if not callable(opts["type"]): continue # for name, opts
+                value = opts["type"]()
+            elif "table" == opts["type"]: value = [x[opts["col"]] for x in rows]
             else:
-                result[name] = rows[0].values()[0]
-                if callable(opts["type"]):
-                    result[name] = opts["type"](result[name])
+                value = rows[0].values()[0]
+                if callable(opts["type"]): value = opts["type"](value)
+            if not (dump or stats) or value != opts.get("default"):
+                result[name] = value
 
         return result
 

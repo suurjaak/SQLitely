@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.12.2019
+@modified    02.12.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1205,6 +1205,8 @@ HTML statistics export template.
 
 @param   title        export title
 @param   db           database.Database instance
+@param   pragma       pragma settings to export, as {name: value},
+@param   sql          database schema SQL,
 @param   stats        {"table": [{name, size, size_total, ?size_index, ?index: []}],
                        "index": [{name, size, table}]}
 """
@@ -1760,13 +1762,13 @@ mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "v
 
 <h2><a class="toggle" title="Toggle PRAGMAs" onclick="onToggle(this, 'pragma')">PRAGMA settings</a></h2>
 <div class="hidden sql" id="pragma">
-{{! Template(templates.PRAGMA_SQL).expand(pragma=db.get_pragma_values()) }}
+{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma) }}
 </div>
 
 
 <h2><a class="toggle" title="Toggle full schema" onclick="onToggle(this, 'schema')">Full schema SQL</a></h2>
 <div class="hidden sql" id="schema">
-{{ db.get_sql() }}
+{{ sql }}
 </div>
 
 </div>
@@ -1966,9 +1968,8 @@ import itertools
 from sqlitely.lib.vendor.step import Template
 from sqlitely import grammar, templates
 
-PRAGMAS_FIRST = ("auto_vacuum", "encoding")
-pragma_first = {k: v for k, v in pragma.items() if k in PRAGMAS_FIRST}
-pragma_last  = {k: v for k, v in pragma.items() if k not in PRAGMAS_FIRST}
+pragma_first = {k: v for k, v in pragma.items() if db.PRAGMA[k].get("initial")}
+pragma_last  = {k: v for k, v in pragma.items() if not db.PRAGMA[k].get("initial")}
 %>
 -- Database dump.
 -- Source: {{ db.name }}.

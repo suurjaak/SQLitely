@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.12.2019
+@modified    02.12.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -513,7 +513,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_tools_export.AppendSeparator()
         menu_tools_export_pragma = self.menu_tools_export_pragma = menu_tools_export.Append(
             wx.ID_ANY, "&PRAGMA settings as SQL",
-            "Export database PRAGMA settings as SQL")
+            "Export all current database PRAGMA settings as SQL")
         menu_tools_export_schema = self.menu_tools_export_schema = menu_tools_export.Append(
             wx.ID_ANY, "Database schema as S&QL",
             "Export database schema as SQL")

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.11.2019
+@modified    02.11.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -279,8 +279,13 @@ def export_stats(filename, db, data, filetype="html"):
     TPLARGS = {"html": (templates.DATA_STATISTICS_HTML, dict(escape=True, strip=False)),
                "sql":  (templates.DATA_STATISTICS_SQL,  dict(strip=False))}
     template = step.Template(TPLARGS[filetype][0], **TPLARGS[filetype][1])
-    ns = {"title": "Database statistics", "sql": data.get("data", {}).get("sql", ""),
-          "db": db, "stats": data.get("data", {})}
+    ns = {
+        "title":  "Database statistics",
+        "db":     db,
+        "pragma": db.get_pragma_values(stats=True),
+        "sql":    db.get_sql(),
+        "stats":  data.get("data", {}),
+    }
     with open(filename, "wb") as f: template.stream(f, ns)
     return True
 
@@ -303,7 +308,7 @@ def export_dump(filename, db, progress=None):
                 "data":     [{"name": t, "columns": [x["name"] for x in opts["columns"]],
                               "rows": iter(db.execute("SELECT * FROM %s" % grammar.quote(t)))}
                              for t, opts in tables.items()],
-                "pragma":   db.get_pragma_values(),
+                "pragma":   db.get_pragma_values(dump=True),
                 "progress": progress,
             }
             template = step.Template(templates.DUMP_SQL, strip=False)
