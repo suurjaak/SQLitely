@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.11.2019
+@modified    01.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1411,15 +1411,20 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
 
 
-def is_sqlite_file(filename, path=None):
-    """Returns whether the file looks to be an SQLite database file."""
+def is_sqlite_file(filename, path=None, empty=False):
+    """
+    Returns whether the file looks to be an SQLite database file.
+
+    @param   path   path to prepend to filename, if any
+    @param   empty  whether an empty file is considered valid
+    """
     SQLITE_HEADER = "SQLite format 3\00"
     result = os.path.splitext(filename)[1].lower() in conf.DBExtensions
     if result:
         try:
+            result = empty
             fullpath = os.path.join(path, filename) if path else filename
-            result = bool(os.path.getsize(fullpath))
-            if result:
+            if os.path.getsize(fullpath):
                 result = False
                 with open(fullpath, "rb") as f:
                     result = (f.read(len(SQLITE_HEADER)) == SQLITE_HEADER)

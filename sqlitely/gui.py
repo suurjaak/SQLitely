@@ -2163,7 +2163,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         db_filenames, notdb_filenames = [], []
         for f in filenames:
-            if database.is_sqlite_file(f): db_filenames.append(f)
+            if database.is_sqlite_file(f, empty=True): db_filenames.append(f)
             else:
                 notdb_filenames.append(f)
                 guibase.status("%s is not a valid SQLite database.", f,
