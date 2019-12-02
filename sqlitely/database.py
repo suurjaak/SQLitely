@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.12.2019
+@modified    02.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -58,7 +58,8 @@ class Database(object):
         ?dump:        whether directive should be included in db dump
                       and statistics export,
         ?stats:       whether directive should be included in statistics export,
-        ?initial:     True if directive should be issued before creating schema,
+        ?initial:     whether directive should be issued before creating schema
+                      or a callable(db, value) returning whether,
         ?min:         minimum integer value,
         ?max:         maximum integer value,
         ?read:        false if setting is write-only,
@@ -72,7 +73,6 @@ class Database(object):
         "name": "application_id",
         "label": "Application ID",
         "type": int,
-        "default": 0,
         "dump": True,
         "short": "Application-specified unique integer",
         "description": "Applications can set a unique integer so that utilities can determine the specific file type.",
@@ -82,7 +82,6 @@ class Database(object):
         "label": "Auto-vacuum",
         "type": int,
         "values": {0: "NONE", 1: "FULL", 2: "INCREMENTAL"},
-        "default": 0,
         "dump": True,
         "initial": True,
         "write": lambda db: not db.schema.values() and not db.filesize,
@@ -176,6 +175,7 @@ class Database(object):
         "name": "data_store_directory",
         "label": "Data-store directory",
         "type": unicode,
+        "default": "",
         "deprecated": True,
         "short": "Windows-specific directory for relative pathnames",
         "description": "Global variable, used by interface backends on Windows to determine where to store database files specified using a relative pathname.",
@@ -319,7 +319,7 @@ class Database(object):
         "name": "page_count",
         "label": "Page count",
         "type": int,
-        "stats": False,
+        "stats": True,
         "write": False,
         "short": "Total number of pages",
         "description": "The total number of pages in the database file.",
@@ -338,6 +338,7 @@ class Database(object):
         "name": "query_only",
         "label": "Query only",
         "type": bool,
+        "initial": lambda db, v: not v, # Should be first only if false, else last
         "short": "Prevent database changes",
         "description": "If enabled, prevents all changes to the database file for the duration of the current session.",
       },
@@ -408,6 +409,7 @@ class Database(object):
         "name": "temp_store_directory",
         "label": "Temporary store directory",
         "type": unicode,
+        "default": "",
         "deprecated": True,
         "short": "Location of temporary storage",
         "description": "Value of the sqlite3_temp_directory global variable, which some operating-system interface backends use to determine where to store temporary tables and indexes.",
@@ -425,7 +427,6 @@ class Database(object):
         "label": "User version",
         "type": int,
         "min": 0,
-        "default": 0,
         "dump": True,
         "short": "User-defined database version number",
         "description": "User-defined version number for the database.",

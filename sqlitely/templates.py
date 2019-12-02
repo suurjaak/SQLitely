@@ -1968,15 +1968,15 @@ import itertools
 from sqlitely.lib.vendor.step import Template
 from sqlitely import grammar, templates
 
-pragma_first = {k: v for k, v in pragma.items() if db.PRAGMA[k].get("initial")}
-pragma_last  = {k: v for k, v in pragma.items() if not db.PRAGMA[k].get("initial")}
+is_initial = lambda o, v: o["initial"](db, v) if callable(o.get("initial")) else o.get("initial")
+pragma_first = {k: v for k, v in pragma.items() if is_initial(db.PRAGMA[k], v)}
+pragma_last  = {k: v for k, v in pragma.items() if not is_initial(db.PRAGMA[k], v)}
 %>
 -- Database dump.
 -- Source: {{ db.name }}.
 -- {{ templates.export_comment() }}
 %if pragma_first:
 
--- Initial PRAGMA settings
 {{! Template(templates.PRAGMA_SQL).expand(pragma=pragma_first) }}
 
 %endif
@@ -1998,7 +1998,6 @@ rows = itertools.chain([row], table["rows"])
 
 %endfor
 
--- PRAGMA settings
 {{! Template(templates.PRAGMA_SQL).expand(pragma=pragma_last) }}
 """
 
@@ -2017,28 +2016,38 @@ for name, opts in database.Database.PRAGMA.items():
     if opts.get("read") or opts.get("write") is False:
         pragma.pop(name, None)
 
-lastopts, count = {}, 0
-sortkey = lambda x: (bool(x[1].get("deprecated")), x[1]["label"])
+lastopts, lastvalue, count = {}, None, 0
+is_initial = lambda o, v: o["initial"](None, v) if callable(o.get("initial")) else o.get("initial")
+sortkey = lambda (k, v, o): ((-1, not callable(o.get("initial"))) if is_initial(o, v)
+                             else (1, 0) if callable(o.get("initial")) else (0, 0),
+                             bool(o.get("deprecated")), o.get("label", k))
 %>
-%for name, opts in sorted(database.Database.PRAGMA.items(), key=sortkey):
+%for name, value, opts in sorted(((k, pragma.get(k), o) for k, o in database.Database.PRAGMA.items()), key=sortkey):
 <%
 if name not in pragma:
-    lastopts = opts
     continue # for name, opts
 
 %>
-    %if opts.get("deprecated") and bool(lastopts.get("deprecated")) != bool(opts.get("deprecated")):
+    %if is_initial(opts, value) and (not count or not is_initial(lastopts, lastvalue)):
+-- BASE PRAGMAS:
+    %elif opts.get("deprecated") and not lastopts.get("deprecated"):
 
--- DEPRECATED:
+-- DEPRECATED PRAGMAS:
+    %elif callable(opts.get("initial")) and not is_initial(opts, value) and not callable(lastopts.get("initial")):
+
+-- CLOSING PRAGMAS:
+    %elif not opts.get("deprecated") and not is_initial(opts, value) and (not count or is_initial(lastopts, lastvalue)):
+
+-- COMMON PRAGMAS:
     %endif
 <%
-value = pragma[name]
+lastopts, lastvalue = opts, value
 if isinstance(value, basestring):
     value = '"%s"' % value.replace('"', '""')
 elif isinstance(value, bool): value = str(value).upper()
-lastopts = opts
 %>
-{{ "\\n" if count else "" }}PRAGMA {{ name }} = {{ value }};
+
+PRAGMA {{ name }} = {{ value }};
 <%
 count += 1
 %>

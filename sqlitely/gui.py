@@ -3378,11 +3378,7 @@ class DatabasePage(wx.Panel):
                                       conf.Title, wx.OK | wx.ICON_WARNING)
 
         try:
-            mysql = "SAVEPOINT save_pragma;\n\n%s\n" \
-                    "RELEASE SAVEPOINT save_pragma;" % sql
-            logger.info("Executing %s.", mysql)
-            self.db.log_query("PRAGMA", sql)
-            self.db.executescript(mysql)
+            self.db.executescript(sql, name="PRAGMA")
         except Exception as e:
             result = False
             msg = "Error saving PRAGMA:\n\n%s" % util.format_exc(e)
