@@ -540,7 +540,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
             try: self.connection.close()
             except Exception: pass
             self.connection = None
-        self.filename = self.name = filename
+        self.filename = filename
+        if not self.temporary: self.name = filename
         self.open()
 
 
