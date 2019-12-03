@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.12.2019
+@modified    03.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -3773,8 +3773,17 @@ class SchemaObjectPage(wx.Panel):
             cols1_sqls = [grammar.generate(dict(c, name="", __type__="column"))[0]
                           for c in cols1]
             cols2_sqls = [grammar.generate(dict(c, name="", __type__="column"))[0]
-                          for c in cols2]
+                          for c in cols2 if c["__id__"] in colmap1]
             can_simple = (cols1_sqls == cols2_sqls) # Column definition changed
+        if can_simple:
+            FORBIDDEN_DEFAULTS = ("CURRENT_TIME", "CURRENT_DATE", "CURRENT_TIMESTAMP")
+            for c2 in cols2:
+                if c2["__id__"] in colmap1: continue # for c
+                # Simple column addition has specific requirements
+                can_simple = "pk" not in c2 and "unique" not in c2 \
+                             and c2.get("default", "").upper() not in FORBIDDEN_DEFAULTS \
+                             and ("notnull" not in c2 or c2.get("default", "").upper() != "NULL")
+                if not can_simple: break # for c
 
         if can_simple and old["name"] != new["name"] and not self._db.has_full_rename_table():
             can_simple = False if old["name"].lower() == new["name"].lower() else \
