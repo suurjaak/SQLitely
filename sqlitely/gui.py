@@ -972,6 +972,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
             if event.temporary: self.db_datas.pop(event.filename1, None)
             self.update_database_list(event.filename2)
+            if self.list_db.IsSelected(0): self.list_db.Select(0, False)
             for i in range(1, self.list_db.GetItemCount()):
                 fn = self.list_db.GetItemText(i)
                 self.list_db.Select(i, on=(fn == event.filename2))
