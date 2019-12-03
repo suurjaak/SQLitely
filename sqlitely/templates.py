@@ -106,11 +106,12 @@ from sqlitely.lib import util
     td.index, th.index { color: gray; width: 10px; }
     td.index { color: gray; text-align: right; }
     th { padding-left: 5px; padding-right: 5px; text-align: center; white-space: nowrap; }
-    span#sql { display: inline; font-family: monospace; overflow: visible; white-space: pre-wrap; }
-    span#sql.clip { display: inline-block; font-family: inherit; height: 1em; overflow: hidden; }
+    #sqlintro { font-family: monospace; white-space: pre-wrap; }
+    #sql { font-family: monospace; white-space: pre-wrap; }
+    a#toggle { position: relative; top: 2px; }
     a#toggle:hover { cursor: pointer; text-decoration: none; }
-    span#sql + a#toggle { padding-left: 3px; }
-    span#sql.clip + a#toggle { background: white; position: relative; left: -8px; }
+    a#toggle::after { content: ".. \\\\25b6"; font-size: 1.2em; }
+    a#toggle.open::after { content: " \\\\25b2"; font-size: 0.7em; }
     a.sort { display: block; }
     a.sort:hover { cursor: pointer; text-decoration: none; }
     a.sort::after      { content: ""; display: inline-block; min-width: 6px; position: relative; left: 3px; top: -1px; }
@@ -160,6 +161,12 @@ from sqlitely.lib import util
       }, 200);
     };
 
+    var onToggle = function(a, id1, id2) {
+        a.classList.toggle('open');
+        document.getElementById(id1).classList.toggle('hidden');
+        document.getElementById(id2).classList.toggle('hidden');
+    };
+
     var doSearch = function() {
       var words = String(search).split(/\s/g).filter(Boolean);
       var regexes = words.map(function(word) { return new RegExp(escapeRegExp(word), "i"); });
@@ -197,8 +204,10 @@ from sqlitely.lib import util
   <tr>
     <td>
       <div id="title">{{ title }}</div><br />
-      <b>SQL:</b> <span id="sql">{{ sql or create_sql }}</span>
-      <a id="toggle" title="Toggle full SQL" onclick="document.getElementById('sql').classList.toggle('clip')">...</a>
+      <b>SQL:</b>
+      <span id="sql" class="hidden">{{ sql or create_sql }}</span>
+      <span id="shortsql">{{ (sql or create_sql).split("\\n", 1)[0] }}</span>
+      <a id="toggle" title="Toggle full SQL" onclick="onToggle(this, 'shortsql', 'sql')"> </a>
       <br />
       Source: <b>{{ db_filename }}</b>.<br />
       <b>{{ row_count }}</b> {{ util.plural("row", row_count, numbers=False) }}{{ " in results" if sql else "" }}.<br />
