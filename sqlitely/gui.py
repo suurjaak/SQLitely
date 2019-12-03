@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.12.2019
+@modified    03.12.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5281,7 +5281,7 @@ class DatabasePage(wx.Panel):
                             names = [self.db.schema["table"][x]["name"] if x in self.db.schema["table"]
                                      else self.db.schema["view"][x]["name"] if x in self.db.schema["view"]
                                      else x for x in item["meta"].get("__tables__", ())]
-                            childtext = "ON " + ", ".join(map(grammar.quote, names))
+                            childtext = "ON " + ", ".join(map(grammar.quote, names)) if names else ""
                         columns = item.get("columns") or []
                         subcategories, emptysubs = ["table", "trigger", "view"], False
 
