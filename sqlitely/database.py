@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.12.2019
+@modified    03.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -21,9 +21,11 @@ import sqlite3
 import tempfile
 
 from . lib.util import CaselessDict
+from . lib.vendor import step
 from . lib import util
 from . import conf
 from . import grammar
+from . import templates
 
 logger = logging.getLogger(__name__)
 
@@ -557,12 +559,21 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         @return  a list of encountered errors, if any
         """
-        result, sqls = [], []
+        result, sqls, pragma = [], [], {}
         with open(filename, "w") as _: pass # Truncate file
         self.execute("ATTACH DATABASE ? AS new", (filename, ))
         sqls.append("ATTACH DATABASE ? AS new")
-        fks = self.execute("PRAGMA foreign_keys").fetchone()["foreign_keys"]
-        if fks: self.execute("PRAGMA foreign_keys = FALSE")
+
+        # Set initial PRAGMAs
+        pragma_tpl = step.Template(templates.PRAGMA_SQL, strip=False)
+        try: pragma = self.get_pragma_values(dump=True)
+        except Exception: logger.exception("Failed to get PRAGMAs for %s.", self.name)
+        pragma_first = {k: v for k, v in pragma.items()
+                        if k in ("auto_vacuum", "page_size")}
+        if pragma_first:
+            sql = pragma_tpl.expand(pragma=pragma_first, schema="new")
+            self.executescript(sql)
+            sqls.append(sql)
 
         # Create structure for all tables
         for name, opts in self.schema["table"].items():
@@ -601,7 +612,15 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     result.append(util.format_exc(e))
                     logger.exception("Error creating %s %s for %s.",
                                      category, grammar.quote(name), filename)
-        if fks: self.execute("PRAGMA foreign_keys = TRUE")
+
+        # Set closing PRAGMAs
+        pragma_last  = {k: v for k, v in pragma.items()
+                        if k in ("application_id", "schema_version", "user_version")}
+        if pragma_last:
+            sql = pragma_tpl.expand(pragma=pragma_last, schema="new")
+            self.executescript(sql)
+            sqls.append(sql)
+
         self.execute("DETACH DATABASE new")
         sqls.append("DETACH DATABASE new")
         self.log_query("RECOVER", sqls, filename)

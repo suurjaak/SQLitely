@@ -2006,9 +2006,10 @@ rows = itertools.chain([row], table["rows"])
 Database PRAGMA statements SQL template.
 
 @param   pragma   PRAGMA values as {name: value}
+@param   ?schema  schema for PRAGMA directive, if any
 """
 PRAGMA_SQL = """<%
-from sqlitely import database
+from sqlitely import database, grammar
 
 pragma = dict(pragma)
 for name, opts in database.Database.PRAGMA.items():
@@ -2046,7 +2047,7 @@ if isinstance(value, basestring):
 elif isinstance(value, bool): value = str(value).upper()
 %>
 
-PRAGMA {{ name }} = {{ value }};
+PRAGMA {{ ("%s." % grammar.quote(schema)) if isdef("schema") and schema else "" }}{{ name }} = {{ value }};
 <%
 count += 1
 %>
