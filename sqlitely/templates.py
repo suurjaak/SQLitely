@@ -108,16 +108,19 @@ from sqlitely.lib import util
     th { padding-left: 5px; padding-right: 5px; text-align: center; white-space: nowrap; }
     #sqlintro { font-family: monospace; white-space: pre-wrap; }
     #sql { font-family: monospace; white-space: pre-wrap; }
-    a#toggle { position: relative; top: 2px; }
-    a#toggle:hover { cursor: pointer; text-decoration: none; }
-    a#toggle::after { content: ".. \\\\25b6"; font-size: 1.2em; }
-    a#toggle.open::after { content: " \\\\25b2"; font-size: 0.7em; }
+    a.toggle:hover { cursor: pointer; text-decoration: none; }
+    a.toggle::after { content: ".. \\\\25b6"; font-size: 1.2em; position: relative; top: 2px; }
+    a.toggle.open::after { content: " \\\\25b2"; font-size: 0.7em; }
     a.sort { display: block; }
     a.sort:hover { cursor: pointer; text-decoration: none; }
     a.sort::after      { content: ""; display: inline-block; min-width: 6px; position: relative; left: 3px; top: -1px; }
     a.sort.asc::after  { content: "↓"; }
     a.sort.desc::after { content: "↑"; }
     .hidden { display: none; }
+    @-moz-document url-prefix() { /* Firefox-specific tweaks */
+        a.toggle { top: 0; }
+        a.toggle::after { font-size: 0.7em; top: 0 !important; }
+    }
   </style>
   <script>
     var sort_col = 0;
@@ -207,7 +210,7 @@ from sqlitely.lib import util
       <b>SQL:</b>
       <span id="sql" class="hidden">{{ sql or create_sql }}</span>
       <span id="shortsql">{{ (sql or create_sql).split("\\n", 1)[0] }}</span>
-      <a id="toggle" title="Toggle full SQL" onclick="onToggle(this, 'shortsql', 'sql')"> </a>
+      <a class="toggle" title="Toggle full SQL" onclick="onToggle(this, 'shortsql', 'sql')"> </a>
       <br />
       Source: <b>{{ db_filename }}</b>.<br />
       <b>{{ row_count }}</b> {{ util.plural("row", row_count, numbers=False) }}{{ " in results" if sql else "" }}.<br />
@@ -1355,6 +1358,9 @@ COLS = {"table":   ["Name", "Columns", "Rows", "Size in bytes", "Related tables"
       text-align: center;
       padding-bottom: 10px;
       color: #666;
+    }
+    @-moz-document url-prefix() { /* Firefox-specific tweaks */
+        a.toggle::after { font-size: 0.7em; top: 0 !important; }
     }
   </style>
   <script>
