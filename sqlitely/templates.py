@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.12.2019
+@modified    03.12.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1935,21 +1935,20 @@ widths = {i: max([len(x[i]) for x in vals.values()] +
 """
 Database statistics SQL export template.
 
-@param   db_filename  database path or temporary name
-@param   db_filesize  database size in bytes
-@param   sql          SQL query giving export data, if any
+@param   db      database.Database instance
+@param   stats   {"filesize": database size, "sql": "statistics CREATE SQL"}
 """
 DATA_STATISTICS_SQL = """<%
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
 %>-- Output from sqlite3_analyzer.
--- Source: {{ db_filename }}.
--- Source size: {{ util.format_bytes(db_filesize) }} ({{ util.format_bytes(db_filesize, max_units=False) }}).
+-- Source: {{ db.name }}.
+-- Source size: {{ util.format_bytes(stats["filesize"]) }} ({{ util.format_bytes(stats["filesize"], max_units=False) }}).
 -- {{ templates.export_comment() }}
 
 
-{{! sql.replace("\\r", "") }}
+{{! stats["sql"].replace("\\r", "") }}
 """
 
 
