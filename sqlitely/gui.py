@@ -482,6 +482,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_tools_optimize = self.menu_tools_optimize = menu_tools.Append(
             wx.ID_ANY, "&Optimize",
             "Attempt to optimize the database, running ANALYZE on tables")
+        menu_tools_reindex = self.menu_tools_reindex = menu_tools.Append(
+            wx.ID_ANY, "&Reindex all",
+            "Recreate all table indexes from scratch")
         menu_tools_vacuum = self.menu_tools_vacuum = menu_tools.Append(
             wx.ID_ANY, "&Vacuum",
             "Rebuild the database file, repacking it into a minimal amount of disk space")
@@ -590,6 +593,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["cancel"]), menu_edit_cancel)
 
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["optimize"]),  menu_tools_optimize)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["reindex"]),   menu_tools_reindex)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["vacuum"]),    menu_tools_vacuum)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["integrity"]), menu_tools_integrity)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["fks"]),       menu_tools_fks)
@@ -3015,6 +3019,42 @@ class DatabasePage(wx.Panel):
             category = args[0]
             names = args[1:] if len(args) > 1 else list(self.db.schema[category])
             self.on_drop_items(category, names)
+        elif "reindex" == cmd:
+            if not self.db.schema.get("index"):
+                return wx.MessageBox("No indexes to re-create.", conf.Title,
+                                     wx.ICON_INFORMATION)
+
+            category, name = (list(args) + [None, None])[:2]
+            targets = indexes = list(self.db.schema["index"])
+            if name and "table" == category:
+                targets = [name]
+                indexes = [v["name"] for k, vv in self.db.get_related(category, name).items()
+                           if "index" == k for v in vv]
+                label = ("%s on table %s" % (util.plural("index", indexes, single=""),
+                                             grammar.quote(name, force=True))).lstrip()
+            elif name:
+                targets = indexes = [name]
+                label = "index %s" % grammar.quote(name, force=True)
+            elif "table" == category:
+                targets = list(self.db.schema["table"])
+                label = "indexes on all tables"
+            else:
+                label = "all indexes"
+            if wx.YES != controls.YesNoMessageBox(
+                "Are you sure you want to re-create %s?" % label,
+                conf.Title, wx.ICON_INFORMATION, defaultno=True
+            ): return
+
+            sql = "REINDEX" if not name else \
+                  "\n\n".join("REINDEX main.%s;" % grammar.quote(x) for x in targets)
+            busy = controls.BusyPanel(self, "Re-creating %s.." % label)
+            try:
+                logger.info("Running REINDEX on %s in %s.", label, self.db)
+                self.db.executescript(sql, name="REINDEX")
+                busy.Close()
+                wx.MessageBox("Re-created %s." % util.plural("index", indexes),
+                              conf.Title, wx.ICON_INFORMATION)
+            finally: busy.Close()
         elif "refresh" == cmd:
             self.reload_schema(count=True, parse=True)
             self.update_info_panel()
@@ -4670,14 +4710,18 @@ class DatabasePage(wx.Panel):
         if getattr(event, "export_db", False):
             return self.on_export_data_base(event.tables, selects=event.selects)
 
-        VARS = ("close", "modified", "updated", "open", "remove", "drop", "table", "row", "rows")
+        VARS = ("close", "modified", "updated", "open", "remove", "drop",
+                "reindex", "table", "row", "rows")
         idx = self.notebook_data.GetPageIndex(event.source)
-        close, modified, updated, open, remove, drop, table, row, rows = (getattr(event, x, None) for x in VARS)
+        close, modified, updated, open, remove, drop, reindex, table, row, rows = \
+            (getattr(event, x, None) for x in VARS)
         category, name = (event.item.get(x) for x in ("type", "name"))
         if close and idx >= 0:
             self.notebook_data.DeletePage(idx)
         if drop:
             self.on_drop_items(category, [name])
+        if reindex:
+            self.handle_command("reindex", category, name)
         if (modified is not None or updated is not None) and event.source:
             if name:
                 suffix = "*" if event.source.IsChanged() else ""
@@ -4996,12 +5040,12 @@ class DatabasePage(wx.Panel):
         if not self: return
         extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
                 if "table" == category else ""
-        itemtext = util.plural(category, names)
+        itemtext = "all " + util.plural(category, names)
         if len(names) == 1:
-            itemtext = " ".join((category, grammar.quote(names[0], force=True)))
+            itemtext = "the %s %s" % (category, grammar.quote(names[0], force=True))
 
         if wx.YES != controls.YesNoMessageBox(
-            "Are you sure you want to drop the %s?%s" % (itemtext, extra),
+            "Are you sure you want to drop %s?%s" % (itemtext, extra),
             conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
 
@@ -5459,7 +5503,8 @@ class DatabasePage(wx.Panel):
 
         menu = wx.Menu()
         item_file = item_file_single = item_database = item_import = None
-        item_truncate = item_drop = item_drop_all = item_create = None
+        item_reindex = item_reindex_all = item_truncate = None
+        item_drop = item_drop_all = item_create = None
         if data.get("type") in ("table", "view"): # Single table/view
             item_name = wx.MenuItem(menu, -1, "%s %s" % (
                         data["type"].capitalize(), util.unprint(grammar.quote(data["name"], force=True))))
@@ -5486,6 +5531,7 @@ class DatabasePage(wx.Panel):
                 item_database = wx.MenuItem(menu, -1, "Export table to another &database")
                 item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
                 item_truncate = wx.MenuItem(menu, -1, "Truncate table")
+                item_reindex  = wx.MenuItem(menu, -1, "Reindex table")
             item_drop = wx.MenuItem(menu, -1, "Drop %s" % data["type"])
 
         elif "column" == data.get("type"): # Column
@@ -5515,8 +5561,9 @@ class DatabasePage(wx.Panel):
             menu.Append(item_copy)
 
             if "table" == data["category"]:
-                item_database = wx.MenuItem(menu, -1, "Export all tables to another &database")
-                item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
+                item_database    = wx.MenuItem(menu, -1, "Export all tables to another &database")
+                item_import      = wx.MenuItem(menu, -1, "&Import into table from file")
+                item_reindex_all = wx.MenuItem(menu, -1, "Reindex all")
 
             item_drop_all = wx.MenuItem(menu, -1, "Drop all %s" % util.plural(data["category"]))
             item_create   = wx.MenuItem(menu, -1, "Create &new %s" % data["category"])
@@ -5548,13 +5595,17 @@ class DatabasePage(wx.Panel):
             if item_file_single: menu.Append(item_file_single)
             if item_database: menu.Append(item_database)
             if item_import: menu.Append(item_import)
-            if item_truncate:
+            if item_reindex:
                 menu.AppendSeparator()
+                menu.Append(item_reindex)
+            if item_truncate:
                 menu.Append(item_truncate)
             if item_drop_all:
                 menu.AppendSeparator()
                 menu.Append(item_drop_all)
                 menu.Append(item_create)
+            if item_reindex_all:
+                menu.Append(item_reindex_all)
             if item_drop:
                 menu.Append(item_drop)
             names = data["items"] if "category" == data["type"] else data["name"]
@@ -5569,6 +5620,12 @@ class DatabasePage(wx.Panel):
                           item_database)
             if item_import:
                 menu.Bind(wx.EVT_MENU, import_data, item_import)
+            if item_reindex:
+                item_reindex.Enable("index" == data["type"] or "index" in self.db.get_related("table", data["name"], associated=True))
+                menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("reindex", data["type"], data["name"]), item_reindex)
+            if item_reindex_all:
+                if not self.db.schema.get("index"): item_reindex_all.Enable(False)
+                menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("reindex", data["category"]), item_reindex_all)
             if item_truncate:
                 if not self.db.schema["table"][data["name"]].get("count"):
                     item_truncate.Enable(False)
@@ -5673,12 +5730,16 @@ class DatabasePage(wx.Panel):
             sqlkws = {"category": data["category"]}
             if data.get("parent"): sqlkws["name"] = [x["name"] for x in data["items"]]
             names = [x["name"] for x in data["items"]]
+            item_reindex = None
 
             if names:
                 item_drop_all = wx.MenuItem(menu, -1, "Drop all %s" % util.plural(data["category"]))
                 item_copy     = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
                 item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % util.plural(data["category"]))
                 item_save_sql = wx.MenuItem(menu, -1, "Save %s SQL to fi&le" % util.plural(data["category"]))
+                if data["category"] in ("table", "index"):
+                    item_reindex = wx.MenuItem(menu, -1, "Reindex all")
+                    menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("reindex", data["category"]), item_reindex)
 
                 menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["category"], names),
                           item_drop_all)
@@ -5702,6 +5763,7 @@ class DatabasePage(wx.Panel):
                     menu.Append(item_database_meta)
 
                 menu.AppendSeparator()
+                if item_reindex: menu.Append(item_reindex)
                 menu.Append(item_drop_all)
             menu.Append(item_create)
             menu.Bind(wx.EVT_MENU, functools.partial(create_object, data["category"]), item_create)
@@ -5769,6 +5831,8 @@ class DatabasePage(wx.Panel):
             item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s &SQL" % data["type"])
             item_copy_rel  = wx.MenuItem(menu, -1, "Copy all &related SQL")
             item_drop      = wx.MenuItem(menu, -1, "Drop %s" % data["type"])
+            item_reindex   = wx.MenuItem(menu, -1, "Reindex") \
+                             if data["type"] in ("table", "index") else None
 
             item_name.Font = boldfont
 
@@ -5785,6 +5849,9 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, copy_related, item_copy_rel)
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["type"], [data["name"]]),
                       item_drop)
+            if item_reindex:
+                item_reindex.Enable("index" == data["type"] or "index" in self.db.get_related("table", data["name"], associated=True))
+                menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("reindex", data["type"], data["name"]), item_reindex)
 
             menu.Append(item_name)
             menu.AppendSeparator()
@@ -5814,6 +5881,7 @@ class DatabasePage(wx.Panel):
                     menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), it)
 
             menu.Append(item_drop)
+            if item_reindex: menu.Append(item_reindex)
 
         if tree.HasChildren(item):
             item_expand   = wx.MenuItem(menu, -1, "&Toggle expanded/collapsed")

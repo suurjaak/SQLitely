@@ -2182,21 +2182,28 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             dlg.ShowModal()
         def on_drop(event=None):
             self._PostEvent(drop=True)
+        def on_reindex(event=None):
+            self._PostEvent(reindex=True)
 
         menu = wx.Menu()
         item_export   = wx.MenuItem(menu, -1, "&Export to another database")
         item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
+        item_reindex  = wx.MenuItem(menu, -1, "Reindex table")
         item_truncate = wx.MenuItem(menu, -1, "Truncate table")
         item_drop     = wx.MenuItem(menu, -1, "Drop table")
+        if "index" not in self._db.get_related("table", self._item["name"], associated=True):
+            item_reindex.Enable(False)
         if not self._grid.Table.GetNumberRows(total=True):
             item_truncate.Enable(False)
         menu.Append(item_export)
         menu.Append(item_import)
         menu.AppendSeparator()
+        menu.Append(item_reindex)
         menu.Append(item_truncate)
         menu.Append(item_drop)
         menu.Bind(wx.EVT_MENU, self._OnExportToDB, item_export)
         menu.Bind(wx.EVT_MENU, on_import,          item_import)
+        menu.Bind(wx.EVT_MENU, on_reindex,         item_reindex)
         menu.Bind(wx.EVT_MENU, self.Truncate,      item_truncate)
         menu.Bind(wx.EVT_MENU, on_drop,            item_drop)
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
