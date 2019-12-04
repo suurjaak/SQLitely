@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.12.2019
+@modified    04.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -2517,10 +2517,10 @@ class SchemaObjectPage(wx.Panel):
         button_test    = self._buttons["test"]    = wx.Button(panel2, label="Test")
         button_import  = self._buttons["import"]  = wx.Button(panel2, label="Import SQL")
         button_cancel  = self._buttons["cancel"]  = wx.Button(panel2, label="Cancel")
-        button_delete  = self._buttons["delete"]  = wx.Button(panel2, label="Drop")
+        button_actions = self._buttons["actions"] = wx.Button(panel2, label="Actions ..")
         button_close   = self._buttons["close"]   = wx.Button(panel2, label="Close")
         button_edit._toggle   = button_refresh._toggle = "skip"
-        button_delete._toggle = button_close._toggle   = "hide skip"
+        button_actions._toggle = button_close._toggle  = "hide skip"
         button_import._toggle = button_cancel._toggle  = button_test._toggle  = "show skip"
         button_refresh.ToolTip = "Reload statement, and database tables"
         button_test.ToolTip    = "Test saving schema object, checking SQL validity"
@@ -2534,7 +2534,7 @@ class SchemaObjectPage(wx.Panel):
         sizer_buttons.Add(button_test,    flag=wx.ALIGN_CENTER_HORIZONTAL)
         sizer_buttons.Add(button_import,  flag=wx.ALIGN_CENTER_HORIZONTAL)
         sizer_buttons.Add(button_cancel,  flag=wx.ALIGN_RIGHT)
-        sizer_buttons.Add(button_delete,  flag=wx.ALIGN_CENTER_HORIZONTAL)
+        sizer_buttons.Add(button_actions, flag=wx.ALIGN_CENTER_HORIZONTAL)
         sizer_buttons.Add(button_close,   flag=wx.ALIGN_RIGHT)
         for i in range(sizer_buttons.Cols): sizer_buttons.AddGrowableCol(i)
 
@@ -2558,7 +2558,7 @@ class SchemaObjectPage(wx.Panel):
         self.Bind(wx.EVT_BUTTON,   self._OnTest,           button_test)
         self.Bind(wx.EVT_BUTTON,   self._OnImportSQL,      button_import)
         self.Bind(wx.EVT_BUTTON,   self._OnToggleEdit,     button_cancel)
-        self.Bind(wx.EVT_BUTTON,   self._OnDrop,           button_delete)
+        self.Bind(wx.EVT_BUTTON,   self._OnActions,        button_actions)
         self.Bind(wx.EVT_BUTTON,   self._OnClose,          button_close)
         self.Bind(wx.EVT_CHECKBOX, self._OnToggleAlterSQL, check_alter)
         self._BindDataHandler(self._OnChange, edit_name, ["name"])
@@ -4932,9 +4932,30 @@ class SchemaObjectPage(wx.Panel):
         return True
 
 
-    def _OnDrop(self, event=None):
-        """Handler for clicking to drop the item."""
-        self._PostEvent(drop=True)
+    def _OnActions(self, event):
+        """Handler for clicking actions, opens popup menu with options."""
+        menu = wx.Menu()
+        if self._category in ("table", ):
+            item_export_data = wx.MenuItem(menu, -1, "Export table to another database")
+            item_export      = wx.MenuItem(menu, -1, "Export table structure to another database")
+            menu.Append(item_export_data)
+            menu.Append(item_export)
+            menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(export=True, data=True), item_export_data)
+            menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(export=True), item_export)
+        if self._category in ("table", "index"):
+            item_reindex = wx.MenuItem(menu, -1, "Reindex")
+            item_reindex.Enable("index" == self._category or "index" in self._db.get_related(
+                self._category, self._item["name"], associated=True))
+            menu.Append(item_reindex)
+            menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(reindex=True), item_reindex)
+        if self._category in ("table", ):
+            item_truncate = wx.MenuItem(menu, -1, "Truncate")
+            menu.Append(item_truncate)
+            menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(truncate=True), item_truncate)
+        item_drop = wx.MenuItem(menu, -1, "Drop")
+        menu.Append(item_drop)
+        menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(drop=True), item_drop)
+        event.EventObject.PopupMenu(menu)
 
 
 

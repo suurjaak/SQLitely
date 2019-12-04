@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.12.2019
+@modified    04.12.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3030,11 +3030,11 @@ class DatabasePage(wx.Panel):
                 targets = [name]
                 indexes = [v["name"] for k, vv in self.db.get_related(category, name).items()
                            if "index" == k for v in vv]
-                label = ("%s on table %s" % (util.plural("index", indexes, single=""),
-                                             grammar.quote(name, force=True))).lstrip()
+                label = "%s on table %s" % (util.plural("index", indexes, single="the"),
+                                            grammar.quote(name, force=True))
             elif name:
                 targets = indexes = [name]
-                label = "index %s" % grammar.quote(name, force=True)
+                label = "the index %s" % grammar.quote(name, force=True)
             elif "table" == category:
                 targets = list(self.db.schema["table"])
                 label = "indexes on all tables"
@@ -4592,12 +4592,18 @@ class DatabasePage(wx.Panel):
     def on_schema_page_event(self, event):
         """Handler for a message from SchemaObjectPage."""
         idx = self.notebook_schema.GetPageIndex(event.source)
-        close, modified, updated, drop = (getattr(event, x, None)
-                                    for x in ("close", "modified", "updated", "drop"))
+        VARS = ("close", "modified", "updated", "reindex", "export", "data", "truncate", "drop")
+        close, modified, updated, reindex, export, data, truncate, drop = (getattr(event, x, None) for x in VARS)
         category, name = (event.item.get(x) for x in ("type", "name"))
         name0 = None
         if close and idx >= 0:
             self.notebook_schema.DeletePage(idx)
+        if export:
+            self.on_export_data_base([name], data=data)
+        if reindex:
+            self.handle_command("reindex", category, name)
+        if truncate:
+            self.on_truncate(name)
         if drop:
             self.on_drop_items(category, [name])
         if (modified is not None or updated is not None) and event.source:
