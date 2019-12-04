@@ -8,13 +8,12 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.12.2019
+@modified    04.12.2019
 ------------------------------------------------------------------------------
 """
 import collections
 import ctypes
 import datetime
-import io
 import locale
 import math
 import os
@@ -25,9 +24,6 @@ import time
 import urllib
 import warnings
 
-try: import wx
-except ImportError: pass
-
 
 class CaselessDict(dict):
     """
@@ -36,8 +32,8 @@ class CaselessDict(dict):
     """
 
     def __init__(self, iterable=None, **kwargs):
-        self._data  = {} # {lowercase key: value}
-        self._keys = {}  # {lowercase key: original key}
+        self._data = {} # {lowercase key: value}
+        self._keys = {} # {lowercase key: original key}
         self.update(iterable, **kwargs)
 
     def clear(self): self._data.clear(), self._keys.clear()
@@ -457,9 +453,11 @@ def tuplefy(value):
            else tuple(value) if isinstance(value, list) else (value, )
 
 
-def lccmp(x, y):
-    """Returns negative if x<y, zero if x==y, positive if x>y, caselessly."""
-    return cmp(x.lower(), y.lower())
+def lceq(a, b):
+    """Returns whether x and y are caselessly equal."""
+    a, b = (x if isinstance(x, basestring) else "" if x is None else str(x)
+            for x in (a, b))
+    return a.lower() == b.lower()
 
 
 def get_locale_day_date(dt):
@@ -534,14 +532,13 @@ def longpath(path):
 def shortpath(path):
     """Returns the path in short Windows form (PROGRA~1 not "Program Files")."""
     if isinstance(path, str): return path
-    import ctypes.wintypes
+    from ctypes import wintypes
 
     ctypes.windll.kernel32.GetShortPathNameW.argtypes = [
-        ctypes.wintypes.LPCWSTR, # lpszLongPath
-        ctypes.wintypes.LPWSTR, # lpszShortPath
-        ctypes.wintypes.DWORD # cchBuffer
+        # lpszLongPath, lpszShortPath, cchBuffer
+        wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD 
     ]
-    ctypes.windll.kernel32.GetShortPathNameW.restype = ctypes.wintypes.DWORD
+    ctypes.windll.kernel32.GetShortPathNameW.restype = wintypes.DWORD
     buf = ctypes.create_unicode_buffer(path)
     ctypes.windll.kernel32.GetShortPathNameW(path, buf, len(buf))
     return buf.value

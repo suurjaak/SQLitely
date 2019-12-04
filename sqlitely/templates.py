@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.12.2019
+@modified    04.12.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1606,7 +1606,7 @@ countstr = "{1}{0:,}".format(count, pref)
 
             %if stats.get("table"):
 <%
-size = next((x["size"] for x in stats["table"] if x["name"] == item["name"]), "")
+size = next((x["size"] for x in stats["table"] if util.lceq(x["name"], item["name"])), "")
 %>
     <td class="right" title="{{ util.format_bytes(size) if size != "" else "" }}" data-sort="{{ size }}">
       {{ util.format_bytes(size, max_units=False, with_units=False) if size != "" else "" }}
@@ -1627,11 +1627,11 @@ dks2, fks2 = db.get_keys(item2["name"])
 fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(grammar.quote, x))
 for col in dks2:
     for table, keys in col.get("table", {}).items():
-        if table == item["name"]:
+        if util.lceq(table, item["name"]):
             rels.append((None, keys, item2["name"], col["name"]))
 for col in fks2:
     for table, keys in col.get("table", {}).items():
-        if table == item["name"]:
+        if util.lceq(table, item["name"]):
             rels.append((item2["name"], col["name"], None, keys))
 %>
   <a href="#{{category}}/{{! urllib.quote(item2["name"], safe="") }}" title="Go to {{ category }} {{ grammar.quote(item2["name"], force=True) }}">{{ item2["name"] }}</a><br />
@@ -1661,7 +1661,7 @@ for col in fks2:
 
     <td>
             %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
-                %if "table" != item2["type"] and item2.get("tbl_name") == item["name"]:
+                %if "table" != item2["type"] and util.lceq(item2.get("tbl_name"), item["name"]):
 <%
 flags["has_direct"] = True
 %>
@@ -1670,7 +1670,7 @@ flags["has_direct"] = True
             %endfor
 
             %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
-                %if "table" != item2["type"] and item2.get("tbl_name") != item["name"]:
+                %if "table" != item2["type"] and not util.lceq(item2.get("tbl_name"), item["name"]):
                     %if flags.get("has_direct") and not flags.get("has_indirect"):
   <br />
                     %endif
@@ -1698,7 +1698,7 @@ flags["has_indirect"] = True
     </td>
             %if stats.get("index"):
 <%
-size = next((x["size"] for x in stats["index"] if x["name"] == item["name"]), "")
+size = next((x["size"] for x in stats["index"] if util.lceq(x["name"], item["name"])), "")
 %>
     <td class="right" title="{{ util.format_bytes(size) if size != "" else "" }}" data-sort="{{ size }}">
       {{ util.format_bytes(size, max_units=False, with_units=False) if size != "" else "" }}
@@ -1725,7 +1725,7 @@ mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "v
     </td>
     <td>
             %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
-                %if item2["name"] != item["tbl_name"]:
+                %if not util.lceq(item2["name"], item["tbl_name"]):
   <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ item2["name"] }}</a></em><br />
                 %endif
             %endfor
@@ -1748,7 +1748,7 @@ mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "v
       {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ item2["name"] }}</a><br />
             %endfor
 
-            %for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, ()) if x.get("tbl_name") == item["name"]):
+            %for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, ()) if util.lceq(x.get("tbl_name"), item["name"])):
                 %if not i:
       <br />
                 %endif

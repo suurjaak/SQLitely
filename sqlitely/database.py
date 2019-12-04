@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.12.2019
+@modified    04.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -878,7 +878,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         for mycategory, itemmap in self.schema.items():
             if category and category != mycategory: continue # for mycategory
             for myname, opts in itemmap.items():
-                if category and name and myname.lower() != name: continue # for myname
+                if category and name and not util.lceq(myname, name): continue # for myname
 
                 opts0 = schema0.get(mycategory, {}).get(myname, {})
 
@@ -1005,8 +1005,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         for subcategory in SUBCATEGORIES.get(category, []):
             for subname, subitem in self.schema[subcategory].items():
                 if "meta" not in subitem: continue # for subname, subitem
-                is_assoc = not util.lccmp(subitem["meta"].get("table", ""), name) \
-                           or not util.lccmp(item["meta"].get("table", ""), subname)
+                is_assoc = util.lceq(subitem["meta"].get("table"), name) \
+                           or util.lceq(item["meta"].get("table"), subname)
                 is_related = name in subitem["meta"]["__tables__"] \
                              or subname.lower() in item["meta"]["__tables__"]
                 if not is_related or associated is not None and associated != is_assoc:
@@ -1093,7 +1093,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
                 if names and column and "table" == mycategory:
                     col = next((c for c in opts["columns"]
-                                if c["name"].lower() == column), None)
+                                if util.lceq(c["name"], column)), None)
                     if not col: continue # for myname, opts
                     sql, err = grammar.generate(dict(col, __type__="column"), indent=False)
                     if err: raise Exception(err)
@@ -1142,7 +1142,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Tables must not start with "sqlite_", no limitations otherwise.
         """
         result = False
-        if table:    result = table[:7].lower() != "sqlite_"
+        if table:    result = not util.lceq(table[:7], "sqlite_")
         elif column: result = True
         return result
 
@@ -1384,7 +1384,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     for row, rowid in zip(rows, rowids):
                         data = {rowidname: rowid} if use_rowids else \
                                {c["name"]: row[c["name"]] for c in key_cols}
-                        if not any(data in xx for t, xx in result if t == table):
+                        if not any(data in xx for t, xx in result if util.lceq(t, table)):
                             key_data.append(data); myrows.append(row)
                     if not key_data: continue # while queue
 

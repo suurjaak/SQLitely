@@ -5014,7 +5014,7 @@ class DatabasePage(wx.Panel):
             except Exception: pass
 
         if success and tables1:
-            same_name = (tables1[0].lower() == tables2_lower[0])
+            same_name = util.lceq(tables1[0], tables2_lower[0])
             t = "%s tables" % len(tables1) if len(tables1) > 1 \
                 else "table %s" % grammar.quote(tables1[0], force=True)
             extra = "" if len(tables1) > 1 or same_name \
@@ -5288,7 +5288,7 @@ class DatabasePage(wx.Panel):
             def is_indirect_item(a, b):
                 trg = next((x for x in (a, b) if x["type"] == "trigger"), None)
                 tbv = next((x for x in (a, b) if x["type"] in ("table", "view")), None)
-                if trg and tbv: return trg["tbl_name"].lower() != tbv["name"].lower()
+                if trg and tbv: return not util.lceq(trg["tbl_name"], tbv["name"])
                 return a["type"] == b["type"] == "view" and \
                        b["name"].lower() not in a.get("meta", {}).get("__tables__", ())
 
@@ -5391,12 +5391,12 @@ class DatabasePage(wx.Panel):
                                 fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(grammar.quote, x))
                                 for col in dks:
                                     for table, keys in col.get("table", {}).items():
-                                        if table != item["name"]: continue # for table, keys
+                                        if not util.lceq(table, item["name"]): continue # for table, keys
                                         texts.append("%s REFERENCES %s.%s" % (fmtkeys(keys),
                                             grammar.quote(subitem["name"]), fmtkeys(col["name"])))
                                 for col in fks:
                                     for table, keys in col.get("table", {}).items():
-                                        if table != item["name"]: continue # for table, keys
+                                        if not util.lceq(table, item["name"]): continue # for table, keys
                                         texts.append("%s.%s REFERENCES %s" % (
                                         grammar.quote(subitem["name"]), fmtkeys(col["name"]),
                                         fmtkeys(keys)))

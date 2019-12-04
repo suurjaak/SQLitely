@@ -913,10 +913,10 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             defaultno=True): return
 
             result = self.db.delete_cascade(self.name, rowdatas0, [self.rowids.get(x) for x in idxs])
-            self.DropRows([x for t, xx in result if t == self.name for x in xx])
+            self.DropRows([x for t, xx in result if util.lceq(t, self.name) for x in xx])
             others = OrderedDict() # {table: [{row data}, ]}
             for t, xx in result:
-                if t != self.name: others.setdefault(t, []).extend(xx)
+                if not util.lceq(t, self.name): others.setdefault(t, []).extend(xx)
             for t, xx in others.items():
                 on_event(remove=True, table=t, data=xx)
 
@@ -3701,11 +3701,11 @@ class SchemaObjectPage(wx.Panel):
                 ww = [grammar.quote(c["name"]) for c in item["columns"]]
 
                 if self._category in ("index", "trigger") \
-                and item["name"] == self._item["meta"].get("table"):
+                and util.lceq(item["name"], self._item["meta"].get("table")):
                     singlewords = ww
                 if self._category in ("trigger", "view"): subwords[myname] = ww
                 if "trigger" == self._category \
-                and item["name"] == self._item["meta"].get("table"):
+                and util.lceq(item["name"], self._item["meta"].get("table")):
                     subwords["OLD"] = subwords["NEW"] = ww
 
         for c in self._ctrls.values():
@@ -3793,7 +3793,7 @@ class SchemaObjectPage(wx.Panel):
                 if not can_simple: break # for c
 
         if can_simple and old["name"] != new["name"] and not self._db.has_full_rename_table():
-            can_simple = False if old["name"].lower() == new["name"].lower() else \
+            can_simple = False if util.lceq(old["name"], new["name"]) else \
                          bool(self._db.get_related("table", old["name"], associated=False))
 
         if can_simple:
@@ -3819,7 +3819,7 @@ class SchemaObjectPage(wx.Panel):
             names_existing.add(tempname)
             meta = copy.deepcopy(self._item["meta"])
             util.walk(meta, (lambda x, *_: isinstance(x, dict)
-                             and x.get("table", "").lower() == old["name"].lower()
+                             and util.lceq(x.get("table"), old["name"])
                              and x.update(table=tempname))) # Rename in constraints
             meta["name"] = tempname
 
@@ -3840,7 +3840,7 @@ class SchemaObjectPage(wx.Panel):
 
             for category, items in self._db.get_related("table", old["name"], associated=not renames).items():
                 for item in items:
-                    is_our_item = item["meta"].get("table", "").lower() == old["name"].lower()
+                    is_our_item = util.lceq(item["meta"].get("table"), old["name"])
                     sql, _ = grammar.transform(item["sql"], renames=renames)
                     if sql == item["sql"] and not is_our_item: continue # for item
 
@@ -3920,7 +3920,7 @@ class SchemaObjectPage(wx.Panel):
 
         for category, items in self._db.get_related("view", old["name"], associated=not renames).items():
             for item in items:
-                is_view_trigger = item["meta"]["table"].lower() == old["name"].lower()
+                is_view_trigger = util.lceq(item["meta"]["table"], old["name"])
                 sql, _ = grammar.transform(item["sql"], renames=renames)
                 if sql == item["sql"] and not is_view_trigger: continue # for item
 
@@ -4359,8 +4359,8 @@ class SchemaObjectPage(wx.Panel):
         for category in ("table", "view") if self._editmode else ():
             for item in self._db.get_category(category).values():
                 if not item.get("columns"): continue # for item
-                if "table" == self._category and item["name"] == self._original.get("name") \
-                or "index" == self._category and item["name"] == self._item["meta"].get("table"):
+                if "table" == self._category and util.lceq(item["name"], self._original.get("name")) \
+                or "index" == self._category and util.lceq(item["name"], self._item["meta"].get("table")):
                     words = [grammar.quote(c["name"]) for c in item["columns"]]
                     break
 
@@ -4576,7 +4576,7 @@ class SchemaObjectPage(wx.Panel):
                         if name in cnstr.get("columns", []):
                             cnstr["columns"] = [x for x in cnstr["columns"] if x != name]
                             changed = keychanged = True
-                        if cnstr.get("table") == self._item["meta"].get("name") \
+                        if util.lceq(cnstr.get("table"), self._item["meta"].get("name")) \
                         and name in cnstr.get("key", []):
                             cnstr["key"] = [x for x in cnstr["key"] if x != name]
                             changed = True
@@ -4828,7 +4828,7 @@ class SchemaObjectPage(wx.Panel):
         if self._category in ("table", "index") and not meta.get("columns"):
             errors += ["Columns are required."]
 
-        if (self._newmode or name.lower() != self._item["name"].lower()) \
+        if (self._newmode or not util.lceq(name, self._item["name"])) \
         and self._db.get_category(self._category, name):
             errors += ["%s named %s already exists." % (self._category.capitalize(),
                        grammar.quote(name, force=True))]
@@ -5706,7 +5706,7 @@ class ImportDialog(wx.Dialog):
         @param   fixed  whether to make table selection immutable
         """
         idx, self._table = next((i, x) for i, x in enumerate(self._tables)
-                                if x["name"] == table)
+                                if util.lceq(x["name"], table))
         if self._combo_table.Selection != idx: self._combo_table.Select(idx)
         self._table_fixed = fixed
 
@@ -6261,7 +6261,7 @@ class ImportDialog(wx.Dialog):
                 continue # while not valid
             category = next((c for c in self._db.CATEGORIES
                              for n in self._db.get_category(c)
-                             if n == name.lower()), None)
+                             if util.lceq(n, name)), None)
             if category:
                 msg = "A %s by this name already exists." % category
                 continue # while not valid
