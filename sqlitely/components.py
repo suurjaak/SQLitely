@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.12.2019
+@modified    06.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -98,6 +98,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         self.is_seek = False    # Whether row count is fully known
         self.sort_column = None # Index of column currently sorted by
         self.sort_ascending = None
+        self.complete = False
         self.filters = {} # {col index: value, }
         self.attrs = {}   # {"new": wx.grid.GridCellAttr, }
 
@@ -146,7 +147,14 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
     def IsComplete(self):
         """Returns whether all rows have been retrieved."""
-        return not self.row_iterator
+        return self.complete
+
+
+    def CloseCursor(self):
+        """Closes the currently open database cursor, if any."""
+        try: self.row_iterator.close()
+        except Exception: pass
+        self.row_iterator = None
 
 
     def SeekAhead(self, end=False):
@@ -177,9 +185,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 self.idx_all.append(myid)
                 self.iterator_index += 1
             else:
-                self.row_iterator, post = None, True
+                self.row_iterator, self.complete, post = None, True, True
         if self.iterator_index >= self.MAX_ROWS:
-            self.row_iterator, post = None, True
+            self.row_iterator, self.complete, post = None, True, True
         if self.is_seek and self.row_count < self.iterator_index + 1:
             self.row_count = self.iterator_index + 1
         if self.GetNumberRows() != rows_before:
@@ -251,7 +259,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         Returns an iterator producing all grid rows, in current sort order and
         matching current filter, making an extra query if all not retrieved yet.
         """
-        if not self.row_iterator: return iter(self.rows_current) # All retrieved
+        if self.complete: return iter(self.rows_current) # All retrieved
 
         def generator(res):
             for row in self.rows_current: yield row
@@ -661,7 +669,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         """
         result = False
         refresh_idxs, reload_idxs = [], []
-        rels = self.db.get_related("table", self.name, associated=True)
+        rels = self.db.get_related("table", self.name, own=True)
         actions = {x["meta"].get("action"): True for x in rels.get("trigger", [])}
         try:
             for idx in self.idx_changed.copy():
@@ -2013,6 +2021,11 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         return self._export.IsRunning()
 
 
+    def IsOpen(self):
+        """Returns whether grid has an open cursor."""
+        return not self._grid.Table.IsComplete()
+
+
     def ScrollToRow(self, row, full=False):
         """
         Scrolls to row matching given row dict.
@@ -2076,6 +2089,11 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._OnRefresh(force=force, restore=restore, item=item)
 
 
+    def CloseCursor(self):
+        """Closes grid cursor, if currently open."""
+        self._grid.Table.CloseCursor()
+
+
     def Export(self, opts):
         """Opens export panel using given options, and starts export."""
         self.Freeze()
@@ -2101,6 +2119,10 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             "This action is not undoable.",
             conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
+
+        lock = self._db.get_lock("table", self.Name)
+        if lock: return wx.MessageBox("%s, cannot truncate." % lock,
+                                      conf.Title, wx.OK | wx.ICON_WARNING)
 
         sql = "DELETE FROM %s" % grammar.quote(self.Name)
         count = self._db.executeaction(sql, name="TRUNCATE")
@@ -2134,6 +2156,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         changed = self._grid.Table.IsChanged()
         self._tb.EnableTool(wx.ID_SAVE, changed)
         self._tb.EnableTool(wx.ID_UNDO, changed)
+        if not changed: self._db.unlock(self._category, self.Name, self)
+        else: self._db.lock(self._category, self.Name, self, label="data grid")
         self._PostEvent(modified=changed, **kwargs)
 
 
@@ -2191,7 +2215,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         item_reindex  = wx.MenuItem(menu, -1, "Reindex table")
         item_truncate = wx.MenuItem(menu, -1, "Truncate table")
         item_drop     = wx.MenuItem(menu, -1, "Drop table")
-        if "index" not in self._db.get_related("table", self._item["name"], associated=True):
+        if "index" not in self._db.get_related("table", self._item["name"], own=True):
             item_reindex.Enable(False)
         if not self._grid.Table.GetNumberRows(total=True):
             item_truncate.Enable(False)
@@ -2306,7 +2330,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             info, conf.Title, wx.ICON_INFORMATION
         ): return
 
-        lock = self._db.get_lock(self._category, self._item["name"])
+        lock = self._db.get_lock(self._category, self._item["name"], skip=self)
         if lock: return wx.MessageBox("%s, cannot commit." % lock,
                                       conf.Title, wx.OK | wx.ICON_WARNING)
 
@@ -3794,7 +3818,8 @@ class SchemaObjectPage(wx.Panel):
 
         if can_simple and old["name"] != new["name"] and not self._db.has_full_rename_table():
             can_simple = False if util.lceq(old["name"], new["name"]) else \
-                         bool(self._db.get_related("table", old["name"], associated=False))
+                         set(self._db.get_related("table", old["name"], own=False) & \
+                         set(("trigger", "view")))
 
         if can_simple:
             # Possible to use just simple ALTER TABLE statements
@@ -3838,7 +3863,7 @@ class SchemaObjectPage(wx.Panel):
                 if not v or not any(x.values() if isinstance(x, dict) else x
                                     for x in v.values()): renames.pop(k)
 
-            for category, items in self._db.get_related("table", old["name"], associated=not renames).items():
+            for category, items in self._db.get_related("table", old["name"], own=not renames).items():
                 for item in items:
                     is_our_item = util.lceq(item["meta"].get("table"), old["name"])
                     sql, _ = grammar.transform(item["sql"], renames=renames)
@@ -3857,7 +3882,7 @@ class SchemaObjectPage(wx.Panel):
                     args.setdefault(category, []).append(myitem)
                     if category not in ("table", "view"): continue # for item
 
-                    subrelateds = self._db.get_related(category, item["name"], associated=True)
+                    subrelateds = self._db.get_related(category, item["name"], own=True)
                     for subcategory, subitems in subrelateds.items():
                         for subitem in subitems:
                             # Re-create table indexes and triggers, and view triggers
@@ -3918,7 +3943,7 @@ class SchemaObjectPage(wx.Panel):
         args = {"name": old["name"], "name2": new["name"],
                 "meta": new, "__type__": "ALTER VIEW"}
 
-        for category, items in self._db.get_related("view", old["name"], associated=not renames).items():
+        for category, items in self._db.get_related("view", old["name"], own=not renames).items():
             for item in items:
                 is_view_trigger = util.lceq(item["meta"]["table"], old["name"])
                 sql, _ = grammar.transform(item["sql"], renames=renames)
@@ -3928,7 +3953,7 @@ class SchemaObjectPage(wx.Panel):
                 if "view" != category: continue
 
                 # Re-create view triggers
-                for subitem in self._db.get_related("view", item["name"], associated=True).values():
+                for subitem in self._db.get_related("view", item["name"], own=True).values():
                     sql, _ = grammar.transform(subitem["sql"], renames=renames)
                     args.setdefault(subitem["type"], []).append(dict(subitem, sql=sql))
 
@@ -4161,10 +4186,14 @@ class SchemaObjectPage(wx.Panel):
         populate_rows()
 
 
-    def _PostEvent(self, **kwargs):
-        """Posts an EVT_SCHEMA_PAGE event to parent."""
+    def _PostEvent(self, sync=False, **kwargs):
+        """
+        Posts an EVT_SCHEMA_PAGE event to parent.
+
+        @param   sync   whether to process event immediately or asynchonously
+        """
         evt = SchemaPageEvent(self.Id, source=self, item=self._item, **kwargs)
-        wx.PostEvent(self.Parent, evt)
+        self.ProcessEvent(evt) if sync else wx.PostEvent(self.Parent, evt)
 
 
     def _AddSizer(self, parentsizer, childsizer, *args, **kwargs):
@@ -4862,6 +4891,7 @@ class SchemaObjectPage(wx.Panel):
             if lock: return wx.MessageBox("%s, cannot test." % lock,
                                          conf.Title, wx.OK | wx.ICON_WARNING)
 
+            self._PostEvent(sync=True, close_grids=True)
             logger.info("Executing test SQL:\n\n%s", sql2)
             busy = controls.BusyPanel(self, "Testing..")
             try: self._db.executescript(sql2)
@@ -4872,7 +4902,9 @@ class SchemaObjectPage(wx.Panel):
                 try: self._fks_on and self._db.execute("PRAGMA foreign_keys = on")
                 except Exception: pass
                 errors = [util.format_exc(e)]
-            finally: busy.Close()
+            finally:
+                busy.Close()
+                self._PostEvent(reload_grids=True)
 
         if errors: wx.MessageBox("Errors:\n\n%s" % "\n\n".join(errors),
                                  conf.Title, wx.OK | wx.ICON_WARNING)
@@ -4906,6 +4938,7 @@ class SchemaObjectPage(wx.Panel):
         ): return
 
 
+        self._PostEvent(sync=True, close_grids=True)
         logger.info("Executing schema SQL:\n\n%s", sql2)
         busy = controls.BusyPanel(self, "Saving..")
         try: self._db.executescript(sql2, name="CREATE" if self._newmode else "ALTER")
@@ -4918,7 +4951,8 @@ class SchemaObjectPage(wx.Panel):
             msg = "Error saving changes:\n\n%s" % util.format_exc(e)
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
             return
-        finally: busy.Close()
+        finally:
+            busy.Close()
 
         self._item.update(name=meta2["name"], meta=self._AssignColumnIDs(meta2))
         if "view" != self._category: self._item.update(
@@ -4945,7 +4979,7 @@ class SchemaObjectPage(wx.Panel):
         if self._category in ("table", "index"):
             item_reindex = wx.MenuItem(menu, -1, "Reindex")
             item_reindex.Enable("index" == self._category or "index" in self._db.get_related(
-                self._category, self._item["name"], associated=True))
+                self._category, self._item["name"], own=True))
             menu.Append(item_reindex)
             menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(reindex=True), item_reindex)
         if self._category in ("table", ):

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.12.2019
+@modified    06.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -650,15 +650,27 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def lock(self, category, name, key, label=None):
         """
-        Locks a schema object for altering or deleting.
+        Locks a schema object for altering or deleting. For tables, cascades
+        lock to views that query the table; and for views, cascades lock to
+        tables the view queries, also to other views that the view queries
+        or that query the view; recursively.
 
-        @param   category  x
         @param   key       any hashable to identify lock by
         @param   label     an informational label for lock
         """
         category, name = (x.lower() if x else x for x in (category, name))
+        if name and name not in self.schema.get(category, {}): return            
         self.locks[category][name].add(key)
-        if label: self.locklabels[key] = label
+        self.locklabels[key] = label
+        if category and name:
+            relateds = self.get_related(category, name, data=True)
+            if not relateds: return
+            subkey = (hash(key), category, name)
+            for subcategory, items in relateds.items():
+                for item in items:
+                    self.locks[subcategory][item["name"].lower()].add(subkey)
+            qname = grammar.quote(self.schema[category][name]["name"], force=True)
+            self.locklabels[subkey] = " ".join(filter(bool, (category, qname, label, "cascade")))
 
 
     def unlock(self, category, name, key):
@@ -666,6 +678,15 @@ WARNING: misuse can easily result in a corrupt database file.""",
         category, name = (x.lower() if x else x for x in (category, name))
         self.locks[category][name].discard(key)
         self.locklabels.pop(key, None)
+        if category and name:
+            subkey = (hash(key), category, name)
+            relateds = self.get_related(category, name, data=True)
+            for subcategory, items in relateds.items():
+                for subname in (x["name"].lower() for x in items):
+                    self.locks[subcategory][subname].discard(subkey)
+                    if not self.locks[subcategory][subname]:
+                        self.locks[subcategory].pop(subname)
+            self.locklabels.pop(subkey, None)
         if not self.locks[category][name]: self.locks[category].pop(name)
         if not self.locks[category]:       self.locks.pop(category)
 
@@ -686,12 +707,15 @@ WARNING: misuse can easily result in a corrupt database file.""",
         "Database is currently locked (statistics analysis)" or
         "Table "foo" is currently locked" if querying category and name.
 
-        @param   *(?category, ?name) or **{category, name} for specific lock
-                 *(None) or **{category=None} for global lock
-                 no arguments for any lock
+        @param   category  item category, or None for global lock,
+                           or not given for any lock
+        @param   name      specific item, if any
+        @param   skip      keys to skip, if any
         """
         if "category" not in kwargs and args: kwargs["category"]  = args[0]
         if "name" not in kwargs and len(args) > 1: kwargs["name"] = args[1]
+        if "skip" not in kwargs and len(args) > 2: kwargs["skip"] = args[2]
+        skipkeys = set(util.tuplefy(kwargs.get("skip", ())))
         for k, v in kwargs.items():
             if isinstance(v, basestring): kwargs[k] = v.lower()
         result, keys = "", ()
@@ -699,18 +723,24 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if kwargs.get("category") and kwargs.get("name"):
             category, name = kwargs["category"], kwargs["name"]
             keys = self.locks.get(category, {}).get(name)
+            if keys and skipkeys: keys -= skipkeys
+            name = self.schema.get(category, {}).get(name, {}).get("name", name)
             if keys: result = "%s %s is currently locked" % \
                               (category.capitalize(), grammar.quote(name, force=True))
         elif kwargs.get("category"): # Check for lock on any item in category
             category = kwargs["category"]
             keys = set(y for x in self.locks.get(category, {}).values() for y in x)
+            if keys and skipkeys: keys -= skipkeys
             if keys: result = "%s are currently locked" % util.plural(category.capitalize())
 
         if not result: # Check for global lock
             keys = self.locks.get(None, {}).get(None)
+            if keys and skipkeys: keys -= skipkeys
             if keys: result = "Database is currently locked"
         if not kwargs and not result and self.locks: # No args: check for any lock
-            result, keys = "Database is currently locked", self.locklabels.keys()
+            keys = self.locklabels.keys()
+            if keys and skipkeys: keys -= skipkeys
+            if keys: result = "Database is currently locked"
 
         if result and keys:
             labels = filter(bool, map(self.locklabels.get, keys))
@@ -976,43 +1006,66 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return copy.deepcopy(result)
 
 
-    def get_related(self, category, name, associated=None):
+    def get_related(self, category, name, own=None, data=False, skip=None):
         """
         Returns database objects related to specified object in any way,
         like triggers selecting from a view, as {category: [{item}, ]}.
 
-        @param   associated  if True, returns only directly associated items,
-                             like table's own indexes and triggers for table,
-                             view's own triggers for views,
-                             index's own table for index,
-                             and trigger's own table or view for triggers;
-                             if False, returns only indirectly associated items,
-                             like views and triggers for tables and views
-                             that query them in view or trigger body,
-                             also foreign tables for tables;
-                             if None, returns all relations
+        @param   own   if true, returns only direct ownership relations,
+                       like table's own indexes and triggers for table,
+                       view's own triggers for views,
+                       index's own table for index,
+                       and trigger's own table or view for triggers;
+                       if False, returns only indirectly associated items,
+                       like tables and views and triggers for tables and views
+                       that query them in view or trigger body,
+                       also foreign tables for tables;
+                       if None, returns all relations
+        @param   data  whether to return cascading data dependency
+                       relations: for views, the tables and views they query,
+                       recursively
+        @param   skip  CaselessDict{name: True} to skip (recursion helper)
         """
-        result = CaselessDict()
         category, name = category.lower(), name.lower()
+        result, skip = CaselessDict(), (skip or CaselessDict({name: True}))
         SUBCATEGORIES = {"table":   ["table", "index", "view", "trigger"],
                          "index":   ["table"],
                          "trigger": ["table", "view"],
                          "view":    ["table", "view", "trigger"]}
+        if data: SUBCATEGORIES = {"view": ["table", "view"]}
+            
         item = self.get_category(category, name)
         if not item or category not in SUBCATEGORIES or "meta" not in item:
             return result
 
         for subcategory in SUBCATEGORIES.get(category, []):
             for subname, subitem in self.schema[subcategory].items():
-                if "meta" not in subitem: continue # for subname, subitem
-                is_assoc = util.lceq(subitem["meta"].get("table"), name) \
-                           or util.lceq(item["meta"].get("table"), subname)
-                is_related = name in subitem["meta"]["__tables__"] \
-                             or subname.lower() in item["meta"]["__tables__"]
-                if not is_related or associated is not None and associated != is_assoc:
+                if "meta" not in subitem or subname in skip:
+                    continue # for subname, subitem
+                is_own = util.lceq(subitem["meta"].get("table"), name) or \
+                         util.lceq(item["meta"].get("table"), subname)
+                is_rel_from = name in subitem["meta"]["__tables__"]
+                is_rel_to   = subname.lower() in item["meta"]["__tables__"]
+                if not is_rel_to and not is_rel_from or data and not is_rel_to \
+                or own is not None and bool(own) is not is_own:
                     continue # for subname, subitem
 
                 result.setdefault(subcategory, []).append(copy.deepcopy(subitem))
+
+        visited = CaselessDict()
+        for k, vv in result.items() if data else ():
+            skip.update({v["name"]: True for v in vv})
+        for mycategory, items in result.items() if data else ():
+            if mycategory not in SUBCATEGORIES: continue # for mycategory, items
+            for item in items:
+                if item["name"] in visited: continue # for item
+                visited[item["name"]] = True
+                subresult = self.get_related(mycategory, item["name"], own, data, skip)
+                for subcategory, subitems in subresult.items():
+                    result.setdefault(subcategory, []).extend(subitems)
+                    visited.update({x["name"]: True for x in subitems})
+                    skip.update(visited)
+
         return result
 
 

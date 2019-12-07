@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.12.2019
+@modified    06.12.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3028,22 +3028,29 @@ class DatabasePage(wx.Panel):
             targets = indexes = list(self.db.schema["index"])
             if name and "table" == category:
                 targets = [name]
-                indexes = [v["name"] for k, vv in self.db.get_related(category, name).items()
+                indexes = [v["name"] for k, vv in self.db.get_related(category, name, own=True).items()
                            if "index" == k for v in vv]
                 label = "%s on table %s" % (util.plural("index", indexes, single="the"),
                                             grammar.quote(name, force=True))
+                lock = self.db.get_lock(category, name)
             elif name:
                 targets = indexes = [name]
                 label = "the index %s" % grammar.quote(name, force=True)
+                lock = self.db.get_lock("table", self.db.schema["index"][name]["tbl_name"])
             elif "table" == category:
                 targets = list(self.db.schema["table"])
                 label = "indexes on all tables"
+                lock = self.db.get_lock("table")
             else:
                 label = "all indexes"
+                lock = self.db.get_lock("table")
             if wx.YES != controls.YesNoMessageBox(
                 "Are you sure you want to re-create %s?" % label,
                 conf.Title, wx.ICON_INFORMATION, defaultno=True
             ): return
+
+            if lock: return wx.MessageBox("%s, cannot reindex." % lock,
+                                          conf.Title, wx.OK | wx.ICON_WARNING)
 
             sql = "REINDEX" if not name else \
                   "\n\n".join("REINDEX main.%s;" % grammar.quote(x) for x in targets)
@@ -3639,6 +3646,10 @@ class DatabasePage(wx.Panel):
         if lock: return wx.MessageBox("%s, cannot vacuum." % lock,
                                       conf.Title, wx.OK | wx.ICON_INFORMATION)
 
+        pages = []
+        for page in (v for vv in self.data_pages.values() for v in vv.values()):
+            if page.IsOpen(): pages.append(page); page.CloseCursor()
+
         size1 = self.db.filesize
         msg = "Vacuuming %s." % self.db.name
         guibase.status(msg, log=True, flash=True)
@@ -3651,6 +3662,7 @@ class DatabasePage(wx.Panel):
             errors = e.args[:]
         busy.Close()
         guibase.status("")
+        for page in pages: page.Reload(force=True)
         if errors:
             err = "\n- ".join(errors)
             logger.info("Error running vacuum on %s: %s", self.db, err)
@@ -4527,9 +4539,22 @@ class DatabasePage(wx.Panel):
         return p
 
 
-    def on_refresh_schema(self, event):
+    def on_refresh_schema(self, event=None):
         """Refreshes database schema tree and panel."""
         self.load_tree_schema(refresh=True)
+
+
+    def toggle_cursors(self, category, name, close=False):
+        """Closes or reopens grid cursors using specified table or view."""
+        relateds = {category: set([name])}
+        for c, vv in self.db.get_related(category, name, data=True).items():
+            if c not in ("table", "view") or "table" == category == c:
+                continue # for c, vv
+            relateds.setdefault(c, set()).update(v["name"] for v in vv)
+
+        for page in (p for c, nn in relateds.items()
+                     for n, p in self.data_pages.get(c, {}).items() if n in nn):
+            page.CloseCursor() if close else page.Reload(force=True)
 
 
     def on_schema_create(self, event):
@@ -4560,7 +4585,7 @@ class DatabasePage(wx.Panel):
             title, busy = "* New %s *" % data["type"], None
         self.notebook_schema.Freeze()
         try:
-            p = components.SchemaObjectPage(self.notebook_schema, self.db, data)
+            p = components.SchemaObjectPage(self.notebook_schema, self.db, data, self.toggle_cursors)
             self.schema_pages[data["type"]][data.get("name") or str(id(p))] = p
             self.notebook_schema.InsertPage(0, page=p, text=title, select=True)
             for i, item in enumerate(self.pages_closed.get(self.notebook_schema, [])):
@@ -4592,8 +4617,10 @@ class DatabasePage(wx.Panel):
     def on_schema_page_event(self, event):
         """Handler for a message from SchemaObjectPage."""
         idx = self.notebook_schema.GetPageIndex(event.source)
-        VARS = ("close", "modified", "updated", "reindex", "export", "data", "truncate", "drop")
-        close, modified, updated, reindex, export, data, truncate, drop = (getattr(event, x, None) for x in VARS)
+        VARS = ("close", "modified", "updated", "reindex", "export", "data",
+                "truncate", "drop", "close_grids", "reload_grids")
+        close, modified, updated, reindex, export, data, truncate, drop, \
+        close_grids, reload_grids = (getattr(event, x, None) for x in VARS)
         category, name = (event.item.get(x) for x in ("type", "name"))
         name0 = None
         if close and idx >= 0:
@@ -4606,6 +4633,10 @@ class DatabasePage(wx.Panel):
             self.on_truncate(name)
         if drop:
             self.on_drop_items(category, [name])
+        if close_grids:
+            self.toggle_cursors(category, name, close=True)
+        if reload_grids:
+            self.toggle_cursors(category, name)
         if (modified is not None or updated is not None) and event.source:
             if name:
                 suffix = "*" if event.source.IsChanged() else ""
@@ -4963,7 +4994,7 @@ class DatabasePage(wx.Panel):
                         sqls.append(myinsert_sql)
 
                     # Copy table indexes and triggers
-                    for category, items in self.db.get_related("table", table, associated=True).items():
+                    for category, items in self.db.get_related("table", table, own=True).items():
                         items2 = [x["name"] for x in self.db.execute(
                             "SELECT name FROM %s.sqlite_master "
                             "WHERE type = ? AND sql != '' AND name NOT LIKE 'sqlite_%%'" % schema2, [category]
@@ -5627,7 +5658,7 @@ class DatabasePage(wx.Panel):
             if item_import:
                 menu.Bind(wx.EVT_MENU, import_data, item_import)
             if item_reindex:
-                item_reindex.Enable("index" == data["type"] or "index" in self.db.get_related("table", data["name"], associated=True))
+                item_reindex.Enable("index" == data["type"] or "index" in self.db.get_related("table", data["name"], own=True))
                 menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("reindex", data["type"], data["name"]), item_reindex)
             if item_reindex_all:
                 if not self.db.schema.get("index"): item_reindex_all.Enable(False)
@@ -5698,12 +5729,12 @@ class DatabasePage(wx.Panel):
                 for category, item in ((c, v) for c, vv in relateds.items() for v in vv):
                     sqls[item["name"]] = item["sql"]
                     if category not in ("table", "view"): continue # for category, item
-                    subrelateds = self.db.get_related("table", item["name"], associated=True)
+                    subrelateds = self.db.get_related("table", item["name"], own=True)
                     for subitems in subrelateds.values():
                         for subitem in subitems:
                             sqls[subitem["name"]] = subitem["sql"]
 
-            collect(self.db.get_related(data["type"], data["name"], associated=True))
+            collect(self.db.get_related(data["type"], data["name"], own=True))
             collect(self.db.get_related(data["type"], data["name"]))
             clipboard_copy("\n\n".join(x.rstrip(";") + ";" for x in sqls.values()) + "\n\n")
 
@@ -5856,7 +5887,7 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["type"], [data["name"]]),
                       item_drop)
             if item_reindex:
-                item_reindex.Enable("index" == data["type"] or "index" in self.db.get_related("table", data["name"], associated=True))
+                item_reindex.Enable("index" == data["type"] or "index" in self.db.get_related("table", data["name"], own=True))
                 menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("reindex", data["type"], data["name"]), item_reindex)
 
             menu.Append(item_name)
