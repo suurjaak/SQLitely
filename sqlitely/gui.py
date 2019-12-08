@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.12.2019
+@modified    08.12.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -452,11 +452,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         menu_edit = self.menu_edit = wx.Menu()
         menu.Append(menu_edit, "&Edit")
-        menu_edit_table   = wx.Menu()
-        menu_edit_index   = wx.Menu()
-        menu_edit_trigger = wx.Menu()
-        menu_edit_view    = wx.Menu()
-        menu_edit_drop    = wx.Menu()
+        menu_edit_table    = wx.Menu()
+        menu_edit_index    = wx.Menu()
+        menu_edit_trigger  = wx.Menu()
+        menu_edit_view     = wx.Menu()
+        menu_edit_drop     = wx.Menu()
+        menu_edit_truncate = wx.Menu()
         self.menu_edit_table   = menu_edit.AppendSubMenu(menu_edit_table,   "&Table")
         self.menu_edit_index   = menu_edit.AppendSubMenu(menu_edit_index,   "&Index")
         self.menu_edit_trigger = menu_edit.AppendSubMenu(menu_edit_trigger, "T&rigger")
@@ -467,11 +468,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_edit_cancel = self.menu_edit_cancel = menu_edit.Append(
             wx.ID_ANY, "&Cancel unsaved changes", "Roll back all unsaved changes")
         menu_edit.AppendSeparator()
-        self.menu_edit_drop    = menu_edit.AppendSubMenu(menu_edit_drop,    "&Drop")
-        menu_edit_drop_table   = wx.Menu()
-        menu_edit_drop_index   = wx.Menu()
-        menu_edit_drop_trigger = wx.Menu()
-        menu_edit_drop_view    = wx.Menu()
+        self.menu_edit_truncate = menu_edit.AppendSubMenu(menu_edit_truncate, "Tr&uncate")
+        self.menu_edit_drop     = menu_edit.AppendSubMenu(menu_edit_drop,     "&Drop")
+        menu_edit_drop_table    = wx.Menu()
+        menu_edit_drop_index    = wx.Menu()
+        menu_edit_drop_trigger  = wx.Menu()
+        menu_edit_drop_view     = wx.Menu()
         self.menu_edit_drop_table   = menu_edit_drop.AppendSubMenu(menu_edit_drop_table,   "&Table")
         self.menu_edit_drop_index   = menu_edit_drop.AppendSubMenu(menu_edit_drop_index,   "&Index")
         self.menu_edit_drop_trigger = menu_edit_drop.AppendSubMenu(menu_edit_drop_trigger, "T&rigger")
@@ -626,6 +628,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.menu_view_changes.Enabled = bool(db.temporary or changes)
         self.menu_edit_save.Enabled = self.menu_edit_cancel.Enabled = bool(changes)
         self.menu_view_folder.Enabled = not db.temporary
+        self.menu_edit_drop.Enabled = any(db.schema.values())
         label = "Database &schema and statistics as HTML"
         help  = "Export database schema information and statistics as HTML"
         if "data" not in page.statistics:
@@ -633,11 +636,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             help  = "Export database schema information as HTML"
         self.menu_tools_export_stats.ItemLabel, self.menu_tools_export_stats.Help = label, help
 
-        EDITMENUS = {"table":   self.menu_edit_table,   "index": self.menu_edit_index,
-                     "trigger": self.menu_edit_trigger, "view": self.menu_edit_view}
-        DROPMENUS = {"table":   self.menu_edit_drop_table,   "index": self.menu_edit_drop_index,
-                     "trigger": self.menu_edit_drop_trigger, "view": self.menu_edit_drop_view}
-        VIEWMENUS = {"table":   self.menu_view_data_table,   "view": self.menu_view_data_view}
+        EDITMENUS  = {"table":   self.menu_edit_table,   "index": self.menu_edit_index,
+                      "trigger": self.menu_edit_trigger, "view": self.menu_edit_view}
+        DROPMENUS  = {"table":   self.menu_edit_drop_table,   "index": self.menu_edit_drop_index,
+                      "trigger": self.menu_edit_drop_trigger, "view": self.menu_edit_drop_view}
+        TRUNCMENUS = {"table":   self.menu_edit_truncate}
+        VIEWMENUS  = {"table":   self.menu_view_data_table,   "view": self.menu_view_data_view}
         for category in db.CATEGORIES if self.db_menustate.get(db.filename, {}).get("full") else ():
             menu = EDITMENUS[category]
             for x in menu.SubMenu.MenuItems: menu.SubMenu.Delete(x)
@@ -648,9 +652,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if items: menu.SubMenu.AppendSeparator()
             for name in items:
                 help = "Open schema editor for %s %s" % (category, grammar.quote(name))
-                item = menu.SubMenu.Append(wx.ID_ANY, name, help)
+                menuitem = menu.SubMenu.Append(wx.ID_ANY, name, help)
                 args = ["schema", category, name]
-                self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), item)
+                self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
 
             menu = DROPMENUS[category]
             for x in menu.SubMenu.MenuItems: menu.SubMenu.Delete(x)
@@ -662,9 +666,24 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 if items: menu.SubMenu.AppendSeparator()
                 for name in items:
                     help = "Drop %s %s" % (category, grammar.quote(name))
-                    item = menu.SubMenu.Append(wx.ID_ANY, name, help)
+                    menuitem = menu.SubMenu.Append(wx.ID_ANY, name, help)
                     args = ["drop", category, name]
-                    self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), item)
+                    self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
+
+            if category in TRUNCMENUS:
+                menu = TRUNCMENUS[category]
+                for x in menu.SubMenu.MenuItems: menu.SubMenu.Delete(x)
+                menu.Enabled = bool(items)
+                item_all = menu.SubMenu.Append(wx.ID_ANY, "Truncate all %s" % util.plural(category),
+                                               "Delete all rows from all tables")
+                self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["truncate"]), item_all)
+                if items: menu.SubMenu.AppendSeparator()
+                for name, item in items.items():
+                    help = "Delete all rows from %s %s" % (category, grammar.quote(name))
+                    menuitem = menu.SubMenu.Append(wx.ID_ANY, name, help)
+                    menuitem.Enable(bool(item.get("count")))
+                    args = ["truncate", name]
+                    self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
 
             if category not in VIEWMENUS: continue # for category
             menu = VIEWMENUS[category]
@@ -672,9 +691,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             menu.Enable(bool(items))
             for name in items:
                 help = "Open data grid for %s %s" % (category, grammar.quote(name))
-                item = menu.SubMenu.Append(wx.ID_ANY, name, help)
+                menuitem = menu.SubMenu.Append(wx.ID_ANY, name, help)
                 args = ["data", category, name]
-                self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), item)
+                self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
 
 
     def on_menu_open(self, event):
@@ -3019,6 +3038,8 @@ class DatabasePage(wx.Panel):
             category = args[0]
             names = args[1:] if len(args) > 1 else list(self.db.schema[category])
             self.on_drop_items(category, names)
+        elif "truncate" == cmd:
+            self.on_truncate(args[0]) if args else self.on_truncate_all()
         elif "reindex" == cmd:
             if not self.db.schema.get("index"):
                 return wx.MessageBox("No indexes to re-create.", conf.Title,
@@ -5146,8 +5167,51 @@ class DatabasePage(wx.Panel):
         self.db.schema["table"][name]["count"] = 0
         self.db.schema["table"][name].pop("is_count_estimated", None)
         self.load_tree_data()
+        self.update_page_header(updated=True)
         wx.MessageBox("Deleted %s from table %s." % (util.plural("row", count),
                       grammar.quote(name)), conf.Title)
+
+
+    def on_truncate_all(self, event=None):
+        """Handler for deleting all rows from all tables, confirms choice."""
+        names = [x["name"] for x in self.db.get_category("table").values()
+                 if x.get("count")]
+        if not names: return
+
+        if wx.YES != controls.YesNoMessageBox(
+            "Are you sure you want to delete all rows from all tables?\n\n"
+            "This action is not undoable.",
+            conf.Title, wx.ICON_WARNING, defaultno=True
+        ): return
+
+        pages = {x: self.data_pages["table"].get(x) for x in names}
+        locks = set(filter(bool, (self.db.get_lock("table", x, skip=pages[x])
+                                  for x in names)))
+        if locks: return wx.MessageBox("Cannot truncate:\n\n%s." % ".\n".join(locks),
+                                       conf.Title, wx.OK | wx.ICON_WARNING)
+
+        sqls, count = [], 0
+        busy = controls.BusyPanel(self, "Truncating tables..")
+        try:
+            for name in names:
+                page = pages[name]
+                if page: page.CloseCursor(), page.Rollback(force=True)
+
+                sql = "DELETE FROM %s" % grammar.quote(name)
+                count += self.db.executeaction(sql)
+                self.db.schema["table"][name]["count"] = 0
+                self.db.schema["table"][name].pop("is_count_estimated", None)
+                sqls.append(sql)
+                if page: page.Reload(force=True)
+        finally:
+            busy.Close()
+            if sqls:
+                self.db.log_query("TRUNCATE", sqls)
+                self.load_tree_data()
+                self.update_page_header(updated=True)
+
+        wx.MessageBox("Deleted %s from %s." % (util.plural("row", count),
+                      util.plural("table", names)), conf.Title)
 
 
     def load_data(self):

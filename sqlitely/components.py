@@ -2089,6 +2089,24 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._OnRefresh(force=force, restore=restore, item=item)
 
 
+    def Rollback(self, force=False):
+        """Rolls back pending changes, if any, confirms choice if not force"""
+        info = self._grid.Table.GetChangedInfo()
+        if not info: return
+
+        if not force and wx.YES != controls.YesNoMessageBox(
+            "Are you sure you want to discard these changes (%s)?" %
+            info, conf.Title, wx.ICON_INFORMATION, defaultno=True
+        ): return
+
+        self._grid.Table.UndoChanges()
+        # Refresh scrollbars and colours; without CallAfter wx 2.8 can crash
+        wx.CallLater(0, lambda: self and (self._grid.ContainingSizer.Layout(),
+                                          self._grid.ForceRefresh()))
+        self._backup = None
+        self._OnChange(updated=True)
+
+
     def CloseCursor(self):
         """Closes grid cursor, if currently open."""
         self._grid.Table.CloseCursor()
@@ -2346,18 +2364,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnRollback(self, event=None):
         """Handler for clicking to rollback the changed database table."""
-        info = self._grid.Table.GetChangedInfo()
-        if wx.YES != controls.YesNoMessageBox(
-            "Are you sure you want to discard these changes (%s)?" %
-            info, conf.Title, wx.ICON_INFORMATION, defaultno=True
-        ): return
-
-        self._grid.Table.UndoChanges()
-        # Refresh scrollbars and colours; without CallAfter wx 2.8 can crash
-        wx.CallLater(0, lambda: self and (self._grid.ContainingSizer.Layout(),
-                                          self._grid.ForceRefresh()))
-        self._backup = None
-        self._OnChange(updated=True)
+        self.Rollback()
 
 
     def _OnRefresh(self, event=None, force=False, restore=False, item=None):
