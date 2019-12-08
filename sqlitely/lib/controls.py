@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    28.11.2019
+@modified    08.12.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -308,15 +308,17 @@ class FormDialog(wx.Dialog):
                       supported toolbar buttons "open" and "paste"
     }]
     @param   autocomp  list of words to add to SQLiteTextCtrl autocomplete
+    @param   onclose   callable(data) on closing dialog, returning whether to close
     """
 
-    def __init__(self, parent, title, props=None, data=None, edit=None, autocomp=None):
+    def __init__(self, parent, title, props=None, data=None, edit=None, autocomp=None, onclose=None):
         wx.Dialog.__init__(self, parent, title=title,
                           style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER)
         self._ignore_change = False
         self._editmode = True
         self._comps    = collections.defaultdict(list) # {(path): [wx component, ]}
         self._autocomp = autocomp
+        self._onclose  = onclose
         self._toggles  = {} # {(path): wx.CheckBox, }
         self._props    = []
         self._data     = {}
@@ -810,6 +812,7 @@ class FormDialog(wx.Dialog):
 
     def _OnClose(self, event):
         """Handler for clicking OK/Cancel, hides the dialog."""
+        if self._onclose and not self._onclose(self._data): return
         self.Hide()
         self.IsModal() and self.EndModal(event.GetId())
 

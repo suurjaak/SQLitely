@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.12.2019
+@modified    08.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -4715,20 +4715,38 @@ class SchemaObjectPage(wx.Panel):
                   "tb": [{"type": "paste", "help": "Paste from clipboard"},
                          {"type": "open",  "help": "Load from file"}, ]}]
         data, title = {"sql": self._item["sql"]}, "Import definition from SQL"
-        dlg = controls.FormDialog(self.TopLevelParent, title, props, data)
+
+        def onclose(mydata):
+            sql = mydata.get("sql", "")
+            if not sql or sql == data["sql"]: return True
+            meta, err = grammar.parse(sql, self._category)
+
+            if not err and "INSTEAD OF" == meta["upon"] \
+            and not any(util.lceq(meta["table"], x) for x in self._views):
+                err = "No such view: %s" % grammar.quote(meta["table"], force=True)
+            if not err and not any(util.lceq(meta["table"], x) for x in self._tables):
+                err = "No such table: %s" % grammar.quote(meta["table"], force=True)
+            if not err: return True
+
+            if isinstance(err, grammar.ParseError):
+                lines = sql.split("\n")
+                start = sum(len(l) + 1 for l in lines[:err.line]) + err.column
+                end   = start + len(lines[err.line]) - err.column
+                ctrl  = dlg._comps[("sql", )][0]
+                ctrl.SetSelection(start, end)
+                ctrl.SetFocus()
+            wx.MessageBox("Failed to parse SQL.\n\n%s" % err,
+                          conf.Title, wx.OK | wx.ICON_ERROR)
+
+        dlg = controls.FormDialog(self.TopLevelParent, title, props, data, onclose=onclose)
         wx_accel.accelerate(dlg)
         if wx.OK != dlg.ShowModal(): return
         sql = dlg.GetData().get("sql", "").strip()
-        if not sql or sql == data["sql"]: return
+        if not sql or sql == data["sql"].strip(): return
 
         logger.info("Importing %s definition from SQL:\n\n%s", self._category, sql)
-        meta, err = grammar.parse(sql, self._category)
-        if not meta:
-            return wx.MessageBox("Failed to parse SQL.\n\n%s" % err,
-                                 conf.Title, wx.OK | wx.ICON_ERROR)
-
+        meta, _ = grammar.parse(sql, self._category)
         if self._show_alter: self._OnToggleAlterSQL()
-
         self._item.update(sql=sql, meta=self._AssignColumnIDs(meta))
         self._Populate()
 

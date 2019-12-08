@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    22.11.2019
+@modified    08.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -213,6 +213,63 @@ class CTX(object):
 
 
 
+class ParseError(Exception, basestring):
+    """Parse exception showing line and column, also usable in string context."""
+
+    def __init__(self, message, line, column):
+        Exception.__init__(self, message)
+        self.message, self.line, self.column = message, line, column
+
+
+    def __getattribute__(self, name):
+        if name in dir(str): return getattr(self.message, name)
+        return Exception.__getattribute__(self, name)
+
+    def __eq__  (self, other):    return self.message == other
+    def __ne__  (self, other):    return self.message != other
+    def __lt__  (self, other):    return self.message <  other
+    def __le__  (self, other):    return self.message <= other
+    def __gt__  (self, other):    return self.message >  other
+    def __ge__  (self, other):    return self.message >= other
+    def __hash__(self, other):    return hash(self.message)
+    def __len__ (self):           return len(self.message)
+    def __add__ (self, other):    return self.message + type(self.message)(other)
+    def __radd__(self, other):    return self.message + type(self.message)(other)
+    def __mul__ (self, other):    return self.message * other
+    def __contains__(self, item): return item in self.message
+    def __getitem__ (self, key):  return self.message.__getitem__ (key)
+    def __getslice__(self, i, j): return self.message.__getslice__(i, j)
+
+    """
+    def __repr__(self): return repr(self.message)
+    def __str__ (self): return str(self.message)
+    def __unicode__ (self):       return util.to_unicode(self.message)
+    """
+
+"""
+TODO remove
+
+e = ParseError("ohoo", 234, 3)
+print "simple print\t", e
+print "len\t\t\t\t", len(e)
+print "slice\t\t\t", e[:2]
+print "%%s format\t\t", "%s" % e
+print "lower\t\t\t", e.lower()
+print "line\t\t\t", Exception.__getattribute__(e, "line")
+print "is string\t\t", isinstance(e, basestring)
+print "concat\t\t\t", e + e
+print "mul\t\t\t\t", e * 2
+print "in\t\t\t\t", "oh" in e
+print "radd\t\t\t", "faa" + e
+print "eq\t\t\t\t", "ohoo" == e
+print "is\t\t\t\t", e is "ohoo"
+print "iter\t\t\t", list(iter(e))
+print "reverse\t\t\t%s", reversed(e)
+#print "join\t\t\t", ", ".join((e, e))
+sys.exit()
+"""
+
+
 class Parser(object):
     """
     SQL statement parser.
@@ -253,10 +310,35 @@ class Parser(object):
         def reportContextSensitivity(self, *_, **__): pass
 
         def syntaxError(self, recognizer, offendingToken, line, column, msg, e):
+
+            """
+
+            TODO idee veel näidata siin täpne süntaksi koht ka kätte?
+
+            ja seal schema editoris mitte panna dialoogi kinnigi, öelda kohe
+            et error ja selectida vastav koht.
+            selleks tuleb aint siit midagi muud kui lihtsalt string välja anda.
+
+            mingi special objekt või exception, mis käitub nagu string
+            (tal on repr ja str ja len ja getslice ja getitem)
+
+            või siis andagi välja lihtsalt exception?
+
+            teine variant, anda parsest tagasi kolmene result. {meta}, "err", <midagi veel>
+
+            
+
+
             err = "%sine %s:%s %s" % (
                 "L" if not e else "%s: l" % util.format_exc(e), line, column, msg
             )
-            self._errors.append(err)
+
+
+            """
+
+
+            err = "Line %s:%s %s" % (line, column + 1, msg) # Column is 0-based
+            self._errors.append(ParseError(err, line - 1, column)) # Line is 1-based
             if not self._stack:
                 stack = traceback.extract_stack()[:-1]
                 for i, (f, l, fn, t) in enumerate(stack):
@@ -266,9 +348,9 @@ class Parser(object):
                 self._stack = traceback.format_list(stack)
 
         def getErrors(self, stack=False):
-            if not stack: return "\n\n".join(self._errors)
-            return "%s\n%s" % ("\n\n".join(self._errors), "".join(self._stack))
-
+            es = self._errors
+            res = es[0] if len(es) == 1 else "\n\n".join(e.message for e in es)
+            return "%s\n%s" % (res, "".join(self._stack)) if stack else res
 
 
     def __init__(self):
@@ -1106,6 +1188,16 @@ def test():
         CREATE VIRTUAL TABLE IF NOT EXISTS myschemaname.mytable
         USING mymodule (myargument1, myargument2);
         ''',
+    ]
+
+
+    TEST_STATEMENTS = [
+"""
+CREATE TRIGGER new_trigger
+ON
+BEGIN
+END
+"""
     ]
 
 
