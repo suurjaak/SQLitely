@@ -3715,6 +3715,7 @@ class DatabasePage(wx.Panel):
             p.Close(force=True)
         try: self.db.connection.interrupt()
         except Exception: pass
+        self.db.clear_locks()
 
         if self.db.temporary: return
 

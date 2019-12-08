@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.12.2019
+@modified    08.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -689,6 +689,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
             self.locklabels.pop(subkey, None)
         if not self.locks[category][name]: self.locks[category].pop(name)
         if not self.locks[category]:       self.locks.pop(category)
+
+
+    def clear_locks(self):
+        """Clears all current locks."""
+        self.locks.clear()
+        self.locklabels.clear()
 
 
     def is_locked(self, category=None, name=None):
