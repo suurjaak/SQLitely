@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.12.2019
+@modified    07.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -4714,12 +4714,12 @@ class SchemaObjectPage(wx.Panel):
         props = [{"name": "sql", "label": "SQL:", "component": controls.SQLiteTextCtrl,
                   "tb": [{"type": "paste", "help": "Paste from clipboard"},
                          {"type": "open",  "help": "Load from file"}, ]}]
-        title = "Import definition from SQL"
-        dlg = controls.FormDialog(self.TopLevelParent, title, props)
+        data, title = {"sql": self._item["sql"]}, "Import definition from SQL"
+        dlg = controls.FormDialog(self.TopLevelParent, title, props, data)
         wx_accel.accelerate(dlg)
         if wx.OK != dlg.ShowModal(): return
         sql = dlg.GetData().get("sql", "").strip()
-        if not sql: return
+        if not sql or sql == data["sql"]: return
 
         logger.info("Importing %s definition from SQL:\n\n%s", self._category, sql)
         meta, err = grammar.parse(sql, self._category)
