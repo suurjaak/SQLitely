@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.12.2019
+@modified    09.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1430,31 +1430,34 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 self.execute("BEGIN TRANSACTION", cursor=cursor)
 
                 while queue:
-                    table, rows, rowids = queue.pop(0)
-                    col_data = self.schema["table"][table]["columns"]
+                    table1, rows1, rowids1 = queue.pop(0)
+                    if not util.lceq(table1, table):
+                        lock = self.get_lock("table", table1)
+                        if lock: raise Exception("%s, cannot delete." % lock)
+                    col_data = self.schema["table"][table1]["columns"]
                     pks = [c for c in col_data if "pk" in c]
-                    rowidname = self.get_rowid(table)
-                    use_rowids = rowidname and rowids and all(rowids) and \
-                                 not (len(pks) == 1 and all(pks[0]["name"] in r for r in rows))
+                    rowidname = self.get_rowid(table1)
+                    use_rowids = rowidname and rowids1 and all(rowids1) and \
+                                 not (len(pks) == 1 and all(pks[0]["name"] in r for r in rows1))
                     key_cols = [{"name": "_rowid_"}] if use_rowids else pks or col_data
                     key_data, myrows = [], []
 
-                    for row, rowid in zip(rows, rowids):
+                    for row, rowid in zip(rows1, rowids1):
                         data = {rowidname: rowid} if use_rowids else \
                                {c["name"]: row[c["name"]] for c in key_cols}
-                        if not any(data in xx for t, xx in result if util.lceq(t, table)):
+                        if not any(data in xx for t, xx in result if util.lceq(t, table1)):
                             key_data.append(data); myrows.append(row)
                     if not key_data: continue # while queue
 
                     logger.info("Deleting %s from table %s, %s.",
-                                util.plural("row", key_data), grammar.quote(table), self.name)
+                                util.plural("row", key_data), grammar.quote(table1), self.name)
                     for where, args in self.chunk_args(key_cols, key_data):
-                        sql = "DELETE FROM %s WHERE %s" % (grammar.quote(table), where)
+                        sql = "DELETE FROM %s WHERE %s" % (grammar.quote(table1), where)
                         self.execute(sql, args, cursor=cursor)
                         queries.append((sql, args))
-                    result.append((table, key_data))
+                    result.append((table1, key_data))
 
-                    for dk in self.get_keys(table)[0]:
+                    for dk in self.get_keys(table1)[0]:
                         if "table" not in dk: continue # for dk
                         dkrows = [x for x in myrows
                                   if all(x[c] is not None for c in dk["name"])]

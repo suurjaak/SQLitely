@@ -920,6 +920,10 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             if wx.YES != controls.YesNoMessageBox(msg, "Delete %s" % caption, wx.ICON_WARNING,
             defaultno=True): return
 
+            lock = self.db.get_lock(self.category, self.name, skip=self.View.Parent)
+            if lock: return wx.MessageBox("%s, cannot delete." % lock,
+                                          conf.Title, wx.OK | wx.ICON_WARNING)
+
             result = self.db.delete_cascade(self.name, rowdatas0, [self.rowids.get(x) for x in idxs])
             self.DropRows([x for t, xx in result if util.lceq(t, self.name) for x in xx])
             others = OrderedDict() # {table: [{row data}, ]}
@@ -2210,6 +2214,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
                 if not self._grid.Table.SaveChanges(): return
                 kws["updated"] = True
 
+        self._db.unlock(self._category, self.Name, self)
         self._PostEvent(**kws)
         return True
 
