@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.12.2019
+@modified    09.12.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4568,6 +4568,7 @@ class DatabasePage(wx.Panel):
 
     def toggle_cursors(self, category, name, close=False):
         """Closes or reopens grid cursors using specified table or view."""
+        if not name: return            
         relateds = {category: set([name])}
         for c, vv in self.db.get_related(category, name, data=True).items():
             if c not in ("table", "view") or "table" == category == c:

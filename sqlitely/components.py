@@ -4722,6 +4722,18 @@ class SchemaObjectPage(wx.Panel):
                   "tb": [{"type": "paste", "help": "Paste from clipboard"},
                          {"type": "open",  "help": "Load from file"}, ]}]
         data, title = {"sql": self._item["sql"]}, "Import definition from SQL"
+        words = {}
+        for category in ("table", "view"):
+            for item in self._db.get_category(category).values():
+                if self._category in ("trigger", "view"):
+                    myname = grammar.quote(item["name"])
+                    words[myname] = []
+                if not item.get("columns"): continue # for item
+                ww = [grammar.quote(c["name"]) for c in item["columns"]]
+                if self._category in ("trigger", "view"): words[myname] = ww
+                if "trigger" == self._category \
+                and util.lceq(item["name"], self._item["meta"].get("table")):
+                    words["OLD"] = words["NEW"] = ww
 
         def onclose(mydata):
             sql = mydata.get("sql", "")
@@ -4745,7 +4757,8 @@ class SchemaObjectPage(wx.Panel):
             wx.MessageBox("Failed to parse SQL.\n\n%s" % err,
                           conf.Title, wx.OK | wx.ICON_ERROR)
 
-        dlg = controls.FormDialog(self.TopLevelParent, title, props, data, onclose=onclose)
+        dlg = controls.FormDialog(self.TopLevelParent, title, props, data,
+                                  autocomp=words, onclose=onclose)
         wx_accel.accelerate(dlg)
         if wx.OK != dlg.ShowModal(): return
         sql = dlg.GetData().get("sql", "").strip().replace("\r\n", "\n")

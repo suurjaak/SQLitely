@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    08.12.2019
+@modified    09.12.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -307,7 +307,8 @@ class FormDialog(wx.Dialog):
        ?tb:           [{type, ?help}] for SQLiteTextCtrl component, adds toolbar,
                       supported toolbar buttons "open" and "paste"
     }]
-    @param   autocomp  list of words to add to SQLiteTextCtrl autocomplete
+    @param   autocomp  list of words to add to SQLiteTextCtrl autocomplete,
+                       or a dict for words and subwords
     @param   onclose   callable(data) on closing dialog, returning whether to close
     """
 
@@ -521,6 +522,9 @@ class FormDialog(wx.Dialog):
                     if self._autocomp and isinstance(c, SQLiteTextCtrl):
                         c.AutoCompClearAdded()
                         c.AutoCompAddWords(self._autocomp)
+                        if isinstance(self._autocomp, dict):
+                            for w, ww in self._autocomp.items():
+                                c.AutoCompAddSubWords(w, ww)
                 elif isinstance(c, wx.CheckBox): c.Value = bool(value)
                 else:
                     if isinstance(c, wx.ComboBox): c.SetItems(choices)
