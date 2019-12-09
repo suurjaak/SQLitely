@@ -1521,15 +1521,16 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
 
 
-def is_sqlite_file(filename, path=None, empty=False):
+def is_sqlite_file(filename, path=None, empty=False, ext=True):
     """
     Returns whether the file looks to be an SQLite database file.
 
     @param   path   path to prepend to filename, if any
     @param   empty  whether an empty file is considered valid
+    @param   ext    whether to check file extension
     """
     SQLITE_HEADER = "SQLite format 3\00"
-    result = os.path.splitext(filename)[1].lower() in conf.DBExtensions
+    result = not ext or os.path.splitext(filename)[1].lower() in conf.DBExtensions
     if result:
         try:
             result = empty

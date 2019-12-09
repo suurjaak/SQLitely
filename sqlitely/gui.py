@@ -1441,12 +1441,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             return wx.MessageBox("%s exist on this computer." % m, conf.Title,
                                  wx.OK | wx.ICON_ERROR)
 
+        exts = ";".join("*" + x for x in conf.DBExtensions)
+        wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
         dialog = wx.DirDialog(self,
             message="Choose directory where to save databases",
             defaultPath=os.getcwd(),
             style=wx.DD_DIR_MUST_EXIST | wx.RESIZE_BORDER
         ) if len(filenames) > 1 else wx.FileDialog(self,
-            message="Save a copy..",
+            message="Save a copy..", wildcard=wildcard,
             defaultDir=os.path.split(filenames[0])[0],
             defaultFile=os.path.basename(filenames[0]),
             style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
@@ -2187,7 +2189,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         db_filenames, notdb_filenames = [], []
         for f in filenames:
-            if database.is_sqlite_file(f, empty=True): db_filenames.append(f)
+            if database.is_sqlite_file(f, empty=True, ext=False): db_filenames.append(f)
             else:
                 notdb_filenames.append(f)
                 guibase.status("%s is not a valid SQLite database.", f,
