@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.12.2019
+@modified    09.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -1429,8 +1429,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         tb.AddTool(wx.ID_SAVE, "", bmp3, shortHelp="Save SQL to file")
         tb.Realize()
 
-        stc = self._stc = controls.SQLiteTextCtrl(panel1,
-            style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
+        stc = self._stc = controls.SQLiteTextCtrl(panel1, traversable=True,
+                                                  style=wx.BORDER_STATIC)
 
         panel2 = self._panel2 = wx.Panel(splitter)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2535,8 +2535,7 @@ class SchemaObjectPage(wx.Panel):
         tb.AddTool(wx.ID_SAVE, "", bmp2, shortHelp="Save SQL to file")
         tb.Realize()
 
-        stc = self._ctrls["sql"] = controls.SQLiteTextCtrl(panel2,
-            style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
+        stc = self._ctrls["sql"] = controls.SQLiteTextCtrl(panel2, style=wx.BORDER_STATIC)
         stc.SetReadOnly(True)
         stc._toggle = "skip"
 
@@ -2780,8 +2779,7 @@ class SchemaObjectPage(wx.Panel):
 
         label_where = wx.StaticText(panel, label="WHE&RE:")
         stc_where   = self._ctrls["where"] = controls.SQLiteTextCtrl(panel,
-            size=(-1, 40),
-            style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
+            traversable=True, size=(-1, 40), style=wx.BORDER_STATIC)
         label_where.ToolTip = "Optional WHERE-clause to create a partial index, " \
                               "on rows for which WHERE evaluates to true.\n\n" \
                               "May contain operators, literal values, and names " \
@@ -2848,8 +2846,7 @@ class SchemaObjectPage(wx.Panel):
 
         label_body = wx.StaticText(panel2, label="&Body:")
         stc_body   = self._ctrls["body"] = controls.SQLiteTextCtrl(panel2,
-            size=(-1, 40),
-            style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
+            traversable=True, size=(-1, 40), style=wx.BORDER_STATIC)
         label_body.MinSize = (35, -1)
         label_body.ToolTip = "Trigger body SQL, any number of " \
                              "SELECT-INSERT-UPDATE-DELETE statements. " \
@@ -2859,8 +2856,7 @@ class SchemaObjectPage(wx.Panel):
         label_when = wx.StaticText(panel2, label="WHEN:", name="trigger_when_label")
         label_when.MinSize = (35, -1)
         stc_when   = self._ctrls["when"] = controls.SQLiteTextCtrl(panel2,
-            size=(-1, 40), name="trigger_when",
-            style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
+            traversable=True, size=(-1, 40), name="trigger_when", style=wx.BORDER_STATIC)
         label_when.ToolTip = "Trigger WHEN expression, trigger executed only if WHEN is true. " \
                              "Can access OLD row reference on UPDATE and DELETE, " \
                              "and NEW row reference on INSERT and UPDATE."
@@ -2924,8 +2920,7 @@ class SchemaObjectPage(wx.Panel):
 
         label_body = wx.StaticText(panel2, label="Se&lect:")
         stc_body = self._ctrls["select"] = controls.SQLiteTextCtrl(panel2,
-            size=(-1, 40),
-            style=wx.BORDER_STATIC | wx.TE_PROCESS_TAB | wx.TE_PROCESS_ENTER)
+            traversable=True, size=(-1, 40), style=wx.BORDER_STATIC)
         label_body.ToolTip = "SELECT statement for view"
 
         sizer_flags.Add(check_temp)
@@ -3742,8 +3737,8 @@ class SchemaObjectPage(wx.Panel):
         for c in self._ctrls.values():
             if not isinstance(c, controls.SQLiteTextCtrl): continue # for c
             c.AutoCompClearAdded()
-            if singlewords and c.IsTraversable(): c.AutoCompAddWords(singlewords)
-            elif words and not c.IsTraversable():
+            if singlewords and c.LinesOnScreen() < 2: c.AutoCompAddWords(singlewords)
+            elif words and c.LinesOnScreen() > 1:
                 c.AutoCompAddWords(words)
                 for w, ww in subwords.items(): c.AutoCompAddSubWords(w, ww)
 
@@ -4067,7 +4062,8 @@ class SchemaObjectPage(wx.Panel):
 
         if grammar.SQL.CHECK == data["type"]: return [
             {"name": "name", "label": "Constraint name", "type": "text", "toggle": True},
-            {"name": "check", "label": "CHECK", "component": controls.SQLiteTextCtrl},
+            {"name": "check", "label": "CHECK", "component": controls.SQLiteTextCtrl,
+             "help": "Expression yielding a NUMERIC 0 on constraint violation,\ncannot contain a subquery."},
         ]
 
         if data["type"] in (grammar.SQL.PRIMARY_KEY, grammar.SQL.UNIQUE): return [
@@ -4766,7 +4762,6 @@ class SchemaObjectPage(wx.Panel):
 
         logger.info("Importing %s definition from SQL:\n\n%s", self._category, sql)
         meta, _ = grammar.parse(sql, self._category)
-        logger.info("meta %s", meta) # TODO remove
         if self._show_alter: self._OnToggleAlterSQL()
         self._item.update(sql=sql, meta=self._AssignColumnIDs(meta))
         self._Populate()

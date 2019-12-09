@@ -595,7 +595,7 @@ class FormDialog(wx.Dialog):
 
             mylabel = wx.StaticText(parent, label=label, name=accname + "_label")
             tb = wx.ToolBar(parent, style=wx.TB_FLAT | wx.TB_NODIVIDER)
-            ctrl = field["component"](parent)
+            ctrl = field["component"](parent, traversable=True)
 
             OPTS = {"open":  {"id": wx.ID_OPEN,  "bmp": wx.ART_FILE_OPEN, "handler": self._OnOpenFile},
                     "paste": {"id": wx.ID_PASTE, "bmp": wx.ART_PASTE,     "handler": self._OnPaste}, }
@@ -640,7 +640,7 @@ class FormDialog(wx.Dialog):
                     ctrl.Add(myctrl, border=5, flag=wx.RIGHT)
                     ctrl.Add(mylabel)
                     self._comps[fpath].append(myctrl)
-                    if field.get("help"): myctrl.ToolTip = field["help"]
+                    if field.get("help"): myctrl.ToolTip = myctrl.ToolTip = field["help"]
             elif "choices" in field:
                 style = wx.CB_DROPDOWN | (0 if field.get("choicesedit") else wx.CB_READONLY)
                 ctrl = wx.ComboBox(parent, style=style)
@@ -654,7 +654,9 @@ class FormDialog(wx.Dialog):
         for i, x in enumerate(result):
             if not isinstance(x, wx.Window): continue # for i, x
             self._comps[fpath].append(x)
-            if not i: continue # for i, x
+            if not i:
+                if field.get("help"): x.ToolTip = field["help"]
+                continue # for i, x
             x.SetName(accname)
             if field.get("help"): x.ToolTip = field["help"]
         return result

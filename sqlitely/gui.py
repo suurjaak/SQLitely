@@ -2762,8 +2762,7 @@ class DatabasePage(wx.Panel):
         check_fullsql.ToolTip = "See SQL statements for setting all current PRAGMA values"
         check_fullsql.Hide()
 
-        stc = self.stc_pragma = controls.SQLiteTextCtrl(
-            panel_sql, style=wx.BORDER_STATIC)
+        stc = self.stc_pragma = controls.SQLiteTextCtrl(panel_sql, style=wx.BORDER_STATIC)
         stc.SetReadOnly(True)
         tb = self.tb_pragma = wx.ToolBar(panel_sql, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY,      wx.ART_TOOLBAR, (16, 16))
@@ -2972,8 +2971,7 @@ class DatabasePage(wx.Panel):
         tb_sql.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_schema), id=wx.ID_COPY)
         tb_sql.Bind(wx.EVT_TOOL, lambda e: self.save_sql(self.stc_schema.Text), id=wx.ID_SAVE)
 
-        stc = self.stc_schema = controls.SQLiteTextCtrl(panel_schema,
-            style=wx.BORDER_STATIC)
+        stc = self.stc_schema = controls.SQLiteTextCtrl(panel_schema, style=wx.BORDER_STATIC)
         stc.SetText("Parsing..")
         stc.SetReadOnly(True)
 
