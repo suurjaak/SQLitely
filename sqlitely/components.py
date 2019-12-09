@@ -4748,11 +4748,12 @@ class SchemaObjectPage(wx.Panel):
         dlg = controls.FormDialog(self.TopLevelParent, title, props, data, onclose=onclose)
         wx_accel.accelerate(dlg)
         if wx.OK != dlg.ShowModal(): return
-        sql = dlg.GetData().get("sql", "").strip()
+        sql = dlg.GetData().get("sql", "").strip().replace("\r\n", "\n")
         if not sql or sql == data["sql"].strip(): return
 
         logger.info("Importing %s definition from SQL:\n\n%s", self._category, sql)
         meta, _ = grammar.parse(sql, self._category)
+        logger.info("meta %s", meta) # TODO remove
         if self._show_alter: self._OnToggleAlterSQL()
         self._item.update(sql=sql, meta=self._AssignColumnIDs(meta))
         self._Populate()

@@ -310,33 +310,6 @@ class Parser(object):
         def reportContextSensitivity(self, *_, **__): pass
 
         def syntaxError(self, recognizer, offendingToken, line, column, msg, e):
-
-            """
-
-            TODO idee veel näidata siin täpne süntaksi koht ka kätte?
-
-            ja seal schema editoris mitte panna dialoogi kinnigi, öelda kohe
-            et error ja selectida vastav koht.
-            selleks tuleb aint siit midagi muud kui lihtsalt string välja anda.
-
-            mingi special objekt või exception, mis käitub nagu string
-            (tal on repr ja str ja len ja getslice ja getitem)
-
-            või siis andagi välja lihtsalt exception?
-
-            teine variant, anda parsest tagasi kolmene result. {meta}, "err", <midagi veel>
-
-            
-
-
-            err = "%sine %s:%s %s" % (
-                "L" if not e else "%s: l" % util.format_exc(e), line, column, msg
-            )
-
-
-            """
-
-
             err = "Line %s:%s %s" % (line, column + 1, msg) # Column is 0-based
             self._errors.append(ParseError(err, line - 1, column)) # Line is 1-based
             if not self._stack:
@@ -557,7 +530,7 @@ class Parser(object):
         if ctx.K_WHEN():
             result["when"] = self.r(ctx.expr())
 
-        body = self.r(ctx.K_BEGIN(), ctx.K_END()).rstrip()
+        body = self.r(ctx.K_BEGIN(), ctx.K_END()).rstrip(" \t")
         result["body"] = re.sub("^\n?(.+?)\n?$", r"\1", body, flags=re.DOTALL)
 
         return result
@@ -1188,16 +1161,6 @@ def test():
         CREATE VIRTUAL TABLE IF NOT EXISTS myschemaname.mytable
         USING mymodule (myargument1, myargument2);
         ''',
-    ]
-
-
-    TEST_STATEMENTS = [
-"""
-CREATE TRIGGER new_trigger
-ON
-BEGIN
-END
-"""
     ]
 
 
