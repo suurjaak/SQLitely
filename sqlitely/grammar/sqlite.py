@@ -8,12 +8,11 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    08.12.2019
+@modified    09.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
 import logging
-import os
 import re
 import sys
 import traceback
@@ -214,60 +213,34 @@ class CTX(object):
 
 
 class ParseError(Exception, basestring):
-    """Parse exception showing line and column, also usable in string context."""
+    """Parse exception with line and column, also usable in string context."""
 
     def __init__(self, message, line, column):
         Exception.__init__(self, message)
         self.message, self.line, self.column = message, line, column
 
-
     def __getattribute__(self, name):
         if name in dir(str): return getattr(self.message, name)
         return Exception.__getattribute__(self, name)
 
+    def __repr__(self):           return repr(self.message)
+    def __str__ (self):           return str(self.message)
+    def __hash__(self):           return hash(self.message)
+    def __len__ (self):           return len(self.message)
     def __eq__  (self, other):    return self.message == other
     def __ne__  (self, other):    return self.message != other
     def __lt__  (self, other):    return self.message <  other
     def __le__  (self, other):    return self.message <= other
     def __gt__  (self, other):    return self.message >  other
     def __ge__  (self, other):    return self.message >= other
-    def __hash__(self, other):    return hash(self.message)
-    def __len__ (self):           return len(self.message)
     def __add__ (self, other):    return self.message + type(self.message)(other)
     def __radd__(self, other):    return self.message + type(self.message)(other)
     def __mul__ (self, other):    return self.message * other
     def __contains__(self, item): return item in self.message
     def __getitem__ (self, key):  return self.message.__getitem__ (key)
     def __getslice__(self, i, j): return self.message.__getslice__(i, j)
-
-    """
-    def __repr__(self): return repr(self.message)
-    def __str__ (self): return str(self.message)
     def __unicode__ (self):       return util.to_unicode(self.message)
-    """
 
-"""
-TODO remove
-
-e = ParseError("ohoo", 234, 3)
-print "simple print\t", e
-print "len\t\t\t\t", len(e)
-print "slice\t\t\t", e[:2]
-print "%%s format\t\t", "%s" % e
-print "lower\t\t\t", e.lower()
-print "line\t\t\t", Exception.__getattribute__(e, "line")
-print "is string\t\t", isinstance(e, basestring)
-print "concat\t\t\t", e + e
-print "mul\t\t\t\t", e * 2
-print "in\t\t\t\t", "oh" in e
-print "radd\t\t\t", "faa" + e
-print "eq\t\t\t\t", "ohoo" == e
-print "is\t\t\t\t", e is "ohoo"
-print "iter\t\t\t", list(iter(e))
-print "reverse\t\t\t%s", reversed(e)
-#print "join\t\t\t", ", ".join((e, e))
-sys.exit()
-"""
 
 
 class Parser(object):
@@ -329,6 +302,7 @@ class Parser(object):
     def __init__(self):
         self._category = None
         self._stream   = None
+        self._repls    = [] # [(start index, end index, replacement)]
 
 
     def parse(self, sql, category=None, renames=None):
@@ -350,45 +324,57 @@ class Parser(object):
         @return            ({..}, None) or (None, error)
 
         """
-        self._stream  = CommonTokenStream(SQLiteLexer(InputStream(sql)))
-        parser, listener = SQLiteParser(self._stream), self.ErrorListener()
-        parser.removeErrorListeners()
-        parser.addErrorListener(listener)
-        tree = parser.parse()
-        if parser.getNumberOfSyntaxErrors():
-            logger.error('Errors parsing SQL "%s":\n\n%s', sql,
-                         listener.getErrors(stack=True))
-            return None, listener.getErrors()
+        def parse_tree(sql):
+            self._stream  = CommonTokenStream(SQLiteLexer(InputStream(sql)))
+            parser, listener = SQLiteParser(self._stream), self.ErrorListener()
+            parser.removeErrorListeners()
+            parser.addErrorListener(listener)
 
-        # parse ctx -> statement list ctx -> statement ctx -> specific type ctx
-        ctx = tree.children[0].children[0].children[0]
-        result, name = None, self.CTXS.get(type(ctx))
-        categoryname = self.CATEGORIES.get(category)
-        if category and name != categoryname or name not in self.BUILDERS:
-            error = "Unexpected statement category: '%s'%s."% (name,
-                     " (expected '%s')" % (categoryname or category)
-                     if category else "")
-            logger.error(error)
-            return None, error
+            tree = parser.parse()
+            if parser.getNumberOfSyntaxErrors():
+                logger.error('Errors parsing SQL "%s":\n\n%s', sql,
+                             listener.getErrors(stack=True))
+                return None, listener.getErrors()
 
-        self._category = name
-        if renames: self.recurse_rename([ctx], renames)
-        try: result = self.BUILDERS[name](self, ctx)
-        except self.ReparseException as e:
-            return self.parse(e.message, category, renames)
-        result["__type__"] = name
-        result["__tables__"] = self.recurse_collect(
-            [ctx], [CTX.FOREIGN_TABLE] if SQL.CREATE_TABLE == name else [CTX.TABLE_NAME]
-        )
-        if renames and "schema" in renames:
-            if isinstance(renames["schema"], dict):
-                for v1, v2 in renames["schema"].items():
-                    if result.get("schema", "").lower() == v1.lower():
-                        result["schema"] = v2
-            elif renames["schema"]: result["schema"] = renames["schema"]
-            else: result.pop("schema", None)
+            # parse ctx -> statement list ctx -> statement ctx -> specific type ctx
+            ctx = tree.children[0].children[0].children[0]
+            name = self.CTXS.get(type(ctx))
+            categoryname = self.CATEGORIES.get(category)
+            if category and name != categoryname or name not in self.BUILDERS:
+                error = "Unexpected statement category: '%s'%s."% (name,
+                         " (expected '%s')" % (categoryname or category)
+                         if category else "")
+                logger.error(error)
+                return None, error
+            self._category = name
+            return ctx, None
 
-        return result, None
+        def build(ctx):
+            if renames: self.recurse_rename([ctx], renames)
+            result = self.BUILDERS[self._category](self, ctx)
+            result["__type__"] = self._category
+            result["__tables__"] = self.recurse_collect(
+                [ctx], [CTX.FOREIGN_TABLE] if SQL.CREATE_TABLE == self._category else [CTX.TABLE_NAME]
+            )
+            if renames and "schema" in renames:
+                if isinstance(renames["schema"], dict):
+                    for v1, v2 in renames["schema"].items():
+                        if result.get("schema", "").lower() == v1.lower():
+                            result["schema"] = v2
+                elif renames["schema"]: result["schema"] = renames["schema"]
+                else: result.pop("schema", None)
+
+            return result
+
+        result, error, tries = None, None, 0
+        while not result and not error:
+            ctx, error = parse_tree(sql)
+            if error: break # while
+            try: result = build(ctx)
+            except self.ReparseException as e:
+                sql, tries = e.message, tries + 1
+                if tries > 1: error = "Failed to parse SQL"
+        return result, error
 
 
     def t(self, ctx):
@@ -482,6 +468,14 @@ class Parser(object):
         if ctx.K_WITHOUT():     result["without"] = True
 
         result["columns"] = [self.build_table_column(x) for x in ctx.column_def()]
+        if self._repls:
+            sql, shift = self._stream.getText((0, sys.maxint)), 0
+            for start, end, repl in self._repls:
+                sql = sql[:start + shift] + repl + sql[end + shift:]
+                shift = len(repl) - end + start
+            del self._repls[:]
+            raise self.ReparseException(sql)
+
         if ctx.table_constraint():
             result["constraints"] = [self.build_table_constraint(x)
                                      for x in ctx.table_constraint()]
@@ -628,10 +622,9 @@ class Parser(object):
                 # resulting in DEFAULT and everything preceding being parsed
                 # as type if DEFAULT value is double-quoted.
                 start, end = ctx.type_name().getSourceInterval()
-                sql1  = self._stream.getText((0, start - 1))
                 inter = self._stream.getText((start, end))
-                sql2  = self._stream.getText((end + 1, sys.maxint))
-
+                cstart = len(self._stream.getText((0, start - 1)))
+                cend   = cstart + len(inter)
                 xstart = type_raw.find("DEFAULT") + 7
                 repl, in_quotes, i = inter[:xstart], False, xstart
                 while i < len(inter):
@@ -641,7 +634,8 @@ class Parser(object):
                         elif '"' == nxt: i += 1 # "-escaped ", insert single "
                         else: c, in_quotes = "'", False # End quote
                     repl, i = repl + c, i + 1
-                raise self.ReparseException(sql1 + repl + sql2)
+                self._repls.append((cstart, cend, repl))
+                return result
 
         for c in ctx.column_constraint():
             conflict = self.get_conflict(c)
@@ -1168,13 +1162,13 @@ def test():
     renames = {"table":   {"mytable": "renamed mytable", "mytable2": "renamed mytable2"},
                "trigger": {u"mytriggér": u"renämed mytriggér"},
                "index":   {"myindex":  u"renämed myindex"},
-               "view":    {"myview": u"renämed myview"},
-               "view":    {"myview2": u"renämed myview2"},
+               "view":    {"myview":  u"renämed myview",
+                           "myview2": u"renämed myview2"},
                "column":  {
-                           "renamed mytable":   {"mytablecol1": u"renamed mytablecol1", "mytable col2": "renamed mytable col2", "mytablecol2": "renamed mytablecol2", "mytablecol3": "renamed mytablecol3", "mytable col3": "renamed mytable col3", "mytablekey": "renamed mytablekey", "mytablefk2": "renamed mytablefk2"},
-                           "renamed mytable2":  {"mytable2col1": u"renamed mytable2col1", "mytable2col2": u"renamed mytable2col2", "mytable2key": "renamed mytable2key", "mytablefk2": "renamed mytablefk2"},
-                           u"renämed myview":   {"myviewcol1": "renamed myviewcol1", "myview col3": "renamed myview col3"},
-                           u"renämed myview2":  {"myview2col1": "renamed myview2col1", "myview2 col3": "renamed myview2 col3"},
+                           "renamed mytable":  {"mytablecol1": u"renamed mytablecol1", "mytable col2": "renamed mytable col2", "mytablecol2": "renamed mytablecol2", "mytablecol3": "renamed mytablecol3", "mytable col3": "renamed mytable col3", "mytablekey": "renamed mytablekey", "mytablefk2": "renamed mytablefk2"},
+                           "renamed mytable2": {"mytable2col1": u"renamed mytable2col1", "mytable2col2": u"renamed mytable2col2", "mytable2key": "renamed mytable2key", "mytablefk2": "renamed mytablefk2"},
+                           u"renämed myview":  {"myviewcol1": "renamed myviewcol1", "myview col3": "renamed myview col3"},
+                           u"renämed myview2": {"myview2col1": "renamed myview2col1", "myview2 col3": "renamed myview2 col3"},
                },
                "schema":  u"renämed schéma"}
     for sql1 in TEST_STATEMENTS:
@@ -1182,7 +1176,9 @@ def test():
         print sql1.encode("utf-8")
 
         x, err = parse(sql1)
-        if not x: continue # for sql1
+        if not x:
+            print "ERROR:", err
+            continue # for sql1
 
         print "\n%s\nPARSED:" % ("-" * 70)
         print json.dumps(x, indent=2)
