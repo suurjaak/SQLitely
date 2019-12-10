@@ -990,8 +990,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             item_copy_col    = wx.MenuItem(menu_copy, -1, "Copy selected co&lumn%s" % colsuff)
             item_copy_insert = wx.MenuItem(menu_copy, -1, "Copy row%s &INSERT SQL" % rowsuff)
             item_copy_update = wx.MenuItem(menu_copy, -1, "Copy row%s &UPDATE SQL" % rowsuff)
-            item_copy_txt    = wx.MenuItem(menu_copy, -1, "Copy row%s as &text" % colsuff)
-            item_copy_json   = wx.MenuItem(menu_copy, -1, "Copy row%s as &JSON" % colsuff)
+            item_copy_txt    = wx.MenuItem(menu_copy, -1, "Copy row%s as &text" % rowsuff)
+            item_copy_json   = wx.MenuItem(menu_copy, -1, "Copy row%s as &JSON" % rowsuff)
             item_open        = wx.MenuItem(menu,      -1, "&Open form")
 
         if is_table:
