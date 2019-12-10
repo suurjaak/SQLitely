@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.12.2019
+@modified    09.12.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1228,10 +1228,10 @@ from sqlitely.lib.vendor.step import Template
 from sqlitely.lib import util
 from sqlitely import conf, grammar, images, templates
 
-COLS = {"table":   ["Name", "Columns", "Rows", "Size in bytes", "Related tables", "Other relations"]
-                   if stats else ["Name", "Columns", "Rows", "Related tables", "Other relations"],
-        "index":   ["Name", "Columns", "Size in bytes", "Table"] if stats else ["Name", "Columns", "Table"],
-        "trigger": ["Name", "Action", "Owner", "Uses"],
+COLS = {"table":   ["Name", "Columns", "Related tables", "Other relations", "Rows", "Size in bytes"]
+                   if stats else ["Name", "Columns", "Related tables", "Other relations", "Rows"],
+        "index":   ["Name", "Table", "Columns", "Size in bytes"] if stats else ["Name", "Table", "Columns"],
+        "trigger": ["Name", "Owner", "When", "Uses"],
         "view":    ["Name", "Columns", "Uses", "Used by"], }
 %><!DOCTYPE HTML><html lang="en">
 <head>
@@ -1288,6 +1288,7 @@ COLS = {"table":   ["Name", "Columns", "Rows", "Size in bytes", "Related tables"
     }
     .right { text-align: right !important; }
     .name { word-break: break-all; word-break: break-word; }
+    .nowrap { word-break: normal !important; }
     .table { color: {{ conf.PlotTableColour }}; }
     .index { color: {{ conf.PlotIndexColour }}; }
     table.plot {
@@ -1329,10 +1330,13 @@ COLS = {"table":   ["Name", "Columns", "Rows", "Size in bytes", "Related tables"
       padding: 5px;
       position: relative;
       vertical-align: top;
+      word-break: break-all;
       word-break: break-word;
     }
     table.content > tbody > tr > th {
       text-align: center;
+      vertical-align: bottom;
+      white-space: nowrap;
     }
     table.content > tbody > tr > td.index, table.content > tbody > tr > th.index { color: gray; width: 10px; }
     table.content > tbody > tr > td.index { text-align: right; white-space: nowrap; }
@@ -1436,18 +1440,41 @@ COLS = {"table":   ["Name", "Columns", "Rows", "Size in bytes", "Related tables"
 index_total = sum(x["size"] for x in stats.get("index", []))
 table_total = sum(x["size"] for x in stats.get("table", []))
 total = index_total + sum(x["size"] for x in stats.get("table", []))
+rows_total, rows_pref = sum(x.get("count") or 0 for x in db.schema.get("table", {}).values()), ""
+if rows_total and any(x.get("is_count_estimated") for x in db.schema["table"].values()):
+    rows_total, rows_pref = int(math.ceil(rows_total / 100.) * 100), "~"
 %>
 <tr><td><table id="header_table">
   <tr>
     <td>
       <div id="title">{{ title }}</div><br />
       Source: <b>{{ db.name }}</b>.<br />
-      Source size: <b>{{ util.format_bytes(stats.get("size", db.filesize)) }}</b> ({{ util.format_bytes(stats.get("size", db.filesize), max_units=False) }}).<br />
+      Size: <b title="{{ stats.get("size", db.filesize) }}">{{ util.format_bytes(stats.get("size", db.filesize)) }}</b> (<span title="{{ stats.get("size", db.filesize) }}">{{ util.format_bytes(stats.get("size", db.filesize), max_units=False) }}</span>).<br />
 %if db.schema.get("table"):
-      <b>{{ util.plural("table", db.schema["table"]) }}</b>{{ (", " + util.format_bytes(table_total)) if stats else "" }}.<br />
+      <b>{{ util.plural("table", db.schema["table"]) }}</b>{{ ", " if stats or rows_total else "." }}
+    %if stats:
+      <span title="{{ table_total }}">{{ util.format_bytes(table_total) }}</span>{{ "" if rows_total else "." }}
+    %endif
+    %if rows_total:
+(<span title="{{ rows_total }}">{{ rows_pref }}{{ util.plural("row", rows_total, sep=",") }}</span>).
+    %endif
+      <br />
 %endif
 %if db.schema.get("index"):
-      <b>{{ util.plural("index", db.schema["index"]) }}</b>{{ (", " + util.format_bytes(index_total)) if stats else "" }}.<br />
+      <b>{{ util.plural("index", db.schema["index"]) }}</b>{{ ", " if stats else "." }}
+    %if stats:
+      <span title="{{ index_total }}">{{ util.format_bytes(index_total) }}</span>.
+    %endif
+      <br />
+%endif
+%if db.schema.get("trigger"):
+      <b>{{ util.plural("trigger", db.schema["trigger"]) }}</b>{{ ", " if db.schema.get("view") else "." }}
+%endif
+%if db.schema.get("view"):
+      <b>{{ util.plural("view", db.schema["view"]) }}</b>.
+%endif
+%if db.schema.get("trigger") or db.schema.get("view"):
+    <br />
 %endif
     </td>
   </tr></table>
@@ -1505,7 +1532,7 @@ total = index_total + sum(x["size"] for x in stats.get("table", []))
     <th></th>
     <th>Name</th>
     <th class="right">Size in bytes</th>
-    <th class="right">Proportion</th>
+    <th class="right" title="Percentage of all indexes">Proportion</th>
   </tr>
         %for item in sorted([x for x in stats["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower())):
   <tr>
@@ -1524,7 +1551,7 @@ total = index_total + sum(x["size"] for x in stats.get("table", []))
     <th>Name</th>
     <th>Table</th>
     <th class="right">Size in bytes</th>
-    <th class="right">Proportion</th>
+    <th class="right" title="Percentage of all indexes">Proportion</th>
   </tr>
         %for item in sorted(stats["index"], key=lambda x: (-x["size"], x["name"].lower())):
   <tr>
@@ -1585,6 +1612,12 @@ dks, fks = db.get_keys(item["name"]) if "table" == category else [(), ()]
 
 
         %if "table" == category:
+<%
+count, pref = item["count"], ""
+if item.get("is_count_estimated"):
+    count, pref = int(math.ceil(count / 100.) * 100), "~"
+countstr = "{1}{0:,}".format(count, pref)
+%>
     <td>
       <a class="toggle right" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urllib.quote(item["name"], safe="") }}/cols')">{{ len(item["columns"]) }}</a>
       <table class="hidden" id="{{ category }}/{{! urllib.quote(item["name"], safe="") }}/cols">
@@ -1593,25 +1626,6 @@ dks, fks = db.get_keys(item["name"]) if "table" == category else [(), ()]
             %endfor
       </table>
     </td>
-
-<%
-count, pref = item["count"], ""
-if item.get("is_count_estimated"):
-    count, pref = int(math.ceil(count / 100.) * 100), "~"
-countstr = "{1}{0:,}".format(count, pref)
-%>
-    <td class="right" title="{{ count }}" data-sort="{{ count }}">
-      {{ countstr }}
-    </td>
-
-            %if stats.get("table"):
-<%
-size = next((x["size"] for x in stats["table"] if util.lceq(x["name"], item["name"])), "")
-%>
-    <td class="right" title="{{ util.format_bytes(size) if size != "" else "" }}" data-sort="{{ size }}">
-      {{ util.format_bytes(size, max_units=False, with_units=False) if size != "" else "" }}
-    </td>
-            %endif
 
     <td>
       <table class="subtable">
@@ -1681,11 +1695,26 @@ flags["has_indirect"] = True
                 %endif
             %endfor
     </td>
+    <td class="right nowrap" title="{{ count }}" data-sort="{{ count }}">
+      {{ countstr }}
+    </td>
+
+            %if stats.get("table"):
+<%
+size = next((x["size_total"] for x in stats["table"] if util.lceq(x["name"], item["name"])), "")
+%>
+    <td class="right nowrap" title="{{ util.format_bytes(size) if size != "" else "" }}" data-sort="{{ size }}">
+      {{ util.format_bytes(size, max_units=False, with_units=False) if size != "" else "" }}
+    </td>
+            %endif
 
         %endif
 
 
         %if "index" == category:
+    <td>
+      <a href="#table/{{! urllib.quote(item["tbl_name"], safe="") }}" title="Go to table {{ grammar.quote(item["tbl_name"], force=True) }}">{{ item["tbl_name"] }}</a>
+    </td>
     <td>
             %for col in item["columns"]:
                 %if col.get("expr"):
@@ -1700,28 +1729,25 @@ flags["has_indirect"] = True
 <%
 size = next((x["size"] for x in stats["index"] if util.lceq(x["name"], item["name"])), "")
 %>
-    <td class="right" title="{{ util.format_bytes(size) if size != "" else "" }}" data-sort="{{ size }}">
+    <td class="right nowrap" title="{{ util.format_bytes(size) if size != "" else "" }}" data-sort="{{ size }}">
       {{ util.format_bytes(size, max_units=False, with_units=False) if size != "" else "" }}
     </td>
             %endif
-    <td>
-      <a href="#table/{{! urllib.quote(item["tbl_name"], safe="") }}" title="Go to table {{ grammar.quote(item["tbl_name"], force=True) }}">{{ item["tbl_name"] }}</a>
-    </td>
         %endif
 
 
         %if "trigger" == category:
     <td>
-      {{ item.get("meta", {}).get("upon") }} {{ item.get("meta", {}).get("action") }}
-            %if item.get("meta", {}).get("columns"):
-      OF {{ ", ".join(grammar.quote(c["name"]) for c in item["meta"]["columns"]) }}
-            %endif
-    </td>
-    <td>
 <%
 mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "view"
 %>
       {{ mycategory }} <a href="#{{ mycategory }}/{{! urllib.quote(item["tbl_name"], safe="") }}" title="Go to {{ mycategory }} {{ grammar.quote(item["tbl_name"], force=True) }}">{{ item["tbl_name"] }}</a>
+    </td>
+    <td>
+      {{ item.get("meta", {}).get("upon") }} {{ item.get("meta", {}).get("action") }}
+            %if item.get("meta", {}).get("columns"):
+      OF {{ ", ".join(grammar.quote(c["name"]) for c in item["meta"]["columns"]) }}
+            %endif
     </td>
     <td>
             %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
@@ -1959,7 +1985,7 @@ from sqlitely import conf, templates
 
 %>-- Output from sqlite3_analyzer.
 -- Source: {{ db.name }}.
--- Source size: {{ util.format_bytes(stats["filesize"]) }} ({{ util.format_bytes(stats["filesize"], max_units=False) }}).
+-- Size: {{ util.format_bytes(stats["filesize"]) }} ({{ util.format_bytes(stats["filesize"], max_units=False) }}).
 -- {{ templates.export_comment() }}
 
 
