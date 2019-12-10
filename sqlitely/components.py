@@ -4130,9 +4130,16 @@ class SchemaObjectPage(wx.Panel):
 
         button_add_column = wx.Button(panel_wrapper, label="&Add column")
 
-        sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Column",  size=(250, -1)))
-        sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Collate", size=( 80, -1)))
-        sizer_columnstop.Add(wx.StaticText(panel_wrapper, label="Order",   size=( 60, -1)))
+        label_column  = wx.StaticText(panel_wrapper, label="Column",  size=(250, -1))
+        label_collate = wx.StaticText(panel_wrapper, label="Collate", size=( 80, -1))
+        label_order   = wx.StaticText(panel_wrapper, label="Order",   size=( 60, -1))
+        label_collate.ToolTip = "Ordering sequence to use for text values, defaults to the " \
+                                "collating sequence defined for the table column, or BINARY"
+        label_order.ToolTip = "If DESC, an integer key is not an alias for ROWID."
+
+        sizer_columnstop.Add(label_column)
+        sizer_columnstop.Add(label_collate)
+        sizer_columnstop.Add(label_order)
 
         sizer_wrapper.Add(sizer_columnstop, border=5, flag=wx.LEFT | wx.TOP | wx.BOTTOM | wx.GROW)
         sizer_wrapper.Add(panel_columns, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.GROW)
