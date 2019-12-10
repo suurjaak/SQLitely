@@ -682,7 +682,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 refresh_idxs.append(idx)
                 if grammar.SQL.UPDATE in actions: reload_idxs.append(idx)
             # Save all newly inserted rows
-            pks = [c["name"] for c in self.columns if "pk" in c]
+            pks = [{"name": y} for x in self.db.get_keys(self.name, True)[0]
+                   for y in x["name"]]
             col_map = dict((c["name"], c) for c in self.columns)
             for idx in self.idx_new[:]:
                 row = self.rows_all[idx]
@@ -950,8 +951,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             self.View.GoToCell(self.View.GridCursorRow, col)
 
 
-        pks = [c for c in self.columns if "pk" in c]
         lks, fks = self.db.get_keys(self.name)
+        pks = [{"name": y} for x in lks if "pk" in x for y in x["name"]]
         is_table = ("table" == self.category)
         caption, rowdatas, rowdatas0, idxs, cutoff = "", [], [], [], ""
         rows, cols = get_grid_selection(self.View, cursor=False)
@@ -2044,8 +2045,9 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         columns = self._item["columns"]
         if full: fields = [c["name"] for c in columns if c["name"] in row]
         else:
-            fields = [c["name"] for c in columns if "pk" in c] or \
-                     [c["name"] for c in columns] # No primary keys: take all
+            fields = [y for x in self._db.get_keys(self.Name, True)[0]
+                      for y in x["name"]]
+            if not fields: fields = [c["name"] for c in columns] # No pks: take all
         if not fields: return
 
         row_id = [row[c] for c in fields]
@@ -6692,7 +6694,8 @@ class DataDialog(wx.Dialog):
             self._button_prev.Enabled = bool(self._row)
             self._button_next.Enabled = self._row + 1 < gridbase.RowsCount
 
-            pks = [c for c in self._columns if "pk" in c]
+            pks = [{"name": y} for x in gridbase.db.get_keys(gridbase.name, True)[0]
+                   for y in x["name"]]
             if self._data[gridbase.KEY_NEW]: rowtitle = "New row"
             elif pks: rowtitle = ", ".join("%s %s" % (c["name"], self._original[c["name"]])
                                           for c in pks)
@@ -6853,7 +6856,10 @@ class DataDialog(wx.Dialog):
         item_datetime = wx.MenuItem(menu, -1, "Set current date&time")
         item_stamp    = wx.MenuItem(menu, -1, "Set current timesta&mp")
 
-        item_null.Enabled = "notnull" not in coldata and "pk" not in coldata
+        is_pk = any(util.lceq(coldata["name"], y) for x in 
+                    self._gridbase.db.get_keys(self._gridbase.name, True)[0]
+                    for y in x["name"])
+        item_null.Enabled = "notnull" not in coldata and not is_pk
 
         menu.Append(item_data)
         menu.Append(item_name)
@@ -6902,7 +6908,8 @@ class DataDialog(wx.Dialog):
         def on_copy_update(event=None):
             tpl = step.Template(templates.DATA_ROWS_UPDATE_SQL, strip=False)
             mydata, mydata0 = self._data, self._original
-            mypks = [c["name"] for c in self._columns if "pk" in c]
+            mypks = [y for x in self._gridbase.db.get_keys(self._gridbase.name, True)[0]
+                     for y in x["name"]]
             if not mypks and self._gridbase.rowid_name:
                 mypks = [self._gridbase.rowid_name]
                 rowid = self._gridbase.rowids.get(mydata[self.KEY_ID])

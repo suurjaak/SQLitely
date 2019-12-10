@@ -1075,11 +1075,13 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
-    def get_keys(self, table):
+    def get_keys(self, table, pks_only=False):
         """
         Returns the local and foreign keys of a table. Local keys are
         table primary keys, plus any columns used as foreign keys by other tables.
 
+        @param    pks_only  true if local keys should only be table primary keys,
+                            not all columns used as foreign keys by other tables
         @return   ([{"name": ["col", ], "table": CaselessDict{ftable: ["fcol", ]}}],
                    [{"name": ["col", ], "table": CaselessDict{ftable: ["fcol", ]}}])
         """
@@ -1087,10 +1089,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
         item = self.schema["table"].get(table)
         if not item: return [], []
 
-        def get_fks(item):
-            cc = [c for c in item["columns"] if "fk" in c] + [
+        def get_fks(myitem):
+            cc = [c for c in myitem["columns"] if "fk" in c] + [
                 dict(name=c["columns"], fk=c)
-                for c in item.get("meta", {}).get("constraints", [])
+                for c in myitem.get("meta", {}).get("constraints", [])
                 if grammar.SQL.FOREIGN_KEY == c["type"]
             ]
             return [dict(name=util.tuplefy(c["name"]), table=CaselessDict(
@@ -1098,9 +1100,14 @@ WARNING: misuse can easily result in a corrupt database file.""",
             )) for c in cc]
 
         mykeys = CaselessDict((util.tuplefy(c["name"]),
-                               dict(name=util.tuplefy(c["name"]), pk=c.get("pk")))
+                               dict(name=util.tuplefy(c["name"]), pk=c["pk"]))
                               for c in item["columns"] if "pk" in c)
-        for item2 in self.get_related("table", table, False).get("table", []):
+        for c in item.get("meta", {}).get("constraints", []):
+            if grammar.SQL.PRIMARY_KEY == c["type"]:
+                names = tuple(x["name"] for x in c["key"])
+                mykeys[names] = {"name": names, "pk": {}}
+        relateds = {} if pks_only else self.get_related("table", table, False)
+        for item2 in relateds.get("table", []):
             for fk in [x for x in get_fks(item2) if table in x["table"]]:
                 keys = fk["table"][table]
                 lk = mykeys.get(keys) or {"name": keys}
@@ -1271,10 +1278,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         if not self.is_open(): return
 
-        table = self.schema["table"][table]["name"]
+        table, where = self.schema["table"][table]["name"], ""
         col_data = self.schema["table"][table]["columns"]
-
-        where, pks = "", [c for c in col_data if "pk" in c]
+        pks = [{"name": y} for x in self.get_keys(table, True)[0] for y in x["name"]]
 
         if rowid is not None and not (len(pks) == 1 and pks[0]["name"] in row):
             rowidname = self.get_rowid(table)
@@ -1334,7 +1340,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         where, args = "", self.make_args(changed_cols, row)
         setsql = ", ".join("%s = :%s" % (grammar.quote(changed_cols[i]["name"]), x)
                                          for i, x in enumerate(args))
-        pks = [c for c in col_data if "pk" in c]
+        pks = [{"name": y} for x in self.get_keys(table, True)[0] for y in x["name"]]
         if rowid is not None and not (len(pks) == 1 and pks[0]["name"] in row):
             key_data = [{"name": "_rowid_"}]
             keyargs = self.make_args(key_data, {"_rowid_": rowid}, args)
@@ -1359,19 +1365,19 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         if not self.is_open(): return
 
-        table = self.schema["table"][table]["name"]
+        table, where = self.schema["table"][table]["name"], ""
         logger.info("Deleting 1 row from table %s, %s.",
                     grammar.quote(table), self.name)
         col_data = self.schema["table"][table]["columns"]
 
-        where, pks = "", [c for c in col_data if "pk" in c]
+        pks = [{"name": y} for x in self.get_keys(table, True)[0] for y in x["name"]]
 
         if rowid is not None and not (len(pks) == 1 and pks[0]["name"] in row):
             rowidname = self.get_rowid(table)
             key_data = [{"name": rowidname}]
             keyargs = self.make_args(key_data, {rowidname: rowid})
         else: # Use either primary key or all columns to identify row
-            key_data = [c for c in col_data if "pk" in c] or col_data
+            key_data = pks or col_data
             keyargs = self.make_args(key_data, row)
         for col, key in zip(key_data, keyargs):
             where += (" AND " if where else "") + "%s IS :%s" % (grammar.quote(col["name"]), key)
@@ -1435,7 +1441,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                         lock = self.get_lock("table", table1)
                         if lock: raise Exception("%s, cannot delete." % lock)
                     col_data = self.schema["table"][table1]["columns"]
-                    pks = [c for c in col_data if "pk" in c]
+                    pks = [{"name": y} for x in self.get_keys(table, True)[0]
+                           for y in x["name"]]
                     rowidname = self.get_rowid(table1)
                     use_rowids = rowidname and rowids1 and all(rowids1) and \
                                  not (len(pks) == 1 and all(pks[0]["name"] in r for r in rows1))
