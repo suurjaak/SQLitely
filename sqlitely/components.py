@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.12.2019
+@modified    10.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -813,7 +813,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         """Handler for opening popup menu in grid."""
         menu = wx.Menu()
         menu_copy, menu_cols = wx.Menu(), wx.Menu()
-        menu_fks,  menu_dks  = wx.Menu(), wx.Menu()
+        menu_fks,  menu_lks  = wx.Menu(), wx.Menu()
 
 
         def copy(text, status, *args):
@@ -902,7 +902,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             """Confirms whether to delete row and related rows."""
             inter1 = inter2 = ""
             name = "this rows" if len(rowdatas0) == 1 else "these rows"
-            if any("table" in x for x in dks):
+            if any("table" in x for x in lks):
                 inter1 = " and all its related rows"
                 inter2 = "Table %s is referenced by:\n- %s.\n\n" \
                         "Deleting %s will delete any related rows " \
@@ -913,7 +913,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                         grammar.quote(t, force=True),
                         ", ".join(map(grammar.quote, kk)),
                         ", ".join(map(grammar.quote, x["name"]))
-                    ) for x in dks for t, kk in x.get("table", {}).items()), name
+                    ) for x in lks for t, kk in x.get("table", {}).items()), name
                 )
             msg = "Are you sure you want to delete %s%s?\n\n" \
                   "%sThis action executes immediately and is not undoable." % (name, inter1, inter2)
@@ -951,7 +951,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
 
         pks = [c for c in self.columns if "pk" in c]
-        dks, fks = self.db.get_keys(self.name)
+        lks, fks = self.db.get_keys(self.name)
         is_table = ("table" == self.category)
         caption, rowdatas, rowdatas0, idxs, cutoff = "", [], [], [], ""
         rows, cols = get_grid_selection(self.View, cursor=False)
@@ -1033,7 +1033,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             return ", ".join(fmtval(rowdata[k]) for k in kk)
 
         has_cascade = False
-        for is_fks, (keys, menu2) in enumerate([(dks, menu_dks), (fks, menu_fks)]):
+        for is_fks, (keys, menu2) in enumerate([(lks, menu_lks), (fks, menu_fks)]):
             titles = []
             for rowdata in rowdatas0:
                 for c in keys:
@@ -1060,7 +1060,12 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         for col, coldata in enumerate(self.columns):
             submenu = wx.Menu()
             tip = self.db.get_sql(self.category, self.name, coldata["name"])
-            menu_cols.Append(wx.ID_ANY, coldata["name"], submenu, tip)
+            label = coldata["name"]
+            if any(label in x["name"] for x in lks):
+                label += u"\t\u1d18\u1d0b" # Unicode small caps "PK"
+            elif any(label in x["name"] for x in fks):
+                label += u"\t\u1da0\u1d4f" # Unicode small "fk"
+            menu_cols.Append(wx.ID_ANY, label, submenu, tip)
             item_col_copy = wx.MenuItem(submenu, -1, "&Copy column")
             item_col_name = wx.MenuItem(submenu, -1, "Copy column &name")
             item_col_goto = wx.MenuItem(submenu, -1, "&Go to column")
@@ -1074,15 +1079,15 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
         if is_table and rowdatas:
             menu.AppendSeparator()
-            item_dks = menu.AppendSubMenu(menu_dks, "&Domestic keys")
+            item_lks = menu.AppendSubMenu(menu_lks, "&Local keys")
             item_fks = menu.AppendSubMenu(menu_fks, "&Foreign keys")
-            menu.AppendSubMenu(menu_cols, "Co&lumns")
+            menu.AppendSubMenu(menu_cols, "Col&umns")
             menu.AppendSeparator()
             menu.Append(item_insert)
             menu.Append(item_delete)
-            if any(x.get("table") for x in dks):
+            if any(x.get("table") for x in lks):
                 menu.Append(item_delete_cascade)
-            if not dks: item_dks.Enabled = False
+            if not lks: item_lks.Enabled = False
             if not fks: item_fks.Enabled = False
             item_delete_cascade.Enabled = has_cascade and any(not x[self.KEY_NEW] for x in rowdatas)
         elif is_table:

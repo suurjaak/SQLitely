@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.12.2019
+@modified    10.12.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5346,11 +5346,11 @@ class DatabasePage(wx.Panel):
                     else: t = "" if "view" == category else "Counting.."
                     tree.SetItemText(child, t, 1)
 
-                    dks, fks = self.db.get_keys(item["name"]) if "table" == category else [(), ()]
+                    lks, fks = self.db.get_keys(item["name"]) if "table" == category else [(), ()]
                     for col in item["columns"]:
                         subchild = tree.AppendItem(child, util.unprint(col["name"]))
                         mytype = col.get("type", "")
-                        if any(col["name"] in x["name"] for x in dks):
+                        if any(col["name"] in x["name"] for x in lks):
                             mytype = u"\u1d18\u1d0b  " + mytype # Unicode small caps "PK"
                         elif any(col["name"] in x["name"] for x in fks):
                             mytype = u"\u1da0\u1d4f  " + mytype # Unicode small "fk"
@@ -5449,11 +5449,11 @@ class DatabasePage(wx.Panel):
                         colchild = tree.AppendItem(child, "Columns (%s)" % len(columns))
                         tree.SetItemPyData(colchild, {"type": "columns", "parent": itemdata})
                         tree.SetItemImage(colchild, imgs["columns"], wx.TreeItemIcon_Normal)
-                        dks, fks = self.db.get_keys(item["name"]) if "table" == category else [(), ()]
+                        lks, fks = self.db.get_keys(item["name"]) if "table" == category else [(), ()]
                         for col in columns:
                             subchild = tree.AppendItem(colchild, util.unprint(col["name"]))
                             mytype = col.get("type", "")
-                            if any(col["name"] in x["name"] for x in dks):
+                            if any(col["name"] in x["name"] for x in lks):
                                 mytype = u"\u1d18\u1d0b  " + mytype # Unicode small caps "PK"
                             elif any(col["name"] in x["name"] for x in fks):
                                 mytype = u"\u1da0\u1d4f  " + mytype # Unicode small "fk"
@@ -5484,9 +5484,9 @@ class DatabasePage(wx.Panel):
                                               for x in subitem.get("meta", {}).get("columns", subitem.get("columns", [])))
                             elif "table" == category == subcategory:
                                 texts = []
-                                dks, fks = self.db.get_keys(subitem["name"])
+                                lks, fks = self.db.get_keys(subitem["name"])
                                 fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(grammar.quote, x))
-                                for col in dks:
+                                for col in lks:
                                     for table, keys in col.get("table", {}).items():
                                         if not util.lceq(table, item["name"]): continue # for table, keys
                                         texts.append("%s REFERENCES %s.%s" % (fmtkeys(keys),

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.12.2019
+@modified    10.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1077,7 +1077,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def get_keys(self, table):
         """
-        Returns the domestic and foreign keys of a table. Domestic keys are
+        Returns the local and foreign keys of a table. Local keys are
         table primary keys, plus any columns used as foreign keys by other tables.
 
         @return   ([{"name": ["col", ], "table": CaselessDict{ftable: ["fcol", ]}}],
@@ -1103,16 +1103,16 @@ WARNING: misuse can easily result in a corrupt database file.""",
         for item2 in self.get_related("table", table, False).get("table", []):
             for fk in [x for x in get_fks(item2) if table in x["table"]]:
                 keys = fk["table"][table]
-                dk = mykeys.get(keys) or {"name": keys}
-                dk.setdefault("table", CaselessDict())[item2["name"]] = fk["name"]
-                mykeys[keys] = dk
-        dks = sorted(mykeys.values(), key=lambda x: (len(x["name"]), "pk" not in x, x["name"]))
+                lk = mykeys.get(keys) or {"name": keys}
+                lk.setdefault("table", CaselessDict())[item2["name"]] = fk["name"]
+                mykeys[keys] = lk
+        lks = sorted(mykeys.values(), key=lambda x: (len(x["name"]), "pk" not in x, x["name"]))
 
         fks = get_fks(item)
         fks.sort(key=lambda x: (len(x["name"]), x["name"])) # Singulars first
         fks = [x for x in fks]
 
-        return dks, fks
+        return lks, fks
 
 
     def get_sql(self, category=None, name=None, column=None, indent="  ",
@@ -1457,17 +1457,17 @@ WARNING: misuse can easily result in a corrupt database file.""",
                         queries.append((sql, args))
                     result.append((table1, key_data))
 
-                    for dk in self.get_keys(table1)[0]:
-                        if "table" not in dk: continue # for dk
-                        dkrows = [x for x in myrows
-                                  if all(x[c] is not None for c in dk["name"])]
-                        if not dkrows: continue # for dk
-                        for table2, keys2 in dk["table"].items():
+                    for lk in self.get_keys(table1)[0]:
+                        if "table" not in lk: continue # for lk
+                        lkrows = [x for x in myrows
+                                  if all(x[c] is not None for c in lk["name"])]
+                        if not lkrows: continue # for lk
+                        for table2, keys2 in lk["table"].items():
                             table2 = self.schema["table"][table2]["name"]
 
                             key_cols2 = [{"name": x} for x in keys2]
-                            key_data2 = [{x: row[y] for x, y in zip(keys2, dk["name"])}
-                                         for row in dkrows]
+                            key_data2 = [{x: row[y] for x, y in zip(keys2, lk["name"])}
+                                         for row in lkrows]
                             cols = "*"
                             rowidname2 = self.get_rowid(table2)
                             if rowidname2: cols = "%s AS %s, *" % ((rowidname2, ) * 2)

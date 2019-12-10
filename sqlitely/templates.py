@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.12.2019
+@modified    10.12.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1590,7 +1590,7 @@ if rows_total and any(x.get("is_count_estimated") for x in db.schema["table"].va
 <%
 flags = {}
 relateds = db.get_related(category, item["name"])
-dks, fks = db.get_keys(item["name"]) if "table" == category else [(), ()]
+lks, fks = db.get_keys(item["name"]) if "table" == category else [(), ()]
 %>
   <tr>
     <td class="index">{{ itemi + 1 }}</td>
@@ -1637,9 +1637,9 @@ rels = [] # [(source, keys, target, keys)]
             %for item2 in relateds.get("table", ()):
 <%
 
-dks2, fks2 = db.get_keys(item2["name"])
+lks2, fks2 = db.get_keys(item2["name"])
 fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(grammar.quote, x))
-for col in dks2:
+for col in lks2:
     for table, keys in col.get("table", {}).items():
         if util.lceq(table, item["name"]):
             rels.append((None, keys, item2["name"], col["name"]))
