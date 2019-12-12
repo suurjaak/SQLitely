@@ -2459,10 +2459,10 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         Goes to next/previous control on Tab/Shift+Tab,
         swallows Enter.
         """
-        if self.AutoCompActive(): return event.Skip()
+        if self.AutoCompActive() or event.ControlDown() \
+        or wx.WXK_TAB != event.KeyCode: return event.Skip()
         if event.KeyCode in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER) \
         and self.LinesOnScreen() < 2: return
-        if wx.WXK_TAB != event.KeyCode: return event.Skip()
 
         direction = wx.NavigationKeyEvent.IsBackward if event.ShiftDown() \
                     else wx.NavigationKeyEvent.IsForward
