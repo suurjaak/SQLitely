@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.12.2019
+@modified    12.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -1603,6 +1603,18 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         self._grid.Freeze()
         try:
+            if cursor and cursor.description is not None \
+            and isinstance(self._grid.Table, SQLiteGridBase):
+                self._panel2.Freeze()
+                try: # Workaround, grid.BestSize remains sticky after wide results
+                    idx = self._panel2.Sizer.Children.index(self._panel2.Sizer.GetItem(self._grid))
+                    self._panel2.Sizer.Remove(idx)
+                    self._grid = wx.grid.Grid(self._panel2)
+                    SQLiteGridBaseMixin.__init__(self)
+                    self._panel2.Sizer.Insert(idx, self._grid, proportion=1, flag=wx.GROW)
+                finally: self._panel2.Thaw()
+                self._grid.Freeze()
+
             if cursor and cursor.description is not None: # Resultset: populate grid
                 grid_data = SQLiteGridBase(self._db, sql=sql, cursor=cursor)
                 self._grid.SetTable(grid_data, takeOwnership=True)
@@ -1616,7 +1628,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                 self._button_export.Enabled = False
                 if cursor and cursor.rowcount >= 0:
                     self._grid.CreateGrid(1, 1)
-                    self._grid.SetColLabelValue(0, "Affected rows")
+                    self._grid.SetColLabelValue(0, " Affected rows ")
                     self._grid.SetCellValue(0, 0, str(cursor.rowcount))
                     self._grid.SetColSize(0, wx.grid.GRID_AUTOSIZE)
             self._tbgrid.Enable()
