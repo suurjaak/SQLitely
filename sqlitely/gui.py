@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.12.2019
+@modified    12.12.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2640,7 +2640,7 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
                   self.on_notebook_menu, nb)
         self.Bind(wx.EVT_CONTEXT_MENU, self.on_notebook_menu, nb.GetTabArea())
-        self.Bind(wx.EVT_CHAR_HOOK, self.on_key_sql_page, nb)
+        nb.Bind(wx.EVT_CHAR_HOOK, self.on_key_sql_page)
         self.register_notebook_hotkeys(nb)
 
 
