@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.12.2019
+@modified    12.12.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -623,7 +623,7 @@ from sqlitely import conf, grammar
 %>
 <font color="{{ conf.FgColour }}">
 <br /><br /><b><a name="{{ item["name"] }}">{{ category.capitalize() }} {{ grammar.quote(item["name"]) }}:</a></b><br />
-<table border="1" cellpadding="4" cellspacing="0" width="1000">
+<table border="1" cellpadding="4" cellspacing="0" width="100%">
 <tr>
 <th>#</th>
 %for col in item["columns"]:
