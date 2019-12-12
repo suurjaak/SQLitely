@@ -1529,6 +1529,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         wx_accel.accelerate(self)
         wx.CallAfter(lambda: self and splitter.SplitHorizontally(
                      panel1, panel2, sashPosition=self.Size[1] * 2/5))
+        wx.CallAfter(lambda: self and stc.SetFocus())
 
 
     def GetSQL(self):
