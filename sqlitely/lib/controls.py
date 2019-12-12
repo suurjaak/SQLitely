@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    09.12.2019
+@modified    12.12.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -3045,6 +3045,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         elif event.KeyCode in [wx.WXK_BACK, wx.WXK_DELETE]:
             self._skip_autocomplete = True
             self.ShowDropDown()
+
         if visible:
             if selected_new is not None: # Replace textbox value with new text
                 self._ignore_textchange = True
@@ -3060,6 +3061,9 @@ class TextCtrlAutoComplete(wx.TextCtrl):
                 if self._value_last != self.Value:
                     self.Value = self._value_last
                     self.SelectAll()
+            elif event.ControlDown() and event.KeyCode in map(ord, "AH"):
+                # Avoid opening dropdown on Ctrl-A (select all) or Ctrl-H (backspace)
+                self._ignore_textchange = True
         if skip: event.Skip()
 
 
