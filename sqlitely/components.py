@@ -2750,9 +2750,7 @@ class SchemaObjectPage(wx.Panel):
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
 
-        check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
         check_rowid  = self._ctrls["without"]   = wx.CheckBox(panel, label="WITHOUT &ROWID")
-        check_temp.ToolTip   = "Table will exist only for the duration of the current session"
         check_rowid.ToolTip  = "Omit the default internal ROWID column. " \
                                "Table must have a non-autoincrement primary key. " \
                                "sqlite3_blob_open() will not work.\n\n" \
@@ -2764,8 +2762,6 @@ class SchemaObjectPage(wx.Panel):
         panel_columnwrapper = self._MakeColumnsGrid(nb)
         panel_constraintwrapper = self._MakeConstraintsGrid(nb)
 
-        sizer_flags.Add(check_temp)
-        sizer_flags.Add(100, 0)
         sizer_flags.Add(check_rowid)
 
         nb.AddPage(panel_columnwrapper, "Columns")
@@ -2775,7 +2771,6 @@ class SchemaObjectPage(wx.Panel):
         sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
         sizer.Add(nb, proportion=1, border=5, flag=wx.TOP | wx.GROW)
 
-        self._BindDataHandler(self._OnChange, check_temp,   ["temporary"])
         self._BindDataHandler(self._OnChange, check_rowid,  ["without"])
 
         return panel
@@ -2850,9 +2845,7 @@ class SchemaObjectPage(wx.Panel):
                              "INSTEAD OF triggers apply to views, enabling to execute " \
                              "INSERT, DELETE or UPDATE statements on the view."
 
-        check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
         check_for    = self._ctrls["for"]       = wx.CheckBox(panel, label="FOR EACH &ROW")
-        check_temp.ToolTip   = "Trigger will exist only for the duration of the current session"
         check_for.ToolTip    = "Not enforced by SQLite, all triggers are FOR EACH ROW by default"
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
@@ -2885,8 +2878,6 @@ class SchemaObjectPage(wx.Panel):
         sizer_table.Add(label_action, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_table.Add(list_action, flag=wx.GROW)
 
-        sizer_flags.Add(check_temp)
-        sizer_flags.Add(100, 0)
         sizer_flags.Add(check_for)
 
         sizer_body.Add(label_body, border=5, flag=wx.RIGHT)
@@ -2905,7 +2896,6 @@ class SchemaObjectPage(wx.Panel):
         self._BindDataHandler(self._OnChange, list_table,   ["table"])
         self._BindDataHandler(self._OnChange, list_upon,    ["upon"])
         self._BindDataHandler(self._OnChange, list_action,  ["action"])
-        self._BindDataHandler(self._OnChange, check_temp,   ["temporary"])
         self._BindDataHandler(self._OnChange, check_for,    ["for"])
         self._BindDataHandler(self._OnChange, stc_body,     ["body"])
         self._BindDataHandler(self._OnChange, stc_when,     ["when"])
@@ -2919,10 +2909,6 @@ class SchemaObjectPage(wx.Panel):
         """Returns control panel for CREATE VIEW page."""
         panel = wx.Panel(parent)
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_flags  = wx.BoxSizer(wx.HORIZONTAL)
-
-        check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
-        check_temp.ToolTip   = "View will exist only for the duration of the current session"
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
         panel1, panel2 = self._MakeColumnsGrid(splitter), wx.Panel(splitter)
@@ -2933,15 +2919,11 @@ class SchemaObjectPage(wx.Panel):
             traversable=True, size=(-1, 40), style=wx.BORDER_STATIC)
         label_body.ToolTip = "SELECT statement for view"
 
-        sizer_flags.Add(check_temp)
-
         panel2.Sizer.Add(label_body)
         panel2.Sizer.Add(stc_body, proportion=1, flag=wx.GROW)
 
-        sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
 
-        self._BindDataHandler(self._OnChange, check_temp,   ["temporary"])
         self._BindDataHandler(self._OnChange, stc_body,     ["select"])
 
         splitter.SetMinimumPaneSize(105)
@@ -3164,7 +3146,6 @@ class SchemaObjectPage(wx.Panel):
         """Populates panel with table-specific data."""
         meta = self._item.get("meta") or {}
 
-        self._ctrls["temporary"].Value = bool(meta.get("temporary"))
         self._ctrls["without"].Value   = bool(meta.get("without"))
 
         for i, grid in enumerate((self._grid_columns, self._grid_constraints)):
@@ -3239,7 +3220,6 @@ class SchemaObjectPage(wx.Panel):
             self._ctrls["table"].SetItems(self._tables)
 
         self._ctrls["table"].Value = meta.get("table") or ""
-        self._ctrls["temporary"].Value = bool(meta.get("temporary"))
         self._ctrls["for"].Value       = bool(meta.get("for"))
         self._ctrls["upon"].Value      = meta.get("upon") or ""
         self._ctrls["action"].Value    = meta.get("action") or ""
@@ -3275,7 +3255,6 @@ class SchemaObjectPage(wx.Panel):
         items = (meta.get("columns") if self._hasmeta
                  else self._item.get("columns")) or ()
 
-        self._ctrls["temporary"].Value = bool(meta.get("temporary"))
         self._ctrls["select"].SetText(meta.get("select") or "")
 
         self._EmptyControl(self._panel_columns)
@@ -3782,7 +3761,7 @@ class SchemaObjectPage(wx.Panel):
         colmap1 = {c["__id__"]: c for c in cols1}
         colmap2 = {c["__id__"]: c for c in cols2}
 
-        for k in "temporary", "without", "constraints":
+        for k in "without", "constraints":
             if bool(new.get(k)) != bool(old.get(k)):
                 can_simple = False # Top-level flag or constraints existence changed
         if can_simple:
