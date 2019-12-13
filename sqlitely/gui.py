@@ -526,8 +526,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             "Dump entire database as SQL")
         menu_tools_export.AppendSeparator()
         menu_tools_export_stats = self.menu_tools_export_stats = menu_tools_export.Append(
-            wx.ID_ANY, "Database &schema as HTML",
-            "Export database schema information as HTML")
+            wx.ID_ANY, "Database &statistics",
+            "Export database schema information and statistics")
 
         menu_help = wx.Menu()
         menu.Append(menu_help, "&Help")
@@ -628,12 +628,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.menu_edit_save.Enabled = self.menu_edit_cancel.Enabled = bool(changes)
         self.menu_view_folder.Enabled = not db.temporary
         self.menu_edit_drop.Enabled = any(db.schema.values())
-        label = "Database &schema and statistics as HTML"
-        help  = "Export database schema information and statistics as HTML"
-        if "data" not in page.statistics:
-            label = "Database &schema as HTML"
-            help  = "Export database schema information as HTML"
-        self.menu_tools_export_stats.ItemLabel, self.menu_tools_export_stats.Help = label, help
 
         EDITMENUS  = {"table":   self.menu_edit_table,   "index": self.menu_edit_index,
                       "trigger": self.menu_edit_trigger, "view": self.menu_edit_view}
@@ -2930,41 +2924,34 @@ class DatabasePage(wx.Panel):
         panel_stats.Sizer  = wx.BoxSizer(wx.VERTICAL)
         panel_schema.Sizer = wx.BoxSizer(wx.VERTICAL)
 
-        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR,
+        bmp1 = images.ToolbarRefresh.Bitmap
+        bmp2 = images.ToolbarStopped.Bitmap
+        bmp3 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR,
                                         (16, 16))
-        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR,
+        bmp4 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR,
                                         (16, 16))
-        bmp3 = wx.ArtProvider.GetBitmap(wx.ART_HARDDISK, wx.ART_TOOLBAR,
-                                        (16, 16))
-        bmp4 = images.ToolbarRefresh.Bitmap
-        bmp5 = images.ToolbarStopped.Bitmap
         tb_stats = self.tb_stats = wx.ToolBar(panel_stats,
                                       style=wx.TB_FLAT | wx.TB_NODIVIDER)
         tb_stats.SetToolBitmapSize(bmp1.Size)
-        tb_stats.AddTool(wx.ID_COPY,    "", bmp1, shortHelp="Copy statistics to clipboard as text")
-        tb_stats.AddTool(wx.ID_SAVE,    "", bmp2, shortHelp="Save statistics as HTML")
-        tb_stats.AddTool(wx.ID_SAVEAS,  "", bmp3, shortHelp="Save SQLite analyzer statistics output as SQL")
+        tb_stats.AddTool(wx.ID_REFRESH, "", bmp1, shortHelp="Refresh statistics")
+        tb_stats.AddTool(wx.ID_STOP,    "", bmp2, shortHelp="Stop statistics analysis")
         tb_stats.AddSeparator()
-        tb_stats.AddTool(wx.ID_REFRESH, "", bmp4, shortHelp="Refresh statistics")
-        tb_stats.AddTool(wx.ID_STOP,    "", bmp5, shortHelp="Stop statistics analysis")
+        tb_stats.AddTool(wx.ID_COPY,    "", bmp3, shortHelp="Copy statistics to clipboard as text")
+        tb_stats.AddTool(wx.ID_SAVE,    "", bmp4, shortHelp="Save statistics as HTML")
         tb_stats.Realize()
-        tb_stats.EnableTool(wx.ID_COPY, False)
-        tb_stats.EnableTool(wx.ID_SAVE, False)
-        tb_stats.EnableTool(wx.ID_SAVEAS, False)
-        tb_stats.Bind(wx.EVT_TOOL, self.on_copy_statistics,     id=wx.ID_COPY)
-        tb_stats.Bind(wx.EVT_TOOL, functools.partial(self.on_save_statistics, "html"), id=wx.ID_SAVE)
-        tb_stats.Bind(wx.EVT_TOOL, functools.partial(self.on_save_statistics, "sql"),  id=wx.ID_SAVEAS)
-        tb_stats.Bind(wx.EVT_TOOL, self.on_update_statistics,   id=wx.ID_REFRESH)
-        tb_stats.Bind(wx.EVT_TOOL, self.on_stop_statistics,     id=wx.ID_STOP)
+        tb_stats.Bind(wx.EVT_TOOL, self.on_update_statistics, id=wx.ID_REFRESH)
+        tb_stats.Bind(wx.EVT_TOOL, self.on_stop_statistics,   id=wx.ID_STOP)
+        tb_stats.Bind(wx.EVT_TOOL, self.on_copy_statistics,   id=wx.ID_COPY)
+        tb_stats.Bind(wx.EVT_TOOL, self.on_save_statistics,   id=wx.ID_SAVE)
 
         html_stats = self.html_stats = wx.html.HtmlWindow(panel_stats)
 
         tb_sql = self.tb_sql = wx.ToolBar(panel_schema,
                                       style=wx.TB_FLAT | wx.TB_NODIVIDER)
         tb_sql.SetToolBitmapSize(bmp1.Size)
-        tb_sql.AddTool(wx.ID_REFRESH, "", bmp4, shortHelp="Refresh schema SQL")
-        tb_sql.AddTool(wx.ID_COPY,    "", bmp1, shortHelp="Copy schema SQL to clipboard")
-        tb_sql.AddTool(wx.ID_SAVE,    "", bmp2, shortHelp="Save schema SQL to file")
+        tb_sql.AddTool(wx.ID_REFRESH, "", bmp1, shortHelp="Refresh schema SQL")
+        tb_sql.AddTool(wx.ID_COPY,    "", bmp3, shortHelp="Copy schema SQL to clipboard")
+        tb_sql.AddTool(wx.ID_SAVE,    "", bmp4, shortHelp="Save schema SQL to file")
         tb_sql.Realize()
         tb_sql.EnableTool(wx.ID_COPY, False)
         tb_sql.EnableTool(wx.ID_SAVE, False)
@@ -3161,7 +3148,7 @@ class DatabasePage(wx.Panel):
 
                 wx.MessageBox("No schema to save.", conf.Title, wx.ICON_NONE)
             elif "statistics" == arg:
-                if any(self.db.schema.values()): return self.on_save_statistics("html")
+                if any(self.db.schema.values()): return self.on_save_statistics()
                 wx.MessageBox("No statistics to save, database is empty.", conf.Title, wx.ICON_NONE)
             elif "dump" == arg:
                 self.notebook.SetSelection(self.pageorder[self.page_data])
@@ -3246,7 +3233,7 @@ class DatabasePage(wx.Panel):
             guibase.status("Copied database statistics to clipboard", flash=True)
 
 
-    def on_save_statistics(self, filetype, event=None):
+    def on_save_statistics(self, event=None):
         """
         Handler for saving database statistics to file, pops open file dialog
         and saves content.
@@ -3255,18 +3242,22 @@ class DatabasePage(wx.Panel):
         filename = filename.rstrip() + " statistics"
         dialog = wx.FileDialog(
             self, message="Save statistics as", defaultFile=filename,
-            wildcard="%s file (*.%s)|*.%s|All files|*.*" %
-                     (filetype.upper(), filetype, filetype),
+            wildcard="HTML file (*.html)|*.html|SQL file (*.sql)|*.sql|"
+                     "Text file (*.txt)|*.txt",
             style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
         filename = dialog.GetPath()
+        extname = ["html", "sql", "txt"][dialog.FilterIndex]
+        if not filename.lower().endswith(".%s" % extname):
+            filename += ".%s" % extname
+
         try:
-            importexport.export_stats(filename, self.db, self.statistics, filetype)
+            importexport.export_stats(filename, self.db, self.statistics)
             util.start_file(filename)
         except Exception as e:
-            msg = "Error saving statistics %s to %s." % (filetype.upper(), filename)
+            msg = "Error saving statistics %s to %s." % (extname.upper(), filename)
             logger.exception(msg); guibase.status(msg, flash=True)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
@@ -3281,11 +3272,7 @@ class DatabasePage(wx.Panel):
         self.html_stats.SetPage("")
         self.html_stats.BackgroundColour = conf.BgColour
         self.tb_stats.EnableTool(wx.ID_REFRESH, True)
-        self.tb_stats.EnableTool(wx.ID_COPY, False)
-        self.tb_stats.EnableTool(wx.ID_SAVE, False)
-        self.tb_stats.EnableTool(wx.ID_SAVEAS, False)
-        self.tb_stats.SetToolNormalBitmap(wx.ID_STOP,
-                                          images.ToolbarStopped.Bitmap)
+        self.tb_stats.SetToolNormalBitmap(wx.ID_STOP, images.ToolbarStopped.Bitmap)
 
 
     def on_analyzer_result(self, result):
@@ -3329,9 +3316,6 @@ class DatabasePage(wx.Panel):
                 self.html_stats.Scroll(*previous_scrollpos)
         finally: self.html_stats.Thaw()
         self.tb_stats.EnableTool(wx.ID_REFRESH, not self.worker_analyzer.is_working())
-        self.tb_stats.EnableTool(wx.ID_COPY,   "data" in self.statistics)
-        self.tb_stats.EnableTool(wx.ID_SAVE,   "data" in self.statistics)
-        self.tb_stats.EnableTool(wx.ID_SAVEAS, "data" in self.statistics)
         bmp = images.ToolbarStop.Bitmap if self.worker_analyzer.is_working() \
               else images.ToolbarStopped.Bitmap
         self.tb_stats.SetToolNormalBitmap(wx.ID_STOP, bmp)

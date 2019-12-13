@@ -274,10 +274,12 @@ def export_sql(filename, db, sql, title=None):
     return True
 
 
-def export_stats(filename, db, data, filetype="html"):
+def export_stats(filename, db, data):
     """Exports statistics to HTML or SQL file."""
+    filetype  = os.path.splitext(filename)[1][1:].lower()
     TPLARGS = {"html": (templates.DATA_STATISTICS_HTML, dict(escape=True, strip=False)),
-               "sql":  (templates.DATA_STATISTICS_SQL,  dict(strip=False))}
+               "sql":  (templates.DATA_STATISTICS_SQL,  dict(strip=False)),
+               "txt":  (templates.DATA_STATISTICS_TXT,  dict(strip=False))}
     template = step.Template(TPLARGS[filetype][0], **TPLARGS[filetype][1])
     ns = {
         "title":  "Database statistics",
