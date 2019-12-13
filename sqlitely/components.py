@@ -5595,7 +5595,7 @@ class ImportDialog(wx.Dialog):
         sizer_p2.Add(combo_table,  border=10, flag=wx.GROW)
         sizer_p2.Add(0, 0)
         sizer_p2.Add(button_table, border=5, flag=wx.TOP | wx.BOTTOM | wx.ALIGN_RIGHT)
-        sizer_p2.Add(0, 0)
+        sizer_p2.Add(0, button_table.Size[1] + 10)
 
         sizer_b1.Add(button_up1)
         sizer_b1.Add(button_down1)
@@ -5781,6 +5781,7 @@ class ImportDialog(wx.Dialog):
         self._combo_table.Enable(not fixed)
         self._button_table.Enable(not fixed and not self._has_new and bool(self._cols1)
                                   or bool(self._table.get("new")))
+        if fixed: self._button_table.Hide()
         self._UpdatePK()
         self._UpdateFooter()
         self._OnSize()
