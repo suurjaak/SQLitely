@@ -682,8 +682,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 refresh_idxs.append(idx)
                 if grammar.SQL.UPDATE in actions: reload_idxs.append(idx)
             # Save all newly inserted rows
-            pks = [{"name": y} for x in self.db.get_keys(self.name, True)[0]
-                   for y in x["name"]]
+            pks = [y for x in self.db.get_keys(self.name, True)[0] for y in x["name"]]
             col_map = dict((c["name"], c) for c in self.columns)
             for idx in self.idx_new[:]:
                 row = self.rows_all[idx]
