@@ -2948,7 +2948,7 @@ class SchemaObjectPage(wx.Panel):
         sizer_headers.Add(50, 0)
         if "table" == self._category:
             sizer_columnflags = wx.BoxSizer(wx.HORIZONTAL)
-            for l, t in [("P", grammar.SQL.PRIMARY_KEY), ("I", grammar.SQL.AUTOINCREMENT),
+            for l, t in [("P", grammar.SQL.PRIMARY_KEY), ("A", grammar.SQL.AUTOINCREMENT),
                          ("N", grammar.SQL.NOT_NULL),    ("U", grammar.SQL.UNIQUE)]:
                 label = wx.StaticText(panel, label=l, size=(14, -1))
                 label.ToolTip = t
