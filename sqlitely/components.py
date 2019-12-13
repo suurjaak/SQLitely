@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.12.2019
+@modified    13.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -2751,10 +2751,8 @@ class SchemaObjectPage(wx.Panel):
         sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
 
         check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
-        check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT EXISTS")
         check_rowid  = self._ctrls["without"]   = wx.CheckBox(panel, label="WITHOUT &ROWID")
         check_temp.ToolTip   = "Table will exist only for the duration of the current session"
-        check_exists.ToolTip = 'Include "IF NOT EXISTS" in the CREATE statement'
         check_rowid.ToolTip  = "Omit the default internal ROWID column. " \
                                "Table must have a non-autoincrement primary key. " \
                                "sqlite3_blob_open() will not work.\n\n" \
@@ -2768,8 +2766,6 @@ class SchemaObjectPage(wx.Panel):
 
         sizer_flags.Add(check_temp)
         sizer_flags.Add(100, 0)
-        sizer_flags.Add(check_exists)
-        sizer_flags.Add(100, 0)
         sizer_flags.Add(check_rowid)
 
         nb.AddPage(panel_columnwrapper, "Columns")
@@ -2780,7 +2776,6 @@ class SchemaObjectPage(wx.Panel):
         sizer.Add(nb, proportion=1, border=5, flag=wx.TOP | wx.GROW)
 
         self._BindDataHandler(self._OnChange, check_temp,   ["temporary"])
-        self._BindDataHandler(self._OnChange, check_exists, ["exists"])
         self._BindDataHandler(self._OnChange, check_rowid,  ["without"])
 
         return panel
@@ -2799,8 +2794,6 @@ class SchemaObjectPage(wx.Panel):
             style=wx.CB_DROPDOWN | wx.CB_READONLY)
 
         check_unique = self._ctrls["unique"] = wx.CheckBox(panel, label="&UNIQUE")
-        check_exists = self._ctrls["exists"] = wx.CheckBox(panel, label="IF NOT EXISTS")
-        check_exists.ToolTip = 'Include "IF NOT EXISTS" in the CREATE statement'
 
         panel_wrapper = self._MakeColumnsGrid(panel)
 
@@ -2818,8 +2811,6 @@ class SchemaObjectPage(wx.Panel):
         sizer_table.Add(list_table, flag=wx.GROW)
 
         sizer_flags.Add(check_unique)
-        sizer_flags.Add(100, 0)
-        sizer_flags.Add(check_exists)
 
         sizer_where.Add(label_where, border=5, flag=wx.RIGHT)
         sizer_where.Add(stc_where, proportion=1, flag=wx.GROW)
@@ -2831,7 +2822,6 @@ class SchemaObjectPage(wx.Panel):
 
         self._BindDataHandler(self._OnChange, list_table,   ["table"])
         self._BindDataHandler(self._OnChange, check_unique, ["unique"])
-        self._BindDataHandler(self._OnChange, check_exists, ["exists"])
         self._BindDataHandler(self._OnChange, stc_where,    ["where"])
 
         return panel
@@ -2861,10 +2851,8 @@ class SchemaObjectPage(wx.Panel):
                              "INSERT, DELETE or UPDATE statements on the view."
 
         check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
-        check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT EXISTS")
         check_for    = self._ctrls["for"]       = wx.CheckBox(panel, label="FOR EACH &ROW")
         check_temp.ToolTip   = "Trigger will exist only for the duration of the current session"
-        check_exists.ToolTip = 'Include "IF NOT EXISTS" in the CREATE statement'
         check_for.ToolTip    = "Not enforced by SQLite, all triggers are FOR EACH ROW by default"
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
@@ -2899,8 +2887,6 @@ class SchemaObjectPage(wx.Panel):
 
         sizer_flags.Add(check_temp)
         sizer_flags.Add(100, 0)
-        sizer_flags.Add(check_exists)
-        sizer_flags.Add(100, 0)
         sizer_flags.Add(check_for)
 
         sizer_body.Add(label_body, border=5, flag=wx.RIGHT)
@@ -2920,7 +2906,6 @@ class SchemaObjectPage(wx.Panel):
         self._BindDataHandler(self._OnChange, list_upon,    ["upon"])
         self._BindDataHandler(self._OnChange, list_action,  ["action"])
         self._BindDataHandler(self._OnChange, check_temp,   ["temporary"])
-        self._BindDataHandler(self._OnChange, check_exists, ["exists"])
         self._BindDataHandler(self._OnChange, check_for,    ["for"])
         self._BindDataHandler(self._OnChange, stc_body,     ["body"])
         self._BindDataHandler(self._OnChange, stc_when,     ["when"])
@@ -2937,9 +2922,7 @@ class SchemaObjectPage(wx.Panel):
         sizer_flags  = wx.BoxSizer(wx.HORIZONTAL)
 
         check_temp   = self._ctrls["temporary"] = wx.CheckBox(panel, label="TE&MPORARY")
-        check_exists = self._ctrls["exists"]    = wx.CheckBox(panel, label="IF NOT EXISTS")
         check_temp.ToolTip   = "View will exist only for the duration of the current session"
-        check_exists.ToolTip = 'Include "IF NOT EXISTS" in the CREATE statement'
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
         panel1, panel2 = self._MakeColumnsGrid(splitter), wx.Panel(splitter)
@@ -2951,8 +2934,6 @@ class SchemaObjectPage(wx.Panel):
         label_body.ToolTip = "SELECT statement for view"
 
         sizer_flags.Add(check_temp)
-        sizer_flags.Add(100, 0)
-        sizer_flags.Add(check_exists)
 
         panel2.Sizer.Add(label_body)
         panel2.Sizer.Add(stc_body, proportion=1, flag=wx.GROW)
@@ -2961,7 +2942,6 @@ class SchemaObjectPage(wx.Panel):
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
 
         self._BindDataHandler(self._OnChange, check_temp,   ["temporary"])
-        self._BindDataHandler(self._OnChange, check_exists, ["exists"])
         self._BindDataHandler(self._OnChange, stc_body,     ["select"])
 
         splitter.SetMinimumPaneSize(105)
@@ -3185,7 +3165,6 @@ class SchemaObjectPage(wx.Panel):
         meta = self._item.get("meta") or {}
 
         self._ctrls["temporary"].Value = bool(meta.get("temporary"))
-        self._ctrls["exists"].Value    = bool(meta.get("exists"))
         self._ctrls["without"].Value   = bool(meta.get("without"))
 
         for i, grid in enumerate((self._grid_columns, self._grid_constraints)):
@@ -3225,7 +3204,6 @@ class SchemaObjectPage(wx.Panel):
         self._ctrls["table"].Value = meta.get("table") or ""
 
         self._ctrls["unique"].Value = bool(meta.get("unique"))
-        self._ctrls["exists"].Value = bool(meta.get("exists"))
         self._ctrls["where"].SetText(meta.get("where") or "")
         items = (meta.get("columns") if self._hasmeta \
                  else self._item.get("columns")) or ()
@@ -3262,7 +3240,6 @@ class SchemaObjectPage(wx.Panel):
 
         self._ctrls["table"].Value = meta.get("table") or ""
         self._ctrls["temporary"].Value = bool(meta.get("temporary"))
-        self._ctrls["exists"].Value    = bool(meta.get("exists"))
         self._ctrls["for"].Value       = bool(meta.get("for"))
         self._ctrls["upon"].Value      = meta.get("upon") or ""
         self._ctrls["action"].Value    = meta.get("action") or ""
@@ -3299,7 +3276,6 @@ class SchemaObjectPage(wx.Panel):
                  else self._item.get("columns")) or ()
 
         self._ctrls["temporary"].Value = bool(meta.get("temporary"))
-        self._ctrls["exists"].Value = bool(meta.get("exists"))
         self._ctrls["select"].SetText(meta.get("select") or "")
 
         self._EmptyControl(self._panel_columns)
@@ -3806,7 +3782,7 @@ class SchemaObjectPage(wx.Panel):
         colmap1 = {c["__id__"]: c for c in cols1}
         colmap2 = {c["__id__"]: c for c in cols2}
 
-        for k in "temporary", "exists", "without", "constraints":
+        for k in "temporary", "without", "constraints":
             if bool(new.get(k)) != bool(old.get(k)):
                 can_simple = False # Top-level flag or constraints existence changed
         if can_simple:
