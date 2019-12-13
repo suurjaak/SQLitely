@@ -3012,10 +3012,19 @@ class SchemaObjectPage(wx.Panel):
         button_move_down.ToolTip  = "Move column one step lower"
         button_remove_col.ToolTip = "Drop column"
         button_add_column._toggle = "show"
-        if "index" == self._category:
+        if "table" == self._category:
+            button_add_column.ToolTip = "Add new column to table"
+        elif "index" == self._category:
             button_add_column._toggle = button_add_expr._toggle = lambda: (
                 "disable" if self._hasmeta and not self._item["meta"].get("table") else "show"
             )
+            button_add_column.ToolTip = "Add column to index"
+        elif "trigger" == self._category:
+            button_add_column.ToolTip = \
+                "Add specific column on UPDATE of which to trigger"
+        elif "view" == self._category:
+            button_add_column.ToolTip = \
+                "Add named column, to not derive names from SELECT results"
         button_move_up._toggle    = lambda: "show disable" if not grid.NumberRows or grid.GridCursorRow <= 0 else "show"
         button_move_down._toggle  = lambda: "show disable" if not grid.NumberRows or grid.GridCursorRow == grid.NumberRows - 1 else "show"
         button_remove_col._toggle = lambda: "show disable" if not grid.NumberRows else "show"
