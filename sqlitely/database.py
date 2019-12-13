@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.12.2019
+@modified    13.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1171,7 +1171,6 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if not opts.get("meta") or kws or indent != "  ":
                     sql, err = grammar.transform(sql, indent=indent, **kws)
                     if err and kws: raise Exception(err)
-                    sql = opts["sql"]
                 sqls.setdefault(category, []).append(sql)
 
         return "\n\n".join("\n\n".join(v + ";" for v in vv) for vv in sqls.values())

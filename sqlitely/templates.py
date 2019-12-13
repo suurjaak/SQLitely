@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.12.2019
+@modified    13.12.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -390,7 +390,7 @@ from sqlitely import conf, templates
 %endif
 %if isdef("create_sql") and create_sql:
 
-{{ create_sql }};
+{{ create_sql.rstrip(";") }};
 %endif
 
 
