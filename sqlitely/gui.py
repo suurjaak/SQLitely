@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.12.2019
+@modified    13.12.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -144,9 +144,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self, message="Choose a directory where to search for databases",
             defaultPath=os.getcwd(),
             style=wx.DD_DIR_MUST_EXIST | wx.RESIZE_BORDER)
-        self.dialog_savefile = wx.FileDialog(
-            self, defaultDir=os.getcwd(), defaultFile="",
-            style=wx.FD_SAVE | wx.RESIZE_BORDER)
+        self.dialog_savefile = wx.FileDialog(self, defaultDir=os.getcwd(),
+                                             style=wx.FD_SAVE | wx.RESIZE_BORDER)
 
         # Memory file system for showing images in wx.HtmlWindow
         self.memoryfs = {"files": {}, "handler": wx.MemoryFSHandler()}
@@ -1720,8 +1719,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         exts = ";".join("*" + x for x in conf.DBExtensions)
         wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
-        dialog = wx.FileDialog(
-            self, message="Open", defaultFile="", wildcard=wildcard,
+        dialog = wx.FileDialog(self, message="Open", wildcard=wildcard,
             style=wx.FD_FILE_MUST_EXIST | wx.FD_MULTIPLE | wx.FD_OPEN | wx.RESIZE_BORDER
         )
         if wx.ID_OK == dialog.ShowModal():
@@ -2327,8 +2325,9 @@ class DatabasePage(wx.Panel):
         sizer.Add(notebook, proportion=1, border=5, flag=wx.GROW | wx.ALL)
 
         self.dialog_savefile = wx.FileDialog(
-            self, defaultDir=os.getcwd(), defaultFile="",
+            self, defaultDir=os.getcwd(), wildcard=importexport.EXPORT_WILDCARD,
             style=wx.FD_SAVE | wx.RESIZE_BORDER)
+        self.dialog_savefile.SetFilterIndex(importexport.EXPORT_EXTS.index("html"))
 
         self.Layout()
         # Hack to get info-page multiline TextCtrls to layout without quirks.
@@ -3625,14 +3624,14 @@ class DatabasePage(wx.Panel):
 
             directory, filename = os.path.split(self.db.filename)
             base = os.path.splitext(filename)[0]
-            self.dialog_savefile.Directory = directory
-            self.dialog_savefile.Filename = "%s (recovered)" % base
-            self.dialog_savefile.Message = "Save recovered data as"
-            self.dialog_savefile.Wildcard = "SQLite database (*.db)|*.db"
-            self.dialog_savefile.WindowStyle |= wx.FD_OVERWRITE_PROMPT
-            if wx.ID_OK != self.dialog_savefile.ShowModal(): return
 
-            newfile = self.dialog_savefile.GetPath()
+            dlg = wx.FileDialog(self, message="Save recovered data as",
+                defaultDir=directory, defaultFile="%s (recovered)" % base,
+                wildcard="SQLite database (*.db)|*.db",
+                style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER)
+            if wx.ID_OK != dlg.ShowModal(): return
+
+            newfile = dlg.GetPath()
             if newfile[-3:].lower() != ".db": newfile += ".db"
             if newfile == self.db.filename:
                 wx.MessageBox("Cannot recover data from %s to itself."
@@ -4830,7 +4829,6 @@ class DatabasePage(wx.Panel):
             self.dialog_savefile.Filename = "Filename will be ignored"
             self.dialog_savefile.Message = "Choose directory where to save files"
             self.dialog_savefile.WindowStyle ^= wx.FD_OVERWRITE_PROMPT
-        self.dialog_savefile.Wildcard = importexport.EXPORT_WILDCARD
         if wx.ID_OK != self.dialog_savefile.ShowModal(): return
 
         wx.YieldIfNeeded() # Allow dialog to disappear
@@ -4902,8 +4900,7 @@ class DatabasePage(wx.Panel):
         wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
         dialog = wx.FileDialog(
             self, message="Select existing or new database to export to",
-            defaultFile="", wildcard=wildcard,
-            style=wx.FD_OPEN | wx.RESIZE_BORDER
+            wildcard=wildcard, style=wx.FD_OPEN | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 

@@ -1418,6 +1418,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             message="Save query as", wildcard=importexport.EXPORT_WILDCARD,
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
         )
+        self._dialog_export.SetFilterIndex(importexport.EXPORT_EXTS.index("html"))
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -1940,6 +1941,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             wildcard=importexport.EXPORT_WILDCARD,
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
         )
+        self._dialog_export.SetFilterIndex(importexport.EXPORT_EXTS.index("html"))
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_header       = wx.BoxSizer(wx.HORIZONTAL)

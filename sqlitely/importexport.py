@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.11.2019
+@modified    13.12.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -62,13 +62,13 @@ IMPORT_WILDCARD = "All supported formats (%s)|%s|%s%s"\
 XLSX_WILDCARD = "Excel workbook (*.xlsx)|*.xlsx|" if xlsxwriter else ""
 
 """Wildcards for export file dialog."""
-EXPORT_WILDCARD = ("HTML document (*.html)|*.html|"
+EXPORT_WILDCARD = ("CSV spreadsheet (*.csv)|*.csv|%s"
+                   "HTML document (*.html)|*.html|"
                    "JSON data (*.json)|*.json|"
-                   "Text document (*.txt)|*.txt|"
                    "SQL INSERT statements (*.sql)|*.sql|"
-                   "%sCSV spreadsheet (*.csv)|*.csv" % XLSX_WILDCARD)
-EXPORT_EXTS = ["html", "json", "txt", "sql", "xlsx", "csv"] if xlsxwriter \
-               else ["html", "json", "txt", "sql", "csv"]
+                   "Text document (*.txt)|*.txt" % XLSX_WILDCARD)
+EXPORT_EXTS = ["csv", "xlsx", "html", "json", "sql", "txt"] if xlsxwriter \
+               else ["csv", "html", "json", "sql", "txt"]
 
 """Maximum file size to do full row count for."""
 MAX_IMPORT_FILESIZE_FOR_COUNT = 10 * 1e6
