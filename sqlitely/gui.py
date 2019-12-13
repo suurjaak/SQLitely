@@ -3202,12 +3202,13 @@ class DatabasePage(wx.Panel):
         self.tb_sql.EnableTool(wx.ID_SAVE, False)
 
         self.db.populate_schema(parse=True)
+        sql = self.db.get_sql()
         self.stc_schema.SetReadOnly(False)
-        self.stc_schema.SetText(self.db.get_sql())
+        self.stc_schema.SetText(sql)
         self.stc_schema.SetReadOnly(True)
         self.stc_schema.ScrollToLine(scrollpos)
-        self.tb_sql.EnableTool(wx.ID_COPY, True)
-        self.tb_sql.EnableTool(wx.ID_SAVE, True)
+        self.tb_sql.EnableTool(wx.ID_COPY, bool(sql))
+        self.tb_sql.EnableTool(wx.ID_SAVE, bool(sql))
 
 
     def on_update_statistics(self, event=None):
