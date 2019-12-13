@@ -2947,15 +2947,17 @@ class SchemaObjectPage(wx.Panel):
         sizer_headers.Add(50, 0)
         if "table" == self._category:
             sizer_columnflags = wx.BoxSizer(wx.HORIZONTAL)
-            for l, t in [("P", grammar.SQL.PRIMARY_KEY), ("A", grammar.SQL.AUTOINCREMENT),
-                         ("N", grammar.SQL.NOT_NULL),    ("U", grammar.SQL.UNIQUE)]:
-                label = wx.StaticText(panel, label=l, size=(14, -1))
+            for l, t in [(u"\u1d18\u1d0b", grammar.SQL.PRIMARY_KEY),   # Unicode small caps "PK"
+                         (u"\u1d00\u026a", grammar.SQL.AUTOINCREMENT), # Unicode small caps "AI"
+                         (u"\u0274\u0274", grammar.SQL.NOT_NULL),      # Unicode small caps "NN"
+                         (u"\u1d1c",       grammar.SQL.UNIQUE)]:       # Unicode small caps "U"
+                label = wx.StaticText(panel, label=l, size=(13, -1), style=wx.ALIGN_CENTER_HORIZONTAL)
                 label.ToolTip = t
                 sizer_columnflags.Add(label)
 
             sizer_headers.Add(wx.StaticText(panel, label="Name",    size=(150, -1)), border=7, flag=wx.LEFT)
             sizer_headers.Add(wx.StaticText(panel, label="Type",    size=(100, -1)))
-            sizer_headers.Add(wx.StaticText(panel, label="Default", size=(100, -1)))
+            sizer_headers.Add(wx.StaticText(panel, label="Default", size=( 99, -1)))
             sizer_headers.Add(sizer_columnflags, border=5, flag=wx.LEFT | wx.RIGHT)
             sizer_headers.Add(wx.StaticText(panel, label="Options", size=(50, -1)))
             sizer_headers.GetItem(3).Window.ToolTip = \
