@@ -2273,6 +2273,7 @@ class DatabasePage(wx.Panel):
         edit_search = self.edit_searchall = controls.TextCtrlAutoComplete(
             self, description=conf.SearchDescription,
             size=(300, -1), style=wx.TE_PROCESS_ENTER)
+        edit_search.ToolTip = self.label_search.ToolTip.Tip
         self.Bind(wx.EVT_TEXT_ENTER, self.on_searchall, edit_search)
         tb = self.tb_search = wx.ToolBar(self, style=wx.TB_FLAT | wx.TB_NODIVIDER)
 
@@ -3945,11 +3946,13 @@ class DatabasePage(wx.Panel):
             conf.SearchInData = False
             self.label_search.Label = "&Search in metadata:"
             self.label_search.ToolTip = "Search in database CREATE SQL"
+            self.edit_searchall.ToolTip = self.label_search.ToolTip.Tip
         elif wx.ID_STATIC == event.Id:
             conf.SearchInData = True
             conf.SearchInMeta = False
             self.label_search.Label = "&Search in data:"
             self.label_search.ToolTip = "Search in all columns of all database tables and views"
+            self.edit_searchall.ToolTip = self.label_search.ToolTip.Tip
         self.label_search.ContainingSizer.Layout()
         if wx.ID_NEW == event.Id:
             conf.SearchUseNewTab = event.EventObject.GetToolState(event.Id)
