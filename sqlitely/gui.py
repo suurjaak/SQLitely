@@ -2937,7 +2937,7 @@ class DatabasePage(wx.Panel):
         tb_stats.AddTool(wx.ID_STOP,    "", bmp2, shortHelp="Stop statistics analysis")
         tb_stats.AddSeparator()
         tb_stats.AddTool(wx.ID_COPY,    "", bmp3, shortHelp="Copy statistics to clipboard as text")
-        tb_stats.AddTool(wx.ID_SAVE,    "", bmp4, shortHelp="Save statistics as HTML")
+        tb_stats.AddTool(wx.ID_SAVE,    "", bmp4, shortHelp="Save statistics to file")
         tb_stats.Realize()
         tb_stats.Bind(wx.EVT_TOOL, self.on_update_statistics, id=wx.ID_REFRESH)
         tb_stats.Bind(wx.EVT_TOOL, self.on_stop_statistics,   id=wx.ID_STOP)
@@ -3225,10 +3225,8 @@ class DatabasePage(wx.Panel):
     def on_copy_statistics(self, event=None):
         """Handler for copying database statistics to clipboard."""
         if wx.TheClipboard.Open():
-            ns = {"db_filename": self.db.name,
-                  "db_filesize": self.statistics["data"]["filesize"]}
             template = step.Template(templates.DATA_STATISTICS_TXT, strip=False)
-            content = template.expand(ns, **self.statistics)
+            content = template.expand(db=self.db, stats=self.statistics.get("data", {}))
             d = wx.TextDataObject(content)
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
             guibase.status("Copied database statistics to clipboard", flash=True)

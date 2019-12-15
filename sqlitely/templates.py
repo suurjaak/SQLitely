@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.12.2019
+@modified    15.12.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -514,9 +514,9 @@ TXT data export template for the rows part.
 
 @param   rows          iterable
 @param   columns       [name, ]
-@param   namespace     {"row_count"}
 @param   columnjusts   {col name: ljust or rjust}
 @param   columnwidths  {col name: character width}
+@param   ?namespace    {"row_count"}
 @param   ?progress     callback(count) returning whether to cancel, if any
 """
 DATA_ROWS_TXT = """<%
@@ -526,7 +526,7 @@ from sqlitely import templates
 %for i, row in enumerate(rows, 1):
 <%
 values = []
-namespace["row_count"] += 1
+if isdef("namespace"): namespace["row_count"] += 1
 %>
     %for col in columns:
 <%
@@ -1854,27 +1854,62 @@ if text_cell2 and percent:
 
 
 """
-Database statistics text.
+Text statistics export template.
 
-@param   db_filename  database filename
-@param   db_filesize  database size in bytes
-@param   data         {"table": [{name, size, size_total, ?size_index, ?index: []}],
+@param   db           database.Database instance
+@param   ?stats       {"table": [{name, size, size_total, ?size_index, ?index: []}],
                        "index": [{name, size, table}]}
 """
 DATA_STATISTICS_TXT = """<%
+import math
 from sqlitely.lib.vendor.step import Template
 from sqlitely.lib import util
-from sqlitely import templates
+from sqlitely import grammar, templates
 
-index_total = sum(x["size"] for x in data["index"])
-table_total = sum(x["size"] for x in data["table"])
-total = index_total + sum(x["size"] for x in data["table"])
+COLS = {"table":   ["Name", "Columns", "Related tables", "Other relations", "Rows", "Size in bytes"]
+                   if stats else ["Name", "Columns", "Related tables", "Other relations", "Rows"],
+        "index":   ["Name", "Table", "Columns", "Size in bytes"] if stats else ["Name", "Table", "Columns"],
+        "trigger": ["Name", "Owner", "When", "Uses"],
+        "view":    ["Name", "Columns", "Uses", "Used by"], }
+fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(grammar.quote, x))
+
+index_total = sum(x["size"] for x in stats["index"]) if stats else None
+table_total = sum(x["size"] for x in stats["table"]) if stats else None
+total = (index_total + sum(x["size"] for x in stats["table"])) if stats else None
+rows_total, rows_pref = sum(x.get("count") or 0 for x in db.schema.get("table", {}).values()), ""
+if rows_total and any(x.get("is_count_estimated") for x in db.schema["table"].values()):
+    rows_total, rows_pref = int(math.ceil(rows_total / 100.) * 100), "~"
+
+tblstext = idxstext = othrtext = ""
+if db.schema.get("table"):
+    tblstext = util.plural("table", db.schema["table"]) + (", " if stats else "" if rows_total else ".")
+    if stats:
+        tblstext += util.format_bytes(table_total) + ("" if rows_total else ".")
+    if rows_total:
+        tblstext += " (%s%s)." % (rows_pref, util.plural("row", rows_total, sep=","))
+if db.schema.get("index"):
+    idxstext = util.plural("index", db.schema["index"]) + (", " if stats else ".")
+    if stats: idxstext += util.format_bytes(index_total)
+if db.schema.get("trigger"):
+      othrtext = util.plural("trigger", db.schema["trigger"]) + (", " if db.schema.get("view") else ".")
+if db.schema.get("view"):
+      othrtext += util.plural("view", db.schema["view"]) + "."
 %>
-Source: {{ db_filename }}.
-Size: {{ util.format_bytes(db_filesize) }} ({{ util.format_bytes(db_filesize, max_units=False) }}).
+Source: {{ db.name }}.
+Size: {{ util.format_bytes(db.filesize) }} ({{ util.format_bytes(db.filesize, max_units=False) }}).
+%if tblstext:
+{{ tblstext }}
+%endif
+%if idxstext:
+{{ idxstext }}
+%endif
+%if othrtext:
+{{ othrtext }}
+%endif
 
+%if stats:
 <%
-items = sorted(data["table"], key=lambda x: (-x["size"], x["name"].lower()))
+items = sorted(stats["table"], key=lambda x: (-x["size"], x["name"].lower()))
 cols = ["Name", "Size", "Bytes"]
 vals = {x["name"]: (
     x["name"],
@@ -1884,10 +1919,10 @@ vals = {x["name"]: (
 justs  = {0: 1, 1: 0, 2: 0}
 %>
 {{! Template(templates.DATA_STATISTICS_TABLE_TXT, strip=False).expand(dict(title="Table sizes", items=items, sizecol="size", cols=cols, vals=vals, justs=justs, total=total)) }}
-%if data["index"]:
+    %if stats["index"]:
 <%
 
-items = sorted(data["table"], key=lambda x: (-x["size_total"], x["name"].lower()))
+items = sorted(stats["table"], key=lambda x: (-x["size_total"], x["name"].lower()))
 cols = ["Name", "Size", "Bytes"]
 vals = {x["name"]: (
     x["name"],
@@ -1900,7 +1935,7 @@ justs  = {0: 1, 1: 0, 2: 0}
 {{! Template(templates.DATA_STATISTICS_TABLE_TXT, strip=False).expand(dict(title="Table sizes with indexes", items=items, sizecol="size_total", cols=cols, vals=vals, justs=justs, total=total)) }}
 <%
 
-items = sorted([x for x in data["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower()))
+items = sorted([x for x in stats["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower()))
 cols = ["Name", "Size", "Bytes", "Proportion"]
 vals = {x["name"]: (
     "%s (%s)" % (x["name"], len(x["index"])),
@@ -1914,7 +1949,7 @@ justs  = {0: 1, 1: 0, 2: 0, 3: 0}
 {{! Template(templates.DATA_STATISTICS_TABLE_TXT, strip=False).expand(dict(title="Table index sizes", items=items, sizecol="size_index", cols=cols, vals=vals, justs=justs, total=total)) }}
 <%
 
-items = sorted(data["index"], key=lambda x: (-x["size"], x["name"].lower()))
+items = sorted(stats["index"], key=lambda x: (-x["size"], x["name"].lower()))
 cols = ["Name", "Table", "Size", "Bytes", "Proportion"]
 vals = {x["name"]: (
     x["name"],
@@ -1927,7 +1962,135 @@ justs  = {0: 1, 1: 1, 2: 0, 3: 0, 4: 0}
 %>
 
 {{! Template(templates.DATA_STATISTICS_TABLE_TXT, strip=False).expand(dict(title="Index sizes", items=items, sizecol="size", cols=cols, vals=vals, justs=justs, total=total)) }}
+    %endif
 %endif
+%for category in filter(db.schema.get, db.CATEGORIES):
+
+{{ util.plural(category).capitalize() }}
+<%
+columns = COLS[category]
+rows    = []
+
+for item in db.schema.get(category).values():
+    flags = {}
+    relateds = db.get_related(category, item["name"])
+    lks, fks = db.get_keys(item["name"]) if "table" == category else [(), ()]
+
+    row = {"Name": item["name"]}
+    if "table" == category:
+        row["Columns"] = str(len(item["columns"]))
+
+        count, pref = item["count"], ""
+        if item.get("is_count_estimated"):
+            count, pref = int(math.ceil(count / 100.) * 100), "~"
+        row["Rows"] = countstr = "{1}{0:,}".format(count, pref)
+
+        if stats:
+            size = next((x["size_total"] for x in stats["table"] if util.lceq(x["name"], item["name"])), "")
+            row["Size in bytes"] = util.format_bytes(size, max_units=False, with_units=False) if size != "" else ""
+
+        rels = [] # [(source, keys, target, keys)]
+        for item2 in relateds.get("table", ()):
+            lks2, fks2 = db.get_keys(item2["name"])
+            for col in lks2:
+                for table, keys in col.get("table", {}).items():
+                    if util.lceq(table, item["name"]):
+                        rels.append((None, keys, item2["name"], col["name"]))
+            for col in fks2:
+                for table, keys in col.get("table", {}).items():
+                    if util.lceq(table, item["name"]):
+                        rels.append((item2["name"], col["name"], None, keys))
+        reltexts = []
+        for (a, c1, b, c2) in rels:
+            if a: s = "%s.%s REFERENCES %s" % (grammar.quote(a), fmtkeys(c1), fmtkeys(c2))
+            else: s = "%s REFERENCES %s.%s" % (fmtkeys(c1), grammar.quote(b), fmtkeys(c2))
+            reltexts.append(s)
+        row["Related tables"] = reltexts or [""]
+
+        othertexts = []
+        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+            if "table" != item2["type"] and util.lceq(item2.get("tbl_name"), item["name"]):
+                flags["has_direct"] = True
+                s = "%s %s" % (item2["type"], grammar.quote(item2["name"]))
+                othertexts.append(s)
+        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+            if "table" != item2["type"] and not util.lceq(item2.get("tbl_name"), item["name"]):
+                if flags.get("has_direct") and not flags.get("has_indirect"):
+                    flags["has_indirect"] = True
+                    s = "%s %s" % (item2["type"], grammar.quote(item2["name"]))
+                    othertexts.append(s)
+        row["Other relations"] = othertexts or [""]
+
+    elif "index" == category:
+        row["Table"] = item["tbl_name"]
+        row["Columns"] = [c.get("expr", c.get("name")) for c in item["columns"]]
+        if stats and stats.get("index"):
+            size = next((x["size"] for x in stats["index"] if util.lceq(x["name"], item["name"])), "")
+            row["Size in bytes"] = util.format_bytes(size, max_units=False, with_units=False) if size != "" else ""
+
+    elif "trigger" == category:
+        row["Owner"] = ("table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "view") + " " + grammar.quote(item["tbl_name"])
+        row["When"] = "%s %s" % (item.get("meta", {}).get("upon"), item.get("meta", {}).get("action"))
+        if item.get("meta", {}).get("columns"):
+            row["When"] += " OF " + ", ".join(grammar.quote(c["name"]) for c in item["meta"]["columns"])
+        usetexts = []
+        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+            if not util.lceq(item2["name"], item["tbl_name"]):
+                usetexts.append("%s %s" % (item2["type"], grammar.quote(item2["name"])))
+        row["Uses"] = usetexts or [""]
+
+    elif "view" == category:
+        row["Columns"] = str(len(item["columns"]))
+
+        usetexts = []
+        for item2 in (x for c in ("table", "view") for x in relateds.get(c, ()) if x["name"].lower() in item["meta"]["__tables__"]):
+            usetexts.append("%s %s" % (item2["type"], grammar.quote(item2["name"])))
+        for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, ()) if util.lceq(x.get("tbl_name"), item["name"])):
+            if not i:
+                usetexts.append("")
+                usetexts.append("%s %s" % (item2["type"], grammar.quote(item2["name"])))
+        row["Uses"] = usetexts or [""]
+
+        usedbytexts = []
+        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ()) if item["name"].lower() in x["meta"]["__tables__"]):
+            usedbytexts.append("%s %s" % (item2["type"], grammar.quote(item2["name"])))
+        row["Used by"] = usedbytexts or [""]
+
+    rows.append(row)
+
+justs = {c: True for c in columns}
+if "table" == category:
+    justs.update({"Columns": False, "Rows": False, "Size in bytes": False})
+elif "index" == category:
+    justs.update({"Columns": False, "Size in bytes": False})
+elif "view" == category:
+    justs.update({"Columns": False})
+widths = {c: max(len(c), max(len(x) for r in rows for x in util.tuplefy(r[c]))) for c in columns}
+
+headers = []
+for c in columns:
+    headers.append((c.ljust if widths[c] else c.rjust)(widths[c]))
+hr = "|-" + "-|-".join("".ljust(widths[c], "-") for c in columns) + "-|"
+header = "| " + " | ".join(headers) + " |"
+%>
+
+{{ hr }}
+{{ header }}
+{{ hr }}
+    %for row in rows:
+<%
+linecount = max(len(row[c]) if isinstance(row[c], list) else 1 for c in columns)
+subrows = [[] for _ in range(linecount)]
+for i, c in enumerate(columns):
+    for j, v in enumerate(util.tuplefy(row[c]) + ("", ) * (linecount - len(util.tuplefy(row[c])))):
+        subrows[j].append((v.ljust if justs[c] else v.rjust)(widths[c]))
+%>
+        %for subrow in subrows:
+| {{ " | ".join(subrow) }} |
+        %endfor
+{{ hr }}
+    %endfor
+%endfor
 """
 
 
