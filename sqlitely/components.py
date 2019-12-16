@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.12.2019
+@modified    16.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -4002,7 +4002,9 @@ class SchemaObjectPage(wx.Panel):
         if "columns" == path[0]: return [
             {"name": "name",    "label": "Name"},
             {"name": "type",    "label": "Type", "choices": self._types, "choicesedit": True},
-            {"name": "default", "label": "Default", "component": controls.SQLiteTextCtrl},
+            {"name": "default", "label": "Default", "component": controls.SQLiteTextCtrl,
+             "help": "String or numeric constant, NULL, CURRENT_TIME, CURRENT_DATE, "
+                     "CURRENT_TIMESTAMP, or (constant expression)"},
             {"name": "pk", "label": "PRIMARY KEY", "toggle": True, "link": toggle_pk, "children": [
                 {"name": "autoincrement", "label": "AUTOINCREMENT", "type": bool},
                 {"name": "order", "label": "Order", "toggle": True, "choices": self.ORDER,
@@ -4032,7 +4034,7 @@ class SchemaObjectPage(wx.Panel):
             {"name": "check",   "label": "CHECK",   "toggle": True, "component": controls.SQLiteTextCtrl,
              "help": "Expression yielding a NUMERIC 0 on constraint violation,\ncannot contain a subquery."},
             {"name": "collate", "label": "COLLATE", "toggle": True, "choices": self.COLLATE, "choicesedit": True,
-             "help": "Collating sequence to use for the column (defaults to BINARY)."},
+             "help": "Ordering sequence to use for text values (defaults to BINARY)."},
         ]
 
         if grammar.SQL.FOREIGN_KEY == data["type"]: return [

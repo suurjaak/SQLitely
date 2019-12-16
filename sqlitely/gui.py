@@ -443,7 +443,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_view_folder = self.menu_view_folder = menu_view.Append(wx.ID_ANY,
             "Show in &folder", "Open database file directory")
         menu_view_locks = self.menu_view_locks = menu_view.Append(
-            wx.ID_ANY, "Current &locks", "Show all current database locks")
+            wx.ID_ANY, "Current &locks", "Show all current database locks (for pending changes, ongoing exports, statistics etc)")
         menu_view_changes = self.menu_view_changes = menu_view.Append(
             wx.ID_ANY, "&Unsaved changes", "Show unsaved changes")
         menu_view_history = self.menu_view_history = menu_view.Append(
