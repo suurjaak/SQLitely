@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.12.2019
+@modified    17.12.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2322,7 +2322,6 @@ class DatabasePage(wx.Panel):
         self.dialog_savefile = wx.FileDialog(
             self, defaultDir=os.getcwd(), wildcard=importexport.EXPORT_WILDCARD,
             style=wx.FD_SAVE | wx.RESIZE_BORDER)
-        self.dialog_savefile.SetFilterIndex(importexport.EXPORT_EXTS.index("html"))
 
         self.Layout()
         # Hack to get info-page multiline TextCtrls to layout without quirks.
@@ -4806,6 +4805,8 @@ class DatabasePage(wx.Panel):
         and performs export.
         """
         items = [item] if isinstance(item, basestring) else item
+        if conf.LastExportType in importexport.EXPORT_EXTS:
+            self.dialog_savefile.SetFilterIndex(importexport.EXPORT_EXTS.index(conf.LastExportType))
         if len(items) == 1:
             filename = "%s %s" % (category.capitalize(), items[0])
             self.dialog_savefile.Filename = util.safe_filename(filename)
@@ -4819,6 +4820,7 @@ class DatabasePage(wx.Panel):
 
         wx.YieldIfNeeded() # Allow dialog to disappear
         extname = importexport.EXPORT_EXTS[self.dialog_savefile.FilterIndex]
+        conf.LastExportType = extname
         path = self.dialog_savefile.GetPath()
         filenames = [path]
         if len(items) > 1:

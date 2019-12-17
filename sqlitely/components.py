@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.12.2019
+@modified    17.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -1417,7 +1417,6 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             message="Save query as", wildcard=importexport.EXPORT_WILDCARD,
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
         )
-        self._dialog_export.SetFilterIndex(importexport.EXPORT_EXTS.index("html"))
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -1733,10 +1732,13 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         title = "SQL query"
         self._dialog_export.Filename = util.safe_filename(title)
+        if conf.LastExportType in importexport.EXPORT_EXTS:
+            self._dialog_export.SetFilterIndex(importexport.EXPORT_EXTS.index(conf.LastExportType))
         if wx.ID_OK != self._dialog_export.ShowModal(): return
 
         filename = self._dialog_export.GetPath()
         extname = importexport.EXPORT_EXTS[self._dialog_export.FilterIndex]
+        conf.LastExportType = extname
         if not filename.lower().endswith(".%s" % extname):
             filename += ".%s" % extname
         try:
@@ -1940,7 +1942,6 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             wildcard=importexport.EXPORT_WILDCARD,
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
         )
-        self._dialog_export.SetFilterIndex(importexport.EXPORT_EXTS.index("html"))
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_header       = wx.BoxSizer(wx.HORIZONTAL)
@@ -2292,10 +2293,13 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         title = "%s %s" % (self._category.capitalize(),
                            grammar.quote(self._item["name"], force=True))
         self._dialog_export.Filename = util.safe_filename(title)
+        if conf.LastExportType in importexport.EXPORT_EXTS:
+            self._dialog_export.SetFilterIndex(importexport.EXPORT_EXTS.index(conf.LastExportType))
         if wx.ID_OK != self._dialog_export.ShowModal(): return
 
         filename = self._dialog_export.GetPath()
         extname = importexport.EXPORT_EXTS[self._dialog_export.FilterIndex]
+        conf.LastExportType = extname
         if not filename.lower().endswith(".%s" % extname):
             filename += ".%s" % extname
         try:
