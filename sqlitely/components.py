@@ -5023,6 +5023,7 @@ class SchemaObjectPage(wx.Panel):
             menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(reindex=True), item_reindex)
         if self._category in ("table", ):
             item_truncate = wx.MenuItem(menu, -1, "Truncate")
+            item_truncate.Enable(bool((self._db.get_category(self._category, self.Name) or {}).get("count")))
             menu.Append(item_truncate)
             menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(truncate=True), item_truncate)
         item_drop = wx.MenuItem(menu, -1, "Drop")
