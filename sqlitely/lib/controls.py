@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    12.12.2019
+@modified    18.12.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -1010,15 +1010,15 @@ class NoteButton(wx.Panel, wx.Button):
         self._cursor_hover   = wx.Cursor(wx.CURSOR_HAND)
         self._cursor_default = wx.Cursor(wx.CURSOR_DEFAULT)
 
-        self.Bind(wx.EVT_MOUSE_EVENTS, self.OnMouseEvent)
+        self.Bind(wx.EVT_MOUSE_EVENTS,       self.OnMouseEvent)
         self.Bind(wx.EVT_MOUSE_CAPTURE_LOST, self.OnMouseCaptureLostEvent)
-        self.Bind(wx.EVT_PAINT, self.OnPaint)
-        self.Bind(wx.EVT_SIZE, self.OnSize)
-        self.Bind(wx.EVT_SET_FOCUS, self.OnFocus)
-        self.Bind(wx.EVT_KILL_FOCUS, self.OnFocus)
-        self.Bind(wx.EVT_ERASE_BACKGROUND, self.OnEraseBackground)
-        self.Bind(wx.EVT_KEY_DOWN, self.OnKeyDown)
-        self.Bind(wx.EVT_KEY_UP, self.OnKeyUp)
+        self.Bind(wx.EVT_PAINT,              self.OnPaint)
+        self.Bind(wx.EVT_SIZE,               self.OnSize)
+        self.Bind(wx.EVT_SET_FOCUS,          self.OnFocus)
+        self.Bind(wx.EVT_KILL_FOCUS,         self.OnFocus)
+        self.Bind(wx.EVT_ERASE_BACKGROUND,   self.OnEraseBackground)
+        self.Bind(wx.EVT_KEY_DOWN,           self.OnKeyDown)
+        self.Bind(wx.EVT_CHAR_HOOK,          self.OnChar)
 
         self.SetCursor(self._cursor_hover)
         ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
@@ -1215,22 +1215,22 @@ class NoteButton(wx.Panel, wx.Button):
 
 
     def OnKeyDown(self, event):
-        """Refreshes display if pressing space."""
+        """Refreshes display if pressing space (showing sunken state)."""
         if not event.AltDown() and event.UnicodeKey in [wx.WXK_SPACE]:
             self.Refresh()
+        else: event.Skip()
 
 
-    def OnKeyUp(self, event):
-        """Fires button event on releasing space or enter."""
+    def OnChar(self, event):
+        """Queues firing button event on pressing space or enter."""
         skip = True
-        if not event.AltDown():
-            key = event.UnicodeKey
-            if key in [wx.WXK_SPACE, wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]:
-                button_event = wx.PyCommandEvent(wx.EVT_BUTTON.typeId, self.Id)
-                button_event.EventObject = self
-                wx.PostEvent(self, button_event)
-                skip = False
-                self.Refresh()
+        if not event.AltDown() \
+        and event.UnicodeKey in [wx.WXK_SPACE, wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]:
+            button_event = wx.PyCommandEvent(wx.EVT_BUTTON.typeId, self.Id)
+            button_event.EventObject = self
+            wx.CallLater(0, wx.PostEvent, self, button_event)
+            skip = False
+            self.Refresh()
         if skip: event.Skip()
 
 
@@ -3210,8 +3210,8 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
         self._handlers = collections.defaultdict(list) # {event type: [handler, ]}
         super(TreeListCtrl, self).__init__(parent, id, pos, size, style,
                                            agwStyle, validator, name)
-        self.Bind(wx.EVT_KEY_UP, self._OnKey)
-        self.GetMainWindow().Bind(wx.EVT_KEY_UP, self._OnKey)
+        self.Bind(wx.EVT_CHAR_HOOK, self._OnKey)
+        self.GetMainWindow().Bind(wx.EVT_CHAR_HOOK, self._OnKey)
 
 
     RootItem = property(lambda x: x.GetRootItem())
