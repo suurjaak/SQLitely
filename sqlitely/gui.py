@@ -2251,7 +2251,6 @@ class DatabasePage(wx.Panel):
         # Create search structures and threads
         self.Bind(EVT_SEARCH, self.on_searchall_result)
         self.workers_search = {} # {search ID: workers.SearchThread, }
-        self.search_data_contact = {"id": None} # Current contacts search data
 
         self.worker_analyzer = workers.AnalyzerThread(self.on_analyzer_result)
         self.worker_checksum = workers.ChecksumThread(self.on_checksum_result)
@@ -4695,12 +4694,16 @@ class DatabasePage(wx.Panel):
         Handler for keypress in SQL notebook,
         skips adder-tab on Ctrl+PageUp|PageDown|Tab navigation.
         """
-        if not event.ControlDown() \
-        or event.KeyCode not in controls.KEYS.TAB + controls.KEYS.PAGING:
-            return event.Skip()
+        if not event.ControlDown() or event.AltDown() \
+        or event.KeyCode not in controls.KEYS.TAB + controls.KEYS.PAGING \
+        or event.ShiftDown() and event.KeyCode in controls.KEYS.PAGING:
+            if not event.ControlDown() \
+            or event.KeyCode not in controls.KEYS.PAGING + controls.KEYS.TAB:
+                event.Skip()
+            return
 
         nb = self.notebook_sql
-        direction = 1 if event.KeyCode in controls.KEYS.PAGEDOWN else -1
+        direction = -1 if event.KeyCode in controls.KEYS.PAGEUP else 1
         if event.ShiftDown() and event.KeyCode in controls.KEYS.TAB:
             direction = -1
         cur, count = nb.GetSelection(), nb.GetPageCount()
