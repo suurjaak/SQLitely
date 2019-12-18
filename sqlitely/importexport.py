@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.12.2019
+@modified    18.12.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -328,6 +328,7 @@ def get_import_file_data(filename):
     Returns import file metadata, as {
         "name":        file name and path}.
         "size":        file size in bytes,
+        "format":      "xlsx", "xlsx", "csv" or "json",
         "sheets":      [
             "name":    sheet name or None if CSV or JSON,
             "rows":    count or -1 if file too large,
@@ -338,10 +339,9 @@ def get_import_file_data(filename):
     sheets, size = [], os.path.getsize(filename)
     if not size: raise ValueError("File is empty.")
 
-    is_csv  = filename.lower().endswith(".csv")
-    is_json = filename.lower().endswith(".json")
-    is_xls  = filename.lower().endswith(".xls")
-    is_xlsx = filename.lower().endswith(".xlsx")
+    extname = os.path.splitext(filename)[-1][1:].lower()
+    is_csv, is_json, is_xls, is_xlsx = \
+        (extname == x for x in ("csv", "json", "xls", "xlsx"))
     if is_csv:
         rows = -1 if size > MAX_IMPORT_FILESIZE_FOR_COUNT else 0
         with open(filename, "rbU") as f:
@@ -397,7 +397,7 @@ def get_import_file_data(filename):
                 sheets.append({"rows": rows, "columns": columns, "name": sheet.title})
         finally: wb and wb.close()
 
-    return {"name": filename, "size": size, "sheets": sheets}
+    return {"name": filename, "size": size, "format": extname, "sheets": sheets}
 
 
 

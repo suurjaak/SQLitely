@@ -5503,7 +5503,7 @@ class ImportDialog(wx.Dialog):
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         self._db     = db # database.Database
-        self._data   = None # {name, size, sheets: {?name, rows, columns}}
+        self._data   = None # {name, size, format, sheets: {?name, rows, columns}}
         self._cols1  = [] # [{index, name, skip}]
         self._cols2  = []
         self._tables = db.get_category("table").values()
@@ -5735,7 +5735,8 @@ class ImportDialog(wx.Dialog):
         """
         Sets the file data to import from, refreshes controls.
 
-        @param   data   file metadata as {name, size, sheets: [{name, rows, columns}]}
+        @param   data   file metadata as {name, size, format,
+                                          sheets: [{name, rows, columns}]}
         """
         self._data  = data
 
@@ -5764,6 +5765,8 @@ class ImportDialog(wx.Dialog):
             else util.plural("row", x["rows"]),
         ) for x in data["sheets"]])
         self._combo_sheet.Select(idx)
+        self._label_sheet.Label = "&Source %s:" % ("data" if "json" == data["format"]
+                                                   else "worksheet")
         self._has_header = has_sheets or None
         self._check_header.Value = bool(self._has_header)
 
