@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.12.2019
+@modified    18.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -1274,11 +1274,11 @@ class SQLiteGridBaseMixin(object):
 
         if event.ControlDown() and event.KeyCode == ord("V") \
         or not event.ControlDown() and event.ShiftDown() \
-        and event.KeyCode in (wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT):
+        and event.KeyCode in controls.KEYS.INSERT:
             self._grid.Table.Paste()
 
         elif event.ControlDown() and not self._grid.Table.IsComplete() \
-        and event.KeyCode in (wx.WXK_DOWN, wx.WXK_END, wx.WXK_NUMPAD_END):
+        and event.KeyCode in controls.KEYS.DOWN + controls.KEYS.END:
             # Disallow jumping to the very end, may be a billion rows.
             row, col = (self._grid.GridCursorRow, self._grid.GridCursorCol)
             rows_present = self._grid.Table.GetNumberRows(present=True) - 1
@@ -1293,7 +1293,7 @@ class SQLiteGridBaseMixin(object):
                 self._grid.SelectBlock(row, col, row2, col)
 
         elif event.ControlDown() and not event.ShiftDown() \
-        and event.KeyCode in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT):
+        and event.KeyCode in controls.KEYS.INSERT + (ord("C"), ):
             rows, cols = get_grid_selection(self._grid)
             if not rows or not cols: return
 
@@ -1816,7 +1816,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         if self._export.Shown or self._worker.is_working(): return
         event.Skip() # Allow to propagate to other handlers
         stc = event.GetEventObject()
-        if (event.AltDown() or event.ControlDown()) and wx.WXK_RETURN == event.KeyCode:
+        if (event.AltDown() or event.ControlDown()) \
+        and event.KeyCode in controls.KEYS.ENTER:
             sql = (stc.SelectedText or stc.CurLine[0]).strip()
             if sql: self.ExecuteSQL(sql)
 
@@ -5456,11 +5457,9 @@ class ImportDialog(wx.Dialog):
             generates scroll events on keyboard navigation.
             """
             event.Skip()
-            EDIT_KEYS = [wx.WXK_F2, wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]
-            MOVE_KEYS = [wx.WXK_UP, wx.WXK_DOWN, wx.WXK_PAGEUP, wx.WXK_PAGEDOWN,
-                         wx.WXK_HOME, wx.WXK_END, wx.WXK_NUMPAD_HOME,
-                         wx.WXK_NUMPAD_PAGEUP, wx.WXK_NUMPAD_PAGEDOWN,
-                         wx.WXK_NUMPAD_UP, wx.WXK_NUMPAD_DOWN, wx.WXK_NUMPAD_END]
+            EDIT_KEYS = controls.KEYS.ENTER + (wx.WXK_F2, )
+            MOVE_KEYS = controls.KEYS.UP + controls.KEYS.DOWN + controls.KEYS.HOME + \
+                        controls.KEYS.END + controls.KEYS.PAGING
 
             pos0 = self.GetScrollPos(wx.VERTICAL)
             def fire_scroll():
@@ -7058,7 +7057,7 @@ class HistoryDialog(wx.Dialog):
     def _OnGridKey(self, event):
         """Handler for grid keypress, copies selection to clipboard on Ctrl-C/Insert."""
         if not event.ControlDown() \
-        or event.KeyCode not in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT):
+        or event.KeyCode not in controls.KEYS.INSERT + (ord("C"), ):
             return event.Skip()
 
         rows, cols = get_grid_selection(self._grid)

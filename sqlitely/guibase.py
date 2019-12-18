@@ -13,7 +13,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.10.2019
+@modified    18.12.2019
 """
 import datetime
 import logging
@@ -26,7 +26,7 @@ import wx.lib.inspection
 import wx.lib.newevent
 import wx.py
 
-from . lib.controls import ColourManager
+from . lib.controls import ColourManager, KEYS
 from . lib import util, wx_accel
 from . import conf
 
@@ -170,7 +170,7 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
     def on_keydown_console(self, event):
         """Handler for keydown in console, saves entered command in history."""
         event.Skip()
-        if (wx.WXK_RETURN == event.KeyCode and not event.ShiftDown()
+        if (event.KeyCode in KEYS.ENTER and not event.ShiftDown()
         and self.console.history):
             # Defer saving until command is inserted into console history
             wx.CallAfter(self.save_last_command)

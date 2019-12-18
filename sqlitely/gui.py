@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.12.2019
+@modified    18.12.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1056,10 +1056,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         elif event.KeyCode in [ord("F")] and event.ControlDown():
             self.edit_filter.SetFocus()
         elif self.list_db.GetFirstSelected() >= 0 and self.dbs_selected \
-        and not event.AltDown() \
-        and event.KeyCode in [wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]:
+        and not event.AltDown() and event.KeyCode in controls.KEYS.ENTER:
             self.load_database_pages(self.dbs_selected, clearselection=False)
-        elif event.KeyCode in [wx.WXK_DELETE] and self.dbs_selected:
+        elif event.KeyCode in controls.KEYS.DELETE and self.dbs_selected:
             self.on_remove_database(None)
 
 
@@ -4697,12 +4696,13 @@ class DatabasePage(wx.Panel):
         skips adder-tab on Ctrl+PageUp|PageDown|Tab navigation.
         """
         if not event.ControlDown() \
-        or event.KeyCode not in [wx.WXK_PAGEUP, wx.WXK_PAGEDOWN, wx.WXK_TAB]:
+        or event.KeyCode not in controls.KEYS.TAB + controls.KEYS.PAGING:
             return event.Skip()
 
         nb = self.notebook_sql
-        direction = 1 if event.KeyCode in [wx.WXK_PAGEDOWN, wx.WXK_TAB] else -1
-        if event.ShiftDown() and wx.WXK_TAB == event.KeyCode: direction = -1
+        direction = 1 if event.KeyCode in controls.KEYS.PAGEDOWN else -1
+        if event.ShiftDown() and event.KeyCode in controls.KEYS.TAB:
+            direction = -1
         cur, count = nb.GetSelection(), nb.GetPageCount()
         index2 = cur + direction
         if index2 < 0: index2 = count - 1

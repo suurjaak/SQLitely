@@ -96,6 +96,28 @@ BRUSH = lambda c, s=wx.BRUSHSTYLE_SOLID: wx.TheBrushList.FindOrCreateBrush(c, s)
 PEN = lambda c, w=1, s=wx.PENSTYLE_SOLID: wx.ThePenList.FindOrCreatePen(c, w, s)
 
 
+
+class KEYS(object):
+    """Keycode groupings, includes numpad keys."""
+    UP    = wx.WXK_UP,       wx.WXK_NUMPAD_UP
+    DOWN  = wx.WXK_DOWN,     wx.WXK_NUMPAD_DOWN
+    LEFT  = wx.WXK_LEFT,     wx.WXK_NUMPAD_LEFT
+    RIGHT = wx.WXK_RIGHT,    wx.WXK_NUMPAD_RIGHT
+    PAGEUP      = wx.WXK_PAGEUP,   wx.WXK_NUMPAD_PAGEUP
+    PAGEDOWN    = wx.WXK_PAGEDOWN, wx.WXK_NUMPAD_PAGEDOWN
+    ENTER       = wx.WXK_RETURN,   wx.WXK_NUMPAD_ENTER
+    INSERT      = wx.WXK_INSERT,   wx.WXK_NUMPAD_INSERT
+    DELETE      = wx.WXK_DELETE,   wx.WXK_NUMPAD_DELETE
+    HOME        = wx.WXK_HOME,     wx.WXK_NUMPAD_HOME
+    END         = wx.WXK_END,      wx.WXK_NUMPAD_END
+    SPACE       = wx.WXK_SPACE,    wx.WXK_NUMPAD_SPACE
+    TAB         = wx.WXK_TAB,      wx.WXK_NUMPAD_TAB
+
+    ARROW       = UP + DOWN + LEFT + RIGHT
+    PAGING      = PAGEUP   + PAGEDOWN
+
+
+
 class BusyPanel(wx.Window):
     """
     Primitive hover panel with a message that stays in the center of parent
@@ -1101,7 +1123,7 @@ class NoteButton(wx.Panel, wx.Button):
                 dc.DrawRectangle(5, 5, width - 10, height - 10)
             dc.Pen = PEN(dc.TextForeground)
 
-        if self._press or (is_focused and wx.GetKeyState(wx.WXK_SPACE)):
+        if self._press or (is_focused and any(wx.GetKeyState(x) for x in KEYS.SPACE)):
             # Button is being clicked with mouse: create sunken effect
             colours = [(128, 128, 128)] * 2
             lines   = [(1, 1, width - 2, 1), (1, 1, 1, height - 2)]
@@ -1216,7 +1238,7 @@ class NoteButton(wx.Panel, wx.Button):
 
     def OnKeyDown(self, event):
         """Refreshes display if pressing space (showing sunken state)."""
-        if not event.AltDown() and event.UnicodeKey in [wx.WXK_SPACE]:
+        if not event.AltDown() and event.UnicodeKey in KEYS.SPACE:
             self.Refresh()
         else: event.Skip()
 
@@ -1225,7 +1247,7 @@ class NoteButton(wx.Panel, wx.Button):
         """Queues firing button event on pressing space or enter."""
         skip = True
         if not event.AltDown() \
-        and event.UnicodeKey in [wx.WXK_SPACE, wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]:
+        and event.UnicodeKey in KEYS.SPACE + KEYS.ENTER:
             button_event = wx.PyCommandEvent(wx.EVT_BUTTON.typeId, self.Id)
             button_event.EventObject = self
             wx.CallLater(0, wx.PostEvent, self, button_event)
@@ -1679,8 +1701,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         frmt = lambda: lambda r, c: "" if r.get(c) is None else unicode(r[c])
         self._formatters = collections.defaultdict(frmt)
         id_copy = wx.NewIdRef().Id
-        entries = [(wx.ACCEL_CTRL, x, id_copy)
-                   for x in (ord("C"), wx.WXK_INSERT, wx.WXK_NUMPAD_INSERT)]
+        entries = [(wx.ACCEL_CTRL, x, id_copy) for x in KEYS.INSERT + (ord("C"), )]
         self.SetAcceleratorTable(wx.AcceleratorTable(entries))
         self.Bind(wx.EVT_MENU, self.OnCopy, id=id_copy)
         self.Bind(wx.EVT_LIST_COL_CLICK, self.OnSort)
@@ -2460,9 +2481,8 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         swallows Enter.
         """
         if self.AutoCompActive() or event.ControlDown() \
-        or wx.WXK_TAB != event.KeyCode: return event.Skip()
-        if event.KeyCode in (wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER) \
-        and self.LinesOnScreen() < 2: return
+        or event.KeyCode not in KEYS.TAB: return event.Skip()
+        if event.KeyCode in KEYS.ENTER and self.LinesOnScreen() < 2: return
 
         direction = wx.NavigationKeyEvent.IsBackward if event.ShiftDown() \
                     else wx.NavigationKeyEvent.IsForward
@@ -2482,7 +2502,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
             do_autocomp = False
             words = self.autocomps_total
             autocomp_len = 0
-            if wx.WXK_SPACE == event.UnicodeKey and event.CmdDown():
+            if event.UnicodeKey in KEYS.SPACE and event.CmdDown():
                 # Start autocomp when user presses Ctrl+Space
                 do_autocomp = True
             elif not event.CmdDown():
@@ -2492,8 +2512,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
                     char = chr(event.UnicodeKey).decode("latin1")
                 except Exception:
                     pass
-                if char not in [wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER, 10, 13] \
-                and char is not None:
+                if char not in KEYS.ENTER and char is not None:
                     # Get a slice of the text on the current text up to caret.
                     line_text = self.GetTextRange(
                         self.PositionFromLine(self.GetCurrentLine()),
@@ -2525,7 +2544,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
             if do_autocomp:
                 if skip: event.Skip()
                 self.AutoCompShow(autocomp_len, u" ".join(words))
-        elif self.AutoCompActive() and wx.WXK_DELETE == event.KeyCode:
+        elif self.AutoCompActive() and event.KeyCode in KEYS.DELETE:
             self.AutoCompCancel()
         if skip: event.Skip()
 
@@ -3017,9 +3036,9 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         visible = self._listwindow.Shown
         selected = self._listbox.GetFirstSelected()
         selected_new = None
-        if event.KeyCode in [wx.WXK_DOWN, wx.WXK_UP]:
+        if event.KeyCode in KEYS.UP + KEYS.DOWN:
             if visible:
-                step = 1 if (wx.WXK_UP != event.KeyCode) else -1
+                step = 1 if event.KeyCode in KEYS.DOWN else -1
                 itemcount = len(self._choices)
                 selected_new = min(itemcount - 1, max(0, selected + step))
                 self._listbox.Select(selected_new)
@@ -3028,9 +3047,9 @@ class TextCtrlAutoComplete(wx.TextCtrl):
                 self._listbox.EnsureVisible(ensured)
             self.ShowDropDown()
             skip = False
-        elif event.KeyCode in [wx.WXK_PAGEDOWN, wx.WXK_PAGEUP]:
+        elif event.KeyCode in KEYS.PAGING:
             if visible:
-                step = 1 if (wx.WXK_PAGEUP != event.KeyCode) else -1
+                step = 1 if event.KeyCode in KEYS.PAGEDOWN else -1
                 self._listbox.ScrollPages(step)
                 itemcount = len(self._choices)
                 countperpage = self._listbox.CountPerPage
@@ -3042,7 +3061,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
                 self._listbox.Select(selected_new)
             self.ShowDropDown()
             skip = False
-        elif event.KeyCode in [wx.WXK_BACK, wx.WXK_DELETE]:
+        elif event.KeyCode in KEYS.DELETE + (wx.WXK_BACK, ):
             self._skip_autocomplete = True
             self.ShowDropDown()
 
@@ -3051,7 +3070,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
                 self._ignore_textchange = True
                 self.Value = self._listbox.GetItemText(selected_new)
                 self.SetInsertionPointEnd()
-            if wx.WXK_RETURN == event.KeyCode:
+            if event.KeyCode in KEYS.ENTER:
                 self.ShowDropDown(False)
             if wx.WXK_ESCAPE == event.KeyCode:
                 self.ShowDropDown(False)
@@ -3285,7 +3304,7 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
     def _OnKey(self, event):
         """Fires EVT_TREE_ITEM_ACTIVATED event on pressing enter."""
         event.Skip()
-        if event.KeyCode not in [wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER]: return
+        if event.KeyCode not in KEYS.ENTER: return
         item = self.GetSelection()
         if item and item.IsOk():
             evt = self.DummyEvent(item)
