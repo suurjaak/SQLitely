@@ -1747,8 +1747,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for clicking to auto-detect databases, starts the
         detection in a background thread.
         """
-        if self.button_detect.FindFocus() == self.button_detect:
-            self.list_db.SetFocus()
         if self.worker_detection.is_working():
             self.worker_detection.stop_work()
             self.button_detect.Label = "Detect databases"
@@ -1790,8 +1788,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for clicking to select folder where to search for databases,
         updates database list.
         """
-        if self.button_folder.FindFocus() == self.button_folder:
-            self.list_db.SetFocus()
         if self.worker_folder.is_working():
             self.worker_folder.stop_work()
             self.button_folder.Label = "&Import from folder"
