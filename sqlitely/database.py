@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.12.2019
+@modified    19.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -695,16 +695,6 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """Clears all current locks."""
         self.locks.clear()
         self.locklabels.clear()
-
-
-    def is_locked(self, category=None, name=None):
-        """
-        Returns whether there are currently locks on specified schema object,
-        or any category object, or any object.
-        """
-        category, name = (x.lower() if x else x for x in (category, name))
-        return self.locks[category].get(name) if name and category in self.locks \
-               else self.locks.get(category) if not name and category else self.locks
 
 
     def get_lock(self, *args, **kwargs):
