@@ -30,7 +30,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     19.11.2011
-@modified    22.10.2019
+@modified    19.12.2019
 ------------------------------------------------------------------------------
 """
 import functools
@@ -254,7 +254,7 @@ def collect_shortcuts(control, use_heuristics=True):
 
 
 
-def accelerate(window, use_heuristics=True, skipclicklabels=set()):
+def accelerate(window, use_heuristics=True, skipclicklabels=None):
     """
     Assigns global keyboard shortcuts to all controls under the specified
     wx.Window that have a shortcut key defined in their label (e.g. a button
@@ -271,6 +271,7 @@ def accelerate(window, use_heuristics=True, skipclicklabels=set()):
     CHK_3STATE_NEXT = {wx.CHK_CHECKED:      wx.CHK_UNDETERMINED,
                        wx.CHK_UNCHECKED:    wx.CHK_CHECKED,
                        wx.CHK_UNDETERMINED: wx.CHK_UNCHECKED}
+    if skipclicklabels is None: skipclicklabels = set()
 
     def eventhandler(targets, key, shortcut_event):
         """

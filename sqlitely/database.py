@@ -1049,7 +1049,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 result.setdefault(subcategory, []).append(copy.deepcopy(subitem))
 
         visited = CaselessDict()
-        for k, vv in result.items() if data else ():
+        for vv in result.values() if data else ():
             skip.update({v["name"]: True for v in vv})
         for mycategory, items in result.items() if data else ():
             if mycategory not in SUBCATEGORIES: continue # for mycategory, items

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.12.2019
+@modified    19.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -763,7 +763,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 idx = next((k for k, v in self.rowids.items()
                             if v == rowdata[self.rowid_name]), None)
             else:
-                idx = next((k for i, x in self.rows_backup.items()
+                idx = next((i for i, x in self.rows_backup.items()
                             if all(v == x[k] for k, v in rowdata.items())), None)
                 idx = idx or next((i for i, x in self.rows_all.items()
                                    if all(v == x[k] for k, v in rowdata.items())), None)
@@ -816,7 +816,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         menu_fks,  menu_lks  = wx.Menu(), wx.Menu()
 
 
-        def copy(text, status, *args):
+        def mycopy(text, status, *args):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
@@ -830,20 +830,20 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             """Copies rows data to clipboard."""
             text = "\n".join("\t".join(util.to_unicode(x[c["name"]])
                                        for c in self.columns) for x in rowdatas)
-            copy(text, "Copied row%s data to clipboard%s", rowsuff, cutoff)
+            mycopy(text, "Copied row%s data to clipboard%s", rowsuff, cutoff)
 
         def on_copy_col(event=None):
             """Copies columns data to clipboard."""
             text = "\n".join("\t".join(util.to_unicode(x[self.columns[i]["name"]])
                                        for i in cols) for x in rowdatas)
-            copy(text, "Copied column%s data to clipboard%s", colsuff, cutoff)
+            mycopy(text, "Copied column%s data to clipboard%s", colsuff, cutoff)
 
         def on_copy_insert(event=None):
             """Copies rows INSERT SQL to clipboard."""
             tpl = step.Template(templates.DATA_ROWS_SQL, strip=False)
             text = tpl.expand(name=self.name, rows=rowdatas,
                               columns=[x["name"] for x in self.columns])
-            copy(text, "Copied INSERT SQL to clipboard%s", cutoff)
+            mycopy(text, "Copied INSERT SQL to clipboard%s", cutoff)
 
         def on_copy_update(event=None):
             """Copies rows INSERT SQL to clipboard."""
@@ -858,14 +858,14 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                         mydatas0[i] = dict(row0, **{self.rowid_name: rowid})
             text = tpl.expand(name=self.name, rows=rowdatas, originals=rowdatas0,
                               columns=[x["name"] for x in self.columns], pks=mypks)
-            copy(text, "Copied UPDATE SQL to clipboard%s", cutoff)
+            mycopy(text, "Copied UPDATE SQL to clipboard%s", cutoff)
 
         def on_copy_txt(event=None):
             """Copies rows to clipboard as text."""
             tpl = step.Template(templates.DATA_ROWS_PAGE_TXT, strip=False)
             text = tpl.expand(name=self.name, rows=rowdatas,
                               columns=[x["name"] for x in self.columns])
-            copy(text, "Copied row%s text to clipboard%s", rowsuff, cutoff)
+            mycopy(text, "Copied row%s text to clipboard%s", rowsuff, cutoff)
 
         def on_copy_json(event=None):
             """Copies rows to clipboard as JSON."""
@@ -873,7 +873,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                        for x in rowdatas]
             data = mydatas if len(mydatas) > 1 else mydatas[0]
             text = json.dumps(data, indent=2)
-            copy(text, "Copied row%s JSON to clipboard%s", rowsuff, cutoff)
+            mycopy(text, "Copied row%s JSON to clipboard%s", rowsuff, cutoff)
 
         def on_reset(event=None):
             """Resets row changes."""
@@ -940,11 +940,11 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         def on_col_copy(col, event=None):
             text = "\n".join(util.to_unicode(x[self.columns[col]["name"]])
                              for x in rowdatas)
-            copy(text, "Copied column data to clipboard%s", cutoff)
+            mycopy(text, "Copied column data to clipboard%s", cutoff)
 
         def on_col_name(col, event=None):
             text = self.columns[col]["name"]
-            copy(text, "Copied column name to clipboard%s", cutoff)
+            mycopy(text, "Copied column name to clipboard%s", cutoff)
 
         def on_col_goto(col, event=None):
             self.View.GoToCell(self.View.GridCursorRow, col)
@@ -1554,11 +1554,11 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         return self._stc.CanUndo() or self._stc.CanRedo()
 
 
-    def SetAutoComp(self, words=[], subwords={}):
+    def SetAutoComp(self, words=(), subwords=None):
         """Sets additional words to use in STC autocompletion."""
         self._stc.AutoCompClearAdded()
-        self._stc.AutoCompAddWords(words)
-        for word, subwords in subwords.items():
+        if words: self._stc.AutoCompAddWords(words)
+        for word, subwords in subwords.items() if subwords else ():
             self._stc.AutoCompAddSubWords(word, subwords)
 
 
@@ -3182,7 +3182,8 @@ class SchemaObjectPage(wx.Panel):
                 adder([collection], j, opts)
             if grid.NumberRows:
                 row = min(max(0, row), grid.NumberRows - 1)
-                wx.CallLater(0, lambda: self and grid.SetGridCursor(row, col))
+                setcursor = lambda g, r, c: lambda: (self and g.SetGridCursor(r, c))
+                wx.CallLater(0, setcursor(grid, row, col))
                 if i: wx.CallAfter(self._SizeConstraintsGrid)
             panel.Layout()
 
@@ -6717,8 +6718,7 @@ class DataDialog(wx.Dialog):
         self._edits[name].Value = "" if val is None else util.to_unicode(val)
         self._edits[name].Hint  = "<NULL>" if val is None else ""
         bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
-        if val != self._original[name]:
-           bg = wx.Colour(conf.GridRowChangedColour)
+        if val != self._original[name]: bg = wx.Colour(conf.GridRowChangedColour)
         self._edits[name].BackgroundColour = bg
         wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
 
@@ -6751,8 +6751,7 @@ class DataDialog(wx.Dialog):
         self._data[name] = value
         event.EventObject.Hint = ""
         bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
-        if value != self._original[name]:
-           bg = wx.Colour(conf.GridRowChangedColour)
+        if value != self._original[name]: bg = wx.Colour(conf.GridRowChangedColour)
         event.EventObject.BackgroundColour = bg
 
 
@@ -6808,21 +6807,21 @@ class DataDialog(wx.Dialog):
         coldata = self._columns[col]
         menu = wx.Menu()
 
-        def copy(text, status, *args):
+        def mycopy(text, status, *args):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
                 guibase.status(status, *args, flash=True)
         def on_copy_data(event=None):
             text = util.to_unicode(self._data[coldata["name"]])
-            copy(text, "Copied column data to clipboard")
+            mycopy(text, "Copied column data to clipboard")
         def on_copy_name(event=None):
             text = util.to_unicode(coldata["name"])
-            copy(text, "Copied column name to clipboard")
+            mycopy(text, "Copied column name to clipboard")
         def on_copy_sql(event=None):
             text = "%s = %s" % (grammar.quote(coldata["name"]),
                                 grammar.format(self._data[coldata["name"]]))
-            copy(text, "Copied column UPDATE SQL to clipboard")
+            mycopy(text, "Copied column UPDATE SQL to clipboard")
         def on_reset(event=None):
             self._SetValue(col, self._original[coldata["name"]])
         def on_null(event=None):
@@ -6878,7 +6877,7 @@ class DataDialog(wx.Dialog):
         """Handler for opening popup menu for copying row."""
         menu = wx.Menu()
 
-        def copy(text, status, *args):
+        def mycopy(text, status, *args):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
@@ -6887,13 +6886,13 @@ class DataDialog(wx.Dialog):
         def on_copy_data(event=None):
             text = "\t".join(util.to_unicode(self._data[c["name"]])
                              for c in self._columns)
-            copy(text, "Copied row data to clipboard")
+            mycopy(text, "Copied row data to clipboard")
 
         def on_copy_insert(event=None):
             tpl = step.Template(templates.DATA_ROWS_SQL, strip=False)
             text = tpl.expand(name=self._gridbase.name, rows=[self._data],
                               columns=[x["name"] for x in self._columns])
-            copy(text, "Copied row INSERT SQL to clipboard")
+            mycopy(text, "Copied row INSERT SQL to clipboard")
 
         def on_copy_update(event=None):
             tpl = step.Template(templates.DATA_ROWS_UPDATE_SQL, strip=False)
@@ -6908,18 +6907,18 @@ class DataDialog(wx.Dialog):
                     mydata0 = dict(mydata0, **{mypks[0]: rowid})
             text = tpl.expand(name=self._gridbase.name, rows=[mydata], originals=[mydata0],
                               columns=[x["name"] for x in self._columns], pks=mypks)
-            copy(text, "Copied row UPDATE SQL to clipboard")
+            mycopy(text, "Copied row UPDATE SQL to clipboard")
 
         def on_copy_txt(event=None):
             tpl = step.Template(templates.DATA_ROWS_PAGE_TXT, strip=False)
             text = tpl.expand(name=self._gridbase.name, rows=[self._data],
                               columns=[x["name"] for x in self._columns])
-            copy(text, "Copied row text to clipboard")
+            mycopy(text, "Copied row text to clipboard")
 
         def on_copy_json(event=None):
             mydata = OrderedDict((c["name"], self._data[c["name"]]) for c in self._columns)
             text = json.dumps(mydata, indent=2)
-            copy(text, "Copied row JSON to clipboard")
+            mycopy(text, "Copied row JSON to clipboard")
 
 
         item_data   = wx.MenuItem(menu, -1, "Copy row &data")

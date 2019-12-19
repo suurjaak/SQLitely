@@ -8,11 +8,9 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.11.2019
+@modified    19.12.2019
 ------------------------------------------------------------------------------
 """
-import glob
-import os
 import setuptools
 
 from sqlitely import conf

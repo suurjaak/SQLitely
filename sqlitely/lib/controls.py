@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    18.12.2019
+@modified    19.12.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -504,7 +504,7 @@ class FormDialog(wx.Dialog):
         if callback: callback(self, field, parent, self._data)
         elif not field.get("toggle") or any(field.get(x) for x in ["type", "choices", "component"]):
             ctrls = self._MakeControls(field, path)
-            for i, c in enumerate(ctrls):
+            for c in ctrls:
                 colspan = 2 if isinstance(c, wx.StaticText) else MAXCOL - level - col
                 brd, BRD = (5, wx.BOTTOM) if isinstance(c, wx.CheckBox) else (0, 0)
                 sizer.Add(c, border=brd, pos=(self._rows, level + col), span=(1, colspan), flag=BRD | wx.GROW)
@@ -562,7 +562,7 @@ class FormDialog(wx.Dialog):
     def _MakeControls(self, field, path=()):
         """Returns a list of wx components for field."""
         result = []
-        parent, sizer, ctrl = self._panel, self._panel.Sizer, None
+        parent, ctrl = self._panel, None
         fpath = path + (field["name"], )
         label = field["label"] if "label" in field else field["name"]
         accname = "ctrl_%s" % self._rows # Associating label click with control
@@ -593,9 +593,9 @@ class FormDialog(wx.Dialog):
             sizer_b1.Add(b1); sizer_b1.Add(b2)
             sizer_b2.Add(b3); sizer_b2.Add(b4)
             sizer_l.Add(ctrl1, proportion=1)
-            sizer_l.Add(sizer_b1, flag=wx.ALIGN_CENTER_VERTICAL);
+            sizer_l.Add(sizer_b1, flag=wx.ALIGN_CENTER_VERTICAL)
             sizer_l.Add(ctrl2, proportion=1)
-            sizer_l.Add(sizer_b2, flag=wx.ALIGN_CENTER_VERTICAL);
+            sizer_l.Add(sizer_b2, flag=wx.ALIGN_CENTER_VERTICAL)
 
             toplabel = wx.StaticText(parent, label=label, name=accname + "_label")
             sizer_f.Add(toplabel, flag=wx.GROW)
@@ -757,8 +757,7 @@ class FormDialog(wx.Dialog):
         """Handler for moving selected items up/down within listbox."""
         _, listbox2 = (x for x in self._comps[path + (field["name"], )]
                        if isinstance(x, wx.ListBox))
-        indexes = listbox2.GetSelections()
-        selecteds, items = map(listbox2.GetString, indexes), listbox2.GetItems()
+        indexes, items = listbox2.GetSelections(), listbox2.GetItems()
 
         if not indexes or direction < 0 and not indexes[0] \
         or direction > 0 and indexes[-1] == len(items) - 1: return
@@ -2000,8 +1999,6 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
     def OnSort(self, event):
         """Handler on clicking column, sorts list."""
-        sortstate = self.GetSortState()
-
         col, ascending = self.GetSortState()
         if col == event.GetColumn() and not ascending: # Clear sort
             self._col = -1
@@ -2564,7 +2561,7 @@ class TabbedHtmlWindow(wx.Panel):
     def __init__(self, parent, id=wx.ID_ANY, pos=wx.DefaultPosition,
                  size=wx.DefaultSize, style=wx.html.HW_DEFAULT_STYLE,
                  name=""):
-        wx.Panel.__init__(self, parent, pos=pos, size=size, style=style)
+        wx.Panel.__init__(self, parent, id=id, pos=pos, size=size, style=style)
         # [{"title", "content", "id", "info", "scrollpos", "scrollrange"}]
         self._tabs = []
         self._default_page = ""      # Content shown on the blank page
@@ -3320,7 +3317,6 @@ def YesNoMessageBox(message, caption, icon=wx.ICON_NONE, defaultno=False):
     @param   icon       dialog icon to use, one of wx.ICON_XYZ
     @param   defaultno  True if No-button should be default
     """
-    RES = {wx.ID_OK: wx.OK, wx.ID_CANCEL: wx.CANCEL}
     style = icon | wx.OK | wx.CANCEL | (wx.CANCEL_DEFAULT if defaultno else 0)
     dlg = wx.MessageDialog(None, message, caption, style)
     dlg.SetOKCancelLabels("&Yes", "&No")

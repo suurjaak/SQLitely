@@ -845,8 +845,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         p = self.notebook.GetCurrentPage()
         if not self.pages_visited or self.pages_visited[-1] != p:
             self.pages_visited.append(p)
-        self.Title = conf.Title
-        title, subtitle = conf.Title, ""
+        self.Title, subtitle = conf.Title, ""
         if isinstance(p, DatabasePage): # Use parent/file.db or C:/file.db
             self.page_db_latest = p
             path, file = os.path.split(p.db.name)
