@@ -183,26 +183,6 @@ def format_bytes(size, precision=2, max_units=True, with_units=True):
     return formatted + ((" " + unit) if with_units else "")
 
 
-def format_seconds(seconds, insert=""):
-    """
-    Returns nicely formatted seconds, e.g. "25 hours, 12 seconds".
-
-    @param   insert  text inserted between count and unit, e.g. "4 call hours"
-    """
-    insert = insert + " " if insert else ""
-    formatted = "0 %sseconds" % insert
-    seconds = int(seconds)
-    if seconds:
-        formatted, inter = "", ""
-        for unit, count in zip(["hour", "minute", "second"], [3600, 60, 1]):
-            if seconds >= count:
-                label = "%s%s" % (insert if not formatted else "", unit)
-                formatted += inter + plural(label, seconds / count)
-                seconds %= count
-                inter = ", "
-    return formatted
-
-
 def format_exc(e):
     """Formats an exception as Class: message, or Class: (arg1, arg2, ..)."""
     with warnings.catch_warnings():
