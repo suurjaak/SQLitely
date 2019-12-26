@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.12.2019
+@modified    26.12.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1440,9 +1440,8 @@ COLS = {"table":   ["Name", "Columns", "Related tables", "Other relations", "Row
 index_total = sum(x["size"] for x in stats.get("index", []))
 table_total = sum(x["size"] for x in stats.get("table", []))
 total = index_total + sum(x["size"] for x in stats.get("table", []))
-rows_total, rows_pref = sum(x.get("count") or 0 for x in db.schema.get("table", {}).values()), ""
-if rows_total and any(x.get("is_count_estimated") for x in db.schema["table"].values()):
-    rows_total, rows_pref = int(math.ceil(rows_total / 100.) * 100), "~"
+rows_total = sum(x.get("count") or 0 for x in db.schema.get("table", {}).values())
+rows_pref = "~" if rows_total and any(x.get("is_count_estimated") for x in db.schema["table"].values()) else ""
 %>
 <tr><td><table id="header_table">
   <tr>
@@ -1456,7 +1455,7 @@ if rows_total and any(x.get("is_count_estimated") for x in db.schema["table"].va
       <span title="{{ table_total }}">{{ util.format_bytes(table_total) }}</span>{{ "" if rows_total else "." }}
     %endif
     %if rows_total:
-(<span title="{{ rows_total }}">{{ rows_pref }}{{ util.plural("row", rows_total, sep=",") }}</span>).
+(<span title="{{ rows_total }}">{{ util.plural("row", rows_total, sep=",", pref=rows_pref) }}</span>).
     %endif
       <br />
 %endif
@@ -1613,10 +1612,8 @@ lks, fks = db.get_keys(item["name"]) if "table" == category else [(), ()]
 
         %if "table" == category:
 <%
-count, pref = item["count"], ""
-if item.get("is_count_estimated"):
-    count, pref = int(math.ceil(count / 100.) * 100), "~"
-countstr = "{1}{0:,}".format(count, pref)
+count = item["count"]
+countstr = "{1}{0:,}".format(count, "~" if item.get("is_count_estimated") else "")
 %>
     <td>
       <a class="toggle right" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urllib.quote(item["name"], safe="") }}/cols')">{{ len(item["columns"]) }}</a>
@@ -1876,9 +1873,8 @@ fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(grammar.quo
 index_total = sum(x["size"] for x in stats["index"]) if stats else None
 table_total = sum(x["size"] for x in stats["table"]) if stats else None
 total = (index_total + sum(x["size"] for x in stats["table"])) if stats else None
-rows_total, rows_pref = sum(x.get("count") or 0 for x in db.schema.get("table", {}).values()), ""
-if rows_total and any(x.get("is_count_estimated") for x in db.schema["table"].values()):
-    rows_total, rows_pref = int(math.ceil(rows_total / 100.) * 100), "~"
+rows_total = sum(x.get("count") or 0 for x in db.schema.get("table", {}).values())
+rows_pref = "~" if rows_total and any(x.get("is_count_estimated") for x in db.schema["table"].values()) else ""
 
 tblstext = idxstext = othrtext = ""
 if db.schema.get("table"):
@@ -1886,7 +1882,7 @@ if db.schema.get("table"):
     if stats:
         tblstext += util.format_bytes(table_total) + ("" if rows_total else ".")
     if rows_total:
-        tblstext += " (%s%s)." % (rows_pref, util.plural("row", rows_total, sep=","))
+        tblstext += " (%s)." % util.plural("row", rows_total, sep=",", pref=rows_pref)
 if db.schema.get("index"):
     idxstext = util.plural("index", db.schema["index"]) + (", " if stats else ".")
     if stats: idxstext += util.format_bytes(index_total)
@@ -1980,10 +1976,8 @@ for item in db.schema.get(category).values():
     if "table" == category:
         row["Columns"] = str(len(item["columns"]))
 
-        count, pref = item["count"], ""
-        if item.get("is_count_estimated"):
-            count, pref = int(math.ceil(count / 100.) * 100), "~"
-        row["Rows"] = countstr = "{1}{0:,}".format(count, pref)
+        count = item["count"]
+        row["Rows"] = "{1}{0:,}".format(count, "~" if item.get("is_count_estimated") else "")
 
         if stats:
             size = next((x["size_total"] for x in stats["table"] if util.lceq(x["name"], item["name"])), "")

@@ -8,13 +8,14 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.12.2019
+@modified    26.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
 import copy
 import datetime
 import logging
+import math
 import os
 import re
 import sqlite3
@@ -956,6 +957,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Returns {"count": int, ?"is_count_estimated": bool}.
         Uses MAX(ROWID) to estimate row count and skips COUNT(*) if likely
         to take too long (file over half a gigabyte).
+        Estimated count is rounded upwards to 100.
         """
         result, do_full = {"count": None}, False
         tpl = "SELECT %%s AS count FROM %s LIMIT 1" % grammar.quote(table)
@@ -963,6 +965,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             rowidname = self.get_rowid(table)
             if rowidname:
                 result = self.execute(tpl % "MAX(%s)" % rowidname, log=False).fetchone()
+                result["count"] = int(math.ceil(result["count"] / 100.) * 100)
                 result["is_count_estimated"] = True
             if self.filesize < conf.MaxDBSizeForFullCount \
             or result and result["count"] < conf.MaxTableRowIDForFullCount:

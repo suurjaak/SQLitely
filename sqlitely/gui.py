@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.12.2019
+@modified    26.12.2019
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5096,15 +5096,14 @@ class DatabasePage(wx.Panel):
                 if "table" == category else ()
         if "table" == category and any(x.get("count") for x in items):
             count = sum(x.get("count") or 0 for x in items)
-            is_estimated = any(x.get("is_count_estimated") for x in items)
-            if is_estimated: count = int(math.ceil(count / 100.) * 100)
+            pref = "~" if any(x.get("is_count_estimated") for x in items) else ""
+            if pref: count = int(math.ceil(count / 100.) * 100)
+            countstr = util.plural("row", count, sep=",", pref=pref)
             if wx.YES != controls.YesNoMessageBox(
                 "Are you REALLY sure you want to drop the %s?\n\n"
-                "%s currently %s %s%s." %
+                "%s currently %s %s." %
                 (itemtext, "They" if len(names) > 1 else "It",
-                 "contain" if len(names) > 1 else "contains",
-                 "~" if is_estimated else "",
-                 util.plural("row", count, sep=",")),
+                 "contain" if len(names) > 1 else "contains", countstr),
                 conf.Title, wx.ICON_WARNING, defaultno=True
             ): return
         lock = self.db.get_lock(category=None)
@@ -5321,11 +5320,8 @@ class DatabasePage(wx.Panel):
                         t = "ERROR"
                         if item["count"] is None: t = "ERROR"
                         else:
-                            count = item["count"]
-                            if item.get("is_count_estimated"):
-                                roundedcount = int(math.ceil(count / 100.) * 100)
-                                t = "~" + util.plural("row", roundedcount, sep=",")
-                            else: t = util.plural("row", count, sep=",")
+                            pref = "~" if item.get("is_row_estimated") else ""
+                            t = util.plural("row", item["count"], sep=",", pref=pref)
                     else: t = "" if "view" == category else "Counting.."
                     tree.SetItemText(child, t, 1)
 

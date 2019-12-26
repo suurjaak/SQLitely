@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.12.2019
+@modified    26.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -185,7 +185,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 self.idx_all.append(myid)
                 self.iterator_index += 1
             else:
-                self.row_iterator, self.complete, post = None, True, True
+                self.row_iterator, self.row_count = None, self.iterator_index + 1
+                self.complete, self.is_seek, post = True, False, True
         if self.iterator_index >= self.MAX_ROWS:
             self.row_iterator, self.complete, post = None, True, True
         if self.is_seek and self.row_count < self.iterator_index + 1:
@@ -1372,21 +1373,27 @@ class SQLiteGridBaseMixin(object):
         if not self or not hasattr(self, "_label_rows") \
         or not isinstance(self._grid.Table, SQLiteGridBase): return
         gridbase = self._grid.Table
-        count, pref, suff = gridbase.GetNumberRows(), "", ""
-        if not gridbase.IsComplete() and not gridbase.filters:
+        count, pref, suf = gridbase.GetNumberRows(), "", ""
+
+        if not gridbase.IsComplete():
             if "table" == getattr(self, "_category", None):
                 data = self._db.schema["table"].get(self.Name, {})
                 if reload or not data.get("count"): data = self._db.get_count(self.Name)
                 if data and data["count"] is not None:
                     count = data["count"]
-                    if data.get("is_count_estimated"):
-                        count, pref = int(math.ceil(count / 100.) * 100), "~"
+                    pref = "~" if data.get("is_count_estimated") else ""
                     count += len(gridbase.idx_new) - len(gridbase.rows_deleted)
-                else: suff = "+"
-            else: suff = "+"
-        elif not gridbase.IsComplete(): suff = "+"
-        t = pref + util.plural("row", count, sep=",")
-        if suff: t = t.replace(" ", suff + " ")
+                else: suf = "+"
+            else: suf = "+"
+
+        if gridbase.filters:
+            count, total = gridbase.GetNumberRows(), gridbase.GetNumberRows(total=True)
+            suf2 = "" if gridbase.IsComplete() else "+"
+            t = "%s (%s filtered)" % (util.plural("row", total, sep=",", pref=pref, suf=suf),
+                                      util.plural("", count, sep=",", suf=suf2))
+        else:
+            t = util.plural("row", count, sep=",", pref=pref, suf=suf)
+
         self._label_rows.Label = t
         self._label_rows.Parent.Layout()
 
@@ -5155,10 +5162,9 @@ class ExportProgressPanel(wx.Panel):
             percent, text = None, util.plural(unit, count)
         else:
             percent = int(100 * util.safedivf(count, total))
-            if opts.get("is_total_estimated"):
-                total = int(math.ceil(total / 100.) * 100)
+            pref = "~" if opts.get("is_total_estimated") else ""
             text = "%s%% (%s of %s%s)" % (percent, util.plural(unit, count, sep=","),
-                   "~" if opts.get("is_total_estimated") else "", "{0:,}".format(total))
+                                          pref, "{0:,}".format(total))
         return percent, text
 
 
@@ -6676,10 +6682,10 @@ class DataDialog(wx.Dialog):
                 item = gridbase.db.schema[gridbase.category][gridbase.name]
                 if item.get("count") is not None:
                     count, pref = item["count"], ""
-                    if not item.get("is_count_estimated"):
+                    if item.get("is_count_estimated"):
                         changes = gridbase.GetChanges()
                         count += len(changes.get("new", ())) - len(changes.get("deleted", ()))
-                    else: count, pref = int(math.ceil(count / 100.) * 100), "~"
+                    else: pref = "~"
                     title += " of {1}{0:,}".format(count, pref)
             self.Title = title
             self._button_prev.Enabled = bool(self._row)

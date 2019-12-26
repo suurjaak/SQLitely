@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.12.2019
+@modified    26.12.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -213,30 +213,34 @@ def format_exc(e):
     return result
 
 
-def plural(word, items=None, numbers=True, single="1", sep=""):
+def plural(word, items=None, numbers=True, single="1", sep="", pref="", suf=""):
     """
     Returns the word as 'count words', or '1 word' if count is 1,
     or 'words' if count omitted.
 
-    @param   items    item collection or count,
-                      or None to get just the plural of the word
-             numbers  if False, count is omitted from final result
-             single   prefix to use for word if count is 1
-             sep      thousand-separator to use for count
+    @param   items      item collection or count,
+                        or None to get just the plural of the word
+             numbers    if False, count is omitted from final result
+             single     prefix to use for word if count is 1, e.g. "a"
+             sep        thousand-separator to use for count
+             pref       prefix to prepend to count, e.g. "~150"
+             suf        suffix to append to count, e.g. "150+"
     """
     count   = len(items) if hasattr(items, "__len__") else items or 0
     isupper = word[-1:].isupper()
-    suffix = "es" if word[-1:].lower() in "xyz" else "s"
+    suffix = "es" if word and word[-1:].lower() in "xyz" else "s" if word else ""
+    if isupper: suffix = suffix.upper()
     if count != 1 and "y" == word[-1:].lower():
         word = word[:-1] + ("I" if isupper else "i")
-    if isupper: suffix = suffix.upper()
     result = word + ("" if 1 == count else suffix)
     if numbers and items is not None:
-        fmtcount = "".join([x + ("," if i and not i % 3 else "")
-                            for i, x in enumerate(str(count)[::-1])][::-1]) \
-                   if sep else count
+        fmtcount = single if 1 == count else "".join([
+            x + ("," if i and not i % 3 else "")
+            for i, x in enumerate(str(count)[::-1])][::-1
+        ]) if sep else str(count)
+        fmtcount = pref + fmtcount + suf
         result = "%s %s" % (single if 1 == count else fmtcount, result)
-    return result
+    return result.strip()
 
 
 def try_until(func, count=1, sleep=0.5):
