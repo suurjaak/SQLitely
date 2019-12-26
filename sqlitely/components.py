@@ -1156,6 +1156,7 @@ class SQLiteGridBaseMixin(object):
     """Binds SQLiteGridBase handlers to self._grid."""
 
     SCROLLPOS_ROW_RATIO = 0.88235 # Heuristic estimate of scroll pos to row
+    SEEKAHEAD_POS_RATIO = 0.8     # Scroll position at which to seek further ahead
 
 
     def __init__(self):
@@ -1240,8 +1241,6 @@ class SQLiteGridBaseMixin(object):
         """
         if not isinstance(self._grid.Table, SQLiteGridBase): return event.Skip()
 
-        SEEKAHEAD_POS_RATIO = 0.8
-
         # Disallow scrolling ahead too much, may be a billion rows.
         if not self._grid.Table.is_query and isinstance(event, wx.ScrollWinEvent) \
         and not self._grid.Table.IsComplete():
@@ -1258,7 +1257,7 @@ class SQLiteGridBaseMixin(object):
             scrollpos = self._grid.GetScrollPos(wx.VERTICAL)
             scrollrange = self._grid.GetScrollRange(wx.VERTICAL)
             scrollpage = self._grid.GetScrollPageSize(wx.VERTICAL)
-            if scrollpos + scrollpage > scrollrange * SEEKAHEAD_POS_RATIO:
+            if round(float(scrollpos + scrollpage) / scrollrange, 2) > self.SEEKAHEAD_POS_RATIO:
                 self._grid.Table.SeekAhead()
 
         event.Skip()
@@ -1285,10 +1284,9 @@ class SQLiteGridBaseMixin(object):
             rows_present = self._grid.Table.GetNumberRows(present=True) - 1
             seekrow = (rows_present / conf.SeekLeapLength + 1) * conf.SeekLeapLength
             busy = controls.BusyPanel(self, "Seeking..")
-            try: self._grid.Table.SeekToRow(seekrow)
+            try: self._grid.Table.SeekToRow(int(seekrow / self.SEEKAHEAD_POS_RATIO) - 1)
             finally: busy.Close()
-            row2 = self._grid.Table.GetNumberRows(present=True) - 1
-            if row2 == seekrow: row2 -= 1 # Stay at #10000, #20000 etc
+            row2 = min(seekrow, self._grid.Table.GetNumberRows(present=True)) - 1
             self._grid.GoToCell(row2, col)
             if event.ShiftDown():
                 self._grid.SelectBlock(row, col, row2, col)
