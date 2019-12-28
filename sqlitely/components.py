@@ -1635,7 +1635,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                 self._grid.AutoSizeColLabelSize(i)
             if restore:
                 maxrow = max(scrollpos[1] * self.SCROLLPOS_ROW_RATIO, cursorpos[0])
-                seekrow = (maxrow / conf.SeekLength + 1) * conf.SeekLength
+                seekrow = int(maxrow / conf.SeekLength + 1) * conf.SeekLength - 1
                 self._grid.Table.SeekToRow(seekrow)
                 self._grid.Table.SetFilterSort(state)
                 maxpos = self._grid.GetNumberRows() - 1, self._grid.GetNumberCols() - 1
