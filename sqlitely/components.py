@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.12.2019
+@modified    28.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -212,10 +212,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         if col == self.sort_column:
             label += u" ↓" if self.sort_ascending else u" ↑"
         if col in self.filters:
-            if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
-                label += "\n= %s" % self.filters[col]
-            else:
-                label += '\nlike "%s"' % self.filters[col]
+            label += u'\nlike "%s"' % self.filters[col]
         pref = u"\u25be" if self.View and col == self.View.GridCursorCol \
                and len(self.columns) > 1 and self.GetNumberRows() else "  "
         return u" %s %s  " % (pref, label)
@@ -294,11 +291,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             part = ""
             for col, filter_value in self.filters.items():
                 column_data = self.columns[col]
-                if self.db.get_affinity(column_data) in ("INTEGER", "REAL"):
-                    part = "%s = %s" % (column_data["name"], filter_value)
-                else:
-                    v = grammar.quote(filter_value, force=True)[1:-1]
-                    part = '%s LIKE "%%%s%%"' % (column_data["name"], v)
+                v = grammar.quote(filter_value, force=True)[1:-1]
+                part = '%s LIKE "%%%s%%"' % (column_data["name"], v)
                 where += (" AND " if where else "WHERE ") + part
 
         if sort and self.sort_column is not None:
@@ -573,42 +567,30 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
     def AddFilter(self, col, val):
         """
-        Adds a filter to the grid data on the specified column. Ignores the
-        value if invalid for the column (e.g. a string for an integer column).
+        Adds a filter to the grid data on the specified column.
 
         @param   col   column index
-        @param   val   a simple value for filtering. For numeric columns, the
-                       value is matched exactly, and for text columns,
-                       matched by substring.
+        @param   val   value to filter by, matched by substring
         """
-        accepted_value = None
+        value = val
         if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
-            try:
-                # Allow user to enter a comma for decimal separator.
-                accepted_value = float(val.replace(",", ".")) \
-                                 if ("." in val or "," in val) \
-                                 else int(val)
-            except ValueError: pass
-        else: accepted_value = val
-        if accepted_value is not None:
-            rows_before = self.GetNumberRows()
-            self.filters[col] = accepted_value
-            self.Filter(rows_before)
+            value = val.replace(",", ".").strip() # Allow comma for decimals
+        if value: self.filters[col] = value
+        else: self.filters.pop(col, None)
+        self.Filter(self.GetNumberRows())
 
 
     def RemoveFilter(self, col):
         """Removes filter on the specified column, if any."""
         if col not in self.filters: return
-        rows_before = self.GetNumberRows()
         self.filters.pop(col)
-        self.Filter(rows_before)
+        self.Filter(self.GetNumberRows())
 
 
     def ClearFilter(self, refresh=True):
         """Clears all added filters."""
-        rows_before = self.GetNumberRows()
         self.filters.clear()
-        if refresh: self.Filter(rows_before)
+        if refresh: self.Filter(self.GetNumberRows())
 
 
     def ClearSort(self, refresh=True):
@@ -1141,12 +1123,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         for col, filter_value in self.filters.items():
             column_data = self.columns[col]
             value = rowdata[column_data["name"]]
-            if self.db.get_affinity(column_data) in ("INTEGER", "REAL"):
-                is_filtered = (filter_value != value)
-            else:
-                if not isinstance(value, basestring):
-                    value = "" if value is None else str(value)
-                is_filtered = filter_value.lower() not in value.lower()
+            if not isinstance(value, basestring):
+                value = "" if value is None else str(value)
+            is_filtered = filter_value.lower() not in value.lower()
             if is_filtered: break # for col
         return is_filtered
 
@@ -1224,7 +1203,7 @@ class SQLiteGridBaseMixin(object):
         if wx.ID_OK != dlg.ShowModal(): return
 
         new_filter = dlg.GetValue()
-        if len(new_filter):
+        if new_filter:
             busy = controls.BusyPanel(self, 'Filtering column %s by "%s".' %
                                       (name, new_filter))
             try: grid_data.AddFilter(col, new_filter)
