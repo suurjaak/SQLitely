@@ -209,11 +209,11 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         and sort arrow if grid sorted by column.
         """
         EM3, EM4, TRIANGLE = u"\u2004", u"\u2005", u"\u25be"
-        label, pref, suf = self.columns[col]["name"], EM3 + EM4, EM4 * 3
+        pref, suf = EM3 + EM4, EM4 * 3
         if col == self.sort_column: suf = u"↓" if self.sort_ascending else u"↑"
         if self.View and col == self.View.GridCursorCol \
         and len(self.columns) > 1 and self.GetNumberRows(): pref = TRIANGLE
-        label = u" %s %s %s " % (pref, label, suf)
+        label = u" %s %s %s " % (pref, util.unprint(self.columns[col]["name"]), suf)
         if col in self.filters: label += u'\nhas "%s"' % self.filters[col]
         return label
 
@@ -891,11 +891,11 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                         "Deleting %s will delete any related rows " \
                         "in related tables also,\ncascading further to related " \
                         "rows in any of their related tables, etc.\n\n" % (
-                    grammar.quote(self.name, force=True),
+                    util.unprint(grammar.quote(self.name, force=True)),
                     "\n- ".join("table %s %s (ON %s)" % (
-                        grammar.quote(t, force=True),
-                        ", ".join(map(grammar.quote, kk)),
-                        ", ".join(map(grammar.quote, x["name"]))
+                        util.unprint(grammar.quote(t, force=True)),
+                        ", ".join(map(util.unprint, map(grammar.quote, kk))),
+                        ", ".join(map(util.unprint, map(grammar.quote, x["name"])))
                     ) for x in lks for t, kk in x.get("table", {}).items()), name
                 )
             msg = "Are you sure you want to delete %s%s?\n\n" \
@@ -917,7 +917,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
             msg = "Deleted %s:\n" % util.plural("row", sum((xx for t, xx in result), []))
             for t, xx in result:
-                msg += "\n- %s in table %s" % (util.plural("row", xx), grammar.quote(t, force=True))
+                msg += "\n- %s in table %s" % (util.plural("row", xx), util.unprint(grammar.quote(t, force=True)))
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_INFORMATION)
 
         def on_col_copy(col, event=None):
@@ -958,7 +958,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
             if len(rows) > 1: caption = util.plural("row", rows)
             elif rowdatas[0][self.KEY_NEW]: caption = "New row"
-            elif pks: caption = ", ".join("%s %s" % (c["name"], rowdatas0[0][c["name"]])
+            elif pks: caption = ", ".join("%s %s" % (util.unprint(c["name"]), rowdatas0[0][c["name"]])
                                           for c in pks)
             elif idxs[0] in self.rowids:
                 caption = "ROWID %s" % self.rowids[idxs[0]]
@@ -1020,7 +1020,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             titles = []
             for rowdata in rowdatas0:
                 for c in keys:
-                    itemtitle = ", ".join(c["name"]) + " " + fmtvals(rowdata, c["name"])
+                    itemtitle = util.unprint(", ".join(c["name"])) + " " + fmtvals(rowdata, c["name"])
                     if itemtitle in titles: continue # for c
                     if (is_fks or "table" in c) and all(rowdata[x] is not None for x in c["name"]):
                         if not is_fks: has_cascade = True
@@ -1028,7 +1028,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                         menu2.Append(wx.ID_ANY, itemtitle, submenu)
                         for table2, keys2 in c["table"].items():
                             vals = {a: rowdata[b] for a, b in zip(keys2, c["name"])}
-                            valstr = ", ".join("%s %s" % (k, fmtval(v))
+                            valstr = ", ".join("%s %s" % (util.unprint(k), fmtval(v))
                                                for k, v in vals.items())
                             item_link = wx.MenuItem(submenu, -1, "Open table %s ON %s" %
                                                     (grammar.quote(table2, force=True), valstr))
@@ -1043,7 +1043,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         for col, coldata in enumerate(self.columns):
             submenu = wx.Menu()
             tip = self.db.get_sql(self.category, self.name, coldata["name"])
-            label = coldata["name"]
+            label = util.unprint(coldata["name"])
             if any(label in x["name"] for x in lks):
                 label += u"\t\u1d18\u1d0b" # Unicode small caps "PK"
             elif any(label in x["name"] for x in fks):
@@ -1198,7 +1198,7 @@ class SQLiteGridBaseMixin(object):
 
         current_filter = unicode(grid_data.filters[col]) \
                          if col in grid_data.filters else ""
-        name = grammar.quote(grid_data.columns[col]["name"], force=True)
+        name = util.unprint(grammar.quote(grid_data.columns[col]["name"], force=True))
         dlg = wx.TextEntryDialog(self,
                   "Filter column %s by:" % name, "Filter", value=current_filter,
                   style=wx.OK | wx.CANCEL)
@@ -2317,7 +2317,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         try:
             grid = self._grid.Table
             args = {"make_iterable": grid.GetRowIterator, "filename": filename,
-                    "title": title, "db": self._db, "columns": grid.columns,
+                    "title": util.unprint(title), "db": self._db, "columns": grid.columns,
                     "category": self._category, "name": self._item["name"]}
             opts = {"filename": filename,
                     "callable": functools.partial(importexport.export_data, **args)}
@@ -3208,8 +3208,9 @@ class SchemaObjectPage(wx.Panel):
     def _PopulateIndex(self):
         """Populates panel with index-specific data."""
         meta = self._item.get("meta") or {}
-        self._ctrls["table"].SetItems(self._tables)
-        self._ctrls["table"].Value = meta.get("table") or ""
+        self._ctrls["table"].SetItems(map(util.unprint, self._tables))
+        self._ctrls["table"].Value = util.unprint(meta.get("table") or "")
+        for j, x in enumerate(self._tables): self._ctrls["table"].SetClientData(j, x)
 
         self._ctrls["unique"].Value = bool(meta.get("unique"))
         self._ctrls["where"].SetText(meta.get("where") or "")
@@ -3241,12 +3242,14 @@ class SchemaObjectPage(wx.Panel):
 
         if grammar.SQL.INSTEAD_OF == meta.get("upon"):
             self._ctrls["label_table"].Label = "&View:"
-            self._ctrls["table"].SetItems(self._views)
+            self._ctrls["table"].SetItems(map(util.unprint, self._views))
+            for j, x in enumerate(self._views): self._ctrls["table"].SetClientData(j, x)
         else:
             self._ctrls["label_table"].Label = "T&able:"
-            self._ctrls["table"].SetItems(self._tables)
+            self._ctrls["table"].SetItems(map(util.unprint, self._tables))
+            for j, x in enumerate(self._tables): self._ctrls["table"].SetClientData(j, x)
 
-        self._ctrls["table"].Value = meta.get("table") or ""
+        self._ctrls["table"].Value     = util.unprint(meta.get("table") or "")
         self._ctrls["for"].Value       = bool(meta.get("for"))
         self._ctrls["upon"].Value      = meta.get("upon") or ""
         self._ctrls["action"].Value    = meta.get("action") or ""
@@ -3401,10 +3404,12 @@ class SchemaObjectPage(wx.Panel):
                 ctrl_cols  = wx.TextCtrl(panel)
                 ctrl_cols.SetEditable(False); ctrl_cols._toggle = "disable"
             else:
-                ctrl_cols  = wx.ComboBox(panel, choices=mycolumns, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+                ctrl_cols  = wx.ComboBox(panel, choices=map(util.unprint, mycolumns),
+                                         style=wx.CB_DROPDOWN | wx.CB_READONLY)
+                for j, x in enumerate(mycolumns): ctrl_cols.SetClientData(j, x)
 
             ctrl_cols.MinSize = (150, -1)
-            ctrl_cols.Value = ", ".join(kcols)
+            ctrl_cols.Value = util.unprint(", ".join(kcols))
 
             sizer_item.Add(ctrl_cols, proportion=1, flag=wx.GROW)
 
@@ -3426,22 +3431,28 @@ class SchemaObjectPage(wx.Panel):
                 ctrl_cols  = wx.TextCtrl(panel)
                 ctrl_cols.SetEditable(False); ctrl_cols._toggle = "disable"
             else:
-                ctrl_cols = wx.ComboBox(panel, choices=mycolumns, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+                ctrl_cols = wx.ComboBox(panel, choices=map(util.unprint, mycolumns),
+                                        style=wx.CB_DROPDOWN | wx.CB_READONLY)
+                for j, x in enumerate(mycolumns): ctrl_cols.SetClientData(j, x)
             label_table = wx.StaticText(panel, label="Foreign table:")
-            list_table  = wx.ComboBox(panel, choices=self._tables, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+            list_table  = wx.ComboBox(panel, choices=map(util.unprint, self._tables),
+                                      style=wx.CB_DROPDOWN | wx.CB_READONLY)
+            for j, x in enumerate(self._tables): list_table.SetClientData(j, x)
             label_keys  = wx.StaticText(panel, label="Foreign column:")
             if len(fkcols) > 1:
                 ctrl_keys  = wx.TextCtrl(panel)
                 ctrl_keys.SetEditable(False); ctrl_keys._toggle = "disable"
             else:
-                ctrl_keys = wx.ComboBox(panel, choices=fcolumns, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+                ctrl_keys = wx.ComboBox(panel, choices=map(util.unprint, fcolumns),
+                                        style=wx.CB_DROPDOWN | wx.CB_READONLY)
+                for j, x in enumerate(fcolumns): ctrl_keys.SetClientData(j, x)
 
             ctrl_cols.MinSize  = (125, -1)
             list_table.MinSize = (125, -1)
             ctrl_keys.MinSize  = (125, -1)
 
-            ctrl_cols.Value  = ", ".join(kcols)
-            list_table.Value = cnstr.get("table") or ""
+            ctrl_cols.Value  = util.unprint(", ".join(kcols))
+            list_table.Value = util.unprint(cnstr.get("table") or "")
             ctrl_keys.Value  = ", ".join(fkcols)
 
             sizer_foreign.Add(label_table, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -3512,9 +3523,10 @@ class SchemaObjectPage(wx.Panel):
         panel = self._panel_columns
 
         if self._hasmeta and "name" in col:
-            ctrl_index = wx.ComboBox(panel, choices=tablecols,
+            ctrl_index = wx.ComboBox(panel, choices=map(util.unprint, tablecols),
                 style=wx.CB_DROPDOWN | wx.CB_READONLY)
             ctrl_index.ToolTip = "Table column to index"
+            for j, x in enumerate(tablecols): ctrl_index.SetClientData(j, x)
         else:
             ctrl_index = controls.SQLiteTextCtrl(panel, traversable=True, wheelable=False)
             ctrl_index.SetCaretLineVisible(False)
@@ -3533,7 +3545,7 @@ class SchemaObjectPage(wx.Panel):
         list_collate.MinSize = ( 80, -1)
         list_order.MinSize =   ( 60, -1)
 
-        ctrl_index.Value   = col.get("name") or col.get("expr") or ""
+        ctrl_index.Value   = util.unprint(col.get("name") or col.get("expr") or "")
         list_collate.Value = col.get("collate") or ""
         list_order.Value   = col.get("order") or ""
 
@@ -3573,10 +3585,11 @@ class SchemaObjectPage(wx.Panel):
         choicecols = [x["name"] for x in table.get("columns") or ()]
         panel = self._panel_columns
 
-        list_column = wx.ComboBox(panel, choices=choicecols,
+        list_column = wx.ComboBox(panel, choices=map(util.unprint, choicecols),
             style=wx.CB_DROPDOWN | wx.CB_READONLY)
+        for j, x in enumerate(choicecols): list_column.SetClientData(j, x)
         list_column.MinSize = (200, -1)
-        list_column.Value = col["name"]
+        list_column.Value = util.unprint(col["name"])
 
         if insert:
             start = panel.Sizer.Cols * i
@@ -4158,13 +4171,14 @@ class SchemaObjectPage(wx.Panel):
 
             sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
 
-            ctrl_index = wx.ComboBox(panel_columns, choices=tablecols,
+            ctrl_index = wx.ComboBox(panel_columns, choices=map(util.unprint, tablecols),
                 style=wx.CB_DROPDOWN | wx.CB_READONLY)
             list_collate  = wx.ComboBox(panel_columns, choices=self.COLLATE, style=wx.CB_DROPDOWN)
             list_order    = wx.ComboBox(panel_columns, choices=self.ORDER, style=wx.CB_DROPDOWN | wx.CB_READONLY)
             button_up     = wx.Button(panel_columns, label=u"\u2191", size=(20, -1))
             button_down   = wx.Button(panel_columns, label=u"\u2193", size=(20, -1))
             button_remove = wx.Button(panel_columns, label=u"\u2715", size=(20, -1))
+            for j, x in enumerate(tablecols): ctrl_index.SetClientData(j, x)
 
             ctrl_index.MinSize =   (250, -1)
             list_collate.MinSize = ( 80, -1)
@@ -4175,7 +4189,7 @@ class SchemaObjectPage(wx.Panel):
             button_down.ToolTip   = "Move one step lower"
             button_remove.ToolTip = "Remove"
 
-            ctrl_index.Value   = col.get("name") or ""
+            ctrl_index.Value   = util.unprint(col.get("name") or "")
             list_collate.Value = col.get("collate") or ""
             list_order.Value   = col.get("order") or ""
 
@@ -4442,12 +4456,14 @@ class SchemaObjectPage(wx.Panel):
 
         path = [path] if isinstance(path, basestring) else path
         rebuild, meta = False, self._item["meta"]
-        value0 = util.get(meta, path)
+        value0, src = util.get(meta, path), event.EventObject
 
-        value = event.EventObject.Value
+        value = src.Value
         if isinstance(value, basestring) \
-        and (not isinstance(event.EventObject, wx.stc.StyledTextCtrl)
+        and (not isinstance(src, wx.stc.StyledTextCtrl)
         or not value.strip()): value = value.strip()
+        if isinstance(src, wx.ComboBox) and src.HasClientData():
+            value = src.GetClientData(src.Selection)
         if isinstance(value0, list) and not isinstance(value, list):
             value = [value]
 
@@ -5687,7 +5703,7 @@ class ImportDialog(wx.Dialog):
         combo_sheet.Enabled = check_header.Enabled = False
         button_table.Enabled = False
 
-        combo_table.SetItems(["%s (%s)" % (x["name"], util.plural("column", x["columns"]))
+        combo_table.SetItems(["%s (%s)" % (util.unprint(x["name"]), util.plural("column", x["columns"]))
                               for x in self._tables])
 
         check_header.Value = self._has_header
@@ -6238,7 +6254,7 @@ class ImportDialog(wx.Dialog):
             self._has_new = False
             self._has_pk = self._check_pk.Value = False
             self._tables = self._db.get_category("table").values()
-            self._combo_table.SetItems(["%s (%s)" % (x["name"], util.plural("column", x["columns"]))
+            self._combo_table.SetItems(["%s (%s)" % (util.unprint(x["name"]), util.plural("column", x["columns"]))
                                         for x in self._tables])
             for i, x in enumerate(self._tables):
                 if x["name"] != self._table["name"]: continue # for i, x
@@ -6268,7 +6284,7 @@ class ImportDialog(wx.Dialog):
             self._combo_table.Select(-1)
         if self._has_new:
             self._tables = [x for x in self._tables if not x.get("new")]
-            self._combo_table.SetItems(["%s (%s)" % (x["name"], util.plural("column", x["columns"]))
+            self._combo_table.SetItems(["%s (%s)" % (util.unprint(x["name"]), util.plural("column", x["columns"]))
                                         for x in self._tables])
             self._button_table.Label = "&New table"
             self._button_table.Enabled = False
@@ -6382,7 +6398,7 @@ class ImportDialog(wx.Dialog):
             self._table["name"] = name
             self._combo_table.Clear()
             for t in self._tables:
-                n = t["name"] + (" " + NEW_SUFFIX) if t.get("new") else ""
+                n = util.unprint(t["name"]) + (" " + NEW_SUFFIX) if t.get("new") else " (%s)" % util.plural("column", t["columns"])
                 self._combo_table.Append(n)
             self._combo_table.Select(len(self._tables) - 1)
 
@@ -6584,14 +6600,14 @@ class DataDialog(wx.Dialog):
         sizer_columns.AddGrowableCol(1)
 
         for i, coldata in enumerate(self._columns):
-            label = wx.StaticText(panel, label=coldata["name"] + ":",
-                                  name="label_data_" + coldata["name"])
+            name = util.unprint(coldata["name"])
+            label = wx.StaticText(panel, label=name + ":", name="label_data_" + name)
             resizable, rw = gridbase.db.get_affinity(coldata) in ("TEXT", "BLOB"), None
             style = wx.TE_RICH | (wx.TE_MULTILINE if resizable else 0)
             edit = controls.HintedTextCtrl(panel, escape=False, style=style,
-                                           name="data_" + coldata["name"])
+                                           name="data_" + name)
             edit.SetEditable(self._editable)
-            tip = ("%s %s" % (coldata["name"], coldata.get("type"))).strip()
+            tip = ("%s %s" % (name, coldata.get("type"))).strip()
             if self._editable:
                 tip = gridbase.db.get_sql(gridbase.category, gridbase.name, coldata["name"])
             edit.ToolTip = label.ToolTip = tip

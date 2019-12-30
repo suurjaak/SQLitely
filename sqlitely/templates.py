@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.12.2019
+@modified    30.12.2019
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -227,7 +227,7 @@ from sqlitely.lib import util
   <tr>
     <th class="index asc"><a class="sort asc" title="Sort by index" onclick="onSort(0)">#</a></th>
 %for i, col in enumerate(columns):
-    <th><a class="sort" title="Sort by {{ grammar.quote(col) }}" onclick="onSort({{ i }})">{{ col }}</a></th>
+    <th><a class="sort" title="Sort by {{ grammar.quote(col) }}" onclick="onSort({{ i + 1 }})">{{ util.unprint(col) }}</a></th>
 %endfor
   </tr>
 <%
@@ -491,7 +491,8 @@ SQL: {{ sql }}
 <%
 headers = []
 for c in columns:
-    headers.append((c.ljust if columnjusts[c] else c.rjust)(columnwidths[c]))
+    fc = util.unprint(c)
+    headers.append((fc.ljust if columnjusts[c] else fc.rjust)(columnwidths[c]))
 hr = "|-" + "-|-".join("".ljust(columnwidths[c], "-") for c in columns) + "-|"
 header = "| " + " | ".join(headers) + " |"
 %>
@@ -554,22 +555,24 @@ TXT data export template for copying row as page.
 @param   columns       [name, ]
 """
 DATA_ROWS_PAGE_TXT = """<%
+from sqlitely.lib import util
 from sqlitely import templates
 
-colwidth = max(map(len, columns))
+fmtcols = map(util.unprint, columns)
+colwidth = max(map(len, fmtcols))
 %>
 %for i, row in enumerate(rows):
     %if i:
 
     %endif
-    %for col in columns:
+    %for col, fmtcol in zip(columns, fmtcols):
 <%
 raw = row[col]
 value = "" if raw is None \
         else raw if isinstance(raw, basestring) else str(raw)
 value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
 %>
-{{ col.ljust(colwidth) }} = {{ value }}
+{{ fmtcol.ljust(colwidth) }} = {{ value }}
     %endfor
 %endfor
 """
@@ -600,12 +603,13 @@ HTML template for SQL search results.
 @param   pattern_replace  regex for matching search words
 """
 SEARCH_ROW_META_HTML = """<%
+from sqlitely.lib import util
 from sqlitely import conf, grammar
 
 wrap_b = lambda x: "<b>%s</b>" % x.group(0)
 %>
 <a name="{{ category }}">{{ category.capitalize() }}</a>
-<a href="{{ category }}:{{ item["name"] }}"><font color="{{ conf.LinkColour }}">{{! pattern_replace.sub(wrap_b, escape(grammar.quote(item["name"]))) }}</font></a>:
+<a href="{{ category }}:{{ item["name"] }}"><font color="{{ conf.LinkColour }}">{{! pattern_replace.sub(wrap_b, escape(util.unprint(grammar.quote(item["name"])))) }}</font></a>:
 <pre><font size="2">{{! pattern_replace.sub(wrap_b, escape(item["sql"])).replace(" ", "&nbsp;") }}</font></pre>
 <br /><br />
 """
@@ -619,15 +623,16 @@ HTML template for data search results header; start of HTML table.
 @param   item      schema category object
 """
 SEARCH_ROW_DATA_HEADER_HTML = """<%
+from sqlitely.lib import util
 from sqlitely import conf, grammar
 %>
 <font color="{{ conf.FgColour }}">
-<br /><br /><b><a name="{{ item["name"] }}">{{ category.capitalize() }} {{ grammar.quote(item["name"]) }}:</a></b><br />
+<br /><br /><b><a name="{{ item["name"] }}">{{ category.capitalize() }} {{ util.unprint(grammar.quote(item["name"])) }}:</a></b><br />
 <table border="1" cellpadding="4" cellspacing="0" width="100%">
 <tr>
 <th>#</th>
 %for col in item["columns"]:
-<th>{{ col["name"] }}</th>
+<th>{{ util.unprint(col["name"]) }}</th>
 %endfor
 </tr>
 """
@@ -1090,7 +1095,7 @@ total = index_total + sum(x["size"] for x in data["table"])
     %for item in sorted(data["table"], key=lambda x: (-x["size"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size"], total=total)) }}</td>
-    <td nowrap="">{{ item["name"] }}</td>
+    <td nowrap="">{{ util.unprint(item["name"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
   </tr>
@@ -1111,7 +1116,7 @@ total = index_total + sum(x["size"] for x in data["table"])
         %for item in sorted(data["table"], key=lambda x: (-x["size_total"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size_total"], total=total)) }}</td>
-    <td nowrap="">{{ item["name"] }}</td>
+    <td nowrap="">{{ util.unprint(item["name"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size_total"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size_total"], max_units=False, with_units=False) }}</td>
   </tr>
@@ -1131,7 +1136,7 @@ total = index_total + sum(x["size"] for x in data["table"])
         %for item in sorted([x for x in data["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size_index"], total=total)) }}</td>
-    <td nowrap="">{{ item["name"] }} ({{ len(item["index"]) }})</td>
+    <td nowrap="">{{ util.unprint(item["name"]) }} ({{ len(item["index"]) }})</td>
     <td align="left" nowrap="">{{ util.format_bytes(item["size_index"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size_index"], max_units=False, with_units=False) }}</td>
     <td align="right">{{ int(round(100 * util.safedivf(item["size_index"], index_total))) }}%</td>
@@ -1153,8 +1158,8 @@ total = index_total + sum(x["size"] for x in data["table"])
         %for item in sorted(data["index"], key=lambda x: (-x["size"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size"], total=total)) }}</td>
-    <td nowrap="">{{ item["name"] }}</td>
-    <td nowrap="">{{ item["table"] }}</td>
+    <td nowrap="">{{ util.unprint(item["name"]) }}</td>
+    <td nowrap="">{{ util.unprint(item["table"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
     <td align="right">{{ int(round(100 * util.safedivf(item["size"], index_total))) }}%</td>
@@ -1499,7 +1504,7 @@ rows_pref = "~" if rows_total and any(x.get("is_count_estimated") for x in db.sc
     %for item in sorted(stats["table"], key=lambda x: (-x["size"], x["name"].lower())):
     <tr>
       <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size"], total=total)) }}</td>
-      <td title="{{ item["name"] }}">{{ item["name"] }}</td>
+      <td title="{{ item["name"] }}">{{ util.unprint(item["name"]) }}</td>
       <td class="right" title="{{ util.format_bytes(item["size"]) }}">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
     </tr>
     %endfor
@@ -1518,7 +1523,7 @@ rows_pref = "~" if rows_total and any(x.get("is_count_estimated") for x in db.sc
         %for item in sorted(stats["table"], key=lambda x: (-x["size_total"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size_total"], total=total)) }}</td>
-    <td title="{{ item["name"] }}">{{ item["name"] }}</td>
+    <td title="{{ item["name"] }}">{{ util.unprint(item["name"]) }}</td>
     <td class="right" title="{{ util.format_bytes(item["size_total"]) }}">{{ util.format_bytes(item["size_total"], max_units=False, with_units=False) }}</td>
   </tr>
         %endfor
@@ -1536,7 +1541,7 @@ rows_pref = "~" if rows_total and any(x.get("is_count_estimated") for x in db.sc
         %for item in sorted([x for x in stats["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size_index"], total=total)) }}</td>
-    <td title="{{ item["name"] }} ({{ len(item["index"]) }})">{{ item["name"] }} ({{ len(item["index"]) }})</td>
+    <td title="{{ item["name"] }} ({{ len(item["index"]) }})">{{ util.unprint(item["name"]) }} ({{ len(item["index"]) }})</td>
     <td class="right" title="{{ util.format_bytes(item["size_index"]) }}">{{ util.format_bytes(item["size_index"], max_units=False, with_units=False) }}</td>
     <td class="right">{{ int(round(100 * util.safedivf(item["size_index"], index_total))) }}%</td>
   </tr>
@@ -1555,7 +1560,7 @@ rows_pref = "~" if rows_total and any(x.get("is_count_estimated") for x in db.sc
         %for item in sorted(stats["index"], key=lambda x: (-x["size"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size"], total=total)) }}</td>
-    <td title="{{ item["name"] }}">{{ item["name"] }}</td>
+    <td title="{{ item["name"] }}">{{ util.unprint(item["name"]) }}</td>
     <td title="{{ item["table"] }}">{{ item["table"] }}</td>
     <td class="right" title="{{ util.format_bytes(item["size"]) }}">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
     <td class="right">{{ int(round(100 * util.safedivf(item["size"], index_total))) }}%</td>
@@ -1597,7 +1602,7 @@ lks, fks = db.get_keys(item["name"]) if "table" == category else [(), ()]
       <table class="subtable">
         <tr>
           <td title="{{ item["name"] }}">
-            {{ item["name"] }}
+            {{ util.unprint(item["name"]) }}
           </td>
           <td>
             <a class="toggle" title="Toggle SQL" onclick="onToggle(this, '{{ category }}/{{! urllib.quote(item["name"], safe="") }}/sql')">SQL</a>
@@ -1619,7 +1624,7 @@ countstr = "{1}{0:,}".format(count, "~" if item.get("is_count_estimated") else "
       <a class="toggle right" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urllib.quote(item["name"], safe="") }}/cols')">{{ len(item["columns"]) }}</a>
       <table class="hidden" id="{{ category }}/{{! urllib.quote(item["name"], safe="") }}/cols">
             %for col in item["columns"]:
-        <tr><td>{{ col["name"] }}</td><td>{{ col.get("type", "") }}</td></tr>
+        <tr><td>{{ util.unprint(col["name"]) }}</td><td>{{ util.unprint(col.get("type", "")) }}</td></tr>
             %endfor
       </table>
     </td>
@@ -1635,7 +1640,7 @@ rels = [] # [(source, keys, target, keys)]
 <%
 
 lks2, fks2 = db.get_keys(item2["name"])
-fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(grammar.quote, x))
+fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(util.unprint, map(grammar.quote, x)))
 for col in lks2:
     for table, keys in col.get("table", {}).items():
         if util.lceq(table, item["name"]):
@@ -1661,9 +1666,9 @@ for col in fks2:
         <br />
                 %for (a, c1, b, c2) in rels:
                     %if a:
-        <a href="#table/{{! urllib.quote(a, safe="") }}" title="Go to table {{ grammar.quote(a, force=True) }}">{{ grammar.quote(a) }}</a>.{{ fmtkeys(c1) }} REFERENCES {{ fmtkeys(c2) }}<br />
+        <a href="#table/{{! urllib.quote(a, safe="") }}" title="Go to table {{ grammar.quote(a, force=True) }}">{{ util.unprint(grammar.quote(a)) }}</a>.{{ fmtkeys(c1) }} REFERENCES {{ fmtkeys(c2) }}<br />
                     %else:
-        {{ fmtkeys(c1) }} REFERENCES <a href="#table/{{! urllib.quote(b, safe="") }}" title="Go to table {{ grammar.quote(b, force=True) }}">{{ grammar.quote(b) }}</a>.{{ fmtkeys(c2) }}<br />
+        {{ fmtkeys(c1) }} REFERENCES <a href="#table/{{! urllib.quote(b, safe="") }}" title="Go to table {{ util.unprint(grammar.quote(b, force=True)) }}">{{ grammar.quote(b) }}</a>.{{ fmtkeys(c2) }}<br />
                     %endif
                 %endfor
         </div>
@@ -1676,7 +1681,7 @@ for col in fks2:
 <%
 flags["has_direct"] = True
 %>
-  {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ item2["name"] }}</a><br />
+  {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a><br />
                 %endif
             %endfor
 
@@ -1688,7 +1693,7 @@ flags["has_direct"] = True
 <%
 flags["has_indirect"] = True
 %>
-  <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ item2["name"] }}</a></em><br />
+  <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a></em><br />
                 %endif
             %endfor
     </td>
@@ -1717,7 +1722,7 @@ size = next((x["size_total"] for x in stats["table"] if util.lceq(x["name"], ite
                 %if col.get("expr"):
       <pre>{{ col["expr"] }}</pre>
                 %else:
-      {{ col["name"] }}
+      {{ util.unprint(col["name"]) }}
                 %endif
       <br />
             %endfor
@@ -1738,7 +1743,7 @@ size = next((x["size"] for x in stats["index"] if util.lceq(x["name"], item["nam
 <%
 mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "view"
 %>
-      {{ mycategory }} <a href="#{{ mycategory }}/{{! urllib.quote(item["tbl_name"], safe="") }}" title="Go to {{ mycategory }} {{ grammar.quote(item["tbl_name"], force=True) }}">{{ item["tbl_name"] }}</a>
+      {{ mycategory }} <a href="#{{ mycategory }}/{{! urllib.quote(item["tbl_name"], safe="") }}" title="Go to {{ mycategory }} {{ grammar.quote(item["tbl_name"], force=True) }}">{{ util.unprint(item["tbl_name"]) }}</a>
     </td>
     <td>
       {{ item.get("meta", {}).get("upon") }} {{ item.get("meta", {}).get("action") }}
@@ -1749,7 +1754,7 @@ mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "v
     <td>
             %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
                 %if not util.lceq(item2["name"], item["tbl_name"]):
-  <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ item2["name"] }}</a></em><br />
+  <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a></em><br />
                 %endif
             %endfor
     </td>
@@ -1761,28 +1766,28 @@ mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "v
       <a class="toggle" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urllib.quote(item["name"], safe="") }}/cols')">{{ len(item["columns"]) }}</a>
       <table class="hidden" id="{{ category }}/{{! urllib.quote(item["name"], safe="") }}/cols">
             %for col in item["columns"]:
-        <tr><td>{{ col["name"] }}</td><td>{{ col.get("type", "") }}</td></tr>
+        <tr><td>{{ util.unprint(col["name"]) }}</td><td>{{ util.unprint(col.get("type", "")) }}</td></tr>
             %endfor
       </table>
     </td>
 
     <td>
             %for item2 in (x for c in ("table", "view") for x in relateds.get(c, ()) if x["name"].lower() in item["meta"]["__tables__"]):
-      {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ item2["name"] }}</a><br />
+      {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a><br />
             %endfor
 
             %for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, ()) if util.lceq(x.get("tbl_name"), item["name"])):
                 %if not i:
       <br />
                 %endif
-      {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ item2["name"] }}</a><br />
+      {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a><br />
             %endfor
 
     </td>
 
     <td>
             %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ()) if item["name"].lower() in x["meta"]["__tables__"]):
-      <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ item2["name"] }}</a></em><br />
+      <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a></em><br />
             %endfor
     </td>
         %endif
@@ -1868,7 +1873,7 @@ COLS = {"table":   ["Name", "Columns", "Related tables", "Other relations", "Row
         "index":   ["Name", "Table", "Columns", "Size in bytes"] if stats else ["Name", "Table", "Columns"],
         "trigger": ["Name", "Owner", "When", "Uses"],
         "view":    ["Name", "Columns", "Uses", "Used by"], }
-fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(grammar.quote, x))
+fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(util.unprint, map(grammar.quote, x)))
 
 index_total = sum(x["size"] for x in stats["index"]) if stats else None
 table_total = sum(x["size"] for x in stats["table"]) if stats else None
@@ -1908,7 +1913,7 @@ Size: {{ util.format_bytes(db.filesize) }} ({{ util.format_bytes(db.filesize, ma
 items = sorted(stats["table"], key=lambda x: (-x["size"], x["name"].lower()))
 cols = ["Name", "Size", "Bytes"]
 vals = {x["name"]: (
-    x["name"],
+    util.unprint(x["name"]),
     util.format_bytes(x["size"]),
     util.format_bytes(x["size"], max_units=False, with_units=False),
 ) for x in items}
@@ -1921,7 +1926,7 @@ justs  = {0: 1, 1: 0, 2: 0}
 items = sorted(stats["table"], key=lambda x: (-x["size_total"], x["name"].lower()))
 cols = ["Name", "Size", "Bytes"]
 vals = {x["name"]: (
-    x["name"],
+    util.unprint(x["name"]),
     util.format_bytes(x["size_total"]),
     util.format_bytes(x["size_total"], max_units=False, with_units=False),
 ) for x in items}
@@ -1934,7 +1939,7 @@ justs  = {0: 1, 1: 0, 2: 0}
 items = sorted([x for x in stats["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower()))
 cols = ["Name", "Size", "Bytes", "Proportion"]
 vals = {x["name"]: (
-    "%s (%s)" % (x["name"], len(x["index"])),
+    "%s (%s)" % (util.unprint(x["name"]), len(x["index"])),
     util.format_bytes(x["size_index"]),
     util.format_bytes(x["size_index"], max_units=False, with_units=False),
     "%s%%" % int(round(100 * util.safedivf(x["size_index"], index_total))),
@@ -1948,8 +1953,8 @@ justs  = {0: 1, 1: 0, 2: 0, 3: 0}
 items = sorted(stats["index"], key=lambda x: (-x["size"], x["name"].lower()))
 cols = ["Name", "Table", "Size", "Bytes", "Proportion"]
 vals = {x["name"]: (
-    x["name"],
-    x["table"],
+    util.unprint(x["name"]),
+    util.unprint(x["table"]),
     util.format_bytes(x["size"]),
     util.format_bytes(x["size"], max_units=False, with_units=False),
     "%s%%" % int(round(100 * util.safedivf(x["size"], index_total))),
@@ -1972,7 +1977,7 @@ for item in db.schema.get(category).values():
     relateds = db.get_related(category, item["name"])
     lks, fks = db.get_keys(item["name"]) if "table" == category else [(), ()]
 
-    row = {"Name": item["name"]}
+    row = {"Name": util.unprint(item["name"])}
     if "table" == category:
         row["Columns"] = str(len(item["columns"]))
 
@@ -1996,8 +2001,8 @@ for item in db.schema.get(category).values():
                         rels.append((item2["name"], col["name"], None, keys))
         reltexts = []
         for (a, c1, b, c2) in rels:
-            if a: s = "%s.%s REFERENCES %s" % (grammar.quote(a), fmtkeys(c1), fmtkeys(c2))
-            else: s = "%s REFERENCES %s.%s" % (fmtkeys(c1), grammar.quote(b), fmtkeys(c2))
+            if a: s = "%s.%s REFERENCES %s" % (util.unprint(grammar.quote(a)), fmtkeys(c1), fmtkeys(c2))
+            else: s = "%s REFERENCES %s.%s" % (fmtkeys(c1), util.unprint(grammar.quote(b)), fmtkeys(c2))
             reltexts.append(s)
         row["Related tables"] = reltexts or [""]
 
@@ -2005,32 +2010,32 @@ for item in db.schema.get(category).values():
         for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
             if "table" != item2["type"] and util.lceq(item2.get("tbl_name"), item["name"]):
                 flags["has_direct"] = True
-                s = "%s %s" % (item2["type"], grammar.quote(item2["name"]))
+                s = "%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"])))
                 othertexts.append(s)
         for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
             if "table" != item2["type"] and not util.lceq(item2.get("tbl_name"), item["name"]):
                 if flags.get("has_direct") and not flags.get("has_indirect"):
                     flags["has_indirect"] = True
-                    s = "%s %s" % (item2["type"], grammar.quote(item2["name"]))
+                    s = "%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"])))
                     othertexts.append(s)
         row["Other relations"] = othertexts or [""]
 
     elif "index" == category:
         row["Table"] = item["tbl_name"]
-        row["Columns"] = [c.get("expr", c.get("name")) for c in item["columns"]]
+        row["Columns"] = [c.get("expr", util.unprint(c.get("name") or "")) for c in item["columns"]]
         if stats and stats.get("index"):
             size = next((x["size"] for x in stats["index"] if util.lceq(x["name"], item["name"])), "")
             row["Size in bytes"] = util.format_bytes(size, max_units=False, with_units=False) if size != "" else ""
 
     elif "trigger" == category:
-        row["Owner"] = ("table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "view") + " " + grammar.quote(item["tbl_name"])
+        row["Owner"] = ("table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "view") + " " + util.unprint(grammar.quote(item["tbl_name"]))
         row["When"] = "%s %s" % (item.get("meta", {}).get("upon"), item.get("meta", {}).get("action"))
         if item.get("meta", {}).get("columns"):
-            row["When"] += " OF " + ", ".join(grammar.quote(c["name"]) for c in item["meta"]["columns"])
+            row["When"] += " OF " + ", ".join(util.unprint(grammar.quote(c["name"])) for c in item["meta"]["columns"])
         usetexts = []
         for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
             if not util.lceq(item2["name"], item["tbl_name"]):
-                usetexts.append("%s %s" % (item2["type"], grammar.quote(item2["name"])))
+                usetexts.append("%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"]))))
         row["Uses"] = usetexts or [""]
 
     elif "view" == category:
@@ -2038,16 +2043,16 @@ for item in db.schema.get(category).values():
 
         usetexts = []
         for item2 in (x for c in ("table", "view") for x in relateds.get(c, ()) if x["name"].lower() in item["meta"]["__tables__"]):
-            usetexts.append("%s %s" % (item2["type"], grammar.quote(item2["name"])))
+            usetexts.append("%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"]))))
         for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, ()) if util.lceq(x.get("tbl_name"), item["name"])):
             if not i:
                 usetexts.append("")
-                usetexts.append("%s %s" % (item2["type"], grammar.quote(item2["name"])))
+                usetexts.append("%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"]))))
         row["Uses"] = usetexts or [""]
 
         usedbytexts = []
         for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ()) if item["name"].lower() in x["meta"]["__tables__"]):
-            usedbytexts.append("%s %s" % (item2["type"], grammar.quote(item2["name"])))
+            usedbytexts.append("%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"]))))
         row["Used by"] = usedbytexts or [""]
 
     rows.append(row)
@@ -2063,7 +2068,8 @@ widths = {c: max(len(c), max(len(x) for r in rows for x in util.tuplefy(r[c]))) 
 
 headers = []
 for c in columns:
-    headers.append((c.ljust if widths[c] else c.rjust)(widths[c]))
+    cf = util.unprint(c)
+    headers.append((cf.ljust if widths[c] else cf.rjust)(widths[c]))
 hr = "|-" + "-|-".join("".ljust(widths[c], "-") for c in columns) + "-|"
 header = "| " + " | ".join(headers) + " |"
 %>

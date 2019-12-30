@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    19.12.2019
+@modified    30.12.2019
 ------------------------------------------------------------------------------
 """
 import collections
@@ -473,6 +473,13 @@ class FormDialog(wx.Dialog):
         return result
 
 
+    def _Unprint(self, s, escape=True):
+        """Returns string with unprintable characters escaped or stripped."""
+        enc = "unicode_escape" if isinstance(s, unicode) else "string_escape"
+        repl = (lambda m: m.group(0).encode(enc)) if escape else ""
+        return re.sub(r"[\x00-\x1f]", repl, s)
+
+
     def _AddField(self, field, path=()):
         """Adds field controls to dialog."""
         callback = field["type"] if callable(field.get("type")) \
@@ -526,8 +533,11 @@ class FormDialog(wx.Dialog):
         if list is field.get("type"):
             value = value or []
             listbox1, listbox2 = (x for x in ctrls if isinstance(x, wx.ListBox))
-            listbox1.SetItems([x for x in choices if x not in value])
-            listbox2.SetItems(value or [])
+            listbox1.SetItems([self._Unprint(x) for x in choices if x not in value])
+            listbox2.SetItems(map(self._Unprint, value or []))
+            for j, x in enumerate(x for x in choices if x not in value):
+                listbox1.SetClientData(j, x)
+            for j, x in enumerate(value or []): listbox2.SetClientData(j, x)
             listbox1.Enable(self._editmode)
             listbox2.Enable(self._editmode)
             for c in ctrls:
@@ -549,8 +559,11 @@ class FormDialog(wx.Dialog):
                                 c.AutoCompAddSubWords(w, ww)
                 elif isinstance(c, wx.CheckBox): c.Value = bool(value)
                 else:
-                    if isinstance(c, wx.ComboBox): c.SetItems(choices)
                     if isinstance(value, (list, tuple)): value = "".join(value)
+                    if isinstance(c, wx.ComboBox):
+                        c.SetItems(map(self._Unprint, choices))
+                        for j, x in enumerate(choices): c.SetClientData(j, x)
+                        value = self._Unprint(value) if value else value
                     c.Value = "" if value is None else value
 
                 if isinstance(c, wx.TextCtrl): c.SetEditable(self._editmode)
@@ -701,10 +714,13 @@ class FormDialog(wx.Dialog):
         refreshes linked field if any.
         """
         if self._ignore_change: return
-        value = event.EventObject.Value
+        value, src = event.EventObject.Value, event.EventObject
+
         if isinstance(value, basestring) \
-        and (not isinstance(event.EventObject, wx.stc.StyledTextCtrl)
+        and (not isinstance(src, wx.stc.StyledTextCtrl)
         or not value.strip()): value = value.strip()
+        if isinstance(src, wx.ComboBox) and src.HasClientData():
+            value = src.GetClientData(src.Selection)
         self._SetValue(field, value, path)
         if field.get("link"):
             name = field["link"]
@@ -728,11 +744,14 @@ class FormDialog(wx.Dialog):
         else:
             indexes.extend(listbox1.GetSelections())
             if not indexes and listbox1.GetCount(): indexes.append(0)
-        selecteds = map(listbox1.GetString, indexes)
+        selecteds = map(listbox1.GetClientData, indexes)
 
         for i in indexes[::-1]: listbox1.Delete(i)
-        listbox2.AppendItems(selecteds)
-        self._SetValue(field, listbox2.GetItems(), path)
+        listbox2.AppendItems(map(self._Unprint, selecteds))
+        for j, x in enumerate(selecteds, listbox2.Count - len(selecteds)):
+            listbox2.SetClientData(j, x)
+        items2 = map(listbox2.GetClientData, range(listbox2.Count))
+        self._SetValue(field, items2, path)
 
 
     def _OnRemoveFromList(self, field, path, event):
@@ -747,9 +766,11 @@ class FormDialog(wx.Dialog):
             if not indexes and listbox2.GetCount(): indexes.append(0)
 
         for i in indexes[::-1]: listbox2.Delete(i)
-        items2 = listbox2.GetItems()
+        items2 = map(listbox2.GetClientData, range(listbox2.Count))
         allchoices = self._GetChoices(field, path)
-        listbox1.SetItems([x for x in allchoices if x not in items2])
+        listbox1.SetItems([self._Unprint(x) for x in allchoices if x not in items2])
+        for j, x in enumerate(x for x in allchoices if x not in items2):
+            listbox1.SetClientData(j, x)
         self._SetValue(field, items2, path)
 
 
@@ -757,7 +778,8 @@ class FormDialog(wx.Dialog):
         """Handler for moving selected items up/down within listbox."""
         _, listbox2 = (x for x in self._comps[path + (field["name"], )]
                        if isinstance(x, wx.ListBox))
-        indexes, items = listbox2.GetSelections(), listbox2.GetItems()
+        indexes = listbox2.GetSelections()
+        items = map(listbox2.GetClientData, range(listbox2.Count))
 
         if not indexes or direction < 0 and not indexes[0] \
         or direction > 0 and indexes[-1] == len(items) - 1: return
@@ -767,7 +789,8 @@ class FormDialog(wx.Dialog):
             i2 = i + direction
             items[i], items[i2] = items[i2], items[i]
 
-        listbox2.SetItems(items)
+        listbox2.SetItems(map(self._Unprint, items))
+        for j, x in enumerate(items): listbox2.SetClientData(j, x)
         for i in indexes: listbox2.Select(i + direction)
         self._SetValue(field, items, path)
 

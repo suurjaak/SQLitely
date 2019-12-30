@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    13.12.2019
+@modified    30.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -115,7 +115,7 @@ def unquote(val):
     Always returns unicode.
     """
     result = uni(val)
-    if re.match(r"^([\"].*[\"])|([\'].*[\'])|([\[].*[\]])$", result):
+    if re.match(r"^([\"].*[\"])|([\'].*[\'])|([\[].*[\]])$", result, re.DOTALL):
         result, sep = result[1:-1], result[0]
         if sep != "[": result = result.replace(sep * 2, sep)
     return result

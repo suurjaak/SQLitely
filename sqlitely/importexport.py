@@ -156,7 +156,7 @@ def export_data(make_iterable, filename, title, db, columns,
                 namespace["namespace"] = namespace # To update row_count
 
                 if is_txt: # Run through rows once, to populate text-justify options
-                    widths = {c: len(c) for c in colnames}
+                    widths = {c: len(util.unprint(c)) for c in colnames}
                     justs  = {c: True   for c in colnames}
                     for i, row in enumerate(make_iterable()):
                         for col in colnames:

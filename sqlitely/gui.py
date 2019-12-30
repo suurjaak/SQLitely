@@ -644,8 +644,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             items = db.get_category(category)
             if items: menu.SubMenu.AppendSeparator()
             for name in items:
-                help = "Open schema editor for %s %s" % (category, grammar.quote(name))
-                menuitem = menu.SubMenu.Append(wx.ID_ANY, name, help)
+                help = "Open schema editor for %s %s" % (category, util.unprint(grammar.quote(name)))
+                menuitem = menu.SubMenu.Append(wx.ID_ANY, util.unprint(name), help)
                 args = ["schema", category, name]
                 self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
 
@@ -658,8 +658,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), item_all)
                 if items: menu.SubMenu.AppendSeparator()
                 for name in items:
-                    help = "Drop %s %s" % (category, grammar.quote(name))
-                    menuitem = menu.SubMenu.Append(wx.ID_ANY, name, help)
+                    help = "Drop %s %s" % (category, util.unprint(grammar.quote(name)))
+                    menuitem = menu.SubMenu.Append(wx.ID_ANY, util.unprint(name), help)
                     args = ["drop", category, name]
                     self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
 
@@ -672,8 +672,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["truncate"]), item_all)
                 if items: menu.SubMenu.AppendSeparator()
                 for name, item in items.items():
-                    help = "Delete all rows from %s %s" % (category, grammar.quote(name))
-                    menuitem = menu.SubMenu.Append(wx.ID_ANY, name, help)
+                    help = "Delete all rows from %s %s" % (category, util.unprint(grammar.quote(name)))
+                    menuitem = menu.SubMenu.Append(wx.ID_ANY, util.unprint(name), help)
                     menuitem.Enable(bool(item.get("count")))
                     args = ["truncate", name]
                     self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
@@ -683,8 +683,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             for x in menu.SubMenu.MenuItems: menu.SubMenu.Delete(x)
             menu.Enable(bool(items))
             for name in items:
-                help = "Open data grid for %s %s" % (category, grammar.quote(name))
-                menuitem = menu.SubMenu.Append(wx.ID_ANY, name, help)
+                help = "Open data grid for %s %s" % (category, util.unprint(grammar.quote(name)))
+                menuitem = menu.SubMenu.Append(wx.ID_ANY, util.unprint(name), help)
                 args = ["data", category, name]
                 self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
 
@@ -4505,7 +4505,7 @@ class DatabasePage(wx.Panel):
 
     def add_data_page(self, data):
         """Opens and returns a data object page for specified object data."""
-        title = "%s %s" % (data["type"].capitalize(), grammar.quote(data["name"]))
+        title = "%s %s" % (data["type"].capitalize(), util.unprint(grammar.quote(data["name"])))
         self.notebook_data.Freeze()
         try:
             p = components.DataObjectPage(self.notebook_data, self.db, data)
@@ -4578,7 +4578,7 @@ class DatabasePage(wx.Panel):
     def add_schema_page(self, data):
         """Opens and returns schema object page for specified object data."""
         if "name" in data:
-            title = "%s %s" % (data["type"].capitalize(), grammar.quote(data["name"]))
+            title = "%s %s" % (data["type"].capitalize(), util.unprint(grammar.quote(data["name"])))
             busy = controls.BusyPanel(self.notebook_schema, "Opening %s %s." %
                                       (data["type"], grammar.quote(data["name"], force=True)))
         else:
@@ -4641,7 +4641,7 @@ class DatabasePage(wx.Panel):
             if name:
                 suffix = "*" if event.source.IsChanged() else ""
                 title = "%s %s%s" % (category.capitalize(),
-                                     grammar.quote(name), suffix)
+                                     util.unprint(grammar.quote(name)), suffix)
                 if self.notebook_schema.GetPageText(idx) != title:
                     self.notebook_schema.SetPageText(idx, title)
             if not self.save_underway: self.update_page_header(updated=updated)
@@ -4768,7 +4768,7 @@ class DatabasePage(wx.Panel):
             if name:
                 suffix = "*" if event.source.IsChanged() else ""
                 title = "%s %s%s" % (category.capitalize(),
-                                     grammar.quote(name), suffix)
+                                     util.unprint(grammar.quote(name)), suffix)
                 if self.notebook_data.GetPageText(idx) != title:
                     self.notebook_data.SetPageText(idx, title)
             if not self.save_underway: self.update_page_header()
@@ -5410,7 +5410,7 @@ class DatabasePage(wx.Panel):
                     elif "trigger" == category:
                         if "meta" in item: childtext = " ".join(filter(bool,
                             (item["meta"].get("upon"), item["meta"]["action"],
-                             "ON", grammar.quote(item["meta"]["table"]))
+                             "ON", util.unprint(grammar.quote(item["meta"]["table"])))
                         ))
                         subcategories, emptysubs = ["table", "view"], False
                     elif "view" == category:
@@ -5418,7 +5418,7 @@ class DatabasePage(wx.Panel):
                             names = [self.db.schema["table"][x]["name"] if x in self.db.schema["table"]
                                      else self.db.schema["view"][x]["name"] if x in self.db.schema["view"]
                                      else x for x in item["meta"].get("__tables__", ())]
-                            childtext = "ON " + ", ".join(map(grammar.quote, names)) if names else ""
+                            childtext = "ON " + ", ".join(map(util.unprint, map(grammar.quote, names))) if names else ""
                         columns = item.get("columns") or []
                         subcategories, emptysubs = ["table", "trigger", "view"], False
 
@@ -5431,7 +5431,7 @@ class DatabasePage(wx.Panel):
                         lks, fks = self.db.get_keys(item["name"]) if "table" == category else [(), ()]
                         for col in columns:
                             subchild = tree.AppendItem(colchild, util.unprint(col["name"]))
-                            mytype = col.get("type", "")
+                            mytype = util.unprint(col.get("type", ""))
                             if any(col["name"] in x["name"] for x in lks):
                                 mytype = u"\u1d18\u1d0b  " + mytype # Unicode small caps "PK"
                             elif any(col["name"] in x["name"] for x in fks):
@@ -5459,29 +5459,29 @@ class DatabasePage(wx.Panel):
                             tree.SetItemPyData(subchild, dict(subitem, parent=itemdata, level=item["name"]))
                             t = ""
                             if "index" == subcategory:
-                                t = ", ".join(x.get("name", x.get("expr"))
+                                t = ", ".join(util.unprint(x.get("name", x.get("expr")))
                                               for x in subitem.get("meta", {}).get("columns", subitem.get("columns", [])))
                             elif "table" == category == subcategory:
                                 texts = []
                                 lks, fks = self.db.get_keys(subitem["name"])
-                                fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(grammar.quote, x))
+                                fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(util.unprint, map(grammar.quote, x)))
                                 for col in lks:
                                     for table, keys in col.get("table", {}).items():
                                         if not util.lceq(table, item["name"]): continue # for table, keys
                                         texts.append("%s REFERENCES %s.%s" % (fmtkeys(keys),
-                                            grammar.quote(subitem["name"]), fmtkeys(col["name"])))
+                                            util.unprint(grammar.quote(subitem["name"])), fmtkeys(col["name"])))
                                 for col in fks:
                                     for table, keys in col.get("table", {}).items():
                                         if not util.lceq(table, item["name"]): continue # for table, keys
                                         texts.append("%s.%s REFERENCES %s" % (
-                                        grammar.quote(subitem["name"]), fmtkeys(col["name"]),
+                                        util.unprint(grammar.quote(subitem["name"])), fmtkeys(col["name"]),
                                         fmtkeys(keys)))
                                 t = ", ".join(texts)
                             elif "trigger" == subcategory:
                                 if "meta" in subitem:
                                     t = " ".join(filter(bool, (subitem["meta"].get("upon"), subitem["meta"]["action"])))
                                 if is_indirect_item(item, subitem):
-                                    t += " ON %s" % grammar.quote(subitem["tbl_name"])
+                                    t += " ON %s" % util.unprint(grammar.quote(subitem["tbl_name"]))
                             tree.SetItemText(subchild, t, 1)
                             if is_indirect_item(item, subitem): tree.SetItemFont(subchild, italicfont)
 

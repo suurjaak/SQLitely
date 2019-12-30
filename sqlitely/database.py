@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.12.2019
+@modified    30.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -588,7 +588,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             except Exception as e:
                 result.append(util.format_exc(e))
                 logger.exception("Error creating table %s in %s.",
-                                 grammar.quote(name), filename)
+                                 util.unprint(grammar.quote(name)), filename)
 
         # Copy data from all tables
         for name, opts in self.schema["table"].items():
@@ -599,7 +599,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             except Exception as e:
                 result.append(util.format_exc(e))
                 logger.exception("Error copying table %s from %s to %s.",
-                                 grammar.quote(name), self.filename, filename)
+                                 util.unprint(grammar.quote(name)), self.filename, filename)
 
         # Create indexes-triggers-views
         for category in "index", "trigger", "view":
@@ -613,7 +613,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 except Exception as e:
                     result.append(util.format_exc(e))
                     logger.exception("Error creating %s %s for %s.",
-                                     category, grammar.quote(name), filename)
+                                     category, util.unprint(grammar.quote(name)), filename)
 
         # Set closing PRAGMAs
         pragma_last  = {k: v for k, v in pragma.items()
@@ -670,7 +670,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             for subcategory, items in relateds.items():
                 for item in items:
                     self.locks[subcategory][item["name"].lower()].add(subkey)
-            qname = grammar.quote(self.schema[category][name]["name"], force=True)
+            qname = util.unprint(grammar.quote(self.schema[category][name]["name"], force=True))
             self.locklabels[subkey] = " ".join(filter(bool, (category, qname, label, "cascade")))
 
 
@@ -723,7 +723,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             if keys and skipkeys: keys -= skipkeys
             name = self.schema.get(category, {}).get(name, {}).get("name", name)
             if keys: result = "%s %s is currently locked" % \
-                              (category.capitalize(), grammar.quote(name, force=True))
+                              (category.capitalize(), util.unprint(grammar.quote(name, force=True)))
         elif kwargs.get("category"): # Check for lock on any item in category
             category = kwargs["category"]
             keys = set(y for x in self.locks.get(category, {}).values() for y in x)
@@ -756,7 +756,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 t, labels = "", filter(bool, map(self.locklabels.get, keys))
                 if category and name:
                     name = self.schema.get(category, {}).get(name, {}).get("name", name)
-                    t = "%s %s" % (category, grammar.quote(name, force=True))
+                    t = "%s %s" % (category, util.unprint(grammar.quote(name, force=True)))
                 elif category: t = util.plural(category)
                 else: t = "global lock"
                 if labels: t += " (%s)" % ", ".join(sorted(labels))
@@ -920,7 +920,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     except Exception:
                         opts.update(columns=[])
                         logger.exception("Error fetching columns for %s %s.",
-                                         mycategory, grammar.quote(myname))
+                                         mycategory, util.unprint(grammar.quote(myname)))
                     else:
                         opts["columns"] = []
                         for row in rows:
@@ -978,7 +978,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 result = self.execute(tpl % "COUNT(*)", log=False).fetchone()
         except Exception:
             logger.exception("Error fetching COUNT for table %s.",
-                             grammar.quote(table))
+                             util.unprint(grammar.quote(table)))
         return result
 
 
@@ -1297,7 +1297,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         table = self.schema["table"][table]["name"]
         logger.info("Inserting 1 row into table %s, %s.",
-                    grammar.quote(table), self.name)
+                    util.unprint(grammar.quote(table)), self.name)
         col_data = self.schema["table"][table]["columns"]
         fields = [col["name"] for col in col_data]
         row = self.blobs_to_binary(row, fields, col_data)
@@ -1359,7 +1359,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         table, where = self.schema["table"][table]["name"], ""
         logger.info("Deleting 1 row from table %s, %s.",
-                    grammar.quote(table), self.name)
+                    util.unprint(grammar.quote(table)), self.name)
         col_data = self.schema["table"][table]["columns"]
 
         pks = [{"name": y} for x in self.get_keys(table, True)[0] for y in x["name"]]
@@ -1448,8 +1448,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                             key_data.append(data); myrows.append(row)
                     if not key_data: continue # while queue
 
-                    logger.info("Deleting %s from table %s, %s.",
-                                util.plural("row", key_data), grammar.quote(table1), self.name)
+                    logger.info("Deleting %s from table %s, %s.", util.plural("row", key_data),
+                                util.unprint(grammar.quote(table1)), self.name)
                     for where, args in self.chunk_args(key_cols, key_data):
                         sql = "DELETE FROM %s WHERE %s" % (grammar.quote(table1), where)
                         self.execute(sql, args, cursor=cursor)
