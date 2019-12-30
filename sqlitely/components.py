@@ -577,20 +577,20 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             value = val.replace(",", ".").strip() # Allow comma for decimals
         if value: self.filters[col] = value
         else: self.filters.pop(col, None)
-        self.Filter(self.GetNumberRows())
+        self.Filter(self.GetNumberRows(present=True))
 
 
     def RemoveFilter(self, col):
         """Removes filter on the specified column, if any."""
         if col not in self.filters: return
         self.filters.pop(col)
-        self.Filter(self.GetNumberRows())
+        self.Filter(self.GetNumberRows(present=True))
 
 
     def ClearFilter(self, refresh=True):
         """Clears all added filters."""
         self.filters.clear()
-        if refresh: self.Filter(self.GetNumberRows())
+        if refresh: self.Filter(self.GetNumberRows(present=True))
 
 
     def ClearSort(self, refresh=True):
