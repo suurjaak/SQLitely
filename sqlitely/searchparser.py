@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.12.2019
+@modified    30.12.2019
 """
 import calendar
 import collections
@@ -154,8 +154,9 @@ class SearchQueryParser(object):
                 result = ""
             else:
                 kw_sql = self._makeKeywordsSQL(keywords, params, item)
-                result = "SELECT * FROM %s WHERE %s %s%s" % (
-                         grammar.quote(item["name"]), result,
+                result = "SELECT * FROM %s%s%s%s%s" % (
+                         grammar.quote(item["name"]),
+                         " WHERE " if result else "", result,
                          " AND " if result and kw_sql else "", kw_sql)
         else:
             kw_sql = self._makeKeywordsSQL(keywords, params, item)
