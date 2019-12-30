@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.12.2019
+@modified    30.12.2019
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -208,14 +208,14 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         Returns column label value, with cursor arrow if grid cursor on col,
         and sort arrow if grid sorted by column.
         """
-        label = self.columns[col]["name"]
-        if col == self.sort_column:
-            label += u" ↓" if self.sort_ascending else u" ↑"
-        if col in self.filters:
-            label += u'\nlike "%s"' % self.filters[col]
-        pref = u"\u25be" if self.View and col == self.View.GridCursorCol \
-               and len(self.columns) > 1 and self.GetNumberRows() else "  "
-        return u" %s %s  " % (pref, label)
+        EM3, EM4, TRIANGLE = u"\u2004", u"\u2005", u"\u25be"
+        label, pref, suf = self.columns[col]["name"], EM3 + EM4, EM4 * 3
+        if col == self.sort_column: suf = u"↓" if self.sort_ascending else u"↑"
+        if self.View and col == self.View.GridCursorCol \
+        and len(self.columns) > 1 and self.GetNumberRows(): pref = TRIANGLE
+        label = u" %s %s %s " % (pref, label, suf)
+        if col in self.filters: label += u'\nhas "%s"' % self.filters[col]
+        return label
 
 
     def GetValue(self, row, col):
@@ -634,7 +634,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             return cmp(aval, bval)
 
         self.SeekAhead(end=True)
-        self.sort_ascending = True if self.sort_ascending is None \
+        self.sort_ascending = True if self.sort_ascending is None or col != self.sort_column \
                               else False if self.sort_ascending else None
         if self.sort_ascending is None:
             self.sort_column = None
@@ -1139,9 +1139,11 @@ class SQLiteGridBaseMixin(object):
 
 
     def __init__(self):
+        self._grid_widths = [] # [col width, ]
         grid = self._grid
         grid.SetDefaultEditor(wx.grid.GridCellAutoWrapStringEditor())
         grid.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
+        grid.SetDefaultCellOverflow(False)
         ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
         ColourManager.Manage(grid, "LabelBackgroundColour",       wx.SYS_COLOUR_BTNFACE)
@@ -1156,6 +1158,7 @@ class SQLiteGridBaseMixin(object):
         grid.Bind(wx.EVT_SCROLL_CHANGED,              self._OnGridScroll)
         grid.Bind(wx.EVT_KEY_DOWN,                    self._OnGridScroll)
         grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK,  self._OnGridMenu)
+        grid.Bind(wx.grid.EVT_GRID_COL_SIZE,          self._OnGridSizeCol)
         grid.GridWindow.Bind(wx.EVT_RIGHT_UP,         self._OnGridMenu)
         grid.GridWindow.Bind(wx.EVT_MOTION,           self._OnGridMouse)
         grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,        self._OnGridKey)
@@ -1338,6 +1341,18 @@ class SQLiteGridBaseMixin(object):
             event.EventObject.SetGridCursor(row, col)
 
 
+    def _OnGridSizeCol(self, event):
+        """
+        Handler for dragging or double-clicking column border,
+        autosizes column 
+        """
+        col, width = event.RowOrCol, self._grid.GetColSize(event.RowOrCol)
+        if width == self._grid.GetColMinimalWidth(col) and width >= self._grid_widths[col] \
+        and (isinstance(self, SQLPage) or self._grid.Table.IsComplete()):
+            self._grid.AutoSizeColumn(col, setAsMin=False)
+        self._grid_widths[col] = self._grid.GetColSize(col)
+
+
     def _OnSysColourChange(self, event):
         """Handler for system colour change, refreshes grid colours."""
         event.Skip()
@@ -1373,6 +1388,25 @@ class SQLiteGridBaseMixin(object):
 
         self._label_rows.Label = t
         self._label_rows.Parent.Layout()
+
+
+    def _SizeColumns(self):
+        """Sizes grid columns to fit column labels."""
+        size = self._grid.Size
+        # Jiggle size by 1 pixel to refresh scrollbars
+        self._grid.Size = size[0], size[1]-1
+        self._grid.Size = size[0], size[1]
+
+        self._grid.SetColMinimalAcceptableWidth(100)
+        for i in range(self._grid.NumberCols): self._grid.AutoSizeColLabelSize(i)
+        if isinstance(self, SQLPage) or self._grid.Table.IsComplete():
+            for i in range(self._grid.NumberCols):
+                w1 = self._grid.GetColSize(i)
+                self._grid.AutoSizeColumn(i, setAsMin=False)
+                w2 = self._grid.GetColSize(i)
+                if w1 < 50: self._grid.SetColMinimalWidth(i, w1)
+                if w2 > w1: self._grid.SetColSize(i, w1)
+        self._grid_widths = map(self._grid.GetColSize, range(self._grid.NumberCols))
 
 
 
@@ -1623,16 +1657,10 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             guibase.status('Executed SQL "%s" (%s).', sql, self._db,
                            log=True, flash=True)
 
-            size = self._grid.Size
-            self._grid.Fit()
-            # Jiggle size by 1 pixel to refresh scrollbars
-            self._grid.Size = size[0], size[1]-1
-            self._grid.Size = size[0], size[1]
             self._last_sql = sql
             self._last_is_script = script
-            self._grid.SetColMinimalAcceptableWidth(100)
-            for i in range(self._grid.NumberCols):
-                self._grid.AutoSizeColLabelSize(i)
+            self._SizeColumns()
+
             if restore:
                 maxrow = max(scrollpos[1] * self.SCROLLPOS_ROW_RATIO, cursorpos[0])
                 seekrow = int(maxrow / conf.SeekLength + 1) * conf.SeekLength - 1
@@ -1642,6 +1670,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                 cursorpos = [max(0, min(x)) for x in zip(cursorpos, maxpos)]
                 self._grid.SetGridCursor(*cursorpos)
                 self._grid.Scroll(*scrollpos)
+
             self._PopulateCount()
         except Exception as e:
             logger.exception("Error running SQL %s.", sql)
@@ -2166,10 +2195,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         grid_data = SQLiteGridBase(self._db, category=self._category, name=self._item["name"])
         self._grid.SetTable(grid_data, takeOwnership=True)
         self._grid.Scroll(0, 0)
-        self._grid.SetColMinimalAcceptableWidth(100)
-        col_range = range(grid_data.GetNumberCols())
-        [self._grid.AutoSizeColLabelSize(x) for x in col_range]
         self._grid.SetGridCursor(0, 0)
+        self._SizeColumns()
         self._PopulateCount(reload=True)
 
 
