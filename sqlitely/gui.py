@@ -2169,7 +2169,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         Tries to load the specified databases, if not already open, create
         subpages for them, if not already created, and focus the subpages.
-        Skips files that are not SQLite databases, adds others to databae list.
+        Skips files that are not SQLite databases, adds others to database list.
 
         @param   clearselection  clear previously selected files in database list
         """
@@ -5079,7 +5079,7 @@ class DatabasePage(wx.Panel):
 
 
     def on_drop_items(self, category, names, event=None):
-        """Handler for deleting schema items, confirms choice-"""
+        """Handler for deleting schema items, confirms choice."""
         if not self: return
         extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
                 if "table" == category else ""

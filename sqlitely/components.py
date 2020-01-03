@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.12.2019
+@modified    03.01.2020
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -3308,7 +3308,9 @@ class SchemaObjectPage(wx.Panel):
 
         sizer_flags = wx.BoxSizer(wx.HORIZONTAL)
 
-        text_name     = wx.TextCtrl(panel)
+        tstyle = wx.TE_MULTILINE if col.get("name") and col["name"] != util.unprint(col["name"]) \
+                 else 0
+        text_name     = wx.TextCtrl(panel, style=tstyle)
         list_type     = wx.ComboBox(panel, choices=self._types, style=wx.CB_DROPDOWN)
         text_default  = controls.SQLiteTextCtrl(panel, traversable=True, wheelable=False)
         text_default.SetCaretLineVisible(False)
@@ -3328,7 +3330,7 @@ class SchemaObjectPage(wx.Panel):
 
         text_name.MinSize    = (150, -1)
         list_type.MinSize    = (100, -1)
-        text_default.MinSize = (100, text_name.Size[1])
+        text_default.MinSize = (100, list_type.Size[1])
         button_open._toggle = lambda: "skip" if self._hasmeta else ""
         button_open.ToolTip = "Open advanced options"
 
