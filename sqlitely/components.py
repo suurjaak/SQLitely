@@ -313,7 +313,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
         col_value, accepted = None, False
         if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
-            if not val: accepted = True # Set column to NULL
+            if val in ("", None): accepted = True # Set column to NULL
             else:
                 try:
                     valc = val.replace(",", ".") # Allow comma separator
