@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.01.2020
+@modified    29.04.2020
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -3844,8 +3844,8 @@ class SchemaObjectPage(wx.Panel):
 
         if can_simple and old["name"] != new["name"] and not self._db.has_full_rename_table():
             can_simple = False if util.lceq(old["name"], new["name"]) else \
-                         set(self._db.get_related("table", old["name"], own=False) & \
-                         set(("trigger", "view")))
+                         set(self._db.get_related("table", old["name"], own=False)) & \
+                         set(("trigger", "view"))
 
         if can_simple:
             # Possible to use just simple ALTER TABLE statements
