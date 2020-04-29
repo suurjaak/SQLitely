@@ -7138,6 +7138,10 @@ class HistoryDialog(wx.Dialog):
         self.Freeze()
         grid, log = self._grid, self._log
 
+        font0 = grid.GetDefaultCellFont()
+        font_face = "Courier New" if os.name == "nt" else "Courier"
+        font_mono = wx.Font(font0.PixelSize, wx.FONTFAMILY_TELETYPE, font0.Style,
+                            font0.Weight, faceName=font_face)
         patterns = map(re.escape, self._filter.split())
         matches = lambda d: any(all(re.search(p, v, re.I | re.U) for p in patterns)
                                 for v in d.values())
@@ -7152,6 +7156,8 @@ class HistoryDialog(wx.Dialog):
                 grid.SetCellValue(i, 1, data["action"])
                 grid.SetCellValue(i, 2, data["sql"])
                 if data.get("params"): grid.SetCellValue(i, 3, data["params"])
+                grid.SetCellFont(i, 2, font_mono)
+                grid.SetCellFont(i, 3, font_mono)
             grid.AutoSizeRows(setAsMin=False)
             for i in range(grid.NumberRows):
                 grid.SetRowSize(i, min(grid.Size.height, grid.GetRowSize(i)))
