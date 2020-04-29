@@ -6985,7 +6985,7 @@ class HistoryDialog(wx.Dialog):
 
     def __init__(self, parent, db, id=wx.ID_ANY,
                  title="Action history", pos=wx.DefaultPosition, size=(650, 400),
-                 style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER,
+                 style=wx.CAPTION | wx.CLOSE_BOX | wx.MAXIMIZE_BOX | wx.RESIZE_BORDER,
                  name=wx.DialogNameStr):
         """
         @param   db  database.Database instance
