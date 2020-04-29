@@ -664,12 +664,17 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 del self.rows_backup[idx]
                 refresh_idxs.append(idx)
                 if grammar.SQL.UPDATE in actions: reload_idxs.append(idx)
+
             # Save all newly inserted rows
             pks = [y for x in self.db.get_keys(self.name, True)[0] for y in x["name"]]
             col_map = dict((c["name"], c) for c in self.columns)
             for idx in self.idx_new[:]:
                 row = self.rows_all[idx]
-                insert_id = self.db.insert_row(self.name, row)
+                row0 = {c["name"]: row[c["name"]] for c in self.columns
+                        if "pk" not in c and row[c["name"]] is not None}
+                has_defaults = any("default" in x and x["name"] not in row0
+                                   for x in self.columns)
+                insert_id = self.db.insert_row(self.name, row0)
                 if len(pks) == 1 and row[pks[0]] in (None, "") \
                 and "INTEGER" == self.db.get_affinity(col_map[pks[0]]):
                     # Autoincremented row: update with new value
@@ -679,7 +684,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 row[self.KEY_NEW] = False
                 self.idx_new.remove(idx)
                 refresh_idxs.append(idx)
-                if grammar.SQL.INSERT in actions: reload_idxs.append(idx)
+                if has_defaults or grammar.SQL.INSERT in actions:
+                    reload_idxs.append(idx)
+
             # Delete all newly removed rows
             for idx, row in self.rows_deleted.copy().items():
                 self.db.delete_row(self.name, row, self.rowids.get(idx))

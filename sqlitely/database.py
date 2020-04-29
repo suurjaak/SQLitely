@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.12.2019
+@modified    29.04.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1299,14 +1299,16 @@ WARNING: misuse can easily result in a corrupt database file.""",
         logger.info("Inserting 1 row into table %s, %s.",
                     util.unprint(grammar.quote(table)), self.name)
         col_data = self.schema["table"][table]["columns"]
-        fields = [col["name"] for col in col_data]
+        fields = [col["name"] for col in col_data if col["name"] in row]
         row = self.blobs_to_binary(row, fields, col_data)
         args = self.make_args(fields, row)
-        str_cols = ", ".join(map(grammar.quote, fields))
-        str_vals = ":" + ", :".join(args)
 
-        sql = "INSERT INTO %s (%s) VALUES (%s)" % \
-              (grammar.quote(table), str_cols, str_vals)
+        if args:
+            str_cols = ", ".join(map(grammar.quote, fields))
+            str_vals = (":" if args else "") + ", :".join(args)
+            sql = "INSERT INTO %s (%s) VALUES (%s)" % \
+                  (grammar.quote(table), str_cols, str_vals)
+        else: sql = "INSERT INTO %s DEFAULT VALUES" % grammar.quote(table)
         cursor = self.execute(sql, args)
         if self.connection.isolation_level is not None: self.connection.commit()
         self.log_query("INSERT", sql, args)
