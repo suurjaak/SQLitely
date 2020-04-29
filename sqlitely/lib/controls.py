@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    30.12.2019
+@modified    24.04.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -239,6 +239,7 @@ class ColourManager(object):
         @param   colour  colour name in colour container like "BgColour",
                          or system colour ID like wx.SYS_COLOUR_WINDOW
         """
+        if not ctrl: return
         cls.ctrls[ctrl][prop] = colour
         cls.UpdateControlColour(ctrl, prop, colour)
 

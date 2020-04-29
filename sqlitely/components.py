@@ -6694,7 +6694,7 @@ class DataDialog(wx.Dialog):
 
     def _Populate(self):
         """Populates edits with current row data, updates navigation buttons."""
-        if not self: return
+        if not self or not self._gridbase: return
         self.Freeze()
         try:
             title, gridbase = "Row #{0:,}".format(self._row + 1), self._gridbase
