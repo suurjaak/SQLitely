@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.12.2019
+@modified    30.04.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5158,9 +5158,8 @@ class DatabasePage(wx.Panel):
 
     def on_truncate_all(self, event=None):
         """Handler for deleting all rows from all tables, confirms choice."""
-        names = [x["name"] for x in self.db.get_category("table").values()
-                 if x.get("count")]
-        if not names: return
+        items = [x for x in self.db.get_category("table").values() if x.get("count")]
+        if not items: return
 
         if wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to delete all rows from all tables?\n\n"
@@ -5168,6 +5167,17 @@ class DatabasePage(wx.Panel):
             conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
 
+        count = sum(x.get("count") or 0 for x in items)
+        pref = "~" if any(x.get("is_count_estimated") for x in items) else ""
+        if pref: count = int(math.ceil(count / 100.) * 100)
+        countstr = util.plural("row", count, sep=",", pref=pref)
+        if wx.YES != controls.YesNoMessageBox(
+            "Are you REALLY sure you want to delete all rows from all tables?\n\n"
+            "Database currently contains %s." % countstr,
+            conf.Title, wx.ICON_WARNING, defaultno=True
+        ): return
+
+        names = [x["name"] for x in items]
         pages = {x: self.data_pages["table"].get(x) for x in names}
         locks = set(filter(bool, (self.db.get_lock("table", x, skip=pages[x])
                                   for x in names)))
