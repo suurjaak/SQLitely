@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    30.12.2019
+@modified    29.04.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -948,7 +948,7 @@ class Generator(object):
         if category not in self.TEMPLATES:
             return None, "Unknown category: %s" % category
 
-        REPLACE_ORDER = ["Q", "PAD", "GLUE", "LF", "CM", "PRE", "WS"]
+        REPLACE_ORDER = ["Q", "PAD", "GLUE", "CM", "LF", "PRE", "WS"]
         ns = {"Q":    self.quote,   "LF": self.linefeed, "PRE": self.indentation,
               "PAD":  self.padding, "CM": self.comma,    "WS":  self.token,
               "GLUE": self.glue, "data": data, "root": data,
