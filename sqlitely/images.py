@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.11.2019
+@modified    30.04.2020
 ------------------------------------------------------------------------------
 """
 try:
@@ -1808,6 +1808,20 @@ ToolbarDelete = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAB3RJTUUH3AEbFAgjYsF/DAAA"
     "AAlwSFlzAAALEgAACxIB0t1+/AAAAARnQU1BAACxjwv8YQUAAAAkSURBVHjaY2AYBcMAMCJz"
     "TvDx/SdGk8WnT3B9TAPtg1EwKAAAoFkEBI8Fc8MAAAAASUVORK5CYII="
+)
+
+
+"""Toolbar icon for form button in data grids."""
+ToolbarForm = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9i"
+    "ZSBJbWFnZVJlYWR5ccllPAAAAWhJREFUeNqkU71qwlAUPtd7ExJLKiREUEKHrnERJCVDNp9B"
+    "8gZ9AZc+Qbc+gG/h6CgEpKNDHR26OIg4SJb82XOuEhpILeqFj3vhnO/jOx/nsuPxCPccMRqN"
+    "nvF+QRhXcg+IT5HnuT8ej9/a7bab5xlkWY5IIU3pnUFRFHAyyYExISGECrvd7msy+XgX2PAY"
+    "x7G7Xq9lMwFFJS69Ee50On0QiqIUw+HwpvlnsxkTaJOdbFbDjKIINptNLbHT6UAQBDSiFGiQ"
+    "rfl8Dpqmga7r0Ov1QFVVCMOwVmCxWMhRiFsK+L5fNlB4GCqsVqtaAaqVAmmaNohA+H0sy7o4"
+    "P/UTVyRJws9qlYblcgnb7baWbNs2DAYDIC4JlBl0u13Y7/fQ7/eh2Wz+mwFxSwee58mi4zjS"
+    "jWmaf2ZAtbMAF7hECmMMcB8qTa1W62IGxJFcwzBeOedPtywSuvhmeOvnjySu5FPqB3bvd/4R"
+    "YAB0Lucj40EubAAAAABJRU5ErkJggg=="
 )
 
 

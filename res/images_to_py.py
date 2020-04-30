@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  25.11.2019
+@modified  30.04.2020
 ------------------------------------------------------------------------------
 """
 import base64
@@ -85,6 +85,8 @@ IMAGES = {
         "Toolbar icon for commit button in database table grids.",
     "ToolbarDelete.png":
         "Toolbar icon for delete button in database table grids.",
+    "ToolbarForm.png":
+        "Toolbar icon for form button in data grids.",
     "ToolbarInsert.png":
         "Toolbar icon for insert button in database table grids.",
     "ToolbarRefresh.png":
