@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    24.04.2020
+@modified    30.04.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -1601,6 +1601,7 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
                             resize in one or both directions
         """
         self._direction = direction if direction & self.BOTH else self.BOTH
+        self._sized = False
         super(self.__class__, self).__init__(parent, id, pos, size, style, name)
 
 
@@ -1665,10 +1666,18 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
         if self.HasCapture(): return self._bestSize
 
         HANDLE = wx.lib.resizewidget.RW_THICKNESS
-        size, csize = wx.Size(*self._bestSize), self.ManagedChild.EffectiveMinSize
+        c = self.ManagedChild
+        size, csize = wx.Size(*self._bestSize), c.EffectiveMinSize
         # Allow external resizing to function from child size
         if not self._direction & wx.HORIZONTAL: size[0] = csize[0] + HANDLE
         if not self._direction & wx.VERTICAL:   size[1] = csize[1] + HANDLE
+
+        # Leave at min height if control has one line of content
+        if self._direction & wx.VERTICAL and not self._sized \
+        and (not c.Value or "\n" not in c.Value and len(c.Value) < 30):
+            size[1] = csize[1] + HANDLE
+        self._sized = True
+
         return size
 
 

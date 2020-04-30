@@ -6625,7 +6625,7 @@ class DataDialog(wx.Dialog):
             if resizable:
                 rw = controls.ResizeWidget(panel, direction=wx.VERTICAL)
                 rw.SetManagedChild(edit)
-                edit.MinSize = (100, 21)
+                edit.MinSize = (-1, 21)
             sizer_columns.Add(label, flag=wx.GROW)
             sizer_columns.Add(rw if resizable else edit, border=wx.lib.resizewidget.RW_THICKNESS,
                               flag=wx.GROW | (0 if resizable else wx.RIGHT | wx.BOTTOM))
