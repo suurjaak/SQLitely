@@ -3905,7 +3905,7 @@ class SchemaObjectPage(wx.Panel):
                     if "table" == category:
                         mytempname = util.make_unique(item["name"], names_existing)
                         names_existing.add(mytempname)
-                        myrenames = dict(renames)
+                        myrenames = copy.deepcopy(renames)
                         myrenames.setdefault("table", {})[item["name"]] = mytempname
                         myitem = dict(item, tempname=mytempname)
                     else:
