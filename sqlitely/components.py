@@ -1180,8 +1180,8 @@ class SQLiteGridBaseMixin(object):
         if not isinstance(self._grid.Table, SQLiteGridBase): return
 
         row, col = event.GetRow(), event.GetCol()
-        if row >= 0 and col < 0:
-            return DataDialog(self, self._grid.Table, row).ShowModal()
+        if self._grid.NumberRows and col < 0:
+            return DataDialog(self, self._grid.Table, max(0, row)).ShowModal()
 
         # Remember scroll positions, as grid update loses them
         scroll_hor = self._grid.GetScrollPos(wx.HORIZONTAL)
