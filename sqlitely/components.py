@@ -514,7 +514,6 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
     def DeleteRows(self, row, numRows):
         """Deletes rows from a specified position."""
-        logger.info("base.DeleteRows %s, %s, rowcount %s", row, numRows, self.row_count)
         if row + numRows - 1 >= self.row_count: return False
 
         self.SeekToRow(row + numRows - 1)
@@ -951,6 +950,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 rows, cols = ([x] for x in self.View.XYToCell(xy))
             elif isinstance(event, wx.grid.GridEvent):
                 rows, cols = [event.Row], [event.Col]
+        rows, cols = ([x for x in xx if x >= 0] for xx in (rows, cols))
         if not rows and self.View.NumberRows and self.View.GridCursorRow >= 0:
             rows, cols = [self.View.GridCursorRow], [self.View.GridCursorCol]
         rows, cols = ([x for x in xx if x >= 0] for xx in (rows, cols))
@@ -1201,7 +1201,7 @@ class SQLiteGridBaseMixin(object):
         row, col = event.GetRow(), event.GetCol()
         grid_data = self._grid.Table
         if not grid_data.columns: return
-        if row >= 0: return self._grid.Table.OnMenu(event)
+        if row >= 0 or col < 0: return self._grid.Table.OnMenu(event)
 
         current_filter = unicode(grid_data.filters[col]) \
                          if col in grid_data.filters else ""
