@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.04.2020
+@modified    30.04.2020
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -4027,7 +4027,7 @@ class SchemaObjectPage(wx.Panel):
         def get_foreign_cols(data):
             result = []
             if data and data.get("table"):
-                ftable = self._db.get_category("table", data["table"])
+                ftable = self._db.get_category("table", data["table"]) or {}
                 result = [x["name"] for x in ftable.get("columns") or ()]
             return result
 
