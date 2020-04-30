@@ -1482,10 +1482,13 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
         bmp2 = images.ToolbarRefresh.Bitmap
         bmp3 = images.ToolbarClear.Bitmap
+        bmp4 = images.ToolbarForm.Bitmap
         tbgrid.SetToolBitmapSize(bmp1.Size)
         tbgrid.AddTool(wx.ID_INFO,    "", bmp1, shortHelp="Copy executed SQL statement to clipboard")
         tbgrid.AddTool(wx.ID_REFRESH, "", bmp2, shortHelp="Re-execute query")
         tbgrid.AddTool(wx.ID_RESET,   "", bmp3, shortHelp="Reset all applied sorting and filtering")
+        tbgrid.AddSeparator()
+        tbgrid.AddTool(wx.ID_EDIT,    "", bmp4, shortHelp="Open row in data form")
         tbgrid.Realize()
         tbgrid.Disable()
 
@@ -1517,11 +1520,13 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self.Bind(wx.EVT_TOOL,     self._OnCopyGridSQL,   id=wx.ID_INFO)
         self.Bind(wx.EVT_TOOL,     self._OnRequery,       id=wx.ID_REFRESH)
         self.Bind(wx.EVT_TOOL,     self._OnResetView,     id=wx.ID_RESET)
+        self.Bind(wx.EVT_TOOL,     self._OnOpenForm,      id=wx.ID_EDIT)
         self.Bind(wx.EVT_BUTTON,   self._OnExecuteSQL,    button_sql)
         self.Bind(wx.EVT_BUTTON,   self._OnExecuteScript, button_script)
         self.Bind(wx.EVT_BUTTON,   self._OnExport,        button_export)
         self.Bind(wx.EVT_BUTTON,   self._OnGridClose,     button_close)
         stc.Bind(wx.EVT_KEY_DOWN,  self._OnSTCKey)
+        grid.Bind(wx.grid.EVT_GRID_SELECT_CELL,           self._OnSelectCell)
         self.Bind(EVT_GRID_BASE,   self._OnGridBaseEvent)
         self.Bind(EVT_PROGRESS,    self._OnExportClose)
 
@@ -1627,6 +1632,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             state = self._grid.Table and self._grid.Table.GetFilterSort()
 
         self._grid.Freeze()
+        self._tbgrid.EnableTool(wx.ID_EDIT, False)
         try:
             if cursor and cursor.description is not None \
             and isinstance(self._grid.Table, SQLiteGridBase):
@@ -1644,6 +1650,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                 grid_data = SQLiteGridBase(self._db, sql=sql, cursor=cursor)
                 self._grid.SetTable(grid_data, takeOwnership=True)
                 self._tbgrid.EnableTool(wx.ID_RESET, True)
+                self._tbgrid.EnableTool(wx.ID_EDIT, bool(self._grid.NumberRows))
                 self._button_export.Enabled = bool(cursor.description)
                 self._button_close.Enabled  = True
             else: # Action query or script
@@ -1897,6 +1904,19 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             guibase.status("Copied SQL to clipboard", flash=True)
 
 
+    def _OnOpenForm(self, event=None):
+        """Handler for clicking to open data form for row."""
+        row = self._grid.GridCursorRow if self._grid.NumberRows else -1
+        if row >= 0: DataDialog(self, self._grid.Table, row).ShowModal()
+
+
+    def _OnSelectCell(self, event):
+        """Handler for selecting grid cell, refreshes toolbar."""
+        event.Skip()
+        enable = event.Row >= 0 and event.Col >= 0 if self._grid.NumberRows else False
+        self._tbgrid.EnableTool(wx.ID_EDIT, enable)
+
+
     def _OnLoadSQL(self, event=None):
         """
         Handler for loading SQL from file, opens file dialog and loads content.
@@ -1973,8 +1993,9 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         bmp2 = images.ToolbarDelete.Bitmap
         bmp3 = images.ToolbarRefresh.Bitmap
         bmp4 = images.ToolbarClear.Bitmap
-        bmp5 = images.ToolbarCommit.Bitmap
-        bmp6 = images.ToolbarRollback.Bitmap
+        bmp5 = images.ToolbarForm.Bitmap
+        bmp6 = images.ToolbarCommit.Bitmap
+        bmp7 = images.ToolbarRollback.Bitmap
         tb.SetToolBitmapSize(bmp1.Size)
         tb.AddTool(wx.ID_ADD,     "", bmp1, shortHelp="Add new row")
         tb.AddTool(wx.ID_DELETE,  "", bmp2, shortHelp="Delete current row")
@@ -1982,8 +2003,11 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         tb.AddTool(wx.ID_REFRESH, "", bmp3, shortHelp="Reload data")
         tb.AddTool(wx.ID_RESET,   "", bmp4, shortHelp="Reset all applied sorting and filtering")
         tb.AddSeparator()
-        tb.AddTool(wx.ID_SAVE,    "", bmp5, shortHelp="Commit changes to database")
-        tb.AddTool(wx.ID_UNDO,    "", bmp6, shortHelp="Rollback changes and restore original values")
+        tb.AddTool(wx.ID_EDIT,    "", bmp5, shortHelp="Open row in data form")
+        tb.AddSeparator()
+        tb.AddTool(wx.ID_SAVE,    "", bmp6, shortHelp="Commit changes to database")
+        tb.AddTool(wx.ID_UNDO,    "", bmp7, shortHelp="Rollback changes and restore original values")
+        tb.EnableTool(wx.ID_EDIT, False)
         tb.EnableTool(wx.ID_UNDO, False)
         tb.EnableTool(wx.ID_SAVE, False)
         if "view" == self._category:
@@ -2009,12 +2033,14 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         self.Bind(wx.EVT_TOOL,   self._OnInsert,       id=wx.ID_ADD)
         self.Bind(wx.EVT_TOOL,   self._OnDelete,       id=wx.ID_DELETE)
+        self.Bind(wx.EVT_TOOL,   self._OnOpenForm,     id=wx.ID_EDIT)
         self.Bind(wx.EVT_TOOL,   self._OnRefresh,      id=wx.ID_REFRESH)
         self.Bind(wx.EVT_TOOL,   self._OnResetView,    id=wx.ID_RESET)
         self.Bind(wx.EVT_TOOL,   self._OnCommit,       id=wx.ID_SAVE)
         self.Bind(wx.EVT_TOOL,   self._OnRollback,     id=wx.ID_UNDO)
         self.Bind(wx.EVT_BUTTON, self._OnExport,       button_export)
         self.Bind(wx.EVT_BUTTON, self._OnAction,       button_actions)
+        grid.Bind(wx.grid.EVT_GRID_SELECT_CELL,        self._OnSelectCell)
         grid.Bind(wx.grid.EVT_GRID_CELL_CHANGED,       self._OnChange)
         self.Bind(EVT_GRID_BASE, self._OnGridBaseEvent)
         self.Bind(EVT_PROGRESS,  self._OnExportClose)
@@ -2385,8 +2411,22 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             chunk.insert(0, idx)
         if chunk: self._grid.DeleteRows(chunk[0], len(chunk))
 
+        self._tb.EnableTool(wx.ID_EDIT, self._grid.NumberRows)
         self.Layout() # Refresh scrollbars
         self._OnChange()
+
+
+    def _OnOpenForm(self, event=None):
+        """Handler for clicking to open data form for row."""
+        row = self._grid.GridCursorRow if self._grid.NumberRows else -1
+        if row >= 0: DataDialog(self, self._grid.Table, row).ShowModal()
+
+
+    def _OnSelectCell(self, event):
+        """Handler for selecting grid cell, refreshes toolbar."""
+        event.Skip()
+        enable = event.Row >= 0 and event.Col >= 0 if self._grid.NumberRows else False
+        self._tb.EnableTool(wx.ID_EDIT, enable)
 
 
     def _OnCommit(self, event=None):
