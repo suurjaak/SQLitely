@@ -8,10 +8,11 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    29.04.2020
+@modified    15.05.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
+import json
 import logging
 import re
 import sys
@@ -121,17 +122,24 @@ def unquote(val):
     return result
 
 
-def format(value):
+def format(value, coldata=None):
     """Formats a value for use in an SQL statement like INSERT."""
     if isinstance(value, basestring):
-        if SAFEBYTE_RGX.search(value):
+        success = False
+        if isinstance(coldata, dict) \
+        and isinstance(coldata.get("type"), basestring) \
+        and "JSON" == coldata["type"].upper():
+            try: value, success = json.dumps(json.loads(value)), True
+            except Exception: pass
+
+        if not success and SAFEBYTE_RGX.search(value):
             if isinstance(value, unicode):
                 try:
                     value = value.encode("latin1")
                 except UnicodeError:
                     value = value.encode("utf-8", errors="replace")
             value = "X'%s'" % value.encode("hex").upper()
-        else:
+        elif not success:
             if isinstance(value, unicode):
                 value = value.encode("utf-8")
             value = "'%s'" % value.replace("'", "''")

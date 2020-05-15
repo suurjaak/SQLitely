@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.12.2019
+@modified    15.05.2020
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -408,6 +408,7 @@ TXT SQL insert statements export template for the rows part.
 @param   rows       iterable
 @param   columns    [name, ]
 @param   name       table name
+@param   ?coldatas  [{name}, ]
 @param   ?namespace  {"row_count"}
 @param   ?progress  callback(name, count) returning whether to cancel, if any
 """
@@ -415,11 +416,12 @@ DATA_ROWS_SQL = """<%
 from sqlitely import grammar, templates
 
 str_cols = ", ".join(map(grammar.quote, columns))
+coldatas = coldatas if isdef("coldatas") else [{"name": col} for col in columns]
 %>
 %for i, row in enumerate(rows, 1):
 <%
 if isdef("namespace"): namespace["row_count"] += 1
-values = [grammar.format(row[col]) for col in columns]
+values = [grammar.format(row[col], coldatas[i]) for i, col in enumerate(columns)]
 %>
 INSERT INTO {{ name }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
 <%
@@ -439,18 +441,20 @@ TXT SQL update statements export template.
 @param   columns    [name, ]
 @param   pks        [name, ]
 @param   name       table name
+@param   ?coldatas  [{name}, ]
 """
 DATA_ROWS_UPDATE_SQL = """<%
 from sqlitely import grammar, templates
 
 str_cols = ", ".join(map(grammar.quote, columns))
+coldatas = coldatas if isdef("coldatas") else [{"name": col} for col in columns]
 %>
 %for row, original in zip(rows, originals):
 <%
-setstr = ", ".join("%s = %s" % (grammar.quote(col), grammar.format(row[col]))
-                   for col in columns if col not in pks or row[col] != original[col])
-wherestr = " AND ".join("%s = %s" % (grammar.quote(col), grammar.format(original[col]))
-                   for col in pks if col in original)
+setstr = ", ".join("%s = %s" % (grammar.quote(col), grammar.format(row[col], coldatas[i]))
+                   for i, col in enumerate(columns) if col not in pks or row[col] != original[col])
+wherestr = " AND ".join("%s = %s" % (grammar.quote(col), grammar.format(original[col], coldatas[i]))
+                   for i, col in enumerate(columns) if col in pks and col in original)
 %>
 UPDATE {{ name }} SET {{ setstr }}{{ (" WHERE " + wherestr) if wherestr else "" }};
 %endfor
@@ -2162,7 +2166,7 @@ Database dump SQL template.
 
 @param   db         database.Database instance
 @param   sql        schema SQL
-@param   data       [{name, columns, rows}]
+@param   data       [{name, columns, coldatas, rows}]
 @param   pragma     PRAGMA values as {name: value}
 @param   ?progress  callback(count) returning whether to cancel, if any
 """

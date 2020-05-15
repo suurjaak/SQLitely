@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.12.2019
+@modified    15.05.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -146,6 +146,7 @@ def export_data(make_iterable, filename, title, db, columns,
                     "db_filename": db.name,
                     "title":       title,
                     "columns":     colnames,
+                    "coldatas":    columns,
                     "rows":        make_iterable(),
                     "row_count":   0,
                     "sql":         query,
@@ -308,6 +309,7 @@ def export_dump(filename, db, progress=None):
                 "db":       db,
                 "sql":      db.get_sql(),
                 "data":     [{"name": t, "columns": [x["name"] for x in opts["columns"]],
+                              "coldatas": opts["columns"],
                               "rows": iter(db.execute("SELECT * FROM %s" % grammar.quote(t)))}
                              for t, opts in tables.items()],
                 "pragma":   db.get_pragma_values(dump=True),
