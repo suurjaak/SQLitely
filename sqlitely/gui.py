@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.04.2020
+@modified    23.05.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -258,7 +258,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
 
         label_count = self.label_count = wx.StaticText(page)
-        edit_filter = self.edit_filter = controls.HintedTextCtrl(page, "Filter list")
+        edit_filter = self.edit_filter = controls.HintedTextCtrl(page, "Filter list",
+                                                                 style=wx.TE_PROCESS_ENTER)
         edit_filter.ToolTip = "Filter database list (Ctrl-F)"
         list_db = self.list_db = controls.SortableUltimateListCtrl(page,
             agwStyle=wx.LC_REPORT | wx.BORDER_NONE)
@@ -2261,8 +2262,7 @@ class DatabasePage(wx.Panel):
 
         self.label_search = wx.StaticText(self, -1, "&Search in data:")
         self.label_search.ToolTip = "Search in all columns of all database tables and views"
-        sizer_header.Add(self.label_search, border=5,
-                         flag=wx.RIGHT | wx.TOP | wx.ALIGN_RIGHT)
+        sizer_header.Add(self.label_search, border=5, flag=wx.RIGHT | wx.TOP)
         edit_search = self.edit_searchall = controls.TextCtrlAutoComplete(
             self, description=conf.SearchDescription,
             size=(300, -1), style=wx.TE_PROCESS_ENTER)
@@ -2276,9 +2276,8 @@ class DatabasePage(wx.Panel):
         tb.AddTool(wx.ID_FIND, "", bmp, shortHelp="Start search")
         tb.Realize()
         self.Bind(wx.EVT_TOOL, self.on_searchall, id=wx.ID_FIND)
-        sizer_header.Add(edit_search, border=5,
-                     flag=wx.RIGHT | wx.ALIGN_RIGHT)
-        sizer_header.Add(tb, border=5, flag=wx.ALIGN_RIGHT | wx.GROW)
+        sizer_header.Add(edit_search, border=5, flag=wx.RIGHT)
+        sizer_header.Add(tb, border=5, flag=wx.GROW)
         sizer.Add(sizer_header,
                   border=5, flag=wx.LEFT | wx.RIGHT | wx.TOP | wx.GROW)
         sizer.Layout() # To avoid searchbox moving around during page creation
@@ -2406,8 +2405,7 @@ class DatabasePage(wx.Panel):
         self.register_notebook_hotkeys(nb)
 
         sizer_top.Add(label_html, proportion=1, flag=wx.GROW)
-        sizer_top.Add(tb, border=5, flag=wx.TOP |
-                      wx.ALIGN_CENTER_VERTICAL | wx.ALIGN_RIGHT)
+        sizer_top.Add(tb, border=5, flag=wx.TOP | wx.ALIGN_CENTER_VERTICAL)
         sizer.Add(sizer_top, border=5, flag=wx.TOP | wx.RIGHT | wx.GROW)
         sizer.Add(nb, border=5, proportion=1,
                   flag=wx.GROW | wx.LEFT | wx.RIGHT | wx.BOTTOM)
@@ -2653,7 +2651,8 @@ class DatabasePage(wx.Panel):
         label_header = wx.StaticText(page, label="Database PRAGMA settings")
         label_header.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                     wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
-        edit_filter = self.edit_pragma_filter = controls.HintedTextCtrl(page, "Filter settings")
+        edit_filter = self.edit_pragma_filter = controls.HintedTextCtrl(page, "Filter settings",
+                                                                        style=wx.TE_PROCESS_ENTER)
         edit_filter.ToolTip = "Filter PRAGMA directive list (Ctrl-F)"
 
         def on_help(ctrl, text, event):
@@ -6033,7 +6032,7 @@ class AboutDialog(wx.Dialog):
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
 
         self.Layout()
-        self.Size = (self.Size[0], html.VirtualSize[1] + 60)
+        self.Size = (self.Size[0], html.VirtualSize[1] + 70)
         self.CenterOnParent()
 
 

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.05.2020
+@modified    23.05.2020
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -786,7 +786,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             wx.TheClipboard.Close()
         if not data: return
 
-        row, col = self.View.GridCursorRow, self.View.GridCursorCol
+        row, col = max(0, self.View.GridCursorRow), max(0, self.View.GridCursorCol)
         rowdatas = [x.split("\t") for x in data.split("\n")]
         for i, rowdata in enumerate(rowdatas):
             if row + i >= self.GetNumberRows(): break # for i, rowdata
@@ -883,9 +883,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             if wx.ID_OK != dlg.ShowModal(): return
             v = re.sub(r"[\s\.\,]", "", dlg.GetValue())
             try:
-                row = int(v) - 1
+                row, col = int(v) - 1, max(0, self.View.GridCursorCol)
                 self.SeekToRow(row)
-                self.View.GoToCell(min(row, self.row_count - 1), self.View.GridCursorCol)
+                self.View.GoToCell(min(row, self.row_count - 1), col)
             except Exception: pass
 
         def on_delete_cascade(event=None):
@@ -937,7 +937,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             mycopy(text, "Copied column name to clipboard%s", cutoff)
 
         def on_col_goto(col, event=None):
-            self.View.GoToCell(self.View.GridCursorRow, col)
+            self.View.GoToCell(max(0, self.View.GridCursorRow), col)
 
 
         lks, fks = self.db.get_keys(self.name)
@@ -953,7 +953,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 rows, cols = [event.Row], [event.Col]
         rows, cols = ([x for x in xx if x >= 0] for xx in (rows, cols))
         if not rows and self.View.NumberRows and self.View.GridCursorRow >= 0:
-            rows, cols = [self.View.GridCursorRow], [self.View.GridCursorCol]
+            rows, cols = [self.View.GridCursorRow], [max(0, self.View.GridCursorCol)]
         rows, cols = ([x for x in xx if x >= 0] for xx in (rows, cols))
 
         if rows:
@@ -1151,7 +1151,7 @@ class SQLiteGridBaseMixin(object):
         grid = self._grid
         grid.SetDefaultEditor(wx.grid.GridCellAutoWrapStringEditor())
         grid.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
-        grid.SetDefaultCellOverflow(False)
+        grid.SetDefaultCellFitMode(wx.grid.GridFitMode.Clip())
         ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
         ColourManager.Manage(grid, "LabelBackgroundColour",       wx.SYS_COLOUR_BTNFACE)
@@ -1238,7 +1238,7 @@ class SQLiteGridBaseMixin(object):
             rows_present = self._grid.Table.GetNumberRows(present=True)
             if rows_scrolled > rows_present:
                 seekrow = (rows_present / conf.SeekLeapLength + 1) * conf.SeekLeapLength
-                self._grid.MakeCellVisible(rows_present, self._grid.GridCursorCol)
+                self._grid.MakeCellVisible(rows_present, max(0, self._grid.GridCursorCol))
                 return self._grid.Table.SeekToRow(seekrow)
 
         def seekahead():
@@ -1270,7 +1270,7 @@ class SQLiteGridBaseMixin(object):
         elif event.ControlDown() and not self._grid.Table.IsComplete() \
         and event.KeyCode in controls.KEYS.DOWN + controls.KEYS.END:
             # Disallow jumping to the very end, may be a billion rows.
-            row, col = (self._grid.GridCursorRow, self._grid.GridCursorCol)
+            row, col = max(0, self._grid.GridCursorRow), max(0, self._grid.GridCursorCol)
             rows_present = self._grid.Table.GetNumberRows(present=True) - 1
             seekrow = (rows_present / conf.SeekLeapLength + 1) * conf.SeekLeapLength
             busy = controls.BusyPanel(self, "Seeking..")
@@ -1341,7 +1341,6 @@ class SQLiteGridBaseMixin(object):
     def _OnGridSelectRange(self, event):
         """Handler for selecting grid row, moves cursor to selection start."""
         event.Skip()
-        pos = event.EventObject.GridCursorRow, event.EventObject.GridCursorCol
         if not event.Selecting(): return
         row, col = event.TopRow, event.LeftCol
         pos = event.EventObject.GridCursorRow, event.EventObject.GridCursorCol
@@ -1539,18 +1538,18 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         sizer_buttons.Add(button_script, border=5, flag=wx.LEFT | wx.ALIGN_LEFT)
         sizer_buttons.Add(tbgrid, border=10, flag=wx.LEFT)
         sizer_buttons.AddStretchSpacer()
-        sizer_buttons.Add(button_export, border=5, flag=wx.RIGHT | wx.ALIGN_RIGHT)
-        sizer_buttons.Add(button_close, flag=wx.ALIGN_RIGHT)
+        sizer_buttons.Add(button_export, border=5, flag=wx.RIGHT)
+        sizer_buttons.Add(button_close)
 
         sizer_footer.Add(label_help)
         sizer_footer.AddStretchSpacer()
-        sizer_footer.Add(label_rows, flag=wx.ALIGN_RIGHT)
+        sizer_footer.Add(label_rows)
 
         sizer2.Add(label_help_stc, border=5, flag=wx.BOTTOM | wx.GROW)
         sizer2.Add(sizer_buttons, border=5, flag=wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer2.Add(grid, proportion=1, flag=wx.GROW)
         sizer2.Add(sizer_footer, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
-        sizer2.Add(panel_export, proportion=1, flag=wx.ALIGN_CENTER_HORIZONTAL | wx.GROW)
+        sizer2.Add(panel_export, proportion=1, flag=wx.GROW)
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
         label_help.Hide()
@@ -1713,7 +1712,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             self._grid.SetTable(grid_data, takeOwnership=True)
             self._grid.Scroll(*scrollpos)
             maxpos = self._grid.GetNumberRows() - 1, self._grid.GetNumberCols() - 1
-            cursorpos = [min(x) for x in zip(cursorpos, maxpos)]
+            cursorpos = [min(max(0, x)) for x in zip(cursorpos, maxpos)]
             self._grid.SetGridCursor(*cursorpos)
         finally: self._grid.Thaw()
         self._PopulateCount()
@@ -2054,12 +2053,12 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         sizer_footer.Add(label_help)
         sizer_footer.AddStretchSpacer()
-        sizer_footer.Add(label_rows, flag=wx.ALIGN_RIGHT)
+        sizer_footer.Add(label_rows)
 
         sizer.Add(sizer_header, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer.Add(grid, proportion=1, flag=wx.GROW)
         sizer.Add(sizer_footer, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
-        sizer.Add(panel_export, proportion=1, flag=wx.ALIGN_CENTER_HORIZONTAL | wx.GROW)
+        sizer.Add(panel_export, proportion=1, flag=wx.GROW)
         try: self._Populate()
         except Exception:
             self.Destroy()
@@ -2662,7 +2661,7 @@ class SchemaObjectPage(wx.Panel):
         sizer_sql_header.AddStretchSpacer()
         sizer_sql_header.Add(check_alter, border=1, flag=wx.BOTTOM | wx.ALIGN_BOTTOM)
         sizer_sql_header.AddStretchSpacer()
-        sizer_sql_header.Add(tb, border=5, flag=wx.TOP | wx.ALIGN_RIGHT)
+        sizer_sql_header.Add(tb, border=5, flag=wx.TOP)
 
         panel1.Sizer.Add(sizer_name,       border=10, flag=wx.TOP | wx.RIGHT | wx.GROW)
         panel1.Sizer.Add(categorypanel,    border=10, proportion=2, flag=wx.RIGHT | wx.GROW)
@@ -3002,6 +3001,7 @@ class SchemaObjectPage(wx.Panel):
         panel.SetScrollRate(20, 0)
 
         cols = {"table": 5, "index": 4, "trigger": 2, "view": 2}[self._category]
+        gridcols = {"table": 8, "index": 3, "trigger": 1, "view": 1}[self._category]
         sizer_headers = wx.FlexGridSizer(cols=cols+1)
         panel_grid = self._panel_columnsgrid = wx.ScrolledWindow(panel, style=s2)
         panel_grid.Sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -3056,7 +3056,8 @@ class SchemaObjectPage(wx.Panel):
         grid.SetCellHighlightPenWidth(0)
         grid.SetCellHighlightROPenWidth(0)
         grid.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
-        grid.CreateGrid(0, 0, wx.grid.Grid.SelectRows)
+        grid.CreateGrid(0, gridcols, wx.grid.Grid.SelectRows)
+        for i in range(gridcols): grid.HideCol(i) # Dummy columns for tracking focus
         ColourManager.Manage(grid, "LabelBackgroundColour", wx.SYS_COLOUR_BTNFACE)
         ColourManager.Manage(grid, "LabelTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
 
@@ -3113,7 +3114,8 @@ class SchemaObjectPage(wx.Panel):
         for i, x in list(enumerate(headeritems))[::-1]:
             if x.Sizer: headeritems[i:i+1] = list(x.Sizer.Children)
             elif not x.Window: headeritems[i:i+1] = []
-        make_handler = lambda i: lambda e: grid.SetGridCursor(grid.GridCursorRow, i)
+        make_handler = lambda i: (lambda e: grid.GridCursorRow >= 0
+                                            and grid.SetGridCursor(grid.GridCursorRow, i))
         for i, x in enumerate(headeritems):
             x.Window.Bind(wx.EVT_LEFT_UP, make_handler(i))
 
@@ -3150,7 +3152,8 @@ class SchemaObjectPage(wx.Panel):
         grid.SetCellHighlightPenWidth(0)
         grid.SetCellHighlightROPenWidth(0)
         grid.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
-        grid.CreateGrid(0, 0, wx.grid.Grid.SelectRows)
+        grid.CreateGrid(0, 1, wx.grid.Grid.SelectRows)
+        grid.HideCol(0) # Dummy column for tracking focus
         ColourManager.Manage(grid, "LabelBackgroundColour", wx.SYS_COLOUR_BTNFACE)
         ColourManager.Manage(grid, "LabelTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
 
@@ -3230,19 +3233,16 @@ class SchemaObjectPage(wx.Panel):
             items = (meta.get(collection) if self._hasmeta else
                      self._item.get(collection)) or ()
 
-            row, col = grid.GridCursorRow, grid.GridCursorCol
-            if grid.NumberRows:
-                grid.SetGridCursor(-1, col)
-                grid.DeleteRows(0, grid.NumberRows)
+            row, col = max(0, grid.GridCursorRow), max(0, grid.GridCursorCol)
+            if grid.NumberRows: grid.DeleteRows(0, grid.NumberRows)
             grid.AppendRows(len(items))
 
             self._EmptyControl(panel)
             for j, opts in enumerate(items):
                 adder([collection], j, opts)
             if grid.NumberRows:
-                row = min(max(0, row), grid.NumberRows - 1)
                 setcursor = lambda g, r, c: lambda: (self and g.SetGridCursor(r, c))
-                wx.CallLater(0, setcursor(grid, row, col))
+                wx.CallLater(0, setcursor(grid, min(row, grid.NumberRows - 1), col))
                 if i: wx.CallAfter(self._SizeConstraintsGrid)
             panel.Layout()
 
@@ -3265,28 +3265,25 @@ class SchemaObjectPage(wx.Panel):
         items = (meta.get("columns") if self._hasmeta \
                  else self._item.get("columns")) or ()
 
-        row, col = self._grid_columns.GridCursorRow, self._grid_columns.GridCursorCol
-        if self._grid_columns.NumberRows:
-            self._grid_columns.SetGridCursor(-1, col)
-            self._grid_columns.DeleteRows(0, self._grid_columns.NumberRows)
-        self._grid_columns.AppendRows(len(items))
+        grid = self._grid_columns
+        row, col = max(0, grid.GridCursorRow), max(0, grid.GridCursorCol)
+        if grid.NumberRows: grid.DeleteRows(0, grid.NumberRows)
+        grid.AppendRows(len(items))
 
         self._EmptyControl(self._panel_columns)
         for i, coldata in enumerate(items):
             self._AddRowIndex(["columns"], i, coldata)
-        if self._grid_columns.NumberRows:
-            row = min(max(0, row), self._grid_columns.NumberRows - 1)
-            self._grid_columns.SetGridCursor(row, col)
+        if grid.NumberRows:
+            grid.SetGridCursor(min(row, grid.NumberRows - 1), col)
 
 
     def _PopulateTrigger(self):
         """Populates panel with trigger-specific data."""
         meta = self._item.get("meta") or {}
 
-        row, col = self._grid_columns.GridCursorRow, self._grid_columns.GridCursorCol
-        if self._grid_columns.NumberRows:
-            self._grid_columns.SetGridCursor(-1, col)
-            self._grid_columns.DeleteRows(0, self._grid_columns.NumberRows)
+        grid = self._grid_columns
+        row, col = max(0, grid.GridCursorRow), max(0, grid.GridCursorCol)
+        if grid.NumberRows: grid.DeleteRows(0, grid.NumberRows)
 
         if grammar.SQL.INSTEAD_OF == meta.get("upon"):
             self._ctrls["label_table"].Label = "&View:"
@@ -3311,12 +3308,11 @@ class SchemaObjectPage(wx.Panel):
         and (self._editmode or meta.get("columns")):
             self._panel_splitter.SplitHorizontally(p1, p2, self._panel_splitter.MinimumPaneSize)
             self._panel_columnsgrid.Parent.Show()
-            self._grid_columns.AppendRows(len(meta.get("columns") or ()))
+            grid.AppendRows(len(meta.get("columns") or ()))
             for i, coldata in enumerate(meta.get("columns") or ()):
                 self._AddRowTrigger(["columns"], i, coldata)
-            if self._grid_columns.NumberRows:
-                row = min(max(0, row), self._grid_columns.NumberRows - 1)
-                self._grid_columns.SetGridCursor(row, col)
+            if grid.NumberRows:
+                grid.SetGridCursor(min(row, grid.NumberRows - 1), col)
         else:
             self._panel_splitter.Unsplit(p1)
         self._panel_category.Layout()
@@ -3326,10 +3322,9 @@ class SchemaObjectPage(wx.Panel):
         """Populates panel with view-specific data."""
         meta = self._item.get("meta") or {}
 
-        row, col = self._grid_columns.GridCursorRow, self._grid_columns.GridCursorCol
-        if self._grid_columns.NumberRows:
-            self._grid_columns.SetGridCursor(-1, col)
-            self._grid_columns.DeleteRows(0, self._grid_columns.NumberRows)
+        grid = self._grid_columns
+        row, col = max(0, grid.GridCursorRow), max(0, grid.GridCursorCol)
+        if grid.NumberRows: grid.DeleteRows(0, grid.NumberRows)
         items = (meta.get("columns") if self._hasmeta
                  else self._item.get("columns")) or ()
 
@@ -3339,12 +3334,11 @@ class SchemaObjectPage(wx.Panel):
         p1, p2 = self._panel_splitter.Children
         if self._db.has_view_columns() and (items or self._editmode):
             self._panel_splitter.SplitHorizontally(p1, p2, self._panel_splitter.MinimumPaneSize)
-            self._grid_columns.AppendRows(len(items))
+            grid.AppendRows(len(items))
             for i, coldata in enumerate(items):
                 self._AddRowView(["columns"], i, coldata)
-            if self._grid_columns.NumberRows:
-                row = min(max(0, row), self._grid_columns.NumberRows - 1)
-                self._grid_columns.SetGridCursor(row, col)
+            if grid.NumberRows:
+                grid.SetGridCursor(min(row, grid.NumberRows - 1), col)
         else:
             self._panel_splitter.Unsplit(p1)
 
@@ -3554,8 +3548,8 @@ class SchemaObjectPage(wx.Panel):
             self._AddSizer(panel.Sizer, button_open, border=5, flag=wx.LEFT | wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
 
         ctrls.append(button_open)
-        for i, c in enumerate(ctrls):
-            c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusConstraint, [c, i]))
+        for c in ctrls:
+            c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusConstraint, [c, 0]))
         label_type.Bind(wx.EVT_LEFT_UP, lambda e: ctrls[0].SetFocus())
         self._BindDataHandler(self._OnOpenItem, button_open, ["constraints", button_open])
 
@@ -4358,8 +4352,10 @@ class SchemaObjectPage(wx.Panel):
 
         grid = self._grid_constraints if "constraints" == path[0] \
                else self._grid_columns
+        col = max(0, grid.GridCursorCol)
         grid.DeleteRows(index)
-        grid.SetGridCursor(min(index, grid.NumberRows - 1), -1)
+        if grid.NumberRows:
+            grid.SetGridCursor(min(index, grid.NumberRows - 1), col)
 
         if "table" == self._category:
             label, count = path[0].capitalize(), len(self._item["meta"].get(path[0]) or ())
@@ -4420,6 +4416,7 @@ class SchemaObjectPage(wx.Panel):
         if "constraints" == path[0]:
             index = self._grid_constraints.GridCursorRow
         else: index = self._grid_columns.GridCursorRow
+        if index < 0: return
         ptr = self._item["meta"]
         for p in path: ptr = ptr.get(p)
         mydata = ptr[index]
@@ -4449,13 +4446,14 @@ class SchemaObjectPage(wx.Panel):
         grid = self._grid_constraints if "constraints" == path[0] \
                else self._grid_columns
         index = grid.GridCursorRow
+        if index < 0: return
         ptr = self._item["meta"]
         for p in path: ptr = ptr.get(p)
         index2 = index + direction
         ptr[index], ptr[index2] = ptr[index2], ptr[index]
         self.Freeze()
         try:
-            col = grid.GridCursorCol
+            col = max(0, grid.GridCursorCol)
             self._RemoveRow(path, index)
             self._AddRow(path, index2, ptr[index2], insert=True)
             grid.SetGridCursor(index2, col)
@@ -4620,6 +4618,8 @@ class SchemaObjectPage(wx.Panel):
         if isinstance(event, wx.grid.GridRangeSelectEvent):
             row, col = event.TopRow, -1
         else: row, col = event.Row, event.Col
+        if row == self._grid_constraints.GridCursorRow: return
+
         for i in range(self._grid_constraints.NumberRows):
             pref = u"\u25ba " if row == i else "" # Right-pointing pointer symbol
             self._grid_constraints.SetRowLabelValue(i, "%s%s  " % (pref, i + 1))
@@ -4636,7 +4636,9 @@ class SchemaObjectPage(wx.Panel):
             self._panel_constraintsgrid.Scroll(0, rowpos if rowpos < start else rowpos - rng + rowh)
 
         COLS = self._panel_constraints.Sizer.Cols
-        if row >= 0 and col <= 0 and self._grid_constraints.NumberRows \
+        # Focus first control only if user clicked grid row header
+        if isinstance(event, wx.grid.GridRangeSelectEvent) \
+        and row >= 0 and col <= 0 and self._grid_constraints.NumberRows \
         and row * COLS < len(self._panel_constraints.Sizer.Children):
             subsizer = self._panel_constraints.Sizer.Children[COLS * row + 1].Sizer
             ctrl = subsizer.Children[0].Window
@@ -5144,7 +5146,7 @@ class ExportProgressPanel(wx.Panel):
         sizer_buttons.Add(button_close)
 
         sizer.AddStretchSpacer()
-        sizer.Add(panel_tasks, proportion=5, flag=wx.ALIGN_CENTER | wx.GROW)
+        sizer.Add(panel_tasks, proportion=5, flag=wx.GROW)
         sizer.AddStretchSpacer(0)
         sizer.Add(sizer_buttons, border=16, flag=wx.ALL | wx.ALIGN_RIGHT)
 
@@ -5292,7 +5294,7 @@ class ExportProgressPanel(wx.Panel):
             sizer.Add(parent, flag=wx.ALIGN_CENTER)
             sizer.Add(sizer_buttons, border=5, flag=wx.TOP | wx.ALIGN_CENTER)
 
-            panel.Sizer.Add(sizer, border=10, flag=wx.ALL | wx.ALIGN_CENTER | wx.GROW)
+            panel.Sizer.Add(sizer, border=10, flag=wx.ALL | wx.GROW)
 
             self.Bind(wx.EVT_BUTTON, functools.partial(self._OnCancel, i), cancel)
             self.Bind(wx.EVT_BUTTON, functools.partial(self._OnOpen,   i), open)
@@ -5351,7 +5353,7 @@ class ExportProgressPanel(wx.Panel):
         if wx.YES != controls.YesNoMessageBox(msg, conf.Title, wx.ICON_WARNING,
                                               defaultno=True): return
 
-        if self._tasks[index]["pending"]: self._OnResult(self._tasks[index])
+        if self._tasks[index]["pending"]: self._OnResult(self._tasks[index], index)
 
 
     def _OnResult(self, result, index=None):
@@ -6653,7 +6655,7 @@ class DataDialog(wx.Dialog):
             name = util.unprint(coldata["name"])
             label = wx.StaticText(panel, label=name + ":", name="label_data_" + name)
             resizable, rw = gridbase.db.get_affinity(coldata) in ("TEXT", "BLOB"), None
-            style = wx.TE_RICH | (wx.TE_MULTILINE if resizable else 0)
+            style = wx.TE_RICH | wx.TE_PROCESS_ENTER | (wx.TE_MULTILINE if resizable else 0)
             edit = controls.HintedTextCtrl(panel, escape=False, style=style,
                                            name="data_" + name)
             edit.SetEditable(self._editable)
@@ -6690,7 +6692,7 @@ class DataDialog(wx.Dialog):
         sizer_header.AddStretchSpacer()
         sizer_header.Add(text_header, flag=wx.ALIGN_CENTER_VERTICAL)
         sizer_header.AddStretchSpacer()
-        sizer_header.Add(button_next, flag=wx.ALIGN_RIGHT)
+        sizer_header.Add(button_next)
 
         sizer_footer.Add(button_update, border=5, flag=wx.RIGHT)
         sizer_footer.Add(button_reset,  border=5, flag=wx.RIGHT)
@@ -7043,7 +7045,8 @@ class HistoryDialog(wx.Dialog):
         sizer_top = wx.BoxSizer(wx.HORIZONTAL)
 
         info   = self._info = wx.StaticText(self)
-        search = self._search = controls.HintedTextCtrl(self, "Filter list")
+        search = self._search = controls.HintedTextCtrl(self, "Filter list",
+                                                        style=wx.TE_PROCESS_ENTER)
         grid   = self._grid = wx.grid.Grid(self)
         button = wx.Button(self, label="Close")
 
@@ -7087,7 +7090,8 @@ class HistoryDialog(wx.Dialog):
         self.CenterOnParent()
         self.MinSize = (400, 400)
         grid.SetFocus()
-        wx.CallLater(0, lambda: self and grid.GoToCell(grid.NumberRows - 1, 0))
+        if grid.NumberRows:
+            wx.CallLater(0, lambda: self and grid.GoToCell(grid.NumberRows - 1, 0))
 
 
     def _Convert(self, x):
