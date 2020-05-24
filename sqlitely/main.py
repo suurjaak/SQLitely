@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.05.2020
+@modified    24.05.2020
 ------------------------------------------------------------------------------
 """
 import argparse
@@ -48,9 +48,20 @@ def except_hook(etype, evalue, etrace):
     log = "An unexpected error has occurred:\n\n%s"
     logger.error(log, text)
     if not conf.PopupUnexpectedErrors: return
+    conf.UnexpectedErrorCount += 1
     msg = "An unexpected error has occurred:\n\n%s\n\n" \
           "See log for full details." % util.format_exc(evalue)
-    wx.CallAfter(wx.MessageBox, msg, conf.Title, wx.OK | wx.ICON_ERROR)
+
+    def after():
+        dlg = wx.RichMessageDialog(None, msg, conf.Title, wx.OK | wx.ICON_ERROR)
+        if conf.UnexpectedErrorCount > 2:
+            dlg.ShowCheckBox("Do not pop up further errors")
+        dlg.ShowModal()
+        if dlg.IsCheckBoxChecked():
+            conf.PopupUnexpectedErrors = False
+            conf.save()
+
+    wx.CallAfter(after)
 
 
 def install_thread_excepthook():
