@@ -1291,6 +1291,28 @@ class SQLiteGridBaseMixin(object):
                 text = "\n".join("\t".join(c for c in r) for r in data)
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+
+        elif event.KeyCode in controls.KEYS.DELETE \
+        and not event.HasAnyModifiers() and self._grid.SelectedRows:
+            rows = sorted(self._grid.SelectedRows)
+
+            chunk = []
+            # Delete in continuous chunks for speed, reversed for concistent indexes
+            for i, idx in list(enumerate(rows))[::-1]:
+                if i < len(rows) - 1 and rows[i + 1] != idx + 1:
+                    self._grid.DeleteRows(chunk[0], len(chunk))
+                    chunk = []
+                chunk.insert(0, idx)
+            if chunk: self._grid.DeleteRows(chunk[0], len(chunk))
+            if self._grid.NumberRows:
+                row = min(min(rows), self._grid.NumberRows - 1)
+                self._grid.SelectRow(-1)
+                self._grid.GoToCell(row, 0)
+
+        elif event.KeyCode in controls.KEYS.INSERT \
+        and not event.HasAnyModifiers():
+            self._grid.InsertRows(0, 1)
+
         else: event.Skip()
 
 
