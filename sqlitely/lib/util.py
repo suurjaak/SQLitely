@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.12.2019
+@modified    24.05.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -221,6 +221,27 @@ def plural(word, items=None, numbers=True, single="1", sep="", pref="", suf=""):
         fmtcount = pref + fmtcount + suf
         result = "%s %s" % (single if 1 == count else fmtcount, result)
     return result.strip()
+
+
+def count(items, unit=None, key="count", suf=""):
+    """
+    Returns formatted count string, prefixed with "~" and rounded to the lowest
+    hundred if count is estimated.
+
+    @param   items   [{count, ?is_count_estimated}] or {count, ?is_count_estimated}
+                     or numeric count
+    @param   unit    name to append to count, pluralized if count != 1
+    @param   key     name of item key holding count (also changes key for estimate)
+    @param   suf     suffix to append to count, e.g. "150+"
+    """
+    result = ""
+    if isinstance(items, dict): items = [items]
+    elif isinstance(items, (int, long, float)): items = [{key: items}]
+    value = sum(x.get(key) or 0 for x in items)
+    pref = "~" if any(x.get("is_%s_estimated" % key) for x in items) else ""
+    if pref: value = int(math.ceil(value / 100.) * 100)
+    result = plural(unit or "", value, sep=",", pref=pref, suf=suf)
+    return result
 
 
 def try_until(func, count=1, sleep=0.5):

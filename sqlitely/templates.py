@@ -1461,8 +1461,7 @@ COLS = {"table":   ["Name", "Columns", "Related tables", "Other relations", "Row
 index_total = sum(x["size"] for x in stats.get("index", []))
 table_total = sum(x["size"] for x in stats.get("table", []))
 total = index_total + sum(x["size"] for x in stats.get("table", []))
-rows_total = sum(x.get("count") or 0 for x in db.schema.get("table", {}).values())
-rows_pref = "~" if rows_total and any(x.get("is_count_estimated") for x in db.schema["table"].values()) else ""
+has_rows = any(x.get("count") or 0 for x in db.schema.get("table", {}).values())
 %>
 <tr><td><table id="header_table">
   <tr>
@@ -1471,12 +1470,12 @@ rows_pref = "~" if rows_total and any(x.get("is_count_estimated") for x in db.sc
       Source: <b>{{ db.name }}</b>.<br />
       Size: <b title="{{ stats.get("size", db.filesize) }}">{{ util.format_bytes(stats.get("size", db.filesize)) }}</b> (<span title="{{ stats.get("size", db.filesize) }}">{{ util.format_bytes(stats.get("size", db.filesize), max_units=False) }}</span>).<br />
 %if db.schema.get("table"):
-      <b>{{ util.plural("table", db.schema["table"]) }}</b>{{ ", " if stats or rows_total else "." }}
+      <b>{{ util.plural("table", db.schema["table"]) }}</b>{{ ", " if stats or has_rows else "." }}
     %if stats:
-      <span title="{{ table_total }}">{{ util.format_bytes(table_total) }}</span>{{ "" if rows_total else "." }}
+      <span title="{{ table_total }}">{{ util.format_bytes(table_total) }}</span>{{ "" if has_rows else "." }}
     %endif
-    %if rows_total:
-(<span title="{{ rows_total }}">{{ util.plural("row", rows_total, sep=",", pref=rows_pref) }}</span>).
+    %if has_rows:
+(<span title="{{ util.count(db.schema["table"].values()) }}">{{ util.count(db.schema["table"].values(), "row") }}</span>).
     %endif
       <br />
 %endif
@@ -1634,7 +1633,7 @@ lks, fks = db.get_keys(item["name"]) if "table" == category else [(), ()]
         %if "table" == category:
 <%
 count = item["count"]
-countstr = "{1}{0:,}".format(count, "~" if item.get("is_count_estimated") else "")
+countstr = util.count(item)
 %>
     <td>
       <a class="toggle right" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urllib.quote(item["name"], safe="") }}/cols')">{{ len(item["columns"]) }}</a>
@@ -1894,16 +1893,15 @@ fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(util.unprin
 index_total = sum(x["size"] for x in stats["index"]) if stats else None
 table_total = sum(x["size"] for x in stats["table"]) if stats else None
 total = (index_total + sum(x["size"] for x in stats["table"])) if stats else None
-rows_total = sum(x.get("count") or 0 for x in db.schema.get("table", {}).values())
-rows_pref = "~" if rows_total and any(x.get("is_count_estimated") for x in db.schema["table"].values()) else ""
+has_rows = any(x.get("count") or 0 for x in db.schema.get("table", {}).values())
 
 tblstext = idxstext = othrtext = ""
 if db.schema.get("table"):
-    tblstext = util.plural("table", db.schema["table"]) + (", " if stats else "" if rows_total else ".")
+    tblstext = util.plural("table", db.schema["table"]) + (", " if stats else "" if has_rows else ".")
     if stats:
-        tblstext += util.format_bytes(table_total) + ("" if rows_total else ".")
-    if rows_total:
-        tblstext += " (%s)." % util.plural("row", rows_total, sep=",", pref=rows_pref)
+        tblstext += util.format_bytes(table_total) + ("" if has_rows else ".")
+    if has_rows:
+        tblstext += " (%s)." % util.count(db.schema.get("table", {}).values(), "row")
 if db.schema.get("index"):
     idxstext = util.plural("index", db.schema["index"]) + (", " if stats else ".")
     if stats: idxstext += util.format_bytes(index_total)
@@ -1997,8 +1995,7 @@ for item in db.schema.get(category).values():
     if "table" == category:
         row["Columns"] = str(len(item["columns"]))
 
-        count = item["count"]
-        row["Rows"] = "{1}{0:,}".format(count, "~" if item.get("is_count_estimated") else "")
+        row["Rows"] = util.count(item)
 
         if stats:
             size = next((x["size_total"] for x in stats["table"] if util.lceq(x["name"], item["name"])), "")

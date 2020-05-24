@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.05.2020
+@modified    24.05.2020
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -1394,26 +1394,26 @@ class SQLiteGridBaseMixin(object):
         if not self or not hasattr(self, "_label_rows") \
         or not isinstance(self._grid.Table, SQLiteGridBase): return
         gridbase = self._grid.Table
-        count, pref, suf = gridbase.GetNumberRows(), "", ""
+        suf = "+" if gridbase.is_query and not gridbase.IsComplete() else ""
+        data = data0 = {"count": gridbase.GetNumberRows()}
 
-        if not gridbase.IsComplete():
-            if "table" == getattr(self, "_category", None):
-                data = self._db.schema["table"].get(self.Name, {})
-                if reload or not data.get("count"): data = self._db.get_count(self.Name)
-                if data and data["count"] is not None:
-                    count = data["count"]
-                    pref = "~" if data.get("is_count_estimated") else ""
-                    count += len(gridbase.idx_new) - len(gridbase.rows_deleted)
-                else: suf = "+"
+        if "table" == gridbase.category and not gridbase.IsComplete():
+            tdata = self._db.schema["table"].get(self.Name, {})
+            if reload or not tdata or tdata.get("count") is None:
+                tdata = self._db.get_count(self.Name)
+            if tdata and tdata.get("count") is not None:
+                shift = len(gridbase.idx_new) - len(gridbase.rows_deleted)
+                data = dict(tdata, count=tdata["count"] + shift)
             else: suf = "+"
 
         if gridbase.filters:
-            count, total = gridbase.GetNumberRows(), gridbase.GetNumberRows(total=True)
+            total = dict(data, count=gridbase.GetNumberRows(total=True))
+            # Filtered count is never approximated, but can be incomplete
             suf2 = "" if gridbase.IsComplete() else "+"
-            t = "%s (%s filtered)" % (util.plural("row", total, sep=",", pref=pref, suf=suf),
-                                      util.plural("", count, sep=",", suf=suf2))
+            t = "%s (%s filtered)" % (util.count(total, "row", suf=suf),
+                                      util.count(data0, suf=suf2))
         else:
-            t = util.plural("row", count, sep=",", pref=pref, suf=suf)
+            t = util.count(data, "row", suf=suf)
 
         self._label_rows.Label = t
         self._label_rows.Parent.Layout()
@@ -5256,9 +5256,8 @@ class ExportProgressPanel(wx.Panel):
             percent, text = None, util.plural(unit, count)
         else:
             percent = int(100 * util.safedivf(count, total))
-            pref = "~" if opts.get("is_total_estimated") else ""
-            text = "%s%% (%s of %s%s)" % (percent, util.plural(unit, count, sep=","),
-                                          pref, "{0:,}".format(total))
+            text = "%s%% (%s of %s)" % (percent, util.plural(unit, count, sep=","),
+                                        util.count(opts, key="total"))
         return percent, text
 
 
@@ -6773,12 +6772,11 @@ class DataDialog(wx.Dialog):
             elif not gridbase.is_query:
                 item = gridbase.db.schema[gridbase.category][gridbase.name]
                 if item.get("count") is not None:
-                    count, pref = item["count"], ""
                     if item.get("is_count_estimated"):
                         changes = gridbase.GetChanges()
-                        count += len(changes.get("new", ())) - len(changes.get("deleted", ()))
-                    else: pref = "~"
-                    title += " of {1}{0:,}".format(count, pref)
+                        shift = len(changes.get("new", ())) - len(changes.get("deleted", ()))
+                        item = dict(item, count=item["count"] + shift)
+                    title += " of %s" % util.count(item)
             self.Title = title
             self._button_prev.Enabled = bool(self._row)
             self._button_next.Enabled = self._row + 1 < gridbase.RowsCount

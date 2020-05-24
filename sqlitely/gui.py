@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.05.2020
+@modified    24.05.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5094,15 +5094,12 @@ class DatabasePage(wx.Panel):
         items = self.db.get_category(category, names).values() \
                 if "table" == category else ()
         if "table" == category and any(x.get("count") for x in items):
-            count = sum(x.get("count") or 0 for x in items)
-            pref = "~" if any(x.get("is_count_estimated") for x in items) else ""
-            if pref: count = int(math.ceil(count / 100.) * 100)
-            countstr = util.plural("row", count, sep=",", pref=pref)
             if wx.YES != controls.YesNoMessageBox(
                 "Are you REALLY sure you want to drop the %s?\n\n"
                 "%s currently %s %s." %
                 (itemtext, "They" if len(names) > 1 else "It",
-                 "contain" if len(names) > 1 else "contains", countstr),
+                 "contain" if len(names) > 1 else "contains",
+                 util.count(items, "row")),
                 conf.Title, wx.ICON_WARNING, defaultno=True
             ): return
         lock = self.db.get_lock(category=None)
@@ -5166,13 +5163,9 @@ class DatabasePage(wx.Panel):
             conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
 
-        count = sum(x.get("count") or 0 for x in items)
-        pref = "~" if any(x.get("is_count_estimated") for x in items) else ""
-        if pref: count = int(math.ceil(count / 100.) * 100)
-        countstr = util.plural("row", count, sep=",", pref=pref)
         if wx.YES != controls.YesNoMessageBox(
             "Are you REALLY sure you want to delete all rows from all tables?\n\n"
-            "Database currently contains %s." % countstr,
+            "Database currently contains %s." % util.count(items, "row"),
             conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
 
@@ -5326,12 +5319,9 @@ class DatabasePage(wx.Panel):
                     tree.SetItemPyData(child, itemdata)
 
                     if "count" in item:
-                        t = "ERROR"
-                        if item["count"] is None: t = "ERROR"
-                        else:
-                            pref = "~" if item.get("is_row_estimated") else ""
-                            t = util.plural("row", item["count"], sep=",", pref=pref)
-                    else: t = "" if "view" == category else "Counting.."
+                        t = "ERROR" if item["count"] is None else util.count(item, "row")
+                    else:
+                        t = "" if "view" == category else "Counting.."
                     tree.SetItemText(child, t, 1)
 
                     lks, fks = self.db.get_keys(item["name"]) if "table" == category else [(), ()]
