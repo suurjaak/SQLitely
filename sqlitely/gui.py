@@ -1641,7 +1641,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.notebook.SetSelection(self.notebook.GetPageCount() - 1)
             self.on_change_page(None)
             self.menu_log.Check(True)
-        elif self.notebook.GetPageIndex(self.page_log) != self.notebook.GetSelection():
+        elif event and self.notebook.GetPageIndex(self.page_log) != self.notebook.GetSelection():
             self.notebook.SetSelection(self.notebook.GetPageCount() - 1)
             self.on_change_page(None)
             self.menu_log.Check(True)
