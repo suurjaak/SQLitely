@@ -6682,7 +6682,7 @@ class DataDialog(wx.Dialog):
             tip = ("%s %s" % (name, coldata.get("type"))).strip()
             if self._editable:
                 tip = gridbase.db.get_sql(gridbase.category, gridbase.name, coldata["name"])
-            edit.ToolTip = label.ToolTip = tip
+            label.ToolTip = tip
             edit.SetMargins(5, -1)
             self._edits[coldata["name"]] = edit
             if resizable:
@@ -6800,6 +6800,7 @@ class DataDialog(wx.Dialog):
                 v = self._data[n]
                 c.Value = "" if v is None else util.to_unicode(v)
                 c.Hint  = "<NULL>" if v is None else ""
+                c.ToolTip = c.Value if len(c.Value) < 1000 else c.Value[:1000] + ".."
                 if v != self._original[n]:
                     c.BackgroundColour = wx.Colour(conf.GridRowChangedColour)
             wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
@@ -6811,13 +6812,15 @@ class DataDialog(wx.Dialog):
     def _SetValue(self, col, val):
         """Sets the value to column data and edit at specified index."""
         self._ignore_change = True
-        name = self._columns[col]["name"]
+        name, c = self._columns[col]["name"], self._edits[name]
         self._data[name] = val
-        self._edits[name].Value = "" if val is None else util.to_unicode(val)
-        self._edits[name].Hint  = "<NULL>" if val is None else ""
+        c.Value = "" if val is None else util.to_unicode(val)
+        c.Hint  = "<NULL>" if val is None else ""
+        c.ToolTip = c.Value if len(c.Value) < 1000 else c.Value[:1000] + ".."
+
         bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
         if val != self._original[name]: bg = wx.Colour(conf.GridRowChangedColour)
-        self._edits[name].BackgroundColour = bg
+        c.BackgroundColour = bg
         wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
 
 
@@ -6848,6 +6851,8 @@ class DataDialog(wx.Dialog):
 
         self._data[name] = value
         event.EventObject.Hint = ""
+        val = event.EventObject.Value
+        event.EventObject.ToolTip = val if len(val) < 1000 else val[:1000] + ".."
         bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
         if value != self._original[name]: bg = wx.Colour(conf.GridRowChangedColour)
         event.EventObject.BackgroundColour = bg
