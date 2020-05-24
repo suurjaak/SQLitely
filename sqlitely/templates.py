@@ -2180,6 +2180,7 @@ Database dump SQL template.
 @param   sql        schema SQL
 @param   data       [{name, columns, coldatas, rows}]
 @param   pragma     PRAGMA values as {name: value}
+@param   buffer     file or file-like buffer being written to
 @param   ?progress  callback(count) returning whether to cancel, if any
 """
 DUMP_SQL = """<%
@@ -2204,7 +2205,6 @@ pragma_last  = {k: v for k, v in pragma.items() if not is_initial(db.PRAGMA[k], 
 {{ sql }}
 
 %endif
-
 %for table in data:
 <%
 if progress and not progress(): break # for table
@@ -2212,8 +2212,11 @@ row = next(table["rows"], None)
 if not row: continue # for table
 rows = itertools.chain([row], table["rows"])
 %>
+
 -- Table {{ grammar.quote(table["name"], force=True) }} data:
-{{! Template(templates.DATA_ROWS_SQL).expand(dict(table, progress=progress, rows=rows)) }}
+<%
+Template(templates.DATA_ROWS_SQL).stream(buffer, dict(table, progress=progress, rows=rows))
+%>
 
 %endfor
 

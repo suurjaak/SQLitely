@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.05.2020
+@modified    24.05.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -314,9 +314,10 @@ def export_dump(filename, db, progress=None):
                              for t, opts in tables.items()],
                 "pragma":   db.get_pragma_values(dump=True),
                 "progress": progress,
+                "buffer":   f,
             }
             template = step.Template(templates.DUMP_SQL, strip=False)
-            template.stream(f, namespace)
+            template.stream(f, namespace, unbuffered=True)
             result = progress() if progress else True
     finally:
         db.unlock(None, None, filename)
