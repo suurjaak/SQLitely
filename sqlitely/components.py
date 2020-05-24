@@ -6645,9 +6645,7 @@ class DataDialog(wx.Dialog):
         button_next = self._button_next = wx.Button(self, label="&Next", size=(-1, 20))
 
         panel = self._panel = wx.ScrolledWindow(self)
-        sizer_columns = wx.FlexGridSizer(rows=len(self._columns),
-                                         cols=3 if self._editable else 2,
-                                         gap=(5, 5))
+        sizer_columns = wx.FlexGridSizer(rows=len(self._columns), cols=3, gap=(5, 5))
         panel.Sizer = sizer_columns
         sizer_columns.AddGrowableCol(1)
 
@@ -6672,12 +6670,12 @@ class DataDialog(wx.Dialog):
             sizer_columns.Add(label, flag=wx.GROW)
             sizer_columns.Add(rw if resizable else edit, border=wx.lib.resizewidget.RW_THICKNESS,
                               flag=wx.GROW | (0 if resizable else wx.RIGHT | wx.BOTTOM))
+            button = wx.Button(panel, label="..", size=(20, 20))
+            button.AcceptsFocusFromKeyboard = lambda: False # No tabbing
+            button.ToolTip = "Open options menu"
+            sizer_columns.Add(button)
+            self.Bind(wx.EVT_BUTTON, functools.partial(self._OnOptions, i), button)
             if self._editable:
-                button = wx.Button(panel, label="..", size=(20, 20))
-                button.AcceptsFocusFromKeyboard = lambda: False # No tabbing
-                button.ToolTip = "Open options menu"
-                sizer_columns.Add(button)
-                self.Bind(wx.EVT_BUTTON, functools.partial(self._OnOptions, i), button)
                 self.Bind(wx.EVT_TEXT_ENTER, functools.partial(self._OnEdit, i), edit)
 
         button_update = wx.Button(self, label="&Update",  size=(-1, 20))
@@ -6917,36 +6915,39 @@ class DataDialog(wx.Dialog):
         item_data     = wx.MenuItem(menu, -1, "&Copy value")
         item_name     = wx.MenuItem(menu, -1, "Copy co&lumn name")
         item_sql      = wx.MenuItem(menu, -1, "Copy SET &SQL")
-        item_reset    = wx.MenuItem(menu, -1, "&Reset")
-        item_null     = wx.MenuItem(menu, -1, "Set &NULL")
-        item_date     = wx.MenuItem(menu, -1, "Set current &date")
-        item_datetime = wx.MenuItem(menu, -1, "Set current date&time")
-        item_stamp    = wx.MenuItem(menu, -1, "Set current timesta&mp")
+        if self._editable:
+            item_reset    = wx.MenuItem(menu, -1, "&Reset")
+            item_null     = wx.MenuItem(menu, -1, "Set &NULL")
+            item_date     = wx.MenuItem(menu, -1, "Set current &date")
+            item_datetime = wx.MenuItem(menu, -1, "Set current date&time")
+            item_stamp    = wx.MenuItem(menu, -1, "Set current timesta&mp")
 
-        is_pk = any(util.lceq(coldata["name"], y) for x in 
-                    self._gridbase.db.get_keys(self._gridbase.name, True)[0]
-                    for y in x["name"])
-        item_null.Enabled = "notnull" not in coldata and not is_pk
+            is_pk = any(util.lceq(coldata["name"], y) for x in 
+                        self._gridbase.db.get_keys(self._gridbase.name, True)[0]
+                        for y in x["name"])
+            item_null.Enabled = "notnull" not in coldata and not is_pk
 
         menu.Append(item_data)
         menu.Append(item_name)
         menu.Append(item_sql)
-        menu.AppendSeparator()
-        menu.Append(item_reset)
-        menu.AppendSeparator()
-        menu.Append(item_null)
-        menu.Append(item_date)
-        menu.Append(item_datetime)
-        menu.Append(item_stamp)
+        if self._editable:
+            menu.AppendSeparator()
+            menu.Append(item_reset)
+            menu.AppendSeparator()
+            menu.Append(item_null)
+            menu.Append(item_date)
+            menu.Append(item_datetime)
+            menu.Append(item_stamp)
 
         menu.Bind(wx.EVT_MENU, on_copy_data, item_data)
         menu.Bind(wx.EVT_MENU, on_copy_name, item_name)
         menu.Bind(wx.EVT_MENU, on_copy_sql,  item_sql)
-        menu.Bind(wx.EVT_MENU, on_reset,     item_reset)
-        menu.Bind(wx.EVT_MENU, on_null,      item_null)
-        menu.Bind(wx.EVT_MENU, on_date,      item_date)
-        menu.Bind(wx.EVT_MENU, on_datetime,  item_datetime)
-        menu.Bind(wx.EVT_MENU, on_stamp,     item_stamp)
+        if self._editable:
+            menu.Bind(wx.EVT_MENU, on_reset,     item_reset)
+            menu.Bind(wx.EVT_MENU, on_null,      item_null)
+            menu.Bind(wx.EVT_MENU, on_date,      item_date)
+            menu.Bind(wx.EVT_MENU, on_datetime,  item_datetime)
+            menu.Bind(wx.EVT_MENU, on_stamp,     item_stamp)
 
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
 
