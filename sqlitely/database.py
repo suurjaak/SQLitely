@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.04.2020
+@modified    24.05.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1166,7 +1166,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     if err and kws: raise Exception(err)
                 sqls.setdefault(category, []).append(sql)
 
-        return "\n\n".join("\n\n".join(v + ";" for v in vv) for vv in sqls.values())
+        return "\n\n".join("\n\n".join(vv) for vv in sqls.values())
 
 
     @staticmethod

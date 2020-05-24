@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    22.11.2019
+@modified    24.05.2020
 ------------------------------------------------------------------------------
 """
 
@@ -423,6 +423,7 @@ ON {{ Q(data["table"]) if "table" in data else "" }}{{ WS(" ") }}
   {{ LF() if len(data["where"]) > 40 else "" }}
   WHERE {{ WS(data["where"]) }}
 %endif
+{{ GLUE() }};
 """
 
 
@@ -459,6 +460,7 @@ TABLE
 %if data.get("without"):
 WITHOUT ROWID
 %endif
+{{ GLUE() }};
 """
 
 
@@ -509,7 +511,7 @@ ON
 %if data.get("body"):
   {{ WS(data["body"]) }}{{ LF() }}
 %endif
-END
+END;
 """
 
 
@@ -541,7 +543,7 @@ VIEW
 %endif
 
 
-AS {{ WS(data["select"]) if data.get("select") else "" }}
+AS {{ WS(data["select"]) if data.get("select") else "" }};
 """
 
 
@@ -560,6 +562,7 @@ USING {{ data["module"]["name"] }}
 %if data["module"].get("arguments"):
   ({{ ", ".join(data["module"]["arguments"]) }})
 %endif
+{{ GLUE() }};
 """
 
 
