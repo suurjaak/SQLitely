@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.05.2020
+@modified    24.05.2020
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -249,6 +249,7 @@ HTML data export template for the rows part.
 
 @param   rows       iterable
 @param   columns    [name, ]
+@param   name       table name
 @param   namespace  {"row_count"}
 @param   ?progress  callback(count) returning whether to cancel, if any
 """
@@ -267,6 +268,9 @@ if not i % 100 and isdef("progress") and progress and not progress(count=i):
     break # for i, row
 %>
 %endfor
+<%
+if isdef("progress") and progress: progress(name=name, count=i)
+%>
 """
 
 
@@ -361,6 +365,7 @@ while row:
     i, row, nextrow = i + 1, nextrow, next(rows, None)
     if not i % 100 and isdef("progress") and progress and not progress(count=i):
         break # while row
+if isdef("progress") and progress: progress(name=name, count=i)
 %>"""
 
 
@@ -421,7 +426,7 @@ coldatas = coldatas if isdef("coldatas") else [{"name": col} for col in columns]
 %for i, row in enumerate(rows, 1):
 <%
 if isdef("namespace"): namespace["row_count"] += 1
-values = [grammar.format(row[col], coldatas[i]) for i, col in enumerate(columns)]
+values = [grammar.format(row[col], coldatas[j]) for j, col in enumerate(columns)]
 %>
 INSERT INTO {{ name }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
 <%
@@ -429,6 +434,9 @@ if not i % 100 and isdef("progress") and progress and not progress(name=name, co
     break # for i, row
 %>
 %endfor
+<%
+if isdef("progress") and progress: progress(name=name, count=i)
+%>
 """
 
 
@@ -521,6 +529,7 @@ TXT data export template for the rows part.
 @param   columns       [name, ]
 @param   columnjusts   {col name: ljust or rjust}
 @param   columnwidths  {col name: character width}
+@param   name          table name
 @param   ?namespace    {"row_count"}
 @param   ?progress     callback(count) returning whether to cancel, if any
 """
@@ -548,6 +557,9 @@ if not i % 100 and isdef("progress") and progress and not progress(count=i):
     break # for i, row
 %>
 %endfor
+<%
+if isdef("progress") and progress: progress(name=name, count=i)
+%>
 """
 
 
