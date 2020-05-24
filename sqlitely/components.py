@@ -1507,7 +1507,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         bmp4 = images.ToolbarForm.Bitmap
         tbgrid.SetToolBitmapSize(bmp1.Size)
         tbgrid.AddTool(wx.ID_INFO,    "", bmp1, shortHelp="Copy executed SQL statement to clipboard")
-        tbgrid.AddTool(wx.ID_REFRESH, "", bmp2, shortHelp="Re-execute query")
+        tbgrid.AddTool(wx.ID_REFRESH, "", bmp2, shortHelp="Re-execute query  (F5)")
         tbgrid.AddTool(wx.ID_RESET,   "", bmp3, shortHelp="Reset all applied sorting and filtering")
         tbgrid.AddSeparator()
         tbgrid.AddTool(wx.ID_EDIT,    "", bmp4, shortHelp="Open row in data form")
@@ -1577,7 +1577,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         label_help.Hide()
 
         self.Layout()
-        wx_accel.accelerate(self)
+        accelerators = [(wx.ACCEL_NORMAL, wx.WXK_F5,  wx.ID_REFRESH)]
+        wx_accel.accelerate(self, accelerators=accelerators)
         wx.CallAfter(lambda: self and splitter.SplitHorizontally(
                      panel1, panel2, sashPosition=self.Size[1] * 2/5))
         wx.CallAfter(lambda: self and stc.SetFocus())
@@ -2022,13 +2023,13 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         tb.AddTool(wx.ID_ADD,     "", bmp1, shortHelp="Add new row")
         tb.AddTool(wx.ID_DELETE,  "", bmp2, shortHelp="Delete current row")
         tb.AddSeparator()
-        tb.AddTool(wx.ID_REFRESH, "", bmp3, shortHelp="Reload data")
+        tb.AddTool(wx.ID_REFRESH, "", bmp3, shortHelp="Reload data  (F5)")
         tb.AddTool(wx.ID_RESET,   "", bmp4, shortHelp="Reset all applied sorting and filtering")
         tb.AddSeparator()
         tb.AddTool(wx.ID_EDIT,    "", bmp5, shortHelp="Open row in data form")
         tb.AddSeparator()
-        tb.AddTool(wx.ID_SAVE,    "", bmp6, shortHelp="Commit changes to database")
-        tb.AddTool(wx.ID_UNDO,    "", bmp7, shortHelp="Rollback changes and restore original values")
+        tb.AddTool(wx.ID_SAVE,    "", bmp6, shortHelp="Commit changes to database  (F9)")
+        tb.AddTool(wx.ID_UNDO,    "", bmp7, shortHelp="Rollback changes and restore original values  (F10)")
         tb.EnableTool(wx.ID_EDIT, False)
         tb.EnableTool(wx.ID_UNDO, False)
         tb.EnableTool(wx.ID_SAVE, False)
@@ -2085,7 +2086,10 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         except Exception:
             self.Destroy()
             raise
-        wx_accel.accelerate(self)
+        accelerators = [(wx.ACCEL_NORMAL, wx.WXK_F5,  wx.ID_REFRESH),
+                        (wx.ACCEL_NORMAL, wx.WXK_F9,  wx.ID_SAVE),
+                        (wx.ACCEL_NORMAL, wx.WXK_F10, wx.ID_UNDO)]
+        wx_accel.accelerate(self, accelerators=accelerators)
         self._grid.SetFocus()
 
 
