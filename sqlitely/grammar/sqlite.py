@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    15.05.2020
+@modified    24.05.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -129,7 +129,7 @@ def format(value, coldata=None):
         if isinstance(coldata, dict) \
         and isinstance(coldata.get("type"), basestring) \
         and "JSON" == coldata["type"].upper():
-            try: value, success = json.dumps(json.loads(value)), True
+            try: result, success = "'%s'" % json.dumps(json.loads(value)), True
             except Exception: pass
 
         if not success and SAFEBYTE_RGX.search(value):
@@ -138,14 +138,14 @@ def format(value, coldata=None):
                     value = value.encode("latin1")
                 except UnicodeError:
                     value = value.encode("utf-8", errors="replace")
-            value = "X'%s'" % value.encode("hex").upper()
+            result = "X'%s'" % value.encode("hex").upper()
         elif not success:
             if isinstance(value, unicode):
                 value = value.encode("utf-8")
-            value = "'%s'" % value.replace("'", "''")
+            result = "'%s'" % value.replace("'", "''")
     else:
-        value = "NULL" if value is None else str(value)
-    return value
+        result = "NULL" if value is None else str(value)
+    return result
 
 
 def uni(x, encoding="utf-8"):
