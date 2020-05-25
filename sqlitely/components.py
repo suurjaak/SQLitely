@@ -74,6 +74,36 @@ class SQLiteGridBase(wx.grid.GridTableBase):
     KEY_DELETED = "__deleted__"
 
 
+    class NullRenderer(wx.grid.GridCellStringRenderer):
+        """Grid cell renderer that draws "<NULL>" as cell value."""
+
+        def __init__(self): super(SQLiteGridBase.NullRenderer, self).__init__()
+
+        def Draw(self, grid, attr, dc, rect, row, col, isSelected):
+            """Draws "<NULL>" as cell value."""
+            if grid.IsThisEnabled():
+                if isSelected:
+                    fg = grid.SelectionForeground
+                    if grid.HasFocus(): bg = grid.SelectionBackground
+                    else: bg = wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNSHADOW)
+                else:
+                    fg, bg = attr.TextColour, attr.BackgroundColour
+            else:
+                fg = wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)
+                bg = wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNFACE)
+
+            dc.Font = attr.Font
+            dc.Background = controls.BRUSH(bg)
+            dc.TextForeground = fg
+            dc.TextBackground = bg
+
+            dc.SetClippingRegion(rect)
+            dc.Clear()
+            dc.DestroyClippingRegion()
+            grid.DrawTextRectangle(dc, "<NULL>", rect, *attr.GetAlignment())
+
+
+
     def __init__(self, db, category="", name="", sql="", cursor=None):
         super(SQLiteGridBase, self).__init__()
         self.is_query = bool(sql)
@@ -100,7 +130,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         self.sort_ascending = None
         self.complete = False
         self.filters = {} # {col index: value, }
-        self.attrs = {}   # {"new": wx.grid.GridCellAttr, }
+        self.attrs = {}   # {("default", "null"): wx.grid.GridCellAttr, }
 
         if not self.is_query:
             self.columns = self.db.get_category(category, name)["columns"]
@@ -230,7 +260,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         and "BLOB" == self.db.get_affinity(self.columns[col]):
             # Text editor does not support control characters or null bytes.
             value = value.encode("unicode-escape")
-        return value if value is not None else ""
+        return value
 
 
     def GetColumns(self):
@@ -460,25 +490,43 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
     def GetAttr(self, row, col, kind):
         """Returns wx.grid.GridCellAttr for table cell."""
-        if not self.attrs:
-            ATTRS = {"row_changed":  conf.GridRowChangedColour,
-                     "cell_changed": conf.GridCellChangedColour,
-                     "new":          conf.GridRowInsertedColour, "default": None}
-            for name, bg in ATTRS.items():
-                self.attrs[name] = wx.grid.GridCellAttr()
-                if bg: self.attrs[name].SetBackgroundColour(bg)
+        if not self.attrs: self.PopulateAttrs()
 
-        name = "default"
+        key = ["default"]
         if row < len(self.rows_current):
             if self.rows_current[row][self.KEY_CHANGED]:
                 idx = self.rows_current[row][self.KEY_ID]
-                value = self.rows_current[row][self.columns[col]["name"]]
+                value = self.GetValue(row, col)
                 backup = self.rows_backup[idx][self.columns[col]["name"]]
-                name = "row_changed" if backup == value else "cell_changed"
-            elif self.rows_current[row][self.KEY_NEW]: name = "new"
-        attr = self.attrs[name]
+                key = ["row_changed" if backup == value else "cell_changed"]
+            elif self.rows_current[row][self.KEY_NEW]:
+                key = ["new"]
+
+            if self.GetValue(row, col) is None and "new" not in key:
+                key += ["null"] # Skip new rows as all values are null anyway
+
+        attr = self.attrs[tuple(sorted(key))]
         attr.IncRef()
         return attr
+
+
+    def PopulateAttrs(self):
+        """Re-creates table cell attribute caches."""
+        self.attrs.clear()
+        MAINS = {"default":      {},
+                 "row_changed":  {"BackgroundColour": conf.GridRowChangedColour},
+                 "cell_changed": {"BackgroundColour": conf.GridCellChangedColour},
+                 "new":          {"BackgroundColour": conf.GridRowInsertedColour}}
+        AUXS  = {"null":         {"TextColour":       ColourManager.GetColour(wx.SYS_COLOUR_GRAYTEXT),
+                                  "Renderer":         SQLiteGridBase.NullRenderer()}}
+        for name, opts in MAINS.items():
+            attr = self.attrs[tuple([name])] = wx.grid.GridCellAttr()
+            for k, v in opts.items(): getattr(attr, "Set" + k)(v)
+            for name2, opts2 in AUXS.items():
+                key2 = tuple(sorted([name, name2]))
+                attr2 = self.attrs[key2] = wx.grid.GridCellAttr()
+                for k,  v  in opts.items():  getattr(attr2, "Set" + k)(v)
+                for k2, v2 in opts2.items(): getattr(attr2, "Set" + k2)(v2)
 
 
     def ClearAttrs(self):
@@ -1343,6 +1391,8 @@ class SQLiteGridBaseMixin(object):
                           "%Y-%m-%d %H:%M:%S")
                 except Exception:
                     tip = unicode(value)
+            elif value is None:
+                tip = "   NULL  "
             else:
                 tip = unicode(value)
             tip = tip if len(tip) < 1000 else tip[:1000] + ".."
