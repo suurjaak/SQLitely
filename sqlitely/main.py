@@ -44,6 +44,9 @@ ARGUMENTS = {
 
 def except_hook(etype, evalue, etrace):
     """Handler for all unhandled exceptions."""
+    mqueue = getattr(except_hook, "queue", [])
+    setattr(except_hook, "queue", mqueue)
+
     text = "".join(traceback.format_exception(etype, evalue, etrace)).strip()
     log = "An unexpected error has occurred:\n\n%s"
     logger.error(log, text)
@@ -51,17 +54,23 @@ def except_hook(etype, evalue, etrace):
     conf.UnexpectedErrorCount += 1
     msg = "An unexpected error has occurred:\n\n%s\n\n" \
           "See log for full details." % util.format_exc(evalue)
+    mqueue.append(msg)
 
     def after():
+        if not mqueue: return
+        msg = mqueue[0]
         dlg = wx.RichMessageDialog(None, msg, conf.Title, wx.OK | wx.ICON_ERROR)
         if conf.UnexpectedErrorCount > 2:
-            dlg.ShowCheckBox("Do not pop up further errors")
+            dlg.ShowCheckBox("&Do not pop up further errors")
         dlg.ShowModal()
         if dlg.IsCheckBoxChecked():
             conf.PopupUnexpectedErrors = False
+            del mqueue[:]
             conf.save()
+        if mqueue: mqueue.pop(0)
+        if mqueue and conf.PopupUnexpectedErrors: wx.CallAfter(after)
 
-    wx.CallAfter(after)
+    if len(mqueue) < 2: wx.CallAfter(after)
 
 
 def install_thread_excepthook():
