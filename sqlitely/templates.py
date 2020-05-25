@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.05.2020
+@modified    25.05.2020
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -40,7 +40,7 @@ HTML data export template.
 
 @param   db_filename  database path or temporary name
 @param   title        export title
-@param   columns      [name, ]
+@param   columns      [{name}, ]
 @param   data_buffer  iterable yielding rows data in text chunks
 @param   row_count    number of rows
 @param   sql          SQL query giving export data, if any
@@ -226,8 +226,8 @@ from sqlitely.lib import util
   <table id="content_table">
   <tr>
     <th class="index asc"><a class="sort asc" title="Sort by index" onclick="onSort(0)">#</a></th>
-%for i, col in enumerate(columns):
-    <th><a class="sort" title="Sort by {{ grammar.quote(col) }}" onclick="onSort({{ i + 1 }})">{{ util.unprint(col) }}</a></th>
+%for i, c in enumerate(columns):
+    <th><a class="sort" title="Sort by {{ grammar.quote(c["name"]) }}" onclick="onSort({{ i + 1 }})">{{ util.unprint(c["name"]) }}</a></th>
 %endfor
   </tr>
 <%
@@ -248,7 +248,7 @@ for chunk in data_buffer:
 HTML data export template for the rows part.
 
 @param   rows       iterable
-@param   columns    [name, ]
+@param   columns    [{name}, ]
 @param   name       table name
 @param   namespace  {"row_count"}
 @param   ?progress  callback(count) returning whether to cancel, if any
@@ -259,8 +259,8 @@ DATA_ROWS_HTML = """
 namespace["row_count"] += 1
 %><tr>
   <td class="index">{{ i }}</td>
-%for col in columns:
-  <td>{{ "" if row[col] is None else row[col] }}</td>
+%for c in columns:
+  <td>{{ "" if row[c["name"]] is None else row[c["name"]] }}</td>
 %endfor
 </tr>
 <%
@@ -344,7 +344,7 @@ for chunk in data_buffer:
 JSON export template for the rows part.
 
 @param   rows       iterable
-@param   columns    [name, ]
+@param   columns    [{name}, ]
 @param   name       table name
 @param   ?namespace  {"row_count"}
 @param   ?progress  callback(name, count) returning whether to cancel, if any
@@ -358,7 +358,7 @@ i, row, nextrow = 1, next(rows, None), next(rows, None)
 indent = "  " if nextrow else ""
 while row:
     namespace["row_count"] += 1
-    data = collections.OrderedDict(((c, row[c]) for c in columns))
+    data = collections.OrderedDict(((c["name"], row[c["name"]]) for c in columns))
     text = json.dumps(data, indent=2)
     echo("  " + text.replace("\\n", "\\n  ") + (",\\n" if nextrow else "\\n"))
 
@@ -411,22 +411,20 @@ for chunk in data_buffer:
 TXT SQL insert statements export template for the rows part.
 
 @param   rows       iterable
-@param   columns    [name, ]
+@param   columns    [{name, ?type}, ]
 @param   name       table name
-@param   ?coldatas  [{name}, ]
 @param   ?namespace  {"row_count"}
 @param   ?progress  callback(name, count) returning whether to cancel, if any
 """
 DATA_ROWS_SQL = """<%
 from sqlitely import grammar, templates
 
-str_cols = ", ".join(map(grammar.quote, columns))
-coldatas = coldatas if isdef("coldatas") else [{"name": col} for col in columns]
+str_cols = ", ".join(grammar.quote(c["name"]) for c in columns)
 %>
 %for i, row in enumerate(rows, 1):
 <%
 if isdef("namespace"): namespace["row_count"] += 1
-values = [grammar.format(row[col], coldatas[j]) for j, col in enumerate(columns)]
+values = [grammar.format(row[c["name"]], c) for c in columns]
 %>
 INSERT INTO {{ name }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
 <%
@@ -446,23 +444,21 @@ TXT SQL update statements export template.
 
 @param   rows       iterable
 @param   originals  original rows iterable
-@param   columns    [name, ]
+@param   columns    [{name, ?type}, ]
 @param   pks        [name, ]
 @param   name       table name
-@param   ?coldatas  [{name}, ]
 """
 DATA_ROWS_UPDATE_SQL = """<%
 from sqlitely import grammar, templates
 
-str_cols = ", ".join(map(grammar.quote, columns))
-coldatas = coldatas if isdef("coldatas") else [{"name": col} for col in columns]
+str_cols = ", ".join(grammar.quote(c["name"]) for c in columns)
 %>
 %for row, original in zip(rows, originals):
 <%
-setstr = ", ".join("%s = %s" % (grammar.quote(col), grammar.format(row[col], coldatas[i]))
-                   for i, col in enumerate(columns) if col not in pks or row[col] != original[col])
-wherestr = " AND ".join("%s = %s" % (grammar.quote(col), grammar.format(original[col], coldatas[i]))
-                   for i, col in enumerate(columns) if col in pks and col in original)
+setstr = ", ".join("%s = %s" % (grammar.quote(c["name"]), grammar.format(row[c["name"]], c))
+                   for c in columns if c["name"] not in pks or row[c["name"]] != original[c["name"]])
+wherestr = " AND ".join("%s = %s" % (grammar.quote(c["name"]), grammar.format(original[c["name"]], c))
+                       for col in columns if c["name"] in pks and c["name"] in original)
 %>
 UPDATE {{ name }} SET {{ setstr }}{{ (" WHERE " + wherestr) if wherestr else "" }};
 %endfor
@@ -475,7 +471,7 @@ TXT data export template.
 
 @param   db_filename   database path or temporary name
 @param   title         export title
-@param   columns       [name, ]
+@param   columns       [{name}, ]
 @param   data_buffer   iterable yielding rows data in text chunks
 @param   row_count     number of rows
 @param   sql           SQL query giving export data, if any
@@ -503,9 +499,9 @@ SQL: {{ sql }}
 <%
 headers = []
 for c in columns:
-    fc = util.unprint(c)
-    headers.append((fc.ljust if columnjusts[c] else fc.rjust)(columnwidths[c]))
-hr = "|-" + "-|-".join("".ljust(columnwidths[c], "-") for c in columns) + "-|"
+    fc = util.unprint(c["name"])
+    headers.append((fc.ljust if columnjusts[c["name"]] else fc.rjust)(columnwidths[c["name"]]))
+hr = "|-" + "-|-".join("".ljust(columnwidths[c["name"]], "-") for c in columns) + "-|"
 header = "| " + " | ".join(headers) + " |"
 %>
 
@@ -526,7 +522,7 @@ for chunk in data_buffer:
 TXT data export template for the rows part.
 
 @param   rows          iterable
-@param   columns       [name, ]
+@param   columns       [{name}, ]
 @param   columnjusts   {col name: ljust or rjust}
 @param   columnwidths  {col name: character width}
 @param   name          table name
@@ -542,13 +538,13 @@ from sqlitely import templates
 values = []
 if isdef("namespace"): namespace["row_count"] += 1
 %>
-    %for col in columns:
+    %for c in columns:
 <%
-raw = row[col]
+raw = row[c["name"]]
 value = "" if raw is None \
         else raw if isinstance(raw, basestring) else str(raw)
 value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
-values.append((value.ljust if columnjusts[col] else value.rjust)(columnwidths[col]))
+values.append((value.ljust if columnjusts[c["name"]] else value.rjust)(columnwidths[c["name"]]))
 %>
     %endfor
 | {{ " | ".join(values) }} |
@@ -568,22 +564,22 @@ if isdef("progress") and progress: progress(name=name, count=i)
 TXT data export template for copying row as page.
 
 @param   rows          iterable
-@param   columns       [name, ]
+@param   columns       [{name}, ]
 """
 DATA_ROWS_PAGE_TXT = """<%
 from sqlitely.lib import util
 from sqlitely import templates
 
-fmtcols = map(util.unprint, columns)
+fmtcols = [util.unprint(c["name"]) for c in columns]
 colwidth = max(map(len, fmtcols))
 %>
 %for i, row in enumerate(rows):
     %if i:
 
     %endif
-    %for col, fmtcol in zip(columns, fmtcols):
+    %for c, fmtcol in zip(columns, fmtcols):
 <%
-raw = row[col]
+raw = row[c["name"]]
 value = "" if raw is None \
         else raw if isinstance(raw, basestring) else str(raw)
 value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
@@ -647,8 +643,8 @@ from sqlitely import conf, grammar
 <table border="1" cellpadding="4" cellspacing="0" width="100%">
 <tr>
 <th>#</th>
-%for col in item["columns"]:
-<th>{{ util.unprint(col["name"]) }}</th>
+%for c in item["columns"]:
+<th>{{ util.unprint(c["name"]) }}</th>
 %endfor
 </tr>
 """
@@ -678,15 +674,15 @@ wrap_b   = lambda x: "<b>%s</b>" % x.group(0)
     <font color="{{ conf.LinkColour }}">{{ count }}</font>
   </a>
 </td>
-%for col in item["columns"]:
+%for c in item["columns"]:
 <%
-value = row[col["name"]]
+value = row[c["name"]]
 value = value if value is not None else ""
 value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
 value = escape(value)
 
-if not (keywords.get("column") and not match_kw("column", col)) \
-and not (keywords.get("-column") and match_kw("-column", col)):
+if not (keywords.get("column") and not match_kw("column", c)) \
+and not (keywords.get("-column") and match_kw("-column", c)):
     value = pattern_replace.sub(wrap_b, value)
 %>
 <td valign="top"><font color="{{ conf.FgColour }}">{{! value }}</font></td>
@@ -1638,8 +1634,8 @@ countstr = util.count(item)
     <td>
       <a class="toggle right" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urllib.quote(item["name"], safe="") }}/cols')">{{ len(item["columns"]) }}</a>
       <table class="hidden" id="{{ category }}/{{! urllib.quote(item["name"], safe="") }}/cols">
-            %for col in item["columns"]:
-        <tr><td>{{ util.unprint(col["name"]) }}</td><td>{{ util.unprint(col.get("type", "")) }}</td></tr>
+            %for c in item["columns"]:
+        <tr><td>{{ util.unprint(c["name"]) }}</td><td>{{ util.unprint(c.get("type", "")) }}</td></tr>
             %endfor
       </table>
     </td>
@@ -2175,7 +2171,7 @@ Database dump SQL template.
 
 @param   db         database.Database instance
 @param   sql        schema SQL
-@param   data       [{name, columns, coldatas, rows}]
+@param   data       [{name, columns, rows}]
 @param   pragma     PRAGMA values as {name: value}
 @param   buffer     file or file-like buffer being written to
 @param   ?progress  callback(count) returning whether to cancel, if any

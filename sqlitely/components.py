@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.05.2020
+@modified    25.05.2020
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -830,8 +830,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         def on_copy_insert(event=None):
             """Copies rows INSERT SQL to clipboard."""
             tpl = step.Template(templates.DATA_ROWS_SQL, strip=False)
-            text = tpl.expand(name=self.name, rows=rowdatas, coldatas=self.columns,
-                              columns=[x["name"] for x in self.columns])
+            text = tpl.expand(name=self.name, rows=rowdatas, coldatas=self.columns)
             mycopy(text, "Copied INSERT SQL to clipboard%s", cutoff)
 
         def on_copy_update(event=None):
@@ -846,8 +845,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                         mydatas[i]  = dict(row,  **{self.rowid_name: rowid})
                         mydatas0[i] = dict(row0, **{self.rowid_name: rowid})
             text = tpl.expand(name=self.name, rows=rowdatas, originals=rowdatas0,
-                              columns=[x["name"] for x in self.columns], pks=mypks,
-                              coldatas=self.columns)
+                              coldatas=self.columns, pks=mypks)
             mycopy(text, "Copied UPDATE SQL to clipboard%s", cutoff)
 
         def on_copy_txt(event=None):
@@ -6999,7 +6997,6 @@ class DataDialog(wx.Dialog):
         def on_copy_insert(event=None):
             tpl = step.Template(templates.DATA_ROWS_SQL, strip=False)
             text = tpl.expand(name=self._gridbase.name, rows=[self._data],
-                              columns=[x["name"] for x in self._columns],
                               coldatas=self._columns)
             mycopy(text, "Copied row INSERT SQL to clipboard")
 
@@ -7015,8 +7012,7 @@ class DataDialog(wx.Dialog):
                     mydata  = dict(mydata,  **{mypks[0]: rowid})
                     mydata0 = dict(mydata0, **{mypks[0]: rowid})
             text = tpl.expand(name=self._gridbase.name, rows=[mydata], originals=[mydata0],
-                              columns=[x["name"] for x in self._columns], pks=mypks,
-                              coldatas=self._columns)
+                              coldatas=self.columns, pks=mypks)
             mycopy(text, "Copied row UPDATE SQL to clipboard")
 
         def on_copy_txt(event=None):

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.05.2020
+@modified    25.05.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -102,7 +102,8 @@ def export_data(make_iterable, filename, title, db, columns,
     is_sql  = filename.lower().endswith(".sql")
     is_txt  = filename.lower().endswith(".txt")
     is_xlsx = filename.lower().endswith(".xlsx")
-    colnames = [c if isinstance(c, basestring) else c["name"] for c in columns]
+    columns = [{"name": c} if isinstance(c, basestring) else c for c in columns]
+    colnames = [c["name"] for c in columns]
     tmpfile, tmpname = None, None # Temporary file for exported rows
     try:
         with open(filename, "w") as f:
@@ -145,8 +146,7 @@ def export_data(make_iterable, filename, title, db, columns,
                 namespace = {
                     "db_filename": db.name,
                     "title":       title,
-                    "columns":     colnames,
-                    "coldatas":    columns,
+                    "columns":     columns,
                     "rows":        make_iterable(),
                     "row_count":   0,
                     "sql":         query,
@@ -308,8 +308,7 @@ def export_dump(filename, db, progress=None):
             namespace = {
                 "db":       db,
                 "sql":      db.get_sql(),
-                "data":     [{"name": t, "columns": [x["name"] for x in opts["columns"]],
-                              "coldatas": opts["columns"],
+                "data":     [{"name": t, "columns": opts["columns"],
                               "rows": iter(db.execute("SELECT * FROM %s" % grammar.quote(t)))}
                              for t, opts in tables.items()],
                 "pragma":   db.get_pragma_values(dump=True),
