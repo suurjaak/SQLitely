@@ -2076,8 +2076,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         tb.AddSeparator()
         tb.AddTool(wx.ID_EDIT,    "", bmp5, shortHelp="Open row in data form")
         tb.AddSeparator()
-        tb.AddTool(wx.ID_SAVE,    "", bmp6, shortHelp="Commit changes to database  (F9)")
-        tb.AddTool(wx.ID_UNDO,    "", bmp7, shortHelp="Rollback changes and restore original values  (F10)")
+        tb.AddTool(wx.ID_SAVE,    "", bmp6, shortHelp="Commit changes to database  (F10)")
+        tb.AddTool(wx.ID_UNDO,    "", bmp7, shortHelp="Rollback changes and restore original values  (F9)")
         tb.EnableTool(wx.ID_EDIT, False)
         tb.EnableTool(wx.ID_UNDO, False)
         tb.EnableTool(wx.ID_SAVE, False)
@@ -2135,8 +2135,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             self.Destroy()
             raise
         accelerators = [(wx.ACCEL_NORMAL, wx.WXK_F5,  wx.ID_REFRESH),
-                        (wx.ACCEL_NORMAL, wx.WXK_F9,  wx.ID_SAVE),
-                        (wx.ACCEL_NORMAL, wx.WXK_F10, wx.ID_UNDO)]
+                        (wx.ACCEL_NORMAL, wx.WXK_F10, wx.ID_SAVE),
+                        (wx.ACCEL_NORMAL, wx.WXK_F9,  wx.ID_UNDO)]
         wx_accel.accelerate(self, accelerators=accelerators)
         self._grid.SetFocus()
 
