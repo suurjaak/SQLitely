@@ -29,7 +29,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ------------------------------------------------------------------------------
 
-Supplemented with escape and collapse and unbuffered options, by Erki Suurjaak.
+Supplemented with escape and collapse and newline and unbuffered options,
+by Erki Suurjaak.
 """
 
 import re
@@ -65,16 +66,21 @@ class Template(object):
         eval(compile(self.code, "<string>", "exec"), namespace)
         return self._postprocess("".join(map(to_unicode, output)))
 
-    def stream(self, buffer, namespace={}, encoding="utf-8", unbuffered=False, **kw):
+    def stream(self, buffer, namespace={}, encoding="utf-8", newline="\r\n",
+               unbuffered=False, **kw):
         """
         Expand the template and stream it to a file-like buffer.
 
+        @param   newline     if specified, converts \r \n \r\n linefeeds to this
         @param   unbuffered  whether stream is written immediately
         """
 
         def write_buffer(s, flush=False, cache=[""]):
             # Cache output as a single string and write to buffer.
-            cache[0] += to_unicode(s)
+            s = to_unicode(s)
+            if newline is not None:
+                s = re.sub("(\r(?!\n))|((?<!\r)\n)|(\r\n)", newline, s)
+            cache[0] += s
             if (flush or unbuffered) and cache[0] or len(cache[0]) > 65536:
                 buffer.write(self._postprocess(cache[0]).encode(encoding))
                 cache[0] = ""

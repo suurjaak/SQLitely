@@ -106,7 +106,7 @@ def export_data(make_iterable, filename, title, db, columns,
     colnames = [c["name"] for c in columns]
     tmpfile, tmpname = None, None # Temporary file for exported rows
     try:
-        with open(filename, "w") as f:
+        with open(filename, "wb") as f:
             if category and name: db.lock(category, name, make_iterable, label="export")
             count = 0
 
@@ -303,7 +303,7 @@ def export_dump(filename, db, progress=None):
     result = False
     tables = db.schema["table"]
     try:
-        with open(filename, "w") as f:
+        with open(filename, "wb") as f:
             db.lock(None, None, filename, label="database dump")
             namespace = {
                 "db":       db,
