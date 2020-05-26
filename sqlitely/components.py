@@ -289,16 +289,18 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         """
         if self.complete: return iter(self.rows_current) # All retrieved
 
-        def generator(res):
-            for row in self.rows_current: yield row
+        def generator(cursor):
+            try:
+                for row in self.rows_current: yield row
 
-            row, index = next(res), 0
-            while row and index < self.iterator_index + 1:
-                row, index = next(res), index + 1
-            while row:
-                while row and self._IsRowFiltered(row): row = next(res)
-                if row: yield row
-                row = next(res)
+                row, index = next(cursor), 0
+                while row and index < self.iterator_index + 1:
+                    row, index = next(cursor), index + 1
+                while row:
+                    while row and self._IsRowFiltered(row): row = next(cursor)
+                    if row: yield row
+                    row = next(cursor)
+            except GeneratorExit: pass
 
         sql = self.sql if self.is_query \
               else "SELECT * FROM %s" % grammar.quote(self.name)
@@ -1787,7 +1789,9 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
     def Reload(self):
         """Reloads current data grid, if any."""
         if not self._grid.Table: return
-        if not isinstance(self._grid.Table, SQLiteGridBase): # Action query
+        if isinstance(self._grid.Table, SQLiteGridBase):
+            self._grid.Table.CloseCursor()
+        else: # Action query
             self._OnGridClose()
             return
 
@@ -1819,6 +1823,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         ): return
         self._export.Stop()
         self._worker.stop()
+        if isinstance(self._grid.Table, SQLiteGridBase):
+            self._grid.Table.CloseCursor()
 
         return True
 
@@ -1966,6 +1972,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
     def _OnGridClose(self, event=None):
         """Handler for clicking to close the results grid."""
         self._worker.stop_work()
+        if isinstance(self._grid.Table, SQLiteGridBase):
+            self._grid.Table.CloseCursor()
         self._grid.Table = None
         self.Refresh()
         self._button_export.Enabled = False
@@ -2382,6 +2390,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
                 if not self._grid.Table.SaveChanges(): return
                 kws["updated"] = True
 
+        if isinstance(self._grid.Table, SQLiteGridBase):
+            self._grid.Table.CloseCursor()
         self._db.unlock(self._category, self.Name, self)
         self._PostEvent(**kws)
         return True

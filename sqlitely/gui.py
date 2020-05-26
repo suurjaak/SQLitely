@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.05.2020
+@modified    26.05.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2017,8 +2017,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 infos.append(util.plural("SQL query", ongoing["sql"]))
 
             if wx.YES != controls.YesNoMessageBox(
-                "There are ongoing exports in this file:\n\n%s\n\n%s.\n\n"
-                "Are you sure you want to cancel them?" % (page.db, ", ".join(infos)),
+                "There are ongoing exports in this file:\n\n%s\n\n- %s\n\n"
+                "Are you sure you want to cancel them?" % (page.db, "\n- ".join(infos)),
                 conf.Title, wx.ICON_INFORMATION, defaultno=True
             ): return event.Veto()
 
@@ -4293,7 +4293,7 @@ class DatabasePage(wx.Panel):
                 "category": category}
         opts = {"filename": filename, "multi": True, "category": category,
                 "name": "all %s to single spreadsheet" % util.plural(category),
-                "callable": functools.partial(importexport.export_data_single, **args)}
+                "callable": functools.partial(importexport.export_data_multiple, **args)}
         if "table" == category:
             opts["subtotals"] = {t: {
                     "total": topts.get("count"),
@@ -5114,7 +5114,8 @@ class DatabasePage(wx.Panel):
                     wx.MessageBox("%s, cannot drop." % lock,
                                   conf.Title, wx.OK | wx.ICON_WARNING)
                     continue # for name
-                self.db.executeaction("DROP %s %s" % (category.upper(), grammar.quote(name)), name="DROP")
+                self.db.executeaction("DROP %s %s" % (category.upper(),
+                                      grammar.quote(name)), name="DROP")
                 deleteds += [name]
         finally:
             for name in deleteds:

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.11.2019
+@modified    26.05.2020
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -210,34 +210,37 @@ class SearchThread(WorkerThread):
                 if not self._is_working: break # for item
                 if not sql: continue # for item
 
-                cursor = search["db"].execute(sql, params)
-                row = cursor.fetchone()
-                if not row:
-                    mytexts.append(step.escape_html(item["name"]))
-                    continue # for item
-
-                result["output"] = tpl_item.expand(category=category, item=item)
-                count = 0
-                while row:
-                    result["count"], count = result["count"] + 1, count + 1
-
-                    ns = dict(category=category, item=item, row=row,
-                              keywords=kws, count=count, search=search,
-                              pattern_replace=pattern_replace)
-                    result["output"] += tpl_row.expand(ns)
-                    key = "%s:%s:%s" % (category, item["name"], count)
-                    result["map"][key] = {"category": category,
-                                          "name": item["name"],
-                                          "row": row}
-                    if not result["count"] % conf.SearchResultsChunk:
-                        yield "", result
-                        result = dict(result, output="", map={})
-
-                    if not self._is_working \
-                    or result["count"] >= conf.MaxSearchResults:
-                        break # while row
-
+                cursor = None
+                try:
+                    cursor = search["db"].execute(sql, params)
                     row = cursor.fetchone()
+                    if not row:
+                        mytexts.append(step.escape_html(item["name"]))
+                        continue # for item
+
+                    result["output"] = tpl_item.expand(category=category, item=item)
+                    count = 0
+                    while row:
+                        result["count"], count = result["count"] + 1, count + 1
+
+                        ns = dict(category=category, item=item, row=row,
+                                  keywords=kws, count=count, search=search,
+                                  pattern_replace=pattern_replace)
+                        result["output"] += tpl_row.expand(ns)
+                        key = "%s:%s:%s" % (category, item["name"], count)
+                        result["map"][key] = {"category": category,
+                                              "name": item["name"],
+                                              "row": row}
+                        if not result["count"] % conf.SearchResultsChunk:
+                            yield "", result
+                            result = dict(result, output="", map={})
+
+                        if not self._is_working \
+                        or result["count"] >= conf.MaxSearchResults:
+                            break # while row
+
+                        row = cursor.fetchone()
+                finally: util.try_until(lambda: cursor.close())
 
                 if not self._drop_results:
                     result["output"] += "</table></font>"
