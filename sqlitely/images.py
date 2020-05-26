@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.04.2020
+@modified    26.05.2020
 ------------------------------------------------------------------------------
 """
 try:
@@ -1822,6 +1822,19 @@ ToolbarForm = PyEmbeddedImage(
     "P/UTVyRJws9qlYblcgnb7baWbNs2DAYDIC4JlBl0u13Y7/fQ7/eh2Wz+mwFxSwee58mi4zjS"
     "jWmaf2ZAtbMAF7hECmMMcB8qTa1W62IGxJFcwzBeOedPtywSuvhmeOvnjySu5FPqB3bvd/4R"
     "YAB0Lucj40EubAAAAABJRU5ErkJggg=="
+)
+
+
+"""Toolbar icon for goto button in data grids."""
+ToolbarGoto = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABVUlEQVQ4y72TTyjDYRjHP8+P"
+    "ElEotJ3EmdSUHdjBcTflZklulChScqJYOU0pTbvQymXkYgcuylKyH+JASnJauWFMWXtcXvyG"
+    "0pC33sPz7Xk+z7/3hf86IjIlIjERqfoNZF1Eqh12zCqQkeevqt2fAL5IKuyLpAJfZJ81gLE8"
+    "/aOjd+Eqaeih/aGG6LdtNc0ch8WyPE5xoLfJs7hyamsuFzqdbImaCuaAZuBEVcffAI0Tu8nh"
+    "wXbP+R3cZ98htSWwsZywL4MdrY42OoF+VQ0YO178eJ+2Z4PxvLLqe/ye7XDcFssKOYL7AK9z"
+    "Bqrq/zSDisBqEiB3cxZ62JqOOgDzQIsxR1T1CKDY3DqgBijKXB9e8HRrZw+W9oBSIGOyDX85"
+    "RLOacqDsw54zQBp4NhUsAi7ApaptP3mFrSKyKSJuI1WKSKJQThew8woA3IUErwEpYPRPf+kL"
+    "pdlqmIpx05cAAAAASUVORK5CYII="
 )
 
 
