@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.05.2020
+@modified    26.05.2020
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -846,6 +846,28 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         wx.PostEvent(self.View, GridBaseEvent(wx.ID_ANY, refresh=True))
 
 
+    def OnGoto(self, event):
+        """
+        Handler for opening row index popup dialog 
+        and navigating to specified row.
+        """
+        rows, _ = self._GetFocusedRowsAndCols(event)
+        dlg = wx.TextEntryDialog(self.View,
+            'Row number to go to, or row and col, or ", col":', conf.Title,
+            value=str(rows[0] + 1) if rows else "", style=wx.OK | wx.CANCEL
+        )
+        dlg.CenterOnParent()
+        if wx.ID_OK != dlg.ShowModal(): return
+        m = re.match(r"(\d+)?[,\s]*(\d+)?", dlg.GetValue().strip())
+        if not m or not any(m.groups()): return
+
+        row, col = self.View.GridCursorRow, self.View.GridCursorCol
+        row, col = [int(x) - 1 if x else y for x, y in zip(m.groups(), (row, col))]
+        self.SeekToRow(row)
+        row, col = min(row, self.row_count - 1), min(col, len(self.columns) - 1)
+        self.View.GoToCell(row, col)
+        
+
     def OnMenu(self, event):
         """Handler for opening popup menu in grid."""
         menu = wx.Menu()
@@ -920,20 +942,6 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             self.NotifyViewChange()
             on_event(refresh=True)
 
-        def on_goto(event=None):
-            dlg = wx.TextEntryDialog(self.View,
-                "Row number to go to:", conf.Title,
-                value=str(rows[0] + 1) if rows else "", style=wx.OK | wx.CANCEL
-            )
-            dlg.CenterOnParent()
-            if wx.ID_OK != dlg.ShowModal(): return
-            v = re.sub(r"[\s\.\,]", "", dlg.GetValue())
-            try:
-                row, col = int(v) - 1, max(0, self.View.GridCursorCol)
-                self.SeekToRow(row)
-                self.View.GoToCell(min(row, self.row_count - 1), col)
-            except Exception: pass
-
         def on_delete_cascade(event=None):
             """Confirms whether to delete row and related rows."""
             inter1 = inter2 = ""
@@ -990,18 +998,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         pks = [{"name": y} for x in lks if "pk" in x for y in x["name"]]
         is_table = ("table" == self.category)
         caption, rowdatas, rowdatas0, idxs, cutoff = "", [], [], [], ""
-        rows, cols = get_grid_selection(self.View, cursor=False)
-        if not rows:
-            if isinstance(event, wx.MouseEvent) and event.Position != wx.DefaultPosition:
-                xy = self.View.CalcUnscrolledPosition(event.Position)
-                rows, cols = ([x] for x in self.View.XYToCell(xy))
-            elif isinstance(event, wx.grid.GridEvent):
-                rows, cols = [event.Row], [event.Col]
-        rows, cols = ([x for x in xx if x >= 0] for xx in (rows, cols))
-        if not rows and self.View.NumberRows and self.View.GridCursorRow >= 0:
-            rows, cols = [self.View.GridCursorRow], [max(0, self.View.GridCursorCol)]
-        rows, cols = ([x for x in xx if x >= 0] for xx in (rows, cols))
-
+        rows, cols = self._GetFocusedRowsAndCols(event)
         if rows:
             rowdatas = [self.rows_current[i] for i in rows if i < len(self.rows_current)]
             rowdatas0 = list(rowdatas)
@@ -1029,7 +1026,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             item_copy_update = wx.MenuItem(menu_copy, -1, "Copy row%s &UPDATE SQL" % rowsuff)
             item_copy_txt    = wx.MenuItem(menu_copy, -1, "Copy row%s as &text" % rowsuff)
             item_copy_json   = wx.MenuItem(menu_copy, -1, "Copy row%s as &JSON" % rowsuff)
-            item_open        = wx.MenuItem(menu,      -1, "&Open form")
+            item_open        = wx.MenuItem(menu,      -1, "&Open form  (F4)")
 
         if is_table:
             item_insert = wx.MenuItem(menu, -1, "Add &new row")
@@ -1038,7 +1035,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             item_delete = wx.MenuItem(menu, -1, "Delete row%s" % rowsuff)
             item_delete_cascade = wx.MenuItem(menu, -1, "Delete row%s cascade" % rowsuff)
         if self.row_count:
-            item_goto   = wx.MenuItem(menu, -1, "&Go to row ..")
+            item_goto   = wx.MenuItem(menu, -1, "&Go to row ..  (Ctrl-G)")
 
         if rowdatas:
             boldfont = item_caption.Font
@@ -1152,7 +1149,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             menu.Bind(wx.EVT_MENU, functools.partial(on_event, delete=True, rows=[i for i in rows if i < len(self.rows_current)]), item_delete)
             menu.Bind(wx.EVT_MENU, on_delete_cascade, item_delete_cascade)
         if self.row_count:
-            menu.Bind(wx.EVT_MENU, on_goto, item_goto)
+            menu.Bind(wx.EVT_MENU, self.OnGoto, item_goto)
 
         self.View.PopupMenu(menu)
 
@@ -1167,6 +1164,21 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 self.View.RefreshAttr(row, col)
         self.View.Refresh()
 
+
+    def _GetFocusedRowsAndCols(self, event):
+        """Returns [row, ], [col, ] from current selection or event or current position."""
+        rows, cols = get_grid_selection(self.View, cursor=False)
+        if not rows:
+            if isinstance(event, wx.MouseEvent) and event.Position != wx.DefaultPosition:
+                xy = self.View.CalcUnscrolledPosition(event.Position)
+                rows, cols = ([x] for x in self.View.XYToCell(xy))
+            elif isinstance(event, wx.grid.GridEvent):
+                rows, cols = [event.Row], [event.Col]
+        rows, cols = ([x for x in xx if x >= 0] for xx in (rows, cols))
+        if not rows and self.View.NumberRows and self.View.GridCursorRow >= 0:
+            rows, cols = [self.View.GridCursorRow], [max(0, self.View.GridCursorCol)]
+        rows, cols = ([x for x in xx if x >= 0] for xx in (rows, cols))
+        return rows, cols
 
     def _IsRowFiltered(self, rowdata):
         """
@@ -1552,13 +1564,15 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
         bmp2 = images.ToolbarRefresh.Bitmap
         bmp3 = images.ToolbarClear.Bitmap
-        bmp4 = images.ToolbarForm.Bitmap
+        bmp4 = images.ToolbarGoto.Bitmap
+        bmp5 = images.ToolbarForm.Bitmap
         tbgrid.SetToolBitmapSize(bmp1.Size)
         tbgrid.AddTool(wx.ID_INFO,    "", bmp1, shortHelp="Copy executed SQL statement to clipboard")
         tbgrid.AddTool(wx.ID_REFRESH, "", bmp2, shortHelp="Re-execute query  (F5)")
         tbgrid.AddTool(wx.ID_RESET,   "", bmp3, shortHelp="Reset all applied sorting and filtering")
         tbgrid.AddSeparator()
-        tbgrid.AddTool(wx.ID_EDIT,    "", bmp4, shortHelp="Open row in data form")
+        tbgrid.AddTool(wx.ID_INDEX,   "", bmp4, shortHelp="Go to row ..  (Ctrl-G)")
+        tbgrid.AddTool(wx.ID_EDIT,    "", bmp5, shortHelp="Open row in data form  (F4)")
         tbgrid.Realize()
         tbgrid.Disable()
 
@@ -1590,6 +1604,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self.Bind(wx.EVT_TOOL,     self._OnCopyGridSQL,   id=wx.ID_INFO)
         self.Bind(wx.EVT_TOOL,     self._OnRequery,       id=wx.ID_REFRESH)
         self.Bind(wx.EVT_TOOL,     self._OnResetView,     id=wx.ID_RESET)
+        self.Bind(wx.EVT_TOOL,     self._OnGotoRow,       id=wx.ID_INDEX)
         self.Bind(wx.EVT_TOOL,     self._OnOpenForm,      id=wx.ID_EDIT)
         self.Bind(wx.EVT_BUTTON,   self._OnExecuteSQL,    button_sql)
         self.Bind(wx.EVT_BUTTON,   self._OnExecuteScript, button_script)
@@ -1625,7 +1640,9 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         label_help.Hide()
 
         self.Layout()
-        accelerators = [(wx.ACCEL_NORMAL, wx.WXK_F5,  wx.ID_REFRESH)]
+        accelerators = [(wx.ACCEL_NORMAL, wx.WXK_F4,  wx.ID_EDIT),
+                        (wx.ACCEL_NORMAL, wx.WXK_F5,  wx.ID_REFRESH),
+                        (wx.ACCEL_CTRL,   ord('G'),   wx.ID_INDEX)]
         wx_accel.accelerate(self, accelerators=accelerators)
         wx.CallAfter(lambda: self and splitter.SplitHorizontally(
                      panel1, panel2, sashPosition=self.Size[1] * 2/5))
@@ -1975,6 +1992,11 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             guibase.status("Copied SQL to clipboard", flash=True)
 
 
+    def _OnGotoRow(self, event=None):
+        """Handler for clicking to open goto row dialog."""
+        self._grid.Table.OnGoto(None)
+
+
     def _OnOpenForm(self, event=None):
         """Handler for clicking to open data form for row."""
         row = self._grid.GridCursorRow if self._grid.NumberRows else -1
@@ -2064,9 +2086,10 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         bmp2 = images.ToolbarDelete.Bitmap
         bmp3 = images.ToolbarRefresh.Bitmap
         bmp4 = images.ToolbarClear.Bitmap
-        bmp5 = images.ToolbarForm.Bitmap
-        bmp6 = images.ToolbarCommit.Bitmap
-        bmp7 = images.ToolbarRollback.Bitmap
+        bmp5 = images.ToolbarGoto.Bitmap
+        bmp6 = images.ToolbarForm.Bitmap
+        bmp7 = images.ToolbarCommit.Bitmap
+        bmp8 = images.ToolbarRollback.Bitmap
         tb.SetToolBitmapSize(bmp1.Size)
         tb.AddTool(wx.ID_ADD,     "", bmp1, shortHelp="Add new row")
         tb.AddTool(wx.ID_DELETE,  "", bmp2, shortHelp="Delete current row")
@@ -2074,10 +2097,11 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         tb.AddTool(wx.ID_REFRESH, "", bmp3, shortHelp="Reload data  (F5)")
         tb.AddTool(wx.ID_RESET,   "", bmp4, shortHelp="Reset all applied sorting and filtering")
         tb.AddSeparator()
-        tb.AddTool(wx.ID_EDIT,    "", bmp5, shortHelp="Open row in data form")
+        tb.AddTool(wx.ID_INDEX,   "", bmp5, shortHelp="Go to row ..  (Ctrl-G)")
+        tb.AddTool(wx.ID_EDIT,    "", bmp6, shortHelp="Open row in data form  (F4)")
         tb.AddSeparator()
-        tb.AddTool(wx.ID_SAVE,    "", bmp6, shortHelp="Commit changes to database  (F10)")
-        tb.AddTool(wx.ID_UNDO,    "", bmp7, shortHelp="Rollback changes and restore original values  (F9)")
+        tb.AddTool(wx.ID_SAVE,    "", bmp7, shortHelp="Commit changes to database  (F10)")
+        tb.AddTool(wx.ID_UNDO,    "", bmp8, shortHelp="Rollback changes and restore original values  (F9)")
         tb.EnableTool(wx.ID_EDIT, False)
         tb.EnableTool(wx.ID_UNDO, False)
         tb.EnableTool(wx.ID_SAVE, False)
@@ -2104,6 +2128,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         self.Bind(wx.EVT_TOOL,   self._OnInsert,       id=wx.ID_ADD)
         self.Bind(wx.EVT_TOOL,   self._OnDelete,       id=wx.ID_DELETE)
+        self.Bind(wx.EVT_TOOL,   self._OnGotoRow,      id=wx.ID_INDEX)
         self.Bind(wx.EVT_TOOL,   self._OnOpenForm,     id=wx.ID_EDIT)
         self.Bind(wx.EVT_TOOL,   self._OnRefresh,      id=wx.ID_REFRESH)
         self.Bind(wx.EVT_TOOL,   self._OnResetView,    id=wx.ID_RESET)
@@ -2134,9 +2159,11 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         except Exception:
             self.Destroy()
             raise
-        accelerators = [(wx.ACCEL_NORMAL, wx.WXK_F5,  wx.ID_REFRESH),
+        accelerators = [(wx.ACCEL_NORMAL, wx.WXK_F4,  wx.ID_EDIT),
+                        (wx.ACCEL_NORMAL, wx.WXK_F5,  wx.ID_REFRESH),
                         (wx.ACCEL_NORMAL, wx.WXK_F10, wx.ID_SAVE),
-                        (wx.ACCEL_NORMAL, wx.WXK_F9,  wx.ID_UNDO)]
+                        (wx.ACCEL_NORMAL, wx.WXK_F9,  wx.ID_UNDO),
+                        (wx.ACCEL_CTRL,   ord('G'),   wx.ID_INDEX)]
         wx_accel.accelerate(self, accelerators=accelerators)
         self._grid.SetFocus()
 
@@ -2488,6 +2515,11 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._tb.EnableTool(wx.ID_EDIT, self._grid.NumberRows)
         self.Layout() # Refresh scrollbars
         self._OnChange()
+
+
+    def _OnGotoRow(self, event=None):
+        """Handler for clicking to open goto row dialog."""
+        self._grid.Table.OnGoto(None)
 
 
     def _OnOpenForm(self, event=None):
@@ -7321,7 +7353,7 @@ def get_grid_selection(grid, cursor=True):
         rows += [r for r, c in grid.GetSelectedCells()]
         cols += [c for r, c in grid.GetSelectedCells()]
     if not rows and not cols and cursor:
-        if grid.GetGridCursorRow() >= 0 and grid.GetGridCursorCol() >= 0:
-            rows, cols = [grid.GetGridCursorRow()], [grid.GetGridCursorCol()]
+        if grid.GridCursorRow >= 0 and grid.GridCursorCol >= 0:
+            rows, cols = [grid.GridCursorRow], [grid.GridCursorCol]
     rows, cols = (sorted(set(y for y in x if y >= 0)) for x in (rows, cols))
     return rows, cols
