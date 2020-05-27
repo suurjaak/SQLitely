@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.05.2020
+@modified    27.05.2020
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -6779,14 +6779,15 @@ class DataDialog(wx.Dialog):
             edit.SetMargins(5, -1)
             self._edits[coldata["name"]] = edit
             if resizable:
+                _, (ch, bh) = zip(edit.GetTextExtent("X"), edit.DoGetBorderSize())
+                edit.Size = edit.MinSize = (-1, ch + 2 * bh)
                 rw = controls.ResizeWidget(panel, direction=wx.VERTICAL)
                 rw.SetManagedChild(edit)
-                edit.MinSize = (-1, 21)
             sizer_columns.Add(label, flag=wx.GROW)
             sizer_columns.Add(rw if resizable else edit, border=wx.lib.resizewidget.RW_THICKNESS,
                               flag=wx.GROW | (0 if resizable else wx.RIGHT | wx.BOTTOM))
             button = wx.Button(panel, label="..", size=(20, 20))
-            button.AcceptsFocusFromKeyboard = lambda: False # No tabbing
+            button.AcceptsFocusFromKeyboard = lambda: False # Tab to next edit instead
             button.ToolTip = "Open options menu"
             sizer_columns.Add(button)
             self.Bind(wx.EVT_BUTTON, functools.partial(self._OnOptions, i), button)

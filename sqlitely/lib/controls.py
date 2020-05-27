@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    30.04.2020
+@modified    27.05.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -1601,11 +1601,12 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
                             resize in one or both directions
         """
         self._direction = direction if direction & self.BOTH else self.BOTH
-        self._sized = False
-        super(self.__class__, self).__init__(parent, id, pos, size, style, name)
+        super(ResizeWidget, self).__init__(parent, id, pos, size, style, name)
+        self.ToolTip = "Drag to resize, double-click to fit"
+        self.Bind(wx.EVT_LEFT_DCLICK, lambda e: self.Fit())
 
 
-    def GetDirection(self, direction):
+    def GetDirection(self):
         """Returns the resize direction of the window."""
         return self._direction
     def SetDirection(self, direction):
@@ -1615,6 +1616,36 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
         """
         self._direction = direction if direction & self.BOTH else self.BOTH
     Direction = property(GetDirection, SetDirection)
+
+
+    def Fit(self):
+        """Resizes control to fit managed child."""
+        def doFit():
+            size = self.GetBestChildSize()
+            if size == self.ManagedChild.Size: return
+
+            self.AdjustToSize(size)
+            self.Parent.ContainingSizer.Layout()
+        doFit()
+        wx.CallLater(0, doFit) # Might need recalculation after first layout
+
+
+    def GetBestChildSize(self):
+        """Returns size for managed child fitting content in resize directions."""
+        linesmax, widthmax = -1, -1
+        while self.ManagedChild.GetLineLength(linesmax + 1) >= 0:
+            linesmax += 1
+            t = self.ManagedChild.GetLineText(linesmax)
+            widthmax = max(widthmax, self.ManagedChild.GetTextExtent(t)[0])
+        _, charh = self.ManagedChild.GetTextExtent("X")
+        borderw, borderh = self.ManagedChild.DoGetBorderSize()
+        size = self.Size
+
+        if self._direction & wx.HORIZONTAL:
+            size[0] = 2 * borderw + widthmax
+        if self._direction & wx.VERTICAL:
+            size[1] = 2 * borderh + charh * (linesmax + 1)
+        return size
 
 
     def OnLeftUp(self, evt):
@@ -1671,12 +1702,6 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
         # Allow external resizing to function from child size
         if not self._direction & wx.HORIZONTAL: size[0] = csize[0] + HANDLE
         if not self._direction & wx.VERTICAL:   size[1] = csize[1] + HANDLE
-
-        # Leave at min height if control has one line of content
-        if self._direction & wx.VERTICAL and not self._sized \
-        and (not c.Value or "\n" not in c.Value and len(c.Value) < 30):
-            size[1] = csize[1] + HANDLE
-        self._sized = True
 
         return size
 
