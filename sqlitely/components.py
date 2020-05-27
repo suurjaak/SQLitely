@@ -867,7 +867,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         row, col = [int(x) - 1 if x else y for x, y in zip(m.groups(), (row, col))]
         self.SeekToRow(row)
         row, col = min(row, self.row_count - 1), min(col, len(self.columns) - 1)
-        self.View.GoToCell(row, col)
+        if row >= 0 and col >= 0: self.View.GoToCell(row, col)
         
 
     def OnMenu(self, event):
