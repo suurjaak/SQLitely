@@ -271,6 +271,24 @@ class ColourManager(object):
 
 
     @classmethod
+    def Adjust(cls, colour1, colour2, ratio=1/2.):
+        """
+        Returns first colour adjusted towards second.
+        Arguments can be wx.Colour, RGB tuple, colour hex string,
+        or wx.SystemSettings colour index.
+        """
+        colour1 = wx.SystemSettings.GetColour(colour1) \
+                  if isinstance(colour1, (int, long)) else wx.Colour(colour1)
+        colour2 = wx.SystemSettings.GetColour(colour2) \
+                  if isinstance(colour2, (int, long)) else wx.Colour(colour2)
+        rgb1, rgb2 = tuple(colour1)[:3], tuple(colour2)[:3]
+        delta  = tuple(a - b for a, b in zip(rgb1, rgb2))
+        result = tuple(a - (d * ratio) for a, d in zip(rgb1, delta))
+        result = tuple(min(255, max(0, x)) for x in result)
+        return wx.Colour(result)
+
+
+    @classmethod
     def UpdateContainer(cls):
         """Updates configuration colours with current system theme values."""
         for name, colourid in cls.colourmap.items():
@@ -877,18 +895,20 @@ class HintedTextCtrl(wx.TextCtrl):
     """
 
 
-    def __init__(self, parent, hint="", escape=True, **kwargs):
+    def __init__(self, parent, hint="", escape=True, adjust=False, **kwargs):
         """
         @param   hint    hint text shown when no value and no focus
         @param   escape  whether to clear entered value on pressing Escape
+        @param   adjust  whether to adjust hint colour more towards background
         """
-        super(self.__class__, self).__init__(parent, **kwargs)
-        self._text_colour = self._hint_colour = None
-        ColourManager.Manage(self, "_text_colour", wx.SYS_COLOUR_BTNTEXT)
-        ColourManager.Manage(self, "_hint_colour", wx.SYS_COLOUR_GRAYTEXT)
+        super(HintedTextCtrl, self).__init__(parent, **kwargs)
+        self._text_colour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
+        self._hint_colour = ColourManager.GetColour(wx.SYS_COLOUR_GRAYTEXT) if not adjust else \
+                            ColourManager.Adjust(wx.SYS_COLOUR_GRAYTEXT, wx.SYS_COLOUR_WINDOW)
         self.SetForegroundColour(self._text_colour)
 
         self._hint = hint
+        self._adjust = adjust
         self._hint_on = False # Whether textbox is filled with hint value
         self._ignore_change = False # Ignore value change
         if not self.Value:
@@ -948,6 +968,9 @@ class HintedTextCtrl(wx.TextCtrl):
     def OnSysColourChange(self, event):
         """Handler for system colour change, updates text colour."""
         event.Skip()
+        self._text_colour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
+        self._hint_colour = ColourManager.GetColour(wx.SYS_COLOUR_GRAYTEXT) if not self._adjust else \
+                            ColourManager.Adjust(wx.SYS_COLOUR_GRAYTEXT, wx.SYS_COLOUR_WINDOW)
         def after():
             if not self: return
             colour = self._hint_colour if self._hint_on else self._text_colour

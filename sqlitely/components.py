@@ -89,7 +89,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 else:
                     fg, bg = attr.TextColour, attr.BackgroundColour
             else:
-                fg = wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)
+                fg = ColourManager.Adjust(wx.SYS_COLOUR_GRAYTEXT, wx.SYS_COLOUR_WINDOW)
                 bg = wx.SystemSettings.GetColour(wx.SYS_COLOUR_BTNFACE)
 
             dc.Font = attr.Font
@@ -519,7 +519,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                  "row_changed":  {"BackgroundColour": conf.GridRowChangedColour},
                  "cell_changed": {"BackgroundColour": conf.GridCellChangedColour},
                  "new":          {"BackgroundColour": conf.GridRowInsertedColour}}
-        AUXS  = {"null":         {"TextColour":       ColourManager.GetColour(wx.SYS_COLOUR_GRAYTEXT),
+        AUXS  = {"null":         {"TextColour":       ColourManager.Adjust(wx.SYS_COLOUR_GRAYTEXT, wx.SYS_COLOUR_WINDOW),
                                   "Renderer":         SQLiteGridBase.NullRenderer()}}
         for name, opts in MAINS.items():
             attr = self.attrs[tuple([name])] = wx.grid.GridCellAttr()
@@ -6769,7 +6769,7 @@ class DataDialog(wx.Dialog):
             label = wx.StaticText(panel, label=name + ":", name="label_data_" + name)
             resizable, rw = gridbase.db.get_affinity(coldata) in ("TEXT", "BLOB"), None
             style = wx.TE_RICH | wx.TE_PROCESS_ENTER | (wx.TE_MULTILINE if resizable else 0)
-            edit = controls.HintedTextCtrl(panel, escape=False, style=style,
+            edit = controls.HintedTextCtrl(panel, escape=False, adjust=True, style=style,
                                            name="data_" + name)
             edit.SetEditable(self._editable)
             tip = ("%s %s" % (name, coldata.get("type"))).strip()
