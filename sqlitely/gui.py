@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.05.2020
+@modified    27.05.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4802,6 +4802,14 @@ class DatabasePage(wx.Panel):
         and performs export.
         """
         items = [item] if isinstance(item, basestring) else item
+
+        exporting = [x for x in items if category in self.data_pages
+                     and x in self.data_pages[category]
+                     and self.data_pages[category][x].IsExporting()]
+        if exporting:
+            return wx.MessageBox("Export is already underway for %s." % ", ".join(exporting),
+                                 conf.Title, wx.OK | wx.ICON_INFORMATION)
+
         if conf.LastExportType in importexport.EXPORT_EXTS:
             self.dialog_savefile.SetFilterIndex(importexport.EXPORT_EXTS.index(conf.LastExportType))
         if len(items) == 1:
