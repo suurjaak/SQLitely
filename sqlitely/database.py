@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.05.2020
+@modified    26.05.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1167,6 +1167,14 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 sqls.setdefault(category, []).append(sql)
 
         return "\n\n".join("\n\n".join(vv) for vv in sqls.values())
+
+
+    def get_default(self, col):
+        """Returns the default value for column, selected from database."""
+        result = None
+        if "default" in col:
+            result = self.execute("SELECT %s AS v" % col["default"]).fetchone()["v"]
+        return result
 
 
     @staticmethod

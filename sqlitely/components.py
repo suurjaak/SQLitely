@@ -6904,7 +6904,8 @@ class DataDialog(wx.Dialog):
     def _SetValue(self, col, val):
         """Sets the value to column data and edit at specified index."""
         self._ignore_change = True
-        name, c = self._columns[col]["name"], self._edits[name]
+        name = self._columns[col]["name"]
+        c = self._edits[name]
         self._data[name] = val
         c.Value = "" if val is None else util.to_unicode(val)
         c.Hint  = "<NULL>" if val is None else ""
@@ -7021,11 +7022,14 @@ class DataDialog(wx.Dialog):
             self._SetValue(col, self._original[coldata["name"]])
         def on_null(event=None):
             self._SetValue(col, None)
+        def on_default(event=None):
+            v = self._gridbase.db.get_default(coldata)
+            self._SetValue(col, v)
         def on_date(event=None):
             v = datetime.date.today()
             self._SetValue(col, v)
         def on_datetime(event=None):
-            v = datetime.datetime.utcnow().isoformat()[:19]
+            v = datetime.datetime.now().isoformat()[:19].replace("T", " ")
             self._SetValue(col, v)
         def on_stamp(event=None):
             v = datetime.datetime.utcnow().replace(tzinfo=util.UTC).isoformat()
@@ -7037,14 +7041,18 @@ class DataDialog(wx.Dialog):
         if self._editable:
             item_reset    = wx.MenuItem(menu, -1, "&Reset")
             item_null     = wx.MenuItem(menu, -1, "Set &NULL")
-            item_date     = wx.MenuItem(menu, -1, "Set current &date")
-            item_datetime = wx.MenuItem(menu, -1, "Set current date&time")
-            item_stamp    = wx.MenuItem(menu, -1, "Set current timesta&mp")
+            item_default  = wx.MenuItem(menu, -1, "Set D&EFAULT")
+            item_date     = wx.MenuItem(menu, -1, "Set local &date")
+            item_datetime = wx.MenuItem(menu, -1, "Set local date&time")
+            item_stamp    = wx.MenuItem(menu, -1, "Set ISO8601 timesta&mp")
 
             is_pk = any(util.lceq(coldata["name"], y) for x in 
                         self._gridbase.db.get_keys(self._gridbase.name, True)[0]
                         for y in x["name"])
-            item_null.Enabled = "notnull" not in coldata and not is_pk
+            item_null.Enabled = "notnull" not in coldata or is_pk and self._data[self._gridbase.KEY_NEW]
+            item_default.Enabled = "default" in coldata
+            x = self._gridbase.db.get_affinity(coldata) not in ("INTEGER", "REAL")
+            item_date.Enabled = item_datetime.Enabled = item_stamp.Enabled = x
 
         menu.Append(item_data)
         menu.Append(item_name)
@@ -7054,6 +7062,7 @@ class DataDialog(wx.Dialog):
             menu.Append(item_reset)
             menu.AppendSeparator()
             menu.Append(item_null)
+            menu.Append(item_default)
             menu.Append(item_date)
             menu.Append(item_datetime)
             menu.Append(item_stamp)
@@ -7064,6 +7073,7 @@ class DataDialog(wx.Dialog):
         if self._editable:
             menu.Bind(wx.EVT_MENU, on_reset,     item_reset)
             menu.Bind(wx.EVT_MENU, on_null,      item_null)
+            menu.Bind(wx.EVT_MENU, on_default,   item_default)
             menu.Bind(wx.EVT_MENU, on_date,      item_date)
             menu.Bind(wx.EVT_MENU, on_datetime,  item_datetime)
             menu.Bind(wx.EVT_MENU, on_stamp,     item_stamp)
