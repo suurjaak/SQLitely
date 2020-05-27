@@ -5252,7 +5252,7 @@ class ExportProgressPanel(wx.Panel):
 
         button_open  = self._button_open  = wx.Button(self, label="Open %s" % category) \
                        if category else None
-        button_close = self._button_close = wx.Button(self, label="Close")
+        button_close = self._button_close = wx.Button(self, label="&Close")
 
         if button_open: self.Bind(wx.EVT_BUTTON, self._OnClose, button_open)
         self.Bind(wx.EVT_BUTTON, self._OnClose, button_close)
