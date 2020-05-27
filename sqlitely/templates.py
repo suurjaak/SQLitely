@@ -458,7 +458,7 @@ str_cols = ", ".join(grammar.quote(c["name"]) for c in columns)
 setstr = ", ".join("%s = %s" % (grammar.quote(c["name"]), grammar.format(row[c["name"]], c))
                    for c in columns if c["name"] not in pks or row[c["name"]] != original[c["name"]])
 wherestr = " AND ".join("%s = %s" % (grammar.quote(c["name"]), grammar.format(original[c["name"]], c))
-                       for col in columns if c["name"] in pks and c["name"] in original)
+                       for c in columns if c["name"] in pks and c["name"] in original)
 %>
 UPDATE {{ name }} SET {{ setstr }}{{ (" WHERE " + wherestr) if wherestr else "" }};
 %endfor
