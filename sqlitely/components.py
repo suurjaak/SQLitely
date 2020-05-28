@@ -6857,34 +6857,36 @@ class DataDialog(wx.Dialog):
         self._ignore_change = False # Ignore edit change in handler
 
         tb = self._tb = wx.ToolBar(self, style=wx.TB_FLAT | wx.TB_NODIVIDER)
-        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_GO_BACK,    wx.ART_TOOLBAR, (16, 16))
-        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_COPY,       wx.ART_TOOLBAR, (16, 16))
+        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_GO_BACK,     wx.ART_TOOLBAR, (16, 16))
+        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_COPY,        wx.ART_TOOLBAR, (16, 16))
         bmp3 = images.ToolbarRefresh.Bitmap
-        bmp4 = images.ToolbarCommit.Bitmap
-        bmp5 = images.ToolbarRollback.Bitmap
-        bmp6 = wx.ArtProvider.GetBitmap(wx.ART_NEW,        wx.ART_TOOLBAR, (16, 16))
-        bmp7 = wx.ArtProvider.GetBitmap(wx.ART_DELETE,     wx.ART_TOOLBAR, (16, 16))
-        bmp8 = wx.ArtProvider.GetBitmap(wx.ART_GO_FORWARD, wx.ART_TOOLBAR, (16, 16))
+        bmp4 = wx.ArtProvider.GetBitmap(wx.ART_FULL_SCREEN, wx.ART_TOOLBAR, (16, 16))
+        bmp5 = images.ToolbarCommit.Bitmap
+        bmp6 = images.ToolbarRollback.Bitmap
+        bmp7 = wx.ArtProvider.GetBitmap(wx.ART_NEW,         wx.ART_TOOLBAR, (16, 16))
+        bmp8 = wx.ArtProvider.GetBitmap(wx.ART_DELETE,      wx.ART_TOOLBAR, (16, 16))
+        bmp9 = wx.ArtProvider.GetBitmap(wx.ART_GO_FORWARD,  wx.ART_TOOLBAR, (16, 16))
         tb.SetToolBitmapSize(bmp1.Size)
-        tb.AddTool(wx.ID_BACKWARD, "", bmp1, shortHelp="Go to previous row  (Alt-Left)")
+        tb.AddTool(wx.ID_BACKWARD,     "", bmp1, shortHelp="Go to previous row  (Alt-Left)")
         tb.AddControl(wx.StaticText(tb, size=(15, 10)))
         if self._editable:
             tb.AddSeparator()
             tb.AddTool(wx.ID_COPY,     "", bmp2, shortHelp="Copy row data or SQL")
             tb.AddTool(wx.ID_REFRESH,  "", bmp3, shortHelp="Reload data  (F5)")
+            tb.AddTool(wx.ID_HIGHEST,  "", bmp4, shortHelp="Resize dialog to fit  (F11)")
             tb.AddSeparator()
-            tb.AddTool(wx.ID_SAVE,     "", bmp4, shortHelp="Commit row changes to database  (F10)")
-            tb.AddTool(wx.ID_UNDO,     "", bmp5, shortHelp="Rollback row changes and restore original values  (F9)")
+            tb.AddTool(wx.ID_SAVE,     "", bmp5, shortHelp="Commit row changes to database  (F10)")
+            tb.AddTool(wx.ID_UNDO,     "", bmp6, shortHelp="Rollback row changes and restore original values  (F9)")
             tb.AddSeparator()
             tb.AddStretchableSpace()
             tb.AddSeparator()
-            tb.AddTool(wx.ID_ADD,      "", bmp6, shortHelp="Add new row")
-            tb.AddTool(wx.ID_DELETE,   "", bmp7, shortHelp="Delete row")
+            tb.AddTool(wx.ID_ADD,      "", bmp7, shortHelp="Add new row")
+            tb.AddTool(wx.ID_DELETE,   "", bmp8, shortHelp="Delete row")
             tb.AddSeparator()
         else:
             tb.AddStretchableSpace()
         tb.AddControl(wx.StaticText(tb, size=(15, 10)))
-        tb.AddTool(wx.ID_FORWARD,  "", bmp8, shortHelp="Go to next row  (Alt-Right)")
+        tb.AddTool(wx.ID_FORWARD,      "", bmp9, shortHelp="Go to next row  (Alt-Right)")
         if self._editable:
             tb.EnableTool(wx.ID_UNDO, False)
             tb.EnableTool(wx.ID_SAVE, False)
@@ -6892,14 +6894,16 @@ class DataDialog(wx.Dialog):
 
         text_header = self._text_header = wx.StaticText(self)
 
-        panel = self._panel = wx.ScrolledWindow(self)
+        panel = wx.ScrolledWindow(self)
         sizer_columns = wx.FlexGridSizer(rows=len(self._columns), cols=3, gap=(5, 5))
         panel.Sizer = sizer_columns
         sizer_columns.AddGrowableCol(1)
 
         for i, coldata in enumerate(self._columns):
             name = util.unprint(coldata["name"])
-            label = wx.StaticText(panel, label=name + ":", name="label_data_" + name)
+            label = wx.StaticText(panel, style=wx.ST_ELLIPSIZE_END,
+                                  label=name + ":", name="label_data_" + name)
+            label.MaxSize = 100, -1
             resizable, rw = gridbase.db.get_affinity(coldata) in ("TEXT", "BLOB"), None
             style = wx.TE_RICH | wx.TE_PROCESS_ENTER | (wx.TE_MULTILINE if resizable else 0)
             edit = controls.HintedTextCtrl(panel, escape=False, adjust=True, style=style,
@@ -6929,7 +6933,7 @@ class DataDialog(wx.Dialog):
 
         sizer_buttons = self.CreateButtonSizer(wx.OK | wx.CANCEL if self._editable else wx.OK)
 
-        self.Sizer.Add(tb,            border=5, flag=wx.GROW)
+        self.Sizer.Add(tb,                      flag=wx.GROW)
         self.Sizer.Add(text_header,   border=5, flag=wx.BOTTOM | wx.ALIGN_CENTER_HORIZONTAL)
         self.Sizer.Add(panel,         border=5, proportion=1, flag=wx.ALL | wx.GROW)
         self.Sizer.Add(sizer_buttons, border=5, flag=wx.ALL | wx.GROW)
@@ -6940,6 +6944,7 @@ class DataDialog(wx.Dialog):
         self.Bind(wx.EVT_TOOL,   functools.partial(self._OnRow, +1), id=wx.ID_FORWARD)
         self.Bind(wx.EVT_TOOL,   self._OnCopy,                       id=wx.ID_COPY)
         self.Bind(wx.EVT_TOOL,   self._OnReset,                      id=wx.ID_REFRESH)
+        self.Bind(wx.EVT_TOOL,   self._OnFit,                        id=wx.ID_HIGHEST)
         self.Bind(wx.EVT_TOOL,   self._OnCommit,                     id=wx.ID_SAVE)
         self.Bind(wx.EVT_TOOL,   self._OnRollback,                   id=wx.ID_UNDO)
         self.Bind(wx.EVT_TOOL,   self._OnNew,                        id=wx.ID_ADD)
@@ -6953,7 +6958,7 @@ class DataDialog(wx.Dialog):
 
         self._Populate()
 
-        self.MinSize = (250, 250)
+        self.MinSize = (350, 250)
         self.Layout()
         self.CenterOnParent()
 
@@ -6961,9 +6966,11 @@ class DataDialog(wx.Dialog):
                         (wx.ACCEL_ALT,    wx.WXK_RIGHT, wx.ID_FORWARD),
                         (wx.ACCEL_NORMAL, wx.WXK_F5,    wx.ID_REFRESH),
                         (wx.ACCEL_NORMAL, wx.WXK_F9,    wx.ID_UNDO),
-                        (wx.ACCEL_NORMAL, wx.WXK_F10,   wx.ID_SAVE)]
+                        (wx.ACCEL_NORMAL, wx.WXK_F10,   wx.ID_SAVE),
+                        (wx.ACCEL_NORMAL, wx.WXK_F11,   wx.ID_HIGHEST)]
         wx_accel.accelerate(self, accelerators=accelerators)
         wx.CallLater(0, lambda: self and self._edits.values()[0].SetFocus())
+        wx.CallAfter(self._OnFit, noresize=True)
 
 
     def _Populate(self):
@@ -7035,6 +7042,38 @@ class DataDialog(wx.Dialog):
         self._tb.EnableTool(wx.ID_SAVE, changed)
         self._tb.EnableTool(wx.ID_UNDO, changed)
         wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
+
+
+    def _OnFit(self, event=None, noresize=False):
+        """Handler for clicking to fit dialog to content."""
+        w, h = self.Size[0], (self.Size[1] - self.ClientSize[1])
+        minsize, self.MinSize = self.MinSize, (-1, -1)
+        self.Fit()
+        for c in self._edits.values() if not noresize else ():
+            if isinstance(c.Parent, controls.ResizeWidget):
+                c.Parent.Fit()
+
+        def after(w, h, minsize):
+            for i in range(self.Sizer.ItemCount):
+                si = self.Sizer.GetItem(i)
+                h += (si.Window.VirtualSize if si.Window else si.Sizer.Size)[1]
+                if si.Flag & wx.BOTTOM: h += si.Border
+                if si.Flag & wx.TOP:    h += si.Border
+
+            display = wx.Display(wx.Display.GetFromWindow(self))
+            maxh, fullh = (x[-1] for x in (display.ClientArea, display.Geometry))
+            # In Windows, maximized programs go over the edge
+            margin = 4 if (maxh < fullh and "nt" == os.name) else 0
+            if h > maxh + 2*margin:
+                h = maxh + 2*margin
+                self.Position = self.Position[0], -margin
+            if minsize[1] > h:
+                minsize = minsize[0], h
+            self.MinSize = minsize
+            self.Size = w, h
+            if h != maxh + 2*margin: self.CenterOnParent()
+        if noresize: after(w, h, minsize)
+        else: wx.CallAfter(after, w, h, minsize) # Give controls time to lay out
 
 
     def _OnRow(self, direction, event=None):
@@ -7116,6 +7155,7 @@ class DataDialog(wx.Dialog):
 
     def _OnCommit(self, event=None):
         """Commits current changes to database and reloads."""
+        if not self._tb.GetToolEnabled(wx.ID_SAVE): return
         if self._data != self._original and wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to commit this row?",
             conf.Title, wx.ICON_INFORMATION, defaultno=True
@@ -7129,6 +7169,7 @@ class DataDialog(wx.Dialog):
 
     def _OnRollback(self, event=None, reload=False):
         """Restores original row values, from database if reload."""
+        if not reload and not self._tb.GetToolEnabled(wx.ID_UNDO): return
         if self._data != self._original and wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to discard changes to this row?",
             conf.Title, wx.ICON_INFORMATION, defaultno=True
