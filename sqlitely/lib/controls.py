@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    27.05.2020
+@modified    28.05.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -99,22 +99,22 @@ PEN = lambda c, w=1, s=wx.PENSTYLE_SOLID: wx.ThePenList.FindOrCreatePen(c, w, s)
 
 class KEYS(object):
     """Keycode groupings, includes numpad keys."""
-    UP    = wx.WXK_UP,       wx.WXK_NUMPAD_UP
-    DOWN  = wx.WXK_DOWN,     wx.WXK_NUMPAD_DOWN
-    LEFT  = wx.WXK_LEFT,     wx.WXK_NUMPAD_LEFT
-    RIGHT = wx.WXK_RIGHT,    wx.WXK_NUMPAD_RIGHT
-    PAGEUP      = wx.WXK_PAGEUP,   wx.WXK_NUMPAD_PAGEUP
-    PAGEDOWN    = wx.WXK_PAGEDOWN, wx.WXK_NUMPAD_PAGEDOWN
-    ENTER       = wx.WXK_RETURN,   wx.WXK_NUMPAD_ENTER
-    INSERT      = wx.WXK_INSERT,   wx.WXK_NUMPAD_INSERT
-    DELETE      = wx.WXK_DELETE,   wx.WXK_NUMPAD_DELETE
-    HOME        = wx.WXK_HOME,     wx.WXK_NUMPAD_HOME
-    END         = wx.WXK_END,      wx.WXK_NUMPAD_END
-    SPACE       = wx.WXK_SPACE,    wx.WXK_NUMPAD_SPACE
-    TAB         = wx.WXK_TAB,      wx.WXK_NUMPAD_TAB
+    UP       = wx.WXK_UP,       wx.WXK_NUMPAD_UP
+    DOWN     = wx.WXK_DOWN,     wx.WXK_NUMPAD_DOWN
+    LEFT     = wx.WXK_LEFT,     wx.WXK_NUMPAD_LEFT
+    RIGHT    = wx.WXK_RIGHT,    wx.WXK_NUMPAD_RIGHT
+    PAGEUP   = wx.WXK_PAGEUP,   wx.WXK_NUMPAD_PAGEUP
+    PAGEDOWN = wx.WXK_PAGEDOWN, wx.WXK_NUMPAD_PAGEDOWN
+    ENTER    = wx.WXK_RETURN,   wx.WXK_NUMPAD_ENTER
+    INSERT   = wx.WXK_INSERT,   wx.WXK_NUMPAD_INSERT
+    DELETE   = wx.WXK_DELETE,   wx.WXK_NUMPAD_DELETE
+    HOME     = wx.WXK_HOME,     wx.WXK_NUMPAD_HOME
+    END      = wx.WXK_END,      wx.WXK_NUMPAD_END
+    SPACE    = wx.WXK_SPACE,    wx.WXK_NUMPAD_SPACE
+    TAB      = wx.WXK_TAB,      wx.WXK_NUMPAD_TAB
 
-    ARROW       = UP + DOWN + LEFT + RIGHT
-    PAGING      = PAGEUP   + PAGEDOWN
+    ARROW    = UP + DOWN + LEFT + RIGHT
+    PAGING   = PAGEUP   + PAGEDOWN
 
 
 

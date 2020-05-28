@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.05.2020
+@modified    28.05.2020
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -6866,7 +6866,7 @@ class DataDialog(wx.Dialog):
         bmp7 = wx.ArtProvider.GetBitmap(wx.ART_DELETE,     wx.ART_TOOLBAR, (16, 16))
         bmp8 = wx.ArtProvider.GetBitmap(wx.ART_GO_FORWARD, wx.ART_TOOLBAR, (16, 16))
         tb.SetToolBitmapSize(bmp1.Size)
-        tb.AddTool(wx.ID_BACKWARD, "", bmp1, shortHelp="Go to previous row")
+        tb.AddTool(wx.ID_BACKWARD, "", bmp1, shortHelp="Go to previous row  (Alt-Left)")
         tb.AddControl(wx.StaticText(tb, size=(15, 10)))
         if self._editable:
             tb.AddSeparator()
@@ -6884,7 +6884,7 @@ class DataDialog(wx.Dialog):
         else:
             tb.AddStretchableSpace()
         tb.AddControl(wx.StaticText(tb, size=(15, 10)))
-        tb.AddTool(wx.ID_FORWARD,  "", bmp8, shortHelp="Go to next row")
+        tb.AddTool(wx.ID_FORWARD,  "", bmp8, shortHelp="Go to next row  (Alt-Right)")
         if self._editable:
             tb.EnableTool(wx.ID_UNDO, False)
             tb.EnableTool(wx.ID_SAVE, False)
@@ -6957,9 +6957,11 @@ class DataDialog(wx.Dialog):
         self.Layout()
         self.CenterOnParent()
 
-        accelerators = [(wx.ACCEL_NORMAL, wx.WXK_F5,  wx.ID_REFRESH),
-                        (wx.ACCEL_NORMAL, wx.WXK_F9,  wx.ID_UNDO),
-                        (wx.ACCEL_NORMAL, wx.WXK_F10, wx.ID_SAVE)]
+        accelerators = [(wx.ACCEL_ALT,    wx.WXK_LEFT,  wx.ID_BACKWARD),
+                        (wx.ACCEL_ALT,    wx.WXK_RIGHT, wx.ID_FORWARD),
+                        (wx.ACCEL_NORMAL, wx.WXK_F5,    wx.ID_REFRESH),
+                        (wx.ACCEL_NORMAL, wx.WXK_F9,    wx.ID_UNDO),
+                        (wx.ACCEL_NORMAL, wx.WXK_F10,   wx.ID_SAVE)]
         wx_accel.accelerate(self, accelerators=accelerators)
         wx.CallLater(0, lambda: self and self._edits.values()[0].SetFocus())
 
@@ -7037,6 +7039,7 @@ class DataDialog(wx.Dialog):
 
     def _OnRow(self, direction, event=None):
         """Handler for clicking to open previous/next row."""
+        if not (0 <= self._row + direction < self._gridbase.RowsCount): return
         self._OnUpdate()
         self._row += direction
         self._data = self._gridbase.GetRowData(self._row)
