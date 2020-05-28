@@ -343,46 +343,44 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         if self.is_query or "view" == self.category or row >= self.row_count:
             return
 
-        col_value, accepted = None, False
+        col_value = None
         if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
-            if val in ("", None): accepted = True # Set column to NULL
-            else:
+            if val not in ("", None):
                 try:
                     valc = val.replace(",", ".") # Allow comma separator
                     col_value = float(valc) if ("." in valc) else int(val)
-                    accepted = True
                 except Exception:
-                    col_value, accepted = val, True
+                    col_value = val
         elif "BLOB" == self.db.get_affinity(self.columns[col]) and val:
             # Text editor does not support control characters or null bytes.
-            try: col_value, accepted = val.decode("unicode-escape"), True
+            try: col_value = val.decode("unicode-escape")
             except UnicodeError: pass # Text is not valid escaped Unicode
         else:
-            col_value, accepted = val, True
-        if accepted:
-            self.SeekToRow(row)
-            data = self.rows_current[row]
-            if col_value == data[self.columns[col]["name"]]: return
+            col_value = val
 
-            idx = data[self.KEY_ID]
-            if not data[self.KEY_NEW]:
-                backup = self.rows_backup.get(idx)
-                if backup:
-                    data[self.columns[col]["name"]] = col_value
-                    if all(data[c["name"]] == backup[c["name"]]
-                           for c in self.columns):
-                        del self.rows_backup[idx]
-                        self.idx_changed.remove(idx)
-                        data[self.KEY_CHANGED] = False
-                        return self._RefreshAttrs([idx])
-                else: # Backup only existing rows, rollback drops new rows anyway
-                    self.rows_backup[idx] = data.copy()
-                data[self.KEY_CHANGED] = True
-                self.idx_changed.add(idx)
-            data[self.columns[col]["name"]] = col_value
-            if self.View:
-                self.View.RefreshAttr(row, col)
-                self.View.Refresh()
+        self.SeekToRow(row)
+        data = self.rows_current[row]
+        if col_value == data[self.columns[col]["name"]]: return
+
+        idx = data[self.KEY_ID]
+        if not data[self.KEY_NEW]:
+            backup = self.rows_backup.get(idx)
+            if backup:
+                data[self.columns[col]["name"]] = col_value
+                if all(data[c["name"]] == backup[c["name"]]
+                       for c in self.columns):
+                    del self.rows_backup[idx]
+                    self.idx_changed.remove(idx)
+                    data[self.KEY_CHANGED] = False
+                    return self._RefreshAttrs([idx])
+            else: # Backup only existing rows, rollback drops new rows anyway
+                self.rows_backup[idx] = data.copy()
+            data[self.KEY_CHANGED] = True
+            self.idx_changed.add(idx)
+        data[self.columns[col]["name"]] = col_value
+        if self.View:
+            self.View.RefreshAttr(row, col)
+            self.View.Refresh()
 
 
     def IsChanged(self):
@@ -701,40 +699,22 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         """
         result = False
         refresh_idxs, reload_idxs = [], []
+        pks = [y for x in self.db.get_keys(self.name, True)[0] for y in x["name"]]
         rels = self.db.get_related("table", self.name, own=True)
         actions = {x["meta"].get("action"): True for x in rels.get("trigger", [])}
+
         try:
             for idx in self.idx_changed.copy():
                 row = self.rows_all[idx]
-                self.db.update_row(self.name, row, self.rows_backup[idx],
-                                   self.rowids.get(idx))
-                row[self.KEY_CHANGED] = False
-                self.idx_changed.remove(idx)
-                del self.rows_backup[idx]
-                refresh_idxs.append(idx)
-                if grammar.SQL.UPDATE in actions: reload_idxs.append(idx)
+                refresh, reload = self._CommitRow(row, pks, rels, actions)
+                if refresh: refresh_idxs.append(idx)
+                if reload:  reload_idxs.append(idx)
 
-            # Save all newly inserted rows
-            pks = [y for x in self.db.get_keys(self.name, True)[0] for y in x["name"]]
-            col_map = dict((c["name"], c) for c in self.columns)
             for idx in self.idx_new[:]:
                 row = self.rows_all[idx]
-                row0 = {c["name"]: row[c["name"]] for c in self.columns
-                        if "pk" not in c and row[c["name"]] is not None}
-                has_defaults = any("default" in x and x["name"] not in row0
-                                   for x in self.columns)
-                insert_id = self.db.insert_row(self.name, row0)
-                if len(pks) == 1 and row[pks[0]] in (None, "") \
-                and "INTEGER" == self.db.get_affinity(col_map[pks[0]]):
-                    # Autoincremented row: update with new value
-                    row[pks[0]] = insert_id
-                if self.rowid_name and insert_id is not None:
-                    self.rowids[idx] = insert_id
-                row[self.KEY_NEW] = False
-                self.idx_new.remove(idx)
-                refresh_idxs.append(idx)
-                if has_defaults or grammar.SQL.INSERT in actions:
-                    reload_idxs.append(idx)
+                refresh, reload = self._CommitRow(row, pks, rels, actions)
+                if refresh: refresh_idxs.append(idx)
+                if reload:  reload_idxs.append(idx)
 
             # Delete all newly removed rows
             for idx, row in self.rows_deleted.copy().items():
@@ -758,33 +738,75 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
 
     def UndoChanges(self):
-        """Undoes the changes made to the rows in this table."""
+        """Undos the changes made to the rows in this table."""
         rows_before = self.GetNumberRows()
         refresh_idxs = []
+
         # Restore all changed row data from backup
         for idx in self.idx_changed.copy():
-            row = self.rows_backup[idx]
-            row[self.KEY_CHANGED] = False
-            self.rows_all[idx].update(row)
-            self.idx_changed.remove(idx)
-            del self.rows_backup[idx]
-            refresh_idxs.append(idx)
+            if self._RollbackRow(self.rows_all[idx]): refresh_idxs.append(idx)
         # Discard all newly inserted rows
         for idx in self.idx_new[:]:
-            row = self.rows_all[idx]
-            del self.rows_all[idx]
-            if row in self.rows_current: self.rows_current.remove(row)
-            self.idx_new.remove(idx)
-            self.idx_all.remove(idx)
-            self.row_count -= 1
+            if self._RollbackRow(self.rows_all[idx]): refresh_idxs.append(idx)
         # Undelete all newly deleted items
         for idx, row in self.rows_deleted.items():
             row[self.KEY_DELETED] = False
             self.rows_all[idx].update(row)
             del self.rows_deleted[idx]
             self.row_count += 1
+
         self.Filter(rows_before)
         self._RefreshAttrs(refresh_idxs)
+
+
+    def CommitRow(self, rowdata):
+        """
+        Commits changes to the specified row, and reloads it from the database
+        if table has defaults or INSERT/UPDATE triggers.
+
+        @param    rowdata  [{identifying column: value}]
+        @return            refreshed row data
+        """
+        pks = [y for x in self.db.get_keys(self.name, True)[0] for y in x["name"]]
+        rels = self.db.get_related("table", self.name, own=True)
+        actions = {x["meta"].get("action"): True for x in rels.get("trigger", [])}
+        refresh = False
+
+        idx, row = rowdata[self.KEY_ID], rowdata
+        try:
+            refresh, _ = self._CommitRow(row, pks, rels, actions)
+            self.rows_all[idx].update(row)
+        except Exception as e:
+            msg = "Error saving changes in %s." % grammar.quote(self.name)
+            logger.exception(msg); guibase.status(msg, flash=True)
+            error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+            wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+        if refresh:
+            row, rowid = self.rows_all[idx], (self.rowids[idx] if self.rowids else None)
+            row.update(self.db.select_row(self.name, row, rowid) or {})
+            self._RefreshAttrs([idx])
+            self.NotifyViewChange()
+        return row
+
+
+    def RollbackRow(self, rowdata, reload=False):
+        """
+        Undos changes to the specified row.
+
+        @param    rowdata  [{identifying column: value}]
+        @param    reload   whether to reload row data from database
+        @return            unchanged row data
+        """
+        rows_before = self.GetNumberRows()
+        idx = rowdata[self.KEY_ID]
+        row = self.rows_all[idx]
+        refresh = self._RollbackRow(rowdata)
+        if reload and row[self.KEY_ID]:
+            rowid = self.rowids[idx] if self.rowids else None
+            row.update(self.db.select_row(self.name, row, rowid) or {})
+        self.Filter(rows_before)
+        if refresh: self._RefreshAttrs([idx])
+        return row
 
 
     def DropRows(self, rowdatas):
@@ -1156,6 +1178,70 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         self.View.PopupMenu(menu)
 
 
+    def _CommitRow(self, rowdata, pks, rels, actions):
+        """
+        Saves changes to the specified row, returns
+        (whether should refresh data in grid, whether should reload data from db).
+        """
+        refresh, reload = False, False
+
+        row, idx = rowdata, rowdata[self.KEY_ID]
+        if idx in self.idx_changed:
+            self.db.update_row(self.name, row, self.rows_backup[idx],
+                               self.rowids.get(idx))
+            row[self.KEY_CHANGED] = False
+            self.idx_changed.remove(idx)
+            del self.rows_backup[idx]
+            refresh = True
+            if grammar.SQL.UPDATE in actions: reload = True
+        elif idx in self.idx_new:
+            col_map = dict((c["name"], c) for c in self.columns)
+            row0 = {c["name"]: row[c["name"]] for c in self.columns
+                    if "pk" not in c and row[c["name"]] is not None}
+            has_defaults = any("default" in x and x["name"] not in row0
+                               for x in self.columns)
+            insert_id = self.db.insert_row(self.name, row0)
+            if len(pks) == 1 and row[pks[0]] in (None, "") \
+            and "INTEGER" == self.db.get_affinity(col_map[pks[0]]):
+                # Autoincremented row: update with new value
+                row[pks[0]] = insert_id
+            if self.rowid_name and insert_id is not None:
+                self.rowids[idx] = insert_id
+            row[self.KEY_NEW] = False
+            self.idx_new.remove(idx)
+            refresh = True
+            if has_defaults or grammar.SQL.INSERT in actions: reload = True
+
+        return refresh, reload
+
+
+    def _RollbackRow(self, rowdata):
+        """
+        Undos the changes made to the rows in this table,
+        returns whether row should be refreshed in grid.
+        """
+        refresh, idx = False, rowdata[self.KEY_ID]
+
+        if idx in self.idx_changed:
+            # Restore changed row data from backup
+            row = self.rows_backup[idx]
+            row[self.KEY_CHANGED] = False
+            self.rows_all[idx].update(row)
+            self.idx_changed.remove(idx)
+            del self.rows_backup[idx]
+            refresh = True
+        elif idx in self.idx_new:
+            # Discard newly inserted row
+            row = self.rows_all[idx]
+            del self.rows_all[idx]
+            if row in self.rows_current: self.rows_current.remove(row)
+            self.idx_new.remove(idx)
+            self.idx_all.remove(idx)
+            self.row_count -= 1
+
+        return refresh
+
+
     def _RefreshAttrs(self, idxs):
         """Refreshes cell attributes for rows specified by identifiers."""
         if not self.View: return
@@ -1372,6 +1458,7 @@ class SQLiteGridBaseMixin(object):
         elif event.KeyCode in controls.KEYS.INSERT \
         and not event.HasAnyModifiers():
             self._grid.InsertRows(0, 1)
+            self._grid.GoToCell(0, 0)
 
         else: event.Skip()
 
@@ -1722,7 +1809,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             state = self._grid.Table and self._grid.Table.GetFilterSort()
 
         self._grid.Freeze()
-        self._tbgrid.EnableTool(wx.ID_EDIT, False)
+        self._tbgrid.EnableTool(wx.ID_INDEX, False)
+        self._tbgrid.EnableTool(wx.ID_EDIT,  False)
         try:
             if cursor and cursor.description is not None \
             and isinstance(self._grid.Table, SQLiteGridBase):
@@ -1740,7 +1828,6 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                 grid_data = SQLiteGridBase(self._db, sql=sql, cursor=cursor)
                 self._grid.SetTable(grid_data, takeOwnership=True)
                 self._tbgrid.EnableTool(wx.ID_RESET, True)
-                self._tbgrid.EnableTool(wx.ID_EDIT, bool(self._grid.NumberRows))
                 self._button_export.Enabled = bool(cursor.description)
                 self._button_close.Enabled  = True
             else: # Action query or script
@@ -1842,6 +1929,13 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
     def CloseGrid(self):
         """Closes the current grid, if any."""
         if self._grid.Table: self._OnGridClose()
+
+
+    def _PopulateCount(self, reload=False):
+        """Populates row count in self._label_rows."""
+        super(SQLPage, self)._PopulateCount(reload=reload)
+        self._tbgrid.EnableTool(wx.ID_EDIT,  bool(self._grid.NumberRows))
+        self._tbgrid.EnableTool(wx.ID_INDEX, bool(self._grid.NumberRows))
 
 
     def _OnExport(self, event=None):
@@ -2002,20 +2096,22 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnGotoRow(self, event=None):
         """Handler for clicking to open goto row dialog."""
-        self._grid.Table.OnGoto(None)
+        if self._grid.NumberRows: wx.CallAfter(self._grid.Table.OnGoto, None)
 
 
     def _OnOpenForm(self, event=None):
         """Handler for clicking to open data form for row."""
+        wx.Yield() # Allow toolbar icon time to toggle back
         row = self._grid.GridCursorRow if self._grid.NumberRows else -1
-        if row >= 0: DataDialog(self, self._grid.Table, row).ShowModal()
+        if row >= 0: wx.CallAfter(DataDialog(self, self._grid.Table, row).ShowModal)
 
 
     def _OnSelectCell(self, event):
         """Handler for selecting grid cell, refreshes toolbar."""
         event.Skip()
         enable = event.Row >= 0 and event.Col >= 0 if self._grid.NumberRows else False
-        self._tbgrid.EnableTool(wx.ID_EDIT, enable)
+        self._tbgrid.EnableTool(wx.ID_EDIT,  enable)
+        self._tbgrid.EnableTool(wx.ID_INDEX, bool(self._grid.NumberRows))
 
 
     def _OnLoadSQL(self, event=None):
@@ -2110,11 +2206,12 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         tb.AddSeparator()
         tb.AddTool(wx.ID_SAVE,    "", bmp7, shortHelp="Commit changes to database  (F10)")
         tb.AddTool(wx.ID_UNDO,    "", bmp8, shortHelp="Rollback changes and restore original values  (F9)")
-        tb.EnableTool(wx.ID_EDIT, False)
-        tb.EnableTool(wx.ID_UNDO, False)
-        tb.EnableTool(wx.ID_SAVE, False)
+        tb.EnableTool(wx.ID_INDEX, False)
+        tb.EnableTool(wx.ID_EDIT,  False)
+        tb.EnableTool(wx.ID_UNDO,  False)
+        tb.EnableTool(wx.ID_SAVE,  False)
         if "view" == self._category:
-            tb.EnableTool(wx.ID_ADD, False)
+            tb.EnableTool(wx.ID_ADD,    False)
             tb.EnableTool(wx.ID_DELETE, False)
         tb.Realize()
 
@@ -2342,6 +2439,13 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._PopulateCount(reload=True)
 
 
+    def _PopulateCount(self, reload=False):
+        """Populates row count in self._label_rows."""
+        super(DataObjectPage, self)._PopulateCount(reload=reload)
+        self._tb.EnableTool(wx.ID_EDIT,  bool(self._grid.NumberRows))
+        self._tb.EnableTool(wx.ID_INDEX, bool(self._grid.NumberRows))
+
+
     def _PostEvent(self, **kwargs):
         """Posts an EVT_DATA_PAGE event to parent."""
         evt = DataPageEvent(self.Id, source=self, item=self._item, **kwargs)
@@ -2354,6 +2458,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         changed = self._grid.Table.IsChanged()
         self._tb.EnableTool(wx.ID_SAVE, changed)
         self._tb.EnableTool(wx.ID_UNDO, changed)
+        self._tb.EnableTool(wx.ID_EDIT,  bool(self._grid.NumberRows))
+        self._tb.EnableTool(wx.ID_INDEX, bool(self._grid.NumberRows))
         if not changed: self._db.unlock(self._category, self.Name, self)
         else: self._db.lock(self._category, self.Name, self, label="data grid")
         self._PostEvent(modified=changed, **kwargs)
@@ -2522,20 +2628,19 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             chunk.insert(0, idx)
         if chunk: self._grid.DeleteRows(chunk[0], len(chunk))
 
-        self._tb.EnableTool(wx.ID_EDIT, self._grid.NumberRows)
         self.Layout() # Refresh scrollbars
         self._OnChange()
 
 
     def _OnGotoRow(self, event=None):
         """Handler for clicking to open goto row dialog."""
-        self._grid.Table.OnGoto(None)
+        if self._grid.NumberRows: wx.CallAfter(self._grid.Table.OnGoto, None)
 
 
     def _OnOpenForm(self, event=None):
         """Handler for clicking to open data form for row."""
         row = self._grid.GridCursorRow if self._grid.NumberRows else -1
-        if row >= 0: DataDialog(self, self._grid.Table, row).ShowModal()
+        if row >= 0: wx.CallAfter(DataDialog(self, self._grid.Table, row).ShowModal)
 
 
     def _OnSelectCell(self, event):
@@ -2543,6 +2648,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         event.Skip()
         enable = event.Row >= 0 and event.Col >= 0 if self._grid.NumberRows else False
         self._tb.EnableTool(wx.ID_EDIT, enable)
+        self._tb.EnableTool(wx.ID_INDEX, bool(self._grid.NumberRows))
 
 
     def _OnCommit(self, event=None):
@@ -6748,16 +6854,43 @@ class DataDialog(wx.Dialog):
         self._original = gridbase.GetRowData(row, original=True)
         self._editable = ("table" == gridbase.category)
         self._edits    = OrderedDict() # {column name: TextCtrl}
-        self._cache    = {} # {row index: {data}}
         self._ignore_change = False # Ignore edit change in handler
 
-        sizer_header  = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_footer  = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+        tb = self._tb = wx.ToolBar(self, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_GO_BACK,    wx.ART_TOOLBAR, (16, 16))
+        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_COPY,       wx.ART_TOOLBAR, (16, 16))
+        bmp3 = images.ToolbarRefresh.Bitmap
+        bmp4 = images.ToolbarCommit.Bitmap
+        bmp5 = images.ToolbarRollback.Bitmap
+        bmp6 = wx.ArtProvider.GetBitmap(wx.ART_NEW,        wx.ART_TOOLBAR, (16, 16))
+        bmp7 = wx.ArtProvider.GetBitmap(wx.ART_DELETE,     wx.ART_TOOLBAR, (16, 16))
+        bmp8 = wx.ArtProvider.GetBitmap(wx.ART_GO_FORWARD, wx.ART_TOOLBAR, (16, 16))
+        tb.SetToolBitmapSize(bmp1.Size)
+        tb.AddTool(wx.ID_BACKWARD, "", bmp1, shortHelp="Go to previous row")
+        tb.AddControl(wx.StaticText(tb, size=(15, 10)))
+        if self._editable:
+            tb.AddSeparator()
+            tb.AddTool(wx.ID_COPY,     "", bmp2, shortHelp="Copy row data or SQL")
+            tb.AddTool(wx.ID_REFRESH,  "", bmp3, shortHelp="Reload data  (F5)")
+            tb.AddSeparator()
+            tb.AddTool(wx.ID_SAVE,     "", bmp4, shortHelp="Commit row changes to database  (F10)")
+            tb.AddTool(wx.ID_UNDO,     "", bmp5, shortHelp="Rollback row changes and restore original values  (F9)")
+            tb.AddSeparator()
+            tb.AddStretchableSpace()
+            tb.AddSeparator()
+            tb.AddTool(wx.ID_ADD,      "", bmp6, shortHelp="Add new row")
+            tb.AddTool(wx.ID_DELETE,   "", bmp7, shortHelp="Delete row")
+            tb.AddSeparator()
+        else:
+            tb.AddStretchableSpace()
+        tb.AddControl(wx.StaticText(tb, size=(15, 10)))
+        tb.AddTool(wx.ID_FORWARD,  "", bmp8, shortHelp="Go to next row")
+        if self._editable:
+            tb.EnableTool(wx.ID_UNDO, False)
+            tb.EnableTool(wx.ID_SAVE, False)
+        tb.Realize()
 
-        button_prev = self._button_prev = wx.Button(self, label="&Previous", size=(-1, 20))
         text_header = self._text_header = wx.StaticText(self)
-        button_next = self._button_next = wx.Button(self, label="&Next", size=(-1, 20))
 
         panel = self._panel = wx.ScrolledWindow(self)
         sizer_columns = wx.FlexGridSizer(rows=len(self._columns), cols=3, gap=(5, 5))
@@ -6794,54 +6927,26 @@ class DataDialog(wx.Dialog):
             if self._editable:
                 self.Bind(wx.EVT_TEXT_ENTER, functools.partial(self._OnEdit, i), edit)
 
-        button_update = wx.Button(self, label="&Update",  size=(-1, 20))
-        button_reset  = wx.Button(self, label="&Reset",   size=(-1, 20))
-        button_delete = wx.Button(self, label="Delete",   size=(-1, 20))
-        button_copy   = wx.Button(self, label="&Copy ..", size=(-1, 20))
+        sizer_buttons = self.CreateButtonSizer(wx.OK | wx.CANCEL if self._editable else wx.OK)
 
-        button_ok     = wx.Button(self, label="&Accept")
-        button_cancel = wx.Button(self, label="&Close", id=wx.CANCEL)
-
-        sizer_header.Add(button_prev)
-        sizer_header.AddStretchSpacer()
-        sizer_header.Add(text_header, flag=wx.ALIGN_CENTER_VERTICAL)
-        sizer_header.AddStretchSpacer()
-        sizer_header.Add(button_next)
-
-        sizer_footer.Add(button_update, border=5, flag=wx.RIGHT)
-        sizer_footer.Add(button_reset,  border=5, flag=wx.RIGHT)
-        sizer_footer.Add(button_delete, border=5, flag=wx.RIGHT)
-        sizer_footer.Add(button_copy)
-
-        sizer_buttons.Add(button_ok, border=5, flag=wx.RIGHT)
-        sizer_buttons.AddStretchSpacer()
-        sizer_buttons.Add(button_cancel)
-        if not self._editable: sizer_buttons.AddStretchSpacer()
-
-        self.Sizer.Add(sizer_header,  border=5, flag=wx.ALL | wx.GROW)
+        self.Sizer.Add(tb,            border=5, flag=wx.GROW)
+        self.Sizer.Add(text_header,   border=5, flag=wx.BOTTOM | wx.ALIGN_CENTER_HORIZONTAL)
         self.Sizer.Add(panel,         border=5, proportion=1, flag=wx.ALL | wx.GROW)
-        self.Sizer.Add(sizer_footer,  border=5, flag=wx.TOP | wx.BOTTOM | wx.ALIGN_CENTER_HORIZONTAL)
         self.Sizer.Add(sizer_buttons, border=5, flag=wx.ALL | wx.GROW)
 
-        button_prev.ToolTip   = "Go to previous row"
-        button_next.ToolTip   = "Go to next row"
-        button_ok.ToolTip     = "Set changes to grid and close dialog" if self._editable else "Close dialog"
-        button_update.ToolTip = "Set changes to grid"
-        button_copy.ToolTip   = "Copy row data or SQL"
-        button_reset.ToolTip  = "Restore original values"
-        button_cancel.ToolTip = "Close data dialog"
-        button_update.Shown = button_reset.Shown = button_delete.Shown = button_ok.Shown = self._editable
         panel.SetScrollRate(0, 20)
-        self.SetEscapeId(wx.CANCEL)
 
-        self.Bind(wx.EVT_BUTTON, functools.partial(self._OnRow, -1), button_prev)
-        self.Bind(wx.EVT_BUTTON, functools.partial(self._OnRow, +1), button_next)
-        self.Bind(wx.EVT_BUTTON, self._OnUpdate, button_update)
-        self.Bind(wx.EVT_BUTTON, self._OnCopy,   button_copy)
-        self.Bind(wx.EVT_BUTTON, self._OnReset,  button_reset)
-        self.Bind(wx.EVT_BUTTON, self._OnDelete, button_delete)
-        self.Bind(wx.EVT_BUTTON, self._OnAccept, button_ok)
-        self.Bind(wx.EVT_BUTTON, self._OnClose,  button_cancel)
+        self.Bind(wx.EVT_TOOL,   functools.partial(self._OnRow, -1), id=wx.ID_BACKWARD)
+        self.Bind(wx.EVT_TOOL,   functools.partial(self._OnRow, +1), id=wx.ID_FORWARD)
+        self.Bind(wx.EVT_TOOL,   self._OnCopy,                       id=wx.ID_COPY)
+        self.Bind(wx.EVT_TOOL,   self._OnReset,                      id=wx.ID_REFRESH)
+        self.Bind(wx.EVT_TOOL,   self._OnCommit,                     id=wx.ID_SAVE)
+        self.Bind(wx.EVT_TOOL,   self._OnRollback,                   id=wx.ID_UNDO)
+        self.Bind(wx.EVT_TOOL,   self._OnNew,                        id=wx.ID_ADD)
+        self.Bind(wx.EVT_TOOL,   self._OnDelete,                     id=wx.ID_DELETE)
+
+        self.Bind(wx.EVT_BUTTON, self._OnAccept, id=wx.ID_OK)
+        self.Bind(wx.EVT_BUTTON, self._OnClose,  id=wx.ID_CANCEL)
         self.Bind(wx.EVT_CLOSE,  self._OnClose)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self._OnSysColourChange)
         self.Bind(wx.lib.resizewidget.EVT_RW_LAYOUT_NEEDED, self._OnResize)
@@ -6852,13 +6957,16 @@ class DataDialog(wx.Dialog):
         self.Layout()
         self.CenterOnParent()
 
-        wx_accel.accelerate(self)
+        accelerators = [(wx.ACCEL_NORMAL, wx.WXK_F5,  wx.ID_REFRESH),
+                        (wx.ACCEL_NORMAL, wx.WXK_F9,  wx.ID_UNDO),
+                        (wx.ACCEL_NORMAL, wx.WXK_F10, wx.ID_SAVE)]
+        wx_accel.accelerate(self, accelerators=accelerators)
         wx.CallLater(0, lambda: self and self._edits.values()[0].SetFocus())
 
 
     def _Populate(self):
         """Populates edits with current row data, updates navigation buttons."""
-        if not self or not self._gridbase: return
+        if not self or not self._gridbase or not hasattr(self._gridbase, "View"): return
         self.Freeze()
         try:
             title, gridbase = "Row #{0:,}".format(self._row + 1), self._gridbase
@@ -6873,8 +6981,12 @@ class DataDialog(wx.Dialog):
                         item = dict(item, count=item["count"] + shift)
                     title += " of %s" % util.count(item)
             self.Title = title
-            self._button_prev.Enabled = bool(self._row)
-            self._button_next.Enabled = self._row + 1 < gridbase.RowsCount
+            self._tb.EnableTool(wx.ID_BACKWARD, bool(self._row))
+            self._tb.EnableTool(wx.ID_FORWARD,  self._row + 1 < gridbase.RowsCount)
+            if self._editable:
+                changed = not self._data[gridbase.KEY_ID] or (self._data != self._original)
+                self._tb.EnableTool(wx.ID_SAVE, changed)
+                self._tb.EnableTool(wx.ID_UNDO, changed)
 
             pks = [{"name": y} for x in gridbase.db.get_keys(gridbase.name, True)[0]
                    for y in x["name"]]
@@ -6893,7 +7005,8 @@ class DataDialog(wx.Dialog):
                 v = self._data[n]
                 c.Value = "" if v is None else util.to_unicode(v)
                 c.Hint  = "<NULL>" if v is None else ""
-                c.ToolTip = c.Value if len(c.Value) < 1000 else c.Value[:1000] + ".."
+                c.ToolTip = "   NULL  " if v is None else \
+                            c.Value if len(c.Value) < 1000 else c.Value[:1000] + ".."
                 if v != self._original[n]:
                     c.BackgroundColour = wx.Colour(conf.GridRowChangedColour)
             wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
@@ -6910,31 +7023,45 @@ class DataDialog(wx.Dialog):
         self._data[name] = val
         c.Value = "" if val is None else util.to_unicode(val)
         c.Hint  = "<NULL>" if val is None else ""
-        c.ToolTip = c.Value if len(c.Value) < 1000 else c.Value[:1000] + ".."
+        c.ToolTip = "   NULL  " if val is None else \
+                    c.Value if len(c.Value) < 1000 else c.Value[:1000] + ".."
 
         bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
         if val != self._original[name]: bg = wx.Colour(conf.GridRowChangedColour)
         c.BackgroundColour = bg
+        changed = not self._data[self._gridbase.KEY_ID] or (self._data != self._original)
+        self._tb.EnableTool(wx.ID_SAVE, changed)
+        self._tb.EnableTool(wx.ID_UNDO, changed)
         wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
 
 
     def _OnRow(self, direction, event=None):
         """Handler for clicking to open previous/next row."""
-        self._cache[self._row] = self._data
+        self._OnUpdate()
         self._row += direction
-        if self._row in self._cache: self._data = self._cache[self._row]
-        else: self._data = self._gridbase.GetRowData(self._row)
-        self._original   = self._gridbase.GetRowData(self._row, original=True)
+        self._data = self._gridbase.GetRowData(self._row)
+        self._original = self._gridbase.GetRowData(self._row, original=True)
         if direction > 0 and self._row >= self._gridbase.GetNumberRows() - 1 \
         and not self._gridbase.IsComplete():
             self._gridbase.SeekAhead()
         self._Populate()
 
 
+    def _OnNew(self, event=None):
+        """Handler for clicking to add new row."""
+        self._OnUpdate(norefresh=True)
+        self._gridbase.InsertRows(0, 1)
+        self._row = 0
+        self._data = self._gridbase.GetRowData(self._row)
+        self._original = self._gridbase.GetRowData(self._row, original=True)
+        self._Populate()
+
+
     def _OnEdit(self, col, event):
         """Handler for editing a value, updates data structure."""
         event.Skip()
-        name, value = self._columns[col]["name"], event.EventObject.Value
+        c = event.EventObject
+        name, value = self._columns[col]["name"], c.Value
         if self._ignore_change or not value and self._data[name] is None: return
 
         if database.Database.get_affinity(self._columns[col]) in ("INTEGER", "REAL"):
@@ -6944,12 +7071,15 @@ class DataDialog(wx.Dialog):
             except Exception: pass
 
         self._data[name] = value
-        event.EventObject.Hint = ""
-        val = event.EventObject.Value
-        event.EventObject.ToolTip = val if len(val) < 1000 else val[:1000] + ".."
+        c.Hint = ""
+        c.ToolTip = c.Value if len(c.Value) < 1000 else c.Value[:1000] + ".."
+
         bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
         if value != self._original[name]: bg = wx.Colour(conf.GridRowChangedColour)
-        event.EventObject.BackgroundColour = bg
+        c.BackgroundColour = bg
+        changed = not self._data[self._gridbase.KEY_ID] or (self._data != self._original)
+        self._tb.EnableTool(wx.ID_SAVE, changed)
+        self._tb.EnableTool(wx.ID_UNDO, changed)
 
 
     def _OnAccept(self, event=None):
@@ -6969,18 +7099,41 @@ class DataDialog(wx.Dialog):
         self._OnClose()
 
 
-    def _OnUpdate(self, event=None):
+    def _OnUpdate(self, event=None, norefresh=False):
         """Handler for updating grid."""
         for col, coldata in enumerate(self._columns):
             self._gridbase.SetValue(self._row, col, self._data[coldata["name"]])
-        wx.PostEvent(self.Parent, GridBaseEvent(-1, refresh=True))
+        if not norefresh: wx.PostEvent(self.Parent, GridBaseEvent(-1, refresh=True))
 
 
     def _OnReset(self, event=None):
-        """Restores original row values."""
+        """Restores original row values from database."""
+        return self._OnRollback(event, reload=True)
+
+
+    def _OnCommit(self, event=None):
+        """Commits current changes to database and reloads."""
+        if self._data != self._original and wx.YES != controls.YesNoMessageBox(
+            "Are you sure you want to commit this row?",
+            conf.Title, wx.ICON_INFORMATION, defaultno=True
+        ): return
+
+        self._OnUpdate(norefresh=True)
+        self._original = self._gridbase.CommitRow(self._data)
         self._data = copy.deepcopy(self._original)
         self._Populate()
-        self._OnUpdate()
+
+
+    def _OnRollback(self, event=None, reload=False):
+        """Restores original row values, from database if reload."""
+        if self._data != self._original and wx.YES != controls.YesNoMessageBox(
+            "Are you sure you want to discard changes to this row?",
+            conf.Title, wx.ICON_INFORMATION, defaultno=True
+        ): return
+
+        self._original = self._gridbase.RollbackRow(self._data)
+        self._data = copy.deepcopy(self._original)
+        self._Populate()
 
 
     def _OnResize(self, event=None):
@@ -7148,7 +7301,8 @@ class DataDialog(wx.Dialog):
         menu.Bind(wx.EVT_MENU, on_copy_txt,    item_text)
         menu.Bind(wx.EVT_MENU, on_copy_json,   item_json)
 
-        event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
+        # Position x 52px: one icon 27px + spacer 15px + separator 2+2*3px + margin 2*1px
+        event.EventObject.PopupMenu(menu, (52, event.EventObject.Size[1]))
 
 
 
