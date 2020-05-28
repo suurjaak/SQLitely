@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.05.2020
+@modified    29.05.2020
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser

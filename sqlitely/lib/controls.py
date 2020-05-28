@@ -1624,10 +1624,12 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
                             resize in one or both directions
         """
         self._direction = direction if direction & self.BOTH else self.BOTH
+        self._fit = False
+        self._ignoresizeevt = False
         super(ResizeWidget, self).__init__(parent, id, pos, size, style, name)
         self.ToolTip = "Drag to resize, double-click to fit"
         self.Bind(wx.EVT_LEFT_DCLICK, lambda e: self.Fit())
-
+        self.Bind(wx.EVT_SIZE,        self.OnSize)
 
     def GetDirection(self):
         """Returns the resize direction of the window."""
@@ -1649,6 +1651,7 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
 
             self.AdjustToSize(size)
             self.Parent.ContainingSizer.Layout()
+        self._fit = True
         doFit()
         wx.CallLater(0, doFit) # Might need recalculation after first layout
 
@@ -1702,6 +1705,7 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
                 self._resizeCursor = False
 
         if evt.Dragging() and self._dragPos is not None:
+            self._fit = False
             delta, posDelta = wx.Size(), self._dragPos - pos
             if self._direction & wx.HORIZONTAL: delta[0] = posDelta[0]
             if self._direction & wx.VERTICAL:   delta[1] = posDelta[1]
@@ -1713,6 +1717,15 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
                 self._bestSize = newSize
                 self.InvalidateBestSize()
                 self._sendEvent()
+
+
+    def OnSize(self, evt):
+        """Handles wx.EVT_SIZE event, resizing control if control fitted."""
+        super(ResizeWidget, self).OnSize(evt)
+        if self._fit and not self._ignoresizeevt:
+            self._ignoresizeevt = True
+            wx.CallAfter(self.Fit)
+            wx.CallLater(100, setattr, self, "_ignoresizeevt", False)
 
 
     def DoGetBestSize(self):
