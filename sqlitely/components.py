@@ -801,7 +801,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         idx = rowdata[self.KEY_ID]
         row = self.rows_all[idx]
         refresh = self._RollbackRow(rowdata)
-        if reload and row[self.KEY_ID]:
+        if reload and not row[self.KEY_NEW]:
             rowid = self.rowids[idx] if self.rowids else None
             row.update(self.db.select_row(self.name, row, rowid) or {})
         self.Filter(rows_before)
@@ -6872,7 +6872,7 @@ class DataDialog(wx.Dialog):
         if self._editable:
             tb.AddSeparator()
             tb.AddTool(wx.ID_COPY,     "", bmp2, shortHelp="Copy row data or SQL")
-            tb.AddTool(wx.ID_REFRESH,  "", bmp3, shortHelp="Reload data  (F5)")
+            tb.AddTool(wx.ID_REFRESH,  "", bmp3, shortHelp="Reload data from database  (F5)")
             tb.AddTool(wx.ID_HIGHEST,  "", bmp4, shortHelp="Resize dialog to fit  (F11)")
             tb.AddSeparator()
             tb.AddTool(wx.ID_SAVE,     "", bmp5, shortHelp="Commit row changes to database  (F10)")
@@ -6993,7 +6993,7 @@ class DataDialog(wx.Dialog):
             self._tb.EnableTool(wx.ID_BACKWARD, bool(self._row))
             self._tb.EnableTool(wx.ID_FORWARD,  self._row + 1 < gridbase.RowsCount)
             if self._editable:
-                changed = not self._data[gridbase.KEY_ID] or (self._data != self._original)
+                changed = self._data[gridbase.KEY_NEW] or (self._data != self._original)
                 self._tb.EnableTool(wx.ID_SAVE, changed)
                 self._tb.EnableTool(wx.ID_UNDO, changed)
 
@@ -7038,7 +7038,7 @@ class DataDialog(wx.Dialog):
         bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
         if val != self._original[name]: bg = wx.Colour(conf.GridRowChangedColour)
         c.BackgroundColour = bg
-        changed = not self._data[self._gridbase.KEY_ID] or (self._data != self._original)
+        changed = self._data[self._gridbase.KEY_NEW] or (self._data != self._original)
         self._tb.EnableTool(wx.ID_SAVE, changed)
         self._tb.EnableTool(wx.ID_UNDO, changed)
         wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
@@ -7119,7 +7119,7 @@ class DataDialog(wx.Dialog):
         bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
         if value != self._original[name]: bg = wx.Colour(conf.GridRowChangedColour)
         c.BackgroundColour = bg
-        changed = not self._data[self._gridbase.KEY_ID] or (self._data != self._original)
+        changed = self._data[self._gridbase.KEY_NEW] or (self._data != self._original)
         self._tb.EnableTool(wx.ID_SAVE, changed)
         self._tb.EnableTool(wx.ID_UNDO, changed)
 
@@ -7175,7 +7175,7 @@ class DataDialog(wx.Dialog):
             conf.Title, wx.ICON_INFORMATION, defaultno=True
         ): return
 
-        self._original = self._gridbase.RollbackRow(self._data)
+        self._original = self._gridbase.RollbackRow(self._data, reload=reload)
         self._data = copy.deepcopy(self._original)
         self._Populate()
 
