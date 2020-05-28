@@ -890,7 +890,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         self.SeekToRow(row)
         row, col = min(row, self.row_count - 1), min(col, len(self.columns) - 1)
         if row >= 0 and col >= 0: self.View.GoToCell(row, col)
-        
+
 
     def OnMenu(self, event):
         """Handler for opening popup menu in grid."""
@@ -2902,8 +2902,8 @@ class SchemaObjectPage(wx.Panel):
         self.Bind(wx.EVT_BUTTON,   self._OnActions,        button_actions)
         self.Bind(wx.EVT_BUTTON,   self._OnClose,          button_close)
         self.Bind(wx.EVT_CHECKBOX, self._OnToggleAlterSQL, check_alter)
+        self.Bind(wx.EVT_SIZE,     self._OnSize)
         self._BindDataHandler(self._OnChange, edit_name, ["name"])
-        self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(lambda: self and (self.Layout(), self.Refresh())))
 
         self._Populate()
         if "sql" not in self._original and "sql" in self._item:
@@ -3028,6 +3028,42 @@ class SchemaObjectPage(wx.Panel):
         return result
 
 
+    def _OnSize(self, event=None):
+        """Handler for wx.EVT_SIZE, aligns table column headers"""
+        if not self: return
+        topsizer = self._sizer_headers
+        for i in range(topsizer.ItemCount):
+            si = topsizer.GetItem(i)
+            if si.Window: si.Window.MinSize = si.Window.MaxSize = (-1, -1)
+
+        def after():
+            self.Layout()
+            self.Refresh()
+            wx.CallAfter(after2)
+
+        def after2():
+            # Align table column headers to precise spot over column row widgets
+            colsizer = self._panel_columns.Sizer
+            pos, itop = 0, 0
+            for i in range(colsizer.Cols):
+                si = colsizer.GetItem(i)
+                if si.Window:
+                    w, b = si.Window.Size[0], (si.Flag & wx.LEFT and si.Border)
+                else:
+                    w, b = si.Sizer.Size[0], 0
+
+                while topsizer.GetItem(itop).Spacer: itop += 1
+                sitop = topsizer.GetItem(itop)
+                if sitop.Window:
+                    wtop = w + (0 if sitop.Flag & wx.LEFT and sitop.Border else b)
+                    sitop.Window.MinSize = sitop.Window.MaxSize = wtop, sitop.Window.Size[1]
+
+                pos  += si.Size[0]
+                itop += 1
+            topsizer.Layout()
+        wx.CallAfter(after)
+
+
     def _CreateTable(self, parent):
         """Returns control panel for CREATE TABLE page."""
         panel = wx.Panel(parent)
@@ -3043,7 +3079,7 @@ class SchemaObjectPage(wx.Panel):
                                "primary keys, and not too much data per row."
 
         nb = self._notebook_table = wx.Notebook(panel)
-        panel_columnwrapper = self._MakeColumnsGrid(nb)
+        panel_columnwrapper     = self._MakeColumnsGrid(nb)
         panel_constraintwrapper = self._MakeConstraintsGrid(nb)
 
         sizer_flags.Add(check_rowid)
@@ -3222,9 +3258,9 @@ class SchemaObjectPage(wx.Panel):
         panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         panel.SetScrollRate(20, 0)
 
-        cols = {"table": 5, "index": 4, "trigger": 2, "view": 2}[self._category]
+        cols     = {"table": 5, "index": 4, "trigger": 2, "view": 2}[self._category]
         gridcols = {"table": 8, "index": 3, "trigger": 1, "view": 1}[self._category]
-        sizer_headers = wx.FlexGridSizer(cols=cols+1)
+        sizer_headers = self._sizer_headers = wx.FlexGridSizer(cols=cols+1)
         panel_grid = self._panel_columnsgrid = wx.ScrolledWindow(panel, style=s2)
         panel_grid.Sizer = wx.BoxSizer(wx.HORIZONTAL)
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
@@ -3245,7 +3281,7 @@ class SchemaObjectPage(wx.Panel):
             sizer_headers.Add(wx.StaticText(panel, label="Type",    size=(100, -1)))
             sizer_headers.Add(wx.StaticText(panel, label="Default", size=( 99, -1)))
             sizer_headers.Add(sizer_columnflags, border=5, flag=wx.LEFT | wx.RIGHT)
-            sizer_headers.Add(wx.StaticText(panel, label="Options", size=(50, -1)))
+            sizer_headers.Add(wx.StaticText(panel, label="Options", size=(50, -1)), border=5, flag=wx.LEFT)
             sizer_headers.GetItem(3).Window.ToolTip = \
                 "String or numeric constant, NULL, CURRENT_TIME, CURRENT_DATE, " \
                 "CURRENT_TIMESTAMP, or (constant expression)"
@@ -3285,6 +3321,10 @@ class SchemaObjectPage(wx.Panel):
 
         panel_columns = self._panel_columns = wx.Panel(panel_grid)
         panel_columns.Sizer = wx.FlexGridSizer(cols=cols)
+        if "table" == self._category:
+            panel_columns.Sizer.AddGrowableCol(0, proportion=2)
+            panel_columns.Sizer.AddGrowableCol(1, proportion=1)
+            panel_columns.Sizer.AddGrowableCol(2, proportion=2)
 
         button_add_column = self._buttons["add_column"]    = wx.Button(panel, label="&Add column")
         button_add_expr   = None
@@ -3614,15 +3654,15 @@ class SchemaObjectPage(wx.Panel):
         vertical = wx.ALIGN_CENTER_VERTICAL
         if insert:
             start = panel.Sizer.Cols * i
-            panel.Sizer.Insert(start,   text_name,    border=5, flag=vertical | wx.LEFT)
-            panel.Sizer.Insert(start+1, list_type,    border=5, flag=vertical)
-            panel.Sizer.Insert(start+2, text_default, border=5, flag=vertical)
+            panel.Sizer.Insert(start,   text_name,    border=5, flag=vertical | wx.LEFT | wx.GROW, proportion=2)
+            panel.Sizer.Insert(start+1, list_type,    border=5, flag=vertical | wx.GROW, proportion=1)
+            panel.Sizer.Insert(start+2, text_default, border=5, flag=vertical | wx.GROW, proportion=2)
             self._AddSizer(panel.Sizer, sizer_flags,  border=5, flag=vertical | wx.LEFT | wx.RIGHT,  insert=start+3)
             self._AddSizer(panel.Sizer, button_open,  border=5, flag=vertical | wx.LEFT | wx.RIGHT, insert=start+4)
         else:
-            panel.Sizer.Add(text_name,     border=5, flag=vertical | wx.LEFT)
-            panel.Sizer.Add(list_type,     border=5, flag=vertical)
-            panel.Sizer.Add(text_default,  border=5, flag=vertical)
+            panel.Sizer.Add(text_name,     border=5, flag=vertical | wx.LEFT | wx.GROW, proportion=2)
+            panel.Sizer.Add(list_type,     border=5, flag=vertical | wx.GROW, proportion=1)
+            panel.Sizer.Add(text_default,  border=5, flag=vertical | wx.GROW, proportion=2)
             self._AddSizer(panel.Sizer, sizer_flags, border=5, flag=vertical | wx.LEFT | wx.RIGHT)
             self._AddSizer(panel.Sizer, button_open, border=5, flag=vertical | wx.LEFT | wx.RIGHT)
 

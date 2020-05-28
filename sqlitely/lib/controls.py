@@ -1666,6 +1666,8 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
         _, charh = self.ManagedChild.GetTextExtent("X")
         borderw, borderh = self.ManagedChild.DoGetBorderSize()
         size = self.Size
+        size[0] -= wx.lib.resizewidget.RW_THICKNESS
+        size[1] -= wx.lib.resizewidget.RW_THICKNESS
 
         if self._direction & wx.HORIZONTAL:
             size[0] = 2 * borderw + widthmax
@@ -1721,6 +1723,7 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
 
     def OnSize(self, evt):
         """Handles wx.EVT_SIZE event, resizing control if control fitted."""
+        if self._ignoresizeevt: return
         super(ResizeWidget, self).OnSize(evt)
         if self._fit and not self._ignoresizeevt:
             self._ignoresizeevt = True
