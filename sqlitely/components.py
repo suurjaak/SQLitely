@@ -3376,10 +3376,20 @@ class SchemaObjectPage(wx.Panel):
         for i, x in list(enumerate(headeritems))[::-1]:
             if x.Sizer: headeritems[i:i+1] = list(x.Sizer.Children)
             elif not x.Window: headeritems[i:i+1] = []
-        make_handler = lambda i: (lambda e: grid.GridCursorRow >= 0
-                                            and grid.SetGridCursor(grid.GridCursorRow, i))
+
+        def on_header(i, e):
+            if grid.GridCursorRow >= 0: grid.SetGridCursor(grid.GridCursorRow, i)
+            def after():
+                ctrl = self.FindFocus()
+                if isinstance(ctrl, wx.CheckBox) and ctrl.IsEnabled():
+                    ctrl.Value = not ctrl.Value
+                    event = wx.CommandEvent(wx.wxEVT_CHECKBOX, ctrl.Id)
+                    event.SetEventObject(ctrl)
+                    wx.PostEvent(self, event)
+            wx.CallAfter(after)
+
         for i, x in enumerate(headeritems):
-            x.Window.Bind(wx.EVT_LEFT_UP, make_handler(i))
+            x.Window.Bind(wx.EVT_LEFT_UP, functools.partial(on_header, i))
 
         self._BindDataHandler(self._OnAddItem,    button_add_column, ["columns"], {"name": ""})
         if "index" == self._category:
