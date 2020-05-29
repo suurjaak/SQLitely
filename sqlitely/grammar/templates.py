@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    24.05.2020
+@modified    29.05.2020
 ------------------------------------------------------------------------------
 """
 
@@ -121,7 +121,7 @@ SAVEPOINT alter_table;{{ LF() }}
 {{ LF() }}
 
 %endif
-{{ Template(templates.CREATE_TABLE).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
+{{ Template(templates.CREATE_TABLE).expand(dict(locals(), data=data["meta"], root=data["meta"])) }}{{ LF() }}
 {{ LF() }}
 
 %if data.get("columns"):
@@ -146,13 +146,13 @@ ALTER TABLE {{ Q(data["tempname"]) }} RENAME TO {{ Q(data["name2"]) }};{{ LF() }
 {{ LF() }}
 
 %for reltable in data.get("table") or []:
-{{ WS(reltable["sql"]) }};{{ LF() }}
+{{ WS(reltable["sql"]) }}{{ LF() }}
 INSERT INTO {{ Q(reltable["tempname"]) }} SELECT * FROM {{ Q(reltable["name"]) }};{{ LF() }}
 DROP TABLE {{ Q(reltable["name"]) }};{{ LF() }}
 ALTER TABLE {{ Q(reltable["tempname"]) }} RENAME TO {{ Q(reltable["name"]) }};{{ LF() }}
     %for category in CATEGORIES:
         %for x in reltable.get(category) or []:
-{{ WS(x["sql"]) }};{{ LF() }}
+{{ WS(x["sql"]) }}{{ LF() }}
         %endfor
     %endfor
 {{ LF() }}
@@ -169,14 +169,14 @@ DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
 
 %for category in CATEGORIES:
     %for x in data.get(category) or []:
-{{ WS(x["sql"]) }};{{ LF() }}
+{{ WS(x["sql"]) }}{{ LF() }}
     %endfor
 %endfor
 %if any(data.get(x) for x in CATEGORIES):
 {{ LF() }}
 %endif
-
 %if not data.get("no_tx"):
+
 RELEASE SAVEPOINT alter_table;{{ LF() }}
 {{ LF() }}
 %endif
@@ -212,7 +212,7 @@ SAVEPOINT alter_index;{{ LF() }}
 DROP INDEX {{ Q(data["name"]) }};{{ LF() }}
 {{ LF() }}
 
-{{ Template(templates.CREATE_INDEX).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
+{{ Template(templates.CREATE_INDEX).expand(dict(locals(), data=data["meta"], root=data["meta"])) }}{{ LF() }}
 {{ LF() }}
 
 %if not data.get("no_tx"):
@@ -247,7 +247,7 @@ SAVEPOINT alter_trigger;{{ LF() }}
 DROP TRIGGER {{ Q(data["name"]) }};{{ LF() }}
 {{ LF() }}
 
-{{ Template(templates.CREATE_TRIGGER).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
+{{ Template(templates.CREATE_TRIGGER).expand(dict(locals(), data=data["meta"], root=data["meta"])) }}{{ LF() }}
 {{ LF() }}
 
 %if not data.get("no_tx"):
@@ -298,12 +298,12 @@ DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
 {{ LF() }}
 %endif
 
-{{ Template(templates.CREATE_VIEW).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
+{{ Template(templates.CREATE_VIEW).expand(dict(locals(), data=data["meta"], root=data["meta"])) }}{{ LF() }}
 {{ LF() }}
 
 %for category in CATEGORIES:
     %for x in data.get(category) or []:
-{{ WS(x["sql"]) }};{{ LF() }}
+{{ WS(x["sql"]) }}{{ LF() }}
     %endfor
 %endfor
 %if any(data.get(x) for x in CATEGORIES):
