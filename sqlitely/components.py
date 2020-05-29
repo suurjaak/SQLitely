@@ -3325,6 +3325,8 @@ class SchemaObjectPage(wx.Panel):
             panel_columns.Sizer.AddGrowableCol(0, proportion=2)
             panel_columns.Sizer.AddGrowableCol(1, proportion=1)
             panel_columns.Sizer.AddGrowableCol(2, proportion=2)
+        elif "view" == self._category:
+            panel_columns.Sizer.AddGrowableCol(0)
 
         button_add_column = self._buttons["add_column"]    = wx.Button(panel, label="&Add column")
         button_add_expr   = None
@@ -3628,6 +3630,8 @@ class SchemaObjectPage(wx.Panel):
         list_type     = wx.ComboBox(panel, choices=self._types, style=wx.CB_DROPDOWN)
         text_default  = controls.SQLiteTextCtrl(panel, traversable=True, wheelable=False)
         text_default.SetCaretLineVisible(False)
+        text_default.SetUseVerticalScrollBar(False)
+        text_default.SetWrapMode(wx.stc.STC_WRAP_CHAR)
         text_default.ToolTip = "String or numeric constant, NULL, CURRENT_TIME, " \
                                "CURRENT_DATE, CURRENT_TIMESTAMP, or (constant expression)"
 
@@ -3846,6 +3850,8 @@ class SchemaObjectPage(wx.Panel):
         else:
             ctrl_index = controls.SQLiteTextCtrl(panel, traversable=True, wheelable=False)
             ctrl_index.SetCaretLineVisible(False)
+            ctrl_index.SetUseVerticalScrollBar(False)
+            ctrl_index.SetWrapMode(wx.stc.STC_WRAP_CHAR)
             ctrl_index.ToolTip = "May not reference other tables, or use subqueries " \
                                  "or functions whose result might change, like random()."
         list_collate  = wx.ComboBox(panel, choices=self.COLLATE, style=wx.CB_DROPDOWN)
@@ -3931,15 +3937,17 @@ class SchemaObjectPage(wx.Panel):
 
         text_column = controls.SQLiteTextCtrl(panel, traversable=True, wheelable=False)
         text_column.SetCaretLineVisible(False)
-        text_column.MinSize = (200, 21)
+        text_column.SetUseVerticalScrollBar(False)
+        text_column.SetWrapMode(wx.stc.STC_WRAP_CHAR)
+        text_column.MinSize = (-1, 21)
         text_column.Value = column.get("name") or ""
 
         if insert:
             start = panel.Sizer.Cols * i
-            panel.Sizer.Insert(start, text_column, border=5, flag=wx.LEFT)
+            panel.Sizer.Insert(start, text_column, border=5, flag=wx.LEFT | wx.GROW)
             panel.Sizer.InsertSpacer(start+1, (0, 23))
         else:
-            panel.Sizer.Add(text_column, border=5, flag=wx.LEFT)
+            panel.Sizer.Add(text_column, border=5, flag=wx.LEFT | wx.GROW)
             panel.Sizer.Add(0, 23)
 
         self._BindDataHandler(self._OnChange, text_column, ["columns", text_column, "name"])
@@ -5133,7 +5141,7 @@ class SchemaObjectPage(wx.Panel):
         self._types = self._GetColumnTypes()
         self._tables = [x["name"] for x in self._db.get_category("table").values()]
         self._views  = [x["name"] for x in self._db.get_category("view").values()]
-        if not self._editmode:
+        if not self._editmode and self._item.get("name"):
             item = self._db.get_category(self._category, self._item["name"])
             if event and not item: return wx.MessageBox(
                 "%s %s no longer present in the database." %
