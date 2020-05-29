@@ -4101,7 +4101,7 @@ class SchemaObjectPage(wx.Panel):
         if sql is None: return
         scrollpos = self._ctrls["sql"].GetScrollPos(wx.VERTICAL)
         self._ctrls["sql"].SetReadOnly(False)
-        self._ctrls["sql"].SetText(sql + "\n")
+        self._ctrls["sql"].SetText(sql.rstrip() + "\n")
         self._ctrls["sql"].SetReadOnly(True)
         self._ctrls["sql"].ScrollToLine(scrollpos)
 

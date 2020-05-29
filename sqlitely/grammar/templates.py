@@ -143,7 +143,7 @@ DROP TABLE {{ Q(data["name"]) }};{{ LF() }}
 {{ LF() }}
 
 ALTER TABLE {{ Q(data["tempname"]) }} RENAME TO {{ Q(data["name2"]) }};{{ LF() }}
-{{ LF() }}
+{{ LF() if data.get("table") else '' }}
 
 %for reltable in data.get("table") or []:
 {{ WS(reltable["sql"]) }}{{ LF() }}
@@ -163,23 +163,27 @@ ALTER TABLE {{ Q(reltable["tempname"]) }} RENAME TO {{ Q(reltable["name"]) }};{{
 DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
     %endfor
 %endfor
-%if any(data.get(x) for x in CATEGORIES):
-{{ LF() }}
-%endif
+{{ LF() if any(data.get(x) for x in CATEGORIES) else '' }}
 
+<%
+sep = False
+%>
 %for category in CATEGORIES:
     %for x in data.get(category) or []:
+{{ LF() if sep else '' }}
 {{ WS(x["sql"]) }}{{ LF() }}
+<%
+sep = True
+%>
     %endfor
 %endfor
-%if any(data.get(x) for x in CATEGORIES):
-{{ LF() }}
-%endif
+
 %if not data.get("no_tx"):
 
 RELEASE SAVEPOINT alter_table;{{ LF() }}
 {{ LF() }}
 %endif
+
 %if data["fks"]:
 
 PRAGMA foreign_keys = on;{{ LF() }}
@@ -294,9 +298,7 @@ DROP VIEW {{ Q(data["name"]) }};{{ LF() }}
 DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
     %endfor
 %endfor
-%if any(data.get(x) for x in CATEGORIES):
-{{ LF() }}
-%endif
+{{ LF() if any(data.get(x) for x in CATEGORIES) else '' }}
 
 {{ Template(templates.CREATE_VIEW).expand(dict(locals(), data=data["meta"], root=data["meta"])) }}{{ LF() }}
 {{ LF() }}
@@ -306,9 +308,7 @@ DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
 {{ WS(x["sql"]) }}{{ LF() }}
     %endfor
 %endfor
-%if any(data.get(x) for x in CATEGORIES):
-{{ LF() }}
-%endif
+{{ LF() if any(data.get(x) for x in CATEGORIES) else '' }}
 
 %if not data.get("no_tx"):
 RELEASE SAVEPOINT alter_view;{{ LF() }}
