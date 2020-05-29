@@ -3039,7 +3039,7 @@ class SchemaObjectPage(wx.Panel):
         def after():
             self.Layout()
             self.Refresh()
-            wx.CallAfter(after2)
+            if "table" == self._category: wx.CallAfter(after2)
 
         def after2():
             # Align table column headers to precise spot over column row widgets
