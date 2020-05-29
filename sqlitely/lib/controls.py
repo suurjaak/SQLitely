@@ -1612,7 +1612,8 @@ class PropertyDialog(wx.Dialog):
 class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
     """
     A specialized panel that provides a resize handle for a widget,
-    with configurable resize directions.
+    with configurable resize directions. Sizes to fit on double-clicking
+    resize handle (sticky).
     """
     BOTH = wx.HORIZONTAL | wx.VERTICAL
 
@@ -1628,7 +1629,7 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
         self._ignoresizeevt = False
         super(ResizeWidget, self).__init__(parent, id, pos, size, style, name)
         self.ToolTip = "Drag to resize, double-click to fit"
-        self.Bind(wx.EVT_LEFT_DCLICK, lambda e: self.Fit())
+        self.Bind(wx.EVT_LEFT_DCLICK, self.OnLeftDClick)
         self.Bind(wx.EVT_SIZE,        self.OnSize)
 
     def GetDirection(self):
@@ -1675,6 +1676,16 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
         if self._direction & wx.VERTICAL:
             size[1] = 2 * borderh + charh * (linesmax + 1)
         return size
+
+
+    def OnLeftDClick(self, event=None):
+        """Handles the wx.EVT_LEFT_DCLICK event, toggling fit-mode on or off."""
+        if self._fit:
+            self._fit = False
+            self.ManagedChild.Size = self.ManagedChild.EffectiveMinSize
+            self.AdjustToSize(self.ManagedChild.Size)
+            self.Parent.ContainingSizer.Layout()
+        else: self.Fit()
 
 
     def OnLeftUp(self, evt):
