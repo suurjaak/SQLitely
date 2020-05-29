@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.05.2020
+@modified    29.05.2020
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -6913,7 +6913,7 @@ class DataDialog(wx.Dialog):
             tb.AddSeparator()
             tb.AddTool(wx.ID_COPY,     "", bmp2, shortHelp="Copy row data or SQL")
             tb.AddTool(wx.ID_REFRESH,  "", bmp3, shortHelp="Reload data from database  (F5)")
-            tb.AddTool(wx.ID_HIGHEST,  "", bmp4, shortHelp="Resize dialog to fit  (F11)")
+            tb.AddTool(wx.ID_HIGHEST,  "", bmp4, shortHelp="Resize to fit  (F11)")
             tb.AddSeparator()
             tb.AddTool(wx.ID_SAVE,     "", bmp5, shortHelp="Commit row changes to database  (F10)")
             tb.AddTool(wx.ID_UNDO,     "", bmp6, shortHelp="Rollback row changes and restore original values  (F9)")
@@ -6989,7 +6989,6 @@ class DataDialog(wx.Dialog):
         self.Bind(wx.EVT_TOOL,   self._OnRollback,                   id=wx.ID_UNDO)
         self.Bind(wx.EVT_TOOL,   self._OnNew,                        id=wx.ID_ADD)
         self.Bind(wx.EVT_TOOL,   self._OnDelete,                     id=wx.ID_DELETE)
-
         self.Bind(wx.EVT_BUTTON, self._OnAccept, id=wx.ID_OK)
         self.Bind(wx.EVT_BUTTON, self._OnClose,  id=wx.ID_CANCEL)
         self.Bind(wx.EVT_CLOSE,  self._OnClose)
@@ -7010,7 +7009,7 @@ class DataDialog(wx.Dialog):
                         (wx.ACCEL_NORMAL, wx.WXK_F11,   wx.ID_HIGHEST)]
         wx_accel.accelerate(self, accelerators=accelerators)
         wx.CallLater(0, lambda: self and self._edits.values()[0].SetFocus())
-        wx.CallAfter(self._OnFit, noresize=True)
+        wx.CallAfter(self._OnFit, initial=True)
 
 
     def _Populate(self):
@@ -7084,36 +7083,34 @@ class DataDialog(wx.Dialog):
         wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
 
 
-    def _OnFit(self, event=None, noresize=False):
-        """Handler for clicking to fit dialog to content."""
+    def _OnFit(self, event=None, initial=False):
+        """Handler for clicking to fit dialog and controls to content."""
         w, h = self.Size[0], (self.Size[1] - self.ClientSize[1])
-        minsize, self.MinSize = self.MinSize, (-1, -1)
-        self.Fit()
-        for c in self._edits.values() if not noresize else ():
+        for c in self._edits.values() if not initial else ():
             if isinstance(c.Parent, controls.ResizeWidget):
                 c.Parent.Fit()
 
-        def after(w, h, minsize):
+        def after(w, h):
             for i in range(self.Sizer.ItemCount):
                 si = self.Sizer.GetItem(i)
-                h += (si.Window.VirtualSize if si.Window else si.Sizer.Size)[1]
+                sz = (si.Window.Sizer.MinSize if si.Window.Sizer else si.Window.VirtualSize) \
+                     if si.Window else si.Sizer.Size if si.Sizer else si.Spacer or (0, 0)
+                h += sz[1]
                 if si.Flag & wx.BOTTOM: h += si.Border
                 if si.Flag & wx.TOP:    h += si.Border
 
-            display = wx.Display(wx.Display.GetFromWindow(self))
-            maxh, fullh = (x[-1] for x in (display.ClientArea, display.Geometry))
-            # In Windows, maximized programs go over the edge
-            margin = 4 if (maxh < fullh and "nt" == os.name) else 0
-            if h > maxh + 2*margin:
-                h = maxh + 2*margin
-                self.Position = self.Position[0], -margin
-            if minsize[1] > h:
-                minsize = minsize[0], h
-            self.MinSize = minsize
-            self.Size = w, h
-            if h != maxh + 2*margin: self.CenterOnParent()
-        if noresize: after(w, h, minsize)
-        else: wx.CallAfter(after, w, h, minsize) # Give controls time to lay out
+            topwindow = wx.GetApp().TopWindow
+            w, h = (min(a, b) for a, b in zip((w, h), topwindow.Size))
+            minsize = self.MinSize
+            if self.MinSize[1] > h: self.MinSize = self.MinSize[0], h
+            xwindow = topwindow if w > self.Parent.Size[0] else self.Parent
+            ywindow = topwindow if h > self.Parent.Size[1] else self.Parent
+            x = xwindow.ScreenPosition[0] + (xwindow.Size[0] - w) / 2
+            y = ywindow.ScreenPosition[1] + max(0, (ywindow.Size[1] - h) / 2)
+            self.Size, self.Position = (w, h), (x, y)
+
+        if initial: after(w, h)
+        else: wx.CallAfter(after, w, h) # Give controls time to lay out
 
 
     def _OnRow(self, direction, event=None):

@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    28.05.2020
+@modified    29.05.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -1649,6 +1649,7 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
             size = self.GetBestChildSize()
             if size == self.ManagedChild.Size: return
 
+            self.ManagedChild.Size = size
             self.AdjustToSize(size)
             self.Parent.ContainingSizer.Layout()
         self._fit = True
