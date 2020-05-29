@@ -3032,20 +3032,21 @@ class SchemaObjectPage(wx.Panel):
         """Handler for wx.EVT_SIZE, aligns table column headers"""
         if not self: return
         topsizer = self._sizer_headers
-        for i in range(topsizer.ItemCount):
+        colsizer = self._panel_columns.Sizer
+        for i in range(topsizer.ItemCount) if colsizer.ItemCount else ():
             si = topsizer.GetItem(i)
             if si.Window: si.Window.MinSize = si.Window.MaxSize = (-1, -1)
 
         def after():
             self.Layout()
             self.Refresh()
-            if "table" == self._category: wx.CallAfter(after2)
+            if self._category in ("index", "table"): wx.CallAfter(after2)
 
         def after2():
             # Align table column headers to precise spot over column row widgets
-            colsizer = self._panel_columns.Sizer
             pos, itop = 0, 0
             for i in range(colsizer.Cols):
+                if i > colsizer.ItemCount - 1: break # for i
                 si = colsizer.GetItem(i)
                 if si.Window:
                     w, b = si.Window.Size[0], (si.Flag & wx.LEFT and si.Border)
@@ -3258,7 +3259,7 @@ class SchemaObjectPage(wx.Panel):
         panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         panel.SetScrollRate(20, 0)
 
-        cols     = {"table": 5, "index": 4, "trigger": 2, "view": 2}[self._category]
+        cols     = {"table": 5, "index": 3, "trigger": 2, "view": 2}[self._category]
         gridcols = {"table": 8, "index": 3, "trigger": 1, "view": 1}[self._category]
         sizer_headers = self._sizer_headers = wx.FlexGridSizer(cols=cols+1)
         panel_grid = self._panel_columnsgrid = wx.ScrolledWindow(panel, style=s2)
@@ -3277,18 +3278,18 @@ class SchemaObjectPage(wx.Panel):
                 label.ToolTip = t
                 sizer_columnflags.Add(label)
 
-            sizer_headers.Add(wx.StaticText(panel, label="Name",    size=(150, -1)), border=7, flag=wx.LEFT)
-            sizer_headers.Add(wx.StaticText(panel, label="Type",    size=(100, -1)))
-            sizer_headers.Add(wx.StaticText(panel, label="Default", size=( 99, -1)))
+            sizer_headers.Add(wx.StaticText(panel, label="Name"), border=7, flag=wx.LEFT)
+            sizer_headers.Add(wx.StaticText(panel, label="Type"))
+            sizer_headers.Add(wx.StaticText(panel, label="Default"))
             sizer_headers.Add(sizer_columnflags, border=5, flag=wx.LEFT | wx.RIGHT)
-            sizer_headers.Add(wx.StaticText(panel, label="Options", size=(50, -1)), border=5, flag=wx.LEFT)
+            sizer_headers.Add(wx.StaticText(panel, label="Options"), border=5, flag=wx.LEFT)
             sizer_headers.GetItem(3).Window.ToolTip = \
                 "String or numeric constant, NULL, CURRENT_TIME, CURRENT_DATE, " \
                 "CURRENT_TIMESTAMP, or (constant expression)"
         elif "index" == self._category:
             sizer_headers.Add(wx.StaticText(panel, label="Column",  size=(250, -1)), border=7, flag=wx.LEFT)
-            sizer_headers.Add(wx.StaticText(panel, label="Collate", size=( 80, -1)))
-            sizer_headers.Add(wx.StaticText(panel, label="Order",   size=( 60, -1)))
+            sizer_headers.Add(wx.StaticText(panel, label="Collate", size=(80, -1)))
+            sizer_headers.Add(wx.StaticText(panel, label="Order",   size=(60, -1)))
             sizer_headers.GetItem(1).Window.ToolTip = \
                 "Table column or an expression to index"
             sizer_headers.GetItem(2).Window.ToolTip = \
@@ -3297,11 +3298,11 @@ class SchemaObjectPage(wx.Panel):
             sizer_headers.GetItem(3).Window.ToolTip = \
                 "Index sort order"
         elif "trigger" == self._category:
-            sizer_headers.Add(wx.StaticText(panel, label="Column",  size=(200, -1)), border=7, flag=wx.LEFT)
+            sizer_headers.Add(wx.StaticText(panel, label="Column"), border=7, flag=wx.LEFT | wx.GROW)
             sizer_headers.GetItem(1).Window.ToolTip = \
                 "Column UPDATE to trigger on"
         elif "view" == self._category:
-            sizer_headers.Add(wx.StaticText(panel, label="Column",  size=(200, -1)), border=7, flag=wx.LEFT)
+            sizer_headers.Add(wx.StaticText(panel, label="Column"), border=7, flag=wx.LEFT | wx.GROW)
             sizer_headers.GetItem(1).Window.ToolTip = \
                 "Name of the view column, if not deriving names from SELECT results"
 
@@ -3325,6 +3326,8 @@ class SchemaObjectPage(wx.Panel):
             panel_columns.Sizer.AddGrowableCol(0, proportion=2)
             panel_columns.Sizer.AddGrowableCol(1, proportion=1)
             panel_columns.Sizer.AddGrowableCol(2, proportion=2)
+        elif "index" == self._category:
+            panel_columns.Sizer.AddGrowableCol(0)
         elif "view" == self._category:
             panel_columns.Sizer.AddGrowableCol(0)
 
@@ -3393,12 +3396,12 @@ class SchemaObjectPage(wx.Panel):
         for i, x in enumerate(headeritems):
             x.Window.Bind(wx.EVT_LEFT_UP, functools.partial(on_header, i))
 
-        self._BindDataHandler(self._OnAddItem,    button_add_column, ["columns"], {"name": ""})
+        self._BindDataHandler(self._OnAddItem,     button_add_column, ["columns"], {"name": ""})
         if "index" == self._category:
-            self._BindDataHandler(self._OnAddItem, button_add_expr,  ["columns"], {"expr": ""})
-        self._BindDataHandler(self._OnMoveItem,   button_move_up,    ["columns"], -1)
-        self._BindDataHandler(self._OnMoveItem,   button_move_down,  ["columns"], +1)
-        self._BindDataHandler(self._OnRemoveItem, button_remove_col, ["columns"])
+            self._BindDataHandler(self._OnAddItem, button_add_expr,   ["columns"], {"expr": ""})
+        self._BindDataHandler(self._OnMoveItem,    button_move_up,    ["columns"], -1)
+        self._BindDataHandler(self._OnMoveItem,    button_move_down,  ["columns"], +1)
+        self._BindDataHandler(self._OnRemoveItem,  button_remove_col, ["columns"])
 
         self.Bind(wx.grid.EVT_GRID_SELECT_CELL,  self._OnSelectGridRow, grid)
         self.Bind(wx.grid.EVT_GRID_RANGE_SELECT, self._OnSelectGridRow, grid)
@@ -3864,8 +3867,8 @@ class SchemaObjectPage(wx.Panel):
         list_order.ToolTip = "Index sort order"
 
         ctrl_index.MinSize =   (250, -1 if self._hasmeta and "name" in col else list_collate.Size[1])
-        list_collate.MinSize = ( 80, -1)
-        list_order.MinSize =   ( 60, -1)
+        list_collate.MinSize = (80,  -1)
+        list_order.MinSize   = (60,  -1)
 
         ctrl_index.Value   = util.unprint(col.get("name") or col.get("expr") or "")
         list_collate.Value = col.get("collate") or ""
@@ -3874,15 +3877,13 @@ class SchemaObjectPage(wx.Panel):
         vertical = wx.ALIGN_CENTER_VERTICAL
         if insert:
             start = panel.Sizer.Cols * i
-            panel.Sizer.Insert(start,   ctrl_index, border=5, flag=vertical | wx.LEFT)
+            panel.Sizer.Insert(start,   ctrl_index, border=5, flag=vertical | wx.LEFT | wx.GROW)
             panel.Sizer.Insert(start+1, list_collate, flag=vertical)
             panel.Sizer.Insert(start+2, list_order, flag=vertical)
-            panel.Sizer.InsertSpacer(start+3, (0, 23))
         else:
-            panel.Sizer.Add(ctrl_index, border=5, flag=vertical | wx.LEFT)
+            panel.Sizer.Add(ctrl_index, border=5, flag=vertical | wx.LEFT | wx.GROW)
             panel.Sizer.Add(list_collate, flag=vertical)
             panel.Sizer.Add(list_order, flag=vertical)
-            panel.Sizer.Add(0, 23)
 
         self._BindDataHandler(self._OnChange, ctrl_index,   ["columns", ctrl_index,   "name" if "name" in col else "expr"])
         self._BindDataHandler(self._OnChange, list_collate, ["columns", list_collate, "collate"])
@@ -4687,6 +4688,7 @@ class SchemaObjectPage(wx.Panel):
             self._AddRow(path, len(ptr) - 1, value)
             self._PopulateSQL()
             self._grid_columns.GoToCell(self._grid_columns.NumberRows - 1, 0)
+            self._OnSize()
         finally: self.Thaw()
         self._PostEvent(modified=True)
 
