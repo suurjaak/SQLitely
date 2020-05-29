@@ -338,25 +338,27 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         return result
 
 
-    def SetValue(self, row, col, val):
+    def SetValue(self, row, col, val, noconvert=False):
         """Sets grid cell value and marks row as changed, if table grid."""
         if self.is_query or "view" == self.category or row >= self.row_count:
             return
 
-        col_value = None
-        if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
-            if val not in ("", None):
-                try:
-                    valc = val.replace(",", ".") # Allow comma separator
-                    col_value = float(valc) if ("." in valc) else int(val)
-                except Exception:
-                    col_value = val
-        elif "BLOB" == self.db.get_affinity(self.columns[col]) and val:
-            # Text editor does not support control characters or null bytes.
-            try: col_value = val.decode("unicode-escape")
-            except UnicodeError: pass # Text is not valid escaped Unicode
+        if noconvert: col_value = val
         else:
-            col_value = val
+            col_value = None
+            if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
+                if val not in ("", None):
+                    try:
+                        valc = val.replace(",", ".") # Allow comma separator
+                        col_value = float(valc) if ("." in valc) else int(val)
+                    except Exception:
+                        col_value = val
+            elif "BLOB" == self.db.get_affinity(self.columns[col]) and val:
+                # Text editor does not support control characters or null bytes.
+                try: col_value = val.decode("unicode-escape")
+                except UnicodeError: pass # Text is not valid escaped Unicode
+            else:
+                col_value = val
 
         self.SeekToRow(row)
         data = self.rows_current[row]
@@ -7201,7 +7203,7 @@ class DataDialog(wx.Dialog):
     def _OnUpdate(self, event=None, norefresh=False):
         """Handler for updating grid."""
         for col, coldata in enumerate(self._columns):
-            self._gridbase.SetValue(self._row, col, self._data[coldata["name"]])
+            self._gridbase.SetValue(self._row, col, self._data[coldata["name"]], noconvert=True)
         if not norefresh: wx.PostEvent(self.Parent, GridBaseEvent(-1, refresh=True))
 
 
