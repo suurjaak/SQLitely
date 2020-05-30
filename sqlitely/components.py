@@ -2658,7 +2658,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         info = self._grid.Table.GetChangedInfo()
         if wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to commit these changes (%s)?" %
-            info, conf.Title, wx.ICON_INFORMATION
+            info, conf.Title, wx.ICON_INFORMATION, defaultno=True
         ): return
 
         lock = self._db.get_lock(self._category, self._item["name"], skip=self)
