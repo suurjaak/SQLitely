@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.05.2020
+@modified    30.05.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1023,7 +1023,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         @param   data  whether to return cascading data dependency
                        relations: for views, the tables and views they query,
                        recursively
-        @param   skip  CaselessDict{name: True} to skip (recursion helper)
+        @param   skip  CaselessDict{name: True} to skip (internal recursion helper)
         """
         category, name = category.lower(), name.lower()
         result, skip = CaselessDict(), (skip or CaselessDict({name: True}))
@@ -1043,8 +1043,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     continue # for subname, subitem
                 is_own = util.lceq(subitem["meta"].get("table"), name) or \
                          util.lceq(item["meta"].get("table"), subname)
-                is_rel_from = name in subitem["meta"]["__tables__"]
-                is_rel_to   = subname.lower() in item["meta"]["__tables__"]
+                is_rel_from = name in subitem["meta"]["__tables__"] \
+                              or "trigger" == subcategory and is_own
+                is_rel_to   = subname.lower() in item["meta"]["__tables__"] \
+                              or "trigger" == category and is_own
                 if not is_rel_to and not is_rel_from or data and not is_rel_to \
                 or own is not None and bool(own) is not is_own:
                     continue # for subname, subitem

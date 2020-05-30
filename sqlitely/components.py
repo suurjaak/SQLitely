@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.05.2020
+@modified    30.05.2020
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -4168,9 +4168,16 @@ class SchemaObjectPage(wx.Panel):
                 if not can_simple: break # for c
 
         if can_simple and old["name"] != new["name"] and not self._db.has_full_rename_table():
-            can_simple = False if util.lceq(old["name"], new["name"]) else \
-                         set(self._db.get_related("table", old["name"], own=False)) & \
-                         set(("trigger", "view"))
+            if util.lceq(old["name"], new["name"]): # Case changed
+                can_simple = False
+            else:
+                rels = self._db.get_related("table", old["name"])
+                # No indirect relations from other tables or views or triggers
+                can_simple = not ("view" in rels or any(
+                    not util.lceq(old["name"], x["name"])
+                    and old["name"].lower() in x.get("meta", {}).get("__tables__", ())
+                    for c in ("table", "trigger") for x in rels.get(c, ())
+                ))
 
         if can_simple:
             # Possible to use just simple ALTER TABLE statements

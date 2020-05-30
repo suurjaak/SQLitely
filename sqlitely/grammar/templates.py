@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    29.05.2020
+@modified    30.05.2020
 ------------------------------------------------------------------------------
 """
 
@@ -42,15 +42,14 @@ Simple ALTER TABLE.
 ALTER_TABLE = """
 %if not data.get("no_tx"):
 SAVEPOINT alter_table;{{ LF() }}
-
+{{ LF() }}
 %endif
 %if data["name"] != data["name2"]:
-{{ LF() }}
 ALTER TABLE {{ Q(data["name"]) }} RENAME TO {{ Q(data["name2"]) }};{{ LF() }}
 %endif
 
 %for i, (c1, c2) in enumerate(data.get("columns", [])):
-    %if not i:
+    %if not i and data["name"] != data["name2"]:
 {{ LF() }}
     %endif
 ALTER TABLE {{ Q(data["name"]) }} RENAME COLUMN {{ Q(c1) }} TO {{ Q(c2) }};{{ LF() }}
@@ -64,8 +63,8 @@ ALTER TABLE {{ Q(data["name"]) }} ADD COLUMN{{ WS(" ") }}
   {{ Template(templates.COLUMN_DEFINITION, strip=True, collapse=True).expand(dict(locals(), data=c)) }};{{ LF() }}
 %endfor
 
-{{ LF() }}
 %if not data.get("no_tx"):
+{{ LF() }}
 RELEASE SAVEPOINT alter_table;{{ LF() }}
 %endif
 """

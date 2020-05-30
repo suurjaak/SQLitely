@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    24.05.2020
+@modified    30.05.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -360,9 +360,12 @@ class Parser(object):
             if renames: self.recurse_rename([ctx], renames)
             result = self.BUILDERS[self._category](self, ctx)
             result["__type__"] = self._category
-            result["__tables__"] = self.recurse_collect(
-                [ctx], [CTX.FOREIGN_TABLE] if SQL.CREATE_TABLE == self._category else [CTX.TABLE_NAME]
-            )
+            ctxitems, ctxtypes = [ctx], [CTX.TABLE_NAME]
+            if SQL.CREATE_TABLE == self._category: ctxtypes = [CTX.FOREIGN_TABLE]
+            if SQL.CREATE_TRIGGER == self._category: # Skip trigger header
+                ctxitems = [ctx.expr()] + ctx.select_stmt() + ctx.update_stmt() + \
+                           ctx.insert_stmt() + ctx.delete_stmt()
+            result["__tables__"] = self.recurse_collect(ctxitems, ctxtypes)
             if renames and "schema" in renames:
                 if isinstance(renames["schema"], dict):
                     for v1, v2 in renames["schema"].items():
