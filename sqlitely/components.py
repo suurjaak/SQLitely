@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.05.2020
+@modified    07.06.2020
 ------------------------------------------------------------------------------
 """
 from collections import Counter, OrderedDict
@@ -350,7 +350,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 if val not in ("", None):
                     try:
                         valc = val.replace(",", ".") # Allow comma separator
-                        col_value = float(valc) if ("." in valc) else int(val)
+                        col_value = float(valc) if ("." in valc) else long(val)
                     except Exception:
                         col_value = val
             elif "BLOB" == self.db.get_affinity(self.columns[col]) and val:
@@ -7175,7 +7175,7 @@ class DataDialog(wx.Dialog):
         if database.Database.get_affinity(self._columns[col]) in ("INTEGER", "REAL"):
             try: # Try converting to number
                 valc = value.replace(",", ".") # Allow comma separator
-                value = float(valc) if ("." in valc) else int(value)
+                value = float(valc) if ("." in valc) else long(value)
             except Exception: pass
 
         self._data[name] = value
