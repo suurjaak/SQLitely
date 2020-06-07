@@ -13,7 +13,7 @@ Stand-alone GUI components for wx:
   Dialog for displaying a complex editable form.
 
 - HintedTextCtrl(wx.TextCtrl):
-  Simple search control, with search description.
+  A text control with a hint text shown when no value, hidden when focused.
 
 - NonModalOKDialog(wx.Dialog):
   A simple non-modal dialog with an OK button, stays on top of parent.
@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    29.05.2020
+@modified    05.06.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -92,29 +92,33 @@ import wx.stc
 
 
 # Convenience methods for creating a wx.Brush and wx.Pen or returning cached.
-BRUSH = lambda c, s=wx.BRUSHSTYLE_SOLID: wx.TheBrushList.FindOrCreateBrush(c, s)
-PEN = lambda c, w=1, s=wx.PENSTYLE_SOLID: wx.ThePenList.FindOrCreatePen(c, w, s)
+BRUSH = lambda c,      s=wx.BRUSHSTYLE_SOLID: wx.TheBrushList.FindOrCreateBrush(c,    s)
+PEN   = lambda c, w=1, s=wx.PENSTYLE_SOLID:   wx.ThePenList  .FindOrCreatePen  (c, w, s)
 
 
 
 class KEYS(object):
     """Keycode groupings, includes numpad keys."""
-    UP       = wx.WXK_UP,       wx.WXK_NUMPAD_UP
-    DOWN     = wx.WXK_DOWN,     wx.WXK_NUMPAD_DOWN
-    LEFT     = wx.WXK_LEFT,     wx.WXK_NUMPAD_LEFT
-    RIGHT    = wx.WXK_RIGHT,    wx.WXK_NUMPAD_RIGHT
-    PAGEUP   = wx.WXK_PAGEUP,   wx.WXK_NUMPAD_PAGEUP
-    PAGEDOWN = wx.WXK_PAGEDOWN, wx.WXK_NUMPAD_PAGEDOWN
-    ENTER    = wx.WXK_RETURN,   wx.WXK_NUMPAD_ENTER
-    INSERT   = wx.WXK_INSERT,   wx.WXK_NUMPAD_INSERT
-    DELETE   = wx.WXK_DELETE,   wx.WXK_NUMPAD_DELETE
-    HOME     = wx.WXK_HOME,     wx.WXK_NUMPAD_HOME
-    END      = wx.WXK_END,      wx.WXK_NUMPAD_END
-    SPACE    = wx.WXK_SPACE,    wx.WXK_NUMPAD_SPACE
-    TAB      = wx.WXK_TAB,      wx.WXK_NUMPAD_TAB
+    UP         = wx.WXK_UP,       wx.WXK_NUMPAD_UP
+    DOWN       = wx.WXK_DOWN,     wx.WXK_NUMPAD_DOWN
+    LEFT       = wx.WXK_LEFT,     wx.WXK_NUMPAD_LEFT
+    RIGHT      = wx.WXK_RIGHT,    wx.WXK_NUMPAD_RIGHT
+    PAGEUP     = wx.WXK_PAGEUP,   wx.WXK_NUMPAD_PAGEUP
+    PAGEDOWN   = wx.WXK_PAGEDOWN, wx.WXK_NUMPAD_PAGEDOWN
+    ENTER      = wx.WXK_RETURN,   wx.WXK_NUMPAD_ENTER
+    INSERT     = wx.WXK_INSERT,   wx.WXK_NUMPAD_INSERT
+    DELETE     = wx.WXK_DELETE,   wx.WXK_NUMPAD_DELETE
+    HOME       = wx.WXK_HOME,     wx.WXK_NUMPAD_HOME
+    END        = wx.WXK_END,      wx.WXK_NUMPAD_END
+    SPACE      = wx.WXK_SPACE,    wx.WXK_NUMPAD_SPACE
+    BACKSPACE  = wx.WXK_BACK,
+    TAB        = wx.WXK_TAB,      wx.WXK_NUMPAD_TAB
+    ESCAPE     = wx.WXK_ESCAPE,
 
-    ARROW    = UP + DOWN + LEFT + RIGHT
-    PAGING   = PAGEUP   + PAGEDOWN
+    ARROW      = UP + DOWN + LEFT + RIGHT
+    PAGING     = PAGEUP + PAGEDOWN
+    NAVIGATION = ARROW + PAGING + HOME + END + TAB
+    COMMAND    = ENTER + INSERT + DELETE + SPACE + BACKSPACE + ESCAPE
 
 
 
@@ -271,11 +275,13 @@ class ColourManager(object):
 
 
     @classmethod
-    def Adjust(cls, colour1, colour2, ratio=1/2.):
+    def Adjust(cls, colour1, colour2, ratio=0.5):
         """
         Returns first colour adjusted towards second.
         Arguments can be wx.Colour, RGB tuple, colour hex string,
         or wx.SystemSettings colour index.
+
+        @param   ratio    RGB channel adjustment ratio towards second colour
         """
         colour1 = wx.SystemSettings.GetColour(colour1) \
                   if isinstance(colour1, (int, long)) else wx.Colour(colour1)
@@ -929,10 +935,10 @@ class HintedTextCtrl(wx.TextCtrl):
         """
         event.Skip() # Allow to propagate to parent, to show having focus
         self._ignore_change = True
-        if self and self.FindFocus() == self:
+        if self and self.FindFocus() is self:
             if self._hint_on:
                 self.SetForegroundColour(self._text_colour)
-                self.Value = ""
+                wx.TextCtrl.SetValue(self, "")
                 self._hint_on = False
             self.SelectAll()
         elif self:
@@ -960,8 +966,8 @@ class HintedTextCtrl(wx.TextCtrl):
         event.Skip()
         if self._ignore_change: return
         evt = wx.CommandEvent(wx.wxEVT_COMMAND_TEXT_ENTER, self.Id)
-        evt.EventObject = self
-        evt.String = self.Value
+        evt.SetEventObject(self)
+        evt.SetString(self.Value)
         wx.PostEvent(self, evt)
 
 
@@ -1003,11 +1009,29 @@ class HintedTextCtrl(wx.TextCtrl):
         """Sets the value in the text entry field."""
         self._ignore_change = True
         wx.TextCtrl.SetValue(self, value)
-        if value:
+        if value or self.FindFocus() is self:
             self.SetForegroundColour(self._text_colour)
             self._hint_on = False
+        elif not value and self.FindFocus() is not self:
+            wx.TextCtrl.SetValue(self, self._hint)
+            self.SetForegroundColour(self._hint_colour)
+            self._hint_on = True
         wx.CallAfter(setattr, self, "_ignore_change", False)
     Value = property(GetValue, SetValue)
+
+
+    def ChangeValue(self, value):
+        """Sets the new text control value."""
+        self._ignore_change = True
+        wx.TextCtrl.ChangeValue(self, value)
+        if value or self.FindFocus() is self:
+            self.SetForegroundColour(self._text_colour)
+            self._hint_on = False
+        elif not value and self.FindFocus() is not self:
+            wx.TextCtrl.SetValue(self, self._hint)
+            self.SetForegroundColour(self._hint_colour)
+            self._hint_on = True
+        wx.CallAfter(setattr, self, "_ignore_change", False)
 
 
 
@@ -1136,7 +1160,7 @@ class NoteButton(wx.Panel, wx.Button):
         dc.Pen = PEN(dc.TextForeground)
         dc.Clear()
 
-        is_focused = (self.FindFocus() == self)
+        is_focused = (self.FindFocus() is self)
 
         if is_focused:
             # Draw simple border around button
@@ -3103,7 +3127,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
         Handler for focusing/unfocusing the control, shows/hides description.
         """
         event.Skip() # Allow to propagate to parent, to show having focus
-        if self and self.FindFocus() == self:
+        if self and self.FindFocus() is self:
             if self._description_on:
                 self.Value = ""
             self._value_last = self.Value
