@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.05.2020
+@modified    09.06.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -511,7 +511,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                                               check_same_thread=False)
             self.connection.row_factory = self.row_factory
             self.connection.text_factory = str
-            self.compile_options = [x["compile_option"] for x in
+            self.compile_options = [x.values()[0] for x in
                                     self.execute("PRAGMA compile_options", log=False).fetchall()]
             self.populate_schema()
             self.update_fileinfo()
@@ -550,7 +550,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """Checks SQLite database integrity, returning a list of errors."""
         result = []
         rows = self.execute("PRAGMA integrity_check").fetchall()
-        if len(rows) != 1 or "ok" != rows[0]["integrity_check"].lower():
+        if len(rows) != 1 or "ok" != rows[0].values()[0].lower():
             result = [r["integrity_check"] for r in rows]
         return result
 
@@ -1521,7 +1521,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             if not rows:
                 if not callable(opts["type"]): continue # for name, opts
                 value = opts["type"]()
-            elif "table" == opts["type"]: value = [x[opts["col"]] for x in rows]
+            elif "table" == opts["type"]: value = [x.values()[0] for x in rows]
             else:
                 value = rows[0].values()[0]
                 if callable(opts["type"]): value = opts["type"](value)
