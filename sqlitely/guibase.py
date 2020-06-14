@@ -13,7 +13,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.12.2019
+@modified    14.06.2020
 """
 import datetime
 import logging
@@ -243,6 +243,7 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
             self.console.Size.height / self.console.GetTextExtent(" ")[1]
         )) # Scroll to the last line
         self.frame_console.Show(show)
+        self.frame_console.Iconize(False)
         if hasattr(self, "menu_console"): self.menu_console.Check(show)
 
 
