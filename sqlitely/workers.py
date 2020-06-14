@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.11.2019
+@modified    26.05.2020
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -210,34 +210,37 @@ class SearchThread(WorkerThread):
                 if not self._is_working: break # for item
                 if not sql: continue # for item
 
-                cursor = search["db"].execute(sql, params)
-                row = cursor.fetchone()
-                if not row:
-                    mytexts.append(step.escape_html(item["name"]))
-                    continue # for item
-
-                result["output"] = tpl_item.expand(category=category, item=item)
-                count = 0
-                while row:
-                    result["count"], count = result["count"] + 1, count + 1
-
-                    ns = dict(category=category, item=item, row=row,
-                              keywords=kws, count=count, search=search,
-                              pattern_replace=pattern_replace)
-                    result["output"] += tpl_row.expand(ns)
-                    key = "%s:%s:%s" % (category, item["name"], count)
-                    result["map"][key] = {"category": category,
-                                          "name": item["name"],
-                                          "row": row}
-                    if not result["count"] % conf.SearchResultsChunk:
-                        yield "", result
-                        result = dict(result, output="", map={})
-
-                    if not self._is_working \
-                    or result["count"] >= conf.MaxSearchResults:
-                        break # while row
-
+                cursor = None
+                try:
+                    cursor = search["db"].execute(sql, params)
                     row = cursor.fetchone()
+                    if not row:
+                        mytexts.append(step.escape_html(item["name"]))
+                        continue # for item
+
+                    result["output"] = tpl_item.expand(category=category, item=item)
+                    count = 0
+                    while row:
+                        result["count"], count = result["count"] + 1, count + 1
+
+                        ns = dict(category=category, item=item, row=row,
+                                  keywords=kws, count=count, search=search,
+                                  pattern_replace=pattern_replace)
+                        result["output"] += tpl_row.expand(ns)
+                        key = "%s:%s:%s" % (category, item["name"], count)
+                        result["map"][key] = {"category": category,
+                                              "name": item["name"],
+                                              "row": row}
+                        if not result["count"] % conf.SearchResultsChunk:
+                            yield "", result
+                            result = dict(result, output="", map={})
+
+                        if not self._is_working \
+                        or result["count"] >= conf.MaxSearchResults:
+                            break # while row
+
+                        row = cursor.fetchone()
+                finally: util.try_until(lambda: cursor.close())
 
                 if not self._drop_results:
                     result["output"] += "</table></font>"
@@ -438,6 +441,8 @@ class AnalyzerThread(WorkerThread):
                 if output and not output.strip().startswith("/**"):
                     output, error = "", output.split("\n")[0].strip()
                     logger.info("Error getting statistics for %s: %s.", path, error)
+                else:
+                    logger.info("Finished statistics analysis for %s.", path)
             self._process = None
 
             try:
@@ -511,6 +516,7 @@ class ChecksumThread(WorkerThread):
                             sha1.update(buf), md5.update(buf)
                             buf = f.read(BLOCKSIZE)
                             if not self._is_working: break # while len
+                    logger.info("Finished checksum calculation for %s.", path)
                 except Exception as e:
                     logger.exception("Error calculating checksum for %s.", path)
                     error = util.format_exc(e)

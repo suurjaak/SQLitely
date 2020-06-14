@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.11.2019
+@modified    14.06.2020
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -17,7 +17,7 @@ import re
 from . import conf
 
 # Modules imported inside templates:
-#import collections, itertools, json, os, pyparsing, sys, wx
+#import collections, itertools, json, math, os, pyparsing, sys, urllib, wx
 #from sqlitely import conf, grammar, images, searchparser, templates
 #from sqlitely.lib import util
 
@@ -40,7 +40,7 @@ HTML data export template.
 
 @param   db_filename  database path or temporary name
 @param   title        export title
-@param   columns      [name, ]
+@param   columns      [{name}, ]
 @param   data_buffer  iterable yielding rows data in text chunks
 @param   row_count    number of rows
 @param   sql          SQL query giving export data, if any
@@ -106,17 +106,21 @@ from sqlitely.lib import util
     td.index, th.index { color: gray; width: 10px; }
     td.index { color: gray; text-align: right; }
     th { padding-left: 5px; padding-right: 5px; text-align: center; white-space: nowrap; }
-    span#sql { display: inline; font-family: monospace; overflow: visible; white-space: pre-wrap; }
-    span#sql.clip { display: inline-block; font-family: inherit; height: 1em; overflow: hidden; }
-    a#toggle:hover { cursor: pointer; text-decoration: none; }
-    span#sql + a#toggle { padding-left: 3px; }
-    span#sql.clip + a#toggle { background: white; position: relative; left: -8px; }
+    #sqlintro { font-family: monospace; white-space: pre-wrap; }
+    #sql { font-family: monospace; white-space: pre-wrap; }
+    a.toggle:hover { cursor: pointer; text-decoration: none; }
+    a.toggle::after { content: ".. \\\\25b6"; font-size: 1.2em; position: relative; top: 2px; }
+    a.toggle.open::after { content: " \\\\25b2"; font-size: 0.7em; }
     a.sort { display: block; }
     a.sort:hover { cursor: pointer; text-decoration: none; }
     a.sort::after      { content: ""; display: inline-block; min-width: 6px; position: relative; left: 3px; top: -1px; }
     a.sort.asc::after  { content: "↓"; }
     a.sort.desc::after { content: "↑"; }
     .hidden { display: none; }
+    @-moz-document url-prefix() { /* Firefox-specific tweaks */
+        a.toggle { top: 0; }
+        a.toggle::after { font-size: 0.7em; top: 0 !important; }
+    }
   </style>
   <script>
     var sort_col = 0;
@@ -142,7 +146,7 @@ from sqlitely.lib import util
         linklist[i].classList.remove("asc");
         linklist[i].classList.remove("desc");
         if (i == sort_col) linklist[i].classList.add(sort_direction ? "asc" : "desc")
-      }
+      };
       return false;
     };
 
@@ -158,6 +162,12 @@ from sqlitely.lib import util
         };
         searchtimer = null;
       }, 200);
+    };
+
+    var onToggle = function(a, id1, id2) {
+        a.classList.toggle('open');
+        document.getElementById(id1).classList.toggle('hidden');
+        document.getElementById(id2).classList.toggle('hidden');
     };
 
     var doSearch = function() {
@@ -197,8 +207,10 @@ from sqlitely.lib import util
   <tr>
     <td>
       <div id="title">{{ title }}</div><br />
-      <b>SQL:</b> <span id="sql">{{ sql or create_sql }}</span>
-      <a id="toggle" title="Toggle full SQL" onclick="document.getElementById('sql').classList.toggle('clip')">...</a>
+      <b>SQL:</b>
+      <span id="sql" class="hidden">{{ sql or create_sql }}</span>
+      <span id="shortsql">{{ (sql or create_sql).split("\\n", 1)[0] }}</span>
+      <a class="toggle" title="Toggle full SQL" onclick="onToggle(this, 'shortsql', 'sql')"> </a>
       <br />
       Source: <b>{{ db_filename }}</b>.<br />
       <b>{{ row_count }}</b> {{ util.plural("row", row_count, numbers=False) }}{{ " in results" if sql else "" }}.<br />
@@ -214,8 +226,8 @@ from sqlitely.lib import util
   <table id="content_table">
   <tr>
     <th class="index asc"><a class="sort asc" title="Sort by index" onclick="onSort(0)">#</a></th>
-%for i, col in enumerate(columns):
-    <th><a class="sort" title="Sort by {{ grammar.quote(col) }}" onclick="onSort({{ i }})">{{ col }}</a></th>
+%for i, c in enumerate(columns):
+    <th><a class="sort" title="Sort by {{ grammar.quote(c["name"]) }}" onclick="onSort({{ i + 1 }})">{{ util.unprint(c["name"]) }}</a></th>
 %endfor
   </tr>
 <%
@@ -236,7 +248,8 @@ for chunk in data_buffer:
 HTML data export template for the rows part.
 
 @param   rows       iterable
-@param   columns    [name, ]
+@param   columns    [{name}, ]
+@param   name       table name
 @param   namespace  {"row_count"}
 @param   ?progress  callback(count) returning whether to cancel, if any
 """
@@ -246,8 +259,8 @@ DATA_ROWS_HTML = """
 namespace["row_count"] += 1
 %><tr>
   <td class="index">{{ i }}</td>
-%for col in columns:
-  <td>{{ "" if row[col] is None else row[col] }}</td>
+%for c in columns:
+  <td>{{ "" if row[c["name"]] is None else row[c["name"]] }}</td>
 %endfor
 </tr>
 <%
@@ -255,6 +268,9 @@ if not i % 100 and isdef("progress") and progress and not progress(count=i):
     break # for i, row
 %>
 %endfor
+<%
+if isdef("progress") and progress: progress(name=name, count=i)
+%>
 """
 
 
@@ -328,7 +344,7 @@ for chunk in data_buffer:
 JSON export template for the rows part.
 
 @param   rows       iterable
-@param   columns    [name, ]
+@param   columns    [{name}, ]
 @param   name       table name
 @param   ?namespace  {"row_count"}
 @param   ?progress  callback(name, count) returning whether to cancel, if any
@@ -342,13 +358,14 @@ i, row, nextrow = 1, next(rows, None), next(rows, None)
 indent = "  " if nextrow else ""
 while row:
     namespace["row_count"] += 1
-    data = collections.OrderedDict(((c, row[c]) for c in columns))
+    data = collections.OrderedDict(((c["name"], row[c["name"]]) for c in columns))
     text = json.dumps(data, indent=2)
     echo("  " + text.replace("\\n", "\\n  ") + (",\\n" if nextrow else "\\n"))
 
     i, row, nextrow = i + 1, nextrow, next(rows, None)
     if not i % 100 and isdef("progress") and progress and not progress(count=i):
         break # while row
+if isdef("progress") and progress: progress(name=name, count=i)
 %>"""
 
 
@@ -378,7 +395,7 @@ from sqlitely import conf, templates
 %endif
 %if isdef("create_sql") and create_sql:
 
-{{ create_sql }};
+{{ create_sql.rstrip(";") }};
 %endif
 
 
@@ -394,7 +411,7 @@ for chunk in data_buffer:
 TXT SQL insert statements export template for the rows part.
 
 @param   rows       iterable
-@param   columns    [name, ]
+@param   columns    [{name, ?type}, ]
 @param   name       table name
 @param   ?namespace  {"row_count"}
 @param   ?progress  callback(name, count) returning whether to cancel, if any
@@ -402,12 +419,12 @@ TXT SQL insert statements export template for the rows part.
 DATA_ROWS_SQL = """<%
 from sqlitely import grammar, templates
 
-str_cols = ", ".join(map(grammar.quote, columns))
+str_cols = ", ".join(grammar.quote(c["name"]) for c in columns)
 %>
 %for i, row in enumerate(rows, 1):
 <%
 if isdef("namespace"): namespace["row_count"] += 1
-values = [grammar.format(row[col]) for col in columns]
+values = [grammar.format(row[c["name"]], c) for c in columns]
 %>
 INSERT INTO {{ name }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
 <%
@@ -415,6 +432,9 @@ if not i % 100 and isdef("progress") and progress and not progress(name=name, co
     break # for i, row
 %>
 %endfor
+<%
+if isdef("progress") and progress: progress(name=name, count=i)
+%>
 """
 
 
@@ -424,21 +444,21 @@ TXT SQL update statements export template.
 
 @param   rows       iterable
 @param   originals  original rows iterable
-@param   columns    [name, ]
+@param   columns    [{name, ?type}, ]
 @param   pks        [name, ]
 @param   name       table name
 """
 DATA_ROWS_UPDATE_SQL = """<%
 from sqlitely import grammar, templates
 
-str_cols = ", ".join(map(grammar.quote, columns))
+str_cols = ", ".join(grammar.quote(c["name"]) for c in columns)
 %>
 %for row, original in zip(rows, originals):
 <%
-setstr = ", ".join("%s = %s" % (grammar.quote(col), grammar.format(row[col]))
-                   for col in columns if col not in pks or row[col] != original[col])
-wherestr = " AND ".join("%s = %s" % (grammar.quote(col), grammar.format(original[col]))
-                   for col in pks if col in original)
+setstr = ", ".join("%s = %s" % (grammar.quote(c["name"]), grammar.format(row[c["name"]], c))
+                   for c in columns if c["name"] not in pks or row[c["name"]] != original[c["name"]])
+wherestr = " AND ".join("%s = %s" % (grammar.quote(c["name"]), grammar.format(original[c["name"]], c))
+                       for c in columns if c["name"] in pks and c["name"] in original)
 %>
 UPDATE {{ name }} SET {{ setstr }}{{ (" WHERE " + wherestr) if wherestr else "" }};
 %endfor
@@ -451,7 +471,7 @@ TXT data export template.
 
 @param   db_filename   database path or temporary name
 @param   title         export title
-@param   columns       [name, ]
+@param   columns       [{name}, ]
 @param   data_buffer   iterable yielding rows data in text chunks
 @param   row_count     number of rows
 @param   sql           SQL query giving export data, if any
@@ -479,8 +499,9 @@ SQL: {{ sql }}
 <%
 headers = []
 for c in columns:
-    headers.append((c.ljust if columnjusts[c] else c.rjust)(columnwidths[c]))
-hr = "|-" + "-|-".join("".ljust(columnwidths[c], "-") for c in columns) + "-|"
+    fc = util.unprint(c["name"])
+    headers.append((fc.ljust if columnjusts[c["name"]] else fc.rjust)(columnwidths[c["name"]]))
+hr = "|-" + "-|-".join("".ljust(columnwidths[c["name"]], "-") for c in columns) + "-|"
 header = "| " + " | ".join(headers) + " |"
 %>
 
@@ -501,10 +522,11 @@ for chunk in data_buffer:
 TXT data export template for the rows part.
 
 @param   rows          iterable
-@param   columns       [name, ]
-@param   namespace     {"row_count"}
+@param   columns       [{name}, ]
 @param   columnjusts   {col name: ljust or rjust}
 @param   columnwidths  {col name: character width}
+@param   name          table name
+@param   ?namespace    {"row_count"}
 @param   ?progress     callback(count) returning whether to cancel, if any
 """
 DATA_ROWS_TXT = """<%
@@ -514,23 +536,26 @@ from sqlitely import templates
 %for i, row in enumerate(rows, 1):
 <%
 values = []
-namespace["row_count"] += 1
+if isdef("namespace"): namespace["row_count"] += 1
 %>
-%for col in columns:
+    %for c in columns:
 <%
-raw = row[col]
+raw = row[c["name"]]
 value = "" if raw is None \
         else raw if isinstance(raw, basestring) else str(raw)
 value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
-values.append((value.ljust if columnjusts[col] else value.rjust)(columnwidths[col]))
+values.append((value.ljust if columnjusts[c["name"]] else value.rjust)(columnwidths[c["name"]]))
 %>
-%endfor
+    %endfor
 | {{ " | ".join(values) }} |
 <%
 if not i % 100 and isdef("progress") and progress and not progress(count=i):
     break # for i, row
 %>
 %endfor
+<%
+if isdef("progress") and progress: progress(name=name, count=i)
+%>
 """
 
 
@@ -539,26 +564,28 @@ if not i % 100 and isdef("progress") and progress and not progress(count=i):
 TXT data export template for copying row as page.
 
 @param   rows          iterable
-@param   columns       [name, ]
+@param   columns       [{name}, ]
 """
 DATA_ROWS_PAGE_TXT = """<%
+from sqlitely.lib import util
 from sqlitely import templates
 
-colwidth = max(map(len, columns))
+fmtcols = [util.unprint(c["name"]) for c in columns]
+colwidth = max(map(len, fmtcols))
 %>
 %for i, row in enumerate(rows):
-%if i:
+    %if i:
 
-%endif
-%for col in columns:
+    %endif
+    %for c, fmtcol in zip(columns, fmtcols):
 <%
-raw = row[col]
+raw = row[c["name"]]
 value = "" if raw is None \
         else raw if isinstance(raw, basestring) else str(raw)
 value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
 %>
-{{ col.ljust(colwidth) }} = {{ value }}
-%endfor
+{{ fmtcol.ljust(colwidth) }} = {{ value }}
+    %endfor
 %endfor
 """
 
@@ -588,12 +615,13 @@ HTML template for SQL search results.
 @param   pattern_replace  regex for matching search words
 """
 SEARCH_ROW_META_HTML = """<%
+from sqlitely.lib import util
 from sqlitely import conf, grammar
 
 wrap_b = lambda x: "<b>%s</b>" % x.group(0)
 %>
 <a name="{{ category }}">{{ category.capitalize() }}</a>
-<a href="{{ category }}:{{ item["name"] }}"><font color="{{ conf.LinkColour }}">{{! pattern_replace.sub(wrap_b, escape(grammar.quote(item["name"]))) }}</font></a>:
+<a href="{{ category }}:{{ item["name"] }}"><font color="{{ conf.LinkColour }}">{{! pattern_replace.sub(wrap_b, escape(util.unprint(grammar.quote(item["name"])))) }}</font></a>:
 <pre><font size="2">{{! pattern_replace.sub(wrap_b, escape(item["sql"])).replace(" ", "&nbsp;") }}</font></pre>
 <br /><br />
 """
@@ -607,15 +635,16 @@ HTML template for data search results header; start of HTML table.
 @param   item      schema category object
 """
 SEARCH_ROW_DATA_HEADER_HTML = """<%
+from sqlitely.lib import util
 from sqlitely import conf, grammar
 %>
 <font color="{{ conf.FgColour }}">
-<br /><br /><b><a name="{{ item["name"] }}">{{ category.capitalize() }} {{ grammar.quote(item["name"]) }}:</a></b><br />
-<table border="1" cellpadding="4" cellspacing="0" width="1000">
+<br /><br /><b><a name="{{ item["name"] }}">{{ category.capitalize() }} {{ util.unprint(grammar.quote(item["name"])) }}:</a></b><br />
+<table border="1" cellpadding="4" cellspacing="0" width="100%">
 <tr>
 <th>#</th>
-%for col in item["columns"]:
-<th>{{ col["name"] }}</th>
+%for c in item["columns"]:
+<th>{{ util.unprint(c["name"]) }}</th>
 %endfor
 </tr>
 """
@@ -645,15 +674,15 @@ wrap_b   = lambda x: "<b>%s</b>" % x.group(0)
     <font color="{{ conf.LinkColour }}">{{ count }}</font>
   </a>
 </td>
-%for col in item["columns"]:
+%for c in item["columns"]:
 <%
-value = row[col["name"]]
+value = row[c["name"]]
 value = value if value is not None else ""
 value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
 value = escape(value)
 
-if not (keywords.get("column") and not match_kw("column", col)) \
-and not (keywords.get("-column") and match_kw("-column", col)):
+if not (keywords.get("column") and not match_kw("column", c)) \
+and not (keywords.get("-column") and match_kw("-column", c)):
     value = pattern_replace.sub(wrap_b, value)
 %>
 <td valign="top"><font color="{{ conf.FgColour }}">{{! value }}</font></td>
@@ -691,10 +720,14 @@ under the MIT License.
   <li>openpyxl,
       <a href="https://pypi.org/project/openpyxl"><font color="{{ conf.LinkColour }}">
           pypi.org/project/openpyxl</font></a></li>
+  <li>Pillow,
+      <a href="https://pypi.org/project/Pillow"><font color="{{ conf.LinkColour }}">pypi.org/project/Pillow</font></a></li>
   <li>pyparsing,
       <a href="https://pypi.org/project/pyparsing/"><font color="{{ conf.LinkColour }}">pypi.org/project/pyparsing</font></a></li>
   <li>Python,
       <a href="https://www.python.org/"><font color="{{ conf.LinkColour }}">python.org</font></a></li>
+  <li>pytz,
+      <a href="https://pythonhosted.org/pytz/"><font color="{{ conf.LinkColour }}">pythonhosted.org/pytz</font></a></li>
   <li>SQLite,
       <a href="https://www.sqlite.org/"><font color="{{ conf.LinkColour }}">sqlite.org</font></a></li>
   <li>sqlite-parser,
@@ -1078,7 +1111,7 @@ total = index_total + sum(x["size"] for x in data["table"])
     %for item in sorted(data["table"], key=lambda x: (-x["size"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size"], total=total)) }}</td>
-    <td nowrap="">{{ item["name"] }}</td>
+    <td nowrap="">{{ util.unprint(item["name"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
   </tr>
@@ -1099,7 +1132,7 @@ total = index_total + sum(x["size"] for x in data["table"])
         %for item in sorted(data["table"], key=lambda x: (-x["size_total"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size_total"], total=total)) }}</td>
-    <td nowrap="">{{ item["name"] }}</td>
+    <td nowrap="">{{ util.unprint(item["name"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size_total"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size_total"], max_units=False, with_units=False) }}</td>
   </tr>
@@ -1114,12 +1147,12 @@ total = index_total + sum(x["size"] for x in data["table"])
     <th align="left">Name</th>
     <th align="left">Size</th>
     <th align="left">Bytes</th>
-    <th align="left" nowrap="">Index Ratio</th>
+    <th align="left" nowrap="">Proportion</th>
   </tr>
         %for item in sorted([x for x in data["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size_index"], total=total)) }}</td>
-    <td nowrap="">{{ item["name"] }} ({{ len(item["index"]) }})</td>
+    <td nowrap="">{{ util.unprint(item["name"]) }} ({{ len(item["index"]) }})</td>
     <td align="left" nowrap="">{{ util.format_bytes(item["size_index"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size_index"], max_units=False, with_units=False) }}</td>
     <td align="right">{{ int(round(100 * util.safedivf(item["size_index"], index_total))) }}%</td>
@@ -1136,13 +1169,13 @@ total = index_total + sum(x["size"] for x in data["table"])
     <th align="left">Table</th>
     <th align="left">Size</th>
     <th align="left">Bytes</th>
-    <th align="left" nowrap="">Index Ratio</th>
+    <th align="left" nowrap="">Proportion</th>
   </tr>
         %for item in sorted(data["index"], key=lambda x: (-x["size"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size"], total=total)) }}</td>
-    <td nowrap="">{{ item["name"] }}</td>
-    <td nowrap="">{{ item["table"] }}</td>
+    <td nowrap="">{{ util.unprint(item["name"]) }}</td>
+    <td nowrap="">{{ util.unprint(item["table"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
     <td align="right">{{ int(round(100 * util.safedivf(item["size"], index_total))) }}%</td>
@@ -1204,15 +1237,23 @@ fgcolour = conf.PlotTableColour if "table" == category else conf.PlotIndexColour
 HTML statistics export template.
 
 @param   title        export title
-@param   db_filename  database filename
-@param   db_filesize  database size in bytes
-@param   data         {"table": [{name, size, size_total, ?size_index, ?index: []}],
+@param   db           database.Database instance
+@param   pragma       pragma settings to export, as {name: value},
+@param   sql          database schema SQL,
+@param   stats        {"table": [{name, size, size_total, ?size_index, ?index: []}],
                        "index": [{name, size, table}]}
 """
 DATA_STATISTICS_HTML = """<%
+import math, urllib
 from sqlitely.lib.vendor.step import Template
 from sqlitely.lib import util
-from sqlitely import conf, images, templates
+from sqlitely import conf, grammar, images, templates
+
+COLS = {"table":   ["Name", "Columns", "Related tables", "Other relations", "Rows", "Size in bytes"]
+                   if stats else ["Name", "Columns", "Related tables", "Other relations", "Rows"],
+        "index":   ["Name", "Table", "Columns", "Size in bytes"] if stats else ["Name", "Table", "Columns"],
+        "trigger": ["Name", "Owner", "When", "Uses"],
+        "view":    ["Name", "Columns", "Uses", "Used by"], }
 %><!DOCTYPE HTML><html lang="en">
 <head>
   <meta http-equiv='Content-Type' content='text/html;charset=utf-8' />
@@ -1249,19 +1290,35 @@ from sqlitely import conf, images, templates
       border-radius: 10px;
       padding: 10px;
     }
-    h2 { margin-bottom: 5px; margin-top: 20px; }
-    td { text-align: left; white-space: nowrap; }
-    th { text-align: left; white-space: nowrap; }
-    td.right { text-align: right; }
+    h2 { margin-bottom: 0; margin-top: 20px; }
+    div.section {
+      border: 1px solid darkgray;
+      border-radius: 10px;
+      margin-top: 10px;
+      padding: 10px;
+    }
+    div.section > h2:first-child {
+      margin-top: 0;
+    }
+    table.stats > tbody > tr > th { text-align: left; white-space: nowrap; }
+    table.stats > tbody > tr > td { text-align: left; white-space: nowrap; }
+    table.stats > tbody > tr > td:nth-child(n+2) {
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .right { text-align: right !important; }
+    .name { word-break: break-all; word-break: break-word; }
+    .nowrap { word-break: normal !important; }
     .table { color: {{ conf.PlotTableColour }}; }
     .index { color: {{ conf.PlotIndexColour }}; }
     table.plot {
       border-collapse: collapse;
       font-weight: bold;
       text-align: center;
-      width: {{ conf.StatisticsPlotWidth }}px;
+      width: {{ 1.5 * conf.StatisticsPlotWidth }}px;
     }
-    table.plot.table td {
+    table.plot td {
       color: #FFFFFF;
       text-align: center;
     }
@@ -1274,126 +1331,505 @@ from sqlitely import conf, images, templates
     table.plot td:last-child {
       background-color: {{ conf.PlotBgColour }};
     }
+    table.plot td span {
+      position: relative;
+    }
     table.plot.table td:last-child {
       color: {{ conf.PlotTableColour }};
     }
     table.plot.index td:last-child {
       color: {{ conf.PlotIndexColour }};
     }
+    table.content {
+      empty-cells: show;
+      border-spacing: 2px;
+      width: 100%;
+    }
+    table.content > tbody > tr > td {
+      border: 1px solid #C0C0C0;
+      line-height: 1.5em;
+      padding: 5px;
+      position: relative;
+      vertical-align: top;
+      word-break: break-all;
+      word-break: break-word;
+    }
+    table.content > tbody > tr > th {
+      text-align: center;
+      vertical-align: bottom;
+      white-space: nowrap;
+    }
+    table.content > tbody > tr > td.index, table.content > tbody > tr > th.index { color: gray; width: 10px; }
+    table.content > tbody > tr > td.index { text-align: right; white-space: nowrap; }
+    table.subtable { border-collapse: collapse; width: 100%; }
+    table.subtable > tbody > tr > td:last-child { text-align: right; vertical-align: top; }
+    a, a.visited { color: #3399FF; text-decoration: none; }
+    a:hover, a.visited:hover { text-decoration: underline; }
+    div.sql { font-family: monospace; text-align: left; white-space: pre-wrap; word-break: break-all; word-break: break-word; }
+    a.sort:hover, a.toggle:hover { cursor: pointer; text-decoration: none; }
+    a.toggle { white-space: nowrap; }
+    a.toggle::after { content: " \\\\25b6"; }
+    a.toggle.open::after { content: " \\\\25bc"; font-size: 0.7em; }
+    h2 > a.toggle::after { position: relative; top: 2px; }
+    h2 > a.toggle.open::after { top: 0; }
+    a.toggle.right { display: block; text-align: right; }
+    .hidden { display: none; }
+    #toggle_all { text-align: right; }
+    a.sort { display: block; }
+    a.sort::after      { content: ""; display: inline-block; min-width: 6px; position: relative; left: 3px; top: -1px; }
+    a.sort.asc::after  { content: "↓"; }
+    a.sort.desc::after { content: "↑"; }
     #footer {
       text-align: center;
       padding-bottom: 10px;
       color: #666;
     }
+    @-moz-document url-prefix() { /* Firefox-specific tweaks */
+        a.toggle::after { font-size: 0.7em; top: 0 !important; }
+    }
   </style>
+  <script>
+    var sort_cols = {}; // {id: index}
+    var sort_directions = {}; // {id: bool}
+
+    window.addEventListener("popstate", onRoute);
+
+    function onRoute(evt) {
+      var hash = document.location.hash.slice(1);
+      var path = hash.split("/").filter(Boolean), accum = "";
+      for (var i = 0; i < path.length; i++) {
+        accum += (accum ? "/" : "") + path[i];
+        var a = document.getElementById("toggle_" + accum);
+        if (a && !a.classList.contains("open")) a.click();
+      };
+    };
+
+    function onSort(id, col) {
+      var sort_col       = sort_cols[id] || 0,
+          sort_direction = (id in sort_directions) ? sort_directions[id] : true;
+      if (col == sort_col && !sort_direction)
+        sort_col = 0, sort_direction = true;
+      else if (col == sort_col)
+        sort_direction = !sort_direction;
+      else
+        sort_col = col, sort_direction = true;
+      var table = document.getElementById(id);
+      var rowlist = [].slice.call(table.getElementsByTagName("tr"));
+      rowlist = rowlist.filter(function(x) { return x.parentNode.parentNode == table; });
+      var rows = [];
+      for (var i = 1, ll = rowlist.length; i != ll; rows.push(rowlist[i++]));
+      rows.sort(sortfn.bind(null, sort_col, sort_direction));
+      for (var i = 0; i < rows.length; i++) table.tBodies[0].appendChild(rows[i]);
+      var linklist = table.getElementsByClassName("sort");
+      for (var i = 0; i < linklist.length; i++) {
+        linklist[i].classList.remove("asc");
+        linklist[i].classList.remove("desc");
+        if (i == sort_col - 1) linklist[i].classList.add(sort_direction ? "asc" : "desc")
+      };
+      sort_cols[id] = sort_col;
+      sort_directions[id] = sort_direction;
+      return false;
+    };
+
+    function onToggle(a, id) {
+      a.classList.toggle("open");
+      document.getElementById(id).classList.toggle('hidden');
+      return false;
+    };
+
+    function onToggleAll(a) {
+      a.classList.toggle("open");
+      var on = a.classList.contains("open");
+      var linklist = document.getElementsByClassName("toggle");
+      for (var i = 0; i < linklist.length; i++) {
+        if (on != linklist[i].classList.contains("open")) linklist[i].click();
+      };
+      return false;
+    };
+
+    var sortfn = function(sort_col, sort_direction, a, b) {
+      var v1 = (a.children[sort_col].hasAttribute("data-sort") ? a.children[sort_col].getAttribute("data-sort") : a.children[sort_col].innerText).toLowerCase();
+      var v2 = (b.children[sort_col].hasAttribute("data-sort") ? b.children[sort_col].getAttribute("data-sort") : b.children[sort_col].innerText).toLowerCase();
+      var result = String(v1).localeCompare(String(v2), undefined, {numeric: true});
+      return sort_direction ? result : -result;
+    };
+  </script>
 </head>
 <body>
 <table id="body_table">
 <%
-index_total = sum(x["size"] for x in data["index"])
-table_total = sum(x["size"] for x in data["table"])
-total = index_total + sum(x["size"] for x in data["table"])
+index_total = sum(x["size"] for x in stats.get("index", []))
+table_total = sum(x["size"] for x in stats.get("table", []))
+total = index_total + sum(x["size"] for x in stats.get("table", []))
+has_rows = any(x.get("count") or 0 for x in db.schema.get("table", {}).values())
 %>
 <tr><td><table id="header_table">
   <tr>
     <td>
       <div id="title">{{ title }}</div><br />
-      Source: <b>{{ db_filename }}</b>.<br />
-      Source size: <b>{{ util.format_bytes(db_filesize) }}</b> ({{ util.format_bytes(db_filesize, max_units=False) }}).<br />
-%if data["table"]:
-      <b>{{ util.plural("table", data["table"]) }}</b>, {{ util.format_bytes(table_total) }}.<br />
+      Source: <b>{{ db.name }}</b>.<br />
+      Size: <b title="{{ stats.get("size", db.filesize) }}">{{ util.format_bytes(stats.get("size", db.filesize)) }}</b> (<span title="{{ stats.get("size", db.filesize) }}">{{ util.format_bytes(stats.get("size", db.filesize), max_units=False) }}</span>).<br />
+%if db.schema.get("table"):
+      <b>{{ util.plural("table", db.schema["table"]) }}</b>{{ ", " if stats or has_rows else "." }}
+    %if stats:
+      <span title="{{ table_total }}">{{ util.format_bytes(table_total) }}</span>{{ "" if has_rows else "." }}
+    %endif
+    %if has_rows:
+(<span title="{{ util.count(db.schema["table"].values()) }}">{{ util.count(db.schema["table"].values(), "row") }}</span>).
+    %endif
+      <br />
 %endif
-%if data["index"]:
-      <b>{{ util.plural("index", data["index"]) }}</b>, {{ util.format_bytes(index_total) }}.<br />
+%if db.schema.get("index"):
+      <b>{{ util.plural("index", db.schema["index"]) }}</b>{{ ", " if stats else "." }}
+    %if stats:
+      <span title="{{ index_total }}">{{ util.format_bytes(index_total) }}</span>.
+    %endif
+      <br />
+%endif
+%if db.schema.get("trigger"):
+      <b>{{ util.plural("trigger", db.schema["trigger"]) }}</b>{{ ", " if db.schema.get("view") else "." }}
+%endif
+%if db.schema.get("view"):
+      <b>{{ util.plural("view", db.schema["view"]) }}</b>.
+%endif
+%if db.schema.get("trigger") or db.schema.get("view"):
+    <br />
 %endif
     </td>
   </tr></table>
 </td></tr><tr><td>
 
+<div id="toggle_all">
+  <a class="toggle" title="Toggle all sections opened or closed" onclick="onToggleAll(this)">Toggle all</a>
+</div>
+
 <div id="content_wrapper">
 
-  <h2 class="table">Table sizes</h2>
-  <table class="stats">
+%if stats:
+
+<div class="section">
+
+  <h2><a class="toggle open" title="Toggle table sizes" onclick="onToggle(this, 'stats,table')">Table sizes</a></h2>
+  <table class="stats" id="stats,table">
     <tr>
       <th></th>
       <th>Name</th>
-      <th>Size</th>
-      <th>Bytes</th>
+      <th class="right">Size in bytes</th>
     </tr>
-%for item in sorted(data["table"], key=lambda x: (-x["size"], x["name"].lower())):
+    %for item in sorted(stats["table"], key=lambda x: (-x["size"], x["name"].lower())):
     <tr>
       <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size"], total=total)) }}</td>
-      <td>{{ item["name"] }}</td>
-      <td class="right">{{ util.format_bytes(item["size"]) }}</td>
-      <td class="right">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
+      <td title="{{ item["name"] }}">{{ util.unprint(item["name"]) }}</td>
+      <td class="right" title="{{ util.format_bytes(item["size"]) }}">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
     </tr>
-%endfor
+    %endfor
   </table>
 
 
-%if data["index"]:
+    %if stats.get("index"):
 
-<h2 class="table">Table sizes with indexes</h2>
-<table class="stats">
+<h2><a class="toggle open" title="Toggle table sizes with indexes" onclick="onToggle(this, 'stats,table,index')">Table sizes with indexes</a></h2>
+<table class="stats" id="stats,table,index">
   <tr>
     <th></th>
     <th>Name</th>
-    <th>Size</th>
-    <th>Bytes</th>
+    <th class="right">Size in bytes</th>
   </tr>
-    %for item in sorted(data["table"], key=lambda x: (-x["size_total"], x["name"].lower())):
+        %for item in sorted(stats["table"], key=lambda x: (-x["size_total"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size_total"], total=total)) }}</td>
-    <td>{{ item["name"] }}</td>
-    <td class="right">{{ util.format_bytes(item["size_total"]) }}</td>
-    <td class="right">{{ util.format_bytes(item["size_total"], max_units=False, with_units=False) }}</td>
+    <td title="{{ item["name"] }}">{{ util.unprint(item["name"]) }}</td>
+    <td class="right" title="{{ util.format_bytes(item["size_total"]) }}">{{ util.format_bytes(item["size_total"], max_units=False, with_units=False) }}</td>
   </tr>
-    %endfor
+        %endfor
 </table>
 
-<h2 class="index">Table index sizes</h2>
-<table class="stats">
+
+<h2><a class="toggle open" title="Toggle table index sizes" onclick="onToggle(this, 'stats,index,table')">Table index sizes</a></h2>
+<table class="stats" id="stats,index,table">
   <tr>
     <th></th>
     <th>Name</th>
-    <th>Size</th>
-    <th>Bytes</th>
-    <th>Index Ratio</th>
+    <th class="right">Size in bytes</th>
+    <th class="right" title="Percentage of all indexes">Proportion</th>
   </tr>
-    %for item in sorted([x for x in data["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower())):
+        %for item in sorted([x for x in stats["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size_index"], total=total)) }}</td>
-    <td>{{ item["name"] }} ({{ len(item["index"]) }})</td>
-    <td class="right">{{ util.format_bytes(item["size_index"]) }}</td>
-    <td class="right">{{ util.format_bytes(item["size_index"], max_units=False, with_units=False) }}</td>
+    <td title="{{ item["name"] }} ({{ len(item["index"]) }})">{{ util.unprint(item["name"]) }} ({{ len(item["index"]) }})</td>
+    <td class="right" title="{{ util.format_bytes(item["size_index"]) }}">{{ util.format_bytes(item["size_index"], max_units=False, with_units=False) }}</td>
     <td class="right">{{ int(round(100 * util.safedivf(item["size_index"], index_total))) }}%</td>
   </tr>
-    %endfor
+        %endfor
 </table>
 
-<h2 class="index">Index sizes</h2>
-<table class="stats">
+<h2><a class="toggle open" title="Toggle index sizes" onclick="onToggle(this, 'stats,index')">Index sizes</a></h2>
+<table class="stats" id="stats,index">
   <tr>
     <th></th>
     <th>Name</th>
     <th>Table</th>
-    <th>Size</th>
-    <th>Bytes</th>
-    <th>Index Ratio</th>
+    <th class="right">Size in bytes</th>
+    <th class="right" title="Percentage of all indexes">Proportion</th>
   </tr>
-    %for item in sorted(data["index"], key=lambda x: (-x["size"], x["name"].lower())):
+        %for item in sorted(stats["index"], key=lambda x: (-x["size"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size"], total=total)) }}</td>
-    <td>{{ item["name"] }}</td>
-    <td>{{ item["table"] }}</td>
-    <td class="right">{{ util.format_bytes(item["size"]) }}</td>
-    <td class="right">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
+    <td title="{{ item["name"] }}">{{ util.unprint(item["name"]) }}</td>
+    <td title="{{ item["table"] }}">{{ item["table"] }}</td>
+    <td class="right" title="{{ util.format_bytes(item["size"]) }}">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
     <td class="right">{{ int(round(100 * util.safedivf(item["size"], index_total))) }}%</td>
+  </tr>
+        %endfor
+</table>
+
+    %endif
+
+
+</div>
+
+%endif
+
+
+<div class="section">
+
+%for category in filter(db.schema.get, db.CATEGORIES):
+
+<h2><a class="toggle open" title="Toggle {{ util.plural(category) }}" id="toggle_{{ category }}" onclick="onToggle(this, '{{ category }}')">{{ util.plural(category).capitalize() }}</a></h2>
+<table class="content" id="{{ category }}">
+  <tr>
+		<th class="index">#</th>
+    %for i, col in enumerate(COLS[category]):
+		<th>
+      <a class="sort" title="Sort by {{ grammar.quote(col, force=True) }}" onclick="onSort('{{ category }}', {{ i + 1 }})">{{ col }}</a>
+    </th>
+    %endfor
+	</tr>
+    %for itemi, item in enumerate(db.schema[category].values()):
+<%
+flags = {}
+relateds = db.get_related(category, item["name"])
+lks, fks = db.get_keys(item["name"]) if "table" == category else [(), ()]
+%>
+  <tr>
+    <td class="index">{{ itemi + 1 }}</td>
+    <td id="{{ category }}/{{! urllib.quote(item["name"], safe="") }}">
+      <table class="subtable">
+        <tr>
+          <td title="{{ item["name"] }}">
+            {{ util.unprint(item["name"]) }}
+          </td>
+          <td>
+            <a class="toggle" title="Toggle SQL" onclick="onToggle(this, '{{ category }}/{{! urllib.quote(item["name"], safe="") }}/sql')">SQL</a>
+          </td>
+        </tr>
+      </table>
+      <div class="sql hidden" id="{{ category }}/{{! urllib.quote(item["name"], safe="") }}/sql">
+{{ db.get_sql(category, item["name"]) }}</div>
+
+    </td>
+
+
+        %if "table" == category:
+<%
+count = item["count"]
+countstr = util.count(item)
+%>
+    <td>
+      <a class="toggle right" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urllib.quote(item["name"], safe="") }}/cols')">{{ len(item["columns"]) }}</a>
+      <table class="hidden" id="{{ category }}/{{! urllib.quote(item["name"], safe="") }}/cols">
+            %for c in item["columns"]:
+        <tr><td>{{ util.unprint(c["name"]) }}</td><td>{{ util.unprint(c.get("type", "")) }}</td></tr>
+            %endfor
+      </table>
+    </td>
+
+    <td>
+      <table class="subtable">
+        <tr>
+          <td>
+<%
+rels = [] # [(source, keys, target, keys)]
+%>
+            %for item2 in relateds.get("table", ()):
+<%
+
+lks2, fks2 = db.get_keys(item2["name"])
+fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(util.unprint, map(grammar.quote, x)))
+for col in lks2:
+    for table, keys in col.get("table", {}).items():
+        if util.lceq(table, item["name"]):
+            rels.append((None, keys, item2["name"], col["name"]))
+for col in fks2:
+    for table, keys in col.get("table", {}).items():
+        if util.lceq(table, item["name"]):
+            rels.append((item2["name"], col["name"], None, keys))
+%>
+  <a href="#{{category}}/{{! urllib.quote(item2["name"], safe="") }}" title="Go to {{ category }} {{ grammar.quote(item2["name"], force=True) }}">{{ item2["name"] }}</a><br />
+            %endfor
+          </td>
+            %if rels:
+          <td>
+            <a class="toggle" title="Toggle foreign keys" onclick="onToggle(this, '{{ category }}/{{! urllib.quote(item["name"], safe="") }}/related')">FKs</a>
+          </td>
+            %endif
+        </tr>
+      </table>
+
+            %if rels:
+      <div class="hidden" id="{{ category }}/{{! urllib.quote(item["name"], safe="") }}/related">
+        <br />
+                %for (a, c1, b, c2) in rels:
+                    %if a:
+        <a href="#table/{{! urllib.quote(a, safe="") }}" title="Go to table {{ grammar.quote(a, force=True) }}">{{ util.unprint(grammar.quote(a)) }}</a>.{{ fmtkeys(c1) }} REFERENCES {{ fmtkeys(c2) }}<br />
+                    %else:
+        {{ fmtkeys(c1) }} REFERENCES <a href="#table/{{! urllib.quote(b, safe="") }}" title="Go to table {{ util.unprint(grammar.quote(b, force=True)) }}">{{ grammar.quote(b) }}</a>.{{ fmtkeys(c2) }}<br />
+                    %endif
+                %endfor
+        </div>
+            %endif
+    </td>
+
+    <td>
+            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+                %if "table" != item2["type"] and util.lceq(item2.get("tbl_name"), item["name"]):
+<%
+flags["has_direct"] = True
+%>
+  {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a><br />
+                %endif
+            %endfor
+
+            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+                %if "table" != item2["type"] and not util.lceq(item2.get("tbl_name"), item["name"]):
+                    %if flags.get("has_direct") and not flags.get("has_indirect"):
+  <br />
+                    %endif
+<%
+flags["has_indirect"] = True
+%>
+  <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a></em><br />
+                %endif
+            %endfor
+    </td>
+    <td class="right nowrap" title="{{ count }}" data-sort="{{ count }}">
+      {{ countstr }}
+    </td>
+
+            %if stats.get("table"):
+<%
+size = next((x["size_total"] for x in stats["table"] if util.lceq(x["name"], item["name"])), "")
+%>
+    <td class="right nowrap" title="{{ util.format_bytes(size) if size != "" else "" }}" data-sort="{{ size }}">
+      {{ util.format_bytes(size, max_units=False, with_units=False) if size != "" else "" }}
+    </td>
+            %endif
+
+        %endif
+
+
+        %if "index" == category:
+    <td>
+      <a href="#table/{{! urllib.quote(item["tbl_name"], safe="") }}" title="Go to table {{ grammar.quote(item["tbl_name"], force=True) }}">{{ item["tbl_name"] }}</a>
+    </td>
+    <td>
+            %for col in item["columns"]:
+                %if col.get("expr"):
+      <pre>{{ col["expr"] }}</pre>
+                %else:
+      {{ util.unprint(col["name"]) }}
+                %endif
+      <br />
+            %endfor
+    </td>
+            %if stats.get("index"):
+<%
+size = next((x["size"] for x in stats["index"] if util.lceq(x["name"], item["name"])), "")
+%>
+    <td class="right nowrap" title="{{ util.format_bytes(size) if size != "" else "" }}" data-sort="{{ size }}">
+      {{ util.format_bytes(size, max_units=False, with_units=False) if size != "" else "" }}
+    </td>
+            %endif
+        %endif
+
+
+        %if "trigger" == category:
+    <td>
+<%
+mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "view"
+%>
+      {{ mycategory }} <a href="#{{ mycategory }}/{{! urllib.quote(item["tbl_name"], safe="") }}" title="Go to {{ mycategory }} {{ grammar.quote(item["tbl_name"], force=True) }}">{{ util.unprint(item["tbl_name"]) }}</a>
+    </td>
+    <td>
+      {{ item.get("meta", {}).get("upon") }} {{ item.get("meta", {}).get("action") }}
+            %if item.get("meta", {}).get("columns"):
+      OF {{ ", ".join(grammar.quote(c["name"]) for c in item["meta"]["columns"]) }}
+            %endif
+    </td>
+    <td>
+            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+                %if not util.lceq(item2["name"], item["tbl_name"]):
+  <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a></em><br />
+                %endif
+            %endfor
+    </td>
+        %endif
+
+
+        %if "view" == category:
+    <td>
+      <a class="toggle" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urllib.quote(item["name"], safe="") }}/cols')">{{ len(item["columns"]) }}</a>
+      <table class="hidden" id="{{ category }}/{{! urllib.quote(item["name"], safe="") }}/cols">
+            %for col in item["columns"]:
+        <tr><td>{{ util.unprint(col["name"]) }}</td><td>{{ util.unprint(col.get("type", "")) }}</td></tr>
+            %endfor
+      </table>
+    </td>
+
+    <td>
+            %for item2 in (x for c in ("table", "view") for x in relateds.get(c, ()) if x["name"].lower() in item["meta"]["__tables__"]):
+      {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a><br />
+            %endfor
+
+            %for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, ()) if util.lceq(x.get("tbl_name"), item["name"])):
+                %if not i:
+      <br />
+                %endif
+      {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a><br />
+            %endfor
+
+    </td>
+
+    <td>
+            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ()) if item["name"].lower() in x["meta"]["__tables__"]):
+      <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a></em><br />
+            %endfor
+    </td>
+        %endif
+
   </tr>
     %endfor
 </table>
 
-%endif
+%endfor
+
+</div>
+
+
+<div class="section">
+
+<h2><a class="toggle" title="Toggle PRAGMAs" onclick="onToggle(this, 'pragma')">PRAGMA settings</a></h2>
+<div class="hidden sql" id="pragma">
+{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma) }}
+</div>
+
+
+<h2><a class="toggle" title="Toggle full schema" onclick="onToggle(this, 'schema')">Full schema SQL</a></h2>
+<div class="hidden sql" id="schema">
+{{ sql }}
+</div>
+
+</div>
 
 
 </div>
@@ -1406,21 +1842,25 @@ total = index_total + sum(x["size"] for x in data["table"])
 
 
 """
-Database statistics row plot.
+Database statistics row plot for HTML exoprt.
 
 @param   category  "table" or "index"
 @param   size      item size
 @param   total     total size
 """
 DATA_STATISTICS_ROW_PLOT_HTML = """<%
+from sqlitely import conf
 from sqlitely.lib import util
 
+width = 1.5 * conf.StatisticsPlotWidth
 ratio = util.safedivf(size, total)
 if 0.99 <= ratio < 1: ratio = 0.99
 percent = int(round(100 * ratio))
-text_cell1 = "&nbsp;%d%%&nbsp;" % round(percent) if (round(percent) > 30) else ""
-text_cell2 = "" if text_cell1 else "&nbsp;%d%%&nbsp;" % percent
-
+text_cell1 = ("&nbsp;%d%%&nbsp;" % percent) if percent > 7 else ""
+text_cell2 = "" if text_cell1 else '&nbsp;%d%%&nbsp;' % percent
+if text_cell2 and percent:
+    indent = percent + max(0, percent - 2) / 2
+    text_cell2 = '<span style="left: -%dpx;">%s</span>' % (indent, text_cell2)
 %>
 <table class="plot {{ category }}"><tr>
   <td style="width: {{ percent }}%;">{{! text_cell1 }}</td>
@@ -1431,43 +1871,76 @@ text_cell2 = "" if text_cell1 else "&nbsp;%d%%&nbsp;" % percent
 
 
 """
-Database statistics text.
+Text statistics export template.
 
-@param   db_filename  database filename
-@param   db_filesize  database size in bytes
-@param   data         {"table": [{name, size, size_total, ?size_index, ?index: []}],
+@param   db           database.Database instance
+@param   ?stats       {"table": [{name, size, size_total, ?size_index, ?index: []}],
                        "index": [{name, size, table}]}
 """
 DATA_STATISTICS_TXT = """<%
+import math
 from sqlitely.lib.vendor.step import Template
 from sqlitely.lib import util
-from sqlitely import templates
+from sqlitely import grammar, templates
 
-index_total = sum(x["size"] for x in data["index"])
-table_total = sum(x["size"] for x in data["table"])
-total = index_total + sum(x["size"] for x in data["table"])
+COLS = {"table":   ["Name", "Columns", "Related tables", "Other relations", "Rows", "Size in bytes"]
+                   if stats else ["Name", "Columns", "Related tables", "Other relations", "Rows"],
+        "index":   ["Name", "Table", "Columns", "Size in bytes"] if stats else ["Name", "Table", "Columns"],
+        "trigger": ["Name", "Owner", "When", "Uses"],
+        "view":    ["Name", "Columns", "Uses", "Used by"], }
+fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(util.unprint, map(grammar.quote, x)))
+
+index_total = sum(x["size"] for x in stats["index"]) if stats else None
+table_total = sum(x["size"] for x in stats["table"]) if stats else None
+total = (index_total + sum(x["size"] for x in stats["table"])) if stats else None
+has_rows = any(x.get("count") or 0 for x in db.schema.get("table", {}).values())
+
+tblstext = idxstext = othrtext = ""
+if db.schema.get("table"):
+    tblstext = util.plural("table", db.schema["table"]) + (", " if stats else "" if has_rows else ".")
+    if stats:
+        tblstext += util.format_bytes(table_total) + ("" if has_rows else ".")
+    if has_rows:
+        tblstext += " (%s)." % util.count(db.schema.get("table", {}).values(), "row")
+if db.schema.get("index"):
+    idxstext = util.plural("index", db.schema["index"]) + (", " if stats else ".")
+    if stats: idxstext += util.format_bytes(index_total)
+if db.schema.get("trigger"):
+      othrtext = util.plural("trigger", db.schema["trigger"]) + (", " if db.schema.get("view") else ".")
+if db.schema.get("view"):
+      othrtext += util.plural("view", db.schema["view"]) + "."
 %>
-Source: {{ db_filename }}.
-Size: {{ util.format_bytes(db_filesize) }} ({{ util.format_bytes(db_filesize, max_units=False) }}).
+Source: {{ db.name }}.
+Size: {{ util.format_bytes(db.filesize) }} ({{ util.format_bytes(db.filesize, max_units=False) }}).
+%if tblstext:
+{{ tblstext }}
+%endif
+%if idxstext:
+{{ idxstext }}
+%endif
+%if othrtext:
+{{ othrtext }}
+%endif
 
+%if stats:
 <%
-items = sorted(data["table"], key=lambda x: (-x["size"], x["name"].lower()))
+items = sorted(stats["table"], key=lambda x: (-x["size"], x["name"].lower()))
 cols = ["Name", "Size", "Bytes"]
 vals = {x["name"]: (
-    x["name"],
+    util.unprint(x["name"]),
     util.format_bytes(x["size"]),
     util.format_bytes(x["size"], max_units=False, with_units=False),
 ) for x in items}
 justs  = {0: 1, 1: 0, 2: 0}
 %>
 {{! Template(templates.DATA_STATISTICS_TABLE_TXT, strip=False).expand(dict(title="Table sizes", items=items, sizecol="size", cols=cols, vals=vals, justs=justs, total=total)) }}
-%if data["index"]:
+    %if stats["index"]:
 <%
 
-items = sorted(data["table"], key=lambda x: (-x["size_total"], x["name"].lower()))
+items = sorted(stats["table"], key=lambda x: (-x["size_total"], x["name"].lower()))
 cols = ["Name", "Size", "Bytes"]
 vals = {x["name"]: (
-    x["name"],
+    util.unprint(x["name"]),
     util.format_bytes(x["size_total"]),
     util.format_bytes(x["size_total"], max_units=False, with_units=False),
 ) for x in items}
@@ -1477,10 +1950,10 @@ justs  = {0: 1, 1: 0, 2: 0}
 {{! Template(templates.DATA_STATISTICS_TABLE_TXT, strip=False).expand(dict(title="Table sizes with indexes", items=items, sizecol="size_total", cols=cols, vals=vals, justs=justs, total=total)) }}
 <%
 
-items = sorted([x for x in data["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower()))
-cols = ["Name", "Size", "Bytes", "Index Ratio"]
+items = sorted([x for x in stats["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower()))
+cols = ["Name", "Size", "Bytes", "Proportion"]
 vals = {x["name"]: (
-    "%s (%s)" % (x["name"], len(x["index"])),
+    "%s (%s)" % (util.unprint(x["name"]), len(x["index"])),
     util.format_bytes(x["size_index"]),
     util.format_bytes(x["size_index"], max_units=False, with_units=False),
     "%s%%" % int(round(100 * util.safedivf(x["size_index"], index_total))),
@@ -1491,11 +1964,11 @@ justs  = {0: 1, 1: 0, 2: 0, 3: 0}
 {{! Template(templates.DATA_STATISTICS_TABLE_TXT, strip=False).expand(dict(title="Table index sizes", items=items, sizecol="size_index", cols=cols, vals=vals, justs=justs, total=total)) }}
 <%
 
-items = sorted(data["index"], key=lambda x: (-x["size"], x["name"].lower()))
-cols = ["Name", "Table", "Size", "Bytes", "Index Ratio"]
+items = sorted(stats["index"], key=lambda x: (-x["size"], x["name"].lower()))
+cols = ["Name", "Table", "Size", "Bytes", "Proportion"]
 vals = {x["name"]: (
-    x["name"],
-    x["table"],
+    util.unprint(x["name"]),
+    util.unprint(x["table"]),
     util.format_bytes(x["size"]),
     util.format_bytes(x["size"], max_units=False, with_units=False),
     "%s%%" % int(round(100 * util.safedivf(x["size"], index_total))),
@@ -1504,7 +1977,133 @@ justs  = {0: 1, 1: 1, 2: 0, 3: 0, 4: 0}
 %>
 
 {{! Template(templates.DATA_STATISTICS_TABLE_TXT, strip=False).expand(dict(title="Index sizes", items=items, sizecol="size", cols=cols, vals=vals, justs=justs, total=total)) }}
+    %endif
 %endif
+%for category in filter(db.schema.get, db.CATEGORIES):
+
+{{ util.plural(category).capitalize() }}
+<%
+columns = COLS[category]
+rows    = []
+
+for item in db.schema.get(category).values():
+    flags = {}
+    relateds = db.get_related(category, item["name"])
+    lks, fks = db.get_keys(item["name"]) if "table" == category else [(), ()]
+
+    row = {"Name": util.unprint(item["name"])}
+    if "table" == category:
+        row["Columns"] = str(len(item["columns"]))
+
+        row["Rows"] = util.count(item)
+
+        if stats:
+            size = next((x["size_total"] for x in stats["table"] if util.lceq(x["name"], item["name"])), "")
+            row["Size in bytes"] = util.format_bytes(size, max_units=False, with_units=False) if size != "" else ""
+
+        rels = [] # [(source, keys, target, keys)]
+        for item2 in relateds.get("table", ()):
+            lks2, fks2 = db.get_keys(item2["name"])
+            for col in lks2:
+                for table, keys in col.get("table", {}).items():
+                    if util.lceq(table, item["name"]):
+                        rels.append((None, keys, item2["name"], col["name"]))
+            for col in fks2:
+                for table, keys in col.get("table", {}).items():
+                    if util.lceq(table, item["name"]):
+                        rels.append((item2["name"], col["name"], None, keys))
+        reltexts = []
+        for (a, c1, b, c2) in rels:
+            if a: s = "%s.%s REFERENCES %s" % (util.unprint(grammar.quote(a)), fmtkeys(c1), fmtkeys(c2))
+            else: s = "%s REFERENCES %s.%s" % (fmtkeys(c1), util.unprint(grammar.quote(b)), fmtkeys(c2))
+            reltexts.append(s)
+        row["Related tables"] = reltexts or [""]
+
+        othertexts = []
+        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+            if "table" != item2["type"] and util.lceq(item2.get("tbl_name"), item["name"]):
+                flags["has_direct"] = True
+                s = "%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"])))
+                othertexts.append(s)
+        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+            if "table" != item2["type"] and not util.lceq(item2.get("tbl_name"), item["name"]):
+                if flags.get("has_direct") and not flags.get("has_indirect"):
+                    flags["has_indirect"] = True
+                    s = "%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"])))
+                    othertexts.append(s)
+        row["Other relations"] = othertexts or [""]
+
+    elif "index" == category:
+        row["Table"] = item["tbl_name"]
+        row["Columns"] = [c.get("expr", util.unprint(c.get("name") or "")) for c in item["columns"]]
+        if stats and stats.get("index"):
+            size = next((x["size"] for x in stats["index"] if util.lceq(x["name"], item["name"])), "")
+            row["Size in bytes"] = util.format_bytes(size, max_units=False, with_units=False) if size != "" else ""
+
+    elif "trigger" == category:
+        row["Owner"] = ("table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "view") + " " + util.unprint(grammar.quote(item["tbl_name"]))
+        row["When"] = "%s %s" % (item.get("meta", {}).get("upon"), item.get("meta", {}).get("action"))
+        if item.get("meta", {}).get("columns"):
+            row["When"] += " OF " + ", ".join(util.unprint(grammar.quote(c["name"])) for c in item["meta"]["columns"])
+        usetexts = []
+        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+            if not util.lceq(item2["name"], item["tbl_name"]):
+                usetexts.append("%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"]))))
+        row["Uses"] = usetexts or [""]
+
+    elif "view" == category:
+        row["Columns"] = str(len(item["columns"]))
+
+        usetexts = []
+        for item2 in (x for c in ("table", "view") for x in relateds.get(c, ()) if x["name"].lower() in item["meta"]["__tables__"]):
+            usetexts.append("%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"]))))
+        for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, ()) if util.lceq(x.get("tbl_name"), item["name"])):
+            if not i:
+                usetexts.append("")
+                usetexts.append("%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"]))))
+        row["Uses"] = usetexts or [""]
+
+        usedbytexts = []
+        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ()) if item["name"].lower() in x["meta"]["__tables__"]):
+            usedbytexts.append("%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"]))))
+        row["Used by"] = usedbytexts or [""]
+
+    rows.append(row)
+
+justs = {c: True for c in columns}
+if "table" == category:
+    justs.update({"Columns": False, "Rows": False, "Size in bytes": False})
+elif "index" == category:
+    justs.update({"Columns": False, "Size in bytes": False})
+elif "view" == category:
+    justs.update({"Columns": False})
+widths = {c: max(len(c), max(len(x) for r in rows for x in util.tuplefy(r[c]))) for c in columns}
+
+headers = []
+for c in columns:
+    cf = util.unprint(c)
+    headers.append((cf.ljust if widths[c] else cf.rjust)(widths[c]))
+hr = "|-" + "-|-".join("".ljust(widths[c], "-") for c in columns) + "-|"
+header = "| " + " | ".join(headers) + " |"
+%>
+
+{{ hr }}
+{{ header }}
+{{ hr }}
+    %for row in rows:
+<%
+linecount = max(len(row[c]) if isinstance(row[c], list) else 1 for c in columns)
+subrows = [[] for _ in range(linecount)]
+for i, c in enumerate(columns):
+    for j, v in enumerate(util.tuplefy(row[c]) + ("", ) * (linecount - len(util.tuplefy(row[c])))):
+        subrows[j].append((v.ljust if justs[c] else v.rjust)(widths[c]))
+%>
+        %for subrow in subrows:
+| {{ " | ".join(subrow) }} |
+        %endfor
+{{ hr }}
+    %endfor
+%endfor
 """
 
 
@@ -1534,7 +2133,7 @@ def plot(size):
     if len(bar) - len(pc) > 3:
         bar = pc.center(len(bar), bar[0])
     else:
-        pad = pc.center(len(pad), pad[0])
+        pad = pc.center(len(pad) - len(bar), pad[0]) + pad[0] * len(bar)
     return bar + pad
 
 widths = {i: max([len(x[i]) for x in vals.values()] +
@@ -1553,21 +2152,20 @@ widths = {i: max([len(x[i]) for x in vals.values()] +
 """
 Database statistics SQL export template.
 
-@param   db_filename  database path or temporary name
-@param   db_filesize  database size in bytes
-@param   sql          SQL query giving export data, if any
+@param   db      database.Database instance
+@param   stats   {"filesize": database size, "sql": "statistics CREATE SQL"}
 """
 DATA_STATISTICS_SQL = """<%
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
 %>-- Output from sqlite3_analyzer.
--- Source: {{ db_filename }}.
--- Source size: {{ util.format_bytes(db_filesize) }} ({{ util.format_bytes(db_filesize, max_units=False) }}).
+-- Source: {{ db.name }}.
+-- Size: {{ util.format_bytes(stats["filesize"]) }} ({{ util.format_bytes(stats["filesize"], max_units=False) }}).
 -- {{ templates.export_comment() }}
 
 
-{{! sql.replace("\\r", "") }}
+{{! stats["sql"].replace("\\r", "") }}
 """
 
 
@@ -1579,6 +2177,7 @@ Database dump SQL template.
 @param   sql        schema SQL
 @param   data       [{name, columns, rows}]
 @param   pragma     PRAGMA values as {name: value}
+@param   buffer     file or file-like buffer being written to
 @param   ?progress  callback(count) returning whether to cancel, if any
 """
 DUMP_SQL = """<%
@@ -1586,16 +2185,15 @@ import itertools
 from sqlitely.lib.vendor.step import Template
 from sqlitely import grammar, templates
 
-PRAGMAS_FIRST = ("auto_vacuum", "encoding")
-pragma_first = {k: v for k, v in pragma.items() if k in PRAGMAS_FIRST}
-pragma_last  = {k: v for k, v in pragma.items() if k not in PRAGMAS_FIRST}
+is_initial = lambda o, v: o["initial"](db, v) if callable(o.get("initial")) else o.get("initial")
+pragma_first = {k: v for k, v in pragma.items() if is_initial(db.PRAGMA[k], v)}
+pragma_last  = {k: v for k, v in pragma.items() if not is_initial(db.PRAGMA[k], v)}
 %>
 -- Database dump.
 -- Source: {{ db.name }}.
 -- {{ templates.export_comment() }}
 %if pragma_first:
 
--- Initial PRAGMA settings
 {{! Template(templates.PRAGMA_SQL).expand(pragma=pragma_first) }}
 
 %endif
@@ -1604,7 +2202,6 @@ pragma_last  = {k: v for k, v in pragma.items() if k not in PRAGMAS_FIRST}
 {{ sql }}
 
 %endif
-
 %for table in data:
 <%
 if progress and not progress(): break # for table
@@ -1612,12 +2209,14 @@ row = next(table["rows"], None)
 if not row: continue # for table
 rows = itertools.chain([row], table["rows"])
 %>
+
 -- Table {{ grammar.quote(table["name"], force=True) }} data:
-{{! Template(templates.DATA_ROWS_SQL).expand(dict(table, progress=progress, rows=rows)) }}
+<%
+Template(templates.DATA_ROWS_SQL).stream(buffer, dict(table, progress=progress, rows=rows))
+%>
 
 %endfor
 
--- PRAGMA settings
 {{! Template(templates.PRAGMA_SQL).expand(pragma=pragma_last) }}
 """
 
@@ -1627,37 +2226,48 @@ rows = itertools.chain([row], table["rows"])
 Database PRAGMA statements SQL template.
 
 @param   pragma   PRAGMA values as {name: value}
+@param   ?schema  schema for PRAGMA directive, if any
 """
 PRAGMA_SQL = """<%
-from sqlitely import database
+from sqlitely import database, grammar
 
 pragma = dict(pragma)
 for name, opts in database.Database.PRAGMA.items():
     if opts.get("read") or opts.get("write") is False:
         pragma.pop(name, None)
 
-lastopts, count = {}, 0
-sortkey = lambda x: (bool(x[1].get("deprecated")), x[1]["label"])
+lastopts, lastvalue, count = {}, None, 0
+is_initial = lambda o, v: o["initial"](None, v) if callable(o.get("initial")) else o.get("initial")
+sortkey = lambda (k, v, o): ((-1, not callable(o.get("initial"))) if is_initial(o, v)
+                             else (1, 0) if callable(o.get("initial")) else (0, 0),
+                             bool(o.get("deprecated")), o.get("label", k))
 %>
-%for name, opts in sorted(database.Database.PRAGMA.items(), key=sortkey):
+%for name, value, opts in sorted(((k, pragma.get(k), o) for k, o in database.Database.PRAGMA.items()), key=sortkey):
 <%
 if name not in pragma:
-    lastopts = opts
     continue # for name, opts
 
 %>
-    %if opts.get("deprecated") and bool(lastopts.get("deprecated")) != bool(opts.get("deprecated")):
+    %if is_initial(opts, value) and (not count or not is_initial(lastopts, lastvalue)):
+-- BASE PRAGMAS:
+    %elif opts.get("deprecated") and not lastopts.get("deprecated"):
 
--- DEPRECATED:
+-- DEPRECATED PRAGMAS:
+    %elif callable(opts.get("initial")) and not is_initial(opts, value) and not callable(lastopts.get("initial")):
+
+-- CLOSING PRAGMAS:
+    %elif not opts.get("deprecated") and not is_initial(opts, value) and (not count or is_initial(lastopts, lastvalue)):
+
+-- COMMON PRAGMAS:
     %endif
 <%
-value = pragma[name]
+lastopts, lastvalue = opts, value
 if isinstance(value, basestring):
     value = '"%s"' % value.replace('"', '""')
 elif isinstance(value, bool): value = str(value).upper()
-lastopts = opts
 %>
-{{ "\\n" if count else "" }}PRAGMA {{ name }} = {{ value }};
+
+PRAGMA {{ ("%s." % grammar.quote(schema)) if isdef("schema") and schema else "" }}{{ name }} = {{ value }};
 <%
 count += 1
 %>

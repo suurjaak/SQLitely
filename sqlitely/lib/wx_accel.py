@@ -30,7 +30,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     19.11.2011
-@modified    22.10.2019
+@modified    24.05.2020
 ------------------------------------------------------------------------------
 """
 import functools
@@ -254,7 +254,7 @@ def collect_shortcuts(control, use_heuristics=True):
 
 
 
-def accelerate(window, use_heuristics=True, skipclicklabels=set()):
+def accelerate(window, use_heuristics=True, skipclicklabels=None, accelerators=None):
     """
     Assigns global keyboard shortcuts to all controls under the specified
     wx.Window that have a shortcut key defined in their label (e.g. a button
@@ -265,12 +265,15 @@ def accelerate(window, use_heuristics=True, skipclicklabels=set()):
                              accelerator table reset
     @param   use_heuristics  whether to use heuristic analysis to detect
                              connected label-control pairs
-    @return                  a map of detected shortcut chars and their target
-                             controls
+    @param   accelerators    additional accelerator entries to bind,
+                             as [(wx.ACCEL_*, key, id), ]
+    @return                  (list of accelerator entries,
+                              map of detected shortcut chars and their target controls)
     """
     CHK_3STATE_NEXT = {wx.CHK_CHECKED:      wx.CHK_UNDETERMINED,
                        wx.CHK_UNCHECKED:    wx.CHK_CHECKED,
                        wx.CHK_UNDETERMINED: wx.CHK_UNCHECKED}
+    if skipclicklabels is None: skipclicklabels = set()
 
     def eventhandler(targets, key, shortcut_event):
         """
@@ -345,9 +348,9 @@ def accelerate(window, use_heuristics=True, skipclicklabels=set()):
             if DEBUG: print("Removing dummy menu item '%s'" % menu_item.Label)
             window.Unbind(wx.EVT_MENU, menu_item)
         del window.__ampersand_shortcut_menu
+    accelerators = list(accelerators or [])
     shortcuts = collect_shortcuts(window, use_heuristics)
     if shortcuts:
-        accelerators = []
         dummy_menu = wx.Menu()
         for key, targets in shortcuts.items():
             for ctrl, label in [x for x in targets if len(x) > 1]:
@@ -366,4 +369,4 @@ def accelerate(window, use_heuristics=True, skipclicklabels=set()):
             accelerators.append((wx.ACCEL_ALT, ord(key), menu_item.Id))
         window.SetAcceleratorTable(wx.AcceleratorTable(accelerators))
         window.__ampersand_shortcut_menu = dummy_menu
-    return shortcuts
+    return accelerators, shortcuts

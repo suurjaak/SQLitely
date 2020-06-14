@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.11.2019
+@modified    30.12.2019
 """
 import calendar
 import collections
@@ -114,7 +114,7 @@ class SearchQueryParser(object):
         @param   case  whether search is case-sensitive
         @param   item  if set, search is performed on all the fields of this
                        specific table or view
-                       {"name": "Item name", "columns": [{"name", "pk", }, ]}
+                       {"name": "Item name", "columns": [{"name"}, ]}
         @return        (SQL string, SQL parameter dict, word and phrase list,
                         keyword map); phrases as tuple-wrapped single strings
         """
@@ -154,15 +154,10 @@ class SearchQueryParser(object):
                 result = ""
             else:
                 kw_sql = self._makeKeywordsSQL(keywords, params, item)
-                result = "SELECT * FROM %s WHERE %s %s%s" % (
-                         grammar.quote(item["name"]), result,
+                result = "SELECT * FROM %s%s%s%s%s" % (
+                         grammar.quote(item["name"]),
+                         " WHERE " if result else "", result,
                          " AND " if result and kw_sql else "", kw_sql)
-
-                pk_cols = [c for c in item["columns"] if c.get("pk")]
-                if pk_cols: result += " ORDER BY " + ", ".join(
-                    "%s ASC" % grammar.quote(c["name"])
-                    for c in sorted(pk_cols, key=lambda x: x["pk"])
-                )
         else:
             kw_sql = self._makeKeywordsSQL(keywords, params, item)
         if not item and kw_sql:
@@ -320,7 +315,7 @@ class SearchQueryParser(object):
                 colsql = ""
                 for j, col in enumerate(datecols):
                     cname = grammar.quote(col["name"])
-                    if "notnull" not in col: cname = "COALESCE(%s, '')" % cname                        
+                    if "notnull" not in col: cname = "COALESCE(%s, '')" % cname
                     colsql += (" OR " if j else "")
                     colsql += "%s %s :%s" % (
                               cname, [">=", "<="][i], param)

@@ -8,13 +8,12 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.11.2019
+@modified    03.06.2020
 ------------------------------------------------------------------------------
 """
 import collections
 import ctypes
 import datetime
-import io
 import locale
 import math
 import os
@@ -25,8 +24,9 @@ import time
 import urllib
 import warnings
 
-try: import wx
-except ImportError: pass
+from PIL import Image
+import pytz
+import wx
 
 
 class CaselessDict(dict):
@@ -36,8 +36,8 @@ class CaselessDict(dict):
     """
 
     def __init__(self, iterable=None, **kwargs):
-        self._data  = {} # {lowercase key: value}
-        self._keys = {}  # {lowercase key: original key}
+        self._data = {} # {lowercase key: value}
+        self._keys = {} # {lowercase key: original key}
         self.update(iterable, **kwargs)
 
     def clear(self): self._data.clear(), self._keys.clear()
@@ -135,6 +135,92 @@ class tzinfo_utc(datetime.tzinfo):
 UTC = tzinfo_utc() # UTC timezone singleton
 
 
+def parse_datetime(s):
+    """
+    Tries to parse string as ISO8601 datetime, returns input on error.
+    Supports "YYYY-MM-DD[ T]HH:MM(:SS)(.micros)?(Z|[+-]HH(:MM)?)?".
+    """
+    if not isinstance(s, basestring) or len(s) < 18: return s
+    rgx = r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})(\.\d+)?(([+-]\d{2}(:?\d{2})?)|Z)?$"
+    result, match = s, re.match(rgx, s)
+    if match:
+        _, micros, _, offset, _ = match.groups()
+        minimal = re.sub(r"\D", "", s[:match.span(3)[0]] if offset else s)
+        fmt = "%Y%m%d%H%M%S" + ("%f" if micros else "")
+        try:
+            result = datetime.datetime.strptime(minimal, fmt)
+            if offset: # Support timezones like 'Z' or '+03:00'
+                hh, mm = map(int, [offset[1:3], offset[4:]])
+                delta = datetime.timedelta(hours=hh, minutes=mm)
+                if offset.startswith("-"): delta = -delta
+                z = pytz.tzinfo.StaticTzInfo()
+                z._utcoffset, z._tzname, z.zone = delta, offset, offset
+                result = z.localize(result)
+        except ValueError: pass
+    return result
+
+
+def parse_date(s):
+    """
+    Tries to parse string as date, returns input on error.
+    Supports "YYYY-MM-DD", "YYYY.MM.DD", "YYYY/MM/DD", "YYYYMMDD",
+    "DD.MM.YYYY", "DD/MM/YYYY", and "DD-MM-YYYY".
+    """
+    if not isinstance(s, basestring) or len(s) < 8: return s
+    rgxs = [r"^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})$",
+            r"^(?P<year>\d{4})\.(?P<month>\d{2})\.(?P<day>\d{2})$",
+            r"^(?P<year>\d{4})\/(?P<month>\d{2})\/(?P<day>\d{2})$",
+            r"^(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})$",
+            r"^(?P<day>\d{2})\/(?P<month>\d{2})\/(?P<year>\d{4})$",
+            r"^(?P<day>\d{2})\.(?P<month>\d{2})\.(?P<year>\d{4})$"]
+    for r in rgxs:
+        m = re.match(r, s)
+        if not m: continue # for r
+        year, month, day = (m.group(x) for x in ("year", "month", "day"))
+        try: s = datetime.date(*map(int, (year, month, day)))
+        except Exception: pass
+        break # for r
+    return s
+
+
+def parse_time(s):
+    """
+    Tries to parse string as time, returns input on error.
+    Supports "HH:MM(:SS)?(.micros)?(Z|[+-]HH(:MM)?)?".
+    """
+    if not isinstance(s, basestring) or len(s) < 18: return s
+    rgx = r"^\d{2}:\d{2}(:\d{2})?(\.\d+)?(([+-]\d{2}(:?\d{2})?)|Z)?$"
+    result, match = s, re.match(rgx, s)
+    if match:
+        seconds, micros, _, offset, _ = match.groups()
+        minimal = re.sub(r"\D", "", s[:match.span(3)[0]] if offset else s)
+        fmt = "%H%M" + ("%S" if seconds else "") + ("%f" if micros else "")
+        try:
+            result = datetime.datetime.strptime(minimal, fmt).time()
+            if offset: # Support timezones like 'Z' or '+03:00'
+                hh, mm = map(int, [offset[1:3], offset[4:]])
+                delta = datetime.timedelta(hours=hh, minutes=mm)
+                if offset.startswith("-"): delta = -delta
+                z = pytz.tzinfo.StaticTzInfo()
+                z._utcoffset, z._tzname, z.zone = delta, offset, offset
+                result = z.localize(result)
+        except ValueError: pass
+    return result
+
+
+def wx_image_to_pil(image):
+    """Returns PIL.Image for wx.Image."""
+    (w, h), data = image.GetSize(), image.GetData()
+
+    chans = [Image.new("L", (w, h)) for i in range(3)]
+    for i in range(3): chans[i].fromstring(str(data[i::3]))
+    if image.HasAlpha():
+        chans += [Image.new("L", (w, h))]
+        chans[-1].fromstring(str(image.GetAlpha()))
+
+    return Image.merge("RGBA"[:len(chans)], chans)
+
+
 def m(o, name, case_insensitive=True):
     """Returns the members of the object or dict, filtered by name."""
     members = o.keys() if isinstance(o, dict) else dir(o)
@@ -187,26 +273,6 @@ def format_bytes(size, precision=2, max_units=True, with_units=True):
     return formatted + ((" " + unit) if with_units else "")
 
 
-def format_seconds(seconds, insert=""):
-    """
-    Returns nicely formatted seconds, e.g. "25 hours, 12 seconds".
-
-    @param   insert  text inserted between count and unit, e.g. "4 call hours"
-    """
-    insert = insert + " " if insert else ""
-    formatted = "0 %sseconds" % insert
-    seconds = int(seconds)
-    if seconds:
-        formatted, inter = "", ""
-        for unit, count in zip(["hour", "minute", "second"], [3600, 60, 1]):
-            if seconds >= count:
-                label = "%s%s" % (insert if not formatted else "", unit)
-                formatted += inter + plural(label, seconds / count)
-                seconds %= count
-                inter = ", "
-    return formatted
-
-
 def format_exc(e):
     """Formats an exception as Class: message, or Class: (arg1, arg2, ..)."""
     with warnings.catch_warnings():
@@ -217,29 +283,54 @@ def format_exc(e):
     return result
 
 
-def plural(word, items=None, numbers=True, single="1", sep=""):
+def plural(word, items=None, numbers=True, single="1", sep="", pref="", suf=""):
     """
     Returns the word as 'count words', or '1 word' if count is 1,
     or 'words' if count omitted.
 
-    @param   items    item collection or count,
-                      or None to get just the plural of the word
-             numbers  if False, count is omitted from final result
-             single   prefix to use for word if count is 1
-             sep      thousand-separator to use for count
+    @param   items      item collection or count,
+                        or None to get just the plural of the word
+             numbers    if False, count is omitted from final result
+             single     prefix to use for word if count is 1, e.g. "a"
+             sep        thousand-separator to use for count
+             pref       prefix to prepend to count, e.g. "~150"
+             suf        suffix to append to count, e.g. "150+"
     """
     count   = len(items) if hasattr(items, "__len__") else items or 0
     isupper = word[-1:].isupper()
-    suffix = "es" if word[-1:].lower() in "xyz" else "s"
+    suffix = "es" if word and word[-1:].lower() in "xyz" else "s" if word else ""
+    if isupper: suffix = suffix.upper()
     if count != 1 and "y" == word[-1:].lower():
         word = word[:-1] + ("I" if isupper else "i")
-    if isupper: suffix = suffix.upper()
     result = word + ("" if 1 == count else suffix)
     if numbers and items is not None:
-        fmtcount = "".join([x + ("," if i and not i % 3 else "")
-                            for i, x in enumerate(str(count)[::-1])][::-1]) \
-                   if sep else count
+        fmtcount = single if 1 == count else "".join([
+            x + ("," if i and not i % 3 else "")
+            for i, x in enumerate(str(count)[::-1])][::-1
+        ]) if sep else str(count)
+        fmtcount = pref + fmtcount + suf
         result = "%s %s" % (single if 1 == count else fmtcount, result)
+    return result.strip()
+
+
+def count(items, unit=None, key="count", suf=""):
+    """
+    Returns formatted count string, prefixed with "~" and rounded to the lowest
+    hundred if count is estimated.
+
+    @param   items   [{count, ?is_count_estimated}] or {count, ?is_count_estimated}
+                     or numeric count
+    @param   unit    name to append to count, pluralized if count != 1
+    @param   key     name of item key holding count (also changes key for estimate)
+    @param   suf     suffix to append to count, e.g. "150+"
+    """
+    result = ""
+    if isinstance(items, dict): items = [items]
+    elif isinstance(items, (int, long, float)): items = [{key: items}]
+    value = sum(x.get(key) or 0 for x in items)
+    pref = "~" if any(x.get("is_%s_estimated" % key) for x in items) else ""
+    if pref: value = int(math.ceil(value / 100.) * 100)
+    result = plural(unit or "", value, sep=",", pref=pref, suf=suf)
     return result
 
 
@@ -378,15 +469,18 @@ def add_unique(lst, item, direction=1, maxlen=sys.maxint):
     return lst
 
 
-def make_unique(value, existing, suffix="_%s", counter=2):
+def make_unique(value, existing, suffix="_%s", counter=2, case=False):
     """
     Returns a unique string, appending suffix % counter as necessary.
 
     @param   existing  collection of existing strings to check
+    @oaram   case      whether uniqueness should be case-sensitive
     """
-    result = value
-    while result in existing:
-        result, counter = value + suffix % counter, counter + 1
+    result, is_present = value, (lambda: result in existing)
+    if not case:
+        existing = [x.lower() for x in existing]
+        is_present = lambda: result.lower() in existing
+    while is_present(): result, counter = value + suffix % counter, counter + 1
     return result
 
 
@@ -454,9 +548,11 @@ def tuplefy(value):
            else tuple(value) if isinstance(value, list) else (value, )
 
 
-def lccmp(x, y):
-    """Returns negative if x<y, zero if x==y, positive if x>y, caselessly."""
-    return cmp(x.lower(), y.lower())
+def lceq(a, b):
+    """Returns whether x and y are caselessly equal."""
+    a, b = (x if isinstance(x, basestring) else "" if x is None else str(x)
+            for x in (a, b))
+    return a.lower() == b.lower()
 
 
 def get_locale_day_date(dt):
@@ -531,14 +627,13 @@ def longpath(path):
 def shortpath(path):
     """Returns the path in short Windows form (PROGRA~1 not "Program Files")."""
     if isinstance(path, str): return path
-    import ctypes.wintypes
+    from ctypes import wintypes
 
     ctypes.windll.kernel32.GetShortPathNameW.argtypes = [
-        ctypes.wintypes.LPCWSTR, # lpszLongPath
-        ctypes.wintypes.LPWSTR, # lpszShortPath
-        ctypes.wintypes.DWORD # cchBuffer
+        # lpszLongPath, lpszShortPath, cchBuffer
+        wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD 
     ]
-    ctypes.windll.kernel32.GetShortPathNameW.restype = ctypes.wintypes.DWORD
+    ctypes.windll.kernel32.GetShortPathNameW.restype = wintypes.DWORD
     buf = ctypes.create_unicode_buffer(path)
     ctypes.windll.kernel32.GetShortPathNameW(path, buf, len(buf))
     return buf.value

@@ -84,7 +84,9 @@ If running from source code, SQLitely needs Python 2.7,
 and the following 3rd-party Python packages:
 * antlr4-python2-runtime (https://pypi.org/project/antlr4-python2-runtime)
 * openpyxl (https://pypi.org/project/openpyxl)
+* Pillow (https://pypi.org/project/Pillow)
 * pyparsing (https://pypi.org/project/pyparsing)
+* pytz (https://pythonhosted.org/pytz/)
 * wxPython 4.0+ (https://wxpython.org)
 * xlrd (https://pypi.org/project/xlrd)
 * XlsxWriter (https://pypi.org/project/XlsxWriter)

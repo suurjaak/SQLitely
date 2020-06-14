@@ -1,6 +1,8 @@
-antlr4-python2-runtime
+antlr4-python2-runtime==4.7.2
 openpyxl
+Pillow
 pyparsing
+pytz
 wxPython
 xlrd
 XlsxWriter

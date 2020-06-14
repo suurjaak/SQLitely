@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.11.2019
+@modified    24.05.2020
 ------------------------------------------------------------------------------
 """
 import argparse
@@ -44,13 +44,33 @@ ARGUMENTS = {
 
 def except_hook(etype, evalue, etrace):
     """Handler for all unhandled exceptions."""
+    mqueue = getattr(except_hook, "queue", [])
+    setattr(except_hook, "queue", mqueue)
+
     text = "".join(traceback.format_exception(etype, evalue, etrace)).strip()
     log = "An unexpected error has occurred:\n\n%s"
     logger.error(log, text)
     if not conf.PopupUnexpectedErrors: return
+    conf.UnexpectedErrorCount += 1
     msg = "An unexpected error has occurred:\n\n%s\n\n" \
           "See log for full details." % util.format_exc(evalue)
-    wx.CallAfter(wx.MessageBox, msg, conf.Title, wx.OK | wx.ICON_ERROR)
+    mqueue.append(msg)
+
+    def after():
+        if not mqueue: return
+        msg = mqueue[0]
+        dlg = wx.RichMessageDialog(None, msg, conf.Title, wx.OK | wx.ICON_ERROR)
+        if conf.UnexpectedErrorCount > 2:
+            dlg.ShowCheckBox("&Do not pop up further errors")
+        dlg.ShowModal()
+        if dlg.IsCheckBoxChecked():
+            conf.PopupUnexpectedErrors = False
+            del mqueue[:]
+            conf.save()
+        if mqueue: mqueue.pop(0)
+        if mqueue and conf.PopupUnexpectedErrors: wx.CallAfter(after)
+
+    if len(mqueue) < 2: wx.CallAfter(after)
 
 
 def install_thread_excepthook():
@@ -83,6 +103,7 @@ def run_gui(filenames):
 
     # Create application main window
     app = wx.App(redirect=True) # stdout and stderr redirected to wx popup
+    locale = wx.Locale(wx.LANGUAGE_ENGLISH) # Avoid dialog buttons in native language
     window = gui.MainWindow()
     app.SetTopWindow(window) # stdout/stderr popup closes with MainWindow
 

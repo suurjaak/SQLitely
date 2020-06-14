@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    22.11.2019
+@modified    30.05.2020
 ------------------------------------------------------------------------------
 """
 
@@ -42,15 +42,14 @@ Simple ALTER TABLE.
 ALTER_TABLE = """
 %if not data.get("no_tx"):
 SAVEPOINT alter_table;{{ LF() }}
-
+{{ LF() }}
 %endif
 %if data["name"] != data["name2"]:
-{{ LF() }}
 ALTER TABLE {{ Q(data["name"]) }} RENAME TO {{ Q(data["name2"]) }};{{ LF() }}
 %endif
 
 %for i, (c1, c2) in enumerate(data.get("columns", [])):
-    %if not i:
+    %if not i and data["name"] != data["name2"]:
 {{ LF() }}
     %endif
 ALTER TABLE {{ Q(data["name"]) }} RENAME COLUMN {{ Q(c1) }} TO {{ Q(c2) }};{{ LF() }}
@@ -64,8 +63,8 @@ ALTER TABLE {{ Q(data["name"]) }} ADD COLUMN{{ WS(" ") }}
   {{ Template(templates.COLUMN_DEFINITION, strip=True, collapse=True).expand(dict(locals(), data=c)) }};{{ LF() }}
 %endfor
 
-{{ LF() }}
 %if not data.get("no_tx"):
+{{ LF() }}
 RELEASE SAVEPOINT alter_table;{{ LF() }}
 %endif
 """
@@ -121,7 +120,7 @@ SAVEPOINT alter_table;{{ LF() }}
 {{ LF() }}
 
 %endif
-{{ Template(templates.CREATE_TABLE).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
+{{ Template(templates.CREATE_TABLE).expand(dict(locals(), data=data["meta"], root=data["meta"])) }}{{ LF() }}
 {{ LF() }}
 
 %if data.get("columns"):
@@ -143,16 +142,16 @@ DROP TABLE {{ Q(data["name"]) }};{{ LF() }}
 {{ LF() }}
 
 ALTER TABLE {{ Q(data["tempname"]) }} RENAME TO {{ Q(data["name2"]) }};{{ LF() }}
-{{ LF() }}
+{{ LF() if data.get("table") else '' }}
 
 %for reltable in data.get("table") or []:
-{{ WS(reltable["sql"]) }};{{ LF() }}
+{{ WS(reltable["sql"]) }}{{ LF() }}
 INSERT INTO {{ Q(reltable["tempname"]) }} SELECT * FROM {{ Q(reltable["name"]) }};{{ LF() }}
 DROP TABLE {{ Q(reltable["name"]) }};{{ LF() }}
 ALTER TABLE {{ Q(reltable["tempname"]) }} RENAME TO {{ Q(reltable["name"]) }};{{ LF() }}
     %for category in CATEGORIES:
         %for x in reltable.get(category) or []:
-{{ WS(x["sql"]) }};{{ LF() }}
+{{ WS(x["sql"]) }}{{ LF() }}
         %endfor
     %endfor
 {{ LF() }}
@@ -163,23 +162,27 @@ ALTER TABLE {{ Q(reltable["tempname"]) }} RENAME TO {{ Q(reltable["name"]) }};{{
 DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
     %endfor
 %endfor
-%if any(data.get(x) for x in CATEGORIES):
-{{ LF() }}
-%endif
+{{ LF() if any(data.get(x) for x in CATEGORIES) else '' }}
 
+<%
+sep = False
+%>
 %for category in CATEGORIES:
     %for x in data.get(category) or []:
-{{ WS(x["sql"]) }};{{ LF() }}
+{{ LF() if sep else '' }}
+{{ WS(x["sql"]) }}{{ LF() }}
+<%
+sep = True
+%>
     %endfor
 %endfor
-%if any(data.get(x) for x in CATEGORIES):
-{{ LF() }}
-%endif
 
 %if not data.get("no_tx"):
+
 RELEASE SAVEPOINT alter_table;{{ LF() }}
 {{ LF() }}
 %endif
+
 %if data["fks"]:
 
 PRAGMA foreign_keys = on;{{ LF() }}
@@ -212,7 +215,7 @@ SAVEPOINT alter_index;{{ LF() }}
 DROP INDEX {{ Q(data["name"]) }};{{ LF() }}
 {{ LF() }}
 
-{{ Template(templates.CREATE_INDEX).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
+{{ Template(templates.CREATE_INDEX).expand(dict(locals(), data=data["meta"], root=data["meta"])) }}{{ LF() }}
 {{ LF() }}
 
 %if not data.get("no_tx"):
@@ -247,7 +250,7 @@ SAVEPOINT alter_trigger;{{ LF() }}
 DROP TRIGGER {{ Q(data["name"]) }};{{ LF() }}
 {{ LF() }}
 
-{{ Template(templates.CREATE_TRIGGER).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
+{{ Template(templates.CREATE_TRIGGER).expand(dict(locals(), data=data["meta"], root=data["meta"])) }}{{ LF() }}
 {{ LF() }}
 
 %if not data.get("no_tx"):
@@ -294,21 +297,17 @@ DROP VIEW {{ Q(data["name"]) }};{{ LF() }}
 DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
     %endfor
 %endfor
-%if any(data.get(x) for x in CATEGORIES):
-{{ LF() }}
-%endif
+{{ LF() if any(data.get(x) for x in CATEGORIES) else '' }}
 
-{{ Template(templates.CREATE_VIEW).expand(dict(locals(), data=data["meta"], root=data["meta"])) }};{{ LF() }}
+{{ Template(templates.CREATE_VIEW).expand(dict(locals(), data=data["meta"], root=data["meta"])) }}{{ LF() }}
 {{ LF() }}
 
 %for category in CATEGORIES:
     %for x in data.get(category) or []:
-{{ WS(x["sql"]) }};{{ LF() }}
+{{ WS(x["sql"]) }}{{ LF() }}
     %endfor
 %endfor
-%if any(data.get(x) for x in CATEGORIES):
-{{ LF() }}
-%endif
+{{ LF() if any(data.get(x) for x in CATEGORIES) else '' }}
 
 %if not data.get("no_tx"):
 RELEASE SAVEPOINT alter_view;{{ LF() }}
@@ -423,6 +422,7 @@ ON {{ Q(data["table"]) if "table" in data else "" }}{{ WS(" ") }}
   {{ LF() if len(data["where"]) > 40 else "" }}
   WHERE {{ WS(data["where"]) }}
 %endif
+{{ GLUE() }};
 """
 
 
@@ -459,6 +459,7 @@ TABLE
 %if data.get("without"):
 WITHOUT ROWID
 %endif
+{{ GLUE() }};
 """
 
 
@@ -509,7 +510,7 @@ ON
 %if data.get("body"):
   {{ WS(data["body"]) }}{{ LF() }}
 %endif
-END
+END;
 """
 
 
@@ -541,7 +542,7 @@ VIEW
 %endif
 
 
-AS {{ WS(data["select"]) if data.get("select") else "" }}
+AS {{ WS(data["select"]) if data.get("select") else "" }};
 """
 
 
@@ -560,6 +561,7 @@ USING {{ data["module"]["name"] }}
 %if data["module"].get("arguments"):
   ({{ ", ".join(data["module"]["arguments"]) }})
 %endif
+{{ GLUE() }};
 """
 
 

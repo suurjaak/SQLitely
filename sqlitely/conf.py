@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.11.2019
+@modified    14.06.2020
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -22,8 +22,8 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev225"
-VersionDate = "27.11.2019"
+Version = "1.0.dev299"
+VersionDate = "14.06.2020"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -42,7 +42,7 @@ ConfigFile = "%s.ini" % os.path.join(EtcDirectory, Title.lower())
 
 """List of attribute names that can be saved to and loaded from ConfigFile."""
 FileDirectives = ["ConsoleHistoryCommands", "DBFiles", "DBSort",
-    "LastActivePage", "LastSearchResults", "LastSelectedFiles",
+    "LastActivePage", "LastExportType", "LastSearchResults", "LastSelectedFiles",
     "LastUpdateCheck", "RecentFiles", "SearchHistory", "SearchInMeta",
     "SearchInData", "SearchUseNewTab", "SearchCaseSensitive", "SQLWindowTexts",
     "TrayIconEnabled", "UpdateCheckAutomatic",
@@ -53,7 +53,7 @@ OptionalFileDirectives = [
     "DBExtensions", "ExportDbTemplate", "LogSQL", "MinWindowSize",
     "MaxConsoleHistory", "MaxDBSizeForFullCount", "MaxTableRowIDForFullCount",
     "MaxHistoryInitialMessages", "MaxRecentFiles", "MaxSearchHistory",
-    "MaxSearchResults", "PopupUnexpectedErrors", "RunChecksums", "RunStatistics", 
+    "MaxSearchResults", "PopupUnexpectedErrors", "RunChecksums", "RunStatistics",
     "SearchResultsChunk", "SeekLength", "SeekLeapLength", "StatisticsPlotWidth",
     "StatusFlashLength", "UpdateCheckInterval",
 ]
@@ -75,6 +75,9 @@ ConsoleHistoryCommands = []
 
 """Index of last active page in database tab, {db path: index}."""
 LastActivePage = {}
+
+"""Last export format, for uniform setting across components."""
+LastExportType = "html"
 
 """HTMLs of last search result, {db path: {"content", "info", "title"}}."""
 LastSearchResults = {}
@@ -158,6 +161,9 @@ LogSQL = False
 
 """Whether to pop up message dialogs for unhandled errors."""
 PopupUnexpectedErrors = True
+
+"""Number of unhandled errors encountered during current runtime."""
+UnexpectedErrorCount = 0
 
 """URLs for download list, changelog, submitting feedback and homepage."""
 DownloadURL  = "https://erki.lap.ee/downloads/SQLitely/"

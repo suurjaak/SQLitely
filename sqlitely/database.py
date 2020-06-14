@@ -8,22 +8,25 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.11.2019
+@modified    09.06.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
 import copy
 import datetime
 import logging
+import math
 import os
 import re
 import sqlite3
 import tempfile
 
 from . lib.util import CaselessDict
+from . lib.vendor import step
 from . lib import util
 from . import conf
 from . import grammar
+from . import templates
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +56,13 @@ class Database(object):
         short:        "short text",
         description:  "long text",
         ?values:      {primitive: label},
+        ?default:     directive default value,
         ?deprecated:  whether directive is deprecated,
+        ?dump:        whether directive should be included in db dump
+                      and statistics export,
+        ?stats:       whether directive should be included in statistics export,
+        ?initial:     whether directive should be issued before creating schema
+                      or a callable(db, value) returning whether,
         ?min:         minimum integer value,
         ?max:         maximum integer value,
         ?read:        false if setting is write-only,
@@ -67,6 +76,7 @@ class Database(object):
         "name": "application_id",
         "label": "Application ID",
         "type": int,
+        "dump": True,
         "short": "Application-specified unique integer",
         "description": "Applications can set a unique integer so that utilities can determine the specific file type.",
       },
@@ -75,7 +85,9 @@ class Database(object):
         "label": "Auto-vacuum",
         "type": int,
         "values": {0: "NONE", 1: "FULL", 2: "INCREMENTAL"},
-        "write": lambda db: not db.schema.values(),
+        "dump": True,
+        "initial": True,
+        "write": lambda db: not db.schema.values() and not db.filesize,
         "short": "Auto-vacuum settings",
         "description": """  FULL: truncate deleted rows on every commit.
   INCREMENTAL: truncate on PRAGMA incremental_vacuum.
@@ -166,6 +178,7 @@ class Database(object):
         "name": "data_store_directory",
         "label": "Data-store directory",
         "type": unicode,
+        "default": "",
         "deprecated": True,
         "short": "Windows-specific directory for relative pathnames",
         "description": "Global variable, used by interface backends on Windows to determine where to store database files specified using a relative pathname.",
@@ -182,7 +195,9 @@ class Database(object):
         "name": "default_cache_size",
         "label": "Default cache size",
         "type": int,
+        "default": -2000,
         "deprecated": True,
+        "dump": True,
         "short": "Suggested number of disk cache pages",
         "description": "The suggested maximum number of pages of disk cache that will be allocated per open database file; persists across database connections.",
       },
@@ -205,7 +220,9 @@ class Database(object):
         "name": "encoding",
         "label": "Encoding",
         "type": str,
-        "write": lambda db: not db.schema.values(),
+        "dump": True,
+        "initial": True,
+        "write": lambda db: not db.schema.values() and not db.filesize,
         "short": "Database text encoding",
         "values": {"UTF-8": "UTF-8", "UTF-16": "UTF-16 native byte-ordering", "UTF-16le": "UTF-16 little endian", "UTF-16be": "UTF-16 big endian"},
         "description": "The text encoding used by the database. It is not possible to change the encoding after the database has been created.",
@@ -221,6 +238,7 @@ class Database(object):
         "name": "freelist_count",
         "label": "Freelist count",
         "type": int,
+        "stats": True,
         "write": False,
         "short": "Unused pages",
         "description": "The number of unused pages in the database file.",
@@ -304,6 +322,7 @@ class Database(object):
         "name": "page_count",
         "label": "Page count",
         "type": int,
+        "stats": True,
         "write": False,
         "short": "Total number of pages",
         "description": "The total number of pages in the database file.",
@@ -313,6 +332,8 @@ class Database(object):
         "label": "Page size",
         "type": int,
         "values": {512: 512, 1024: 1024, 2048: 2048, 4096: 4096, 8192: 8192, 16384: 16384, 32768: 32768, 65536: 65536},
+        "dump": True,
+        "initial": True,
         "short": "Database page byte size",
         "description": "The page size of the database. Specifying a new size does not change the page size immediately. Instead, the new page size is remembered and is used to set the page size when the database is first created, if it does not already exist when the page_size pragma is issued, or at the next VACUUM command that is run on the same database connection while not in WAL mode.",
       },
@@ -320,6 +341,7 @@ class Database(object):
         "name": "query_only",
         "label": "Query only",
         "type": bool,
+        "initial": lambda db, v: not v, # Should be first only if false, else last
         "short": "Prevent database changes",
         "description": "If enabled, prevents all changes to the database file for the duration of the current session.",
       },
@@ -342,6 +364,7 @@ class Database(object):
         "label": "Schema version",
         "type": int,
         "min": 0,
+        "dump": True,
         "short": "Database schema-version",
         "description": "SQLite automatically increments the schema-version whenever the schema changes or VACUUM is performed. As each SQL statement runs, the schema version is checked to ensure that the schema has not changed since the SQL statement was prepared. Subverting this mechanism by changing schema_version may cause SQL statement to run using an obsolete schema, which can lead to incorrect answers and/or database corruption.",
       },
@@ -376,6 +399,8 @@ class Database(object):
         "label": "Temporary store",
         "type": int,
         "values": {0: "DEFAULT", 1: "FILE", 2: "MEMORY"},
+        "default": 0,
+        "dump": True,
         "short": "Location of temporary tables and indexes",
         "description": """  DEFAULT: the compile-time C preprocessor macro SQLITE_TEMP_STORE is used to determine where temporary tables and indexes are stored.
   FILE: temporary tables and indexes are stored in a file. The temp_store_directory pragma can be used to specify the directory containing temporary files when FILE is specified. 
@@ -387,6 +412,7 @@ class Database(object):
         "name": "temp_store_directory",
         "label": "Temporary store directory",
         "type": unicode,
+        "default": "",
         "deprecated": True,
         "short": "Location of temporary storage",
         "description": "Value of the sqlite3_temp_directory global variable, which some operating-system interface backends use to determine where to store temporary tables and indexes.",
@@ -404,6 +430,7 @@ class Database(object):
         "label": "User version",
         "type": int,
         "min": 0,
+        "dump": True,
         "short": "User-defined database version number",
         "description": "User-defined version number for the database.",
       },
@@ -484,7 +511,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                                               check_same_thread=False)
             self.connection.row_factory = self.row_factory
             self.connection.text_factory = str
-            self.compile_options = [x["compile_option"] for x in
+            self.compile_options = [x.values()[0] for x in
                                     self.execute("PRAGMA compile_options", log=False).fetchall()]
             self.populate_schema()
             self.update_fileinfo()
@@ -514,7 +541,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
             try: self.connection.close()
             except Exception: pass
             self.connection = None
-        self.filename = self.name = filename
+        self.filename = filename
+        if not self.temporary: self.name = filename
         self.open()
 
 
@@ -522,7 +550,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """Checks SQLite database integrity, returning a list of errors."""
         result = []
         rows = self.execute("PRAGMA integrity_check").fetchall()
-        if len(rows) != 1 or "ok" != rows[0]["integrity_check"].lower():
+        if len(rows) != 1 or "ok" != rows[0].values()[0].lower():
             result = [r["integrity_check"] for r in rows]
         return result
 
@@ -533,12 +561,21 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         @return  a list of encountered errors, if any
         """
-        result, sqls = [], []
+        result, sqls, pragma = [], [], {}
         with open(filename, "w") as _: pass # Truncate file
         self.execute("ATTACH DATABASE ? AS new", (filename, ))
         sqls.append("ATTACH DATABASE ? AS new")
-        fks = self.execute("PRAGMA foreign_keys").fetchone()["foreign_keys"]
-        if fks: self.execute("PRAGMA foreign_keys = FALSE")
+
+        # Set initial PRAGMAs
+        pragma_tpl = step.Template(templates.PRAGMA_SQL, strip=False)
+        try: pragma = self.get_pragma_values(dump=True)
+        except Exception: logger.exception("Failed to get PRAGMAs for %s.", self.name)
+        pragma_first = {k: v for k, v in pragma.items()
+                        if k in ("auto_vacuum", "page_size")}
+        if pragma_first:
+            sql = pragma_tpl.expand(pragma=pragma_first, schema="new")
+            self.executescript(sql)
+            sqls.append(sql)
 
         # Create structure for all tables
         for name, opts in self.schema["table"].items():
@@ -551,7 +588,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             except Exception as e:
                 result.append(util.format_exc(e))
                 logger.exception("Error creating table %s in %s.",
-                                 grammar.quote(name), filename)
+                                 util.unprint(grammar.quote(name)), filename)
 
         # Copy data from all tables
         for name, opts in self.schema["table"].items():
@@ -562,7 +599,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             except Exception as e:
                 result.append(util.format_exc(e))
                 logger.exception("Error copying table %s from %s to %s.",
-                                 grammar.quote(name), self.filename, filename)
+                                 util.unprint(grammar.quote(name)), self.filename, filename)
 
         # Create indexes-triggers-views
         for category in "index", "trigger", "view":
@@ -576,8 +613,16 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 except Exception as e:
                     result.append(util.format_exc(e))
                     logger.exception("Error creating %s %s for %s.",
-                                     category, grammar.quote(name), filename)
-        if fks: self.execute("PRAGMA foreign_keys = TRUE")
+                                     category, util.unprint(grammar.quote(name)), filename)
+
+        # Set closing PRAGMAs
+        pragma_last  = {k: v for k, v in pragma.items()
+                        if k in ("application_id", "schema_version", "user_version")}
+        if pragma_last:
+            sql = pragma_tpl.expand(pragma=pragma_last, schema="new")
+            self.executescript(sql)
+            sqls.append(sql)
+
         self.execute("DETACH DATABASE new")
         sqls.append("DETACH DATABASE new")
         self.log_query("RECOVER", sqls, filename)
@@ -606,15 +651,27 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def lock(self, category, name, key, label=None):
         """
-        Locks a schema object for altering or deleting.
+        Locks a schema object for altering or deleting. For tables, cascades
+        lock to views that query the table; and for views, cascades lock to
+        tables the view queries, also to other views that the view queries
+        or that query the view; recursively.
 
-        @param   category  x
         @param   key       any hashable to identify lock by
         @param   label     an informational label for lock
         """
         category, name = (x.lower() if x else x for x in (category, name))
+        if name and name not in self.schema.get(category, {}): return            
         self.locks[category][name].add(key)
-        if label: self.locklabels[key] = label
+        self.locklabels[key] = label
+        if category and name:
+            relateds = self.get_related(category, name, data=True)
+            if not relateds: return
+            subkey = (hash(key), category, name)
+            for subcategory, items in relateds.items():
+                for item in items:
+                    self.locks[subcategory][item["name"].lower()].add(subkey)
+            qname = util.unprint(grammar.quote(self.schema[category][name]["name"], force=True))
+            self.locklabels[subkey] = " ".join(filter(bool, (category, qname, label, "cascade")))
 
 
     def unlock(self, category, name, key):
@@ -622,32 +679,40 @@ WARNING: misuse can easily result in a corrupt database file.""",
         category, name = (x.lower() if x else x for x in (category, name))
         self.locks[category][name].discard(key)
         self.locklabels.pop(key, None)
+        if category and name:
+            subkey = (hash(key), category, name)
+            relateds = self.get_related(category, name, data=True)
+            for subcategory, items in relateds.items():
+                for subname in (x["name"].lower() for x in items):
+                    self.locks[subcategory][subname].discard(subkey)
+                    if not self.locks[subcategory][subname]:
+                        self.locks[subcategory].pop(subname)
+            self.locklabels.pop(subkey, None)
         if not self.locks[category][name]: self.locks[category].pop(name)
         if not self.locks[category]:       self.locks.pop(category)
 
 
-    def is_locked(self, category=None, name=None):
-        """
-        Returns whether there are currently locks on specified schema object,
-        or any category object, or any object.
-        """
-        category, name = (x.lower() if x else x for x in (category, name))
-        return self.locks[category].get(name) if name and category in self.locks \
-               else self.locks.get(category) if not name and category else self.locks
+    def clear_locks(self):
+        """Clears all current locks."""
+        self.locks.clear()
+        self.locklabels.clear()
 
 
     def get_lock(self, *args, **kwargs):
         """
-        Returns user-friendly information on current lock status, as 
+        Returns user-friendly information on current lock status, as
         "Database is currently locked (statistics analysis)" or
         "Table "foo" is currently locked" if querying category and name.
 
-        @param   *(?category, ?name) or **{category, name} for specific lock
-                 *(None) or **{category=None} for global lock
-                 no arguments for any lock
+        @param   category  item category, or None for global lock,
+                           or not given for any lock
+        @param   name      specific item, if any
+        @param   skip      keys to skip, if any
         """
         if "category" not in kwargs and args: kwargs["category"]  = args[0]
         if "name" not in kwargs and len(args) > 1: kwargs["name"] = args[1]
+        if "skip" not in kwargs and len(args) > 2: kwargs["skip"] = args[2]
+        skipkeys = set(util.tuplefy(kwargs.get("skip", ())))
         for k, v in kwargs.items():
             if isinstance(v, basestring): kwargs[k] = v.lower()
         result, keys = "", ()
@@ -655,18 +720,24 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if kwargs.get("category") and kwargs.get("name"):
             category, name = kwargs["category"], kwargs["name"]
             keys = self.locks.get(category, {}).get(name)
+            if keys and skipkeys: keys -= skipkeys
+            name = self.schema.get(category, {}).get(name, {}).get("name", name)
             if keys: result = "%s %s is currently locked" % \
-                              (category.capitalize(), grammar.quote(name, force=True))
+                              (category.capitalize(), util.unprint(grammar.quote(name, force=True)))
         elif kwargs.get("category"): # Check for lock on any item in category
             category = kwargs["category"]
             keys = set(y for x in self.locks.get(category, {}).values() for y in x)
+            if keys and skipkeys: keys -= skipkeys
             if keys: result = "%s are currently locked" % util.plural(category.capitalize())
 
         if not result: # Check for global lock
             keys = self.locks.get(None, {}).get(None)
+            if keys and skipkeys: keys -= skipkeys
             if keys: result = "Database is currently locked"
         if not kwargs and not result and self.locks: # No args: check for any lock
-            result, keys = "Database is currently locked", self.locklabels.keys()
+            keys = self.locklabels.keys()
+            if keys and skipkeys: keys -= skipkeys
+            if keys: result = "Database is currently locked"
 
         if result and keys:
             labels = filter(bool, map(self.locklabels.get, keys))
@@ -676,7 +747,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def get_locks(self):
         """
-        Returns user-friendly information on all current locks, as 
+        Returns user-friendly information on all current locks, as
         ["global lock (statistics analysis)", "table "MyTable" (export)", ].
         """
         result = []
@@ -685,7 +756,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 t, labels = "", filter(bool, map(self.locklabels.get, keys))
                 if category and name:
                     name = self.schema.get(category, {}).get(name, {}).get("name", name)
-                    t = "%s %s" % (category, grammar.quote(name, force=True))
+                    t = "%s %s" % (category, util.unprint(grammar.quote(name, force=True)))
                 elif category: t = util.plural(category)
                 else: t = "global lock"
                 if labels: t += " (%s)" % ", ".join(sorted(labels))
@@ -834,7 +905,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         for mycategory, itemmap in self.schema.items():
             if category and category != mycategory: continue # for mycategory
             for myname, opts in itemmap.items():
-                if category and name and myname.lower() != name: continue # for myname
+                if category and name and not util.lceq(myname, name): continue # for myname
 
                 opts0 = schema0.get(mycategory, {}).get(myname, {})
 
@@ -849,7 +920,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     except Exception:
                         opts.update(columns=[])
                         logger.exception("Error fetching columns for %s %s.",
-                                         mycategory, grammar.quote(myname))
+                                         mycategory, util.unprint(grammar.quote(myname)))
                     else:
                         opts["columns"] = []
                         for row in rows:
@@ -886,6 +957,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Returns {"count": int, ?"is_count_estimated": bool}.
         Uses MAX(ROWID) to estimate row count and skips COUNT(*) if likely
         to take too long (file over half a gigabyte).
+        Estimated count is rounded upwards to 100.
         """
         result, do_full = {"count": None}, False
         tpl = "SELECT %%s AS count FROM %s LIMIT 1" % grammar.quote(table)
@@ -893,6 +965,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             rowidname = self.get_rowid(table)
             if rowidname:
                 result = self.execute(tpl % "MAX(%s)" % rowidname, log=False).fetchone()
+                result["count"] = int(math.ceil(result["count"] / 100.) * 100)
                 result["is_count_estimated"] = True
             if self.filesize < conf.MaxDBSizeForFullCount \
             or result and result["count"] < conf.MaxTableRowIDForFullCount:
@@ -905,7 +978,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 result = self.execute(tpl % "COUNT(*)", log=False).fetchone()
         except Exception:
             logger.exception("Error fetching COUNT for table %s.",
-                             grammar.quote(table))
+                             util.unprint(grammar.quote(table)))
         return result
 
 
@@ -932,50 +1005,78 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return copy.deepcopy(result)
 
 
-    def get_related(self, category, name, associated=None):
+    def get_related(self, category, name, own=None, data=False, skip=None):
         """
         Returns database objects related to specified object in any way,
         like triggers selecting from a view, as {category: [{item}, ]}.
 
-        @param   associated  if True, returns only directly associated items,
-                             like table's own indexes and triggers for table,
-                             view's own triggers for views,
-                             index's own table for index,
-                             and trigger's own tables and views for triggers;
-                             if False, returns only indirectly associated items,
-                             like views and triggers for tables and views
-                             that query them in view or trigger body,
-                             also foreign tables for tables
+        @param   own   if true, returns only direct ownership relations,
+                       like table's own indexes and triggers for table,
+                       view's own triggers for views,
+                       index's own table for index,
+                       and trigger's own table or view for triggers;
+                       if False, returns only indirectly associated items,
+                       like tables and views and triggers for tables and views
+                       that query them in view or trigger body,
+                       also foreign tables for tables;
+                       if None, returns all relations
+        @param   data  whether to return cascading data dependency
+                       relations: for views, the tables and views they query,
+                       recursively
+        @param   skip  CaselessDict{name: True} to skip (internal recursion helper)
         """
-        result = CaselessDict()
         category, name = category.lower(), name.lower()
+        result, skip = CaselessDict(), (skip or CaselessDict({name: True}))
         SUBCATEGORIES = {"table":   ["table", "index", "view", "trigger"],
                          "index":   ["table"],
                          "trigger": ["table", "view"],
                          "view":    ["table", "view", "trigger"]}
+        if data: SUBCATEGORIES = {"view": ["table", "view"]}
+            
         item = self.get_category(category, name)
         if not item or category not in SUBCATEGORIES or "meta" not in item:
             return result
 
         for subcategory in SUBCATEGORIES.get(category, []):
             for subname, subitem in self.schema[subcategory].items():
-                if "meta" not in subitem: continue # for subname, subitem                    
-                is_assoc = not util.lccmp(subitem["meta"].get("table", ""), name) \
-                           or not util.lccmp(item["meta"].get("table", ""), subname)
-                is_related = name in subitem["meta"]["__tables__"] \
-                             or subname.lower() in item["meta"]["__tables__"]
-                if not is_related or associated is not None and associated != is_assoc:
+                if "meta" not in subitem or subname in skip:
+                    continue # for subname, subitem
+                is_own = util.lceq(subitem["meta"].get("table"), name) or \
+                         util.lceq(item["meta"].get("table"), subname)
+                is_rel_from = name in subitem["meta"]["__tables__"] \
+                              or "trigger" == subcategory and is_own
+                is_rel_to   = subname.lower() in item["meta"]["__tables__"] \
+                              or "trigger" == category and is_own
+                if not is_rel_to and not is_rel_from or data and not is_rel_to \
+                or own is not None and bool(own) is not is_own:
                     continue # for subname, subitem
 
                 result.setdefault(subcategory, []).append(copy.deepcopy(subitem))
+
+        visited = CaselessDict()
+        for vv in result.values() if data else ():
+            skip.update({v["name"]: True for v in vv})
+        for mycategory, items in result.items() if data else ():
+            if mycategory not in SUBCATEGORIES: continue # for mycategory, items
+            for item in items:
+                if item["name"] in visited: continue # for item
+                visited[item["name"]] = True
+                subresult = self.get_related(mycategory, item["name"], own, data, skip)
+                for subcategory, subitems in subresult.items():
+                    result.setdefault(subcategory, []).extend(subitems)
+                    visited.update({x["name"]: True for x in subitems})
+                    skip.update(visited)
+
         return result
 
 
-    def get_keys(self, table):
+    def get_keys(self, table, pks_only=False):
         """
-        Returns the domestic and foreign keys of a table. Domestic keys are
+        Returns the local and foreign keys of a table. Local keys are
         table primary keys, plus any columns used as foreign keys by other tables.
 
+        @param    pks_only  true if local keys should only be table primary keys,
+                            not all columns used as foreign keys by other tables
         @return   ([{"name": ["col", ], "table": CaselessDict{ftable: ["fcol", ]}}],
                    [{"name": ["col", ], "table": CaselessDict{ftable: ["fcol", ]}}])
         """
@@ -983,10 +1084,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
         item = self.schema["table"].get(table)
         if not item: return [], []
 
-        def get_fks(item):
-            cc = [c for c in item["columns"] if "fk" in c] + [
+        def get_fks(myitem):
+            cc = [c for c in myitem["columns"] if "fk" in c] + [
                 dict(name=c["columns"], fk=c)
-                for c in item.get("meta", {}).get("constraints", [])
+                for c in myitem.get("meta", {}).get("constraints", [])
                 if grammar.SQL.FOREIGN_KEY == c["type"]
             ]
             return [dict(name=util.tuplefy(c["name"]), table=CaselessDict(
@@ -994,22 +1095,26 @@ WARNING: misuse can easily result in a corrupt database file.""",
             )) for c in cc]
 
         mykeys = CaselessDict((util.tuplefy(c["name"]),
-                               dict(name=util.tuplefy(c["name"]), pk=c.get("pk")))
+                               dict(name=util.tuplefy(c["name"]), pk=c["pk"]))
                               for c in item["columns"] if "pk" in c)
-        for item2 in self.get_related("table", table, False).get("table", []):
+        for c in item.get("meta", {}).get("constraints", []):
+            if grammar.SQL.PRIMARY_KEY == c["type"]:
+                names = tuple(x["name"] for x in c["key"])
+                mykeys[names] = {"name": names, "pk": {}}
+        relateds = {} if pks_only else self.get_related("table", table, False)
+        for item2 in relateds.get("table", []):
             for fk in [x for x in get_fks(item2) if table in x["table"]]:
                 keys = fk["table"][table]
-                dk = mykeys.get(keys) or {"name": keys}
-                dk.setdefault("table", CaselessDict())[item2["name"]] = fk["name"]
-                mykeys[keys] = dk
-        dks = sorted(mykeys.values(), key=lambda x: (len(x["name"]), "pk" not in x, x["name"]))
+                lk = mykeys.get(keys) or {"name": keys}
+                lk.setdefault("table", CaselessDict())[item2["name"]] = fk["name"]
+                mykeys[keys] = lk
+        lks = sorted(mykeys.values(), key=lambda x: (len(x["name"]), "pk" not in x, x["name"]))
 
         fks = get_fks(item)
         fks.sort(key=lambda x: (len(x["name"]), x["name"])) # Singulars first
         fks = [x for x in fks]
 
-        return dks, fks
-
+        return lks, fks
 
 
     def get_sql(self, category=None, name=None, column=None, indent="  ",
@@ -1049,7 +1154,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
                 if names and column and "table" == mycategory:
                     col = next((c for c in opts["columns"]
-                                if c["name"].lower() == column), None)
+                                if util.lceq(c["name"], column)), None)
                     if not col: continue # for myname, opts
                     sql, err = grammar.generate(dict(col, __type__="column"), indent=False)
                     if err: raise Exception(err)
@@ -1060,12 +1165,18 @@ WARNING: misuse can easily result in a corrupt database file.""",
                        if transform and x in transform}
                 if not opts.get("meta") or kws or indent != "  ":
                     sql, err = grammar.transform(sql, indent=indent, **kws)
-                    if err: 
-                        sql = opts["sql"]
-                        # raise Exception(err) TODO use or lose
+                    if err and kws: raise Exception(err)
                 sqls.setdefault(category, []).append(sql)
 
-        return "\n\n".join("\n\n".join(v + ";" for v in vv) for vv in sqls.values())
+        return "\n\n".join("\n\n".join(vv) for vv in sqls.values())
+
+
+    def get_default(self, col):
+        """Returns the default value for column, selected from database."""
+        result = None
+        if "default" in col:
+            result = self.execute("SELECT %s AS v" % col["default"]).fetchone()["v"]
+        return result
 
 
     @staticmethod
@@ -1098,7 +1209,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Tables must not start with "sqlite_", no limitations otherwise.
         """
         result = False
-        if table:    result = table[:7].lower() != "sqlite_"
+        if table:    result = not util.lceq(table[:7], "sqlite_")
         elif column: result = True
         return result
 
@@ -1156,7 +1267,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         for c in cols:
             if isinstance(c, dict): c = c["name"]
             name = re.sub(r"\W", "", c, flags=re.I)
-            name = util.make_unique(name, existing, counter=1)
+            name = util.make_unique(name, existing, counter=1, case=True)
             result[name] = existing[name] = data[c]
         return result
 
@@ -1169,10 +1280,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         if not self.is_open(): return
 
-        table = self.schema["table"][table]["name"]
+        table, where = self.schema["table"][table]["name"], ""
         col_data = self.schema["table"][table]["columns"]
-
-        where, pks = "", [c for c in col_data if "pk" in c]
+        pks = [{"name": y} for x in self.get_keys(table, True)[0] for y in x["name"]]
 
         if rowid is not None and not (len(pks) == 1 and pks[0]["name"] in row):
             rowidname = self.get_rowid(table)
@@ -1197,16 +1307,18 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         table = self.schema["table"][table]["name"]
         logger.info("Inserting 1 row into table %s, %s.",
-                    grammar.quote(table), self.name)
+                    util.unprint(grammar.quote(table)), self.name)
         col_data = self.schema["table"][table]["columns"]
-        fields = [col["name"] for col in col_data]
+        fields = [col["name"] for col in col_data if col["name"] in row]
         row = self.blobs_to_binary(row, fields, col_data)
         args = self.make_args(fields, row)
-        str_cols = ", ".join(map(grammar.quote, fields))
-        str_vals = ":" + ", :".join(args)
 
-        sql = "INSERT INTO %s (%s) VALUES (%s)" % \
-              (grammar.quote(table), str_cols, str_vals)
+        if args:
+            str_cols = ", ".join(map(grammar.quote, fields))
+            str_vals = (":" if args else "") + ", :".join(args)
+            sql = "INSERT INTO %s (%s) VALUES (%s)" % \
+                  (grammar.quote(table), str_cols, str_vals)
+        else: sql = "INSERT INTO %s DEFAULT VALUES" % grammar.quote(table)
         cursor = self.execute(sql, args)
         if self.connection.isolation_level is not None: self.connection.commit()
         self.log_query("INSERT", sql, args)
@@ -1232,7 +1344,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         where, args = "", self.make_args(changed_cols, row)
         setsql = ", ".join("%s = :%s" % (grammar.quote(changed_cols[i]["name"]), x)
                                          for i, x in enumerate(args))
-        pks = [c for c in col_data if "pk" in c]
+        pks = [{"name": y} for x in self.get_keys(table, True)[0] for y in x["name"]]
         if rowid is not None and not (len(pks) == 1 and pks[0]["name"] in row):
             key_data = [{"name": "_rowid_"}]
             keyargs = self.make_args(key_data, {"_rowid_": rowid}, args)
@@ -1257,19 +1369,19 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         if not self.is_open(): return
 
-        table = self.schema["table"][table]["name"]
+        table, where = self.schema["table"][table]["name"], ""
         logger.info("Deleting 1 row from table %s, %s.",
-                    grammar.quote(table), self.name)
+                    util.unprint(grammar.quote(table)), self.name)
         col_data = self.schema["table"][table]["columns"]
 
-        where, pks = "", [c for c in col_data if "pk" in c]
+        pks = [{"name": y} for x in self.get_keys(table, True)[0] for y in x["name"]]
 
         if rowid is not None and not (len(pks) == 1 and pks[0]["name"] in row):
             rowidname = self.get_rowid(table)
             key_data = [{"name": rowidname}]
             keyargs = self.make_args(key_data, {rowidname: rowid})
         else: # Use either primary key or all columns to identify row
-            key_data = [c for c in col_data if "pk" in c] or col_data
+            key_data = pks or col_data
             keyargs = self.make_args(key_data, row)
         for col, key in zip(key_data, keyargs):
             where += (" AND " if where else "") + "%s IS :%s" % (grammar.quote(col["name"]), key)
@@ -1292,7 +1404,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
             for col in cols:
                 base = re.sub(r"\W", "", col["name"], flags=re.I)
-                name = base = util.make_unique(base, names)
+                name = base = util.make_unique(base, names, case=True)
                 names.add(base)
                 if len(rows) == 1:
                     where = "%s = :%s" % (grammar.quote(col["name"]), name)
@@ -1300,7 +1412,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 else:
                     mynames = []
                     for i, row in enumerate(rows):
-                        name = util.make_unique(base, names, counter=1)
+                        name = util.make_unique(base, names, counter=1, case=True)
                         args[name] = row[col["name"]]
                         mynames.append(name); names.add(name)
                     where = "%s IN (:%s)" % (grammar.quote(col["name"]), ", :".join(mynames))
@@ -1328,41 +1440,45 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 self.execute("BEGIN TRANSACTION", cursor=cursor)
 
                 while queue:
-                    table, rows, rowids = queue.pop(0)
-                    col_data = self.schema["table"][table]["columns"]
-                    pks = [c for c in col_data if "pk" in c]
-                    rowidname = self.get_rowid(table)
-                    use_rowids = rowidname and rowids and all(rowids) and \
-                                 not (len(pks) == 1 and all(pks[0]["name"] in r for r in rows))
+                    table1, rows1, rowids1 = queue.pop(0)
+                    if not util.lceq(table1, table):
+                        lock = self.get_lock("table", table1)
+                        if lock: raise Exception("%s, cannot delete." % lock)
+                    col_data = self.schema["table"][table1]["columns"]
+                    pks = [{"name": y} for x in self.get_keys(table, True)[0]
+                           for y in x["name"]]
+                    rowidname = self.get_rowid(table1)
+                    use_rowids = rowidname and rowids1 and all(rowids1) and \
+                                 not (len(pks) == 1 and all(pks[0]["name"] in r for r in rows1))
                     key_cols = [{"name": "_rowid_"}] if use_rowids else pks or col_data
                     key_data, myrows = [], []
 
-                    for row, rowid in zip(rows, rowids):
+                    for row, rowid in zip(rows1, rowids1):
                         data = {rowidname: rowid} if use_rowids else \
                                {c["name"]: row[c["name"]] for c in key_cols}
-                        if not any(data in xx for t, xx in result if t == table):
+                        if not any(data in xx for t, xx in result if util.lceq(t, table1)):
                             key_data.append(data); myrows.append(row)
                     if not key_data: continue # while queue
 
-                    logger.info("Deleting %s from table %s, %s.",
-                                util.plural("row", key_data), grammar.quote(table), self.name)
+                    logger.info("Deleting %s from table %s, %s.", util.plural("row", key_data),
+                                util.unprint(grammar.quote(table1)), self.name)
                     for where, args in self.chunk_args(key_cols, key_data):
-                        sql = "DELETE FROM %s WHERE %s" % (grammar.quote(table), where)
+                        sql = "DELETE FROM %s WHERE %s" % (grammar.quote(table1), where)
                         self.execute(sql, args, cursor=cursor)
                         queries.append((sql, args))
-                    result.append((table, key_data))
+                    result.append((table1, key_data))
 
-                    for dk in self.get_keys(table)[0]:
-                        if "table" not in dk: continue # for dk
-                        dkrows = [x for x in myrows
-                                  if all(x[c] is not None for c in dk["name"])]
-                        if not dkrows: continue # for dk
-                        for table2, keys2 in dk["table"].items():
+                    for lk in self.get_keys(table1)[0]:
+                        if "table" not in lk: continue # for lk
+                        lkrows = [x for x in myrows
+                                  if all(x[c] is not None for c in lk["name"])]
+                        if not lkrows: continue # for lk
+                        for table2, keys2 in lk["table"].items():
                             table2 = self.schema["table"][table2]["name"]
 
                             key_cols2 = [{"name": x} for x in keys2]
-                            key_data2 = [{x: row[y] for x, y in zip(keys2, dk["name"])}
-                                         for row in dkrows]
+                            key_data2 = [{x: row[y] for x, y in zip(keys2, lk["name"])}
+                                         for row in lkrows]
                             cols = "*"
                             rowidname2 = self.get_rowid(table2)
                             if rowidname2: cols = "%s AS %s, *" % ((rowidname2, ) * 2)
@@ -1386,40 +1502,51 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
-    def get_pragma_values(self):
+    def get_pragma_values(self, dump=False, stats=False):
         """
         Returns values for all defined and available PRAGMA settings, as
         {pragma_name: scalar value or [{row}, ]}.
+
+        @param   dump   if True, returns only directives for db dump
+        @param   stats  if True, returns only directives for statistics export
         """
         result = {}
         for name, opts in self.PRAGMA.items():
             if opts.get("read") == False: continue # for name, opts
+            if dump  and not opts.get("dump") \
+            or stats and not opts.get("dump") and not opts.get("stats"):
+                continue # for name, opts
 
             rows = self.execute("PRAGMA %s" % name, log=False).fetchall()
             if not rows:
-                if callable(opts["type"]): result[name] = opts["type"]()
-                continue # for name, opts
-
-            if "table" == opts["type"]:
-                result[name] = [x[opts["col"]] for x in rows]
+                if not callable(opts["type"]): continue # for name, opts
+                value = opts["type"]()
+            elif "table" == opts["type"]: value = [x.values()[0] for x in rows]
             else:
-                result[name] = rows[0].values()[0]
-                if callable(opts["type"]):
-                    result[name] = opts["type"](result[name])
+                value = rows[0].values()[0]
+                if callable(opts["type"]): value = opts["type"](value)
+            if not (dump or stats) or value != opts.get("default"):
+                result[name] = value
 
         return result
 
 
 
-def is_sqlite_file(filename, path=None):
-    """Returns whether the file looks to be an SQLite database file."""
+def is_sqlite_file(filename, path=None, empty=False, ext=True):
+    """
+    Returns whether the file looks to be an SQLite database file.
+
+    @param   path   path to prepend to filename, if any
+    @param   empty  whether an empty file is considered valid
+    @param   ext    whether to check file extension
+    """
     SQLITE_HEADER = "SQLite format 3\00"
-    result = os.path.splitext(filename)[1].lower() in conf.DBExtensions
+    result = not ext or os.path.splitext(filename)[1].lower() in conf.DBExtensions
     if result:
         try:
+            result = empty
             fullpath = os.path.join(path, filename) if path else filename
-            result = bool(os.path.getsize(fullpath))
-            if result:
+            if os.path.getsize(fullpath):
                 result = False
                 with open(fullpath, "rb") as f:
                     result = (f.read(len(SQLITE_HEADER)) == SQLITE_HEADER)

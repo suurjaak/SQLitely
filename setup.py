@@ -8,11 +8,9 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.11.2019
+@modified    14.06.2020
 ------------------------------------------------------------------------------
 """
-import glob
-import os
 import setuptools
 
 from sqlitely import conf
@@ -29,7 +27,7 @@ setuptools.setup(
     platforms=["any"],
     keywords="sqlite database",
 
-    install_requires=["antlr4-python2-runtime", "openpyxl", "pyparsing", "wxPython", "xlrd", "XlsxWriter"],
+    install_requires=["antlr4-python2-runtime==4.7.2", "openpyxl", "Pillow", "pyparsing", "pytz", "wxPython", "xlrd", "XlsxWriter"],
     entry_points={"gui_scripts": ["sqlitely = sqlitely.main:run"]},
 
     packages=setuptools.find_packages(),
