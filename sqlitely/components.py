@@ -7058,6 +7058,7 @@ class DataDialog(wx.Dialog):
         wx_accel.accelerate(self, accelerators=accelerators)
         wx.CallLater(0, lambda: self and self._edits.values()[0].SetFocus())
         wx.CallAfter(self._OnFit, initial=True)
+        wx.CallAfter(self.Parent.Refresh) # Refresh grid labels enabled-status
 
 
     def _Populate(self):
