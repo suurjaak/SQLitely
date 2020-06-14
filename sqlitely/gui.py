@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.05.2020
+@modified    14.06.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1053,7 +1053,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     if self.list_db.GetItemText(i) in selected_files:
                         self.list_db.Select(i)
                 self.update_database_detail()
-        elif event.KeyCode in [ord("F")] and event.ControlDown():
+        elif event.KeyCode in [ord("F")] and event.CmdDown():
             self.edit_filter.SetFocus()
         elif self.list_db.GetFirstSelected() >= 0 and self.dbs_selected \
         and not event.AltDown() and event.KeyCode in controls.KEYS.ENTER:
@@ -3406,7 +3406,7 @@ class DatabasePage(wx.Panel):
         """
         Handler for pressing a key in pragma page, focuses filter on Ctrl-F.
         """
-        if event.ControlDown() and event.KeyCode in [ord("F")]:
+        if event.CmdDown() and event.KeyCode in [ord("F")]:
             self.edit_pragma_filter.SetFocus()
         else: event.Skip()
 
@@ -4692,10 +4692,10 @@ class DatabasePage(wx.Panel):
         Handler for keypress in SQL notebook,
         skips adder-tab on Ctrl+PageUp|PageDown|Tab navigation.
         """
-        if not event.ControlDown() or event.AltDown() \
+        if not event.CmdDown() or event.AltDown() \
         or event.KeyCode not in controls.KEYS.TAB + controls.KEYS.PAGING \
         or event.ShiftDown() and event.KeyCode in controls.KEYS.PAGING:
-            if not event.ControlDown() \
+            if not event.CmdDown() \
             or event.KeyCode not in controls.KEYS.PAGING + controls.KEYS.TAB:
                 event.Skip()
             return

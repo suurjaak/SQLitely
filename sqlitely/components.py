@@ -1420,12 +1420,12 @@ class SQLiteGridBaseMixin(object):
         """
         if not isinstance(self._grid.Table, SQLiteGridBase): return event.Skip()
 
-        if event.ControlDown() and event.KeyCode == ord("V") \
-        or not event.ControlDown() and event.ShiftDown() \
+        if event.CmdDown() and event.KeyCode == ord("V") \
+        or not event.CmdDown() and event.ShiftDown() \
         and event.KeyCode in controls.KEYS.INSERT:
             self._grid.Table.Paste()
 
-        elif event.ControlDown() and not self._grid.Table.IsComplete() \
+        elif event.CmdDown() and not self._grid.Table.IsComplete() \
         and event.KeyCode in controls.KEYS.DOWN + controls.KEYS.END:
             # Disallow jumping to the very end, may be a billion rows.
             row, col = max(0, self._grid.GridCursorRow), max(0, self._grid.GridCursorCol)
@@ -1439,7 +1439,7 @@ class SQLiteGridBaseMixin(object):
             if event.ShiftDown():
                 self._grid.SelectBlock(row, col, row2, col)
 
-        elif event.ControlDown() and not event.ShiftDown() \
+        elif event.CmdDown() and not event.ShiftDown() \
         and event.KeyCode in controls.KEYS.INSERT + (ord("C"), ):
             rows, cols = get_grid_selection(self._grid)
             if not rows or not cols: return
@@ -2043,7 +2043,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         if self._export.Shown or self._worker.is_working(): return
         event.Skip() # Allow to propagate to other handlers
         stc = event.GetEventObject()
-        if (event.AltDown() or event.ControlDown()) \
+        if (event.AltDown() or event.CmdDown()) \
         and event.KeyCode in controls.KEYS.ENTER:
             sql = (stc.SelectedText or stc.CurLine[0]).strip()
             if sql: self.ExecuteSQL(sql)
@@ -7583,7 +7583,7 @@ class HistoryDialog(wx.Dialog):
 
     def _OnGridKey(self, event):
         """Handler for grid keypress, copies selection to clipboard on Ctrl-C/Insert."""
-        if not event.ControlDown() \
+        if not event.CmdDown() \
         or event.KeyCode not in controls.KEYS.INSERT + (ord("C"), ):
             return event.Skip()
 
@@ -7599,7 +7599,7 @@ class HistoryDialog(wx.Dialog):
 
     def _OnKey(self, event):
         """Handler for pressing a key, focuses filter on Ctrl-F, closes on Escape."""
-        if event.ControlDown() and event.KeyCode in [ord("F")]:
+        if event.CmdDown() and event.KeyCode in [ord("F")]:
             self._search.SetFocus()
         if wx.WXK_ESCAPE == event.KeyCode and not self._search.HasFocus() \
         and not self._grid.IsCellEditControlShown():

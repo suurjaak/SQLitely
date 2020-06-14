@@ -2613,7 +2613,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         Goes to next/previous control on Tab/Shift+Tab,
         swallows Enter.
         """
-        if self.AutoCompActive() or event.ControlDown() \
+        if self.AutoCompActive() or event.CmdDown() \
         or event.KeyCode not in KEYS.TAB: return event.Skip()
         if event.KeyCode in KEYS.ENTER and self.LinesOnScreen() < 2: return
 
@@ -2635,10 +2635,10 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
             do_autocomp = False
             words = self.autocomps_total
             autocomp_len = 0
-            if event.UnicodeKey in KEYS.SPACE and event.ControlDown():
+            if event.UnicodeKey in KEYS.SPACE and event.CmdDown():
                 # Start autocomp when user presses Ctrl+Space
                 do_autocomp = True
-            elif not event.ControlDown():
+            elif not event.CmdDown():
                 # Check if we have enough valid text to start autocomplete
                 char = None
                 try: # Not all keycodes can be chars
@@ -3005,11 +3005,11 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     def OnChar(self, event):
         """Handler for keypress, cancels event if not acceptable character."""
 
-        if event.ControlDown() and not event.AltDown() and not event.ShiftDown() \
+        if event.CmdDown() and not event.AltDown() and not event.ShiftDown() \
         and ord("Z") == event.KeyCode:
             return self.Undo()
 
-        if event.ControlDown() and not event.AltDown() and (not event.ShiftDown() \
+        if event.CmdDown() and not event.AltDown() and (not event.ShiftDown() \
         and ord("Y") == event.KeyCode) or (event.ShiftDown() and ord("Z") == event.KeyCode):
             return self.Redo()
 
@@ -3040,7 +3040,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             if direction < 0 and not self.GetSelectionEmpty() and pos > sself.GetSelection()[0]:
                 self.CharLeftExtend()
 
-        elif event.KeyCode in KEYS.END and not event.ControlDown():
+        elif event.KeyCode in KEYS.END and not event.CmdDown():
             if event.ShiftDown(): self.LineEndExtend()
             else:
                 pos = self.GetLineEndPosition(self.CurrentLine)
@@ -3491,22 +3491,22 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         """Handler for key down, fires position change events."""
         self._QueueEvents()
 
-        if event.ControlDown() and not event.AltDown() and not event.ShiftDown() \
+        if event.CmdDown() and not event.AltDown() and not event.ShiftDown() \
         and ord("Z") == event.KeyCode:
             return self.Undo()
 
-        if event.ControlDown() and not event.AltDown() and (not event.ShiftDown() \
+        if event.CmdDown() and not event.AltDown() and (not event.ShiftDown() \
         and ord("Y") == event.KeyCode) or (event.ShiftDown() and ord("Z") == event.KeyCode):
             return self.Redo()
 
-        if event.ControlDown() and not event.AltDown() and not event.ShiftDown() \
+        if event.CmdDown() and not event.AltDown() and not event.ShiftDown() \
         and event.KeyCode in KEYS.INSERT + (ord("C"), ):
             if wx.TheClipboard.Open():
                 wx.TheClipboard.SetData(wx.TextDataObject(str(self._bytes)))
                 wx.TheClipboard.Close()
             return
 
-        if event.ControlDown() and not event.AltDown() and (not event.ShiftDown()
+        if event.CmdDown() and not event.AltDown() and (not event.ShiftDown()
         and ord("V") == event.KeyCode or event.ShiftDown() and event.KeyCode in KEYS.INSERT):
             text = None
             if wx.TheClipboard.Open():
@@ -3818,10 +3818,10 @@ class JSONTextCtrl(wx.stc.StyledTextCtrl):
             do_autocomp = False
             words = self.KEYWORDS
             autocomp_len = 0
-            if event.UnicodeKey in KEYS.SPACE and event.ControlDown():
+            if event.UnicodeKey in KEYS.SPACE and event.CmdDown():
                 # Start autocomp when user presses Ctrl+Space
                 do_autocomp = True
-            elif not event.ControlDown():
+            elif not event.CmdDown():
                 # Check if we have enough valid text to start autocomplete
                 char = None
                 try: # Not all keycodes can be chars
@@ -4382,7 +4382,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
                 if self._value_last != self.Value:
                     self.Value = self._value_last
                     self.SelectAll()
-            elif event.ControlDown() and event.KeyCode in map(ord, "AH"):
+            elif event.CmdDown() and event.KeyCode in map(ord, "AH"):
                 # Avoid opening dropdown on Ctrl-A (select all) or Ctrl-H (backspace)
                 self._ignore_textchange = True
         if skip: event.Skip()
