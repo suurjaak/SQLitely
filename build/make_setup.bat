@@ -4,7 +4,7 @@
 ::
 :: @author    Erki Suurjaak
 :: @created   21.08.2019
-:: @modified  21.08.2019
+:: @modified  14.08.2020
 @echo off
 setlocal EnableDelayedExpansion
 set INITIAL_DIR=%CD%
@@ -12,7 +12,12 @@ cd %0\..
 set SETUPDIR=%CD%
 
 cd ../sqlitely
-if defined PROGRAMW6432 set SUFFIX64=_x64
+
+
+for /f %%I in ('python -c "import struct; print(struct.calcsize(chr(80)) * 8 == 64)"') do set IS_64=%%I
+if [%IS_64%] == [True] (
+    set SUFFIX64=_x64
+)
 if [%1] == [] (
     for /f %%I in ('python -c "import conf; print conf.Version"') do set VERSION=%%I
     set EXEFILE=%INITIAL_DIR%\sqlitely_!VERSION!%SUFFIX64%.exe
