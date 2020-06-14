@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.05.2020
+@modified    14.06.2020
 ------------------------------------------------------------------------------
 """
 import argparse
@@ -107,12 +107,13 @@ def run_gui(filenames):
     window = gui.MainWindow()
     app.SetTopWindow(window) # stdout/stderr popup closes with MainWindow
 
-    # Override stdout/stderr.write to swallow Gtk warnings
-    swallow = lambda w, s: None if ("Gtk" in s and "eprecat" in s) else w(s)
-    try:
-        sys.stdout.write = functools.partial(swallow, sys.stdout.write)
-        sys.stderr.write = functools.partial(swallow, sys.stderr.write)
-    except Exception: raise
+    if "posix" == os.name:
+        # Override stdout/stderr.write to swallow Gtk deprecation warnings
+        swallow = lambda w, s: None if ("Gtk" in s and "eprecat" in s) else w(s)
+        try:
+            sys.stdout.write = functools.partial(swallow, sys.stdout.write)
+            sys.stderr.write = functools.partial(swallow, sys.stderr.write)
+        except Exception: raise
 
     # Some debugging support
     window.run_console("import datetime, os, re, time, sys, wx")
