@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    05.06.2020
+@modified    14.06.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -72,6 +72,8 @@ import functools
 import locale
 import os
 import re
+import string
+import struct
 
 import wx
 import wx.html
@@ -269,6 +271,7 @@ class ColourManager(object):
 
     @classmethod
     def GetColour(cls, colour):
+        if isinstance(colour, wx.Colour): return colour
         return wx.Colour(getattr(cls.colourcontainer, colour)) \
                if isinstance(colour, basestring) \
                else wx.SystemSettings.GetColour(colour)
@@ -938,13 +941,13 @@ class HintedTextCtrl(wx.TextCtrl):
         if self and self.FindFocus() is self:
             if self._hint_on:
                 self.SetForegroundColour(self._text_colour)
-                wx.TextCtrl.SetValue(self, "")
+                wx.TextCtrl.ChangeValue(self, "")
                 self._hint_on = False
             self.SelectAll()
         elif self:
             if self._hint and not self.Value:
                 # Control has been unfocused, set and colour hint
-                wx.TextCtrl.SetValue(self, self._hint)
+                wx.TextCtrl.ChangeValue(self, self._hint)
                 self.SetForegroundColour(self._hint_colour)
                 self._hint_on = True
         wx.CallAfter(setattr, self, "_ignore_change", False)
@@ -992,7 +995,7 @@ class HintedTextCtrl(wx.TextCtrl):
         self._hint = hint
         if self._hint_on or not self.Value and not self.HasFocus():
             self._ignore_change = True
-            wx.TextCtrl.SetValue(self, self._hint)
+            wx.TextCtrl.ChangeValue(self, self._hint)
             self.SetForegroundColour(self._hint_colour)
             self._hint_on = True
             wx.CallAfter(setattr, self, "_ignore_change", False)
@@ -2632,10 +2635,10 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
             do_autocomp = False
             words = self.autocomps_total
             autocomp_len = 0
-            if event.UnicodeKey in KEYS.SPACE and event.CmdDown():
+            if event.UnicodeKey in KEYS.SPACE and event.ControlDown():
                 # Start autocomp when user presses Ctrl+Space
                 do_autocomp = True
-            elif not event.CmdDown():
+            elif not event.ControlDown():
                 # Check if we have enough valid text to start autocomplete
                 char = None
                 try: # Not all keycodes can be chars
@@ -2681,6 +2684,1175 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
     def stricmp(self, a, b):
         return cmp(a.lower(), b.lower())
+
+
+
+CaretPositionEvent, EVT_CARET_POS = wx.lib.newevent.NewCommandEvent()
+LinePositionEvent,  EVT_LINE_POS  = wx.lib.newevent.NewCommandEvent()
+SelectionEvent,     EVT_SELECT    = wx.lib.newevent.NewCommandEvent()
+
+class HexTextCtrl(wx.stc.StyledTextCtrl):
+    """
+    A StyledTextCtrl configured for hexadecimal editing.
+    Raises CaretPositionEvent, LinePositionEvent and SelectionEvent.
+    """
+
+    NUMPAD_NUMS = {wx.WXK_NUMPAD0: 0, wx.WXK_NUMPAD1: 1, wx.WXK_NUMPAD2: 2,
+                   wx.WXK_NUMPAD3: 3, wx.WXK_NUMPAD4: 4, wx.WXK_NUMPAD5: 5,
+                   wx.WXK_NUMPAD6: 6, wx.WXK_NUMPAD7: 7, wx.WXK_NUMPAD8: 8,
+                   wx.WXK_NUMPAD7: 9}
+
+    FONT_FACE = "Courier New" if os.name == "nt" else "Courier"
+    """Acceptable input characters."""
+    MASK = string.hexdigits
+    """Number of hex bytes on one line."""
+    WIDTH = 16
+    """Identifier for address margin styling."""
+    STYLE_MARGIN = 11
+    """Identifier for changed bytes styling."""
+    STYLE_CHANGED = 12
+    """Foreground colour for changed bytes."""
+    COLOUR_CHANGED = "red"
+
+
+    def __init__(self, *args, **kwargs):
+        wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
+
+        self._fixed  = False # Fixed-length value
+        self._type   = str   # Value type: str, int, float, long
+        self._bytes0 = []    # [byte or None, ]
+        self._bytes  = bytearray()
+
+        self.SetEOLMode(wx.stc.STC_EOL_LF)
+        self.SetWrapMode(wx.stc.STC_WRAP_CHAR)
+        self.SetCaretLineBackAlpha(20)
+        self.SetCaretLineVisible(False)
+
+        self.SetMarginCount(1)
+        self.SetMarginType(0, wx.stc.STC_MARGIN_TEXT)
+        self.SetMarginWidth(0, 68)
+        self.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
+        self.SetMargins(3, 0)
+
+        self.SetStyleSpecs()
+        self.SetOvertype(True)
+        self.SetUseTabs(False)
+        w = self.TextWidth(0, "X") * self.WIDTH * 3 + self.GetMarginWidth(0) + \
+            sum(max(x, 0) for x in self.GetMargins()) + \
+            wx.SystemSettings.GetMetric(wx.SYS_VSCROLL_X)
+        self.MinSize = self.MaxSize = w, -1
+
+        self.Bind(wx.EVT_KEY_DOWN,                self.OnKeyDown)
+        self.Bind(wx.EVT_CHAR_HOOK,               self.OnChar)
+        self.Bind(wx.EVT_SET_FOCUS,               self.OnFocus)
+        self.Bind(wx.EVT_KILL_FOCUS,              self.OnKillFocus)
+        self.Bind(wx.EVT_MOUSE_EVENTS,            self.OnMouse)
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED,      self.OnSysColourChange)
+        self.Bind(wx.stc.EVT_STC_ZOOM,            self.OnZoom)
+        self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste)
+        self.Bind(wx.stc.EVT_STC_START_DRAG,      lambda e: e.SetString(""))
+
+
+    def SetStyleSpecs(self):
+        """Sets STC style colours."""
+        if not self: return
+        fgcolour, bgcolour, mbgcolour = (
+            wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
+            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
+                      if self.Enabled else wx.SYS_COLOUR_BTNFACE,
+                      wx.SYS_COLOUR_BTNFACE)
+        )
+
+        self.SetCaretForeground(fgcolour)
+        self.SetCaretLineBackground("#00FFFF")
+        self.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT,
+                          "face:%s,back:%s,fore:%s" % (self.FONT_FACE, bgcolour, fgcolour))
+        self.StyleClearAll() # Apply the new default style to all styles
+
+        self.StyleSetSpec(self.STYLE_CHANGED, "fore:%s" % self.COLOUR_CHANGED)
+        self.StyleSetSpec(self.STYLE_MARGIN,  "back:%s" % mbgcolour)
+
+
+    def Enable(self, enable=True):
+        """Enables or disables the control, updating display."""
+        if self.Enabled == enable: return False
+        result = super(self.__class__, self).Enable(enable)
+        self.SetStyleSpecs()
+        return result
+
+
+    def GetLength(self):
+        """Returns the number of bytes in the document."""
+        return len(self._bytes)
+    Length = property(GetLength)
+
+
+    def GetText(self):
+        """Returns current content as non-hex-encoded string."""
+        return str(self._bytes)
+    def SetText(self, text):
+        """Set current content as non-hex-encoded string."""
+        v = text.encode("utf-8") if isinstance(text, unicode) else str(text)
+        return self.SetValue(v)
+    Text = property(GetText, SetText)
+
+
+    def GetValue(self):
+        """Returns current content as original type (string or number)."""
+        v = str(self._bytes)
+        if   self._type is   int: v = struct.unpack(">l", v)[0]
+        elif self._type is float: v = struct.unpack(">f", v)[0]
+        elif self._type is  long: v = struct.unpack(">q", v)[0]
+        return v
+
+    def SetValue(self, value):
+        """Set current content as typed value (string or number)."""
+        self._SetValue(value)
+        self._Populate()
+
+    Value = property(GetValue, SetValue)
+
+
+    def UpdateValue(self, value):
+        """Update current content as typed value (string or number)."""
+        bytes0 = self._bytes0[:]
+        self._SetValue(value)
+        maxlen = min(len(bytes0), len(self._bytes0))
+        grow   = max(len(self._bytes0) - len(bytes0), 0)
+        self._bytes0[:maxlen] = bytes0[:maxlen] + [None] * grow
+        self._Populate()
+
+
+    def GetAnchor(self):
+        return super(HexTextCtrl, self).Anchor / 3
+    def SetAnchor(self, anchor):
+        return super(HexTextCtrl, self).SetAnchor(anchor * 3)
+    Anchor = property(GetAnchor, SetAnchor)
+
+
+    def GetCurrentPos(self):
+        return super(HexTextCtrl, self).CurrentPos / 3
+    def SetCurrentPos(self, caret):
+        return super(HexTextCtrl, self).SetCurrentPos(caret * 3)
+    CurrentPos = property(GetCurrentPos, SetCurrentPos)
+
+
+    def GetSelection(self):
+        """Returns the current byte selection span, as (from_, to_)."""
+        from_, to_ = super(HexTextCtrl, self).GetSelection()
+        return from_ / 3, (to_ + (from_ != to_)) / 3
+    def SetSelection(self, from_, to_):
+        """Selects the bytes from first position up to but not including second."""
+        return super(HexTextCtrl, self).SetSelection(from_ * 3, to_ * 3 - (from_ != to_))
+
+
+    def GetHex(self):
+        """Returns current content as hex-encoded string with spaces and newlines."""
+        return super(HexTextCtrl, self).Text
+
+
+    def Undo(self):
+        """"""
+        if not self.CanUndo(): return
+        self._QueueEvents()
+        sself = super(HexTextCtrl, self)
+        pos, anchor = sself.CurrentPos, sself.Anchor
+        sself.Undo()
+        v = bytearray.fromhex(re.sub("[^0-9a-fA-F]", "", sself.Text))
+        self._bytes[:]  = v
+        self._Restyle()
+        self._Remargin()
+        sself.SetCurrentPos(min(pos,    sself.Length))
+        sself.SetAnchor    (min(anchor, sself.Length))
+        evt = wx.stc.StyledTextEvent(wx.stc.wxEVT_STC_MODIFIED, self.Id)
+        evt.SetModificationType(wx.stc.STC_PERFORMED_UNDO)
+        evt.SetEventObject(self)
+        wx.PostEvent(self, evt)
+
+
+    def Redo(self):
+        """"""
+        if not self.CanRedo(): return
+        self._QueueEvents()
+        sself = super(HexTextCtrl, self)
+        pos, anchor = sself.CurrentPos, sself.Anchor
+        sself.Redo()
+        v = bytearray.fromhex(re.sub("[^0-9a-fA-F]", "", sself.Text))
+        self._bytes[:]  = v
+        self._Restyle()
+        self._Remargin()
+        sself.SetCurrentPos(min(pos,    sself.Length))
+        sself.SetAnchor    (min(anchor, sself.Length))
+        evt = wx.stc.StyledTextEvent(wx.stc.wxEVT_STC_MODIFIED, self.Id)
+        evt.SetModificationType(wx.stc.STC_PERFORMED_REDO)
+        evt.SetEventObject(self)
+        wx.PostEvent(self, evt)
+
+
+    def _Populate(self):
+        """Sets current content to widget."""
+        fulltext, count = bytearray(), len(self._bytes)
+        for i, c in enumerate(self._bytes):
+            text, line = "%02X" % c, i / self.WIDTH
+            if i < count - 1:
+                text += "\n" if i and not (i + 1) % self.WIDTH else " "
+            fulltext += text
+        super(HexTextCtrl, self).SetText(str(fulltext))
+        self._Restyle()
+        self._Remargin()
+
+
+    def _Restyle(self):
+        """Restyles current content according to changed state."""
+        self.StartStyling(0)
+        self.SetStyling(super(HexTextCtrl, self).Length, 0)
+        for i, c in enumerate(self._bytes):
+            if c == self._bytes0[i]: continue # for i, c
+            self.StartStyling(i * 3)
+            self.SetStyling(2, self.STYLE_CHANGED)
+
+
+    def _Remargin(self):
+        """Rebuilds hex address margin."""
+        sself = super(HexTextCtrl, self)
+        margintexts = []
+        self.MarginTextClearAll()
+        for line in xrange((sself.Length + self.WIDTH - 1) / self.WIDTH):
+            self.MarginSetStyle(line, self.STYLE_MARGIN)
+            self.MarginSetText (line, " %08X " % line)
+
+
+    def _SetValue(self, value):
+        """Set current content as typed value (string or number)."""
+        is_long = isinstance(value, long) and not isinstance(value, int) \
+                  and -2**63 <= value < 2**63
+        if   isinstance(value, int):   v = struct.pack(">l", value)
+        elif isinstance(value, float): v = struct.pack(">f", value)
+        elif is_long:                  v = struct.pack(">q", value)
+        elif value is None:            v = ""
+        else: v = value.encode("utf-8") if isinstance(value, unicode) else str(value)
+
+        self._type      = type(value) if is_long or not isinstance(value, long) else str
+        self._fixed     = is_long or value is None or isinstance(value, (int, float))
+        self._bytes0[:] = map(ord, v)
+        self._bytes[:]  = v
+        if self._fixed: self.SetOvertype(True)
+
+
+    def OnFocus(self, event):
+        """Handler for control getting focus, shows caret."""
+        event.Skip()
+        self.SetCaretStyle(wx.stc.STC_CARETSTYLE_LINE)
+
+
+    def OnKillFocus(self, event):
+        """Handler for control losing focus, hides caret."""
+        event.Skip()
+        self.SetCaretStyle(wx.stc.STC_CARETSTYLE_INVISIBLE)
+
+
+    def OnSysColourChange(self, event):
+        """Handler for system colour change, updates STC styling."""
+        event.Skip()
+        wx.CallAfter(self.SetStyleSpecs)
+
+
+    def OnZoom(self, event):
+        """Disables zoom."""
+        if self.Zoom: self.Zoom = 0
+
+
+    def OnPaste(self, event):
+        """Handles paste event."""
+        sself = super(HexTextCtrl, self)
+        text = event.String
+        event.SetString("") # Cancel default paste
+        if self._fixed and not self._bytes: return # NULL number
+        if sself.CurrentPos == self.GetLastPosition() and self._fixed: pass
+
+        self._QueueEvents()
+
+        selection = self.GetSelection()
+        if selection[0] != selection[1] and not self._fixed:
+            del self._bytes [selection[0]:selection[1] + 1]
+            del self._bytes0[selection[0]:selection[1] + 1]
+            del self._text  [selection[0]:selection[1] + 1]
+            self.DeleteBack()
+        elif self._fixed:
+            self.SetSelection(selection[0], selection[0])
+
+        if isinstance(text, unicode): text = text.encode("utf-8")
+        text = re.sub("[^0-9a-fA-F]", "", text)
+        text = text[:len(text) - len(text) % 2]
+        if not text: return
+
+        v = bytearray.fromhex(text)
+        pos = self.CurrentPos
+        maxlen = min(len(v), len(self._bytes) - pos) if self._fixed else len(v)
+        v = v[:maxlen]
+
+        if pos + maxlen > len(self._bytes):
+            self._bytes0.extend([None] * (pos + maxlen - len(self._bytes)))
+        if self.Overtype:
+            self._bytes[pos:pos + maxlen] = v
+        else:
+            self._bytes0[pos:pos] = [None] * len(v)
+            self._bytes [pos:pos] = v
+
+        self._Populate()
+
+
+    def OnChar(self, event):
+        """Handler for keypress, cancels event if not acceptable character."""
+
+        if event.ControlDown() and not event.AltDown() and not event.ShiftDown() \
+        and ord("Z") == event.KeyCode:
+            return self.Undo()
+
+        if event.ControlDown() and not event.AltDown() and (not event.ShiftDown() \
+        and ord("Y") == event.KeyCode) or (event.ShiftDown() and ord("Z") == event.KeyCode):
+            return self.Redo()
+
+        if not event.HasModifiers() and (event.KeyCode in KEYS.ENTER + KEYS.SPACE
+        or (unichr(event.UnicodeKey) not in self.MASK and event.KeyCode not in self.NUMPAD_NUMS) \
+        and event.KeyCode not in KEYS.NAVIGATION + KEYS.COMMAND):
+            return
+        event.Skip()
+
+
+    def OnKeyDown(self, event):
+        """Handler for key down, moves caret to word boundary."""
+        self._QueueEvents()
+        sself = super(HexTextCtrl, self)
+
+        if event.KeyCode in KEYS.LEFT + KEYS.RIGHT:
+            direction = -1 if event.KeyCode in KEYS.LEFT else 1
+            if event.ShiftDown():
+                func = self.WordLeftExtend if direction < 0 else self.WordRightEndExtend
+            else:
+                func = self.WordLeft if direction < 0 else self.WordRight
+            func()
+            pos = sself.CurrentPos
+            linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
+            if not event.ShiftDown() and linepos >= self.WIDTH * 3 - 1 \
+            or event.ShiftDown() and not linepos:
+                func()
+            if direction < 0 and not self.GetSelectionEmpty() and pos > sself.GetSelection()[0]:
+                self.CharLeftExtend()
+
+        elif event.KeyCode in KEYS.END and not event.ControlDown():
+            if event.ShiftDown(): self.LineEndExtend()
+            else:
+                pos = self.GetLineEndPosition(self.CurrentLine)
+                sself.SetSelection(pos, pos)
+        elif event.KeyCode in KEYS.DELETE + KEYS.BACKSPACE:
+            if self._fixed: return
+
+            selection = self.GetSelection()
+            if selection[0] != selection[1]:
+                del self._bytes [selection[0]:selection[1] + 1]
+                del self._bytes0[selection[0]:selection[1] + 1]
+                self._Populate()
+                return
+
+            pos       = sself.CurrentPos
+            line0     = sself.FirstVisibleLine
+            line      = self.LineFromPosition(pos)
+            linepos   = pos - self.PositionFromLine(line)
+            direction = -(event.KeyCode in KEYS.BACKSPACE)
+
+            if not self._bytes or pos == self.GetLastPosition() and not direction:
+                return
+
+            bpos, idx = self.CurrentPos, linepos % 3
+            if pos == self.GetLastPosition(): idx = 0
+            for bb in self._bytes0, self._bytes: del bb[bpos]
+            if line == self.LineCount - 1 and (not direction or linepos):
+                # Last line and not backspacing from first byte
+                frompos = max(pos + direction * 3, 0)
+                topos   = sself.Length if frompos + 3 > sself.Length else frompos + 3
+                self.Remove(frompos, topos)
+            else:
+                self._Populate()
+                sself.SetSelection(pos + 1 + idx, pos + 1 + idx)
+        elif not event.HasModifiers() \
+        and (unichr(event.UnicodeKey) in self.MASK or event.KeyCode in self.NUMPAD_NUMS) \
+        and (not event.ShiftDown() or unichr(event.UnicodeKey) not in string.digits):
+            if self._fixed and not self._bytes: return # NULL number
+
+
+            selection = self.GetSelection()
+            if selection[0] != selection[1] and not self._fixed:
+                del self._bytes [selection[0]:selection[1] + 1]
+                del self._bytes0[selection[0]:selection[1] + 1]
+                self.DeleteBack()
+                self.DeleteBack()
+
+            line0 = sself.FirstVisibleLine
+            pos   = sself.CurrentPos
+            linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
+            bpos, idx = self.CurrentPos, linepos % 3
+            if pos == self.GetLastPosition():
+                if self._fixed: return
+                pos, bpos, idx = pos + bool(self._bytes), bpos + bool(self._bytes), 0
+                self._bytes.append(0), self._bytes0.append(None)
+            elif idx > 1: idx, pos = 0, pos - idx
+            elif not idx and not self.Overtype:
+                self._bytes.insert(bpos, 0), self._bytes0.insert(bpos, None)
+
+            number = self.NUMPAD_NUMS[event.KeyCode] if event.KeyCode in self.NUMPAD_NUMS \
+                     else int(unichr(event.UnicodeKey), 16)
+            byte = self._bytes[bpos]
+
+            b1 = byte >> 4 if idx else number
+            b2 = number if idx else byte & 0x0F
+            byte = b1 * 16 + b2
+            self._bytes[bpos] = byte
+            if (self.Overtype or idx) and pos < self.GetLastPosition():
+                sself.Replace(pos - idx, pos - idx + 2, "%02X" % byte)
+                self.StartStyling(pos - idx)
+                self.SetStyling(2, self.STYLE_CHANGED if self._bytes[bpos] != self._bytes0[bpos] else 0)
+            else:
+                self._Populate()
+                self.SetFirstVisibleLine(line0)
+            sself.SetSelection(pos + 1 + idx, pos + 1 + idx)
+
+        elif event.KeyCode in KEYS.INSERT and not event.HasAnyModifiers():
+            if not self._fixed: event.Skip() # Disallow changing overtype if length fixed
+        elif event.KeyCode not in KEYS.TAB:
+            event.Skip()
+
+
+    def OnMouse(self, event):
+        """Handler for mouse event, moves care to word boundary."""
+        event.Skip()
+        self._QueueEvents(singlepos=event.LeftUp())
+
+
+    def _QueueEvents(self, singlepos=False):
+        """Raises CaretPositionEvent or LinePositionEvent or SelectionEvent if changed after."""
+        sself = super(HexTextCtrl, self)
+        pos, firstline = self.CurrentPos, self.FirstVisibleLine
+        notselected, selection = self.GetSelectionEmpty(), list(sself.GetSelection())
+
+        def after():
+            if not self: return
+
+            notselected2, selection2 = self.GetSelectionEmpty(), list(sself.GetSelection())
+            if singlepos or selection2[0] != selection2[1] and not self.HasCapture():
+                linepos1 = selection2[0] - self.PositionFromLine(self.LineFromPosition(selection2[0]))
+                linepos2 = selection2[1] - self.PositionFromLine(self.LineFromPosition(selection2[1]))
+                if linepos1 % 3: selection2[0] += 1 if linepos1 % 3 == 2 else -1
+                if notselected2: selection2[1] = selection2[0]
+                elif linepos1 != linepos2 and linepos2 % 3 != 2:
+                    selection2[1] += 1 if linepos2 % 3 == 1 else -1
+            if selection2 != list(sself.GetSelection()):
+                if sself.Anchor == selection2[0]: sself.SetSelection(*selection2)
+                else: sself.SetAnchor(selection2[1]), sself.SetCurrentPos(selection2[0])
+
+            if pos != self.CurrentPos:
+                evt = CaretPositionEvent(self.Id)
+                evt.SetEventObject(self)
+                evt.SetInt(self.CurrentPos)
+                wx.PostEvent(self, evt)
+            elif firstline != self.FirstVisibleLine:
+                evt = LinePositionEvent(self.Id)
+                evt.SetEventObject(self)
+                evt.SetInt(self.FirstVisibleLine)
+                wx.PostEvent(self, evt)
+            if notselected != notselected2 \
+            or not notselected and selection != selection2:
+                evt = SelectionEvent(self.Id)
+                evt.SetEventObject(self)
+                wx.PostEvent(self, evt)
+        wx.CallAfter(after)
+
+
+
+class ByteTextCtrl(wx.stc.StyledTextCtrl):
+    """
+    A StyledTextCtrl configured for byte editing.
+    Raises CaretPositionEvent, LinePositionEvent and SelectionEvent.
+    """
+
+    FONT_FACE = "Courier New" if os.name == "nt" else "Courier"
+    """Number of bytes on one line."""
+    WIDTH = 16
+    """Identifier for changed bytes styling."""
+    STYLE_CHANGED = 12
+    """Foreground colour for changed bytes."""
+    COLOUR_CHANGED = "red"
+
+
+    def __init__(self, *args, **kwargs):
+        wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
+
+        self._fixed  = False # Fixed-length value
+        self._type   = str   # Value type: str, int, float, long
+        self._bytes0 = []    # [byte or None, ]
+        self._bytes  = bytearray() # Raw bytes
+        self._text   = bytearray() # Display bytes
+
+        self.SetEOLMode(wx.stc.STC_EOL_LF)
+        self.SetWrapMode(wx.stc.STC_WRAP_CHAR)
+        self.SetCaretLineBackAlpha(20)
+        self.SetCaretLineVisible(False)
+
+        self.SetMarginCount(0)
+        self.SetMargins(0, 0)
+
+        self.SetStyleSpecs()
+        self.SetOvertype(True)
+        self.SetUseTabs(False)
+        w = self.TextWidth(0, "X") * (self.WIDTH + 1) + wx.SystemSettings.GetMetric(wx.SYS_VSCROLL_X)
+        self.Size = self.MinSize = self.MaxSize = w, -1
+
+        self.Bind(wx.EVT_CHAR,                    self.OnChar)
+        self.Bind(wx.EVT_KEY_DOWN,                self.OnKeyDown)
+        self.Bind(wx.EVT_SET_FOCUS,               self.OnFocus)
+        self.Bind(wx.EVT_KILL_FOCUS,              self.OnKillFocus)
+        self.Bind(wx.EVT_MOUSE_EVENTS,            self.OnMouse)
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED,      self.OnSysColourChange)
+        self.Bind(wx.stc.EVT_STC_ZOOM,            self.OnZoom)
+        self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste)
+        self.Bind(wx.stc.EVT_STC_START_DRAG,      lambda e: e.SetString(""))
+
+
+    def SetStyleSpecs(self):
+        """Sets STC style colours."""
+        if not self: return
+        fgcolour, bgcolour = (
+            wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
+            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
+                      if self.Enabled else wx.SYS_COLOUR_BTNFACE)
+        )
+
+        self.SetCaretForeground(fgcolour)
+        self.SetCaretLineBackground("#00FFFF")
+        self.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT,
+                          "face:%s,back:%s,fore:%s" % (self.FONT_FACE, bgcolour, fgcolour))
+        self.StyleClearAll() # Apply the new default style to all styles
+
+        self.StyleSetSpec(self.STYLE_CHANGED, "fore:%s" % self.COLOUR_CHANGED)
+
+
+    def Enable(self, enable=True):
+        """Enables or disables the control, updating display."""
+        if self.Enabled == enable: return False
+        result = super(self.__class__, self).Enable(enable)
+        self.SetStyleSpecs()
+        return result
+
+
+    def GetText(self):
+        """Returns current content as raw byte string."""
+        return str(self._bytes)
+    def SetText(self, text):
+        """Set current content as raw byte string."""
+        v = text.encode("utf-8") if isinstance(text, unicode) else str(text)
+        return self.SetValue(v)
+    Text = property(GetText, SetText)
+
+
+    def GetValue(self):
+        """Returns current content as original type (string or number)."""
+        v = str(self._bytes)
+        if   self._type is   int: v = struct.unpack(">l", v)[0]
+        elif self._type is float: v = struct.unpack(">f", v)[0]
+        elif self._type is  long: v = struct.unpack(">q", v)[0]
+        return v
+
+    def SetValue(self, value):
+        """Set current content as typed value (string or number)."""
+        self._SetValue(value)
+        self._Populate()
+
+    Value = property(GetValue, SetValue)
+
+
+    def UpdateValue(self, value):
+        """Update current content as typed value (string or number), retaining history."""
+        bytes0 = self._bytes0[:]
+        self._SetValue(value)
+        maxlen = min(len(bytes0), len(self._bytes0))
+        grow   = max(len(self._bytes0) - len(bytes0), 0)
+        self._bytes0[:maxlen] = bytes0[:maxlen] + [None] * grow
+        self._Populate()
+
+
+    def UpdateBytes(self, value):
+        """Update current bytes as typed value (string or number), leaving text unchanged."""
+        self._SetValue(value, noreset=True)
+        if len(self._bytes0) < len(self._bytes):
+            self._bytes0.extend([None] * (len(self._bytes) - len(self._bytes0)))
+        self._Restyle()
+
+
+    def GetAnchor(self):
+        return self._PosOut(super(ByteTextCtrl, self).Anchor)
+    def SetAnchor(self, anchor):
+        return super(ByteTextCtrl, self).SetAnchor(self._PosIn(anchor))
+    Anchor = property(GetAnchor, SetAnchor)
+
+
+    def GetCurrentPos(self):
+        return self._PosOut(super(ByteTextCtrl, self).CurrentPos)
+    def SetCurrentPos(self, caret):
+        return super(ByteTextCtrl, self).SetCurrentPos(self._PosIn(caret))
+    CurrentPos = property(GetCurrentPos, SetCurrentPos)
+
+
+    def GetSelection(self):
+        """Returns the current byte selection span, as (from_, to_)."""
+        from_, to_ = super(ByteTextCtrl, self).GetSelection()
+        return self._PosOut(from_), self._PosOut(to_)
+    def SetSelection(self, from_, to_):
+        from_, to_ = self._PosIn(from_), self._PosIn(to_)
+        return super(ByteTextCtrl, self).SetSelection(from_, to_)
+    Selection = property(GetSelection, SetSelection)
+
+
+    def Undo(self):
+        """"""
+        if not self.CanUndo(): return
+        sself = super(ByteTextCtrl, self)
+        pos, anchor = sself.CurrentPos, sself.Anchor
+        sself.Undo()
+        self._Restyle()
+        sself.SetCurrentPos(min(pos,    sself.Length))
+        sself.SetAnchor    (min(anchor, sself.Length))
+        evt = wx.stc.StyledTextEvent(wx.stc.wxEVT_STC_MODIFIED, self.Id)
+        evt.SetModificationType(wx.stc.STC_PERFORMED_UNDO)
+        evt.SetEventObject(self)
+        wx.PostEvent(self, evt)
+
+
+    def Redo(self):
+        """"""
+        if not self.CanRedo(): return
+        sself = super(ByteTextCtrl, self)
+        pos, anchor = sself.CurrentPos, sself.Anchor
+        sself.Redo()
+        self._Restyle()
+        sself.SetCurrentPos(min(pos,    sself.Length))
+        sself.SetAnchor    (min(anchor, sself.Length))
+        evt = wx.stc.StyledTextEvent(wx.stc.wxEVT_STC_MODIFIED, self.Id)
+        evt.SetModificationType(wx.stc.STC_PERFORMED_REDO)
+        evt.SetEventObject(self)
+        wx.PostEvent(self, evt)
+
+
+    def _PosIn(self, pos):
+        line, linepos = divmod(pos, self.WIDTH)
+        return line * (self.WIDTH + 1) + linepos
+    def _PosOut(self, pos):
+        linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
+        return self.CurrentLine * self.WIDTH + linepos
+
+
+    def _Populate(self):
+        """Sets current content to widget."""
+        count = len(self._bytes)
+        fulltext = bytearray()
+        for i, c in enumerate(self._bytes):
+            text = chr(self._text[i])
+            if i and i < count - 1 and not (i + 1) % self.WIDTH:
+                text += "\n"
+            fulltext += text
+        self._text[:] = fulltext
+        fullstr = str(fulltext)
+        if super(ByteTextCtrl, self).Text != fullstr:
+            super(ByteTextCtrl, self).SetText(fullstr)
+        self._Restyle()
+
+
+    def _Restyle(self):
+        """Restyles current content according to changed state."""
+        self.StartStyling(0)
+        self.SetStyling(super(ByteTextCtrl, self).Length, 0)
+        for i, c in enumerate(self._bytes):
+            if c == self._bytes0[i]: continue # for i, c
+            self.StartStyling(i / self.WIDTH + i)
+            self.SetStyling(1, self.STYLE_CHANGED)
+
+
+    def _SetValue(self, value, noreset=False):
+        """Set current content as typed value (string or number)."""
+        is_long = isinstance(value, long) and not isinstance(value, int) \
+                  and -2**63 <= value < 2**63
+        if   isinstance(value, int):   v = struct.pack(">l", value)
+        elif isinstance(value, float): v = struct.pack(">f", value)
+        elif is_long:                  v = struct.pack(">q", value)
+        elif value is None:            v = ""
+        else: v = value.encode("utf-8") if isinstance(value, unicode) else str(value)
+
+        self._bytes[:] = v
+        self._text[:]  = re.sub("[^\x20-\x7e]", ".", v)
+        if not noreset: 
+            self._type      = type(value) if is_long or not isinstance(value, long) else str
+            self._fixed     = is_long or value is None or isinstance(value, (int, float))
+            self._bytes0[:] = map(ord, v)
+        if self._fixed: self.SetOvertype(True)
+
+
+    def OnFocus(self, event):
+        """Handler for control getting focus, shows caret."""
+        event.Skip()
+        self.SetCaretStyle(wx.stc.STC_CARETSTYLE_LINE)
+
+
+    def OnKillFocus(self, event):
+        """Handler for control losing focus, hides caret."""
+        event.Skip()
+        self.SetCaretStyle(wx.stc.STC_CARETSTYLE_INVISIBLE)
+
+
+    def OnSysColourChange(self, event):
+        """Handler for system colour change, updates STC styling."""
+        event.Skip()
+        wx.CallAfter(self.SetStyleSpecs)
+
+
+    def OnZoom(self, event):
+        """Disables zoom."""
+        if self.Zoom: self.Zoom = 0
+
+
+    def OnPaste(self, event=None, text=None):
+        """Handles paste event."""
+        if event:
+            text = event.String
+            event.SetString("") # Cancel default paste
+        if self._fixed and not self._bytes: return # NULL number
+        if self.CurrentPos == self.GetLastPosition() and self._fixed: pass
+
+        self._QueueEvents()
+
+        selection = self.GetSelection()
+        if selection[0] != selection[1] and not self._fixed:
+            del self._bytes [selection[0]:selection[1] + 1]
+            del self._bytes0[selection[0]:selection[1] + 1]
+            del self._text  [selection[0]:selection[1] + 1]
+            self.DeleteBack()
+        elif self._fixed:
+            self.SetSelection(selection[0], selection[0])
+
+        pos = self.CurrentPos
+        if isinstance(text, unicode): text = text.encode("utf-8")
+        maxlen = min(len(text), self.Length - pos) if self._fixed else len(text)
+        text = text[:maxlen]
+
+        if pos + maxlen > len(self._bytes):
+            self._bytes0.extend([None] * (pos + maxlen - len(self._bytes)))
+        if self.Overtype:
+            self._bytes[pos:pos + maxlen] = text
+            self._text [pos:pos + maxlen] = re.sub("[^\x20-\x7e]", ".", text)
+        else:
+            self._bytes0[pos:pos] = [None] * len(text)
+            self._bytes [pos:pos] = text
+            self._text  [pos:pos] = re.sub("[^\x20-\x7e]", ".", text)
+        self._Populate()
+
+
+    def OnChar(self, event):
+        """Handler for character input, displays printable character."""
+        if self._fixed and not self._bytes: return # NULL number
+
+        selection = self.GetSelection()
+        if selection[0] != selection[1] and not self._fixed:
+            del self._bytes [selection[0]:selection[1] + 1]
+            del self._bytes0[selection[0]:selection[1] + 1]
+            del self._text  [selection[0]:selection[1] + 1]
+            self.DeleteBack()
+        elif self._fixed:
+            self.SetSelection(selection[0], selection[0])
+
+        if not event.UnicodeKey: event.Skip()
+        elif self.CurrentPos == self.GetLastPosition() and self._fixed: pass
+        else:
+            pos   = self.CurrentPos
+            tbyte = re.sub("[^\x20-\x7e]", ".", chr(event.KeyCode))
+            if pos >= len(self._bytes):
+                self._bytes0.append(None), self._bytes.append(0), self._text.append(0)
+            elif not self.Overtype:
+                self._bytes0.insert(pos, None), self._bytes.insert(pos, 0), self._text.insert(pos, 0)
+            self._bytes[pos] = event.KeyCode
+            self._text [pos] = tbyte
+
+            if self.Overtype and pos < self.GetLastPosition():
+                self.Replace(pos, pos + 1, tbyte)
+                self.StartStyling(pos)
+                self.SetStyling(1, self.STYLE_CHANGED if self._bytes0[pos] != self._bytes[pos] else 0)
+            else: self._Populate()
+            self.SetSelection(pos + 1, pos + 1)
+
+
+    def OnKeyDown(self, event):
+        """Handler for key down, fires position change events."""
+        self._QueueEvents()
+
+        if event.ControlDown() and not event.AltDown() and not event.ShiftDown() \
+        and ord("Z") == event.KeyCode:
+            return self.Undo()
+
+        if event.ControlDown() and not event.AltDown() and (not event.ShiftDown() \
+        and ord("Y") == event.KeyCode) or (event.ShiftDown() and ord("Z") == event.KeyCode):
+            return self.Redo()
+
+        if event.ControlDown() and not event.AltDown() and not event.ShiftDown() \
+        and event.KeyCode in KEYS.INSERT + (ord("C"), ):
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(str(self._bytes)))
+                wx.TheClipboard.Close()
+            return
+
+        if event.ControlDown() and not event.AltDown() and (not event.ShiftDown()
+        and ord("V") == event.KeyCode or event.ShiftDown() and event.KeyCode in KEYS.INSERT):
+            text = None
+            if wx.TheClipboard.Open():
+                if wx.TheClipboard.IsSupported(wx.DataFormat(wx.DF_TEXT)):
+                    o = wx.TextDataObject()
+                    wx.TheClipboard.GetData(o)
+                    text = o.Text
+                wx.TheClipboard.Close()
+            if text is not None: self.OnPaste(text=text)
+            return
+
+        if   event.KeyCode in KEYS.INSERT and not event.HasAnyModifiers():
+            if not self._fixed: event.Skip() # Disallow changing overtype if length fixed
+        elif event.KeyCode in KEYS.DELETE + KEYS.BACKSPACE:
+            if self._fixed: return
+            pos = self.CurrentPos
+            selection = self.GetSelection()
+            direction = -(event.KeyCode in KEYS.BACKSPACE)
+
+            del self._bytes [selection[0] + direction:selection[1] + direction + 1]
+            del self._bytes0[selection[0] + direction:selection[1] + direction + 1]
+            del self._text  [selection[0] + direction:selection[1] + direction + 1]
+            pos2 = min(pos + direction, self.CurrentPos)
+            self._Populate()
+            self.SetSelection(pos2, pos2)
+        elif event.KeyCode in KEYS.TAB: pass
+        else: event.Skip()
+
+
+    def OnMouse(self, event):
+        """Handler for mouse event, fires position change events."""
+        self._QueueEvents()
+        event.Skip()
+
+
+    def _QueueEvents(self):
+        """Raises CaretPositionEvent or LinePositionEvent or SelectionEvent if changed after."""
+
+        pos, firstline = self.CurrentPos, self.FirstVisibleLine
+        notselected, selection = self.GetSelectionEmpty(), self.GetSelection()
+
+        def after():
+            if not self: return
+            if pos != self.CurrentPos:
+                evt = CaretPositionEvent(self.Id)
+                evt.SetEventObject(self)
+                evt.SetInt(self.CurrentPos)
+                wx.PostEvent(self, evt)
+            elif firstline != self.FirstVisibleLine:
+                evt = LinePositionEvent(self.Id)
+                evt.SetEventObject(self)
+                evt.SetInt(self.FirstVisibleLine)
+                wx.PostEvent(self, evt)
+            if notselected != self.GetSelectionEmpty() \
+            or not self.GetSelectionEmpty() and selection != self.GetSelection():
+                evt = SelectionEvent(self.Id)
+                evt.SetEventObject(self)
+                wx.PostEvent(self, evt)
+        wx.CallAfter(after)
+
+
+
+class JSONTextCtrl(wx.stc.StyledTextCtrl):
+    """
+    A StyledTextCtrl configured for JSON syntax highlighting and folding.
+    """
+
+    """JSON reserved keywords."""
+    KEYWORDS = map(unicode, sorted(["null"]))
+    AUTOCOMP_STOPS = " .,;:([)]}'\"\\<>%^&+-=*/|`"
+    """String length from which autocomplete starts."""
+    AUTOCOMP_LEN = 2
+    FONT_FACE = "Courier New" if os.name == "nt" else "Courier"
+
+
+    def __init__(self, *args, **kwargs):
+        wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
+
+        self.SetLexer(wx.stc.STC_LEX_JSON)
+        self.SetTabWidth(2)
+        # Keywords must be lowercase, required by StyledTextCtrl
+        self.SetKeyWords(0, u" ".join(self.KEYWORDS).lower())
+        self.AutoCompStops(self.AUTOCOMP_STOPS)
+        self.SetWrapMode(wx.stc.STC_WRAP_WORD)
+        self.SetCaretLineBackAlpha(20)
+        self.SetCaretLineVisible(False)
+        self.AutoCompSetIgnoreCase(False)
+
+        self.SetTabWidth(2)
+        self.SetUseTabs(False)
+
+        self.SetMarginCount(2)
+        self.SetMarginType(0, wx.stc.STC_MARGIN_NUMBER)
+        self.SetMarginWidth(0, 25)
+        self.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
+
+        self.SetProperty("fold", "1")
+        self.SetMarginType(1, wx.stc.STC_MARGIN_SYMBOL)
+        self.SetMarginMask(1, wx.stc.STC_MASK_FOLDERS)
+        self.SetMarginSensitive(1, True)
+        self.SetMarginWidth(1, 12)
+
+        self.MarkerDefine(wx.stc.STC_MARKNUM_FOLDEROPEN,    wx.stc.STC_MARK_BOXMINUS,          "white", "#808080")
+        self.MarkerDefine(wx.stc.STC_MARKNUM_FOLDER,        wx.stc.STC_MARK_BOXPLUS,           "white", "#808080")
+        self.MarkerDefine(wx.stc.STC_MARKNUM_FOLDERSUB,     wx.stc.STC_MARK_VLINE,             "white", "#808080")
+        self.MarkerDefine(wx.stc.STC_MARKNUM_FOLDERTAIL,    wx.stc.STC_MARK_LCORNER,           "white", "#808080")
+        self.MarkerDefine(wx.stc.STC_MARKNUM_FOLDEREND,     wx.stc.STC_MARK_BOXPLUSCONNECTED,  "white", "#808080")
+        self.MarkerDefine(wx.stc.STC_MARKNUM_FOLDEROPENMID, wx.stc.STC_MARK_BOXMINUSCONNECTED, "white", "#808080")
+        self.MarkerDefine(wx.stc.STC_MARKNUM_FOLDERMIDTAIL, wx.stc.STC_MARK_TCORNER,           "white", "#808080")
+
+        self.SetStyleSpecs()
+
+        self.Bind(wx.EVT_KEY_DOWN,            self.OnKeyDown)
+        self.Bind(wx.EVT_SET_FOCUS,           self.OnFocus)
+        self.Bind(wx.EVT_KILL_FOCUS,          self.OnKillFocus)
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED,  self.OnSysColourChange)
+        self.Bind(wx.stc.EVT_STC_MARGINCLICK, self.OnMarginClick)
+        self.Bind(wx.stc.EVT_STC_UPDATEUI,    self.OnUpdateUI)
+        self.Bind(wx.stc.EVT_STC_ZOOM,        self.OnZoom)
+
+
+    def SetStyleSpecs(self):
+        """Sets STC style colours."""
+        fgcolour, bgcolour, highcolour = (
+            wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
+            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
+                      if self.Enabled else wx.SYS_COLOUR_BTNFACE,
+                      wx.SYS_COLOUR_HOTLIGHT)
+        )
+
+        self.SetCaretForeground(fgcolour)
+        self.SetCaretLineBackground("#00FFFF")
+        self.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT,
+                          "face:%s,back:%s,fore:%s" % (self.FONT_FACE, bgcolour, fgcolour))
+        self.StyleSetSpec(wx.stc.STC_STYLE_BRACELIGHT, "fore:%s" % highcolour)
+        self.StyleSetSpec(wx.stc.STC_STYLE_BRACEBAD, "fore:#FF0000")
+        self.StyleClearAll() # Apply the new default style to all styles
+
+        self.StyleSetSpec(wx.stc.STC_JSON_DEFAULT,   "face:%s" % self.FONT_FACE)
+        self.StyleSetSpec(wx.stc.STC_JSON_STRING,    "fore:#FF007F") # "
+        # 01234567890.+-e
+        self.StyleSetSpec(wx.stc.STC_JSON_NUMBER, "fore:#FF00FF")
+        # : [] {}
+        self.StyleSetSpec(wx.stc.STC_JSON_OPERATOR, "fore:%s" % highcolour)
+        # //...
+        self.StyleSetSpec(wx.stc.STC_JSON_LINECOMMENT, "fore:#008000")
+        # /*...*/
+        self.StyleSetSpec(wx.stc.STC_JSON_BLOCKCOMMENT, "fore:#008000")
+
+
+    def Enable(self, enable=True):
+        """Enables or disables the control, updating display."""
+        if self.Enabled == enable: return False
+        result = super(self.__class__, self).Enable(enable)
+        self.SetStyleSpecs()
+        return result
+
+    def OnFocus(self, event):
+        """Handler for control getting focus, shows caret."""
+        event.Skip()
+        self.SetCaretStyle(wx.stc.STC_CARETSTYLE_LINE)
+
+
+    def OnKillFocus(self, event):
+        """Handler for control losing focus, hides autocomplete and caret."""
+        event.Skip()
+        self.AutoCompCancel()
+        self.SetCaretStyle(wx.stc.STC_CARETSTYLE_INVISIBLE)
+
+
+    def OnSysColourChange(self, event):
+        """Handler for system colour change, updates STC styling."""
+        event.Skip()
+        self.SetStyleSpecs()
+
+
+    def OnZoom(self, event):
+        """Disables zoom."""
+        if self.Zoom: self.Zoom = 0
+
+
+    def OnUpdateUI(self, evt):
+        # check for matching braces
+        braceAtCaret = -1
+        braceOpposite = -1
+        charBefore = None
+        caretPos = self.GetCurrentPos()
+
+        if caretPos > 0:
+            charBefore = self.GetCharAt(caretPos - 1)
+            styleBefore = self.GetStyleAt(caretPos - 1)
+
+        # check before
+        if charBefore and chr(charBefore) in "[]{}()" and styleBefore == wx.stc.STC_JSON_OPERATOR:
+            braceAtCaret = caretPos - 1
+
+        # check after
+        if braceAtCaret < 0:
+            charAfter = self.GetCharAt(caretPos)
+            styleAfter = self.GetStyleAt(caretPos)
+
+            if charAfter and chr(charAfter) in "[]{}()" and styleAfter == wx.stc.STC_JSON_OPERATOR:
+                braceAtCaret = caretPos
+
+        if braceAtCaret >= 0:
+            braceOpposite = self.BraceMatch(braceAtCaret)
+
+        if braceAtCaret != -1  and braceOpposite == -1:
+            self.BraceBadLight(braceAtCaret)
+        else:
+            self.BraceHighlight(braceAtCaret, braceOpposite)
+            #pt = self.PointFromPosition(braceOpposite)
+            #self.Refresh(True, wxRect(pt.x, pt.y, 5,5))
+            #print(pt)
+            #self.Refresh(False)
+
+
+    def ToggleFolding(self):
+        """Toggles all current folding, off if all lines folded else on."""
+        lineCount = self.GetLineCount()
+        expanding = True
+
+        # Find out if we are folding or unfolding
+        for lineNum in range(lineCount):
+            if self.GetFoldLevel(lineNum) & wx.stc.STC_FOLDLEVELHEADERFLAG:
+                expanding = not self.GetFoldExpanded(lineNum)
+                break
+
+        lineNum = 0
+        while lineNum < lineCount:
+            level = self.GetFoldLevel(lineNum)
+            if level & wx.stc.STC_FOLDLEVELHEADERFLAG \
+            and (level & wx.stc.STC_FOLDLEVELNUMBERMASK) == wx.stc.STC_FOLDLEVELBASE:
+                if expanding:
+                    self.SetFoldExpanded(lineNum, True)
+                    lineNum = self.ToggleLineFolding(lineNum, True)
+                    lineNum = lineNum - 1
+                else:
+                    lastChild = self.GetLastChild(lineNum, -1)
+                    self.SetFoldExpanded(lineNum, False)
+                    if lastChild > lineNum:
+                        self.HideLines(lineNum+1, lastChild)
+            lineNum = lineNum + 1
+
+
+    def ToggleLineFolding(self, line, doExpand, force=False, visLevels=0, level=-1):
+        """Expands or collapses folding on specified line."""
+        lastChild = self.GetLastChild(line, level)
+        line = line + 1
+
+        while line <= lastChild:
+            if force:
+                (self.ShowLines if visLevels > 0 else self.HideLines)(line, line)
+            elif doExpand: self.ShowLines(line, line)
+
+            if level == -1:
+                level = self.GetFoldLevel(line)
+
+            if level & self.STC_FOLDLEVELHEADERFLAG:
+                if force:
+                    self.SetFoldExpanded(line, visLevels > 1)
+
+                    line = self.ToggleLineFolding(line, doExpand, force, visLevels-1)
+
+                else:
+                    on = doExpand and self.GetFoldExpanded(line)
+                    line = self.ToggleLineFolding(line, on, force, visLevels-1)
+            else:
+                line += 1
+
+        return line
+
+
+    def OnMarginClick(self, event):
+        """Handler for clicking margin, folds 2nd margin icons."""
+        if event.GetMargin() != 1: return
+
+        if event.GetShift() and event.GetControl():
+            self.ToggleFolding()
+            return
+
+        lineClicked = self.LineFromPosition(event.GetPosition())
+        if not self.GetFoldLevel(lineClicked) & wx.stc.STC_FOLDLEVELHEADERFLAG:
+            return
+
+        if event.GetShift():
+            self.SetFoldExpanded(lineClicked, True)
+            self.ToggleLineFolding(lineClicked, True, True, 1)
+        elif event.GetControl():
+            if self.GetFoldExpanded(lineClicked):
+                self.SetFoldExpanded(lineClicked, False)
+                self.ToggleLineFolding(lineClicked, False, True, 0)
+            else:
+                self.SetFoldExpanded(lineClicked, True)
+                self.ToggleLineFolding(lineClicked, True, True, 100)
+        else:
+            self.ToggleFold(lineClicked)
+
+
+    def OnKeyDown(self, event):
+        """
+        Shows autocomplete if user is entering a known word, or pressed
+        Ctrl-Space.
+        """
+        skip = True
+        if self.CallTipActive():
+            self.CallTipCancel()
+        if not self.AutoCompActive() and not event.AltDown():
+            do_autocomp = False
+            words = self.KEYWORDS
+            autocomp_len = 0
+            if event.UnicodeKey in KEYS.SPACE and event.ControlDown():
+                # Start autocomp when user presses Ctrl+Space
+                do_autocomp = True
+            elif not event.ControlDown():
+                # Check if we have enough valid text to start autocomplete
+                char = None
+                try: # Not all keycodes can be chars
+                    char = chr(event.UnicodeKey).decode("latin1")
+                except Exception:
+                    pass
+                if char not in KEYS.ENTER and char is not None:
+                    # Get a slice of the text on the current text up to caret.
+                    line_text = self.GetTextRange(
+                        self.PositionFromLine(self.GetCurrentLine()),
+                        self.GetCurrentPos()
+                    )
+                    text = u""
+                    for last_word in re.findall(r"(\w+)$", line_text, re.I):
+                        text += last_word
+                    text = text.upper()
+                    if char in string.letters:
+                        text += char.upper()
+                        if len(text) >= self.AUTOCOMP_LEN and any(x for x in
+                        words if x.upper().startswith(text)):
+                            do_autocomp = True
+                            current_pos = self.GetCurrentPos() - 1
+                            while chr(self.GetCharAt(current_pos)).isalnum():
+                                current_pos -= 1
+                            autocomp_len = self.GetCurrentPos() - current_pos - 1
+            if do_autocomp:
+                if skip: event.Skip()
+                self.AutoCompShow(autocomp_len, u" ".join(words))
+        elif self.AutoCompActive() and event.KeyCode in KEYS.DELETE:
+            self.AutoCompCancel()
+        if skip: event.Skip()
 
 
 

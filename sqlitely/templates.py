@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.05.2020
+@modified    14.06.2020
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -720,10 +720,14 @@ under the MIT License.
   <li>openpyxl,
       <a href="https://pypi.org/project/openpyxl"><font color="{{ conf.LinkColour }}">
           pypi.org/project/openpyxl</font></a></li>
+  <li>Pillow,
+      <a href="https://pypi.org/project/Pillow"><font color="{{ conf.LinkColour }}">pypi.org/project/Pillow</font></a></li>
   <li>pyparsing,
       <a href="https://pypi.org/project/pyparsing/"><font color="{{ conf.LinkColour }}">pypi.org/project/pyparsing</font></a></li>
   <li>Python,
       <a href="https://www.python.org/"><font color="{{ conf.LinkColour }}">python.org</font></a></li>
+  <li>pytz,
+      <a href="https://pythonhosted.org/pytz/"><font color="{{ conf.LinkColour }}">pythonhosted.org/pytz</font></a></li>
   <li>SQLite,
       <a href="https://www.sqlite.org/"><font color="{{ conf.LinkColour }}">sqlite.org</font></a></li>
   <li>sqlite-parser,

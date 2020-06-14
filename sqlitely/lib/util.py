@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.05.2020
+@modified    03.06.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -23,6 +23,10 @@ import sys
 import time
 import urllib
 import warnings
+
+from PIL import Image
+import pytz
+import wx
 
 
 class CaselessDict(dict):
@@ -129,6 +133,92 @@ class tzinfo_utc(datetime.tzinfo):
     def __repr__(self):      return "%s()" % self.__class__.__name__
     def __eq__(self, other): return isinstance(other, self.__class__)
 UTC = tzinfo_utc() # UTC timezone singleton
+
+
+def parse_datetime(s):
+    """
+    Tries to parse string as ISO8601 datetime, returns input on error.
+    Supports "YYYY-MM-DD[ T]HH:MM(:SS)(.micros)?(Z|[+-]HH(:MM)?)?".
+    """
+    if not isinstance(s, basestring) or len(s) < 18: return s
+    rgx = r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})(\.\d+)?(([+-]\d{2}(:?\d{2})?)|Z)?$"
+    result, match = s, re.match(rgx, s)
+    if match:
+        _, micros, _, offset, _ = match.groups()
+        minimal = re.sub(r"\D", "", s[:match.span(3)[0]] if offset else s)
+        fmt = "%Y%m%d%H%M%S" + ("%f" if micros else "")
+        try:
+            result = datetime.datetime.strptime(minimal, fmt)
+            if offset: # Support timezones like 'Z' or '+03:00'
+                hh, mm = map(int, [offset[1:3], offset[4:]])
+                delta = datetime.timedelta(hours=hh, minutes=mm)
+                if offset.startswith("-"): delta = -delta
+                z = pytz.tzinfo.StaticTzInfo()
+                z._utcoffset, z._tzname, z.zone = delta, offset, offset
+                result = z.localize(result)
+        except ValueError: pass
+    return result
+
+
+def parse_date(s):
+    """
+    Tries to parse string as date, returns input on error.
+    Supports "YYYY-MM-DD", "YYYY.MM.DD", "YYYY/MM/DD", "YYYYMMDD",
+    "DD.MM.YYYY", "DD/MM/YYYY", and "DD-MM-YYYY".
+    """
+    if not isinstance(s, basestring) or len(s) < 8: return s
+    rgxs = [r"^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})$",
+            r"^(?P<year>\d{4})\.(?P<month>\d{2})\.(?P<day>\d{2})$",
+            r"^(?P<year>\d{4})\/(?P<month>\d{2})\/(?P<day>\d{2})$",
+            r"^(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})$",
+            r"^(?P<day>\d{2})\/(?P<month>\d{2})\/(?P<year>\d{4})$",
+            r"^(?P<day>\d{2})\.(?P<month>\d{2})\.(?P<year>\d{4})$"]
+    for r in rgxs:
+        m = re.match(r, s)
+        if not m: continue # for r
+        year, month, day = (m.group(x) for x in ("year", "month", "day"))
+        try: s = datetime.date(*map(int, (year, month, day)))
+        except Exception: pass
+        break # for r
+    return s
+
+
+def parse_time(s):
+    """
+    Tries to parse string as time, returns input on error.
+    Supports "HH:MM(:SS)?(.micros)?(Z|[+-]HH(:MM)?)?".
+    """
+    if not isinstance(s, basestring) or len(s) < 18: return s
+    rgx = r"^\d{2}:\d{2}(:\d{2})?(\.\d+)?(([+-]\d{2}(:?\d{2})?)|Z)?$"
+    result, match = s, re.match(rgx, s)
+    if match:
+        seconds, micros, _, offset, _ = match.groups()
+        minimal = re.sub(r"\D", "", s[:match.span(3)[0]] if offset else s)
+        fmt = "%H%M" + ("%S" if seconds else "") + ("%f" if micros else "")
+        try:
+            result = datetime.datetime.strptime(minimal, fmt).time()
+            if offset: # Support timezones like 'Z' or '+03:00'
+                hh, mm = map(int, [offset[1:3], offset[4:]])
+                delta = datetime.timedelta(hours=hh, minutes=mm)
+                if offset.startswith("-"): delta = -delta
+                z = pytz.tzinfo.StaticTzInfo()
+                z._utcoffset, z._tzname, z.zone = delta, offset, offset
+                result = z.localize(result)
+        except ValueError: pass
+    return result
+
+
+def wx_image_to_pil(image):
+    """Returns PIL.Image for wx.Image."""
+    (w, h), data = image.GetSize(), image.GetData()
+
+    chans = [Image.new("L", (w, h)) for i in range(3)]
+    for i in range(3): chans[i].fromstring(str(data[i::3]))
+    if image.HasAlpha():
+        chans += [Image.new("L", (w, h))]
+        chans[-1].fromstring(str(image.GetAlpha()))
+
+    return Image.merge("RGBA"[:len(chans)], chans)
 
 
 def m(o, name, case_insensitive=True):
