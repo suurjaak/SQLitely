@@ -6,7 +6,9 @@
 ; /DSUFFIX64=<"_x64" for 64-bit installer>
 ;
 ; @created   22.08.2019
-; @modified  10.09.2014
+; @modified  14.06.2020
+
+Unicode True
 
 ; HM NIS Edit Wizard helper defines
 !define PRODUCT_NAME "SQLitely"
