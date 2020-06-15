@@ -199,8 +199,6 @@ class ColourManager(object):
         @param   darkcolourmap    colours changed if dark background,
                                   {"attribute": wx.SYS_COLOUR_XYZ or wx.Colour}
         """
-        if "nt" != os.name: return
-
         cls.colourcontainer = colourcontainer
         cls.colourmap.update(colourmap)
         cls.darkcolourmap.update(darkcolourmap)
@@ -2851,6 +2849,44 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         return super(HexTextCtrl, self).Text
 
 
+    def InsertInto(self, text):
+        """Inserts string at current insertion point."""
+        pos = self.InsertionPoint
+        if self._fixed and not self._bytes: return # NULL number
+        if pos == self.GetLastPosition() and self._fixed: pass
+
+        self._QueueEvents()
+
+        selection = self.GetSelection()
+        if selection[0] != selection[1] and not self._fixed:
+            del self._bytes [selection[0]:selection[1] + 1]
+            del self._bytes0[selection[0]:selection[1] + 1]
+            del self._text  [selection[0]:selection[1] + 1]
+            self.DeleteBack()
+        elif self._fixed:
+            self.SetSelection(selection[0], selection[0])
+
+        if isinstance(text, unicode): text = text.encode("utf-8")
+        text = re.sub("[^0-9a-fA-F]", "", text)
+        text = text[:len(text) - len(text) % 2]
+        if not text: return
+
+        bpos = pos / 3 + (pos == self.GetLastPosition())
+        v = bytearray.fromhex(text)
+        maxlen = min(len(v), len(self._bytes) - bpos) if self._fixed else len(v)
+        v = v[:maxlen]
+
+        if bpos + maxlen > len(self._bytes):
+            self._bytes0.extend([None] * (bpos + maxlen - len(self._bytes)))
+        if self.Overtype:
+            self._bytes[bpos:bpos + maxlen] = v
+        else:
+            self._bytes0[bpos:bpos] = [None] * len(v)
+            self._bytes [bpos:bpos] = v
+
+        self._Populate()        
+
+
     def Undo(self):
         """"""
         if not self.CanUndo(): return
@@ -2964,42 +3000,9 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
     def OnPaste(self, event):
         """Handles paste event."""
-        sself = super(HexTextCtrl, self)
         text = event.String
         event.SetString("") # Cancel default paste
-        if self._fixed and not self._bytes: return # NULL number
-        if sself.CurrentPos == self.GetLastPosition() and self._fixed: pass
-
-        self._QueueEvents()
-
-        selection = self.GetSelection()
-        if selection[0] != selection[1] and not self._fixed:
-            del self._bytes [selection[0]:selection[1] + 1]
-            del self._bytes0[selection[0]:selection[1] + 1]
-            del self._text  [selection[0]:selection[1] + 1]
-            self.DeleteBack()
-        elif self._fixed:
-            self.SetSelection(selection[0], selection[0])
-
-        if isinstance(text, unicode): text = text.encode("utf-8")
-        text = re.sub("[^0-9a-fA-F]", "", text)
-        text = text[:len(text) - len(text) % 2]
-        if not text: return
-
-        v = bytearray.fromhex(text)
-        pos = self.CurrentPos
-        maxlen = min(len(v), len(self._bytes) - pos) if self._fixed else len(v)
-        v = v[:maxlen]
-
-        if pos + maxlen > len(self._bytes):
-            self._bytes0.extend([None] * (pos + maxlen - len(self._bytes)))
-        if self.Overtype:
-            self._bytes[pos:pos + maxlen] = v
-        else:
-            self._bytes0[pos:pos] = [None] * len(v)
-            self._bytes [pos:pos] = v
-
-        self._Populate()
+        self.InsertInto(text)
 
 
     def OnChar(self, event):

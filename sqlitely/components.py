@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.06.2020
+@modified    15.06.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -7989,10 +7989,10 @@ class ColumnDialog(wx.Dialog):
             self._Populate(value, skip=NAME)
 
         def update(value, reset=False):
+            state["changing"] = True
             num = self._gridbase.db.get_affinity(self._col) in ("INTEGER", "REAL")
             tedit.Shown, nedit.Shown = not num, num
             edit = tedit if tedit.Shown else nedit
-            edit.SetEvtHandlerEnabled(False)
             v = "" if value is None else util.to_unicode(value)
             edit.Hint = "<NULL>" if value is None else ""
             with warnings.catch_warnings():
@@ -8000,7 +8000,7 @@ class ColumnDialog(wx.Dialog):
                 if v != edit.Value: edit.ChangeValue(v)
             if reset: tedit.DiscardEdits(), nedit.DiscardEdits()
             page.Layout()
-            edit.SetEvtHandlerEnabled(True)
+            wx.CallAfter(state.update, {"changing": False})
 
 
         tb   = self._MakeToolBar(page, NAME, label="", filelabel="", undo=False, redo=False)
@@ -8024,15 +8024,17 @@ class ColumnDialog(wx.Dialog):
         page.Sizer.Add(nedit,          border=5, flag=wx.ALL | wx.GROW)
         page.Sizer.Add(sizer_buttons,  border=5, flag=wx.LEFT | wx.BOTTOM | wx.GROW)
 
-        tedit.Bind(wx.EVT_TEXT, functools.partial(self._OnChar, handler=on_change))
-        nedit.Bind(wx.EVT_TEXT, functools.partial(self._OnChar, handler=on_change))
+        tedit.Bind(wx.EVT_TEXT, functools.partial(self._OnChar, name=NAME, handler=on_change))
+        nedit.Bind(wx.EVT_TEXT, functools.partial(self._OnChar, name=NAME, handler=on_change))
         button_set .Bind(wx.EVT_BUTTON, on_set)
         button_case.Bind(wx.EVT_BUTTON, on_case)
         button_copy.Bind(wx.EVT_BUTTON, on_copy)
 
         self._getters[NAME] = lambda: tedit.GetValue() if tedit.Shown else nedit.GetValue()
         self._setters[NAME] = update
+        state = self._state.setdefault(NAME, {"changing": True})
         tedit.SetFocus()
+        wx.CallAfter(state.update, {"changing": False})
         return page
 
 
@@ -8080,9 +8082,8 @@ class ColumnDialog(wx.Dialog):
             self._Populate(ctrl1.Value, skip=NAME)
 
         def on_paste(value, propagate=False):
-            try: v = re.sub(r"\s", "", value).decode("hex")
-            except Exception: return
-            update(v, propagate)
+            stchex.InsertInto(value)
+            if propagate: self._Populate(stchex.Value, skip=NAME)
 
         def on_position(event):
             on_scroll(event)
@@ -8115,8 +8116,8 @@ class ColumnDialog(wx.Dialog):
             ctrl2.Undo() if event.ModificationType & wx.stc.STC_PERFORMED_UNDO else ctrl2.Redo()
             ctrl2.SetFirstVisibleLine(ctrl1.FirstVisibleLine)
             stctxt.UpdateBytes(stchex.Value) # Restore bytes
-            wx.CallLater(0, state["changing"].clear)
             self._Populate(ctrl1.Value, skip=NAME)
+            wx.CallLater(0, state["changing"].clear)
 
         def on_undo(*a, **kw): stchex.Undo()
         def on_redo(*a, **kw): stchex.Redo()
@@ -8127,7 +8128,6 @@ class ColumnDialog(wx.Dialog):
             page.Layout()
 
         def update(value, reset=False, propagate=False):
-            stchex.EvtHandlerEnabled = stctxt.EvtHandlerEnabled = False
             state["changing"][stchex] = state["changing"][stctxt] = True
             if reset or state["pristine"]:
                 stchex.Value = stctxt.Value = value
@@ -8137,7 +8137,6 @@ class ColumnDialog(wx.Dialog):
             state["pristine"] = False
             set_status()
             if propagate: self._Populate(value, skip=NAME)
-            stchex.EvtHandlerEnabled = stctxt.EvtHandlerEnabled = True
             wx.CallAfter(state["changing"].clear)
 
 
@@ -8172,8 +8171,8 @@ class ColumnDialog(wx.Dialog):
         page.Sizer.Add(stc_sizer, border=5, flag=wx.RIGHT | wx.GROW, proportion=1)
         page.Sizer.Add(sizer_footer, flag=wx.GROW)
 
-        handler1 = functools.partial(self._OnChar, handler=functools.partial(on_change, stchex))
-        handler2 = functools.partial(self._OnChar, handler=functools.partial(on_change, stctxt))
+        handler1 = functools.partial(self._OnChar, name=NAME, handler=functools.partial(on_change, stchex))
+        handler2 = functools.partial(self._OnChar, name=NAME, handler=functools.partial(on_change, stctxt))
         stchex.Bind(wx.EVT_CHAR_HOOK,        handler1)
         stchex.Bind(wx.EVT_KEY_DOWN,         on_tab)
         stchex.Bind(wx.stc.EVT_STC_MODIFIED, on_undoredo)
@@ -8189,6 +8188,9 @@ class ColumnDialog(wx.Dialog):
         stctxt.Bind(controls.EVT_CARET_POS,  on_position)
         stctxt.Bind(controls.EVT_LINE_POS,   on_scroll)
         stctxt.Bind(controls.EVT_SELECT,     on_select)
+
+        self._hex = stchex # @todo remove
+        self._text = stctxt
 
         self._getters[NAME] = stchex.GetValue
         self._setters[NAME] = update
@@ -8217,11 +8219,11 @@ class ColumnDialog(wx.Dialog):
         def on_redo(*a, **kw): stc.Redo()
 
         def update(value, reset=False):
-            stc.SetEvtHandlerEnabled(False)
+            state["changing"] = True
             stc.Text = "" if value is None else util.to_unicode(value)
             if reset: stc.EmptyUndoBuffer()
             validate(stc.Text, propagate=False)
-            stc.SetEvtHandlerEnabled(True)
+            wx.CallLater(0, state.update, {"changing": False})
 
 
         tb     = self._MakeToolBar(page, NAME, label="", filelabel="", undo=on_undo, redo=on_redo)
@@ -8233,7 +8235,7 @@ class ColumnDialog(wx.Dialog):
         hint.Label = "Value shown as JSON, with simple validation check"
         cb.ToolTip = "Show warning if value is not parseable as JSON"
         cb.Value   = True
-        ColourManager.Manage(hint,   "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
+        ColourManager.Manage(hint, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
         status.ForegroundColour = wx.RED
 
         page.Sizer   = wx.BoxSizer(wx.VERTICAL)
@@ -8252,12 +8254,12 @@ class ColumnDialog(wx.Dialog):
         page.Sizer.Add(stc, border=5, flag=wx.RIGHT | wx.GROW, proportion=1)
         page.Sizer.Add(sizer_footer, flag=wx.GROW)
 
-        stc.Bind(wx.stc.EVT_STC_MODIFIED, functools.partial(self._OnChar, handler=validate))
+        stc.Bind(wx.stc.EVT_STC_MODIFIED, functools.partial(self._OnChar, name=NAME, handler=validate))
         self.Bind(wx.EVT_CHECKBOX,        on_toggle_validate, cb)
 
         self._getters[NAME] = stc.GetText
         self._setters[NAME] = update
-        state = self._state.setdefault(NAME, {"validate": True})
+        state = self._state.setdefault(NAME, {"validate": True, "changing": False})
         return page
 
 
@@ -8298,20 +8300,21 @@ class ColumnDialog(wx.Dialog):
             validate(stc.Text, propagate=False)
 
         def on_paste(value, propagate=False):
-            stc.Text = value
+            stc.InsertText(stc.CurrentPos, value)
             validate(value, propagate=propagate)
 
         def on_undo(*a, **kw): stc.Undo()
         def on_redo(*a, **kw): stc.Redo()
 
         def update(value, reset=False):
-            stc.SetEvtHandlerEnabled(False)
-            v = value.encode("utf-8") if isinstance(value, unicode) else "" if value is None else str(value)
+            state["changing"] = True
+            v = value.encode("utf-8") if isinstance(value, unicode) else \
+                "" if value is None else str(value)
             stc.Text = v.encode("base64").strip()
             if reset: stc.EmptyUndoBuffer()
             status.Label = "Raw size: %s, encoded %s" % (len(v), len(stc.Text))
             page.Layout()
-            stc.SetEvtHandlerEnabled(True)
+            wx.CallAfter(state.update, {"changing": False})
 
 
         tb     = self._MakeToolBar(page, NAME, "Base64", paste=on_paste, undo=on_undo, redo=on_redo)
@@ -8350,14 +8353,14 @@ class ColumnDialog(wx.Dialog):
         page.Sizer.Add(sizer_footer, flag=wx.GROW)
 
         page.Bind(wx.EVT_CHECKBOX,           on_toggle_validate, cb)
-        stc.Bind(wx.EVT_CHAR_HOOK,           functools.partial(self._OnChar, handler=validate, mask=MASK))
-        stc.Bind(wx.stc.EVT_STC_MODIFIED,    functools.partial(self._OnChar, handler=validate))
+        stc.Bind(wx.EVT_CHAR_HOOK,           functools.partial(self._OnChar, name=NAME, handler=validate, mask=MASK))
+        stc.Bind(wx.stc.EVT_STC_MODIFIED,    functools.partial(self._OnChar, name=NAME, handler=validate))
         stc.Bind(wx.stc.EVT_STC_ZOOM,        lambda e: stc.Zoom and stc.SetZoom(0)) # Disable zoom
         page.Bind(wx.EVT_SYS_COLOUR_CHANGED, lambda e: set_styles())
 
         self._getters[NAME] = stc.GetText
         self._setters[NAME] = update
-        state = self._state.setdefault(NAME, {"validate": True})
+        state = self._state.setdefault(NAME, {"validate": True, "changing": False})
         return page
 
 
@@ -8461,7 +8464,7 @@ class ColumnDialog(wx.Dialog):
                 self._Populate(v, skip=NAME)
 
         def update(value, reset=False):
-            dtedit.EvtHandlerEnabled = tsedit.EvtHandlerEnabled = False
+            state["changing"] = True
             dt = ts = d = t = u = z = None
             dcb.Value = tcb.Value = ucb.Value = zcb.Value = False
             dedit.Enabled = tedit.Enabled = uedit.Enabled = zedit.Enabled = False
@@ -8515,7 +8518,7 @@ class ColumnDialog(wx.Dialog):
             if reset: dtedit.DiscardEdits()
             state["ignore_change"] = False
             if reset: page.Layout()
-            dtedit.EvtHandlerEnabled = tsedit.EvtHandlerEnabled = True
+            wx.CallAfter(state.update, {"changing": False})
 
 
         tb      = self._MakeToolBar(page, NAME, load=False, save=False, undo=False, redo=False)
@@ -8605,8 +8608,8 @@ class ColumnDialog(wx.Dialog):
         ubutton.Bind(wx.EVT_BUTTON,                   on_set_current)
         zbutton.Bind(wx.EVT_BUTTON,                   on_set_current)
 
-        dtedit.Bind(wx.EVT_CHAR_HOOK, functools.partial(self._OnChar, handler=change_value))
-        tsedit.Bind(wx.EVT_CHAR_HOOK, functools.partial(self._OnChar, handler=change_value))
+        dtedit.Bind(wx.EVT_CHAR_HOOK, functools.partial(self._OnChar, name=NAME, handler=change_value))
+        tsedit.Bind(wx.EVT_CHAR_HOOK, functools.partial(self._OnChar, name=NAME, handler=change_value))
 
         self._getters[NAME] = dtedit.GetValue
         self._setters[NAME] = update
@@ -8804,7 +8807,7 @@ class ColumnDialog(wx.Dialog):
         return page
 
 
-    def _OnChar(self, event, handler=None, mask=None, delay=1000):
+    def _OnChar(self, event, name=None, handler=None, mask=None, delay=1000):
         if isinstance(event, wx.KeyEvent) and mask and not event.HasModifiers() \
         and unichr(event.UnicodeKey) not in mask \
         and event.KeyCode not in controls.KEYS.NAVIGATION + controls.KEYS.COMMAND: 
@@ -8816,9 +8819,17 @@ class ColumnDialog(wx.Dialog):
             handler(c.GetValue())
 
         event.Skip()
-        if not handler or isinstance(event, wx.KeyEvent) and (event.HasModifiers()
+        changestate = self._state.get(name, {}).get("changing")
+        if not handler or changestate is True \
+        or isinstance(changestate, dict) and changestate.get(event.EventObject) \
+        or isinstance(event, wx.KeyEvent) and (event.HasModifiers()
         or 0 < event.UnicodeKey < wx.WXK_SPACE
-        and event.KeyCode not in controls.KEYS.COMMAND + controls.KEYS.TAB):
+        and event.KeyCode not in controls.KEYS.COMMAND + controls.KEYS.TAB) \
+        or isinstance(event, wx.stc.StyledTextEvent) and not event.ModificationType & (
+            wx.stc.STC_MOD_BEFOREDELETE | wx.stc.STC_MOD_BEFOREINSERT | 
+            wx.stc.STC_MOD_DELETETEXT   | wx.stc.STC_MOD_INSERTCHECK  | 
+            wx.stc.STC_MOD_INSERTTEXT
+        ):
             return
         if self._timer: self._timer.Stop()
         callback = functools.partial(do_handle, event.EventObject)
