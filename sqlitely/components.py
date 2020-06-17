@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.06.2020
+@modified    17.06.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -1119,8 +1119,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                                                for k, v in vals.items())
                             item_link = wx.MenuItem(submenu, -1, "Open table %s ON %s" %
                                                     (grammar.quote(table2, force=True), valstr))
-                            menu.Bind(wx.EVT_MENU, functools.partial(on_event, open=True, table=table2, data=vals), item_link)
                             submenu.Append(item_link)
+                            menu.Bind(wx.EVT_MENU, functools.partial(on_event, open=True, table=table2, data=vals), item_link)
                     else:
                         menu2.Append(wx.ID_ANY, itemtitle)
                     titles.append(itemtitle)
@@ -2534,16 +2534,19 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         item_reindex  = wx.MenuItem(menu, -1, "Reindex table")
         item_truncate = wx.MenuItem(menu, -1, "Truncate table")
         item_drop     = wx.MenuItem(menu, -1, "Drop table")
-        if "index" not in self._db.get_related("table", self._item["name"], own=True):
-            item_reindex.Enable(False)
-        if not self._grid.Table.GetNumberRows(total=True):
-            item_truncate.Enable(False)
+
         menu.Append(item_export)
         menu.Append(item_import)
         menu.AppendSeparator()
         menu.Append(item_reindex)
         menu.Append(item_truncate)
         menu.Append(item_drop)
+
+        if "index" not in self._db.get_related("table", self._item["name"], own=True):
+            item_reindex.Enable(False)
+        if not self._grid.Table.GetNumberRows(total=True):
+            item_truncate.Enable(False)
+
         menu.Bind(wx.EVT_MENU, self._OnExportToDB, item_export)
         menu.Bind(wx.EVT_MENU, on_import,          item_import)
         menu.Bind(wx.EVT_MENU, on_reindex,         item_reindex)
@@ -2950,6 +2953,7 @@ class SchemaObjectPage(wx.Panel):
             if not self: return
             if self._newmode: edit_name.SetFocus(), edit_name.SelectAll()
             else: button_edit.SetFocus()
+            wx.CallLater(100, self.SendSizeEvent)
         wx.CallLater(0, after)
 
 
@@ -3062,15 +3066,20 @@ class SchemaObjectPage(wx.Panel):
                 si = colsizer.GetItem(i)
                 if si.Window:
                     w, b = si.Window.Size[0], (si.Flag & wx.LEFT and si.Border)
-                else:
+                elif si.Sizer:
                     w, b = si.Sizer.Size[0], 0
+                    ws = [x.Size[0] for x in si.Sizer.Children]
+                    bs = [x.Flag & wx.LEFT and x.Border for x in si.Sizer.Children]
 
                 while topsizer.GetItem(itop).Spacer: itop += 1
                 sitop = topsizer.GetItem(itop)
                 if sitop.Window:
                     wtop = w + (0 if sitop.Flag & wx.LEFT and sitop.Border else b)
                     sitop.Window.MinSize = sitop.Window.MaxSize = wtop, sitop.Window.Size[1]
-
+                elif sitop.Sizer:
+                    for j, sichild in enumerate(sitop.Sizer.Children):
+                        wnd = sichild.Window
+                        if wnd: wnd.MinSize = wnd.MaxSize = ws[j], wnd.Size[1]
                 pos  += si.Size[0]
                 itop += 1
             topsizer.Layout()
@@ -3161,8 +3170,6 @@ class SchemaObjectPage(wx.Panel):
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_table = wx.BoxSizer(wx.HORIZONTAL)
         sizer_flags = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_body  = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_when  = wx.BoxSizer(wx.HORIZONTAL)
 
         label_table = self._ctrls["label_table"] = wx.StaticText(panel, label="T&able:")
         list_table = self._ctrls["table"] = wx.ComboBox(panel,
@@ -3183,19 +3190,16 @@ class SchemaObjectPage(wx.Panel):
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
         panel1, panel2 = self._MakeColumnsGrid(splitter), wx.Panel(splitter)
-        panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         label_body = wx.StaticText(panel2, label="&Body:")
         stc_body   = self._ctrls["body"] = controls.SQLiteTextCtrl(panel2,
             traversable=True, size=(-1, 40), style=wx.BORDER_STATIC)
-        label_body.MinSize = (35, -1)
         label_body.ToolTip = "Trigger body SQL, any number of " \
                              "SELECT-INSERT-UPDATE-DELETE statements. " \
                              "Can access OLD row reference on UPDATE and DELETE, " \
                              "and NEW row reference on INSERT and UPDATE."
 
         label_when = wx.StaticText(panel2, label="WHEN:", name="trigger_when_label")
-        label_when.MinSize = (35, -1)
         stc_when   = self._ctrls["when"] = controls.SQLiteTextCtrl(panel2,
             traversable=True, size=(-1, 40), name="trigger_when", style=wx.BORDER_STATIC)
         label_when.ToolTip = "Trigger WHEN expression, trigger executed only if WHEN is true. " \
@@ -3213,14 +3217,13 @@ class SchemaObjectPage(wx.Panel):
 
         sizer_flags.Add(check_for)
 
-        sizer_body.Add(label_body, border=5, flag=wx.RIGHT)
-        sizer_body.Add(stc_body, proportion=1, flag=wx.GROW)
-
-        sizer_when.Add(label_when, border=5, flag=wx.RIGHT)
-        sizer_when.Add(stc_when, proportion=1, flag=wx.GROW)
-
-        panel2.Sizer.Add(sizer_body, proportion=3, border=5, flag=wx.TOP | wx.GROW)
-        panel2.Sizer.Add(sizer_when, border=5, flag=wx.TOP | wx.GROW)
+        panel2.Sizer = wx.FlexGridSizer(cols=2)
+        panel2.Sizer.AddGrowableCol(1)
+        panel2.Sizer.AddGrowableRow(0)
+        panel2.Sizer.Add(label_body, border=5, flag=wx.RIGHT)
+        panel2.Sizer.Add(stc_body, flag=wx.GROW)
+        panel2.Sizer.Add(label_when, border=5, flag=wx.RIGHT)
+        panel2.Sizer.Add(stc_when, flag=wx.GROW)
 
         sizer.Add(sizer_table, border=5, flag=wx.TOP | wx.GROW)
         sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
@@ -3684,14 +3687,14 @@ class SchemaObjectPage(wx.Panel):
         if insert:
             start = panel.Sizer.Cols * i
             panel.Sizer.Insert(start,   text_name,    border=5, flag=vertical | wx.LEFT | wx.GROW, proportion=2)
-            panel.Sizer.Insert(start+1, list_type,    border=5, flag=vertical | wx.GROW, proportion=1)
-            panel.Sizer.Insert(start+2, text_default, border=5, flag=vertical | wx.GROW, proportion=2)
+            panel.Sizer.Insert(start+1, list_type,              flag=vertical | wx.GROW, proportion=1)
+            panel.Sizer.Insert(start+2, text_default,           flag=vertical | wx.GROW, proportion=2)
             self._AddSizer(panel.Sizer, sizer_flags,  border=5, flag=vertical | wx.LEFT | wx.RIGHT,  insert=start+3)
             self._AddSizer(panel.Sizer, button_open,  border=5, flag=vertical | wx.LEFT | wx.RIGHT, insert=start+4)
         else:
             panel.Sizer.Add(text_name,     border=5, flag=vertical | wx.LEFT | wx.GROW, proportion=2)
-            panel.Sizer.Add(list_type,     border=5, flag=vertical | wx.GROW, proportion=1)
-            panel.Sizer.Add(text_default,  border=5, flag=vertical | wx.GROW, proportion=2)
+            panel.Sizer.Add(list_type,               flag=vertical | wx.GROW, proportion=1)
+            panel.Sizer.Add(text_default,            flag=vertical | wx.GROW, proportion=2)
             self._AddSizer(panel.Sizer, sizer_flags, border=5, flag=vertical | wx.LEFT | wx.RIGHT)
             self._AddSizer(panel.Sizer, button_open, border=5, flag=vertical | wx.LEFT | wx.RIGHT)
 
@@ -4783,7 +4786,7 @@ class SchemaObjectPage(wx.Panel):
         dlg = controls.FormDialog(self.TopLevelParent, title, props, data,
                                   self._editmode, autocomp=words)
         wx_accel.accelerate(dlg)
-        if wx.OK != dlg.ShowModal() or not self._editmode: return
+        if wx.ID_OK != dlg.ShowModal() or not self._editmode: return
         data2 = dlg.GetData()
         if data == data2: return
 
@@ -5123,10 +5126,11 @@ class SchemaObjectPage(wx.Panel):
             if not sql or sql == data["sql"]: return True
             meta, err = grammar.parse(sql, self._category)
 
-            if not err and "INSTEAD OF" == meta["upon"] \
+            if not err and "INSTEAD OF" == meta.get("upon") and "table" in meta \
             and not any(util.lceq(meta["table"], x) for x in self._views):
                 err = "No such view: %s" % grammar.quote(meta["table"], force=True)
-            if not err and not any(util.lceq(meta["table"], x) for x in self._tables):
+            if not err and "table" in meta \
+            and not any(util.lceq(meta["table"], x) for x in self._tables):
                 err = "No such table: %s" % grammar.quote(meta["table"], force=True)
             if not err: return True
 
@@ -5143,7 +5147,7 @@ class SchemaObjectPage(wx.Panel):
         dlg = controls.FormDialog(self.TopLevelParent, title, props, data,
                                   autocomp=words, onclose=onclose)
         wx_accel.accelerate(dlg)
-        if wx.OK != dlg.ShowModal(): return
+        if wx.ID_OK != dlg.ShowModal(): return
         sql = dlg.GetData().get("sql", "").strip().replace("\r\n", "\n")
         if not sql or sql == data["sql"].strip(): return
 
@@ -5399,14 +5403,14 @@ class SchemaObjectPage(wx.Panel):
             menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(export=True), item_export)
         if self._category in ("table", "index"):
             item_reindex = wx.MenuItem(menu, -1, "Reindex")
+            menu.Append(item_reindex)
             item_reindex.Enable("index" == self._category or "index" in self._db.get_related(
                 self._category, self._item["name"], own=True))
-            menu.Append(item_reindex)
             menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(reindex=True), item_reindex)
         if self._category in ("table", ):
             item_truncate = wx.MenuItem(menu, -1, "Truncate")
-            item_truncate.Enable(bool((self._db.get_category(self._category, self.Name) or {}).get("count")))
             menu.Append(item_truncate)
+            item_truncate.Enable(bool((self._db.get_category(self._category, self.Name) or {}).get("count")))
             menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(truncate=True), item_truncate)
         item_drop = wx.MenuItem(menu, -1, "Drop")
         menu.Append(item_drop)
@@ -6230,8 +6234,9 @@ class ImportDialog(wx.Dialog):
                 if c["index"] in selected_idxs: l.Select(l.ItemCount - 1)
             if cc and not cc[-1]["skip"]: add_separator(l, i)
             pos = max(0, min(pos, l.ItemCount - 1))
-            l.ScrollLines(pos)
-            l.EnsureVisible(max(0, min(pos + l.CountPerPage, l.ItemCount) - 1))
+            if l.ItemCount:
+                l.ScrollLines(pos)
+                l.EnsureVisible(max(0, min(pos + l.CountPerPage, l.ItemCount) - 1))
             wx.CallAfter(setattr, l, "_scrolling", False)
             self.Thaw()
         actives = [sum(not y["skip"] for y in x) for x in (self._cols1, self._cols2)]
@@ -6408,15 +6413,6 @@ class ImportDialog(wx.Dialog):
             item_rename  = wx.MenuItem(menu, -1, "Rena&me")
             item_restore = wx.MenuItem(menu, -1, "&Restore name" + suf)
 
-        item_up      .Enable(bool(can_up))
-        item_down    .Enable(bool(can_down))
-        item_top     .Enable(bool(can_top))
-        item_bottom  .Enable(bool(can_bottom))
-        item_pos     .Enable(len(cc) != len(cols))
-        item_activate.Enable(bool(mydiscards))
-        item_discard .Enable(bool(myactives))
-        if item_restore: item_restore.Enable("name0" in single)
-
         menu.Append(item_up)
         menu.Append(item_down)
         menu.Append(item_top)
@@ -6427,6 +6423,15 @@ class ImportDialog(wx.Dialog):
         if item_restore: menu.Append(item_restore)
         menu.Append(item_activate)
         menu.Append(item_discard)
+
+        item_up      .Enable(bool(can_up))
+        item_down    .Enable(bool(can_down))
+        item_top     .Enable(bool(can_top))
+        item_bottom  .Enable(bool(can_bottom))
+        item_pos     .Enable(len(cc) != len(cols))
+        item_activate.Enable(bool(mydiscards))
+        item_discard .Enable(bool(myactives))
+        if item_restore: item_restore.Enable("name0" in single)
 
         def move_to_pos(pos, indexes, skip=None): self._MoveItems(side, indexes, skip, pos)
 
@@ -6511,8 +6516,12 @@ class ImportDialog(wx.Dialog):
         pk = self._table.get("pk")
         callable = functools.partial(importexport.import_data, self._data["name"],
                                      self._db, table, columns, sheet,
-                                     self._has_header, pk, self._OnProgress)
+                                     self._has_header, pk, self._OnProgressCallback)
         self._worker.work(callable)
+
+
+    def _OnProgressCallback(self, **kwargs):
+        if self: wx.CallAfter(self._OnProgress, **kwargs)            
 
 
     def _OnProgress(self, **kwargs):
@@ -7001,6 +7010,7 @@ class DataDialog(wx.Dialog):
             self._edits[coldata["name"]] = edit
             if resizable:
                 _, (ch, bh) = zip(edit.GetTextExtent("X"), edit.DoGetBorderSize())
+                if "posix" == os.name: bh = edit.GetWindowBorderSize()[1] / 2.
                 edit.Size = edit.MinSize = (-1, ch + 2 * bh)
                 rw = controls.ResizeWidget(panel, direction=wx.VERTICAL)
                 rw.SetManagedChild(edit)
@@ -7280,7 +7290,8 @@ class DataDialog(wx.Dialog):
 
     def _OnClose(self, event=None):
         """Handler for closing dialog."""
-        wx.CallAfter(self.EndModal, wx.CANCEL)
+        if event: event.Skip()
+        else: wx.CallAfter(self.EndModal, wx.CANCEL)
 
 
     def _OnColumnDialog(self, event, col=None):
@@ -7358,14 +7369,6 @@ class DataDialog(wx.Dialog):
             item_datetime = wx.MenuItem(menu, -1, "Set local date&time")
             item_stamp    = wx.MenuItem(menu, -1, "Set ISO8601 timesta&mp")
 
-            is_pk = any(util.lceq(coldata["name"], y) for x in 
-                        self._gridbase.db.get_keys(self._gridbase.name, True)[0]
-                        for y in x["name"])
-            item_null.Enabled = "notnull" not in coldata or is_pk and self._data[self._gridbase.KEY_NEW]
-            item_default.Enabled = "default" in coldata
-            x = self._gridbase.db.get_affinity(coldata) not in ("INTEGER", "REAL")
-            item_date.Enabled = item_datetime.Enabled = item_stamp.Enabled = x
-
         menu.Append(item_dialog)
         menu.AppendSeparator()
         menu.Append(item_data)
@@ -7380,6 +7383,15 @@ class DataDialog(wx.Dialog):
             menu.Append(item_date)
             menu.Append(item_datetime)
             menu.Append(item_stamp)
+
+            is_pk = any(util.lceq(coldata["name"], y) for x in 
+                        self._gridbase.db.get_keys(self._gridbase.name, True)[0]
+                        for y in x["name"])
+            item_null.Enabled = "notnull" not in coldata or is_pk and self._data[self._gridbase.KEY_NEW]
+            item_default.Enabled = "default" in coldata
+            x = self._gridbase.db.get_affinity(coldata) not in ("INTEGER", "REAL")
+            item_date.Enabled = item_datetime.Enabled = item_stamp.Enabled = x
+
 
         menu.Bind(wx.EVT_MENU, on_dialog,    item_dialog)
         menu.Bind(wx.EVT_MENU, on_copy_data, item_data)
@@ -7770,7 +7782,7 @@ class ColumnDialog(wx.Dialog):
         self.Bind(wx.EVT_SIZE,   lambda e: (e.Skip(), self._SetLabel()))
         self.Bind(wx.EVT_CLOSE,  self._OnClose, id=wx.ID_CANCEL)
 
-        self.MinSize = 620, 400
+        self.MinSize = 750, 450
         self.Layout()
         wx_accel.accelerate(self)
 
@@ -7909,14 +7921,14 @@ class ColumnDialog(wx.Dialog):
             item_null    = wx.MenuItem(menu, -1, "Set &NULL")
             item_default = wx.MenuItem(menu, -1, "Set &DEFAULT")
 
+            menu.Append(item_null)
+            menu.Append(item_default)
+
             is_pk = any(util.lceq(self._name, y) for x in 
                         self._gridbase.db.get_keys(self._gridbase.name, True)[0]
                         for y in x["name"])
             item_null   .Enable("notnull" not in self._col or is_pk and self._data[self._gridbase.KEY_NEW])
             item_default.Enable("default" in self._col)
-
-            menu.Append(item_null)
-            menu.Append(item_default)
 
             menu.Bind(wx.EVT_MENU, on_null,    item_null)
             menu.Bind(wx.EVT_MENU, on_default, item_default)
@@ -8188,9 +8200,6 @@ class ColumnDialog(wx.Dialog):
         stctxt.Bind(controls.EVT_CARET_POS,  on_position)
         stctxt.Bind(controls.EVT_LINE_POS,   on_scroll)
         stctxt.Bind(controls.EVT_SELECT,     on_select)
-
-        self._hex = stchex # @todo remove
-        self._text = stctxt
 
         self._getters[NAME] = stchex.GetValue
         self._setters[NAME] = update
@@ -8550,6 +8559,7 @@ class ColumnDialog(wx.Dialog):
         tslabel.Font = font_bold
         dtlabel.MinSize = tslabel.MinSize = tslabel.Size
         tslabel.Font = font_normal
+        dtedit.MinSize = tsedit.MinSize = (250, -1)
 
         jan = datetime.datetime.now().replace(month=1, day=2, hour=1)
         offset = lambda z: z.utcoffset(jan).total_seconds() / 3600
@@ -8587,7 +8597,7 @@ class ColumnDialog(wx.Dialog):
         sizer_right.Add(tsedit, border=5, flag=wx.RIGHT)
 
         sizer_center.AddStretchSpacer()
-        sizer_center.Add(sizer_left,  border=20, flag=wx.RIGHT | wx.ALIGN_CENTER)
+        sizer_center.Add(sizer_left,  border=10, flag=wx.RIGHT | wx.ALIGN_CENTER)
         sizer_center.Add(sizer_right, border=10, flag=wx.TOP   | wx.ALIGN_CENTER)
         sizer_center.AddStretchSpacer()
 
@@ -8840,8 +8850,6 @@ class ColumnDialog(wx.Dialog):
         """Handler for closing dialog."""
         event.Skip()
         if wx.ID_OK == event.Id: self._PropagateChange()
-        if self and self.IsModal():
-            wx.CallAfter(self.EndModal, wx.OK if wx.ID_OK == event.Id else wx.CANCEL)
 
 
     def _OnColumn(self, event, direction=None):

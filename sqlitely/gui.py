@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.06.2020
+@modified    17.06.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -568,7 +568,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_autoupdate_check.Check(conf.UpdateCheckAutomatic)
         menu_tools_export_spreadsheet.Enabled = bool(importexport.xlsxwriter)
 
-        self.Bind(wx.EVT_MENU_OPEN, self.on_menu_open, menu)
+        menu.Bind(wx.EVT_MENU_OPEN, self.on_menu_open)
         self.Bind(wx.EVT_MENU, self.on_new_database, menu_new_database)
         self.Bind(wx.EVT_MENU, self.on_open_database, menu_open_database)
         self.Bind(wx.EVT_MENU, self.on_save_active_database, menu_save_database)
@@ -789,7 +789,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                                    text="Show Python &console")
         item_exit = wx.MenuItem(menu, -1, "E&xit %s" % conf.Title)
 
-        boldfont = item_toggle.Font
+        boldfont = wx.Font(item_toggle.Font)
         boldfont.SetWeight(wx.FONTWEIGHT_BOLD)
         boldfont.SetFaceName(self.Font.FaceName)
         boldfont.SetPointSize(self.Font.PointSize)
@@ -803,8 +803,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             item = wx.MenuItem(menu, -1, filename)
             if page.db.name == curfile or len(openfiles) < 2:
                 item.Font = boldfont
-            menu.Append(item)
             menu.Bind(wx.EVT_MENU, functools.partial(open_item, page.db.name), item)
+            menu.Append(item)
         if openfiles: menu.AppendSeparator()
 
         allfiles = [(os.path.split(k)[-1], k) for k, v in self.db_datas.items()
@@ -1100,13 +1100,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             item_missing = wx.MenuItem(menu, -1, "Remove missing")
             item_clear   = wx.MenuItem(menu, -1, "C&lear list")
 
-            menu.Bind(wx.EVT_MENU, self.on_new_database,     item_new)
-            menu.Bind(wx.EVT_MENU, self.on_open_database,    item_open)
-            menu.Bind(wx.EVT_MENU, self.on_add_from_folder,  item_import)
-            menu.Bind(wx.EVT_MENU, self.on_detect_databases, item_detect)
-            menu.Bind(wx.EVT_MENU, self.on_remove_missing,   item_missing)
-            menu.Bind(wx.EVT_MENU, self.on_clear_databases,  item_clear)
-
             menu.Append(item_new)
             menu.Append(item_open)
             menu.Append(item_import)
@@ -1114,6 +1107,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             menu.AppendSeparator()
             menu.Append(item_missing)
             menu.Append(item_clear)
+
+            menu.Bind(wx.EVT_MENU, self.on_new_database,     item_new)
+            menu.Bind(wx.EVT_MENU, self.on_open_database,    item_open)
+            menu.Bind(wx.EVT_MENU, self.on_add_from_folder,  item_import)
+            menu.Bind(wx.EVT_MENU, self.on_detect_databases, item_detect)
+            menu.Bind(wx.EVT_MENU, self.on_remove_missing,   item_missing)
+            menu.Bind(wx.EVT_MENU, self.on_clear_databases,  item_clear)
 
             # Needs callback, actions can modify list while mouse event ongoing
             return wx.CallAfter(self.list_db.PopupMenu, menu)
@@ -1134,7 +1134,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         item_copy    = wx.MenuItem(menu, -1, "&Copy file path")
         item_folder  = wx.MenuItem(menu, -1, "Show in &folder")
 
-        boldfont = item_name.Font
+        boldfont = wx.Font(item_name.Font)
         boldfont.SetWeight(wx.FONTWEIGHT_BOLD)
         boldfont.SetFaceName(self.Font.FaceName)
         boldfont.SetPointSize(self.Font.PointSize)
@@ -1146,15 +1146,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         item_missing = wx.MenuItem(menu, -1, "Remove &missing from list")
         item_delete  = wx.MenuItem(menu, -1, "Delete from disk")
 
-        menu.Bind(wx.EVT_MENU, clipboard_copy,                item_copy)
-        menu.Bind(wx.EVT_MENU, open_folder,                   item_folder)
-        menu.Bind(wx.EVT_MENU, self.on_open_current_database, item_open)
-        menu.Bind(wx.EVT_MENU, self.on_save_database_as,      item_save)
-        menu.Bind(wx.EVT_MENU, self.on_remove_database,       item_remove)
-        menu.Bind(wx.EVT_MENU, self.on_delete_database,       item_delete)
-        menu.Bind(wx.EVT_MENU, lambda e: self.on_remove_missing(event, selecteds),
-                  item_missing)
-
         menu.Append(item_name)
         menu.AppendSeparator()
         menu.Append(item_copy)
@@ -1165,6 +1156,15 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu.Append(item_remove)
         menu.Append(item_missing)
         menu.Append(item_delete)
+
+        menu.Bind(wx.EVT_MENU, clipboard_copy,                item_copy)
+        menu.Bind(wx.EVT_MENU, open_folder,                   item_folder)
+        menu.Bind(wx.EVT_MENU, self.on_open_current_database, item_open)
+        menu.Bind(wx.EVT_MENU, self.on_save_database_as,      item_save)
+        menu.Bind(wx.EVT_MENU, self.on_remove_database,       item_remove)
+        menu.Bind(wx.EVT_MENU, self.on_delete_database,       item_delete)
+        menu.Bind(wx.EVT_MENU, lambda e: self.on_remove_missing(event, selecteds),
+                  item_missing)
 
         # Needs callback, actions can modify list while mouse event ongoing
         wx.CallAfter(self.list_db.PopupMenu, menu)
@@ -2286,6 +2286,8 @@ class DatabasePage(wx.Panel):
         sizer.Layout() # To avoid searchbox moving around during page creation
 
         bookstyle = wx.lib.agw.fmresources.INB_LEFT
+        if "posix" == os.name: # Hard to identify selected tab in Gtk
+            bookstyle |= wx.lib.agw.fmresources.INB_BOLD_TAB_SELECTION
         if (wx.version().startswith("2.8") and sys.version_info.major == 2
         and sys.version_info < (2, 7, 3)):
             # wx 2.8 + Python below 2.7.3: labelbook can partly cover tab area
@@ -2445,7 +2447,11 @@ class DatabasePage(wx.Panel):
         )
         ColourManager.Manage(tree, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(tree, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
-        tree.AssignImageList(wx.ImageList(16, 16)) # Same height rows as tree_schema
+        isize = (16, 16)
+        il = wx.ImageList(*isize)
+        # Add placeholder image, empty ImageList throws error on Linux
+        il.Add(wx.ArtProvider.GetBitmap(wx.ART_TIP, wx.ART_TOOLBAR, isize))
+        tree.AssignImageList(il) # Same height rows as tree_schema
 
         tree.AddColumn("Object")
         tree.AddColumn("Info")
@@ -2520,13 +2526,14 @@ class DatabasePage(wx.Panel):
         ColourManager.Manage(tree, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(tree, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
 
-        il = wx.ImageList(16, 16)
+        isize = (16, 16)
+        il = wx.ImageList(*isize)
         self.tree_schema_images = {
-            "table":    il.Add(wx.ArtProvider.GetBitmap(wx.ART_REPORT_VIEW,     wx.ART_TOOLBAR, il.GetSize(0))),
-            "index":    il.Add(wx.ArtProvider.GetBitmap(wx.ART_NORMAL_FILE,     wx.ART_TOOLBAR, il.GetSize(0))),
-            "trigger":  il.Add(wx.ArtProvider.GetBitmap(wx.ART_EXECUTABLE_FILE, wx.ART_TOOLBAR, il.GetSize(0))),
-            "view":     il.Add(wx.ArtProvider.GetBitmap(wx.ART_HELP_PAGE,       wx.ART_TOOLBAR, il.GetSize(0))),
-            "columns":  il.Add(wx.ArtProvider.GetBitmap(wx.ART_FOLDER,          wx.ART_TOOLBAR, il.GetSize(0))),
+            "table":    il.Add(wx.ArtProvider.GetBitmap(wx.ART_REPORT_VIEW,     wx.ART_TOOLBAR, isize)),
+            "index":    il.Add(wx.ArtProvider.GetBitmap(wx.ART_NORMAL_FILE,     wx.ART_TOOLBAR, isize)),
+            "trigger":  il.Add(wx.ArtProvider.GetBitmap(wx.ART_EXECUTABLE_FILE, wx.ART_TOOLBAR, isize)),
+            "view":     il.Add(wx.ArtProvider.GetBitmap(wx.ART_HELP_PAGE,       wx.ART_TOOLBAR, isize)),
+            "columns":  il.Add(wx.ArtProvider.GetBitmap(wx.ART_FOLDER,          wx.ART_TOOLBAR, isize)),
         }
         tree.AssignImageList(il)
 
@@ -2654,7 +2661,7 @@ class DatabasePage(wx.Panel):
         label_header = wx.StaticText(page, label="Database PRAGMA settings")
         label_header.Font = wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL,
                                     wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
-        edit_filter = self.edit_pragma_filter = controls.HintedTextCtrl(page, "Filter settings",
+        edit_filter = self.edit_pragma_filter = controls.HintedTextCtrl(page, "Filter list",
                                                                         style=wx.TE_PROCESS_ENTER)
         edit_filter.ToolTip = "Filter PRAGMA directive list (Ctrl-F)"
 
@@ -3273,6 +3280,7 @@ class DatabasePage(wx.Panel):
         """
         Handler for getting results from analyzer thread, populates statistics.
         """
+        if not self: return
         self.statistics = result
         self.db.unlock(None, None, self.db)
         wx.CallAfter(self.populate_statistics)
@@ -3284,16 +3292,19 @@ class DatabasePage(wx.Panel):
         """
         Handler for getting results from checksum thread, populates information.
         """
-        if "error" in result:
-            self.edit_info_sha1.Value = result["error"]
-            self.edit_info_md5.Value  = result["error"]
-        else:
-            self.edit_info_sha1.Value = result["sha1"]
-            self.edit_info_md5.Value  = result["md5"]
-        self.edit_info_sha1.MinSize = (-1, -1)
-        self.edit_info_md5.MinSize  = (-1, -1)
-        self.button_checksum_stop.Hide()
-        self.edit_info_md5.ContainingSizer.Layout()
+        def after():
+            if not self: return
+            if "error" in result:
+                self.edit_info_sha1.Value = result["error"]
+                self.edit_info_md5.Value  = result["error"]
+            else:
+                self.edit_info_sha1.Value = result["sha1"]
+                self.edit_info_md5.Value  = result["md5"]
+            self.edit_info_sha1.MinSize = (-1, -1)
+            self.edit_info_md5.MinSize  = (-1, -1)
+            self.button_checksum_stop.Hide()
+            self.edit_info_md5.ContainingSizer.Layout()
+        wx.CallAfter(after)
 
 
     def populate_statistics(self):
@@ -4204,21 +4215,15 @@ class DatabasePage(wx.Panel):
                 if item["name"] not in self.db.schema[item["type"]]: del pp[i]
 
         if page:
-            item_close = wx.MenuItem(menu, -1, "&Close\t(Ctrl-W)")
-            menu.Bind(wx.EVT_MENU, lambda e: nb.DeletePage(nb.GetPageIndex(page)), item_close)
+            item_close = wx.MenuItem(menu, -1, "&Close\tCtrl-W")
             if isinstance(page, (components.DataObjectPage, components.SchemaObjectPage)):
                 item_save = wx.MenuItem(menu, -1, "&Save")
-                if not page.IsChanged() if isinstance(page, components.DataObjectPage) \
-                else page.ReadOnly: item_save.Enable(False)
-                menu.Bind(wx.EVT_MENU, lambda e: page.Save(), item_save)
 
         if nb is self.notebook_search and page and page.get("info"):
             item_take = wx.MenuItem(menu, -1, "&Take search query")
-            menu.Bind(wx.EVT_MENU, on_take, item_take)
 
         if pp:
-            item_last = wx.MenuItem(menu, -1, "Re&open %s\t(Ctrl-Shift-T)" % fmtname(pp[-1]))
-            menu.Bind(wx.EVT_MENU, functools.partial(self.reopen_page, nb, -1), item_last)
+            item_last = wx.MenuItem(menu, -1, "Re&open %s\tCtrl-Shift-T" % fmtname(pp[-1]))
             for i, item in list(enumerate(pp))[::-1]:
                 item_open = wx.MenuItem(hmenu, -1, fmtname(item, cap=True))
                 hmenu.Append(item_open)
@@ -4233,7 +4238,20 @@ class DatabasePage(wx.Panel):
             menu.Append(item_last)
             menu.AppendSubMenu(hmenu, "&Recent pages")
 
-        nb.PopupMenu(menu)
+        if page:
+            menu.Bind(wx.EVT_MENU, lambda e: nb.DeletePage(nb.GetPageIndex(page)), item_close)
+            if isinstance(page, (components.DataObjectPage, components.SchemaObjectPage)):
+                if not page.IsChanged() if isinstance(page, components.DataObjectPage) \
+                else page.ReadOnly: item_save.Enable(False)
+                menu.Bind(wx.EVT_MENU, lambda e: page.Save(), item_save)
+
+        if nb is self.notebook_search and page and page.get("info"):
+            menu.Bind(wx.EVT_MENU, on_take, item_take)
+
+        if pp:
+            menu.Bind(wx.EVT_MENU, functools.partial(self.reopen_page, nb, -1), item_last)
+
+        if menu.MenuItemCount: nb.PopupMenu(menu)
 
 
     def on_dump(self, event=None):
@@ -5604,12 +5622,6 @@ class DatabasePage(wx.Panel):
             item_open = wx.MenuItem(menu, -1, "&Open %s data" % data["type"])
             item_open_meta = wx.MenuItem(menu, -1, "Open %s &schema" % data["type"])
             item_copy = wx.MenuItem(menu, -1, "&Copy name")
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
-                      item_name)
-            menu.Bind(wx.EVT_MENU, functools.partial(open_data, data), item_open)
-            menu.Bind(wx.EVT_MENU, functools.partial(open_meta, data), item_open_meta)
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
-                      item_copy)
 
             item_name.Font = boldfont
 
@@ -5618,6 +5630,13 @@ class DatabasePage(wx.Panel):
             menu.Append(item_open)
             menu.Append(item_open_meta)
             menu.Append(item_copy)
+
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
+                      item_name)
+            menu.Bind(wx.EVT_MENU, functools.partial(open_data, data), item_open)
+            menu.Bind(wx.EVT_MENU, functools.partial(open_meta, data), item_open_meta)
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
+                      item_copy)
 
             item_file = wx.MenuItem(menu, -1, "&Export %s to file" % data["type"])
             if "table" == data["type"]:
@@ -5633,10 +5652,6 @@ class DatabasePage(wx.Panel):
                         util.unprint(grammar.quote(data["name"]))))
             item_open = wx.MenuItem(menu, -1, "&Open %s data" % data["parent"]["type"])
             item_copy = wx.MenuItem(menu, -1, "&Copy name")
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
-                      item_name)
-            menu.Bind(wx.EVT_MENU, functools.partial(open_data, data["parent"]),    item_open)
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]), item_copy)
 
             item_name.Font = boldfont
 
@@ -5645,13 +5660,19 @@ class DatabasePage(wx.Panel):
             menu.Append(item_open)
             menu.Append(item_copy)
 
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
+                      item_name)
+            menu.Bind(wx.EVT_MENU, functools.partial(open_data, data["parent"]),    item_open)
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]), item_copy)
+
         elif "category" == data.get("type"): # Category list
             item_copy = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
             item_file = wx.MenuItem(menu, -1, "&Export all %s to file" % util.plural(data["category"]))
             item_file_single = wx.MenuItem(menu, -1, "Export all %s to single spreads&heet" % util.plural(data["category"]))
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, ", ".join(data["items"])), item_copy)
 
             menu.Append(item_copy)
+
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, ", ".join(data["items"])), item_copy)
 
             if "table" == data["category"]:
                 item_database    = wx.MenuItem(menu, -1, "Export all tables to another &database")
@@ -5660,21 +5681,10 @@ class DatabasePage(wx.Panel):
 
             item_drop_all = wx.MenuItem(menu, -1, "Drop all %s" % util.plural(data["category"]))
             item_create   = wx.MenuItem(menu, -1, "Create &new %s" % data["category"])
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["category"], data["items"]),
-                      item_drop_all)
-            menu.Bind(wx.EVT_MENU, functools.partial(create_object, data["category"]),
-                      item_create)
-            if not data["items"]:
-                item_copy.Enable(False)
-                item_file.Enable(False)
-                item_file_single.Enable(False)
-                if item_database: item_database.Enable(False)
-                item_drop_all.Enable(False)
-            if not importexport.xlsxwriter: item_file_single.Enable(False)
         else: # Root
             item_dump   = wx.MenuItem(menu, -1, "Save database &dump as SQL")
-            menu.Bind(wx.EVT_MENU, self.on_dump, item_dump)
             menu.Append(item_dump)
+            menu.Bind(wx.EVT_MENU, self.on_dump, item_dump)
             submenu = wx.Menu()
             menu.AppendSubMenu(submenu, text="Create ne&w ..")
             for category, key in (("table", "t"), ("view", "v")):
@@ -5725,6 +5735,21 @@ class DatabasePage(wx.Panel):
                 menu.Bind(wx.EVT_MENU, functools.partial(self.on_truncate, data["name"]), item_truncate)
             if item_drop:
                 menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["type"], [data["name"]]), item_drop)
+
+        if item_drop_all:
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["category"], data["items"]),
+                      item_drop_all)
+        if item_create:
+            menu.Bind(wx.EVT_MENU, functools.partial(create_object, data["category"]),
+                      item_create)
+        if item_file_single:
+            if not data["items"]:
+                item_copy.Enable(False)
+                item_file.Enable(False)
+                item_file_single.Enable(False)
+                if item_database: item_database.Enable(False)
+                item_drop_all.Enable(False)
+            if not importexport.xlsxwriter: item_file_single.Enable(False)
 
         if tree.HasChildren(item):
             item_expand   = wx.MenuItem(menu, -1, "&Toggle expanded/collapsed")
@@ -5805,12 +5830,12 @@ class DatabasePage(wx.Panel):
             if any(self.db.schema.values()):
                 item_copy_sql = wx.MenuItem(menu, -1, "Copy schema &SQL")
                 item_save_sql = wx.MenuItem(menu, -1, "Save schema SQL to fi&le")
+                menu.Append(item_copy_sql)
+                menu.Append(item_save_sql)
                 menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, self.db.get_sql),
                           item_copy_sql)
                 menu.Bind(wx.EVT_MENU, lambda e: self.save_sql(self.db.get_sql()),
                           item_save_sql)
-                menu.Append(item_copy_sql)
-                menu.Append(item_save_sql)
 
             menu.AppendSubMenu(submenu, text="Create ne&w ..")
             for category in database.Database.CATEGORIES:
@@ -5929,6 +5954,14 @@ class DatabasePage(wx.Panel):
 
             item_name.Font = boldfont
 
+            menu.Append(item_name)
+            menu.AppendSeparator()
+            menu.Append(item_open)
+            if item_open_data: menu.Append(item_open_data)
+            menu.Append(item_copy)
+            menu.Append(item_copy_sql)
+            menu.Append(item_copy_rel)
+
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
                       item_name)
             menu.Bind(wx.EVT_MENU, functools.partial(open_meta, data), item_open)
@@ -5942,23 +5975,12 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, copy_related, item_copy_rel)
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["type"], [data["name"]]),
                       item_drop)
-            if item_reindex:
-                item_reindex.Enable("index" == data["type"] or "index" in self.db.get_related("table", data["name"], own=True))
-                menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("reindex", data["type"], data["name"]), item_reindex)
-
-            menu.Append(item_name)
-            menu.AppendSeparator()
-            menu.Append(item_open)
-            if item_open_data: menu.Append(item_open_data)
-            menu.Append(item_copy)
-            menu.Append(item_copy_sql)
-            menu.Append(item_copy_rel)
 
             if "table" == data["type"]:
                 item_database_meta = wx.MenuItem(menu, -1, "Export %s str&ucture to another database" % data["type"])
+                menu.Append(item_database_meta)
                 menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_base, [data["name"]], False, None),
                           item_database_meta)
-                menu.Append(item_database_meta)
 
             menu.AppendSeparator()
 
@@ -5974,13 +5996,16 @@ class DatabasePage(wx.Panel):
                     menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), it)
 
             menu.Append(item_drop)
-            if item_reindex: menu.Append(item_reindex)
+            if item_reindex:
+                menu.Append(item_reindex)
+                item_reindex.Enable("index" == data["type"] or "index" in self.db.get_related("table", data["name"], own=True))
+                menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("reindex", data["type"], data["name"]), item_reindex)
 
         if tree.HasChildren(item):
             item_expand   = wx.MenuItem(menu, -1, "&Toggle expanded/collapsed")
-            menu.Bind(wx.EVT_MENU, functools.partial(toggle_items, item), item_expand)
             if menu.MenuItemCount: menu.AppendSeparator()
             menu.Append(item_expand)
+            menu.Bind(wx.EVT_MENU, functools.partial(toggle_items, item), item_expand)
 
         item0 = tree.GetSelection()
         if item != item0: select_item(item)

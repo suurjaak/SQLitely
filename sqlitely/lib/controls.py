@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    14.06.2020
+@modified    16.06.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -377,11 +377,12 @@ class FormDialog(wx.Dialog):
         panel_items = self._panel = wx.Panel(panel_wrap)
         panel_wrap.SetScrollRate(0, 20)
 
-        button_save   = wx.Button(self, label="OK",     id=wx.OK)
-        button_cancel = wx.Button(self, label="Cancel", id=wx.CANCEL)
+        button_save   = wx.Button(self, label="OK",     id=wx.ID_OK)
+        button_cancel = wx.Button(self, label="Cancel", id=wx.ID_CANCEL)
 
         button_save.SetDefault()
-        self.SetEscapeId(wx.CANCEL)
+        self.SetAffirmativeId(wx.ID_CANCEL)
+        self.SetEscapeId(wx.ID_CANCEL)
         self.Bind(wx.EVT_BUTTON, self._OnClose, button_save)
 
         self.Sizer        = wx.BoxSizer(wx.VERTICAL)
@@ -407,7 +408,7 @@ class FormDialog(wx.Dialog):
             self.MinSize = (440, panel_items.Size[1] + 80)
         else:
             self.MinSize = (440, panel_items.Size[1] + 10)
-            self.SetEscapeId(wx.OK)
+            self.SetEscapeId(wx.ID_OK)
             self.Fit()
             button_cancel.Hide()
         self.CenterOnParent()
@@ -889,8 +890,7 @@ class FormDialog(wx.Dialog):
     def _OnClose(self, event):
         """Handler for clicking OK/Cancel, hides the dialog."""
         if self._onclose and not self._onclose(self._data): return
-        self.Hide()
-        self.IsModal() and self.EndModal(event.GetId())
+        self.EndModal(wx.ID_OK)
 
 
 
@@ -1180,11 +1180,11 @@ class NoteButton(wx.Panel, wx.Button):
                 dc_bmp.SelectObject(wx.NullBitmap)
 
             # Draw focus marquee
-            if hasattr(wx.Pen, "Stipple"):
+            try:
                 pen = PEN(dc.TextForeground, 1, wx.PENSTYLE_STIPPLE)
                 pen.Stipple, dc.Pen = NoteButton.BMP_MARQUEE, pen
                 dc.DrawRectangle(4, 4, width - 8, height - 8)
-            else:
+            except wx.wxAssertionError: # Gtk does not support stippled pens
                 brush = BRUSH(dc.TextForeground)
                 brush.SetStipple(NoteButton.BMP_MARQUEE)
                 dc.Brush = brush
@@ -1502,16 +1502,16 @@ class PropertyDialog(wx.Dialog):
         panelwrap = wx.Panel(self)
         panel = self.panel = wx.ScrolledWindow(panelwrap)
 
-        button_save = wx.Button(panelwrap, label="Save")
-        button_reset = wx.Button(panelwrap, label="Restore defaults")
-        button_cancel = wx.Button(panelwrap, label="Cancel", id=wx.CANCEL)
+        button_save   = wx.Button(panelwrap, label="Save",   id=wx.ID_OK)
+        button_reset  = wx.Button(panelwrap, label="Restore defaults")
+        button_cancel = wx.Button(panelwrap, label="Cancel", id=wx.ID_CANCEL)
 
-        self.Bind(wx.EVT_BUTTON, self._OnSave, button_save)
-        self.Bind(wx.EVT_BUTTON, self._OnReset, button_reset)
-        self.Bind(wx.EVT_BUTTON, self._OnCancel, button_cancel)
+        self.Bind(wx.EVT_BUTTON, self._OnSave,   button_save)
+        self.Bind(wx.EVT_BUTTON, self._OnReset,  button_reset)
 
         button_save.SetDefault()
-        self.SetEscapeId(wx.CANCEL)
+        self.SetAffirmativeId(wx.ID_OK)
+        self.SetEscapeId(wx.ID_CANCEL)
 
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
         panelwrap.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -1563,7 +1563,7 @@ class PropertyDialog(wx.Dialog):
 
     def Realize(self):
         """Lays out the properties, to be called when adding is completed."""
-        self.panel.SetScrollRate(20, 20)
+        self.panel.SetScrollRate(0, 20)
         self.sizer_items.AddGrowableCol(1) # Grow ctrl column
 
 
@@ -1591,11 +1591,7 @@ class PropertyDialog(wx.Dialog):
                 label.ForegroundColour = ctrl.ForegroundColour = self.COLOUR_ERROR
             else:
                 label.ForegroundColour = ctrl.ForegroundColour = self.ForegroundColour
-        if all_ok:
-            self.Hide()
-            self.IsModal() and self.EndModal(wx.ID_OK)
-        else:
-            self.Refresh()
+        event.Skip() if all_ok else self.Refresh()
 
 
     def _OnReset(self, event):
@@ -1606,12 +1602,6 @@ class PropertyDialog(wx.Dialog):
             if self.COLOUR_ERROR == ctrl.ForegroundColour:
                 label.ForegroundColour = ctrl.ForegroundColour = self.ForegroundColour
         self.Refresh()
-
-
-    def _OnCancel(self, event):
-        """Handler for clicking cancel, hides the dialog."""
-        self.Hide()
-        self.IsModal() and self.EndModal(wx.ID_CANCEL)
 
 
     def _GetValueForType(self, value, typeclass):
@@ -1629,6 +1619,8 @@ class PropertyDialog(wx.Dialog):
     def _GetValueForCtrl(self, value, typeclass):
         """Returns the value in type suitable for appropriate wx control."""
         value = tuple(value) if isinstance(value, list) else value
+        if isinstance(value, tuple):
+            value = tuple(str(x) if isinstance(x, unicode) else x for x in value)
         return "" if value is None else value \
                if isinstance(value, (basestring, bool)) else unicode(value)
 
@@ -1686,12 +1678,20 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
     def GetBestChildSize(self):
         """Returns size for managed child fitting content in resize directions."""
         linesmax, widthmax = -1, -1
-        while self.ManagedChild.GetLineLength(linesmax + 1) >= 0:
-            linesmax += 1
-            t = self.ManagedChild.GetLineText(linesmax)
-            widthmax = max(widthmax, self.ManagedChild.GetTextExtent(t)[0])
+        if "posix" == os.name:
+            # GetLineLength() does not account for wrapped lines in linux
+            w, dc = self.ManagedChild.Size[0], wx.ClientDC(self.ManagedChild)
+            t = wx.lib.wordwrap.wordwrap(self.ManagedChild.Value, w, dc)
+            linesmax = t.count("\n")
+            # DoGetBorderSize() appears not implemented under Gtk
+            borderw, borderh = (x / 2. for x in self.ManagedChild.GetWindowBorderSize())
+        else:
+            while self.ManagedChild.GetLineLength(linesmax + 1) >= 0:
+                linesmax += 1
+                t = self.ManagedChild.GetLineText(linesmax)
+                widthmax = max(widthmax, self.ManagedChild.GetTextExtent(t)[0])
+            borderw, borderh = self.ManagedChild.DoGetBorderSize()
         _, charh = self.ManagedChild.GetTextExtent("X")
-        borderw, borderh = self.ManagedChild.DoGetBorderSize()
         size = self.Size
         size[0] -= wx.lib.resizewidget.RW_THICKNESS
         size[1] -= wx.lib.resizewidget.RW_THICKNESS
@@ -2721,6 +2721,9 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         self._bytes0 = []    # [byte or None, ]
         self._bytes  = bytearray()
 
+        self.SetStyleSpecs()
+        cw = self.TextWidth(0, "X")
+
         self.SetEOLMode(wx.stc.STC_EOL_LF)
         self.SetWrapMode(wx.stc.STC_WRAP_CHAR)
         self.SetCaretLineBackAlpha(20)
@@ -2728,14 +2731,13 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
         self.SetMarginCount(1)
         self.SetMarginType(0, wx.stc.STC_MARGIN_TEXT)
-        self.SetMarginWidth(0, 68)
+        self.SetMarginWidth(0, cw * 9)
         self.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
         self.SetMargins(3, 0)
 
-        self.SetStyleSpecs()
         self.SetOvertype(True)
         self.SetUseTabs(False)
-        w = self.TextWidth(0, "X") * self.WIDTH * 3 + self.GetMarginWidth(0) + \
+        w = cw * self.WIDTH * 3 + self.GetMarginWidth(0) + \
             sum(max(x, 0) for x in self.GetMargins()) + \
             wx.SystemSettings.GetMetric(wx.SYS_VSCROLL_X)
         self.MinSize = self.MaxSize = w, -1
@@ -3207,7 +3209,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         self.SetStyleSpecs()
         self.SetOvertype(True)
         self.SetUseTabs(False)
-        w = self.TextWidth(0, "X") * (self.WIDTH + 1) + wx.SystemSettings.GetMetric(wx.SYS_VSCROLL_X)
+        w = self.TextWidth(0, "X") * (self.WIDTH + 2) + wx.SystemSettings.GetMetric(wx.SYS_VSCROLL_X)
         self.Size = self.MinSize = self.MaxSize = w, -1
 
         self.Bind(wx.EVT_CHAR,                    self.OnChar)

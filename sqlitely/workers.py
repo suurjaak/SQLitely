@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.05.2020
+@modified    16.06.2020
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -412,10 +412,12 @@ class AnalyzerThread(WorkerThread):
             else: error = "File does not exist."
 
             try:
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                 pargs = dict(stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT, startupinfo=startupinfo)
+                             stderr=subprocess.STDOUT)
+                if hasattr(subprocess, "STARTUPINFO"):
+                    startupinfo = subprocess.STARTUPINFO()
+                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    pargs.update(startupinfo=startupinfo)
                 paths = [path]
                 if filesize and "nt" == os.name and isinstance(path, unicode):
                     paths.append(util.shortpath(path))
