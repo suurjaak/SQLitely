@@ -7729,7 +7729,7 @@ class ColumnDialog(wx.Dialog):
         button_ok     = wx.Button(self, label="&OK",     id=wx.ID_OK)
         button_reset  = wx.Button(self, label="&Reset")
         button_cancel = wx.Button(self, label="&Cancel", id=wx.ID_CANCEL)
-        if "table" == gridbase.category:
+        if "table" != gridbase.category:
             button_ok.Shown = button_reset.Shown = False
             button_cancel.Label = "&Close"
 

@@ -364,7 +364,7 @@ class FormDialog(wx.Dialog):
         wx.Dialog.__init__(self, parent, title=title,
                           style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER)
         self._ignore_change = False
-        self._editmode = True
+        self._editmode = bool(edit) if edit is not None else True
         self._comps    = collections.defaultdict(list) # {(path): [wx component, ]}
         self._autocomp = autocomp
         self._onclose  = onclose
@@ -377,27 +377,18 @@ class FormDialog(wx.Dialog):
         panel_items = self._panel = wx.Panel(panel_wrap)
         panel_wrap.SetScrollRate(0, 20)
 
-        button_save   = wx.Button(self, label="OK",     id=wx.ID_OK)
-        button_cancel = wx.Button(self, label="Cancel", id=wx.ID_CANCEL)
-
-        button_save.SetDefault()
-        self.SetAffirmativeId(wx.ID_CANCEL)
-        self.SetEscapeId(wx.ID_CANCEL)
-        self.Bind(wx.EVT_BUTTON, self._OnClose, button_save)
-
         self.Sizer        = wx.BoxSizer(wx.VERTICAL)
-        sizer_buttons     = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_buttons     = self.CreateButtonSizer(wx.OK | (wx.CANCEL if self._editmode else 0))
         panel_wrap.Sizer  = wx.BoxSizer(wx.VERTICAL)
         panel_items.Sizer = wx.GridBagSizer(hgap=5, vgap=0)
 
         panel_items.Sizer.SetEmptyCellSize((0, 0))
         panel_wrap.Sizer.Add(panel_items, border=10, proportion=1, flag=wx.RIGHT | wx.GROW)
 
-        sizer_buttons.Add(button_save,   border=10, flag=wx.LEFT)
-        sizer_buttons.Add(button_cancel, border=10, flag=wx.LEFT)
-
         self.Sizer.Add(panel_wrap, border=15, proportion=1, flag=wx.LEFT | wx.TOP | wx.GROW)
         self.Sizer.Add(sizer_buttons, border=5, flag=wx.ALL | wx.ALIGN_CENTER_HORIZONTAL)
+
+        self.Bind(wx.EVT_BUTTON, self._OnClose, id=wx.ID_OK)
 
         for x in self, panel_wrap, panel_items:
             ColourManager.Manage(x, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
@@ -408,9 +399,7 @@ class FormDialog(wx.Dialog):
             self.MinSize = (440, panel_items.Size[1] + 80)
         else:
             self.MinSize = (440, panel_items.Size[1] + 10)
-            self.SetEscapeId(wx.ID_OK)
             self.Fit()
-            button_cancel.Hide()
         self.CenterOnParent()
 
 
@@ -1492,6 +1481,7 @@ class PropertyDialog(wx.Dialog):
     integers, booleans, and wx classes like wx.Size interpreted as tuples.
     """
 
+
     COLOUR_ERROR = wx.RED
 
     def __init__(self, parent, title):
@@ -1502,29 +1492,28 @@ class PropertyDialog(wx.Dialog):
         panelwrap = wx.Panel(self)
         panel = self.panel = wx.ScrolledWindow(panelwrap)
 
-        button_save   = wx.Button(panelwrap, label="Save",   id=wx.ID_OK)
-        button_reset  = wx.Button(panelwrap, label="Restore defaults")
-        button_cancel = wx.Button(panelwrap, label="Cancel", id=wx.ID_CANCEL)
-
-        self.Bind(wx.EVT_BUTTON, self._OnSave,   button_save)
-        self.Bind(wx.EVT_BUTTON, self._OnReset,  button_reset)
-
-        button_save.SetDefault()
-        self.SetAffirmativeId(wx.ID_OK)
-        self.SetEscapeId(wx.ID_CANCEL)
-
-        self.Sizer = wx.BoxSizer(wx.VERTICAL)
+        self.Sizer      = wx.BoxSizer(wx.VERTICAL)
         panelwrap.Sizer = wx.BoxSizer(wx.VERTICAL)
-        panel.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+        panel.Sizer     = wx.BoxSizer(wx.VERTICAL)
         sizer_items = self.sizer_items = wx.GridBagSizer(hgap=5, vgap=1)
+
+        sizer_buttons = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+        button_ok     = next((x.Window for x in sizer_buttons.Children
+                              if x.Window and wx.ID_OK == x.Window.Id), None)
+        button_reset  = wx.Button(self, label="Restore defaults")
+        if button_ok:
+            button_ok.Label = "Save"
+            button_reset.MoveAfterInTabOrder(button_ok)
 
         panel.Sizer.Add(sizer_items, proportion=1, border=5, flag=wx.GROW | wx.RIGHT)
         panelwrap.Sizer.Add(panel, proportion=1, border=10, flag=wx.GROW | wx.ALL)
-        for b in (button_save, button_reset, button_cancel):
-            sizer_buttons.Add(b, border=10, flag=wx.LEFT)
-        panelwrap.Sizer.Add(sizer_buttons, border=10, flag=wx.ALL | wx.ALIGN_RIGHT)
         self.Sizer.Add(panelwrap, proportion=1, flag=wx.GROW)
+        sizer_buttons.Insert(min(2, sizer_buttons.ItemCount), button_reset)
+        self.Sizer.Add(sizer_buttons, border=10, flag=wx.ALL | wx.ALIGN_RIGHT)
+
+        self.Bind(wx.EVT_BUTTON, self._OnSave,   id=wx.ID_OK)
+        self.Bind(wx.EVT_BUTTON, self._OnReset,  button_reset)
+        self.Bind(wx.EVT_BUTTON, self._OnReset,  id=wx.ID_APPLY)
 
         self.MinSize, self.Size = (320, 180), (420, 420)
         ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
@@ -1548,7 +1537,7 @@ class PropertyDialog(wx.Dialog):
         ctrl.ToolTip = label.ToolTip = "Value of type %s%s." % (
             typeclass.__name__,
             "" if default is None else ", default %s" % repr(default))
-        tip.ForegroundColour = wx.SystemSettings.GetColour(wx.SYS_COLOUR_GRAYTEXT)
+        ColourManager.Manage(tip, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
         tipfont, tipfont.PixelSize = tip.Font, (0, 9)
         tip.Font = tipfont
         tip.Wrap(self.panel.Size[0] - 30)
