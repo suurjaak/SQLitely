@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.05.2020
+@modified    17.06.2020
 ------------------------------------------------------------------------------
 """
 try:
@@ -1920,4 +1920,19 @@ ToolbarTitle = PyEmbeddedImage(
 """Transparent 1x1 GIF."""
 TransparentPixel = PyEmbeddedImage(
     "R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="
+)
+
+
+"""TreeListCtrl icon for triggers."""
+TreeTrigger = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAchJ"
+    "REFUOI21k81OE1EYhp9z5k/bhIQiDaHItFQyYIyCRhM3utFELwAvwAWuDCZs3BkuwEQWLmDB"
+    "BcjCtdGVceVCqgk6o8hMY9MWaPnL9A9RXJg2g2Vm55uc3fc8+ZL3OxCSqZnFiWt3Hh9NzSxO"
+    "hM0AyDA476yvPH1yn7yzvhIl6RIEYbuwwfhlK1Iiw+C1UgVNVbg4miIxNBAqkSfB3uY2mirR"
+    "FAWO4LSuk7YyJ0rEv3ChuotAIAQIIfhkFzB0lcPDX3xxy3iOi2mNTC7PT+cAZBAu7+yjKQqa"
+    "+vc1mz/hNyR64pzPDpLq6+1scu/Rwi0AtQ1X9mtoqoIQAoGg1mhR2fa5NH6WU4bKu/drSARm"
+    "fx8Anu2+BoRMj2Vuz84tcaYnTqNxgF9r8t3bJP+jSrG0S73WoljaQ5WSmKGT36riOS6pbOoK"
+    "gHzx7MEb0xqZnJ1bYijZy6pdZKvi4/stzplJhgcTNOoHxAwdp1juwC+fP/zQaWF5fjrXlty9"
+    "eYG4oRM3dPZ26kghUIXko1fogo/VGJTcuD5KzNDJmv0Ymsrb1W94jsvAcPJqEO7UGHZMX+0N"
+    "XuU+d1UXKQhK0lYmEo5M+ze2+/5v+QMVsPBAoH4SJAAAAABJRU5ErkJggg=="
 )

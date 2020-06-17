@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  26.05.2020
+@modified  17.06.2020
 ------------------------------------------------------------------------------
 """
 import base64
@@ -107,6 +107,8 @@ IMAGES = {
         "Toolbar icon for title toggle button on search page.",
     "TransparentPixel.gif":
         "Transparent 1x1 GIF.",
+    "TreeTrigger.png":
+        "TreeListCtrl icon for triggers.",
 }
 HEADER = """%s
 Contains embedded image and icon resources for SQLitely. Auto-generated.
