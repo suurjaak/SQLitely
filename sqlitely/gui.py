@@ -183,10 +183,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.on_change_page(None)
 
         id_close = wx.NewIdRef().Id
-        accelerators = [(wx.ACCEL_CTRL, k, id_close) for k in [wx.WXK_F4]]
+        accelerators = [(wx.ACCEL_CMD, k, id_close) for k in [wx.WXK_F4]]
         for i in range(9):
             id_tab = wx.NewIdRef().Id
-            accelerators += [(wx.ACCEL_CTRL, ord(str(i + 1)), id_tab)]
+            accelerators += [(wx.ACCEL_CMD, ord(str(i + 1)), id_tab)]
             notebook.Bind(wx.EVT_MENU, functools.partial(on_tab_hotkey, i), id=id_tab)
 
         notebook.Bind(wx.EVT_MENU, on_close_hotkey, id=id_close)
@@ -260,7 +260,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         label_count = self.label_count = wx.StaticText(page)
         edit_filter = self.edit_filter = controls.HintedTextCtrl(page, "Filter list",
                                                                  style=wx.TE_PROCESS_ENTER)
-        edit_filter.ToolTip = "Filter database list (Ctrl-F)"
+        edit_filter.ToolTip = "Filter database list (%s-F)" % controls.KEYS.NAME_CTRL
         list_db = self.list_db = controls.SortableUltimateListCtrl(page,
             agwStyle=wx.LC_REPORT | wx.BORDER_NONE)
         list_db.MinSize = 400, -1 # Maximize-restore would resize width to 100
@@ -411,10 +411,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu.Append(menu_file, "&File")
 
         menu_new_database = self.menu_new_database = menu_file.Append(
-            wx.ID_ANY, "&New database\tCtrl-N", "Create a new SQLite database"
+            wx.ID_ANY, "&New database\t%s-N" % controls.KEYS.NAME_CTRL, "Create a new SQLite database"
         )
         menu_open_database = self.menu_open_database = menu_file.Append(
-            wx.ID_ANY, "&Open database...\tCtrl-O", "Choose a database file to open"
+            wx.ID_ANY, "&Open database...\t%s-O" % controls.KEYS.NAME_CTRL, "Choose a database file to open"
         )
         menu_save_database = self.menu_save_database = menu_file.Append(
             wx.ID_ANY, "&Save", "Save changes to the active database"
@@ -544,7 +544,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             "Show &log window", "Show/hide the log messages window",
             kind=wx.ITEM_CHECK)
         menu_console = self.menu_console = menu_help.Append(wx.ID_ANY,
-            "Show Python &console\tCtrl-E",
+            "Show Python &console\t%s-E" % controls.KEYS.NAME_CTRL,
             "Show/hide a Python shell environment window", kind=wx.ITEM_CHECK)
         menu_help.AppendSeparator()
         menu_tray = self.menu_tray = menu_help.Append(wx.ID_ANY,
@@ -2663,7 +2663,7 @@ class DatabasePage(wx.Panel):
                                     wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
         edit_filter = self.edit_pragma_filter = controls.HintedTextCtrl(page, "Filter list",
                                                                         style=wx.TE_PROCESS_ENTER)
-        edit_filter.ToolTip = "Filter PRAGMA directive list (Ctrl-F)"
+        edit_filter.ToolTip = "Filter PRAGMA directive list (%s-F)" % controls.KEYS.NAME_CTRL
 
         def on_help(ctrl, text, event):
             """Handler for clicking help bitmap, shows text popup."""
@@ -3186,8 +3186,8 @@ class DatabasePage(wx.Panel):
             self.reopen_page(notebook, -1)
 
         id_close, id_reopen = wx.NewIdRef().Id, wx.NewIdRef().Id
-        accelerators = [(wx.ACCEL_CTRL,                  ord("W"), id_close),
-                        (wx.ACCEL_CTRL | wx.ACCEL_SHIFT, ord("T"), id_reopen)]
+        accelerators = [(wx.ACCEL_CMD,                  ord("W"), id_close),
+                        (wx.ACCEL_CMD | wx.ACCEL_SHIFT, ord("T"), id_reopen)]
         notebook.Bind(wx.EVT_MENU, on_close_hotkey,  id=id_close)
         notebook.Bind(wx.EVT_MENU, on_reopen_hotkey, id=id_reopen)
         notebook.SetAcceleratorTable(wx.AcceleratorTable(accelerators))
@@ -4218,7 +4218,7 @@ class DatabasePage(wx.Panel):
                 if item["name"] not in self.db.schema[item["type"]]: del pp[i]
 
         if page:
-            item_close = wx.MenuItem(menu, -1, "&Close\tCtrl-W")
+            item_close = wx.MenuItem(menu, -1, "&Close\t%s-W" % controls.KEYS.NAME_CTRL)
             if isinstance(page, (components.DataObjectPage, components.SchemaObjectPage)):
                 item_save = wx.MenuItem(menu, -1, "&Save")
 
@@ -4226,7 +4226,7 @@ class DatabasePage(wx.Panel):
             item_take = wx.MenuItem(menu, -1, "&Take search query")
 
         if pp:
-            item_last = wx.MenuItem(menu, -1, "Re&open %s\tCtrl-Shift-T" % fmtname(pp[-1]))
+            item_last = wx.MenuItem(menu, -1, "Re&open %s\t%s-Shift-T" % (fmtname(pp[-1]), controls.KEYS.NAME_CTRL))
             for i, item in list(enumerate(pp))[::-1]:
                 item_open = wx.MenuItem(hmenu, -1, fmtname(item, cap=True))
                 hmenu.Append(item_open)

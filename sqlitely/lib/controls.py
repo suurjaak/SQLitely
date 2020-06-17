@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    16.06.2020
+@modified    17.06.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -74,6 +74,7 @@ import os
 import re
 import string
 import struct
+import sys
 
 import wx
 import wx.html
@@ -121,6 +122,8 @@ class KEYS(object):
     PAGING     = PAGEUP + PAGEDOWN
     NAVIGATION = ARROW + PAGING + HOME + END + TAB
     COMMAND    = ENTER + INSERT + DELETE + SPACE + BACKSPACE + ESCAPE
+
+    NAME_CTRL  = "Cmd" if "darwin" == sys.platform else "Ctrl"
 
 
 
@@ -1823,7 +1826,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         frmt = lambda: lambda r, c: "" if r.get(c) is None else unicode(r[c])
         self._formatters = collections.defaultdict(frmt)
         id_copy = wx.NewIdRef().Id
-        entries = [(wx.ACCEL_CTRL, x, id_copy) for x in KEYS.INSERT + (ord("C"), )]
+        entries = [(wx.ACCEL_CMD, x, id_copy) for x in KEYS.INSERT + (ord("C"), )]
         self.SetAcceleratorTable(wx.AcceleratorTable(entries))
         self.Bind(wx.EVT_MENU, self.OnCopy, id=id_copy)
         self.Bind(wx.EVT_LIST_COL_CLICK, self.OnSort)

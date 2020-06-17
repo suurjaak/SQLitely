@@ -1063,7 +1063,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             item_copy_txt    = wx.MenuItem(menu_copy, -1, "Copy row%s as &text" % rowsuff)
             item_copy_json   = wx.MenuItem(menu_copy, -1, "Copy row%s as &JSON" % rowsuff)
             item_open_row    = wx.MenuItem(menu,      -1, "&Open row form\tF4")
-            item_open_col    = wx.MenuItem(menu,      -1, "Op&en column form\tAlt-F2")
+            item_open_col    = wx.MenuItem(menu,      -1, "Op&en column form\t%s-F2" % controls.KEYS.NAME_CTRL)
 
         if is_table:
             item_insert = wx.MenuItem(menu, -1, "Add &new row")
@@ -1072,7 +1072,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             item_delete = wx.MenuItem(menu, -1, "Delete row%s" % rowsuff)
             item_delete_cascade = wx.MenuItem(menu, -1, "Delete row%s cascade" % rowsuff)
         if self.row_count:
-            item_goto   = wx.MenuItem(menu, -1, "&Go to row ..\tCtrl-G")
+            item_goto   = wx.MenuItem(menu, -1, "&Go to row ..\t%s-G" % controls.KEYS.NAME_CTRL)
 
         if rowdatas:
             boldfont = item_caption.Font
@@ -1659,8 +1659,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         label_help_stc = wx.StaticText(panel2, label=
-            "Alt-Enter/Ctrl-Enter runs the query contained in currently selected "
-            "text or on the current line. Ctrl-Space shows autocompletion list.")
+            "Alt-Enter/{0}-Enter runs the query contained in currently selected "
+            "text or on the current line. {0}-Space shows autocompletion list.".format(controls.KEYS.NAME_CTRL))
         ColourManager.Manage(label_help_stc, "ForegroundColour", "DisabledColour")
 
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
@@ -1678,7 +1678,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         tbgrid.AddTool(wx.ID_REFRESH, "", bmp2, shortHelp="Re-execute query  (F5)")
         tbgrid.AddTool(wx.ID_RESET,   "", bmp3, shortHelp="Reset all applied sorting and filtering")
         tbgrid.AddSeparator()
-        tbgrid.AddTool(wx.ID_INDEX,   "", bmp4, shortHelp="Go to row ..  (Ctrl-G)")
+        tbgrid.AddTool(wx.ID_INDEX,   "", bmp4, shortHelp="Go to row ..  (%s-G)" % controls.KEYS.NAME_CTRL)
         tbgrid.AddTool(wx.ID_EDIT,    "", bmp5, shortHelp="Open row in data form  (F4)")
         tbgrid.Realize()
         tbgrid.Disable()
@@ -1750,8 +1750,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self.Layout()
         accelerators = [(wx.ACCEL_NORMAL, wx.WXK_F4,  wx.ID_EDIT),
                         (wx.ACCEL_NORMAL, wx.WXK_F5,  wx.ID_REFRESH),
-                        (wx.ACCEL_ALT,    wx.WXK_F2,  wx.ID_PROPERTIES),
-                        (wx.ACCEL_CTRL,   ord('G'),   wx.ID_INDEX)]
+                        (wx.ACCEL_CMD,    wx.WXK_F2,  wx.ID_PROPERTIES),
+                        (wx.ACCEL_CMD,    ord('G'),   wx.ID_INDEX)]
         wx_accel.accelerate(self, accelerators=accelerators)
         wx.CallAfter(lambda: self and splitter.SplitHorizontally(
                      panel1, panel2, sashPosition=self.Size[1] * 2/5))
@@ -2236,7 +2236,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         tb.AddTool(wx.ID_REFRESH, "", bmp3, shortHelp="Reload data  (F5)")
         tb.AddTool(wx.ID_RESET,   "", bmp4, shortHelp="Reset all applied sorting and filtering")
         tb.AddSeparator()
-        tb.AddTool(wx.ID_INDEX,   "", bmp5, shortHelp="Go to row ..  (Ctrl-G)")
+        tb.AddTool(wx.ID_INDEX,   "", bmp5, shortHelp="Go to row ..  (%s-G)" % controls.KEYS.NAME_CTRL)
         tb.AddTool(wx.ID_EDIT,    "", bmp6, shortHelp="Open row in data form  (F4)")
         tb.AddSeparator()
         tb.AddTool(wx.ID_SAVE,    "", bmp7, shortHelp="Commit changes to database  (F10)")
@@ -2305,8 +2305,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
                         (wx.ACCEL_NORMAL, wx.WXK_F5,  wx.ID_REFRESH),
                         (wx.ACCEL_NORMAL, wx.WXK_F10, wx.ID_SAVE),
                         (wx.ACCEL_NORMAL, wx.WXK_F9,  wx.ID_UNDO),
-                        (wx.ACCEL_ALT,    wx.WXK_F2,  wx.ID_PROPERTIES),
-                        (wx.ACCEL_CTRL,   ord('G'),   wx.ID_INDEX)]
+                        (wx.ACCEL_CMD,    wx.WXK_F2,  wx.ID_PROPERTIES),
+                        (wx.ACCEL_CMD,    ord('G'),   wx.ID_INDEX)]
         wx_accel.accelerate(self, accelerators=accelerators)
         self._grid.SetFocus()
 
@@ -7011,7 +7011,7 @@ class DataDialog(wx.Dialog):
             tb.AddTool(wx.ID_REFRESH,  "", bmp3, shortHelp="Reload data from database  (F5)")
             tb.AddTool(wx.ID_HIGHEST,  "", bmp4, shortHelp="Resize to fit  (F11)")
             tb.AddSeparator()
-            tb.AddTool(wx.ID_EDIT,     "", bmp5, shortHelp="Open column dialog  (Alt-F2)")
+            tb.AddTool(wx.ID_EDIT,     "", bmp5, shortHelp="Open column dialog  (%s-F2)" % controls.KEYS.NAME_CTRL)
             tb.AddSeparator()
             tb.AddTool(wx.ID_SAVE,     "", bmp6, shortHelp="Commit row changes to database  (F10)")
             tb.AddTool(wx.ID_UNDO,     "", bmp7, shortHelp="Rollback row changes and restore original values  (F9)")
@@ -7107,7 +7107,7 @@ class DataDialog(wx.Dialog):
 
         accelerators = [(wx.ACCEL_ALT,    wx.WXK_LEFT,  wx.ID_BACKWARD),
                         (wx.ACCEL_ALT,    wx.WXK_RIGHT, wx.ID_FORWARD),
-                        (wx.ACCEL_ALT,    wx.WXK_F2,    wx.ID_EDIT),
+                        (wx.ACCEL_CMD,    wx.WXK_F2,    wx.ID_EDIT),
                         (wx.ACCEL_NORMAL, wx.WXK_F5,    wx.ID_REFRESH),
                         (wx.ACCEL_NORMAL, wx.WXK_F9,    wx.ID_UNDO),
                         (wx.ACCEL_NORMAL, wx.WXK_F10,   wx.ID_SAVE),
@@ -7556,7 +7556,7 @@ class HistoryDialog(wx.Dialog):
         sizer.Add(grid,      border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.GROW)
         sizer.Add(button,    border=5, flag=wx.ALL | wx.ALIGN_CENTER_HORIZONTAL)
 
-        search.ToolTip = "Filter list (Ctrl-F)"
+        search.ToolTip = "Filter list (%s-F)" % controls.KEYS.NAME_CTRL
         grid.CreateGrid(0, 4)
         grid.SetDefaultCellOverflow(False)
         grid.SetDefaultEditor(wx.grid.GridCellAutoWrapStringEditor())
