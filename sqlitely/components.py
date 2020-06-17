@@ -8758,16 +8758,10 @@ class ColumnDialog(wx.Dialog):
                     pimg2 = pimg.convert("P", palette=PIL.Image.ADAPTIVE)
                     pimg2.save(stream, name.lower())
                 else:
-                    AVOID = set(("GIF", "JPG"))
-                    if self.IMAGE_FORMATS[img.Type] in AVOID \
-                    and (set(state["converts"]) - AVOID or "JPG" in state["converts"]):
-                        # Prefer converting from full-color or lossless source
-                        if "SVG" in state["converts"]:
-                            img = load_svg(state["converts"]["SVG"])
-                        else:
-                            name0 = next((x for x in state["converts"] if x not in AVOID), None)
-                            if not name0: name0 = "JPG"
-                            img = wx.Image(io.BytesIO(state["converts"][name0]))
+                    if "SVG" == state["format0"]:
+                        img = load_svg(state["converts"]["SVG"])
+                    elif self.IMAGE_FORMATS[img.Type] != state["format0"]:
+                        img = wx.Image(io.BytesIO(state["converts"][state["format0"]]))
                     fmt = next(k for k, v in self.IMAGE_FORMATS.items() if v == name)
                     img.SaveFile(stream, fmt)
                 v = stream.getvalue()
@@ -8816,6 +8810,7 @@ class ColumnDialog(wx.Dialog):
                 if img and isinstance(v, basestring):
                     status.Label = "%sx%s, %s bytes" % (img.Width, img.Height, len(v))
                     state["converts"][self.IMAGE_FORMATS[img.Type]] = v
+                    state["format0"] = self.IMAGE_FORMATS[img.Type]
                 ColourManager.Manage(hint, "ForegroundColour", wx.SYS_COLOUR_WINDOWTEXT)
                 flist.Items = sorted(set(FMTS + list(state["converts"])))
                 flist.StringSelection = self.IMAGE_FORMATS[img.Type]
@@ -8871,7 +8866,7 @@ class ColumnDialog(wx.Dialog):
 
         self._getters[NAME] = lambda: state["image"]
         self._setters[NAME] = update
-        state = self._state.setdefault(NAME, {"show": True, "image": None, "timer": None, "converts": {}})
+        state = self._state.setdefault(NAME, {"show": True, "image": None, "format0": None, "timer": None, "converts": {}})
         return page
 
 
