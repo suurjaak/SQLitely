@@ -3415,7 +3415,7 @@ class DatabasePage(wx.Panel):
             if show_deprecated != self.label_deprecated.Shown:
                 self.label_deprecated.Show(show_deprecated)
             self.pragma_filter = search
-            self.page_pragma.Layout()
+            self.panel_pragma_wrapper.SendSizeEvent()
         finally: self.page_pragma.Thaw()
 
 
