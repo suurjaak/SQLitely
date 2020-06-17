@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.06.2020
+@modified    16.06.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -769,8 +769,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Returns ROWID name for table, or None if table is WITHOUT ROWID
         or has columns shadowing all ROWID aliases (ROWID, _ROWID_, OID).
         """
+        if util.get(self.schema["table"], table, "meta", "without"): return
         sql = self.schema["table"].get(table, {}).get("sql")
-        if re.search("WITHOUT\s+ROWID\s*$", sql, re.I): return
+        if re.search("WITHOUT\s+ROWID[\s;]*$", sql, re.I): return
         ALIASES = ("_rowid_", "rowid", "oid")
         cols = [c["name"].lower() for c in self.schema["table"][table]["columns"]]
         return next((x for x in ALIASES if x not in cols), None)

@@ -8,15 +8,17 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.06.2020
+@modified    16.06.2020
 ------------------------------------------------------------------------------
 """
 import collections
+import contextlib
 import ctypes
 import datetime
 import locale
 import math
 import os
+import platform
 import re
 import subprocess
 import sys
@@ -213,12 +215,31 @@ def wx_image_to_pil(image):
     (w, h), data = image.GetSize(), image.GetData()
 
     chans = [Image.new("L", (w, h)) for i in range(3)]
-    for i in range(3): chans[i].fromstring(str(data[i::3]))
+    for i in range(3): chans[i].frombytes(str(data[i::3]))
     if image.HasAlpha():
         chans += [Image.new("L", (w, h))]
-        chans[-1].fromstring(str(image.GetAlpha()))
+        chans[-1].frombytes(str(image.GetAlpha()))
 
     return Image.merge("RGBA"[:len(chans)], chans)
+
+
+def ctx(enter, exit, *a, **kw):
+    """
+    Creates a context manager for callable result. Example usage:
+
+        with ctx(wx.TextCtrl, wx.TextCtrl.Destroy, parent=self) as x:
+            defaultfont = x.Font.FaceName
+
+    @param   enter  function returning the value,
+                    invoked with positional and keyword arguments
+    @param   exit   cleanup function, invoked with result of enter()
+    @return         context-managed result of enter(*a, **kw)
+    """
+    def yielder():
+        result = enter(*a, **kw)
+        yield result
+        exit(result)
+    return contextlib.GeneratorContextManager(yielder())
 
 
 def m(o, name, case_insensitive=True):
@@ -421,9 +442,8 @@ def select_file(filepath):
 
 
 def is_os_64bit():
-    """Returns whether the operating system is 64-bit (Windows-only)."""
-    return ('PROCESSOR_ARCHITEW6432' in os.environ
-            or os.environ['PROCESSOR_ARCHITECTURE'].endswith('64'))
+    """Returns whether the operating system is 64-bit."""
+    return "64" in platform.architecture()[0]
 
 
 def round_float(value, precision=1):

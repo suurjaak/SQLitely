@@ -10,20 +10,21 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.06.2020
+@modified    17.06.2020
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
 import datetime
 import json
 import os
+import platform
 import sys
 
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev299"
-VersionDate = "14.06.2020"
+Version = "1.0.dev302"
+VersionDate = "17.06.2020"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -149,9 +150,11 @@ DBsOpen = {}
 
 """Path to SQLite analyzer tool."""
 DBAnalyzer = os.path.join(BinDirectory, "sqlite3_analyzer" + (
-    ".exe" if "win32"  == sys.platform else
-    "_osx" if "darwin" == sys.platform else "_linux"
+    ".exe"   if "win32"  == sys.platform else
+    "_osx"   if "darwin" == sys.platform else
+    "_linux" if "64" not in platform.architecture()[0] else "_linux_x64"
 ))
+
 
 """Whether logging to log window is enabled."""
 LogEnabled = True
