@@ -3294,6 +3294,9 @@ class DatabasePage(wx.Panel):
         """
         def after():
             if not self: return
+            # Gtk tends to crash if not clearing these before setting longer value
+            self.edit_info_sha1.Value = ""
+            self.edit_info_md5.Value  = ""
             if "error" in result:
                 self.edit_info_sha1.Value = result["error"]
                 self.edit_info_md5.Value  = result["error"]
