@@ -6,9 +6,10 @@ depending on current environment.
 Pyinstaller-provided names and variables: Analysis, EXE, PYZ, SPEC, TOC.
 
 @created   23.08.2019
-@modified  27.11.2019
+@modified  17.06.2020
 """
 import os
+import platform
 import struct
 import sys
 
@@ -18,8 +19,10 @@ BUILDPATH = os.path.dirname(os.path.abspath(SPEC))
 APPPATH   = os.path.join(os.path.dirname(BUILDPATH), NAME)
 ROOTPATH  = os.path.dirname(APPPATH)
 
-ANALYZER = "sqlite3_analyzer.exe" if "nt"  == os.name else \
-           "sqlite3_analyzer_osx" if "os2" == os.name else "sqlite3_analyzer_linux"
+ANALYZER = "sqlite3_analyzer.exe"   if "nt"  == os.name else \
+           "sqlite3_analyzer_osx"   if "os2" == os.name else \
+           "sqlite3_analyzer_linux" if "64" not in platform.architecture()[0] else \
+           "sqlite3_analyzer_linux_x64"
 
 os.chdir("..")
 a = Analysis(
