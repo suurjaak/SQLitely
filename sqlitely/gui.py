@@ -2531,7 +2531,7 @@ class DatabasePage(wx.Panel):
         self.tree_schema_images = {
             "table":    il.Add(wx.ArtProvider.GetBitmap(wx.ART_REPORT_VIEW,     wx.ART_TOOLBAR, isize)),
             "index":    il.Add(wx.ArtProvider.GetBitmap(wx.ART_NORMAL_FILE,     wx.ART_TOOLBAR, isize)),
-            "trigger":  il.Add(wx.ArtProvider.GetBitmap(wx.ART_EXECUTABLE_FILE, wx.ART_TOOLBAR, isize)),
+            "trigger":  il.Add(images.TreeTrigger.Bitmap),
             "view":     il.Add(wx.ArtProvider.GetBitmap(wx.ART_HELP_PAGE,       wx.ART_TOOLBAR, isize)),
             "columns":  il.Add(wx.ArtProvider.GetBitmap(wx.ART_FOLDER,          wx.ART_TOOLBAR, isize)),
         }
