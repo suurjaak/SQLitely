@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.06.2020
+@modified    18.06.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -20,6 +20,7 @@ import math
 import os
 import platform
 import re
+import struct
 import subprocess
 import sys
 import time
@@ -444,6 +445,11 @@ def select_file(filepath):
 def is_os_64bit():
     """Returns whether the operating system is 64-bit."""
     return "64" in platform.architecture()[0]
+
+
+def is_python_64bit():
+    """Returns whether Python is 64-bit."""
+    return (struct.calcsize("P") * 8) == 64
 
 
 def round_float(value, precision=1):

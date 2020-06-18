@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.10.2019
+@modified    18.06.2020
 ------------------------------------------------------------------------------
 """
 import HTMLParser
@@ -165,7 +165,7 @@ def get_install_type():
     prog_text = sys.argv[0].lower()
     if not prog_text.endswith(".exe"):
         result = "src"
-    elif util.is_os_64bit() and "program files\\" in prog_text:
+    elif util.is_python_64bit():
         result = "x64"
     else:
         result = "x86"
