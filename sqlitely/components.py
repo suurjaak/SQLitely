@@ -7763,20 +7763,7 @@ class ColumnDialog(wx.Dialog):
         self._value    = self._rowdata[self._name] # Column raw value
         self._gridbase = gridbase
 
-
-        '''
-        @todo drop
-
-        self._col      = next(x for x in cols if x["name"] == col)
-        self._cols     = cols               # [{name, }, ]
-        self._row      = copy.deepcopy(row) # {col1: .., }
-        self._row0     = copy.deepcopy(row0 or row) # {col1: .., }
-        self._value    = row[col]           # Column raw value
-        self._gridbase = gridbase
-        self._eargs    = dict(eargs or {})
-        '''
-
-        button_prev  = wx.Button(self, label="&Previous column")
+        button_prev  = wx.Button(self,     label="&Previous column")
         label_cols   = wx.StaticText(self, label="&Select column:")
         list_cols    = wx.Choice(self)
         button_next  = wx.Button(self, label="&Next column")
