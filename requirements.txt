@@ -3,6 +3,6 @@ openpyxl<=3.0.0
 Pillow<=6.2.2
 pyparsing
 pytz
-wxPython
+wxPython>=4.0
 xlrd
 XlsxWriter
