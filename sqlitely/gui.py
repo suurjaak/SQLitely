@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.06.2020
+@modified    19.06.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1830,7 +1830,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_open_current_database(self, event):
         """Handler for clicking to open selected files from database list."""
-        self.load_database_pages(self.dbs_selected)
+        self.load_database_pages(self.dbs_selected, clearselection=False)
 
 
     def on_open_from_list_db(self, event):
