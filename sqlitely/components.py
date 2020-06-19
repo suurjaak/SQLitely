@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.06.2020
+@modified    19.06.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -2995,7 +2995,7 @@ class SchemaObjectPage(wx.Panel):
         splitter.SplitHorizontally(panel1, panel2, pos)
         splitter.SashInvisible = not has_cols
         wx_accel.accelerate(self)
-        button_edit.Enabled = self._hasmeta
+        button_edit.Enabled = self._hasmeta and grammar.SQL.CREATE_VIRTUAL_TABLE != util.get(item, "meta", "__type__")
         def after():
             if not self: return
             if self._newmode: edit_name.SetFocus(), edit_name.SelectAll()
@@ -3562,7 +3562,7 @@ class SchemaObjectPage(wx.Panel):
         """Populates panel with table-specific data."""
         meta = self._item.get("meta") or {}
 
-        self._ctrls["without"].Value   = bool(meta.get("without"))
+        self._ctrls["without"].Value = bool(meta.get("without"))
 
         for i, grid in enumerate((self._grid_columns, self._grid_constraints)):
             if i and not self._hasmeta: continue # for i, grid
@@ -3589,6 +3589,8 @@ class SchemaObjectPage(wx.Panel):
         self._notebook_table.SetPageText(0, "Columns" if not lencol else "Columns (%s)" % lencol)
         if self._hasmeta:
             self._notebook_table.SetPageText(1, "Constraints" if not lencnstr else "Constraints (%s)" % lencnstr)
+            if grammar.SQL.CREATE_VIRTUAL_TABLE == util.get(self._item, "meta", "__type__"):
+                self._panel_category.Hide()
         self._notebook_table.Layout()
 
 
