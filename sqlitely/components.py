@@ -8545,7 +8545,10 @@ class ColumnDialog(wx.Dialog):
                 x = util.parse_time(value)
                 if isinstance(x, datetime.time): t = x
             if isinstance(t, datetime.time):
-                u = t.microsecond or None
+                u = t.microsecond
+                if not u and (state["numeric"] and not float(value) % 1 or
+                              isinstance(value, basestring) and ".0" not in value):
+                    u = None
             if getattr(dt or t, "tzinfo", None):
                 z = (dt or t).tzinfo.utcoffset(jan).total_seconds() * 3600
 
