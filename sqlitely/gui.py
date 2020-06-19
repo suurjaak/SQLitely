@@ -4925,6 +4925,7 @@ class DatabasePage(wx.Panel):
         filename2 = dialog.GetPath()
         sqls = [] # [sql, ]
         is_samefile = (filename2.lower() == self.db.filename.lower())
+        file_existed = os.path.isfile(filename2)
 
         try:
             if is_samefile: schema2 = "main"
@@ -5093,6 +5094,9 @@ class DatabasePage(wx.Panel):
                 self.reload_schema(count=True, parse=True)
                 self.update_page_header(updated=True)
             else: wx.PostEvent(self, OpenDatabaseEvent(self.Id, file=filename2))
+        elif not success and not file_existed:
+            try: not os.path.getsize(filename2) and os.unlink(filename2)
+            except Exception: pass
 
 
     def on_import_event(self, event):
