@@ -1163,12 +1163,13 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     if err: raise Exception(err)
                     return sql
 
-                sql = opts["sql"]
+                sql = sql0 = opts["sql"]
                 kws = {x: transform[x] for x in ("flags", "renames")
                        if transform and x in transform}
                 if not opts.get("meta") or kws or indent != "  ":
                     sql, err = grammar.transform(sql, indent=indent, **kws)
                     if err and kws: raise Exception(err)
+                    elif not sql: sql = sql0
                 sqls.setdefault(category, []).append(sql)
 
         return "\n\n".join("\n\n".join(vv) for vv in sqls.values())
