@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.06.2020
+@modified    19.06.2020
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -406,7 +406,7 @@ class AnalyzerThread(WorkerThread):
             if not path: continue # while self._is_running
 
             self._is_working, self._drop_results = True, False
-            filesize, output, rows, error = 0, "", [], None
+            filesize, rows, output, error = 0, [], "", None
 
             if os.path.exists(path): filesize = os.path.getsize(path)
             else: error = "File does not exist."
@@ -427,14 +427,17 @@ class AnalyzerThread(WorkerThread):
                     try: self._process = subprocess.Popen(args, **pargs)
                     except Exception:
                         if mypath == paths[-1]: raise
-                    else: break # for mypath
-                if self._process: output, error = self._process.communicate()
+                    else:
+                        try: output, error = self._process.communicate()
+                        except Exception as e:
+                            try:
+                                self._process.kill()
+                                output, error = self._process.communicate()
+                            except Exception: pass
+                            if mypath == paths[-1]: raise e
+                        else:
+                            if output and output.strip().startswith("/**"): break # for mypath
             except Exception as e:
-                if self._process:
-                    try:
-                        self._process.kill()
-                        output, error = self._process.communicate()
-                    except Exception: pass
                 error = error or getattr(e, "output", None)
                 if error: error = error.split("\n")[0].strip()
                 else: error = util.format_exc(e)

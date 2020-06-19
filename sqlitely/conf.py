@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.06.2020
+@modified    19.06.2020
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -23,8 +23,8 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev307"
-VersionDate = "17.06.2020"
+Version = "1.0.dev308"
+VersionDate = "19.06.2020"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -141,7 +141,7 @@ WindowIconized = False
 WindowPosition = None
 
 """Main window size in pixels, [w, h] or [-1, -1] for maximized."""
-WindowSize = (1080, 710)
+WindowSize = (1080, 720)
 
 """---------------------------- /FileDirectives ----------------------------"""
 
