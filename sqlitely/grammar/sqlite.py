@@ -582,7 +582,7 @@ class Parser(object):
         if ctx.K_EXISTS(): result["exists"]  = True
         result["module"] = {"name":  self.u(ctx.module_name)}
         args = ctx.module_argument()
-        if args: result["module"]["arguments"] =  [self.u(x) for x in args]
+        if args: result["module"]["arguments"] =  [self.r(x) for x in args]
 
         return result
 

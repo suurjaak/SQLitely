@@ -472,10 +472,8 @@ error_message
  ;
 
 module_argument
- : keyword
- | signed_number
- | IDENTIFIER
- | STRING_LITERAL
+ : column_def
+ | expr
  ;
 
 column_alias

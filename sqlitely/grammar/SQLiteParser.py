@@ -9,7 +9,7 @@ import sys
 def serializedATN():
     with StringIO() as buf:
         buf.write(u"\3\u608b\ua72a\u8133\ub9ed\u417c\u3be7\u7786\u5964\3")
-        buf.write(u"\u00a0\u06ad\4\2\t\2\4\3\t\3\4\4\t\4\4\5\t\5\4\6\t\6")
+        buf.write(u"\u00a0\u06ab\4\2\t\2\4\3\t\3\4\4\t\4\4\5\t\5\4\6\t\6")
         buf.write(u"\4\7\t\7\4\b\t\b\4\t\t\t\4\n\t\n\4\13\t\13\4\f\t\f\4")
         buf.write(u"\r\t\r\4\16\t\16\4\17\t\17\4\20\t\20\4\21\t\21\4\22\t")
         buf.write(u"\22\4\23\t\23\4\24\t\24\4\25\t\25\4\26\t\26\4\27\t\27")
@@ -167,105 +167,105 @@ def serializedATN():
         buf.write(u"8\38\38\38\38\78\u0645\n8\f8\168\u0648\138\38\38\38\3")
         buf.write(u"8\38\38\78\u0650\n8\f8\168\u0653\138\38\38\78\u0657\n")
         buf.write(u"8\f8\168\u065a\138\58\u065c\n8\39\39\39\39\39\59\u0663")
-        buf.write(u"\n9\3:\5:\u0666\n:\3:\3:\3;\3;\3<\3<\3=\3=\3>\3>\3>\3")
-        buf.write(u">\5>\u0674\n>\3?\3?\3@\3@\3A\3A\3B\3B\3C\3C\3D\3D\3E")
-        buf.write(u"\3E\3F\3F\3G\3G\3H\3H\3I\3I\3J\3J\3K\3K\3L\3L\3M\3M\3")
-        buf.write(u"N\3N\3O\3O\3P\3P\3Q\3Q\3Q\3Q\3Q\3Q\5Q\u06a0\nQ\3R\3R")
-        buf.write(u"\3S\3S\3S\3S\3S\3S\3S\5S\u06ab\nS\3S\4\u017f\u0401\3")
-        buf.write(u"PT\2\4\6\b\n\f\16\20\22\24\26\30\32\34\36 \"$&(*,.\60")
-        buf.write(u"\62\64\668:<>@BDFHJLNPRTVXZ\\^`bdfhjlnprtvxz|~\u0080")
-        buf.write(u"\u0082\u0084\u0086\u0088\u008a\u008c\u008e\u0090\u0092")
-        buf.write(u"\u0094\u0096\u0098\u009a\u009c\u009e\u00a0\u00a2\u00a4")
-        buf.write(u"\2\24\5\2<<GGTT\4\2\61\61DD\4\2\7\7ll\3\2\u0085\u0086")
-        buf.write(u"\4\2\37\37@@\4\2$$>>\7\2\33\33JJSS||\177\177\4\2\t\t")
-        buf.write(u"\16\17\3\2\n\13\3\2\20\23\3\2\24\27\6\2OOcceexx\4\2=")
-        buf.write(u"=\u008d\u008d\5\2\33\33JJ\177\177\6\2\668jj\u0099\u0099")
-        buf.write(u"\u009b\u009c\4\2\n\fhh\4\2\u0098\u0098\u009b\u009b\3")
-        buf.write(u"\2\33\u0096\2\u07bb\2\u00aa\3\2\2\2\4\u00af\3\2\2\2\6")
-        buf.write(u"\u00b4\3\2\2\2\b\u00ce\3\2\2\2\n\u00f0\3\2\2\2\f\u0102")
-        buf.write(u"\3\2\2\2\16\u010b\3\2\2\2\20\u0113\3\2\2\2\22\u011d\3")
-        buf.write(u"\2\2\2\24\u0125\3\2\2\2\26\u0149\3\2\2\2\30\u0169\3\2")
-        buf.write(u"\2\2\32\u0192\3\2\2\2\34\u01d7\3\2\2\2\36\u01f7\3\2\2")
-        buf.write(u"\2 \u0215\3\2\2\2\"\u021f\3\2\2\2$\u023c\3\2\2\2&\u0242")
-        buf.write(u"\3\2\2\2(\u024f\3\2\2\2*\u025c\3\2\2\2,\u0269\3\2\2\2")
-        buf.write(u".\u0277\3\2\2\2\60\u0297\3\2\2\2\62\u02e1\3\2\2\2\64")
-        buf.write(u"\u02f0\3\2\2\2\66\u02fd\3\2\2\28\u0303\3\2\2\2:\u0311")
-        buf.write(u"\3\2\2\2<\u0315\3\2\2\2>\u032d\3\2\2\2@\u0396\3\2\2\2")
-        buf.write(u"B\u0399\3\2\2\2D\u03bc\3\2\2\2F\u03f2\3\2\2\2H\u03f4")
-        buf.write(u"\3\2\2\2J\u03ff\3\2\2\2L\u0430\3\2\2\2N\u0435\3\2\2\2")
-        buf.write(u"P\u0483\3\2\2\2R\u04ec\3\2\2\2T\u051c\3\2\2\2V\u0526")
-        buf.write(u"\3\2\2\2X\u0530\3\2\2\2Z\u0558\3\2\2\2\\\u0567\3\2\2")
-        buf.write(u"\2^\u0571\3\2\2\2`\u057c\3\2\2\2b\u057e\3\2\2\2d\u059d")
-        buf.write(u"\3\2\2\2f\u05e6\3\2\2\2h\u05e8\3\2\2\2j\u05ff\3\2\2\2")
-        buf.write(u"l\u060f\3\2\2\2n\u065b\3\2\2\2p\u0662\3\2\2\2r\u0665")
-        buf.write(u"\3\2\2\2t\u0669\3\2\2\2v\u066b\3\2\2\2x\u066d\3\2\2\2")
-        buf.write(u"z\u0673\3\2\2\2|\u0675\3\2\2\2~\u0677\3\2\2\2\u0080\u0679")
-        buf.write(u"\3\2\2\2\u0082\u067b\3\2\2\2\u0084\u067d\3\2\2\2\u0086")
-        buf.write(u"\u067f\3\2\2\2\u0088\u0681\3\2\2\2\u008a\u0683\3\2\2")
-        buf.write(u"\2\u008c\u0685\3\2\2\2\u008e\u0687\3\2\2\2\u0090\u0689")
-        buf.write(u"\3\2\2\2\u0092\u068b\3\2\2\2\u0094\u068d\3\2\2\2\u0096")
-        buf.write(u"\u068f\3\2\2\2\u0098\u0691\3\2\2\2\u009a\u0693\3\2\2")
-        buf.write(u"\2\u009c\u0695\3\2\2\2\u009e\u0697\3\2\2\2\u00a0\u069f")
-        buf.write(u"\3\2\2\2\u00a2\u06a1\3\2\2\2\u00a4\u06aa\3\2\2\2\u00a6")
-        buf.write(u"\u00a9\5\6\4\2\u00a7\u00a9\5\4\3\2\u00a8\u00a6\3\2\2")
-        buf.write(u"\2\u00a8\u00a7\3\2\2\2\u00a9\u00ac\3\2\2\2\u00aa\u00a8")
-        buf.write(u"\3\2\2\2\u00aa\u00ab\3\2\2\2\u00ab\u00ad\3\2\2\2\u00ac")
-        buf.write(u"\u00aa\3\2\2\2\u00ad\u00ae\7\2\2\3\u00ae\3\3\2\2\2\u00af")
-        buf.write(u"\u00b0\7\u00a0\2\2\u00b0\5\3\2\2\2\u00b1\u00b3\7\3\2")
-        buf.write(u"\2\u00b2\u00b1\3\2\2\2\u00b3\u00b6\3\2\2\2\u00b4\u00b2")
-        buf.write(u"\3\2\2\2\u00b4\u00b5\3\2\2\2\u00b5\u00b7\3\2\2\2\u00b6")
-        buf.write(u"\u00b4\3\2\2\2\u00b7\u00c0\5\b\5\2\u00b8\u00ba\7\3\2")
-        buf.write(u"\2\u00b9\u00b8\3\2\2\2\u00ba\u00bb\3\2\2\2\u00bb\u00b9")
-        buf.write(u"\3\2\2\2\u00bb\u00bc\3\2\2\2\u00bc\u00bd\3\2\2\2\u00bd")
-        buf.write(u"\u00bf\5\b\5\2\u00be\u00b9\3\2\2\2\u00bf\u00c2\3\2\2")
-        buf.write(u"\2\u00c0\u00be\3\2\2\2\u00c0\u00c1\3\2\2\2\u00c1\u00c6")
-        buf.write(u"\3\2\2\2\u00c2\u00c0\3\2\2\2\u00c3\u00c5\7\3\2\2\u00c4")
-        buf.write(u"\u00c3\3\2\2\2\u00c5\u00c8\3\2\2\2\u00c6\u00c4\3\2\2")
-        buf.write(u"\2\u00c6\u00c7\3\2\2\2\u00c7\7\3\2\2\2\u00c8\u00c6\3")
-        buf.write(u"\2\2\2\u00c9\u00cc\7I\2\2\u00ca\u00cb\7t\2\2\u00cb\u00cd")
-        buf.write(u"\7q\2\2\u00cc\u00ca\3\2\2\2\u00cc\u00cd\3\2\2\2\u00cd")
-        buf.write(u"\u00cf\3\2\2\2\u00ce\u00c9\3\2\2\2\u00ce\u00cf\3\2\2")
-        buf.write(u"\2\u00cf\u00ee\3\2\2\2\u00d0\u00ef\5\n\6\2\u00d1\u00ef")
-        buf.write(u"\5\f\7\2\u00d2\u00ef\5\16\b\2\u00d3\u00ef\5\20\t\2\u00d4")
-        buf.write(u"\u00ef\5\22\n\2\u00d5\u00ef\5\24\13\2\u00d6\u00ef\5\26")
-        buf.write(u"\f\2\u00d7\u00ef\5\30\r\2\u00d8\u00ef\5\32\16\2\u00d9")
-        buf.write(u"\u00ef\5\34\17\2\u00da\u00ef\5\36\20\2\u00db\u00ef\5")
-        buf.write(u" \21\2\u00dc\u00ef\5\"\22\2\u00dd\u00ef\5$\23\2\u00de")
-        buf.write(u"\u00ef\5&\24\2\u00df\u00ef\5(\25\2\u00e0\u00ef\5*\26")
-        buf.write(u"\2\u00e1\u00ef\5,\27\2\u00e2\u00ef\5.\30\2\u00e3\u00ef")
-        buf.write(u"\5\60\31\2\u00e4\u00ef\5\62\32\2\u00e5\u00ef\5\64\33")
-        buf.write(u"\2\u00e6\u00ef\5\66\34\2\u00e7\u00ef\58\35\2\u00e8\u00ef")
-        buf.write(u"\5:\36\2\u00e9\u00ef\5<\37\2\u00ea\u00ef\5> \2\u00eb")
-        buf.write(u"\u00ef\5B\"\2\u00ec\u00ef\5D#\2\u00ed\u00ef\5F$\2\u00ee")
-        buf.write(u"\u00d0\3\2\2\2\u00ee\u00d1\3\2\2\2\u00ee\u00d2\3\2\2")
-        buf.write(u"\2\u00ee\u00d3\3\2\2\2\u00ee\u00d4\3\2\2\2\u00ee\u00d5")
-        buf.write(u"\3\2\2\2\u00ee\u00d6\3\2\2\2\u00ee\u00d7\3\2\2\2\u00ee")
-        buf.write(u"\u00d8\3\2\2\2\u00ee\u00d9\3\2\2\2\u00ee\u00da\3\2\2")
-        buf.write(u"\2\u00ee\u00db\3\2\2\2\u00ee\u00dc\3\2\2\2\u00ee\u00dd")
-        buf.write(u"\3\2\2\2\u00ee\u00de\3\2\2\2\u00ee\u00df\3\2\2\2\u00ee")
-        buf.write(u"\u00e0\3\2\2\2\u00ee\u00e1\3\2\2\2\u00ee\u00e2\3\2\2")
-        buf.write(u"\2\u00ee\u00e3\3\2\2\2\u00ee\u00e4\3\2\2\2\u00ee\u00e5")
-        buf.write(u"\3\2\2\2\u00ee\u00e6\3\2\2\2\u00ee\u00e7\3\2\2\2\u00ee")
-        buf.write(u"\u00e8\3\2\2\2\u00ee\u00e9\3\2\2\2\u00ee\u00ea\3\2\2")
-        buf.write(u"\2\u00ee\u00eb\3\2\2\2\u00ee\u00ec\3\2\2\2\u00ee\u00ed")
-        buf.write(u"\3\2\2\2\u00ef\t\3\2\2\2\u00f0\u00f1\7 \2\2\u00f1\u00f5")
-        buf.write(u"\7\u0084\2\2\u00f2\u00f3\5\u0084C\2\u00f3\u00f4\7\4\2")
-        buf.write(u"\2\u00f4\u00f6\3\2\2\2\u00f5\u00f2\3\2\2\2\u00f5\u00f6")
-        buf.write(u"\3\2\2\2\u00f6\u00f7\3\2\2\2\u00f7\u0100\5\u0088E\2\u00f8")
-        buf.write(u"\u00f9\7{\2\2\u00f9\u00fa\7\u0088\2\2\u00fa\u0101\5\u008c")
-        buf.write(u"G\2\u00fb\u00fd\7\35\2\2\u00fc\u00fe\7\60\2\2\u00fd\u00fc")
-        buf.write(u"\3\2\2\2\u00fd\u00fe\3\2\2\2\u00fe\u00ff\3\2\2\2\u00ff")
-        buf.write(u"\u0101\5H%\2\u0100\u00f8\3\2\2\2\u0100\u00fb\3\2\2\2")
-        buf.write(u"\u0101\13\3\2\2\2\u0102\u0109\7!\2\2\u0103\u010a\5\u0084")
-        buf.write(u"C\2\u0104\u010a\5\u008aF\2\u0105\u0106\5\u0084C\2\u0106")
-        buf.write(u"\u0107\7\4\2\2\u0107\u0108\5\u008aF\2\u0108\u010a\3\2")
-        buf.write(u"\2\2\u0109\u0103\3\2\2\2\u0109\u0104\3\2\2\2\u0109\u0105")
-        buf.write(u"\3\2\2\2\u0109\u010a\3\2\2\2\u010a\r\3\2\2\2\u010b\u010d")
-        buf.write(u"\7%\2\2\u010c\u010e\79\2\2\u010d\u010c\3\2\2\2\u010d")
-        buf.write(u"\u010e\3\2\2\2\u010e\u010f\3\2\2\2\u010f\u0110\5P)\2")
-        buf.write(u"\u0110\u0111\7#\2\2\u0111\u0112\5\u0084C\2\u0112\17\3")
-        buf.write(u"\2\2\2\u0113\u0115\7(\2\2\u0114\u0116\t\2\2\2\u0115\u0114")
-        buf.write(u"\3\2\2\2\u0115\u0116\3\2\2\2\u0116\u011b\3\2\2\2\u0117")
+        buf.write(u"\n9\3:\5:\u0666\n:\3:\3:\3;\3;\3<\3<\3=\3=\3>\3>\5>\u0672")
+        buf.write(u"\n>\3?\3?\3@\3@\3A\3A\3B\3B\3C\3C\3D\3D\3E\3E\3F\3F\3")
+        buf.write(u"G\3G\3H\3H\3I\3I\3J\3J\3K\3K\3L\3L\3M\3M\3N\3N\3O\3O")
+        buf.write(u"\3P\3P\3Q\3Q\3Q\3Q\3Q\3Q\5Q\u069e\nQ\3R\3R\3S\3S\3S\3")
+        buf.write(u"S\3S\3S\3S\5S\u06a9\nS\3S\4\u017f\u0401\3PT\2\4\6\b\n")
+        buf.write(u"\f\16\20\22\24\26\30\32\34\36 \"$&(*,.\60\62\64\668:")
+        buf.write(u"<>@BDFHJLNPRTVXZ\\^`bdfhjlnprtvxz|~\u0080\u0082\u0084")
+        buf.write(u"\u0086\u0088\u008a\u008c\u008e\u0090\u0092\u0094\u0096")
+        buf.write(u"\u0098\u009a\u009c\u009e\u00a0\u00a2\u00a4\2\24\5\2<")
+        buf.write(u"<GGTT\4\2\61\61DD\4\2\7\7ll\3\2\u0085\u0086\4\2\37\37")
+        buf.write(u"@@\4\2$$>>\7\2\33\33JJSS||\177\177\4\2\t\t\16\17\3\2")
+        buf.write(u"\n\13\3\2\20\23\3\2\24\27\6\2OOcceexx\4\2==\u008d\u008d")
+        buf.write(u"\5\2\33\33JJ\177\177\6\2\668jj\u0099\u0099\u009b\u009c")
+        buf.write(u"\4\2\n\fhh\4\2\u0098\u0098\u009b\u009b\3\2\33\u0096\2")
+        buf.write(u"\u07b7\2\u00aa\3\2\2\2\4\u00af\3\2\2\2\6\u00b4\3\2\2")
+        buf.write(u"\2\b\u00ce\3\2\2\2\n\u00f0\3\2\2\2\f\u0102\3\2\2\2\16")
+        buf.write(u"\u010b\3\2\2\2\20\u0113\3\2\2\2\22\u011d\3\2\2\2\24\u0125")
+        buf.write(u"\3\2\2\2\26\u0149\3\2\2\2\30\u0169\3\2\2\2\32\u0192\3")
+        buf.write(u"\2\2\2\34\u01d7\3\2\2\2\36\u01f7\3\2\2\2 \u0215\3\2\2")
+        buf.write(u"\2\"\u021f\3\2\2\2$\u023c\3\2\2\2&\u0242\3\2\2\2(\u024f")
+        buf.write(u"\3\2\2\2*\u025c\3\2\2\2,\u0269\3\2\2\2.\u0277\3\2\2\2")
+        buf.write(u"\60\u0297\3\2\2\2\62\u02e1\3\2\2\2\64\u02f0\3\2\2\2\66")
+        buf.write(u"\u02fd\3\2\2\28\u0303\3\2\2\2:\u0311\3\2\2\2<\u0315\3")
+        buf.write(u"\2\2\2>\u032d\3\2\2\2@\u0396\3\2\2\2B\u0399\3\2\2\2D")
+        buf.write(u"\u03bc\3\2\2\2F\u03f2\3\2\2\2H\u03f4\3\2\2\2J\u03ff\3")
+        buf.write(u"\2\2\2L\u0430\3\2\2\2N\u0435\3\2\2\2P\u0483\3\2\2\2R")
+        buf.write(u"\u04ec\3\2\2\2T\u051c\3\2\2\2V\u0526\3\2\2\2X\u0530\3")
+        buf.write(u"\2\2\2Z\u0558\3\2\2\2\\\u0567\3\2\2\2^\u0571\3\2\2\2")
+        buf.write(u"`\u057c\3\2\2\2b\u057e\3\2\2\2d\u059d\3\2\2\2f\u05e6")
+        buf.write(u"\3\2\2\2h\u05e8\3\2\2\2j\u05ff\3\2\2\2l\u060f\3\2\2\2")
+        buf.write(u"n\u065b\3\2\2\2p\u0662\3\2\2\2r\u0665\3\2\2\2t\u0669")
+        buf.write(u"\3\2\2\2v\u066b\3\2\2\2x\u066d\3\2\2\2z\u0671\3\2\2\2")
+        buf.write(u"|\u0673\3\2\2\2~\u0675\3\2\2\2\u0080\u0677\3\2\2\2\u0082")
+        buf.write(u"\u0679\3\2\2\2\u0084\u067b\3\2\2\2\u0086\u067d\3\2\2")
+        buf.write(u"\2\u0088\u067f\3\2\2\2\u008a\u0681\3\2\2\2\u008c\u0683")
+        buf.write(u"\3\2\2\2\u008e\u0685\3\2\2\2\u0090\u0687\3\2\2\2\u0092")
+        buf.write(u"\u0689\3\2\2\2\u0094\u068b\3\2\2\2\u0096\u068d\3\2\2")
+        buf.write(u"\2\u0098\u068f\3\2\2\2\u009a\u0691\3\2\2\2\u009c\u0693")
+        buf.write(u"\3\2\2\2\u009e\u0695\3\2\2\2\u00a0\u069d\3\2\2\2\u00a2")
+        buf.write(u"\u069f\3\2\2\2\u00a4\u06a8\3\2\2\2\u00a6\u00a9\5\6\4")
+        buf.write(u"\2\u00a7\u00a9\5\4\3\2\u00a8\u00a6\3\2\2\2\u00a8\u00a7")
+        buf.write(u"\3\2\2\2\u00a9\u00ac\3\2\2\2\u00aa\u00a8\3\2\2\2\u00aa")
+        buf.write(u"\u00ab\3\2\2\2\u00ab\u00ad\3\2\2\2\u00ac\u00aa\3\2\2")
+        buf.write(u"\2\u00ad\u00ae\7\2\2\3\u00ae\3\3\2\2\2\u00af\u00b0\7")
+        buf.write(u"\u00a0\2\2\u00b0\5\3\2\2\2\u00b1\u00b3\7\3\2\2\u00b2")
+        buf.write(u"\u00b1\3\2\2\2\u00b3\u00b6\3\2\2\2\u00b4\u00b2\3\2\2")
+        buf.write(u"\2\u00b4\u00b5\3\2\2\2\u00b5\u00b7\3\2\2\2\u00b6\u00b4")
+        buf.write(u"\3\2\2\2\u00b7\u00c0\5\b\5\2\u00b8\u00ba\7\3\2\2\u00b9")
+        buf.write(u"\u00b8\3\2\2\2\u00ba\u00bb\3\2\2\2\u00bb\u00b9\3\2\2")
+        buf.write(u"\2\u00bb\u00bc\3\2\2\2\u00bc\u00bd\3\2\2\2\u00bd\u00bf")
+        buf.write(u"\5\b\5\2\u00be\u00b9\3\2\2\2\u00bf\u00c2\3\2\2\2\u00c0")
+        buf.write(u"\u00be\3\2\2\2\u00c0\u00c1\3\2\2\2\u00c1\u00c6\3\2\2")
+        buf.write(u"\2\u00c2\u00c0\3\2\2\2\u00c3\u00c5\7\3\2\2\u00c4\u00c3")
+        buf.write(u"\3\2\2\2\u00c5\u00c8\3\2\2\2\u00c6\u00c4\3\2\2\2\u00c6")
+        buf.write(u"\u00c7\3\2\2\2\u00c7\7\3\2\2\2\u00c8\u00c6\3\2\2\2\u00c9")
+        buf.write(u"\u00cc\7I\2\2\u00ca\u00cb\7t\2\2\u00cb\u00cd\7q\2\2\u00cc")
+        buf.write(u"\u00ca\3\2\2\2\u00cc\u00cd\3\2\2\2\u00cd\u00cf\3\2\2")
+        buf.write(u"\2\u00ce\u00c9\3\2\2\2\u00ce\u00cf\3\2\2\2\u00cf\u00ee")
+        buf.write(u"\3\2\2\2\u00d0\u00ef\5\n\6\2\u00d1\u00ef\5\f\7\2\u00d2")
+        buf.write(u"\u00ef\5\16\b\2\u00d3\u00ef\5\20\t\2\u00d4\u00ef\5\22")
+        buf.write(u"\n\2\u00d5\u00ef\5\24\13\2\u00d6\u00ef\5\26\f\2\u00d7")
+        buf.write(u"\u00ef\5\30\r\2\u00d8\u00ef\5\32\16\2\u00d9\u00ef\5\34")
+        buf.write(u"\17\2\u00da\u00ef\5\36\20\2\u00db\u00ef\5 \21\2\u00dc")
+        buf.write(u"\u00ef\5\"\22\2\u00dd\u00ef\5$\23\2\u00de\u00ef\5&\24")
+        buf.write(u"\2\u00df\u00ef\5(\25\2\u00e0\u00ef\5*\26\2\u00e1\u00ef")
+        buf.write(u"\5,\27\2\u00e2\u00ef\5.\30\2\u00e3\u00ef\5\60\31\2\u00e4")
+        buf.write(u"\u00ef\5\62\32\2\u00e5\u00ef\5\64\33\2\u00e6\u00ef\5")
+        buf.write(u"\66\34\2\u00e7\u00ef\58\35\2\u00e8\u00ef\5:\36\2\u00e9")
+        buf.write(u"\u00ef\5<\37\2\u00ea\u00ef\5> \2\u00eb\u00ef\5B\"\2\u00ec")
+        buf.write(u"\u00ef\5D#\2\u00ed\u00ef\5F$\2\u00ee\u00d0\3\2\2\2\u00ee")
+        buf.write(u"\u00d1\3\2\2\2\u00ee\u00d2\3\2\2\2\u00ee\u00d3\3\2\2")
+        buf.write(u"\2\u00ee\u00d4\3\2\2\2\u00ee\u00d5\3\2\2\2\u00ee\u00d6")
+        buf.write(u"\3\2\2\2\u00ee\u00d7\3\2\2\2\u00ee\u00d8\3\2\2\2\u00ee")
+        buf.write(u"\u00d9\3\2\2\2\u00ee\u00da\3\2\2\2\u00ee\u00db\3\2\2")
+        buf.write(u"\2\u00ee\u00dc\3\2\2\2\u00ee\u00dd\3\2\2\2\u00ee\u00de")
+        buf.write(u"\3\2\2\2\u00ee\u00df\3\2\2\2\u00ee\u00e0\3\2\2\2\u00ee")
+        buf.write(u"\u00e1\3\2\2\2\u00ee\u00e2\3\2\2\2\u00ee\u00e3\3\2\2")
+        buf.write(u"\2\u00ee\u00e4\3\2\2\2\u00ee\u00e5\3\2\2\2\u00ee\u00e6")
+        buf.write(u"\3\2\2\2\u00ee\u00e7\3\2\2\2\u00ee\u00e8\3\2\2\2\u00ee")
+        buf.write(u"\u00e9\3\2\2\2\u00ee\u00ea\3\2\2\2\u00ee\u00eb\3\2\2")
+        buf.write(u"\2\u00ee\u00ec\3\2\2\2\u00ee\u00ed\3\2\2\2\u00ef\t\3")
+        buf.write(u"\2\2\2\u00f0\u00f1\7 \2\2\u00f1\u00f5\7\u0084\2\2\u00f2")
+        buf.write(u"\u00f3\5\u0084C\2\u00f3\u00f4\7\4\2\2\u00f4\u00f6\3\2")
+        buf.write(u"\2\2\u00f5\u00f2\3\2\2\2\u00f5\u00f6\3\2\2\2\u00f6\u00f7")
+        buf.write(u"\3\2\2\2\u00f7\u0100\5\u0088E\2\u00f8\u00f9\7{\2\2\u00f9")
+        buf.write(u"\u00fa\7\u0088\2\2\u00fa\u0101\5\u008cG\2\u00fb\u00fd")
+        buf.write(u"\7\35\2\2\u00fc\u00fe\7\60\2\2\u00fd\u00fc\3\2\2\2\u00fd")
+        buf.write(u"\u00fe\3\2\2\2\u00fe\u00ff\3\2\2\2\u00ff\u0101\5H%\2")
+        buf.write(u"\u0100\u00f8\3\2\2\2\u0100\u00fb\3\2\2\2\u0101\13\3\2")
+        buf.write(u"\2\2\u0102\u0109\7!\2\2\u0103\u010a\5\u0084C\2\u0104")
+        buf.write(u"\u010a\5\u008aF\2\u0105\u0106\5\u0084C\2\u0106\u0107")
+        buf.write(u"\7\4\2\2\u0107\u0108\5\u008aF\2\u0108\u010a\3\2\2\2\u0109")
+        buf.write(u"\u0103\3\2\2\2\u0109\u0104\3\2\2\2\u0109\u0105\3\2\2")
+        buf.write(u"\2\u0109\u010a\3\2\2\2\u010a\r\3\2\2\2\u010b\u010d\7")
+        buf.write(u"%\2\2\u010c\u010e\79\2\2\u010d\u010c\3\2\2\2\u010d\u010e")
+        buf.write(u"\3\2\2\2\u010e\u010f\3\2\2\2\u010f\u0110\5P)\2\u0110")
+        buf.write(u"\u0111\7#\2\2\u0111\u0112\5\u0084C\2\u0112\17\3\2\2\2")
+        buf.write(u"\u0113\u0115\7(\2\2\u0114\u0116\t\2\2\2\u0115\u0114\3")
+        buf.write(u"\2\2\2\u0115\u0116\3\2\2\2\u0116\u011b\3\2\2\2\u0117")
         buf.write(u"\u0119\7\u0089\2\2\u0118\u011a\5\u00a2R\2\u0119\u0118")
         buf.write(u"\3\2\2\2\u0119\u011a\3\2\2\2\u011a\u011c\3\2\2\2\u011b")
         buf.write(u"\u0117\3\2\2\2\u011b\u011c\3\2\2\2\u011c\21\3\2\2\2\u011d")
@@ -884,60 +884,58 @@ def serializedATN():
         buf.write(u"\2\u0666\u0667\3\2\2\2\u0667\u0668\7\u0099\2\2\u0668")
         buf.write(u"s\3\2\2\2\u0669\u066a\t\20\2\2\u066au\3\2\2\2\u066b\u066c")
         buf.write(u"\t\21\2\2\u066cw\3\2\2\2\u066d\u066e\7\u009b\2\2\u066e")
-        buf.write(u"y\3\2\2\2\u066f\u0674\5~@\2\u0670\u0674\5r:\2\u0671\u0674")
-        buf.write(u"\7\u0098\2\2\u0672\u0674\7\u009b\2\2\u0673\u066f\3\2")
-        buf.write(u"\2\2\u0673\u0670\3\2\2\2\u0673\u0671\3\2\2\2\u0673\u0672")
-        buf.write(u"\3\2\2\2\u0674{\3\2\2\2\u0675\u0676\t\22\2\2\u0676}\3")
-        buf.write(u"\2\2\2\u0677\u0678\t\23\2\2\u0678\177\3\2\2\2\u0679\u067a")
-        buf.write(u"\5\u00a4S\2\u067a\u0081\3\2\2\2\u067b\u067c\5\u00a4S")
-        buf.write(u"\2\u067c\u0083\3\2\2\2\u067d\u067e\5\u00a4S\2\u067e\u0085")
-        buf.write(u"\3\2\2\2\u067f\u0680\5\u00a4S\2\u0680\u0087\3\2\2\2\u0681")
-        buf.write(u"\u0682\5\u00a4S\2\u0682\u0089\3\2\2\2\u0683\u0684\5\u00a4")
-        buf.write(u"S\2\u0684\u008b\3\2\2\2\u0685\u0686\5\u00a4S\2\u0686")
-        buf.write(u"\u008d\3\2\2\2\u0687\u0688\5\u00a4S\2\u0688\u008f\3\2")
-        buf.write(u"\2\2\u0689\u068a\5\u00a4S\2\u068a\u0091\3\2\2\2\u068b")
-        buf.write(u"\u068c\5\u00a4S\2\u068c\u0093\3\2\2\2\u068d\u068e\5\u00a4")
-        buf.write(u"S\2\u068e\u0095\3\2\2\2\u068f\u0690\5\u00a4S\2\u0690")
-        buf.write(u"\u0097\3\2\2\2\u0691\u0692\5\u00a4S\2\u0692\u0099\3\2")
-        buf.write(u"\2\2\u0693\u0694\5\u00a4S\2\u0694\u009b\3\2\2\2\u0695")
-        buf.write(u"\u0696\5\u00a4S\2\u0696\u009d\3\2\2\2\u0697\u0698\5\u00a4")
-        buf.write(u"S\2\u0698\u009f\3\2\2\2\u0699\u06a0\7\u0098\2\2\u069a")
-        buf.write(u"\u06a0\7\u009b\2\2\u069b\u069c\7\5\2\2\u069c\u069d\5")
-        buf.write(u"\u00a0Q\2\u069d\u069e\7\6\2\2\u069e\u06a0\3\2\2\2\u069f")
-        buf.write(u"\u0699\3\2\2\2\u069f\u069a\3\2\2\2\u069f\u069b\3\2\2")
-        buf.write(u"\2\u06a0\u00a1\3\2\2\2\u06a1\u06a2\5\u00a4S\2\u06a2\u00a3")
-        buf.write(u"\3\2\2\2\u06a3\u06ab\7\u0098\2\2\u06a4\u06ab\5~@\2\u06a5")
-        buf.write(u"\u06ab\7\u009b\2\2\u06a6\u06a7\7\5\2\2\u06a7\u06a8\5")
-        buf.write(u"\u00a4S\2\u06a8\u06a9\7\6\2\2\u06a9\u06ab\3\2\2\2\u06aa")
-        buf.write(u"\u06a3\3\2\2\2\u06aa\u06a4\3\2\2\2\u06aa\u06a5\3\2\2")
-        buf.write(u"\2\u06aa\u06a6\3\2\2\2\u06ab\u00a5\3\2\2\2\u00f3\u00a8")
-        buf.write(u"\u00aa\u00b4\u00bb\u00c0\u00c6\u00cc\u00ce\u00ee\u00f5")
-        buf.write(u"\u00fd\u0100\u0109\u010d\u0115\u0119\u011b\u0120\u0122")
-        buf.write(u"\u0125\u012a\u012e\u0133\u013c\u013f\u0145\u0147\u014b")
-        buf.write(u"\u0151\u0156\u0161\u0167\u016b\u0171\u0176\u017f\u0186")
-        buf.write(u"\u018c\u0190\u0194\u019a\u019f\u01a6\u01b1\u01b4\u01b6")
-        buf.write(u"\u01bc\u01c2\u01c6\u01cd\u01d3\u01d9\u01df\u01e4\u01ed")
-        buf.write(u"\u01f2\u01fd\u0202\u020d\u0212\u0215\u021c\u021f\u0226")
-        buf.write(u"\u022f\u0232\u0238\u023a\u023e\u0246\u024b\u0253\u0258")
-        buf.write(u"\u0260\u0265\u026d\u0272\u0277\u027f\u0289\u028c\u0292")
-        buf.write(u"\u0294\u0297\u02aa\u02b0\u02b9\u02be\u02c7\u02d2\u02d9")
-        buf.write(u"\u02df\u02e5\u02ee\u02f5\u02f9\u02fb\u02ff\u0306\u0308")
-        buf.write(u"\u030c\u030f\u0315\u031f\u0322\u0328\u032a\u032d\u0335")
-        buf.write(u"\u033f\u0342\u0348\u034a\u034e\u0355\u035e\u0362\u0364")
-        buf.write(u"\u0368\u0371\u0376\u0378\u0381\u038c\u0393\u0396\u0399")
-        buf.write(u"\u03a6\u03b4\u03b9\u03bc\u03c9\u03d7\u03dc\u03e5\u03e8")
-        buf.write(u"\u03ee\u03f0\u03f6\u03fb\u0401\u040d\u0412\u0416\u0419")
-        buf.write(u"\u042b\u0430\u0435\u043d\u0442\u044b\u0452\u0456\u0466")
-        buf.write(u"\u0469\u0471\u047a\u047e\u0483\u04a1\u04ad\u04b2\u04be")
-        buf.write(u"\u04c4\u04cb\u04cf\u04d9\u04dc\u04e2\u04e5\u04e7\u04e9")
-        buf.write(u"\u04f4\u04f9\u0505\u0509\u050d\u0511\u0518\u051a\u0522")
-        buf.write(u"\u0529\u052c\u0530\u0535\u053d\u0550\u0556\u055a\u0561")
-        buf.write(u"\u0567\u056f\u0574\u0577\u057c\u0585\u058a\u0598\u059b")
-        buf.write(u"\u059d\u05a2\u05a6\u05a9\u05b0\u05b5\u05be\u05c1\u05c5")
-        buf.write(u"\u05c8\u05d0\u05d4\u05d8\u05db\u05e1\u05e4\u05e6\u05ef")
-        buf.write(u"\u05f4\u05f8\u05fc\u05ff\u060a\u060f\u0613\u061a\u0623")
-        buf.write(u"\u0627\u0629\u062d\u0636\u063b\u063d\u0646\u0651\u0658")
-        buf.write(u"\u065b\u0662\u0665\u0673\u069f\u06aa")
+        buf.write(u"y\3\2\2\2\u066f\u0672\5H%\2\u0670\u0672\5P)\2\u0671\u066f")
+        buf.write(u"\3\2\2\2\u0671\u0670\3\2\2\2\u0672{\3\2\2\2\u0673\u0674")
+        buf.write(u"\t\22\2\2\u0674}\3\2\2\2\u0675\u0676\t\23\2\2\u0676\177")
+        buf.write(u"\3\2\2\2\u0677\u0678\5\u00a4S\2\u0678\u0081\3\2\2\2\u0679")
+        buf.write(u"\u067a\5\u00a4S\2\u067a\u0083\3\2\2\2\u067b\u067c\5\u00a4")
+        buf.write(u"S\2\u067c\u0085\3\2\2\2\u067d\u067e\5\u00a4S\2\u067e")
+        buf.write(u"\u0087\3\2\2\2\u067f\u0680\5\u00a4S\2\u0680\u0089\3\2")
+        buf.write(u"\2\2\u0681\u0682\5\u00a4S\2\u0682\u008b\3\2\2\2\u0683")
+        buf.write(u"\u0684\5\u00a4S\2\u0684\u008d\3\2\2\2\u0685\u0686\5\u00a4")
+        buf.write(u"S\2\u0686\u008f\3\2\2\2\u0687\u0688\5\u00a4S\2\u0688")
+        buf.write(u"\u0091\3\2\2\2\u0689\u068a\5\u00a4S\2\u068a\u0093\3\2")
+        buf.write(u"\2\2\u068b\u068c\5\u00a4S\2\u068c\u0095\3\2\2\2\u068d")
+        buf.write(u"\u068e\5\u00a4S\2\u068e\u0097\3\2\2\2\u068f\u0690\5\u00a4")
+        buf.write(u"S\2\u0690\u0099\3\2\2\2\u0691\u0692\5\u00a4S\2\u0692")
+        buf.write(u"\u009b\3\2\2\2\u0693\u0694\5\u00a4S\2\u0694\u009d\3\2")
+        buf.write(u"\2\2\u0695\u0696\5\u00a4S\2\u0696\u009f\3\2\2\2\u0697")
+        buf.write(u"\u069e\7\u0098\2\2\u0698\u069e\7\u009b\2\2\u0699\u069a")
+        buf.write(u"\7\5\2\2\u069a\u069b\5\u00a0Q\2\u069b\u069c\7\6\2\2\u069c")
+        buf.write(u"\u069e\3\2\2\2\u069d\u0697\3\2\2\2\u069d\u0698\3\2\2")
+        buf.write(u"\2\u069d\u0699\3\2\2\2\u069e\u00a1\3\2\2\2\u069f\u06a0")
+        buf.write(u"\5\u00a4S\2\u06a0\u00a3\3\2\2\2\u06a1\u06a9\7\u0098\2")
+        buf.write(u"\2\u06a2\u06a9\5~@\2\u06a3\u06a9\7\u009b\2\2\u06a4\u06a5")
+        buf.write(u"\7\5\2\2\u06a5\u06a6\5\u00a4S\2\u06a6\u06a7\7\6\2\2\u06a7")
+        buf.write(u"\u06a9\3\2\2\2\u06a8\u06a1\3\2\2\2\u06a8\u06a2\3\2\2")
+        buf.write(u"\2\u06a8\u06a3\3\2\2\2\u06a8\u06a4\3\2\2\2\u06a9\u00a5")
+        buf.write(u"\3\2\2\2\u00f3\u00a8\u00aa\u00b4\u00bb\u00c0\u00c6\u00cc")
+        buf.write(u"\u00ce\u00ee\u00f5\u00fd\u0100\u0109\u010d\u0115\u0119")
+        buf.write(u"\u011b\u0120\u0122\u0125\u012a\u012e\u0133\u013c\u013f")
+        buf.write(u"\u0145\u0147\u014b\u0151\u0156\u0161\u0167\u016b\u0171")
+        buf.write(u"\u0176\u017f\u0186\u018c\u0190\u0194\u019a\u019f\u01a6")
+        buf.write(u"\u01b1\u01b4\u01b6\u01bc\u01c2\u01c6\u01cd\u01d3\u01d9")
+        buf.write(u"\u01df\u01e4\u01ed\u01f2\u01fd\u0202\u020d\u0212\u0215")
+        buf.write(u"\u021c\u021f\u0226\u022f\u0232\u0238\u023a\u023e\u0246")
+        buf.write(u"\u024b\u0253\u0258\u0260\u0265\u026d\u0272\u0277\u027f")
+        buf.write(u"\u0289\u028c\u0292\u0294\u0297\u02aa\u02b0\u02b9\u02be")
+        buf.write(u"\u02c7\u02d2\u02d9\u02df\u02e5\u02ee\u02f5\u02f9\u02fb")
+        buf.write(u"\u02ff\u0306\u0308\u030c\u030f\u0315\u031f\u0322\u0328")
+        buf.write(u"\u032a\u032d\u0335\u033f\u0342\u0348\u034a\u034e\u0355")
+        buf.write(u"\u035e\u0362\u0364\u0368\u0371\u0376\u0378\u0381\u038c")
+        buf.write(u"\u0393\u0396\u0399\u03a6\u03b4\u03b9\u03bc\u03c9\u03d7")
+        buf.write(u"\u03dc\u03e5\u03e8\u03ee\u03f0\u03f6\u03fb\u0401\u040d")
+        buf.write(u"\u0412\u0416\u0419\u042b\u0430\u0435\u043d\u0442\u044b")
+        buf.write(u"\u0452\u0456\u0466\u0469\u0471\u047a\u047e\u0483\u04a1")
+        buf.write(u"\u04ad\u04b2\u04be\u04c4\u04cb\u04cf\u04d9\u04dc\u04e2")
+        buf.write(u"\u04e5\u04e7\u04e9\u04f4\u04f9\u0505\u0509\u050d\u0511")
+        buf.write(u"\u0518\u051a\u0522\u0529\u052c\u0530\u0535\u053d\u0550")
+        buf.write(u"\u0556\u055a\u0561\u0567\u056f\u0574\u0577\u057c\u0585")
+        buf.write(u"\u058a\u0598\u059b\u059d\u05a2\u05a6\u05a9\u05b0\u05b5")
+        buf.write(u"\u05be\u05c1\u05c5\u05c8\u05d0\u05d4\u05d8\u05db\u05e1")
+        buf.write(u"\u05e4\u05e6\u05ef\u05f4\u05f8\u05fc\u05ff\u060a\u060f")
+        buf.write(u"\u0613\u061a\u0623\u0627\u0629\u062d\u0636\u063b\u063d")
+        buf.write(u"\u0646\u0651\u0658\u065b\u0662\u0665\u0671\u069d\u06a8")
         return buf.getvalue()
 
 
@@ -9514,19 +9512,13 @@ class SQLiteParser ( Parser ):
             super(SQLiteParser.Module_argumentContext, self).__init__(parent, invokingState)
             self.parser = parser
 
-        def keyword(self):
-            return self.getTypedRuleContext(SQLiteParser.KeywordContext,0)
+        def column_def(self):
+            return self.getTypedRuleContext(SQLiteParser.Column_defContext,0)
 
 
-        def signed_number(self):
-            return self.getTypedRuleContext(SQLiteParser.Signed_numberContext,0)
+        def expr(self):
+            return self.getTypedRuleContext(SQLiteParser.ExprContext,0)
 
-
-        def IDENTIFIER(self):
-            return self.getToken(SQLiteParser.IDENTIFIER, 0)
-
-        def STRING_LITERAL(self):
-            return self.getToken(SQLiteParser.STRING_LITERAL, 0)
 
         def getRuleIndex(self):
             return SQLiteParser.RULE_module_argument
@@ -9547,31 +9539,21 @@ class SQLiteParser ( Parser ):
         localctx = SQLiteParser.Module_argumentContext(self, self._ctx, self.state)
         self.enterRule(localctx, 120, self.RULE_module_argument)
         try:
-            self.state = 1649
+            self.state = 1647
             self._errHandler.sync(self)
-            token = self._input.LA(1)
-            if token in [SQLiteParser.K_ABORT, SQLiteParser.K_ACTION, SQLiteParser.K_ADD, SQLiteParser.K_AFTER, SQLiteParser.K_ALL, SQLiteParser.K_ALTER, SQLiteParser.K_ANALYZE, SQLiteParser.K_AND, SQLiteParser.K_AS, SQLiteParser.K_ASC, SQLiteParser.K_ATTACH, SQLiteParser.K_AUTOINCREMENT, SQLiteParser.K_BEFORE, SQLiteParser.K_BEGIN, SQLiteParser.K_BETWEEN, SQLiteParser.K_BY, SQLiteParser.K_CASCADE, SQLiteParser.K_CASE, SQLiteParser.K_CAST, SQLiteParser.K_CHECK, SQLiteParser.K_COLLATE, SQLiteParser.K_COLUMN, SQLiteParser.K_COMMIT, SQLiteParser.K_CONFLICT, SQLiteParser.K_CONSTRAINT, SQLiteParser.K_CREATE, SQLiteParser.K_CROSS, SQLiteParser.K_CURRENT_DATE, SQLiteParser.K_CURRENT_TIME, SQLiteParser.K_CURRENT_TIMESTAMP, SQLiteParser.K_DATABASE, SQLiteParser.K_DEFAULT, SQLiteParser.K_DEFERRABLE, SQLiteParser.K_DEFERRED, SQLiteParser.K_DELETE, SQLiteParser.K_DESC, SQLiteParser.K_DETACH, SQLiteParser.K_DISTINCT, SQLiteParser.K_DROP, SQLiteParser.K_EACH, SQLiteParser.K_ELSE, SQLiteParser.K_END, SQLiteParser.K_ESCAPE, SQLiteParser.K_EXCEPT, SQLiteParser.K_EXCLUSIVE, SQLiteParser.K_EXISTS, SQLiteParser.K_EXPLAIN, SQLiteParser.K_FAIL, SQLiteParser.K_FOR, SQLiteParser.K_FOREIGN, SQLiteParser.K_FROM, SQLiteParser.K_FULL, SQLiteParser.K_GLOB, SQLiteParser.K_GROUP, SQLiteParser.K_HAVING, SQLiteParser.K_IF, SQLiteParser.K_IGNORE, SQLiteParser.K_IMMEDIATE, SQLiteParser.K_IN, SQLiteParser.K_INDEX, SQLiteParser.K_INDEXED, SQLiteParser.K_INITIALLY, SQLiteParser.K_INNER, SQLiteParser.K_INSERT, SQLiteParser.K_INSTEAD, SQLiteParser.K_INTERSECT, SQLiteParser.K_INTO, SQLiteParser.K_IS, SQLiteParser.K_ISNULL, SQLiteParser.K_JOIN, SQLiteParser.K_KEY, SQLiteParser.K_LEFT, SQLiteParser.K_LIKE, SQLiteParser.K_LIMIT, SQLiteParser.K_MATCH, SQLiteParser.K_NATURAL, SQLiteParser.K_NO, SQLiteParser.K_NOT, SQLiteParser.K_NOTNULL, SQLiteParser.K_NULL, SQLiteParser.K_OF, SQLiteParser.K_OFFSET, SQLiteParser.K_ON, SQLiteParser.K_OR, SQLiteParser.K_ORDER, SQLiteParser.K_OUTER, SQLiteParser.K_PLAN, SQLiteParser.K_PRAGMA, SQLiteParser.K_PRIMARY, SQLiteParser.K_QUERY, SQLiteParser.K_RAISE, SQLiteParser.K_RECURSIVE, SQLiteParser.K_REFERENCES, SQLiteParser.K_REGEXP, SQLiteParser.K_REINDEX, SQLiteParser.K_RELEASE, SQLiteParser.K_RENAME, SQLiteParser.K_REPLACE, SQLiteParser.K_RESTRICT, SQLiteParser.K_RIGHT, SQLiteParser.K_ROLLBACK, SQLiteParser.K_ROW, SQLiteParser.K_SAVEPOINT, SQLiteParser.K_SELECT, SQLiteParser.K_SET, SQLiteParser.K_TABLE, SQLiteParser.K_TEMP, SQLiteParser.K_TEMPORARY, SQLiteParser.K_THEN, SQLiteParser.K_TO, SQLiteParser.K_TRANSACTION, SQLiteParser.K_TRIGGER, SQLiteParser.K_UNION, SQLiteParser.K_UNIQUE, SQLiteParser.K_UPDATE, SQLiteParser.K_USING, SQLiteParser.K_VACUUM, SQLiteParser.K_VALUES, SQLiteParser.K_VIEW, SQLiteParser.K_VIRTUAL, SQLiteParser.K_WHEN, SQLiteParser.K_WHERE, SQLiteParser.K_WITH, SQLiteParser.K_WITHOUT]:
+            la_ = self._interp.adaptivePredict(self._input,238,self._ctx)
+            if la_ == 1:
                 self.enterOuterAlt(localctx, 1)
                 self.state = 1645
-                self.keyword()
+                self.column_def()
                 pass
-            elif token in [SQLiteParser.PLUS, SQLiteParser.MINUS, SQLiteParser.NUMERIC_LITERAL]:
+
+            elif la_ == 2:
                 self.enterOuterAlt(localctx, 2)
                 self.state = 1646
-                self.signed_number()
+                self.expr(0)
                 pass
-            elif token in [SQLiteParser.IDENTIFIER]:
-                self.enterOuterAlt(localctx, 3)
-                self.state = 1647
-                self.match(SQLiteParser.IDENTIFIER)
-                pass
-            elif token in [SQLiteParser.STRING_LITERAL]:
-                self.enterOuterAlt(localctx, 4)
-                self.state = 1648
-                self.match(SQLiteParser.STRING_LITERAL)
-                pass
-            else:
-                raise NoViableAltException(self)
+
 
         except RecognitionException as re:
             localctx.exception = re
@@ -9615,7 +9597,7 @@ class SQLiteParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1651
+            self.state = 1649
             _la = self._input.LA(1)
             if not(_la==SQLiteParser.IDENTIFIER or _la==SQLiteParser.STRING_LITERAL):
                 self._errHandler.recoverInline(self)
@@ -10030,7 +10012,7 @@ class SQLiteParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1653
+            self.state = 1651
             _la = self._input.LA(1)
             if not(((((_la - 25)) & ~0x3f) == 0 and ((1 << (_la - 25)) & ((1 << (SQLiteParser.K_ABORT - 25)) | (1 << (SQLiteParser.K_ACTION - 25)) | (1 << (SQLiteParser.K_ADD - 25)) | (1 << (SQLiteParser.K_AFTER - 25)) | (1 << (SQLiteParser.K_ALL - 25)) | (1 << (SQLiteParser.K_ALTER - 25)) | (1 << (SQLiteParser.K_ANALYZE - 25)) | (1 << (SQLiteParser.K_AND - 25)) | (1 << (SQLiteParser.K_AS - 25)) | (1 << (SQLiteParser.K_ASC - 25)) | (1 << (SQLiteParser.K_ATTACH - 25)) | (1 << (SQLiteParser.K_AUTOINCREMENT - 25)) | (1 << (SQLiteParser.K_BEFORE - 25)) | (1 << (SQLiteParser.K_BEGIN - 25)) | (1 << (SQLiteParser.K_BETWEEN - 25)) | (1 << (SQLiteParser.K_BY - 25)) | (1 << (SQLiteParser.K_CASCADE - 25)) | (1 << (SQLiteParser.K_CASE - 25)) | (1 << (SQLiteParser.K_CAST - 25)) | (1 << (SQLiteParser.K_CHECK - 25)) | (1 << (SQLiteParser.K_COLLATE - 25)) | (1 << (SQLiteParser.K_COLUMN - 25)) | (1 << (SQLiteParser.K_COMMIT - 25)) | (1 << (SQLiteParser.K_CONFLICT - 25)) | (1 << (SQLiteParser.K_CONSTRAINT - 25)) | (1 << (SQLiteParser.K_CREATE - 25)) | (1 << (SQLiteParser.K_CROSS - 25)) | (1 << (SQLiteParser.K_CURRENT_DATE - 25)) | (1 << (SQLiteParser.K_CURRENT_TIME - 25)) | (1 << (SQLiteParser.K_CURRENT_TIMESTAMP - 25)) | (1 << (SQLiteParser.K_DATABASE - 25)) | (1 << (SQLiteParser.K_DEFAULT - 25)) | (1 << (SQLiteParser.K_DEFERRABLE - 25)) | (1 << (SQLiteParser.K_DEFERRED - 25)) | (1 << (SQLiteParser.K_DELETE - 25)) | (1 << (SQLiteParser.K_DESC - 25)) | (1 << (SQLiteParser.K_DETACH - 25)) | (1 << (SQLiteParser.K_DISTINCT - 25)) | (1 << (SQLiteParser.K_DROP - 25)) | (1 << (SQLiteParser.K_EACH - 25)) | (1 << (SQLiteParser.K_ELSE - 25)) | (1 << (SQLiteParser.K_END - 25)) | (1 << (SQLiteParser.K_ESCAPE - 25)) | (1 << (SQLiteParser.K_EXCEPT - 25)) | (1 << (SQLiteParser.K_EXCLUSIVE - 25)) | (1 << (SQLiteParser.K_EXISTS - 25)) | (1 << (SQLiteParser.K_EXPLAIN - 25)) | (1 << (SQLiteParser.K_FAIL - 25)) | (1 << (SQLiteParser.K_FOR - 25)) | (1 << (SQLiteParser.K_FOREIGN - 25)) | (1 << (SQLiteParser.K_FROM - 25)) | (1 << (SQLiteParser.K_FULL - 25)) | (1 << (SQLiteParser.K_GLOB - 25)) | (1 << (SQLiteParser.K_GROUP - 25)) | (1 << (SQLiteParser.K_HAVING - 25)) | (1 << (SQLiteParser.K_IF - 25)) | (1 << (SQLiteParser.K_IGNORE - 25)) | (1 << (SQLiteParser.K_IMMEDIATE - 25)) | (1 << (SQLiteParser.K_IN - 25)) | (1 << (SQLiteParser.K_INDEX - 25)) | (1 << (SQLiteParser.K_INDEXED - 25)) | (1 << (SQLiteParser.K_INITIALLY - 25)) | (1 << (SQLiteParser.K_INNER - 25)) | (1 << (SQLiteParser.K_INSERT - 25)))) != 0) or ((((_la - 89)) & ~0x3f) == 0 and ((1 << (_la - 89)) & ((1 << (SQLiteParser.K_INSTEAD - 89)) | (1 << (SQLiteParser.K_INTERSECT - 89)) | (1 << (SQLiteParser.K_INTO - 89)) | (1 << (SQLiteParser.K_IS - 89)) | (1 << (SQLiteParser.K_ISNULL - 89)) | (1 << (SQLiteParser.K_JOIN - 89)) | (1 << (SQLiteParser.K_KEY - 89)) | (1 << (SQLiteParser.K_LEFT - 89)) | (1 << (SQLiteParser.K_LIKE - 89)) | (1 << (SQLiteParser.K_LIMIT - 89)) | (1 << (SQLiteParser.K_MATCH - 89)) | (1 << (SQLiteParser.K_NATURAL - 89)) | (1 << (SQLiteParser.K_NO - 89)) | (1 << (SQLiteParser.K_NOT - 89)) | (1 << (SQLiteParser.K_NOTNULL - 89)) | (1 << (SQLiteParser.K_NULL - 89)) | (1 << (SQLiteParser.K_OF - 89)) | (1 << (SQLiteParser.K_OFFSET - 89)) | (1 << (SQLiteParser.K_ON - 89)) | (1 << (SQLiteParser.K_OR - 89)) | (1 << (SQLiteParser.K_ORDER - 89)) | (1 << (SQLiteParser.K_OUTER - 89)) | (1 << (SQLiteParser.K_PLAN - 89)) | (1 << (SQLiteParser.K_PRAGMA - 89)) | (1 << (SQLiteParser.K_PRIMARY - 89)) | (1 << (SQLiteParser.K_QUERY - 89)) | (1 << (SQLiteParser.K_RAISE - 89)) | (1 << (SQLiteParser.K_RECURSIVE - 89)) | (1 << (SQLiteParser.K_REFERENCES - 89)) | (1 << (SQLiteParser.K_REGEXP - 89)) | (1 << (SQLiteParser.K_REINDEX - 89)) | (1 << (SQLiteParser.K_RELEASE - 89)) | (1 << (SQLiteParser.K_RENAME - 89)) | (1 << (SQLiteParser.K_REPLACE - 89)) | (1 << (SQLiteParser.K_RESTRICT - 89)) | (1 << (SQLiteParser.K_RIGHT - 89)) | (1 << (SQLiteParser.K_ROLLBACK - 89)) | (1 << (SQLiteParser.K_ROW - 89)) | (1 << (SQLiteParser.K_SAVEPOINT - 89)) | (1 << (SQLiteParser.K_SELECT - 89)) | (1 << (SQLiteParser.K_SET - 89)) | (1 << (SQLiteParser.K_TABLE - 89)) | (1 << (SQLiteParser.K_TEMP - 89)) | (1 << (SQLiteParser.K_TEMPORARY - 89)) | (1 << (SQLiteParser.K_THEN - 89)) | (1 << (SQLiteParser.K_TO - 89)) | (1 << (SQLiteParser.K_TRANSACTION - 89)) | (1 << (SQLiteParser.K_TRIGGER - 89)) | (1 << (SQLiteParser.K_UNION - 89)) | (1 << (SQLiteParser.K_UNIQUE - 89)) | (1 << (SQLiteParser.K_UPDATE - 89)) | (1 << (SQLiteParser.K_USING - 89)) | (1 << (SQLiteParser.K_VACUUM - 89)) | (1 << (SQLiteParser.K_VALUES - 89)) | (1 << (SQLiteParser.K_VIEW - 89)) | (1 << (SQLiteParser.K_VIRTUAL - 89)) | (1 << (SQLiteParser.K_WHEN - 89)) | (1 << (SQLiteParser.K_WHERE - 89)) | (1 << (SQLiteParser.K_WITH - 89)) | (1 << (SQLiteParser.K_WITHOUT - 89)))) != 0)):
                 self._errHandler.recoverInline(self)
@@ -10076,7 +10058,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 126, self.RULE_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1655
+            self.state = 1653
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10117,7 +10099,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 128, self.RULE_function_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1657
+            self.state = 1655
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10158,7 +10140,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 130, self.RULE_database_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1659
+            self.state = 1657
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10199,7 +10181,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 132, self.RULE_table_function_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1661
+            self.state = 1659
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10240,7 +10222,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 134, self.RULE_table_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1663
+            self.state = 1661
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10281,7 +10263,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 136, self.RULE_table_or_index_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1665
+            self.state = 1663
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10322,7 +10304,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 138, self.RULE_new_table_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1667
+            self.state = 1665
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10363,7 +10345,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 140, self.RULE_column_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1669
+            self.state = 1667
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10404,7 +10386,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 142, self.RULE_collation_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1671
+            self.state = 1669
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10445,7 +10427,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 144, self.RULE_foreign_table)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1673
+            self.state = 1671
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10486,7 +10468,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 146, self.RULE_index_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1675
+            self.state = 1673
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10527,7 +10509,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 148, self.RULE_trigger_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1677
+            self.state = 1675
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10568,7 +10550,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 150, self.RULE_view_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1679
+            self.state = 1677
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10609,7 +10591,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 152, self.RULE_module_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1681
+            self.state = 1679
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10650,7 +10632,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 154, self.RULE_pragma_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1683
+            self.state = 1681
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10691,7 +10673,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 156, self.RULE_savepoint_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1685
+            self.state = 1683
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10743,26 +10725,26 @@ class SQLiteParser ( Parser ):
         localctx = SQLiteParser.Table_aliasContext(self, self._ctx, self.state)
         self.enterRule(localctx, 158, self.RULE_table_alias)
         try:
-            self.state = 1693
+            self.state = 1691
             self._errHandler.sync(self)
             token = self._input.LA(1)
             if token in [SQLiteParser.IDENTIFIER]:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 1687
+                self.state = 1685
                 self.match(SQLiteParser.IDENTIFIER)
                 pass
             elif token in [SQLiteParser.STRING_LITERAL]:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 1688
+                self.state = 1686
                 self.match(SQLiteParser.STRING_LITERAL)
                 pass
             elif token in [SQLiteParser.OPEN_PAR]:
                 self.enterOuterAlt(localctx, 3)
-                self.state = 1689
+                self.state = 1687
                 self.match(SQLiteParser.OPEN_PAR)
-                self.state = 1690
+                self.state = 1688
                 self.table_alias()
-                self.state = 1691
+                self.state = 1689
                 self.match(SQLiteParser.CLOSE_PAR)
                 pass
             else:
@@ -10807,7 +10789,7 @@ class SQLiteParser ( Parser ):
         self.enterRule(localctx, 160, self.RULE_transaction_name)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 1695
+            self.state = 1693
             self.any_name()
         except RecognitionException as re:
             localctx.exception = re
@@ -10863,31 +10845,31 @@ class SQLiteParser ( Parser ):
         localctx = SQLiteParser.Any_nameContext(self, self._ctx, self.state)
         self.enterRule(localctx, 162, self.RULE_any_name)
         try:
-            self.state = 1704
+            self.state = 1702
             self._errHandler.sync(self)
             token = self._input.LA(1)
             if token in [SQLiteParser.IDENTIFIER]:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 1697
+                self.state = 1695
                 self.match(SQLiteParser.IDENTIFIER)
                 pass
             elif token in [SQLiteParser.K_ABORT, SQLiteParser.K_ACTION, SQLiteParser.K_ADD, SQLiteParser.K_AFTER, SQLiteParser.K_ALL, SQLiteParser.K_ALTER, SQLiteParser.K_ANALYZE, SQLiteParser.K_AND, SQLiteParser.K_AS, SQLiteParser.K_ASC, SQLiteParser.K_ATTACH, SQLiteParser.K_AUTOINCREMENT, SQLiteParser.K_BEFORE, SQLiteParser.K_BEGIN, SQLiteParser.K_BETWEEN, SQLiteParser.K_BY, SQLiteParser.K_CASCADE, SQLiteParser.K_CASE, SQLiteParser.K_CAST, SQLiteParser.K_CHECK, SQLiteParser.K_COLLATE, SQLiteParser.K_COLUMN, SQLiteParser.K_COMMIT, SQLiteParser.K_CONFLICT, SQLiteParser.K_CONSTRAINT, SQLiteParser.K_CREATE, SQLiteParser.K_CROSS, SQLiteParser.K_CURRENT_DATE, SQLiteParser.K_CURRENT_TIME, SQLiteParser.K_CURRENT_TIMESTAMP, SQLiteParser.K_DATABASE, SQLiteParser.K_DEFAULT, SQLiteParser.K_DEFERRABLE, SQLiteParser.K_DEFERRED, SQLiteParser.K_DELETE, SQLiteParser.K_DESC, SQLiteParser.K_DETACH, SQLiteParser.K_DISTINCT, SQLiteParser.K_DROP, SQLiteParser.K_EACH, SQLiteParser.K_ELSE, SQLiteParser.K_END, SQLiteParser.K_ESCAPE, SQLiteParser.K_EXCEPT, SQLiteParser.K_EXCLUSIVE, SQLiteParser.K_EXISTS, SQLiteParser.K_EXPLAIN, SQLiteParser.K_FAIL, SQLiteParser.K_FOR, SQLiteParser.K_FOREIGN, SQLiteParser.K_FROM, SQLiteParser.K_FULL, SQLiteParser.K_GLOB, SQLiteParser.K_GROUP, SQLiteParser.K_HAVING, SQLiteParser.K_IF, SQLiteParser.K_IGNORE, SQLiteParser.K_IMMEDIATE, SQLiteParser.K_IN, SQLiteParser.K_INDEX, SQLiteParser.K_INDEXED, SQLiteParser.K_INITIALLY, SQLiteParser.K_INNER, SQLiteParser.K_INSERT, SQLiteParser.K_INSTEAD, SQLiteParser.K_INTERSECT, SQLiteParser.K_INTO, SQLiteParser.K_IS, SQLiteParser.K_ISNULL, SQLiteParser.K_JOIN, SQLiteParser.K_KEY, SQLiteParser.K_LEFT, SQLiteParser.K_LIKE, SQLiteParser.K_LIMIT, SQLiteParser.K_MATCH, SQLiteParser.K_NATURAL, SQLiteParser.K_NO, SQLiteParser.K_NOT, SQLiteParser.K_NOTNULL, SQLiteParser.K_NULL, SQLiteParser.K_OF, SQLiteParser.K_OFFSET, SQLiteParser.K_ON, SQLiteParser.K_OR, SQLiteParser.K_ORDER, SQLiteParser.K_OUTER, SQLiteParser.K_PLAN, SQLiteParser.K_PRAGMA, SQLiteParser.K_PRIMARY, SQLiteParser.K_QUERY, SQLiteParser.K_RAISE, SQLiteParser.K_RECURSIVE, SQLiteParser.K_REFERENCES, SQLiteParser.K_REGEXP, SQLiteParser.K_REINDEX, SQLiteParser.K_RELEASE, SQLiteParser.K_RENAME, SQLiteParser.K_REPLACE, SQLiteParser.K_RESTRICT, SQLiteParser.K_RIGHT, SQLiteParser.K_ROLLBACK, SQLiteParser.K_ROW, SQLiteParser.K_SAVEPOINT, SQLiteParser.K_SELECT, SQLiteParser.K_SET, SQLiteParser.K_TABLE, SQLiteParser.K_TEMP, SQLiteParser.K_TEMPORARY, SQLiteParser.K_THEN, SQLiteParser.K_TO, SQLiteParser.K_TRANSACTION, SQLiteParser.K_TRIGGER, SQLiteParser.K_UNION, SQLiteParser.K_UNIQUE, SQLiteParser.K_UPDATE, SQLiteParser.K_USING, SQLiteParser.K_VACUUM, SQLiteParser.K_VALUES, SQLiteParser.K_VIEW, SQLiteParser.K_VIRTUAL, SQLiteParser.K_WHEN, SQLiteParser.K_WHERE, SQLiteParser.K_WITH, SQLiteParser.K_WITHOUT]:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 1698
+                self.state = 1696
                 self.keyword()
                 pass
             elif token in [SQLiteParser.STRING_LITERAL]:
                 self.enterOuterAlt(localctx, 3)
-                self.state = 1699
+                self.state = 1697
                 self.match(SQLiteParser.STRING_LITERAL)
                 pass
             elif token in [SQLiteParser.OPEN_PAR]:
                 self.enterOuterAlt(localctx, 4)
-                self.state = 1700
+                self.state = 1698
                 self.match(SQLiteParser.OPEN_PAR)
-                self.state = 1701
+                self.state = 1699
                 self.any_name()
-                self.state = 1702
+                self.state = 1700
                 self.match(SQLiteParser.CLOSE_PAR)
                 pass
             else:
