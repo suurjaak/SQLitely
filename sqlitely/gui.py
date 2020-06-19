@@ -2091,7 +2091,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if not db:
             if not filename or os.path.exists(filename):
                 try:
-                    db = database.Database(filename, parse=True)
+                    db = database.Database(filename)
                 except Exception:
                     logger.exception("Error opening %s.", filename)
                     is_accessible = False
