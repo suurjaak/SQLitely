@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.06.2020
+@modified    19.06.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -464,7 +464,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
 
 
-    def __init__(self, filename=None, log_error=True):
+    def __init__(self, filename=None, log_error=True, parse=False):
         """
         Initializes a new database object from the file.
 
@@ -472,6 +472,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                             file deleted on close
         @param   log_error  if False, exceptions on opening the database
                             are not written to log (written by default)
+        @param   parse      parse all CREATE statements in full, complete metadata
         """
         self.filename = filename
         self.name = filename
@@ -497,14 +498,14 @@ WARNING: misuse can easily result in a corrupt database file.""",
         #      ?meta: {full metadata}}}}
         self.schema = defaultdict(CaselessDict)
         self.connection = None
-        self.open(log_error=log_error)
+        self.open(log_error=log_error, parse=parse)
 
 
     def __str__(self):
         return self.name
 
 
-    def open(self, log_error=True):
+    def open(self, log_error=True, parse=False):
         """Opens the database."""
         try:
             self.connection = sqlite3.connect(self.filename,
@@ -513,7 +514,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             self.connection.text_factory = str
             self.compile_options = [x.values()[0] for x in
                                     self.execute("PRAGMA compile_options", log=False).fetchall()]
-            self.populate_schema()
+            self.populate_schema(parse=parse)
             self.update_fileinfo()
         except Exception:
             if log_error: logger.exception("Error opening database %s.", self.filename)
@@ -942,7 +943,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     if meta: sql, _ = grammar.generate(meta)
                 if meta and sql:
                     opts.update(meta=meta, sql=sql)
-                    if "table" == mycategory: opts["columns"] = meta["columns"]
+                    if "table" == mycategory and meta.get("columns"):
+                        opts["columns"] = meta["columns"]
 
                 # Retrieve table row counts
                 if "table" == mycategory and count:
