@@ -2914,7 +2914,8 @@ class SchemaObjectPage(wx.Panel):
         tb.AddTool(wx.ID_SAVE, "", bmp2, shortHelp="Save SQL to file")
         tb.Realize()
 
-        stc = self._ctrls["sql"] = controls.SQLiteTextCtrl(panel2, style=wx.BORDER_STATIC)
+        stc = self._ctrls["sql"] = controls.SQLiteTextCtrl(panel2, traversable=True,
+                                                           style=wx.BORDER_STATIC)
         stc.SetReadOnly(True)
         stc._toggle = "skip"
 
@@ -4156,8 +4157,8 @@ class SchemaObjectPage(wx.Panel):
         for c in self._ctrls.values():
             if not isinstance(c, controls.SQLiteTextCtrl): continue # for c
             c.AutoCompClearAdded()
-            if singlewords and c.LinesOnScreen() < 2: c.AutoCompAddWords(singlewords)
-            elif words and c.LinesOnScreen() > 1:
+            if singlewords and not c.Wheelable: c.AutoCompAddWords(singlewords)
+            elif words and c.Wheelable:
                 c.AutoCompAddWords(words)
                 for w, ww in subwords.items(): c.AutoCompAddSubWords(w, ww)
 
@@ -5190,19 +5191,19 @@ class SchemaObjectPage(wx.Panel):
 
 
     def _OnImportSQL(self, event=None):
-        """Handler for importing from external SQL, opens dialog."""
+        """Handler for editing SQL directly, opens dialog."""
         props = [{"name": "sql", "label": "SQL:", "component": controls.SQLiteTextCtrl,
                   "tb": [{"type": "paste", "help": "Paste from clipboard"},
                          {"type": "open",  "help": "Load from file"}, ]}]
         data, words = {"sql": self._item["sql0" if self._sql0_applies else "sql"]}, {}
         for category in ("table", "view"):
             for item in self._db.get_category(category).values():
-                if self._category in ("trigger", "view"):
+                if self._category in ("index", "trigger", "view"):
                     myname = grammar.quote(item["name"])
                     words[myname] = []
                 if not item.get("columns"): continue # for item
                 ww = [grammar.quote(c["name"]) for c in item["columns"]]
-                if self._category in ("trigger", "view"): words[myname] = ww
+                if self._category in ("index", "trigger", "view"): words[myname] = ww
                 if "trigger" == self._category \
                 and util.lceq(item["name"], self._item["meta"].get("table")):
                     words["OLD"] = words["NEW"] = ww
