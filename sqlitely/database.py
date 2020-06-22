@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.06.2020
+@modified    22.06.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -901,7 +901,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 and re.search(r"TOKENIZE\s*[\W]*icu[\W]", row["sql"], re.I):
                     continue # for row
 
-            row["sql"] = row["sql0"] = row["sql"].strip()
+            sql = row["sql"].strip().replace("\r\n", "\n")
+            sql = re.sub("\n\s+\)[\s;]*$", "\n)", sql)
+            if not sql.endswith(";"): sql += ";"
+            row["sql"] = row["sql0"] = sql
             self.schema[row["type"]][row["name"]] = row
 
         for mycategory, itemmap in self.schema.items():
@@ -939,12 +942,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if opts0 and opts0.get("meta") and opts["sql0"] == opts0["sql0"]:
                     meta, sql = opts0["meta"], opts0["sql"]
                 elif parse:
-                    meta, _ = grammar.parse(opts["sql"])
+                    meta, _ = grammar.parse(opts["sql0"])
                     if meta: sql, _ = grammar.generate(meta)
-                if meta and sql:
-                    opts.update(meta=meta, sql=sql)
-                    if "table" == mycategory and meta.get("columns"):
-                        opts["columns"] = meta["columns"]
+                if meta: opts.update(meta=meta)
+                if sql and (not meta or not meta.get("comments")): opts.update(sql=sql)
+                if meta and "table" == mycategory and meta.get("columns"):
+                    opts["columns"] = meta["columns"]
 
                 # Retrieve table row counts
                 if "table" == mycategory and count:

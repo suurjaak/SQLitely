@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.06.2020
+@modified    22.06.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -2855,9 +2855,15 @@ class SchemaObjectPage(wx.Panel):
                                         **item.get("meta", {})))
             names = sum(map(list, db.schema.values()), [])
             item["meta"]["name"] = util.make_unique(item["meta"]["name"], names)
+
         item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
+        if "sql" not in item or item["meta"].get("comments"):
+            sql, _ = grammar.generate(item["meta"])
+            if sql is not None:
+                item = dict(item, sql=sql, sql0=item.get("sql0", sql))
         self._item     = copy.deepcopy(item)
         self._original = copy.deepcopy(item)
+        self._sql0_applies = True # Can current schema be parsed from item's sql0
 
         self._ctrls    = {}  # {}
         self._buttons  = {}  # {name: wx.Button}
@@ -2868,7 +2874,7 @@ class SchemaObjectPage(wx.Panel):
         self._ignore_change = False
         self._has_alter     = False
         self._show_alter    = False
-        self._fks_on        = db.execute("PRAGMA foreign_keys", log=False).fetchone()["foreign_keys"]
+        self._fks_on        = db.execute("PRAGMA foreign_keys", log=False).fetchone().values()[0]
         self._backup        = None # State variables copy for RestoreBackup
         self._types    = self._GetColumnTypes()
         self._tables   = [x["name"] for x in db.get_category("table").values()]
@@ -2968,8 +2974,6 @@ class SchemaObjectPage(wx.Panel):
         self._BindDataHandler(self._OnChange, edit_name, ["name"])
 
         self._Populate()
-        if "sql" not in self._original and "sql" in self._item:
-            self._original["sql"] = self._item["sql"]
 
         has_cols = self._hasmeta or self._category in ("table", "index", "view")
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
@@ -2995,7 +2999,12 @@ class SchemaObjectPage(wx.Panel):
         splitter.SplitHorizontally(panel1, panel2, pos)
         splitter.SashInvisible = not has_cols
         wx_accel.accelerate(self)
-        button_edit.Enabled = self._hasmeta and grammar.SQL.CREATE_VIRTUAL_TABLE != util.get(item, "meta", "__type__")
+        button_edit.Enabled = self._hasmeta
+        if grammar.SQL.CREATE_VIRTUAL_TABLE == util.get(self._item, "meta", "__type__"):
+            button_edit.Enabled = False
+            self._panel_category.Hide()
+            splitter.SetMinimumPaneSize(0)
+            splitter.SashPosition = 0
         def after():
             if not self: return
             if self._newmode: edit_name.SetFocus(), edit_name.SelectAll()
@@ -3017,7 +3026,8 @@ class SchemaObjectPage(wx.Panel):
         """Returns whether there are unsaved changes."""
         result = False
         if self._editmode:
-            result = (self._original.get("sql") != self._item.get("sql"))
+            a, b = self._original, self._item
+            result = a["sql"] != b["sql"] or a["sql0"] != b["sql0"]
         return result
 
 
@@ -3028,7 +3038,7 @@ class SchemaObjectPage(wx.Panel):
         @param   backup  back up unsaved changes for RestoreBackup
         """
         VARS = ["_newmode", "_editmode", "_item", "_original", "_has_alter",
-                "_types", "_tables", "_views"]
+                "_sql0_applies", "_types", "_tables", "_views"]
         myvars = {x: copy.deepcopy(getattr(self, x)) for x in VARS} if backup else None
         result = self._OnSave()
         if result and backup: self._backup = myvars
@@ -3589,8 +3599,6 @@ class SchemaObjectPage(wx.Panel):
         self._notebook_table.SetPageText(0, "Columns" if not lencol else "Columns (%s)" % lencol)
         if self._hasmeta:
             self._notebook_table.SetPageText(1, "Constraints" if not lencnstr else "Constraints (%s)" % lencnstr)
-            if grammar.SQL.CREATE_VIRTUAL_TABLE == util.get(self._item, "meta", "__type__"):
-                self._panel_category.Hide()
         self._notebook_table.Layout()
 
 
@@ -4156,10 +4164,12 @@ class SchemaObjectPage(wx.Panel):
 
     def _PopulateSQL(self):
         """Populates CREATE SQL window."""
-        sql, _ = grammar.generate(self._item["meta"])
-        if sql is not None: self._item["sql"] = sql
-        elif not self._hasmeta: sql = self._item["sql"]
-        if self._show_alter: sql, _ = self._GetAlterSQL()
+        if self._editmode:
+            sql, _ = grammar.generate(self._item["meta"])
+            if sql is not None: self._item["sql"] = sql
+        sql = self._item["sql0" if self._sql0_applies else "sql"]
+
+        if self._show_alter: sql, _, _ = self._GetAlterSQL()
         if sql is None: return
         scrollpos = self._ctrls["sql"].GetScrollPos(wx.VERTICAL)
         self._ctrls["sql"].SetReadOnly(False)
@@ -4171,7 +4181,7 @@ class SchemaObjectPage(wx.Panel):
     def _GetAlterSQL(self):
         """
         Returns ALTER SQLs for carrying out schema changes,
-        as (sql, full sql with savepoints).
+        as (sql, full sql with savepoints, {generate args}).
         """
         if   "table"   == self._category: return self._GetAlterTableSQL()
         elif "index"   == self._category: return self._GetAlterIndexSQL()
@@ -4181,8 +4191,8 @@ class SchemaObjectPage(wx.Panel):
 
     def _GetAlterTableSQL(self):
         """Returns SQLs for carrying out table change."""
-        result = "", ""
-        if self._original["sql"] == self._item["sql"]: return result
+        result = "", "", None
+        if not self.IsChanged(): return result
 
         can_simple = True
         old, new = self._original["meta"], self._item["meta"]
@@ -4190,6 +4200,8 @@ class SchemaObjectPage(wx.Panel):
         colmap1 = {c["__id__"]: c for c in cols1}
         colmap2 = {c["__id__"]: c for c in cols2}
 
+        if new.get("comments"):
+            can_simple = False # Need to change 
         for k in "without", "constraints":
             if bool(new.get(k)) != bool(old.get(k)):
                 can_simple = False # Top-level flag or constraints existence changed
@@ -4241,10 +4253,22 @@ class SchemaObjectPage(wx.Panel):
                     for c in ("table", "trigger") for x in rels.get(c, ())
                 ))
 
+        sql = self._item["sql0" if self._sql0_applies else "sql"]
+        renames = {"table":  {old["name"]: new["name"]}
+                             if old["name"] != new["name"] else {},
+                   "column": {new["name"]: {
+                                  colmap1[c2["__id__"]]["name"]: c2["name"]
+                                  for c2 in cols2 if c2["__id__"] in colmap1
+                                  and colmap1[c2["__id__"]]["name"] != c2["name"]}}}
+        for k, v in renames.items():
+            if not v or not any(x.values() if isinstance(x, dict) else x
+                                for x in v.values()): renames.pop(k)
+
         if can_simple:
             # Possible to use just simple ALTER TABLE statements
+
             args = {"name": old["name"], "name2": new["name"],
-                    "__type__": grammar.SQL.ALTER_TABLE}
+                    "sql": sql, "__type__": grammar.SQL.ALTER_TABLE}
 
             for c2 in cols2:
                 c1 = colmap1.get(c2["__id__"])
@@ -4255,6 +4279,12 @@ class SchemaObjectPage(wx.Panel):
                 c1 = colmap1.get(c2["__id__"])
                 if c2["__id__"] not in colmap1:
                     args.setdefault("add", []).append(c2)
+
+            for category, items in self._db.get_related("table", old["name"]).items():
+                for item in items:
+                    sql, _ = grammar.transform(item["sql"], renames=renames)
+                    args.setdefault(category, []).append(dict(item, sql=sql, sql0=sql))
+
         else:
             # Need to re-create table, first under temporary name to copy data.
             names_existing = set(sum((list(self._db.schema[x])
@@ -4268,22 +4298,13 @@ class SchemaObjectPage(wx.Panel):
                              and x.update(table=tempname))) # Rename in constraints
             meta["name"] = tempname
 
+            sql, _ = grammar.transform(sql, renames={"table": {new["name"]: tempname}})
             args = {"name": old["name"], "name2": new["name"], "tempname": tempname,
-                    "fks": self._fks_on, "meta": meta, "__type__": "COMPLEX ALTER TABLE",
+                    "sql": sql, "fks": self._fks_on, "__type__": "COMPLEX ALTER TABLE",
                     "columns": [(colmap1[c2["__id__"]]["name"], c2["name"])
                                 for c2 in cols2 if c2["__id__"] in colmap1]}
 
-            renames = {"table":  {old["name"]: new["name"]}
-                                 if old["name"] != new["name"] else {},
-                       "column": {new["name"]: {
-                                      colmap1[c2["__id__"]]["name"]: c2["name"]
-                                      for c2 in cols2 if c2["__id__"] in colmap1
-                                      and colmap1[c2["__id__"]]["name"] != c2["name"]}}}
-            for k, v in renames.items():
-                if not v or not any(x.values() if isinstance(x, dict) else x
-                                    for x in v.values()): renames.pop(k)
-
-            for category, items in self._db.get_related("table", old["name"], own=not renames).items():
+            for category, items in self._db.get_related("table", old["name"], own=None if renames else True).items():
                 for item in items:
                     is_our_item = util.lceq(item["meta"].get("table"), old["name"])
                     sql, _ = grammar.transform(item["sql"], renames=renames)
@@ -4299,12 +4320,17 @@ class SchemaObjectPage(wx.Panel):
                         myitem, myrenames = dict(item), renames
                     sql, _ = grammar.transform(item["sql"], renames=myrenames)
                     myitem.update(sql=sql)
+                    if "table" == category:
+                        sql0, _ = grammar.transform(item["sql"], renames=renames)
+                        myitem.update(sql0=sql0)
                     args.setdefault(category, []).append(myitem)
                     if category not in ("table", "view"): continue # for item
 
                     subrelateds = self._db.get_related(category, item["name"], own=True)
                     for subcategory, subitems in subrelateds.items():
                         for subitem in subitems:
+                            if any(x["name"] == subitem["name"] for x in args.get(subcategory, [])):
+                                continue # for subitem
                             # Re-create table indexes and triggers, and view triggers
                             sql, _ = grammar.transform(subitem["sql"], renames=renames) \
                                      if renames else (subitem["sql"], None)
@@ -4312,39 +4338,39 @@ class SchemaObjectPage(wx.Panel):
 
         short, _ = grammar.generate(dict(args, no_tx=True))
         full,  _ = grammar.generate(args)
-        return short, full
+        return short, full, args
 
 
     def _GetAlterIndexSQL(self):
         """Returns SQLs for carrying out index change."""
-        result = "", ""
-        if self._original["sql"] == self._item["sql"]: return result
+        result = "", "", None
+        if not self.IsChanged(): return result
 
-        old, new = self._original["meta"], self._item["meta"]
-        args = {"name": old["name"], "name2": new["name"],
-                "meta": new, "__type__": "ALTER INDEX"}
+        args = {"name": self._original["name"],
+                "sql": self._item["sql0" if self._sql0_applies else "sql"],
+                "__type__": "ALTER INDEX"}
         short, _ = grammar.generate(dict(args, no_tx=True))
         full,  _ = grammar.generate(args)
-        return short, full
+        return short, full, args
 
 
     def _GetAlterTriggerSQL(self):
-        """Returns SQLs for carrying out triggre change."""
-        result = "", ""
-        if self._original["sql"] == self._item["sql"]: return result
+        """Returns SQLs for carrying out trigger change."""
+        result = "", "", None
+        if not self.IsChanged(): return result
 
-        old, new = self._original["meta"], self._item["meta"]
-        args = {"name": old["name"], "name2": new["name"],
-                "meta": new, "__type__": "ALTER TRIGGER"}
+        args = {"name": self._original["name"],
+                "sql": self._item["sql0" if self._sql0_applies else "sql"],
+                "__type__": "ALTER TRIGGER"}
         short, _ = grammar.generate(dict(args, no_tx=True))
         full,  _ = grammar.generate(args)
-        return short, full
+        return short, full, args
 
 
     def _GetAlterViewSQL(self):
         """Returns SQLs for carrying out view change."""
-        result = "", ""
-        if self._original["sql"] == self._item["sql"]: return result
+        result = "", "", None
+        if not self.IsChanged(): return result
 
         renames = {}
         old, new = self._original["meta"], self._item["meta"]
@@ -4360,12 +4386,13 @@ class SchemaObjectPage(wx.Panel):
                 renames.setdefault("column", {}).setdefault(new["name"], {})
                 renames["column"][new["name"]][c1["name"]] = c2["name"]
 
-        args = {"name": old["name"], "name2": new["name"],
-                "meta": new, "__type__": "ALTER VIEW"}
+        args = {"name": old["name"],
+                "sql": self._item["sql0" if self._sql0_applies else "sql"],
+                "__type__": "ALTER VIEW"}
 
         for category, items in self._db.get_related("view", old["name"], own=not renames).items():
             for item in items:
-                is_view_trigger = util.lceq(item["meta"]["table"], old["name"])
+                is_view_trigger = "trigger" == category and util.lceq(item["meta"]["table"], old["name"])
                 sql, _ = grammar.transform(item["sql"], renames=renames)
                 if sql == item["sql"] and not is_view_trigger: continue # for item
 
@@ -4379,7 +4406,7 @@ class SchemaObjectPage(wx.Panel):
 
         short, _ = grammar.generate(dict(args, no_tx=True))
         full,  _ = grammar.generate(args)
-        return short, full
+        return short, full, args
 
 
     def _GetColumnTypes(self):
@@ -4727,8 +4754,10 @@ class SchemaObjectPage(wx.Panel):
             self.Freeze()
             try:
                 self._AddRow(["constraints"], len(constraints) - 1, constraint)
+                self._sql0_applies = False
                 self._PopulateSQL()
                 self._grid_constraints.GoToCell(len(constraints) - 1, 0)
+                self._PostEvent(modified=True)
             finally: self.Thaw()
 
         menu = wx.Menu()
@@ -4757,6 +4786,7 @@ class SchemaObjectPage(wx.Panel):
         self.Freeze()
         try:
             self._AddRow(path, len(ptr) - 1, value)
+            self._sql0_applies = False
             self._PopulateSQL()
             self._grid_columns.GoToCell(self._grid_columns.NumberRows - 1, 0)
             self._OnSize()
@@ -4788,6 +4818,7 @@ class SchemaObjectPage(wx.Panel):
         self.Freeze()
         try:
             self._RemoveRow(path, index)
+            self._sql0_applies = False
             self._PopulateSQL()
             self.Layout()
         finally: self.Thaw()
@@ -4810,6 +4841,7 @@ class SchemaObjectPage(wx.Panel):
             self._RemoveRow(path, index)
             self._AddRow(path, index2, ptr[index2], insert=True)
             grid.SetGridCursor(index2, col)
+            self._sql0_applies = False
             self._PopulateSQL()
         finally: self.Thaw()
         self._PostEvent(modified=True)
@@ -4845,6 +4877,7 @@ class SchemaObjectPage(wx.Panel):
         try:
             self._RemoveRow(path2, index)
             ctrls = self._AddRow(path2, index, data2, insert=True)
+            self._sql0_applies = False
             self._PopulateSQL()
             ctrls[-1].SetFocus()
         finally: self.Thaw()
@@ -4909,6 +4942,7 @@ class SchemaObjectPage(wx.Panel):
             if not rebuild: self._PopulateAutoComp()
             meta.pop("columns", None)
 
+        self._sql0_applies = False
         self._Populate() if rebuild else self._PopulateSQL()
         self._PostEvent(modified=True)
 
@@ -5080,7 +5114,9 @@ class SchemaObjectPage(wx.Panel):
             self._panel_constraints.ContainingSizer.Layout()
             t = "Constraints" + ("(%s)" % len(constraints) if constraints else "")
             self._notebook_table.SetPageText(1, t)
+            self._sql0_applies = False
             self._PopulateSQL()
+            self._PostEvent(modified=True)
         finally: self.Thaw()
         wx.CallAfter(self._SizeConstraintsGrid)
 
@@ -5103,7 +5139,9 @@ class SchemaObjectPage(wx.Panel):
             event.EventObject.GetPrevSibling().Value = True
             event.EventObject.GetNextSibling().Value = True
             coldata["notnull"] = {}
+        self._sql0_applies = False
         self._PopulateSQL()
+        self._PostEvent(modified=True)
 
 
     def _OnToggleAlterSQL(self, event=None):
@@ -5156,8 +5194,7 @@ class SchemaObjectPage(wx.Panel):
         props = [{"name": "sql", "label": "SQL:", "component": controls.SQLiteTextCtrl,
                   "tb": [{"type": "paste", "help": "Paste from clipboard"},
                          {"type": "open",  "help": "Load from file"}, ]}]
-        data, title = {"sql": self._item["sql"]}, "Import definition from SQL"
-        words = {}
+        data, words = {"sql": self._item["sql0" if self._sql0_applies else "sql"]}, {}
         for category in ("table", "view"):
             for item in self._db.get_category(category).values():
                 if self._category in ("trigger", "view"):
@@ -5172,7 +5209,7 @@ class SchemaObjectPage(wx.Panel):
 
         def onclose(mydata):
             sql = mydata.get("sql", "")
-            if not sql or sql == data["sql"]: return True
+            if sql.strip() in ("", data["sql"]): return True
             meta, err = grammar.parse(sql, self._category)
 
             if not err and "INSTEAD OF" == meta.get("upon") and "table" in meta \
@@ -5193,23 +5230,27 @@ class SchemaObjectPage(wx.Panel):
             wx.MessageBox("Failed to parse SQL.\n\n%s" % err,
                           conf.Title, wx.OK | wx.ICON_ERROR)
 
-        dlg = controls.FormDialog(self.TopLevelParent, title, props, data,
-                                  autocomp=words, onclose=onclose)
+        dlg = controls.FormDialog(self.TopLevelParent, "Import definition from SQL",
+                                  props, data, autocomp=words, onclose=onclose)
         wx_accel.accelerate(dlg)
         if wx.ID_OK != dlg.ShowModal(): return
         sql = dlg.GetData().get("sql", "").strip().replace("\r\n", "\n")
-        if not sql or sql == data["sql"].strip(): return
+        if not sql.endswith(";"): sql += ";"
+        if not sql or sql == data["sql"]: return
 
         logger.info("Importing %s definition from SQL:\n\n%s", self._category, sql)
         meta, _ = grammar.parse(sql, self._category)
         if self._show_alter: self._OnToggleAlterSQL()
-        self._item.update(sql=sql, meta=self._AssignColumnIDs(meta))
+        self._item.update(sql=sql, sql0=sql, meta=self._AssignColumnIDs(meta))
+        self._sql0_applies = True
         self._Populate()
+        self._PostEvent(modified=True)
 
 
-    def _OnRefresh(self, event=None):
+
+    def _OnRefresh(self, event=None, parse=False):
         """Handler for clicking refresh, updates database data in controls."""
-        self._db.populate_schema()
+        self._db.populate_schema(count=parse, parse=parse)
         prevs = {"_types": self._types, "_tables": self._tables,
                  "_views": self._views, "_item": self._item}
         self._types = self._GetColumnTypes()
@@ -5224,7 +5265,10 @@ class SchemaObjectPage(wx.Panel):
             )
             if item:
                 item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
+                sql, _ = grammar.generate(item["meta"])
+                if sql is not None: item.update(sql=sql, sql0=item.get("sql0", sql))
                 self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
+                self._sql0_applies = True
 
         if not event or any(prevs[x] != getattr(self, x) for x in prevs):
             self._Populate()
@@ -5242,7 +5286,7 @@ class SchemaObjectPage(wx.Panel):
         self._OnSave() if self._editmode else self._OnToggleEdit()
 
 
-    def _OnToggleEdit(self, event=None):
+    def _OnToggleEdit(self, event=None, parse=False):
         """Handler for toggling edit mode."""
         is_changed = self.IsChanged()
         if is_changed and wx.YES != controls.YesNoMessageBox(
@@ -5280,9 +5324,10 @@ class SchemaObjectPage(wx.Panel):
             else:
                 self._buttons["edit"].ToolTip = ""
                 if self._show_alter: self._OnToggleAlterSQL()
-                if is_changed: self._OnRefresh()
+                if is_changed or parse: self._OnRefresh(parse=parse)
                 else:
                     self._item = copy.deepcopy(self._original)
+                    self._sql0_applies = True
                     self._ToggleControls(self._editmode)
                 self._buttons["edit"].SetFocus()
         finally: self.Thaw()
@@ -5349,7 +5394,7 @@ class SchemaObjectPage(wx.Panel):
         errors, sql = [], self._item["sql"]
         if self.IsChanged(): errors, _ = self._Validate()
         if not errors and self.IsChanged():
-            if not self._newmode: sql, _ = self._GetAlterSQL()
+            if not self._newmode: sql, _, _ = self._GetAlterSQL()
             sql2 = "PRAGMA foreign_keys = off;\n\nSAVEPOINT test;\n\n" \
                    "%s;\n\nROLLBACK TO SAVEPOINT test;" % sql
             if ("table" == self._category and not self._newmode
@@ -5403,8 +5448,8 @@ class SchemaObjectPage(wx.Panel):
                                       (lock, "create" if self._newmode else "alter"),
                                       conf.Title, wx.OK | wx.ICON_WARNING)
 
-        sql1 = sql2 = self._item["sql"]
-        if not self._newmode: sql1, sql2 = self._GetAlterSQL()
+        sql1 = sql2 = self._item["sql0" if self._sql0_applies else "sql"]
+        if not self._newmode: sql1, sql2, alterargs = self._GetAlterSQL()
 
         if wx.YES != controls.YesNoMessageBox(
             "Execute the following schema change?\n\n%s" % sql1.strip(),
@@ -5425,17 +5470,48 @@ class SchemaObjectPage(wx.Panel):
             msg = "Error saving changes:\n\n%s" % util.format_exc(e)
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
             return
+        else:
+            # Modify sqlite_master directly, as "ALTER TABLE x RENAME TO y"
+            # sets a quoted name "y" to CREATE statements, including related objects,
+            # regardless of whether the name required quoting.
+            data = defaultdict(dict) # {category: {name: SQL}}
+            if not self._newmode and "table" == self._category \
+            and ("tempname" in alterargs or alterargs["name"] != alterargs["name2"]):
+                if alterargs["name2"] == grammar.quote(alterargs["name2"]):
+                    data["table"][alterargs["name2"]] = self._item["sql0" if self._sql0_applies else "sql"]
+                    for category in ("index", "view", "trigger"):
+                        for subitem in alterargs.get(category) or ():
+                            data[category][subitem["name"]] = subitem["sql"]
+                for reltable in alterargs.get("table") or ():
+                    if reltable["name"] != grammar.quote(reltable["name"]):
+                        continue # for reltable
+                    data["table"][reltable["name"]] = reltable["sql0"]
+                    for category in ("index", "view", "trigger"):
+                        for subitem in reltable.get(category) or ():
+                            data[category][subitem["name"]] = subitem["sql"]
+            if data:
+                try:
+                    v = self._db.execute("PRAGMA schema_version", log=False).fetchone().values()[0]
+                    data.update(version=v)
+                    sql, err = grammar.generate(data, category="ALTER MASTER")
+                    if err: logger.warn("Error syncing sqlite_master contents: %s.", err)
+                    else: self._db.executescript(sql)
+                except:
+                    logger.warn("Error syncing sqlite_master contents.", exc_info=True)
+                    try: self._db.execute("ROLLBACK")
+                    except Exception: pass
         finally:
             busy.Close()
 
-        self._item.update(name=meta2["name"], meta=self._AssignColumnIDs(meta2))
+        self._item.update(name=meta2["name"], meta=self._AssignColumnIDs(meta2),
+                          sql0=self._item["sql0" if self._sql0_applies else "sql"])
         if "view" != self._category: self._item.update(
             tbl_name=meta2["name" if "table" == self._category else "table"])
         self._original = copy.deepcopy(self._item)
         if self._show_alter: self._OnToggleAlterSQL()
         self._has_alter = True
         self._newmode = False
-        self._OnToggleEdit()
+        self._OnToggleEdit(parse=True)
         self._PostEvent(updated=True)
         return True
 

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    19.06.2020
+@modified    21.06.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -50,19 +50,20 @@ def parse(sql, category=None):
     return result, err
 
 
-def generate(data, indent="  "):
+def generate(data, indent="  ", category=None):
     """
     Returns SQL statement from data structure.
 
-    @param   data    {"__type__": "CREATE TABLE"|.., ..}
-    @param   indent  indentation level to use. If falsy,
-                     result is not indented in any, including linefeeds.
-    @return          (SQL string, None) or (None, error)
+    @param   data      {"__type__": "CREATE TABLE"|.., ..}
+    @param   indent    indentation level to use. If falsy,
+                       result is not indented in any, including linefeeds.
+    @param   category  data category if not using data["__type__"]
+    @return            (SQL string, None) or (None, error)
     """
     if not data: return None, "Empty schema item"
     result, err, generator = None, None, Generator(indent)
     try:
-        result, err = generator.generate(data)
+        result, err = generator.generate(data, category=category)
     except Exception as e:
         logger.exception("Error generating SQL for %s.", data)
         err = util.format_exc(e)
@@ -86,12 +87,13 @@ def transform(sql, flags=None, renames=None, indent="  "):
                       result is not indented in any, including linefeeds.
     @return           (SQL string, None) or (None, error)
     """
-    result, err, parser, generator = None, None, Parser(), Generator(indent)
+    result, err, parser = None, None, Parser()
     try:
         data, err = parser.parse(sql, renames=renames)
-        if data:
+        if data and (flags or not indent):
             if flags: data.update(flags)
-            result, err = generator.generate(data)
+            result, err = Generator(indent).generate(data)
+        elif data: result = parser.get_text()
     except Exception as e:
         logger.exception("Error transforming SQL %s.", sql)
         err = util.format_exc(e)
@@ -374,6 +376,9 @@ class Parser(object):
                 elif renames["schema"]: result["schema"] = renames["schema"]
                 else: result.pop("schema", None)
 
+            cc = self._stream.filterForChannel(0, len(self._stream.tokens) - 1, channel=2)
+            result["comments"] = [x.text for x in cc or []]
+
             return result
 
         result, error, tries = None, None, 0
@@ -385,6 +390,11 @@ class Parser(object):
                 sql, tries = e.message, tries + 1
                 if tries > 1: error = "Failed to parse SQL"
         return result, error
+
+
+    def get_text(self):
+        """Returns full text of current input stream."""
+        return self._stream.getText()
 
 
     def t(self, ctx):
@@ -406,7 +416,7 @@ class Parser(object):
         if ctx and ctx2:
             interval = ctx.getSourceInterval()[0], ctx2.getSourceInterval()[1]
         else: interval = ctx.getSourceInterval()
-        result = self._stream.getText(interval)
+        result = self._stream.getText(*interval)
 
         for c, r in ((ctx, "^%s"), (ctx2, "%s$")) if ctx and ctx2 else ():
             if not isinstance(c, TerminalNode): continue # for c, r
@@ -479,7 +489,7 @@ class Parser(object):
 
         result["columns"] = [self.build_table_column(x) for x in ctx.column_def()]
         if self._repls:
-            sql, shift = self._stream.getText((0, sys.maxint)), 0
+            sql, shift = self._stream.getText(0, sys.maxint), 0
             for start, end, repl in self._repls:
                 sql = sql[:start + shift] + repl + sql[end + shift:]
                 shift = len(repl) - end + start
@@ -632,8 +642,8 @@ class Parser(object):
                 # resulting in DEFAULT and everything preceding being parsed
                 # as type if DEFAULT value is double-quoted.
                 start, end = ctx.type_name().getSourceInterval()
-                inter = self._stream.getText((start, end))
-                cstart = len(self._stream.getText((0, start - 1)))
+                inter = self._stream.getText(start, end)
+                cstart = len(self._stream.getText(0, start - 1))
                 cend   = cstart + len(inter)
                 xstart = type_raw.find("DEFAULT") + 7
                 repl, in_quotes, i = inter[:xstart], False, xstart
@@ -927,6 +937,7 @@ class Generator(object):
         "ALTER INDEX":             templates.ALTER_INDEX,
         "ALTER TRIGGER":           templates.ALTER_TRIGGER,
         "ALTER VIEW":              templates.ALTER_VIEW,
+        "ALTER MASTER":            templates.ALTER_MASTER,
         SQL.CREATE_INDEX:          templates.CREATE_INDEX,
         SQL.CREATE_TABLE:          templates.CREATE_TABLE,
         SQL.CREATE_TRIGGER:        templates.CREATE_TRIGGER,
@@ -1031,9 +1042,9 @@ class Generator(object):
         return self.token(self._indent, "PRE") if self._indent else ""
 
 
-    def quote(self, val):
+    def quote(self, val, force=False):
         """Returns token for quoted value."""
-        return self.token(quote(val), "Q")
+        return self.token(quote(val, force=force), "Q")
 
 
     def padding(self, key, data, quoted=False):

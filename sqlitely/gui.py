@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.06.2020
+@modified    22.06.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4669,6 +4669,7 @@ class DatabasePage(wx.Panel):
                     self.notebook_schema.SetPageText(idx, title)
             if not self.save_underway: self.update_page_header(updated=updated)
         if updated:
+            self.load_tree_schema()
             for k, p in self.schema_pages[category].items():
                 if p is event.source and name != k:
                     name0 = k
@@ -4679,7 +4680,7 @@ class DatabasePage(wx.Panel):
                         break # for item
                     break # for k, p
         if updated and not self.save_underway:
-            self.reload_schema(count=True, parse=True)
+            self.load_tree_data()
             datapage = self.data_pages.get(category, {}).get(name0 or name)
             if datapage:
                 if name in self.db.schema[category]:

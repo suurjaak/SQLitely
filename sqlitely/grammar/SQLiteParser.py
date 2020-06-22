@@ -1,4 +1,4 @@
-# Generated from SQLite.g4 by ANTLR 4.7.2
+# Generated from SQLite.g4 by ANTLR 4.8
 # encoding: utf-8
 from __future__ import print_function
 from antlr4 import *
@@ -1262,7 +1262,7 @@ class SQLiteParser ( Parser ):
 
     def __init__(self, input, output=sys.stdout):
         super(SQLiteParser, self).__init__(input, output=output)
-        self.checkVersion("4.7.2")
+        self.checkVersion("4.8")
         self._interp = ParserATNSimulator(self, self.atn, self.decisionsToDFA, self.sharedContextCache)
         self._predicates = None
 

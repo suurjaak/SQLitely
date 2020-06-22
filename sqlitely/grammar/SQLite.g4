@@ -871,11 +871,11 @@ BLOB_LITERAL
  ;
 
 SINGLE_LINE_COMMENT
- : '--' ~[\r\n]* -> channel(HIDDEN)
+ : '--' ~[\r\n]* -> channel(2)
  ;
 
 MULTILINE_COMMENT
- : '/*' .*? ( '*/' | EOF ) -> channel(HIDDEN)
+ : '/*' .*? ( '*/' | EOF ) -> channel(2)
  ;
 
 SPACES
