@@ -5648,7 +5648,7 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
                       item_copy)
 
-            item_file = wx.MenuItem(menu, -1, "&Export %s to file" % data["type"])
+            item_file = wx.MenuItem(menu, -1, "Export %s to &file" % data["type"])
             if "table" == data["type"]:
                 item_database = wx.MenuItem(menu, -1, "Export table to another &database")
                 item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
@@ -5677,7 +5677,7 @@ class DatabasePage(wx.Panel):
 
         elif "category" == data.get("type"): # Category list
             item_copy = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
-            item_file = wx.MenuItem(menu, -1, "&Export all %s to file" % util.plural(data["category"]))
+            item_file = wx.MenuItem(menu, -1, "Export all %s to &file" % util.plural(data["category"]))
             item_file_single = wx.MenuItem(menu, -1, "Export all %s to single spreads&heet" % util.plural(data["category"]))
 
             menu.Append(item_copy)
