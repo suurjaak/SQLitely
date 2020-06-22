@@ -5616,7 +5616,7 @@ class ExportProgressPanel(wx.Panel):
         return [x for x in self._tasks if x["pending"]]
 
 
-    def OnProgress(self, index=0, count=None, name=None, **_):
+    def OnProgress(self, index=0, count=None, name=None, error=None, **_):
         """
         Handler for task progress report, updates progress bar.
         Returns true if task should continue.
@@ -5625,27 +5625,41 @@ class ExportProgressPanel(wx.Panel):
 
         opts, ctrls = (x[index] for x in (self._tasks, self._ctrls))
 
-        if opts["pending"] and count is not None:
+        def after():
             ctrls["text"].Parent.Freeze()
+            total = count
 
             if name and opts.get("multi"):
                 subopts = opts["subtotals"].setdefault(name, {})
-                subopts["count"] = count
-                subpercent, subtext = self._FormatPercent(subopts, opts.get("unit"))
-                subtitle = "Processing %s." % " ".join(filter(bool,
-                           (self._category, grammar.quote(name))))
-                if subpercent is not None: ctrls["subgauge"].Value = subpercent
-                ctrls["subtext"].Label  = subtext
-                ctrls["subtitle"].Label = subtitle
-                count = sum(x.get("count", 0) for x in opts["subtotals"].values())
+                if count is not None:
+                    subopts["count"] = count
+                    subpercent, subtext = self._FormatPercent(subopts, opts.get("unit"))
+                    subtitle = "Processing %s." % " ".join(filter(bool,
+                               (self._category, grammar.quote(name))))
+                    if subpercent is not None: ctrls["subgauge"].Value = subpercent
+                    ctrls["subtext"].Label  = subtext
+                    ctrls["subtitle"].Label = subtitle
+                    total = sum(x.get("count", 0) for x in opts["subtotals"].values())
+            if error is not None:
+                if name:
+                    myerror = "Failed to export %s. %s." % (grammar.quote(name, force=True), error)
+                else:
+                    wx.CallAfter(self.Stop)
+                    myerror = "Export failed. %s." % error
+                ctrls["errtext"].Label += ("\n" if ctrls["errtext"].Label else "") + myerror
+                ctrls["errtext"].Show()
 
-            opts["count"] = count
-            percent, text = self._FormatPercent(opts)
-            if percent is not None: ctrls["gauge"].Value = percent
-            ctrls["text"].Label = text
-            ctrls["text"].Parent.Layout()
+            if total is not None:
+                opts["count"] = total
+                percent, text = self._FormatPercent(opts)
+                if percent is not None: ctrls["gauge"].Value = percent
+                ctrls["text"].Label = text
+
             ctrls["text"].Parent.Thaw()
+            if count is not None or error is not None:
+                self._panel.Layout()
 
+        if opts["pending"]: wx.CallAfter(after)
         wx.YieldIfNeeded()
         return opts["pending"]
 
@@ -5698,6 +5712,8 @@ class ExportProgressPanel(wx.Panel):
                 subgauge = ctrls["subgauge"] = wx.Gauge(parent, range=100, size=(300,-1),
                                                style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
                 subtext  = ctrls["subtext"]  = wx.StaticText(parent)
+                errtext  = ctrls["errtext"]  = wx.StaticText(parent)
+                errtext.Hide()
 
             cancel = ctrls["cancel"] = wx.Button(panel, label="Cancel")
             open   = ctrls["open"]   = wx.Button(panel, label="Open file")
@@ -5720,6 +5736,7 @@ class ExportProgressPanel(wx.Panel):
                 parent.Sizer.Add(subtitle, border=10, flag=wx.TOP | wx.ALIGN_CENTER)
                 parent.Sizer.Add(subgauge, flag=wx.ALIGN_CENTER)
                 parent.Sizer.Add(subtext,  flag=wx.ALIGN_CENTER)
+                parent.Sizer.Add(errtext,  border=10, flag=wx.ALL | wx.GROW)
 
             sizer.Add(parent, flag=wx.ALIGN_CENTER)
             sizer.Add(sizer_buttons, border=5, flag=wx.TOP | wx.ALIGN_CENTER)
@@ -5799,10 +5816,11 @@ class ExportProgressPanel(wx.Panel):
         opts, ctrls = (x[index] for x in (self._tasks, self._ctrls))
         unit = opts.get("unit", "row")
         if "error" in result:
-            self.Layout()
             self._current = None
-            if opts["pending"]: ctrls["text"] = result["error"]
-            if opts["pending"] and len(self._tasks) > 1:
+            ctrls["title"].Label = 'Failed to export "%s".' % opts["filename"]
+            ctrls["text"].Label = result["error"]
+            self.Layout()
+            if not opts["pending"] or len(self._tasks) < 2:
                 error = "Error saving %s:\n\n%s" % (opts["filename"], result["error"])
                 wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         elif "done" in result:

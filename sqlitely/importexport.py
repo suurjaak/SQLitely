@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.05.2020
+@modified    22.06.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -233,7 +233,7 @@ def export_data_multiple(filename, title, db, category, progress=None):
     items, cursor = db.schema[category], None
     try:
         props = {"title": title, "comments": templates.export_comment()}
-        writer = xlsx_writer(filename, next(iter(items), None), props=props)
+        writer = xlsx_writer(filename, props=props)
 
         for n in items: db.lock(category, n, filename, label="export")
         for idx, (name, item) in enumerate(items.items()):
@@ -241,20 +241,29 @@ def export_data_multiple(filename, title, db, category, progress=None):
             if progress and not progress(name=name, count=count):
                 result = False
                 break # for idx, (name, item)
-            if idx: writer.add_sheet(name)
-            colnames = [x["name"] for x in item["columns"]]
-            writer.set_header(True)
-            writer.writerow(colnames, "bold")
-            writer.set_header(False)
 
-            cursor = db.execute("SELECT * FROM %s" % grammar.quote(name))
-            for i, row in enumerate(cursor, 1):
-                count = i
-                writer.writerow([row[c] for c in colnames])
-                if not i % 100 and progress and not progress(name=name, count=i):
+            try:
+                cursor = db.execute("SELECT * FROM %s" % grammar.quote(name))
+
+                for i, row in enumerate(cursor, 1):
+                    if i == 1:
+                        writer.add_sheet(name)
+                        colnames = [x["name"] for x in item["columns"]]
+                        writer.set_header(True)
+                        writer.writerow(colnames, "bold")
+                        writer.set_header(False)
+
+                    count = i
+                    writer.writerow([row[c] for c in colnames])
+                    if not i % 100 and progress and not progress(name=name, count=i):
+                        result = False
+                        break # for i, row
+            except Exception as e:
+                logger.exception("Error exporting %s %s from %s.", category, grammar.quote(name), db)
+                if progress and not progress(name=name, error=util.format_exc(e)):
                     result = False
-                    break # for i, row
-            util.try_until(cursor.close())
+            finally: util.try_until(lambda: cursor.close())
+
             if not result: break # for idx, (name, item)
             if progress and not progress(name=name, count=count):
                 result = False
@@ -309,6 +318,10 @@ def export_dump(filename, db, progress=None):
     """
     result = False
     tables, namespace = db.schema["table"], {}
+
+    def gen(func, *a, **kw):
+        for x in func(*a, **kw): yield x
+
     try:
         with open(filename, "wb") as f:
             db.lock(None, None, filename, label="database dump")
@@ -316,7 +329,7 @@ def export_dump(filename, db, progress=None):
                 "db":       db,
                 "sql":      db.get_sql(),
                 "data":     [{"name": t, "columns": opts["columns"],
-                              "rows": iter(db.execute("SELECT * FROM %s" % grammar.quote(t)))}
+                              "rows": gen(db.execute, "SELECT * FROM %s" % grammar.quote(t))}
                              for t, opts in tables.items()],
                 "pragma":   db.get_pragma_values(dump=True),
                 "progress": progress,
@@ -325,6 +338,11 @@ def export_dump(filename, db, progress=None):
             template = step.Template(templates.DUMP_SQL, strip=False)
             template.stream(f, namespace, unbuffered=True)
             result = progress() if progress else True
+    except Exception as e:
+        logger.exception("Error exporting database dump from %s to %s.",
+                         db, filename)
+        if progress: progress(error=util.format_exc(e), done=True)
+        result = False
     finally:
         db.unlock(None, None, filename)
         for x in namespace.get("data", []): util.try_until(lambda: x["rows"].close())

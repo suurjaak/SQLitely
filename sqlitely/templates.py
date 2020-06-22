@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.06.2020
+@modified    22.06.2020
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -17,7 +17,7 @@ import re
 from . import conf
 
 # Modules imported inside templates:
-#import collections, itertools, json, math, os, pyparsing, sys, urllib, wx
+#import collections, itertools, json, logging, math, os, pyparsing, sys, urllib, wx
 #from sqlitely import conf, grammar, images, searchparser, templates
 #from sqlitely.lib import util
 
@@ -254,6 +254,9 @@ HTML data export template for the rows part.
 @param   ?progress  callback(count) returning whether to cancel, if any
 """
 DATA_ROWS_HTML = """
+<%
+i = 0
+%>
 %for i, row in enumerate(rows, 1):
 <%
 namespace["row_count"] += 1
@@ -2181,9 +2184,12 @@ Database dump SQL template.
 @param   ?progress  callback(count) returning whether to cancel, if any
 """
 DUMP_SQL = """<%
-import itertools
+import itertools, logging
+from sqlitely.lib import util
 from sqlitely.lib.vendor.step import Template
 from sqlitely import grammar, templates
+
+logger = logging.getLogger("sqlitely")
 
 is_initial = lambda o, v: o["initial"](db, v) if callable(o.get("initial")) else o.get("initial")
 pragma_first = {k: v for k, v in pragma.items() if is_initial(db.PRAGMA[k], v)}
@@ -2205,14 +2211,25 @@ pragma_last  = {k: v for k, v in pragma.items() if not is_initial(db.PRAGMA[k], 
 %for table in data:
 <%
 if progress and not progress(): break # for table
-row = next(table["rows"], None)
-if not row: continue # for table
-rows = itertools.chain([row], table["rows"])
+try:
+    row = next(table["rows"], None)
+    if not row: continue # for table
+    rows = itertools.chain([row], table["rows"])
+except Exception as e:
+    logger.exception("Error exporting table %s from %s.", grammar.quote(table["name"]), db)
+    if progress and not progress(name=table["name"], error=util.format_exc(e)):
+        break # for table
+    else: continue # for table
 %>
 
 -- Table {{ grammar.quote(table["name"], force=True) }} data:
 <%
-Template(templates.DATA_ROWS_SQL).stream(buffer, dict(table, progress=progress, rows=rows))
+try:
+    Template(templates.DATA_ROWS_SQL).stream(buffer, dict(table, progress=progress, rows=rows))
+except Exception as e:
+    logger.exception("Error exporting table %s from %s.", grammar.quote(table["name"]), db)
+    if progress and not progress(name=table["name"], error=util.format_exc(e)):
+        break # for table
 %>
 
 %endfor
