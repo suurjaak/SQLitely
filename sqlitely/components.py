@@ -2924,8 +2924,8 @@ class SchemaObjectPage(wx.Panel):
         button_edit    = self._buttons["edit"]    = wx.Button(panel2, label="Edit")
         button_refresh = self._buttons["refresh"] = wx.Button(panel2, label="Refresh")
         button_test    = self._buttons["test"]    = wx.Button(panel2, label="Test")
-        button_import  = self._buttons["import"]  = wx.Button(panel2, label="Import SQL")
-        button_cancel  = self._buttons["cancel"]  = wx.Button(panel2, label="Cancel")
+        button_import  = self._buttons["import"]  = wx.Button(panel2, label="Edit S&QL")
+        button_cancel  = self._buttons["cancel"]  = wx.Button(panel2, label="&Cancel")
         button_actions = self._buttons["actions"] = wx.Button(panel2, label="Actions ..")
         button_close   = self._buttons["close"]   = wx.Button(panel2, label="Close")
         button_edit._toggle   = button_refresh._toggle = "skip"
@@ -2933,7 +2933,7 @@ class SchemaObjectPage(wx.Panel):
         button_import._toggle = button_cancel._toggle  = button_test._toggle  = "show skip"
         button_refresh.ToolTip = "Reload statement, and database tables"
         button_test.ToolTip    = "Test saving schema object, checking SQL validity"
-        button_import.ToolTip  = "Import %s definition from external SQL" % item["type"]
+        button_import.ToolTip  = "Edit SQL statement directly"
 
         sizer_name.Add(label_name, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_name.Add(edit_name, proportion=1)
@@ -3234,7 +3234,7 @@ class SchemaObjectPage(wx.Panel):
         label_upon = wx.StaticText(panel, label="&Upon:")
         list_upon = self._ctrls["upon"] = wx.ComboBox(panel,
             style=wx.CB_DROPDOWN | wx.CB_READONLY, choices=self.UPON)
-        label_action = wx.StaticText(panel, label="&Action:")
+        label_action = wx.StaticText(panel, label="Ac&tion:")
         list_action = self._ctrls["action"] = wx.ComboBox(panel,
             style=wx.CB_DROPDOWN | wx.CB_READONLY, choices=self.ACTION)
         label_table._toggle = "skip"
@@ -4100,7 +4100,7 @@ class SchemaObjectPage(wx.Panel):
             if "hide"    in action: b.Show(not edit)
             if not ("disable" in action or "skip" in action): b.Enable(edit)
 
-        self._buttons["edit"].Label = "Save" if edit else "Edit"
+        self._buttons["edit"].Label = "&Save" if edit else "Edit"
         tooltip = "Validate and confirm SQL, and save to database schema"
         self._buttons["edit"].ToolTip = tooltip if edit else ""
         self._buttons["edit"].ContainingSizer.Layout()
@@ -5230,7 +5230,7 @@ class SchemaObjectPage(wx.Panel):
             wx.MessageBox("Failed to parse SQL.\n\n%s" % err,
                           conf.Title, wx.OK | wx.ICON_ERROR)
 
-        dlg = controls.FormDialog(self.TopLevelParent, "Import definition from SQL",
+        dlg = controls.FormDialog(self.TopLevelParent, "Edit SQL",
                                   props, data, autocomp=words, onclose=onclose)
         wx_accel.accelerate(dlg)
         if wx.ID_OK != dlg.ShowModal(): return

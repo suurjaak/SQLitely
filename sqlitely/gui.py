@@ -2263,7 +2263,7 @@ class DatabasePage(wx.Panel):
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
         sizer_header.AddStretchSpacer()
 
-        self.label_search = wx.StaticText(self, -1, "&Search in data:")
+        self.label_search = wx.StaticText(self, -1, "Search &in data:")
         self.label_search.ToolTip = "Search in all columns of all database tables and views"
         sizer_header.Add(self.label_search, border=5, flag=wx.RIGHT | wx.TOP)
         edit_search = self.edit_searchall = controls.TextCtrlAutoComplete(
@@ -2387,9 +2387,9 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_TOOL, self.on_searchall_toggle_toolbar, id=wx.ID_CONVERT)
         self.Bind(wx.EVT_TOOL, self.on_searchall_stop, id=wx.ID_STOP)
 
-        self.label_search.Label = "&Search in data:"
+        self.label_search.Label = "Search &in data:"
         if conf.SearchInMeta:
-            self.label_search.Label = "&Search in metadata:"
+            self.label_search.Label = "Search &in metadata:"
             self.label_search.ToolTip = "Search in database CREATE SQL"
 
         nb = self.notebook_search = controls.TabbedHtmlWindow(page)
@@ -3952,13 +3952,13 @@ class DatabasePage(wx.Panel):
         if wx.ID_INDEX == event.Id:
             conf.SearchInMeta = True
             conf.SearchInData = False
-            self.label_search.Label = "&Search in metadata:"
+            self.label_search.Label = "Search &in metadata:"
             self.label_search.ToolTip = "Search in database CREATE SQL"
             self.edit_searchall.ToolTip = self.label_search.ToolTip.Tip
         elif wx.ID_STATIC == event.Id:
             conf.SearchInData = True
             conf.SearchInMeta = False
-            self.label_search.Label = "&Search in data:"
+            self.label_search.Label = "Search &in data:"
             self.label_search.ToolTip = "Search in all columns of all database tables and views"
             self.edit_searchall.ToolTip = self.label_search.ToolTip.Tip
         self.label_search.ContainingSizer.Layout()
