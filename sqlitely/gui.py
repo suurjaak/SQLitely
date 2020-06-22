@@ -3075,7 +3075,7 @@ class DatabasePage(wx.Panel):
             self.reload_schema(count=True, parse=True)
             self.update_info_panel()
             if conf.RunStatistics: self.on_update_statistics()
-            self.on_pragma_refresh()
+            self.on_pragma_refresh(reload=True)
             for p in (y for x in self.data_pages.values() for y in x.values()):
                 if not p.IsChanged(): p.Reload()
             for p in (y for x in self.schema_pages.values() for y in x.values()):
@@ -4680,6 +4680,7 @@ class DatabasePage(wx.Panel):
                         break # for item
                     break # for k, p
         if updated and not self.save_underway:
+            self.on_pragma_refresh(reload=True)
             self.load_tree_data()
             datapage = self.data_pages.get(category, {}).get(name0 or name)
             if datapage:
@@ -5161,6 +5162,7 @@ class DatabasePage(wx.Panel):
                 page = self.data_pages.get(category, {}).get(name)
                 if page: page.Close(force=True)
             if deleteds:
+                self.on_pragma_refresh(reload=True)
                 self.reload_schema(count=True)
                 self.update_page_header(updated=True)
 
