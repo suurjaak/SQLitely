@@ -5829,6 +5829,10 @@ class ExportProgressPanel(wx.Panel):
                 ctrls["gauge"].Value = 100
                 ctrls["title"].Label = 'Exported "%s".' % opts["filename"]
                 ctrls["text"].Label = util.plural(unit, opts["count"])
+                try:
+                    bsize = os.path.getsize(opts["filename"])
+                    ctrls["text"].Label += ", %s" % util.format_bytes(bsize)
+                except Exception: pass
                 ctrls["open"].Show()
                 ctrls["open"].SetFocus()
                 ctrls["folder"].Show()
