@@ -90,7 +90,7 @@ def transform(sql, flags=None, renames=None, indent="  "):
     result, err, parser = None, None, Parser()
     try:
         data, err = parser.parse(sql, renames=renames)
-        if data and (flags or not indent):
+        if data and (flags or not indent or "schema" in (renames or {})):
             if flags: data.update(flags)
             result, err = Generator(indent).generate(data)
         elif data: result = parser.get_text()
