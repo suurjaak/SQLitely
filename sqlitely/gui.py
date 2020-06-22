@@ -624,6 +624,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.menu_save_database_as.Enable(bool(page))
         if not db: return
 
+        do_full = self.db_menustate.get(db.filename, {}).get("full")
+        self.db_menustate.pop(db.filename, None)
         changes.pop("temporary", None)
         self.menu_view_changes.Enabled = bool(db.temporary or changes)
         self.menu_edit_save.Enabled = self.menu_edit_cancel.Enabled = bool(changes)
@@ -636,7 +638,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                       "trigger": self.menu_edit_drop_trigger, "view": self.menu_edit_drop_view}
         TRUNCMENUS = {"table":   self.menu_edit_truncate}
         VIEWMENUS  = {"table":   self.menu_view_data_table,   "view": self.menu_view_data_view}
-        for category in db.CATEGORIES if self.db_menustate.get(db.filename, {}).get("full") else ():
+        for category in db.CATEGORIES if do_full else ():
             menu = EDITMENUS[category]
             for x in menu.SubMenu.MenuItems: menu.SubMenu.Delete(x)
             item_add = menu.SubMenu.Append(wx.ID_ANY, "Create &new %s" % category)
@@ -694,9 +696,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for opening main menu, repopulates menu if needed."""
         page = self.notebook.GetSelection() and self.page_db_latest
         db = page.db if page else None
-        if not db or db.filename in self.db_menustate:
-            self.populate_menu()
-            if db: self.db_menustate.pop(db.filename)
+        if not db or db.filename in self.db_menustate: self.populate_menu()
 
 
     def on_menu_page(self, args, event=None):
