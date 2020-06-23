@@ -5713,6 +5713,7 @@ class ExportProgressPanel(wx.Panel):
                                                style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
                 subtext  = ctrls["subtext"]  = wx.StaticText(parent)
                 errtext  = ctrls["errtext"]  = wx.StaticText(parent)
+                ColourManager.Manage(errtext, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
                 errtext.Hide()
 
             cancel = ctrls["cancel"] = wx.Button(panel, label="Cancel")
