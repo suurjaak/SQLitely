@@ -4305,11 +4305,14 @@ class SchemaObjectPage(wx.Panel):
                     "columns": [(colmap1[c2["__id__"]]["name"], c2["name"])
                                 for c2 in cols2 if c2["__id__"] in colmap1]}
 
-            for category, items in self._db.get_related("table", old["name"], own=None if renames else True).items():
+            for category, items in self._db.get_related("table", old["name"]).items():
                 for item in items:
                     is_our_item = util.lceq(item["meta"].get("table"), old["name"])
                     sql, _ = grammar.transform(item["sql"], renames=renames)
-                    if sql == item["sql"] and not is_our_item: continue # for item
+                    if sql == item["sql"] and not is_our_item and "view" != category:
+                        # Views need recreating, as SQLite can raise "no such table" error
+                        # otherwise when dropping the old table.
+                        continue # for item
 
                     if "table" == category:
                         mytempname = util.make_unique(item["name"], names_existing)
@@ -4328,11 +4331,16 @@ class SchemaObjectPage(wx.Panel):
                     if category not in ("table", "view"): continue # for item
 
                     subrelateds = self._db.get_related(category, item["name"], own=True)
+                    if "table" == category:
+                        # Views need recreating, as SQLite can raise "no such table" error
+                        # otherwise when dropping the old table.
+                        others = self._db.get_related(category, item["name"], own=False)
+                        if "view" in others: subrelateds["view"] = others["view"]
                     for subcategory, subitems in subrelateds.items():
                         for subitem in subitems:
                             if any(x["name"] == subitem["name"] for x in args.get(subcategory, [])):
                                 continue # for subitem
-                            # Re-create table indexes and triggers, and view triggers
+                            # Re-create table indexes and views and triggers, and view triggers
                             sql, _ = grammar.transform(subitem["sql"], renames=renames) \
                                      if renames else (subitem["sql"], None)
                             args.setdefault(subcategory, []).append(dict(subitem, sql=sql))
