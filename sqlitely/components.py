@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.06.2020
+@modified    23.06.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -5761,7 +5761,7 @@ class ExportProgressPanel(wx.Panel):
         if index is None: return
 
         opts, self._current = self._tasks[index], index
-        title = 'Exporting "%s".' % opts["filename"]
+        title = 'Exporting to "%s".' % opts["filename"]
         guibase.status(title, log=True, flash=True)
         self.Freeze()
         self._ctrls[index]["title"].Label = title
