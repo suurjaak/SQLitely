@@ -4919,7 +4919,7 @@ class DatabasePage(wx.Panel):
         wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
         dialog = wx.FileDialog(
             self, message="Select existing or new database to export to",
-            wildcard=wildcard, style=wx.FD_OPEN | wx.RESIZE_BORDER
+            wildcard=wildcard, style=wx.FD_SAVE | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
