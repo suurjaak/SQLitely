@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.06.2020
+@modified    23.06.2020
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -256,6 +256,7 @@ HTML data export template for the rows part.
 DATA_ROWS_HTML = """
 <%
 i = 0
+progress = isdef("progress") and progress
 %>
 %for i, row in enumerate(rows, 1):
 <%
@@ -267,12 +268,12 @@ namespace["row_count"] += 1
 %endfor
 </tr>
 <%
-if not i % 100 and isdef("progress") and progress and not progress(count=i):
+if not i % 100 and not progress(count=i):
     break # for i, row
 %>
 %endfor
 <%
-if isdef("progress") and progress: progress(name=name, count=i)
+if progress: progress(name=name, count=i)
 %>
 """
 
@@ -356,6 +357,7 @@ DATA_ROWS_JSON = """<%
 import collections, json
 from sqlitely import templates
 
+progress = isdef("progress") and progress
 rows = iter(rows)
 i, row, nextrow = 1, next(rows, None), next(rows, None)
 indent = "  " if nextrow else ""
@@ -366,9 +368,9 @@ while row:
     echo("  " + text.replace("\\n", "\\n  ") + (",\\n" if nextrow else "\\n"))
 
     i, row, nextrow = i + 1, nextrow, next(rows, None)
-    if not i % 100 and isdef("progress") and progress and not progress(count=i):
+    if not i % 100 and progress and not progress(count=i):
         break # while row
-if isdef("progress") and progress: progress(name=name, count=i)
+if progress: progress(name=name, count=i)
 %>"""
 
 
@@ -423,6 +425,7 @@ DATA_ROWS_SQL = """<%
 from sqlitely import grammar, templates
 
 str_cols = ", ".join(grammar.quote(c["name"]) for c in columns)
+progress = isdef("progress") and progress
 %>
 %for i, row in enumerate(rows, 1):
 <%
@@ -431,12 +434,12 @@ values = [grammar.format(row[c["name"]], c) for c in columns]
 %>
 INSERT INTO {{ name }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
 <%
-if not i % 100 and isdef("progress") and progress and not progress(name=name, count=i):
+if not i % 100 and progress and not progress(name=name, count=i):
     break # for i, row
 %>
 %endfor
 <%
-if isdef("progress") and progress: progress(name=name, count=i)
+if progress: progress(name=name, count=i)
 %>
 """
 
@@ -535,6 +538,7 @@ TXT data export template for the rows part.
 DATA_ROWS_TXT = """<%
 from sqlitely import templates
 
+progress = isdef("progress") and progress
 %>
 %for i, row in enumerate(rows, 1):
 <%
@@ -552,12 +556,12 @@ values.append((value.ljust if columnjusts[c["name"]] else value.rjust)(columnwid
     %endfor
 | {{ " | ".join(values) }} |
 <%
-if not i % 100 and isdef("progress") and progress and not progress(count=i):
+if not i % 100 and progress and not progress(count=i):
     break # for i, row
 %>
 %endfor
 <%
-if isdef("progress") and progress: progress(name=name, count=i)
+if progress: progress(name=name, count=i)
 %>
 """
 
@@ -2194,6 +2198,7 @@ logger = logging.getLogger("sqlitely")
 is_initial = lambda o, v: o["initial"](db, v) if callable(o.get("initial")) else o.get("initial")
 pragma_first = {k: v for k, v in pragma.items() if is_initial(db.PRAGMA[k], v)}
 pragma_last  = {k: v for k, v in pragma.items() if not is_initial(db.PRAGMA[k], v)}
+progress = isdef("progress") and progress
 %>
 -- Database dump.
 -- Source: {{ db.name }}.
