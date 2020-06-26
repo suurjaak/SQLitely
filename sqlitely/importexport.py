@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.06.2020
+@modified    25.06.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -236,11 +236,11 @@ def export_data_multiple(filename, title, db, category, progress=None):
         writer = xlsx_writer(filename, props=props)
 
         for n in items: db.lock(category, n, filename, label="export")
-        for idx, (name, item) in enumerate(items.items()):
+        for name, item in items.items():
             count = 0
             if progress and not progress(name=name, count=count):
                 result = False
-                break # for idx, (name, item)
+                break # for name, item
 
             try:
                 cursor = db.execute("SELECT * FROM %s" % grammar.quote(name))
@@ -264,10 +264,10 @@ def export_data_multiple(filename, title, db, category, progress=None):
                     result = False
             finally: util.try_until(lambda: cursor.close())
 
-            if not result: break # for idx, (name, item)
+            if not result: break # for name, item
             if progress and not progress(name=name, count=count):
                 result = False
-                break # for idx, (name, item)
+                break # for name, item
         writer.close()
         if progress: progress(done=True)
     except Exception as e:
@@ -349,6 +349,176 @@ def export_dump(filename, db, progress=None):
         if not result: util.try_until(lambda: os.unlink(filename))
 
     return result
+
+
+def export_to_db(db, filename, schema, renames=None, data=False, selects=None, progress=None):
+    """
+    Exports selected tables and views to another database, structure only or
+    structure plus data, auto-creating table and view indexes and triggers.
+
+    @param   filename  database filename to export to
+    @param   schema    {category: [name, ]} to export
+    @param   renames   {category: {name1: name2}}
+    @param   data      whether to export table data
+    @param   selects   {table name: SELECT SQL if not using default}
+    @param   progress  callback(?name, ?error) to report export progress,
+                       returning false if export should cancel
+    """
+    result = True
+    CATEGORIES = "table", "view"
+    sqls0, sqls1, actionsqls = [], [], []
+    requireds, processeds, exporteds = {}, set(), set()
+
+    is_samefile = util.lceq(db.filename, filename)
+    file_existed = is_samefile or os.path.isfile(filename)
+    insert_sql = "INSERT INTO %s.%s SELECT * FROM main.%s;"
+
+    for category, name in ((c, n) for c, nn in schema.items() for n in nn):
+        items = [db.schema[category][name]]
+        items.extend(db.get_related(category, name, own=True).get("trigger", {}).values())
+        for item in items:
+            # Foreign tables and tables/views used in triggers for table,
+            # tables/views used in view body and view triggers for view.
+            for name2 in util.get(item, "meta", "__tables__"):
+                if util.lceq(name, name2): continue # for name2
+                requireds.setdefault(name, []).append(name2)
+
+    finalargs = {"done": True}
+    db.lock(None, None, filename, label="database export")
+    try:
+        schema2 = "main"
+        if not is_samefile:
+            schemas = [x.values()[1] for x in
+                       db.execute("PRAGMA database_list").fetchall()]
+            schema2 = util.make_unique("main", schemas, suffix="%s")
+            db.execute("ATTACH DATABASE ? AS %s;" % schema2, [filename])
+            sqls0.append("ATTACH DATABASE ? AS %s;" % schema2)
+        myrenames = dict(renames or {}, schema=schema2)
+
+        allnames2 = util.CaselessDict({x["name"]: x["type"] for x in db.execute(
+            "SELECT name, type FROM %s.sqlite_master" % schema2
+        ).fetchall()})
+
+        fks_on = db.execute("PRAGMA foreign_keys").fetchone()["foreign_keys"]
+        if fks_on:
+            db.execute("PRAGMA foreign_keys = off;")
+            sqls0.append("PRAGMA foreign_keys = off;")
+
+
+        for category, name in ((c, x) for c in CATEGORIES for x in schema.get(c, ())):
+            name2 = renames.get(category, {}).get(name, name)
+            processeds.add(name)
+
+            if requireds.get(name) \
+            and any(x in processeds and x not in exporteds for x in requireds[name]):
+                # Skip item if it requires something that failed to export
+                reqs = {}
+                for name0 in requireds[name]:
+                    if name0 in processeds and name0 not in exporteds:
+                        category0 = "table" if name0 in db.schema.get("table", {}) else "view"
+                        reqs.setdefault(category0, set()).add(name0)
+                err = "Requires %s" % " and ".join(
+                    "%s %s" % (util.plural(c, vv, numbers=False),
+                               ", ".join(grammar.quote(v, force=True)
+                                         for v in sorted(vv, key=lambda x: x.lower())))
+                    for c, vv in sorted(reqs.items())
+                )
+                if progress and not progress(name=name, error=err):
+                    result = False
+                    break # for category, name
+                else: continue # for category, name
+
+            try:
+                # Create table or view structure
+                label = "%s %s" % (category, grammar.quote(name, force=True))
+                if name != name2: label += " as %s" % grammar.quote(name2, force=True)
+
+                if name2 in allnames2:
+                    logger.info("Dropping %s %s in %s.", allnames2[name2], grammar.quote(name2, force=True), filename)
+                    sql = "DROP %s %s.%s;" % (allnames2[name2].upper(), schema2, grammar.quote(name2))
+                    db.execute(sql)
+                    actionsqls.append(sql)
+
+                logger.info("Creating %s in %s.", label, filename)
+                sql, err = grammar.transform(db.schema[category][name]["sql"], renames=myrenames)
+                if err:
+                    if progress and not progress(name=name, error=err):
+                        result = False
+                        break # for category, name
+                    else: continue # for category, name
+                db.execute(sql)
+                actionsqls.append(sql)
+                if not data or "table" != category: exporteds.add(name)
+                allnames2[name2] = category
+
+                # Copy table data
+                if data and "table" == category:
+                    if selects and name in selects:
+                        sql = "INSERT INTO %s.%s %s;" % (
+                              schema2, grammar.quote(name2), selects[name])
+                    else:
+                        sql = insert_sql % (schema2, grammar.quote(name2),
+                                            grammar.quote(name))
+                    logger.info("Copying data to %s in %s.", label, filename)
+                    db.execute(sql)
+                    actionsqls.append(sql)
+                    exporteds.add(name)
+
+                # Create indexes and triggers for tables, triggers for views
+                relateds = db.get_related(category, name, own=True)
+                for subcategory, subitems in relateds.items():
+                    for subitem in subitems:
+                        subname = subname2 = subitem["name"]
+                        if name != name2:
+                            subname2 = re.sub(re.escape(name), re.sub(r"\W", "", name2),
+                                              subname2, count=1, flags=re.I | re.U)
+                        subname2 = util.make_unique(subname2, allnames2)
+                        allnames2[subname2] = subcategory
+
+                        sublabel = "%s %s" % (subcategory, grammar.quote(subname, force=True))
+                        if subname != subname2: sublabel += " as %s" % grammar.quote(subname2, force=True)
+                        logger.info("Creating %s for %s in %s.", sublabel, label, filename)
+                        sql, err = grammar.transform(subitem["sql"], renames=dict(
+                            {subcategory: {subname: subname2}}, **myrenames
+                        ))
+                        if sql:
+                            db.execute(sql)
+                            actionsqls.append(sql)
+            except Exception as e:
+                logger.exception("Error exporting %s %s from %s to %s.",
+                                 category, grammar.quote(name, force=True),
+                                 db, filename)
+                if progress and not progress(name=name, error=util.format_exc(e)):
+                    result = False
+                    break # for category, name
+            else:
+                if progress and not progress(name=name):
+                    result = False
+                    break # for category, name
+    except Exception as e:
+        logger.exception("Error exporting from %s to %s.", db, filename)
+        finalargs["error"] = util.format_exc(e)
+    finally:
+        if fks_on:
+            try:
+                db.execute("PRAGMA foreign_keys = on;")
+                sqls1.append("PRAGMA foreign_keys = on;")
+            except Exception: pass
+        try: 
+            db.execute("DETACH DATABASE %s;" % schema2)
+            sqls1.append("DETACH DATABASE %s;" % schema2)
+        except Exception: pass
+        if not file_existed and (not actionsqls or not result):
+            util.try_until(lambda: os.unlink(filename))
+        db.unlock(None, None, filename)
+
+    result = bool(actionsqls)
+    if result: db.log_query("EXPORT TO DB", sqls0 + actionsqls + sqls1,
+                            params=None if is_samefile else filename)
+
+    if progress: progress(**finalargs)
+    return result
+    
 
 
 def get_import_file_data(filename):

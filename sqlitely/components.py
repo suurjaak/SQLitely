@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.06.2020
+@modified    25.06.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -2253,7 +2253,6 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         button_export  = wx.Button(self, label="Export to fi&le")
         button_export.ToolTip    = "Export to file"
         button_actions = wx.Button(self, label="Other &actions ..")
-        button_actions.Show("table" == self._category)
 
         grid = self._grid = wx.grid.Grid(self)
         SQLiteGridBaseMixin.__init__(self)
@@ -2556,36 +2555,40 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         menu = wx.Menu()
         item_export   = wx.MenuItem(menu, -1, "&Export to another database")
-        item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
-        item_reindex  = wx.MenuItem(menu, -1, "Reindex table")
-        item_truncate = wx.MenuItem(menu, -1, "Truncate table")
-        item_drop     = wx.MenuItem(menu, -1, "Drop table")
+        if "table" == self._category:
+            item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
+            item_reindex  = wx.MenuItem(menu, -1, "Reindex table")
+            item_truncate = wx.MenuItem(menu, -1, "Truncate table")
+        item_drop     = wx.MenuItem(menu, -1, "Drop %s" % self._category)
 
         menu.Append(item_export)
-        menu.Append(item_import)
+        if "table" == self._category:
+            menu.Append(item_import)
         menu.AppendSeparator()
-        menu.Append(item_reindex)
-        menu.Append(item_truncate)
+        if "table" == self._category:
+            menu.Append(item_reindex)
+            menu.Append(item_truncate)
         menu.Append(item_drop)
 
-        if "index" not in self._db.get_related("table", self._item["name"], own=True):
-            item_reindex.Enable(False)
-        if not self._grid.Table.GetNumberRows(total=True):
-            item_truncate.Enable(False)
+        if "table" == self._category:
+            if "index" not in self._db.get_related("table", self._item["name"], own=True):
+                item_reindex.Enable(False)
+            if not self._grid.Table.GetNumberRows(total=True):
+                item_truncate.Enable(False)
 
         menu.Bind(wx.EVT_MENU, self._OnExportToDB, item_export)
-        menu.Bind(wx.EVT_MENU, on_import,          item_import)
-        menu.Bind(wx.EVT_MENU, on_reindex,         item_reindex)
-        menu.Bind(wx.EVT_MENU, self.Truncate,      item_truncate)
+        if "table" == self._category:
+            menu.Bind(wx.EVT_MENU, on_import,          item_import)
+            menu.Bind(wx.EVT_MENU, on_reindex,         item_reindex)
+            menu.Bind(wx.EVT_MENU, self.Truncate,      item_truncate)
         menu.Bind(wx.EVT_MENU, on_drop,            item_drop)
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
 
 
     def _OnExportToDB(self, event=None):
         """Handler for exporting table grid contents to another database."""
-        tables = [self._item["name"]]
         selects = {self._item["name"]: self._grid.Table.GetSQL(sort=True, filter=True)}
-        self._PostEvent(export_db=True, tables=tables, selects=selects)
+        self._PostEvent(export_db=True, names=self._item["name"], selects=selects)
 
 
     def _OnExport(self, event=None):
@@ -2861,6 +2864,8 @@ class SchemaObjectPage(wx.Panel):
             sql, _ = grammar.generate(item["meta"])
             if sql is not None:
                 item = dict(item, sql=sql, sql0=item.get("sql0", sql))
+        else:
+            item = dict(item, sql0=item["sql"])
         self._item     = copy.deepcopy(item)
         self._original = copy.deepcopy(item)
         self._sql0_applies = True # Can current schema be parsed from item's sql0
@@ -5505,7 +5510,7 @@ class SchemaObjectPage(wx.Panel):
                     sql, err = grammar.generate(data, category="ALTER MASTER")
                     if err: logger.warn("Error syncing sqlite_master contents: %s.", err)
                     else: self._db.executescript(sql)
-                except:
+                except Exception:
                     logger.warn("Error syncing sqlite_master contents.", exc_info=True)
                     try: self._db.execute("ROLLBACK")
                     except Exception: pass
@@ -5530,10 +5535,11 @@ class SchemaObjectPage(wx.Panel):
         menu = wx.Menu()
         if self._category in ("table", ):
             item_export_data = wx.MenuItem(menu, -1, "Export table to another database")
-            item_export      = wx.MenuItem(menu, -1, "Export table structure to another database")
             menu.Append(item_export_data)
-            menu.Append(item_export)
             menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(export=True, data=True), item_export_data)
+        if self._category in ("table", "view", ):
+            item_export      = wx.MenuItem(menu, -1, "Export %s structure to another database" % self._category)
+            menu.Append(item_export)
             menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(export=True), item_export)
         if self._category in ("table", "index"):
             item_reindex = wx.MenuItem(menu, -1, "Reindex")
@@ -5561,7 +5567,7 @@ class ExportProgressPanel(wx.Panel):
     def __init__(self, parent, category=None):
         wx.Panel.__init__(self, parent)
 
-        self._tasks = []     # [{callable, pending, count, ?unit, ?multi, ?total, ?is_total_estimated}]
+        self._tasks = []     # [{callable, pending, count, ?unit, ?multi, ?total, ?is_total_estimated, ?subtasks, ?open}]
         self._ctrls   = []   # [{title, gauge, text, cancel, open, folder}]
         self._category = category
         self._current = None # Current task index
@@ -5595,21 +5601,24 @@ class ExportProgressPanel(wx.Panel):
         Run tasks.
 
         @param   tasks    [{
-                            callable: task function to invoke,
-                            ?unit:    result item unit name, by default "row",
-                            ?total:   total number of items to process,
+                            callable:     task function to invoke,
+                            ?unit:        result item unit name, by default "row",
+                            ?total:       total number of items to process,
                             ?is_total_estimated: whether total is approximate,
-                            ?multi:     whether there are subtasks
-                                        reported individually by name,
-                            ?subtotals: {name: {total, ?is_total_estimated}}
-                                        for subtasks,
+                            ?multi:       whether there are subtasks
+                                          reported individually by name,
+                            ?on_complete: callback function invoked on completion
+                                          with (result={result, ?count, ?error, ?subtasks: {name: {..}}})
+                            ?subtotals:   {name: {total, ?is_total_estimated}}
+                                           for subtasks,
+                            ?open:        whether to not show open-button on completion
                           }]
         """
         self.Stop()
         if isinstance(tasks, dict): tasks = [tasks]
-        self._tasks = [dict(x, count=0, pending=True) for x in tasks]
+        self._tasks = [dict(x, pending=True) for x in tasks]
         for x in self._tasks:
-            if x.get("multi"): x["subtotals"] = dict(x.get("subtotals", {}))
+            if x.get("multi"): x["subtasks"] = dict(x.get("subtotals", {}))
         self._Populate()
         self._RunNext()
 
@@ -5624,54 +5633,6 @@ class ExportProgressPanel(wx.Panel):
         return [x for x in self._tasks if x["pending"]]
 
 
-    def OnProgress(self, index=0, count=None, name=None, error=None, **_):
-        """
-        Handler for task progress report, updates progress bar.
-        Returns true if task should continue.
-        """
-        if not self or not self._tasks: return
-
-        opts, ctrls = (x[index] for x in (self._tasks, self._ctrls))
-
-        def after():
-            ctrls["text"].Parent.Freeze()
-            total = count
-
-            if name and opts.get("multi"):
-                subopts = opts["subtotals"].setdefault(name, {})
-                if count is not None:
-                    subopts["count"] = count
-                    subpercent, subtext = self._FormatPercent(subopts, opts.get("unit"))
-                    subtitle = "Processing %s." % " ".join(filter(bool,
-                               (self._category, grammar.quote(name))))
-                    if subpercent is not None: ctrls["subgauge"].Value = subpercent
-                    ctrls["subtext"].Label  = subtext
-                    ctrls["subtitle"].Label = subtitle
-                    total = sum(x.get("count", 0) for x in opts["subtotals"].values())
-            if error is not None:
-                if name:
-                    myerror = "Failed to export %s. %s." % (grammar.quote(name, force=True), error)
-                else:
-                    wx.CallAfter(self.Stop)
-                    myerror = "Export failed. %s." % error
-                ctrls["errtext"].Label += ("\n" if ctrls["errtext"].Label else "") + myerror
-                ctrls["errtext"].Show()
-
-            if total is not None:
-                opts["count"] = total
-                percent, text = self._FormatPercent(opts)
-                if percent is not None: ctrls["gauge"].Value = percent
-                ctrls["text"].Label = text
-
-            ctrls["text"].Parent.Thaw()
-            if count is not None or error is not None:
-                self._panel.Layout()
-
-        if opts["pending"]: wx.CallAfter(after)
-        wx.YieldIfNeeded()
-        return opts["pending"]
-
-
     def Stop(self):
         """Stops running tasks, if any."""
         self._worker.stop_work()
@@ -5683,7 +5644,9 @@ class ExportProgressPanel(wx.Panel):
         """Returns (integer, "x% (y of z units)") or (None, "y units")."""
         count, total = opts.get("count"), opts.get("total")
         unit = unit or opts.get("unit", "row")
-        if total is None:
+        if count is None and total is None:
+            percent, text = None, ""
+        elif total is None:
             percent, text = None, util.plural(unit, count)
         else:
             percent = int(100 * util.safedivf(count, total))
@@ -5767,7 +5730,7 @@ class ExportProgressPanel(wx.Panel):
         if not self: return
         index = next((i for i, x in enumerate(self._tasks)
                       if x["pending"]), None)
-        if index is None: return
+        if index is None: return self._OnComplete()
 
         opts, self._current = self._tasks[index], index
         title = 'Exporting to "%s".' % opts["filename"]
@@ -5780,7 +5743,7 @@ class ExportProgressPanel(wx.Panel):
             self._ctrls[index]["subgauge"].Pulse()
         self.Layout()
         self.Thaw()
-        progress = functools.partial(self.OnProgress, index)
+        progress = functools.partial(self._OnProgress, index)
         callable = functools.partial(opts["callable"], progress=progress)
         self._worker.work(callable, index=index)
 
@@ -5796,6 +5759,7 @@ class ExportProgressPanel(wx.Panel):
         self._Populate()
         do_close = (event.EventObject is self._button_close)
         wx.PostEvent(self, ProgressEvent(self.Id, close=do_close))
+        if any(x["pending"] for x in self._tasks): self._OnComplete()
 
 
     def _OnCancel(self, index, event=None):
@@ -5810,6 +5774,69 @@ class ExportProgressPanel(wx.Panel):
                                               defaultno=True): return
 
         if self._tasks[index]["pending"]: self._OnResult(self._tasks[index], index)
+
+
+    def _OnComplete(self, result=None):
+        """Invoke on_complete if given."""
+        if not self._tasks or any(x["pending"] for x in self._tasks): return
+        opts = self._tasks[-1]
+        if not opts.get("on_complete"): return
+
+        myresult = {k: opts[k] for k in ("result", "error", "count", "subtasks")
+                    if opts.get(k) is not None}
+        opts.pop("on_complete")(result=myresult) # Avoid calling more than once
+
+
+    def _OnProgress(self, index=0, count=None, name=None, error=None, **_):
+        """
+        Handler for task progress report, updates progress bar.
+        Returns true if task should continue.
+        """
+        if not self or not self._tasks: return
+
+        opts, ctrls = (x[index] for x in (self._tasks, self._ctrls))
+
+        def after(name, count, error):
+            ctrls["text"].Parent.Freeze()
+            total = count
+            subopts = name and opts.get("multi") and opts["subtasks"].setdefault(name, {})
+
+            if subopts is not None and count is not None:
+                subopts["count"] = count
+                subpercent, subtext = self._FormatPercent(subopts, opts.get("unit"))
+                subtitle = "Processing %s." % " ".join(filter(bool,
+                           (self._category, grammar.quote(name))))
+                if subpercent is not None: ctrls["subgauge"].Value = subpercent
+                ctrls["subtext"].Label  = subtext
+                ctrls["subtitle"].Label = subtitle
+                total = sum(x.get("count", 0) for x in opts["subtasks"].values())
+            if error is not None:
+                if subopts is not None:
+                    subopts.update(error=error)
+                    myerror = "Failed to export %s. %s." % (grammar.quote(name, force=True), error)
+                    ctrls["subgauge"].Value = ctrls["subgauge"].Value # Stop pulse
+                else:
+                    opts["error"] = error
+                    myerror = "Export failed. %s." % error
+                    wx.CallAfter(self.Stop)
+                ctrls["errtext"].Label += ("\n" if ctrls["errtext"].Label else "") + myerror
+                ctrls["errtext"].Show()
+            elif subopts is not None:
+                if "error" not in subopts: subopts["result"] = True
+
+            if total is not None:
+                opts["count"] = total
+                percent, text = self._FormatPercent(opts)
+                if percent is not None: ctrls["gauge"].Value = percent
+                ctrls["text"].Label = text
+
+            ctrls["text"].Parent.Thaw()
+            if count is not None or error is not None:
+                self._panel.Layout()
+
+        if opts["pending"]: wx.CallAfter(after, name, count, error)
+        wx.YieldIfNeeded()
+        return opts["pending"]
 
 
     def _OnResult(self, result, index=None):
@@ -5828,23 +5855,28 @@ class ExportProgressPanel(wx.Panel):
             self._current = None
             ctrls["title"].Label = 'Failed to export "%s".' % opts["filename"]
             ctrls["text"].Label = result["error"]
+            opts.update(error=result["error"], result=False)
             self.Layout()
             if not opts["pending"] or len(self._tasks) < 2:
                 error = "Error saving %s:\n\n%s" % (opts["filename"], result["error"])
                 wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         elif "done" in result:
-            guibase.status('Exported "%s".', opts["filename"], log=True, flash=True)
+            opts.update(result=result.get("result", True))
+            if opts["result"]:
+                guibase.status('Exported to "%s".', opts["filename"], log=True, flash=True)
             if opts["pending"]:
                 ctrls["gauge"].Value = 100
-                ctrls["title"].Label = 'Exported "%s".' % opts["filename"]
-                ctrls["text"].Label = util.plural(unit, opts["count"])
+                if opts["result"]:
+                    ctrls["title"].Label = 'Exported to "%s".' % opts["filename"]
+                lbl = "" if opts.get("count") is None else util.plural(unit, opts["count"])
                 try:
                     bsize = os.path.getsize(opts["filename"])
-                    ctrls["text"].Label += ", %s" % util.format_bytes(bsize)
+                    lbl += (", " if lbl else "") + util.format_bytes(bsize)
                 except Exception: pass
-                ctrls["open"].Show()
-                ctrls["open"].SetFocus()
-                ctrls["folder"].Show()
+                ctrls["text"].Label = lbl
+                if opts.get("open") is not False:
+                    ctrls["open"].Show(), ctrls["open"].SetFocus()
+                if opts["result"]: ctrls["folder"].Show()
             if opts.get("multi"):
                 ctrls["subgauge"].Shown = ctrls["subtitle"].Shown = False
                 ctrls["subtext"].Shown = False
@@ -5865,6 +5897,7 @@ class ExportProgressPanel(wx.Panel):
         if self._current is None: wx.CallAfter(self._RunNext)
         wx.CallAfter(lambda: self and self.Layout())
         self.Thaw()
+        self._OnComplete()
 
 
     def _OnOpen(self, index, event=None):
