@@ -734,13 +734,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         conf.WindowIconized = not conf.WindowIconized
         if conf.WindowIconized:
             self.Iconize(), self.Hide()
-            conf.WindowPosition = self.Position[:]
             if not conf.TrayIconEnabled:
                 conf.TrayIconEnabled = True
                 self.trayicon.SetIcon(self.TRAY_ICON.Icon, conf.Title)
             if self.menu_console.IsChecked(): self.frame_console.Hide()
         else:
             self.Iconize(False), self.Show(), self.Raise()
+            conf.WindowPosition = self.Position[:]
             if self.menu_console.IsChecked():
                 self.frame_console.Show(), self.frame_console.Iconize(False)
 
@@ -897,8 +897,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def on_move(self, event):
         """Handler for window move event, saves position."""
         event.Skip()
-        conf.WindowPosition = event.Position[:]
-        conf.save()
+        if not self.IsIconized():
+            conf.WindowPosition = event.Position[:]
+            conf.save()
 
 
     def on_sys_colour_change(self, event):
