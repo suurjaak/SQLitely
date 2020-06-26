@@ -1126,7 +1126,6 @@ class Generator(object):
 
 
 def test():
-    import json
     logging.basicConfig()
 
     TEST_STATEMENTS = [

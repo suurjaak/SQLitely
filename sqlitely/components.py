@@ -718,13 +718,13 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         try:
             for idx in self.idx_changed.copy():
                 row = self.rows_all[idx]
-                refresh, reload = self._CommitRow(row, pks, rels, actions)
+                refresh, reload = self._CommitRow(row, pks, actions)
                 if refresh: refresh_idxs.append(idx)
                 if reload:  reload_idxs.append(idx)
 
             for idx in self.idx_new[:]:
                 row = self.rows_all[idx]
-                refresh, reload = self._CommitRow(row, pks, rels, actions)
+                refresh, reload = self._CommitRow(row, pks, actions)
                 if refresh: refresh_idxs.append(idx)
                 if reload:  reload_idxs.append(idx)
 
@@ -786,7 +786,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
         idx, row = rowdata[self.KEY_ID], rowdata
         try:
-            refresh, _ = self._CommitRow(row, pks, rels, actions)
+            refresh, _ = self._CommitRow(row, pks, actions)
             self.rows_all[idx].update(row)
         except Exception as e:
             msg = "Error saving changes in %s." % grammar.quote(self.name)
@@ -1210,7 +1210,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         return rows, cols
 
 
-    def _CommitRow(self, rowdata, pks, rels, actions):
+    def _CommitRow(self, rowdata, pks, actions):
         """
         Saves changes to the specified row, returns
         (whether should refresh data in grid, whether should reload data from db).
@@ -6108,8 +6108,6 @@ class ImportDialog(wx.Dialog):
 
         sizer_b1     = wx.BoxSizer(wx.VERTICAL)
         sizer_b2     = wx.BoxSizer(wx.VERTICAL)
-        sizer_l1     = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_l2     = wx.BoxSizer(wx.HORIZONTAL)
         sizer_pk     = wx.BoxSizer(wx.HORIZONTAL)
 
         info_file = wx.StaticText(self)
@@ -8252,8 +8250,8 @@ class ColumnDialog(wx.Dialog):
             ctrl2 = stctxt if ctrl1 is stchex else stchex
             state["scrolling"][stchex] = state["scrolling"][stctxt] = True
 
-            pos1, pos2 = (x.GetScrollPos(wx.VERTICAL) for x in (ctrl1, ctrl2))
-            if not isinstance(event, wx.ScrollWinEvent):         pos1  = ctrl1.FirstVisibleLine
+            pos1 = ctrl1.GetScrollPos(wx.VERTICAL)
+            if not isinstance(event, wx.ScrollWinEvent):           pos1 = ctrl1.FirstVisibleLine
             elif event.EventType == wx.wxEVT_SCROLLWIN_THUMBTRACK: pos1 = event.Position
             elif event.EventType == wx.wxEVT_SCROLLWIN_LINEDOWN: pos1 += 1
             elif event.EventType == wx.wxEVT_SCROLLWIN_LINEUP:   pos1 -= 1

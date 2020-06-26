@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.06.2020
+@modified    26.06.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -317,10 +317,12 @@ def export_dump(filename, db, progress=None):
                              returning false if export should cancel
     """
     result = False
-    tables, namespace = db.schema["table"], {}
+    tables, namespace, cursors = db.schema["table"], {}, []
 
     def gen(func, *a, **kw):
-        for x in func(*a, **kw): yield x
+        cursor = func(*a, **kw)
+        cursors.append(cursor)
+        for x in cursor: yield x
 
     try:
         with open(filename, "wb") as f:
@@ -345,7 +347,7 @@ def export_dump(filename, db, progress=None):
         result = False
     finally:
         db.unlock(None, None, filename)
-        for x in namespace.get("data", []): util.try_until(lambda: x["rows"].close())
+        for x in cursors: util.try_until(x.close)
         if not result: util.try_until(lambda: os.unlink(filename))
 
     return result

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.06.2020
+@modified    26.06.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -18,7 +18,6 @@ import datetime
 import functools
 import inspect
 import logging
-import math
 import os
 import re
 import shutil
@@ -4873,7 +4872,7 @@ class DatabasePage(wx.Panel):
 
         exports = []
 
-        for i, (name, filename) in enumerate(zip(items, filenames)):
+        for name, filename in zip(items, filenames):
             if not filename.lower().endswith(".%s" % extname):
                 filename += ".%s" % extname
             data = self.db.get_category(category, name)
