@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.06.2020
+@modified    26.06.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -2860,7 +2860,7 @@ class SchemaObjectPage(wx.Panel):
             item["meta"]["name"] = util.make_unique(item["meta"]["name"], names)
 
         item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
-        if "sql" not in item or item["meta"].get("comments"):
+        if "sql" not in item or item["meta"].get("__comments__"):
             sql, _ = grammar.generate(item["meta"])
             if sql is not None:
                 item = dict(item, sql=sql, sql0=item.get("sql0", sql))
@@ -4206,7 +4206,7 @@ class SchemaObjectPage(wx.Panel):
         colmap1 = {c["__id__"]: c for c in cols1}
         colmap2 = {c["__id__"]: c for c in cols2}
 
-        if new.get("comments"):
+        if new.get("__comments__"):
             can_simple = False # Need to change 
         for k in "without", "constraints":
             if bool(new.get(k)) != bool(old.get(k)):

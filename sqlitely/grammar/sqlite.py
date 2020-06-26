@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    21.06.2020
+@modified    26.06.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -377,7 +377,7 @@ class Parser(object):
                 else: result.pop("schema", None)
 
             cc = self._stream.filterForChannel(0, len(self._stream.tokens) - 1, channel=2)
-            result["comments"] = [x.text for x in cc or []]
+            result["__comments__"] = [x.text for x in cc or []]
 
             return result
 
