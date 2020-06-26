@@ -3206,7 +3206,7 @@ class DatabasePage(wx.Panel):
         self.db.populate_schema(parse=True)
         sql = self.db.get_sql()
         self.stc_schema.SetReadOnly(False)
-        self.stc_schema.SetText(sql)
+        self.stc_schema.SetText(sql + ("\n" if sql else ""))
         self.stc_schema.SetReadOnly(True)
         self.stc_schema.ScrollToLine(scrollpos)
         self.tb_sql.EnableTool(wx.ID_COPY, bool(sql))
