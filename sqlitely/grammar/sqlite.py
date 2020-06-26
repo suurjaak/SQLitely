@@ -19,7 +19,7 @@ import sys
 import traceback
 import uuid
 
-from antlr4 import InputStream, CommonTokenStream, TerminalNode
+from antlr4 import InputStream, CommonTokenStream, TerminalNode, Token
 
 from .. lib import util
 from .. lib.vendor import step
@@ -90,7 +90,7 @@ def transform(sql, flags=None, renames=None, indent="  "):
     result, err, parser = None, None, Parser()
     try:
         data, err = parser.parse(sql, renames=renames)
-        if data and (flags or not indent or "schema" in (renames or {})):
+        if data and (flags or not indent):
             if flags: data.update(flags)
             result, err = Generator(indent).generate(data)
         elif data: result = parser.get_text()
@@ -211,6 +211,7 @@ class CTX(object):
     UPDATE               = SQLiteParser.Update_stmtContext
     COLUMN_NAME          = SQLiteParser.Column_nameContext
     INDEX_NAME           = SQLiteParser.Index_nameContext
+    SCHEMA_NAME          = SQLiteParser.Database_nameContext
     TABLE_NAME           = SQLiteParser.Table_nameContext
     TRIGGER_NAME         = SQLiteParser.Trigger_nameContext
     VIEW_NAME            = SQLiteParser.View_nameContext
@@ -273,7 +274,8 @@ class Parser(object):
     }
     RENAME_CTXS = {"index": CTX.INDEX_NAME, "trigger": CTX.TRIGGER_NAME,
                    "view":  (CTX.VIEW_NAME, CTX.TABLE_NAME), "column":  CTX.COLUMN_NAME,
-                   "table": (CTX.TABLE_NAME, CTX.FOREIGN_TABLE)}
+                   "table": (CTX.TABLE_NAME, CTX.FOREIGN_TABLE),
+                   "virtual table": CTX.TABLE_NAME}
     CATEGORIES = {"index":   SQL.CREATE_INDEX,   "table": SQL.CREATE_TABLE,
                   "trigger": SQL.CREATE_TRIGGER, "view":  SQL.CREATE_VIEW,
                   "virtual table":  SQL.CREATE_VIRTUAL_TABLE}
@@ -309,9 +311,9 @@ class Parser(object):
 
 
     def __init__(self):
-        self._category = None
-        self._stream   = None
-        self._repls    = [] # [(start index, end index, replacement)]
+        self._category = None # "CREATE TABLE" etc
+        self._stream   = None # antlr TokenStream
+        self._repls    = []   # [(start index, end index, replacement)]
 
 
     def parse(self, sql, category=None, renames=None):
@@ -334,7 +336,7 @@ class Parser(object):
 
         """
         def parse_tree(sql):
-            self._stream  = CommonTokenStream(SQLiteLexer(InputStream(sql)))
+            self._stream = CommonTokenStream(SQLiteLexer(InputStream(sql)))
             parser, listener = SQLiteParser(self._stream), self.ErrorListener()
             parser.removeErrorListeners()
             parser.addErrorListener(listener)
@@ -371,10 +373,12 @@ class Parser(object):
             if renames and "schema" in renames:
                 if isinstance(renames["schema"], dict):
                     for v1, v2 in renames["schema"].items():
-                        if result.get("schema", "").lower() == v1.lower():
-                            result["schema"] = v2
+                        if util.lceq(result.get("schema"), v1):
+                            if v2: result["schema"] = v2
+                            else: result.pop("schema", None)
                 elif renames["schema"]: result["schema"] = renames["schema"]
                 else: result.pop("schema", None)
+                self.rename_schema(ctx, renames)
 
             cc = self._stream.filterForChannel(0, len(self._stream.tokens) - 1, channel=2)
             result["__comments__"] = [x.text for x in cc or []]
@@ -390,6 +394,37 @@ class Parser(object):
                 sql, tries = e.message, tries + 1
                 if tries > 1: error = "Failed to parse SQL"
         return result, error
+
+
+    def rename_schema(self, ctx, renames):
+        """Alters stream tokens to add, change or remove schema name, for get_text()."""
+        srenames = renames["schema"]
+
+        sctx = next((x for x in ctx.children if isinstance(x, CTX.SCHEMA_NAME)), None)
+        if sctx:
+            # Schema present in statement: modify content or remove token
+            if isinstance(srenames, basestring):
+                sctx.start.text = util.to_unicode(srenames)
+            elif srenames is None or isinstance(srenames, dict) \
+            and any(v is None and util.lceq(k, self.u(sctx)) for k, v in srenames.items()):
+                idx = self._stream.tokens.index(sctx.start)
+                del self._stream.tokens[idx:idx + 2] # Remove schema and dot tokens
+            elif isinstance(srenames, dict) \
+            and any(util.lceq(k, self.u(sctx)) for k, v in srenames.items()):
+                sctx.start.text = util.to_unicode(next(v for k, v in srenames.items()
+                                                       if util.lceq(k, self.u(sctx))))
+        elif isinstance(srenames, basestring):
+            # Schema not present in statement: insert tokens before item name token
+            cname = next(k for k, v in self.CATEGORIES.items() if v == self._category)
+            ctype = self.RENAME_CTXS[cname]
+            nctx = next((x for x in ctx.children if isinstance(x, ctype)), None)
+            if nctx:
+                ntoken = Token()
+                ntoken.text = util.to_unicode(srenames)
+                dtoken = Token()
+                dtoken.text = u"."
+                idx = self._stream.tokens.index(nctx.start)
+                self._stream.tokens[idx:idx] = [ntoken, dtoken]
 
 
     def get_text(self):
