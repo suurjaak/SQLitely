@@ -5254,7 +5254,6 @@ class SchemaObjectPage(wx.Panel):
 
         logger.info("Importing %s definition from SQL:\n\n%s", self._category, sql)
         meta, _ = grammar.parse(sql, self._category)
-        if self._show_alter: self._OnToggleAlterSQL()
         self._item.update(sql=sql, sql0=sql, meta=self._AssignColumnIDs(meta))
         self._sql0_applies = True
         self._Populate()
