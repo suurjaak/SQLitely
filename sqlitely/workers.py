@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.06.2020
+@modified    27.06.2020
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -384,9 +384,8 @@ class AnalyzerThread(WorkerThread):
     def stop(self, drop=True):
         """Stops the worker thread."""
         super(AnalyzerThread, self).stop(drop)
-        try: self._process.kill()
-        except Exception: pass
-        self._process = None
+        p, self._process = self._process, None
+        p and util.try_until(p.kill)
 
 
     def stop_work(self, drop=True):
@@ -394,9 +393,8 @@ class AnalyzerThread(WorkerThread):
         Signals to stop the currently ongoing work, if any.
         """
         super(AnalyzerThread, self).stop_work(drop)
-        try: self._process.kill()
-        except Exception: pass
-        self._process = None
+        p, self._process = self._process, None
+        p and util.try_until(p.kill)
 
 
     def run(self):
@@ -430,13 +428,15 @@ class AnalyzerThread(WorkerThread):
                     else:
                         try: output, error = self._process.communicate()
                         except Exception as e:
+                            if not self._process: break # for mypath
                             try:
                                 self._process.kill()
                                 output, error = self._process.communicate()
                             except Exception: pass
                             if mypath == paths[-1]: raise e
                         else:
-                            if output and output.strip().startswith("/**"): break # for mypath
+                            if not self._process \
+                            or output and output.strip().startswith("/**"): break # for mypath
             except Exception as e:
                 error = error or getattr(e, "output", None)
                 if error: error = error.split("\n")[0].strip()
@@ -446,7 +446,7 @@ class AnalyzerThread(WorkerThread):
                 if output and not output.strip().startswith("/**"):
                     output, error = "", output.split("\n")[0].strip()
                     logger.info("Error getting statistics for %s: %s.", path, error)
-                else:
+                elif self._process:
                     logger.info("Finished statistics analysis for %s.", path)
             self._process = None
 
@@ -521,7 +521,8 @@ class ChecksumThread(WorkerThread):
                             sha1.update(buf), md5.update(buf)
                             buf = f.read(BLOCKSIZE)
                             if not self._is_working: break # while len
-                    logger.info("Finished checksum calculation for %s.", path)
+                    if self._is_working:
+                        logger.info("Finished checksum calculation for %s.", path)
                 except Exception as e:
                     logger.exception("Error calculating checksum for %s.", path)
                     error = util.format_exc(e)
