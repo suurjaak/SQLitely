@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.06.2020
+@modified    27.06.2020
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1658,7 +1658,7 @@ countstr = util.count(item)
 <%
 rels = [] # [(source, keys, target, keys)]
 %>
-            %for item2 in relateds.get("table", ()):
+            %for item2 in relateds.get("table", {}).values():
 <%
 
 lks2, fks2 = db.get_keys(item2["name"])
@@ -1698,7 +1698,7 @@ for col in fks2:
     </td>
 
     <td>
-            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
                 %if "table" != item2["type"] and util.lceq(item2.get("tbl_name"), item["name"]):
 <%
 flags["has_direct"] = True
@@ -1707,7 +1707,7 @@ flags["has_direct"] = True
                 %endif
             %endfor
 
-            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
                 %if "table" != item2["type"] and not util.lceq(item2.get("tbl_name"), item["name"]):
                     %if flags.get("has_direct") and not flags.get("has_indirect"):
   <br />
@@ -1774,7 +1774,7 @@ mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "v
             %endif
     </td>
     <td>
-            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
                 %if not util.lceq(item2["name"], item["tbl_name"]):
   <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a></em><br />
                 %endif
@@ -1794,11 +1794,11 @@ mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "v
     </td>
 
     <td>
-            %for item2 in (x for c in ("table", "view") for x in relateds.get(c, ()) if x["name"].lower() in item["meta"]["__tables__"]):
+            %for item2 in (x for c in ("table", "view") for x in relateds.get(c, {}).values() if x["name"].lower() in item["meta"]["__tables__"]):
       {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a><br />
             %endfor
 
-            %for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, ()) if util.lceq(x.get("tbl_name"), item["name"])):
+            %for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, {}).values() if util.lceq(x.get("tbl_name"), item["name"])):
                 %if not i:
       <br />
                 %endif
@@ -1808,7 +1808,7 @@ mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "v
     </td>
 
     <td>
-            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ()) if item["name"].lower() in x["meta"]["__tables__"]):
+            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values() if item["name"].lower() in x["meta"]["__tables__"]):
       <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a></em><br />
             %endfor
     </td>
@@ -2009,7 +2009,7 @@ for item in db.schema.get(category).values():
             row["Size in bytes"] = util.format_bytes(size, max_units=False, with_units=False) if size != "" else ""
 
         rels = [] # [(source, keys, target, keys)]
-        for item2 in relateds.get("table", ()):
+        for item2 in relateds.get("table", {}).values():
             lks2, fks2 = db.get_keys(item2["name"])
             for col in lks2:
                 for table, keys in col.get("table", {}).items():
@@ -2027,12 +2027,12 @@ for item in db.schema.get(category).values():
         row["Related tables"] = reltexts or [""]
 
         othertexts = []
-        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
             if "table" != item2["type"] and util.lceq(item2.get("tbl_name"), item["name"]):
                 flags["has_direct"] = True
                 s = "%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"])))
                 othertexts.append(s)
-        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
             if "table" != item2["type"] and not util.lceq(item2.get("tbl_name"), item["name"]):
                 if flags.get("has_direct") and not flags.get("has_indirect"):
                     flags["has_indirect"] = True
@@ -2053,7 +2053,7 @@ for item in db.schema.get(category).values():
         if item.get("meta", {}).get("columns"):
             row["When"] += " OF " + ", ".join(util.unprint(grammar.quote(c["name"])) for c in item["meta"]["columns"])
         usetexts = []
-        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
             if not util.lceq(item2["name"], item["tbl_name"]):
                 usetexts.append("%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"]))))
         row["Uses"] = usetexts or [""]
@@ -2062,16 +2062,16 @@ for item in db.schema.get(category).values():
         row["Columns"] = str(len(item["columns"]))
 
         usetexts = []
-        for item2 in (x for c in ("table", "view") for x in relateds.get(c, ()) if x["name"].lower() in item["meta"]["__tables__"]):
+        for item2 in (x for c in ("table", "view") for x in relateds.get(c, {}).values() if x["name"].lower() in item["meta"]["__tables__"]):
             usetexts.append("%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"]))))
-        for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, ()) if util.lceq(x.get("tbl_name"), item["name"])):
+        for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, {}).values() if util.lceq(x.get("tbl_name"), item["name"])):
             if not i:
                 usetexts.append("")
                 usetexts.append("%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"]))))
         row["Uses"] = usetexts or [""]
 
         usedbytexts = []
-        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ()) if item["name"].lower() in x["meta"]["__tables__"]):
+        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values() if item["name"].lower() in x["meta"]["__tables__"]):
             usedbytexts.append("%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"]))))
         row["Used by"] = usedbytexts or [""]
 

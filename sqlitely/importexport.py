@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.06.2020
+@modified    27.06.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -468,9 +468,9 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, p
 
                 # Create indexes and triggers for tables, triggers for views
                 relateds = db.get_related(category, name, own=True)
-                for subcategory, subitems in relateds.items():
-                    for subitem in subitems:
-                        subname = subname2 = subitem["name"]
+                for subcategory, subitemmap in relateds.items():
+                    for subname, subitem in subitemmap.items():
+                        subname2 = subname
                         if name != name2:
                             subname2 = re.sub(re.escape(name), re.sub(r"\W", "", name2),
                                               subname2, count=1, flags=re.I | re.U)
@@ -480,9 +480,9 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, p
                         sublabel = "%s %s" % (subcategory, grammar.quote(subname, force=True))
                         if subname != subname2: sublabel += " as %s" % grammar.quote(subname2, force=True)
                         logger.info("Creating %s for %s in %s.", sublabel, label, filename)
-                        sql, err = grammar.transform(subitem["sql"], renames=dict(
-                            {subcategory: {subname: subname2}}, **myrenames
-                        ))
+                        subrenames = dict(myrenames, **{subcategory: {subname: subname2}}
+                                                     if subname != subname2 else {})
+                        sql, err = grammar.transform(subitem["sql"], renames=subrenames)
                         if sql:
                             db.execute(sql)
                             actionsqls.append(sql)

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.06.2020
+@modified    27.06.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3037,8 +3037,8 @@ class DatabasePage(wx.Panel):
             targets = indexes = list(self.db.schema["index"])
             if name and "table" == category:
                 targets = [name]
-                indexes = [v["name"] for k, vv in self.db.get_related(category, name, own=True).items()
-                           if "index" == k for v in vv]
+                indexes = [n for k, m in self.db.get_related(category, name, own=True).items()
+                           if "index" == k for n in m]
                 label = "%s on table %s" % (util.plural("index", indexes, single="the"),
                                             grammar.quote(name, force=True))
                 lock = self.db.get_lock(category, name)
@@ -4570,10 +4570,9 @@ class DatabasePage(wx.Panel):
         """Closes or reopens grid cursors using specified table or view."""
         if not name: return            
         relateds = {category: set([name])}
-        for c, vv in self.db.get_related(category, name, data=True).items():
-            if c not in ("table", "view") or "table" == category == c:
-                continue # for c, vv
-            relateds.setdefault(c, set()).update(v["name"] for v in vv)
+        for c, m in self.db.get_related(category, name, data=True).items():
+            if c in ("table", "view") and not ("table" == category == c):
+                relateds.setdefault(c, set()).update(m)
 
         for page in (p for c, nn in relateds.items()
                      for n, p in self.data_pages.get(c, {}).items() if n in nn):
@@ -4988,7 +4987,8 @@ class DatabasePage(wx.Panel):
                     if util.lceq(name, name2): continue # for name2
                     category2 = "table" if name2 in self.db.schema.get("table", ()) else "view"
                     requireds[name][name2] = category2
-                    if name2 not in eschema.get(category2, ()): mynames.append(name2)
+                    if name2 not in mynames and name2 not in eschema.get(category2, ()):
+                        mynames.append(name2)
 
 
         def fmt_schema_items(dct):
@@ -5546,7 +5546,7 @@ class DatabasePage(wx.Panel):
                             tree.SetItemText(subchild, mytype, 1)
                             tree.SetItemPyData(subchild, dict(col, parent=itemdata, type="column", level=item["name"]))
                     for subcategory in subcategories:
-                        subitems = relateds.get(subcategory, [])
+                        subitems = relateds.get(subcategory, {}).values()
                         if not subitems and (not emptysubs or category == subcategory):
                             continue # for subcategory
 
@@ -5895,8 +5895,8 @@ class DatabasePage(wx.Panel):
                     sqls[item["name"]] = item["sql"]
                     if category not in ("table", "view"): continue # for category, item
                     subrelateds = self.db.get_related("table", item["name"], own=True)
-                    for subitems in subrelateds.values():
-                        for subitem in subitems:
+                    for subitemmap in subrelateds.values():
+                        for subitem in subitemmap.values():
                             sqls[subitem["name"]] = subitem["sql"]
 
             collect(self.db.get_related(data["type"], data["name"], own=True))

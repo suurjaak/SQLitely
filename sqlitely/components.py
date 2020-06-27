@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.06.2020
+@modified    27.06.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -713,7 +713,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         refresh_idxs, reload_idxs = [], []
         pks = [y for x in self.db.get_keys(self.name, True)[0] for y in x["name"]]
         rels = self.db.get_related("table", self.name, own=True)
-        actions = {x["meta"].get("action"): True for x in rels.get("trigger", [])}
+        actions = {x["meta"].get("action"): True for x in rels.get("trigger", {}).values()}
 
         try:
             for idx in self.idx_changed.copy():
@@ -781,7 +781,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         """
         pks = [y for x in self.db.get_keys(self.name, True)[0] for y in x["name"]]
         rels = self.db.get_related("table", self.name, own=True)
-        actions = {x["meta"].get("action"): True for x in rels.get("trigger", [])}
+        actions = {x["meta"].get("action"): True for x in rels.get("trigger", {}).values()}
         refresh = False
 
         idx, row = rowdata[self.KEY_ID], rowdata
@@ -4256,7 +4256,7 @@ class SchemaObjectPage(wx.Panel):
                 can_simple = not ("view" in rels or any(
                     not util.lceq(old["name"], x["name"])
                     and old["name"].lower() in x.get("meta", {}).get("__tables__", ())
-                    for c in ("table", "trigger") for x in rels.get(c, ())
+                    for c in ("table", "trigger") for x in rels.get(c, {}).values()
                 ))
 
         sql = self._item["sql0" if self._sql0_applies else "sql"]
@@ -4286,8 +4286,8 @@ class SchemaObjectPage(wx.Panel):
                 if c2["__id__"] not in colmap1:
                     args.setdefault("add", []).append(c2)
 
-            for category, items in self._db.get_related("table", old["name"]).items():
-                for item in items:
+            for category, itemmap in self._db.get_related("table", old["name"]).items():
+                for item in itemmap.values():
                     sql, _ = grammar.transform(item["sql"], renames=renames)
                     args.setdefault(category, []).append(dict(item, sql=sql, sql0=sql))
 
@@ -4310,8 +4310,8 @@ class SchemaObjectPage(wx.Panel):
                     "columns": [(colmap1[c2["__id__"]]["name"], c2["name"])
                                 for c2 in cols2 if c2["__id__"] in colmap1]}
 
-            for category, items in self._db.get_related("table", old["name"]).items():
-                for item in items:
+            for category, itemmap in self._db.get_related("table", old["name"]).items():
+                for item in itemmap.values():
                     is_our_item = util.lceq(item["meta"].get("table"), old["name"])
                     sql, _ = grammar.transform(item["sql"], renames=renames)
                     if sql == item["sql"] and not is_our_item and "view" != category:
@@ -4341,8 +4341,8 @@ class SchemaObjectPage(wx.Panel):
                         # otherwise when dropping the old table.
                         others = self._db.get_related(category, item["name"], own=False)
                         if "view" in others: subrelateds["view"] = others["view"]
-                    for subcategory, subitems in subrelateds.items():
-                        for subitem in subitems:
+                    for subcategory, subitemmap in subrelateds.items():
+                        for subitem in subitemmap.values():
                             if any(x["name"] == subitem["name"] for x in args.get(subcategory, [])):
                                 continue # for subitem
                             # Re-create table indexes and views and triggers, and view triggers
@@ -4404,8 +4404,8 @@ class SchemaObjectPage(wx.Panel):
                 "sql": self._item["sql0" if self._sql0_applies else "sql"],
                 "__type__": "ALTER VIEW"}
 
-        for category, items in self._db.get_related("view", old["name"], own=not renames).items():
-            for item in items:
+        for category, itemmap in self._db.get_related("view", old["name"], own=not renames).items():
+            for item in itemmap.values():
                 is_view_trigger = "trigger" == category and util.lceq(item["meta"]["table"], old["name"])
                 sql, _ = grammar.transform(item["sql"], renames=renames)
                 if sql == item["sql"] and not is_view_trigger: continue # for item
@@ -4414,7 +4414,7 @@ class SchemaObjectPage(wx.Panel):
                 if "view" != category: continue
 
                 # Re-create view triggers
-                for subitem in self._db.get_related("view", item["name"], own=True).values():
+                for subitem in self._db.get_related("view", item["name"], own=True).get("trigger", {}).values():
                     sql, _ = grammar.transform(subitem["sql"], renames=renames)
                     args.setdefault(subitem["type"], []).append(dict(subitem, sql=sql))
 
