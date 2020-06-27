@@ -4206,8 +4206,6 @@ class SchemaObjectPage(wx.Panel):
         colmap1 = {c["__id__"]: c for c in cols1}
         colmap2 = {c["__id__"]: c for c in cols2}
 
-        if new.get("__comments__"):
-            can_simple = False # Need to change 
         for k in "without", "constraints":
             if bool(new.get(k)) != bool(old.get(k)):
                 can_simple = False # Top-level flag or constraints existence changed
@@ -4755,6 +4753,24 @@ class SchemaObjectPage(wx.Panel):
             if count: label = "%s (%s)" % (label, count)
             self._notebook_table.SetPageText(0 if ["columns"] == path else 1, label)
         panel.Parent.ContainingSizer.Layout()
+
+
+    def _UpdateSqliteMaster(self, schema):
+        """
+        Updates CREATE-statements in sqlite_master directly.
+
+        @param   schema  {category: {name: CREATE SQL}}
+        """
+        try:
+            v = self._db.execute("PRAGMA schema_version", log=False).fetchone().values()[0]
+            schema = dict(schema, version=v)
+            sql, err = grammar.generate(schema, category="ALTER MASTER")
+            if err: logger.warn("Error syncing sqlite_master contents: %s.", err)
+            else: self._db.executescript(sql)
+        except Exception:
+            logger.warn("Error syncing sqlite_master contents.", exc_info=True)
+            try: self._db.execute("ROLLBACK")
+            except Exception: pass
 
 
     def _OnAddConstraint(self, event):
@@ -5461,7 +5477,30 @@ class SchemaObjectPage(wx.Panel):
                                       (lock, "create" if self._newmode else "alter"),
                                       conf.Title, wx.OK | wx.ICON_WARNING)
 
+        def finalize(post=True):
+            """Updates UI after successful save, returns True."""
+            self._item.update(name=meta2["name"], meta=self._AssignColumnIDs(meta2),
+                              sql0=self._item["sql0" if self._sql0_applies else "sql"])
+            if "view" != self._category: self._item.update(
+                tbl_name=meta2["name" if "table" == self._category else "table"])
+            self._original = copy.deepcopy(self._item)
+            if self._show_alter: self._OnToggleAlterSQL()
+            self._has_alter = True
+            self._newmode = False
+            self._OnToggleEdit(parse=True)
+            if post: self._PostEvent(updated=True)
+            return True
+
+
         sql1 = sql2 = self._item["sql0" if self._sql0_applies else "sql"]
+        if not self._newmode and self._sql0_applies \
+        and self._item["sql"]  == self._original["sql"] \
+        and self._item["sql0"] != self._original["sql0"]:
+            " @todo do master update only "
+            self._UpdateSqliteMaster({self._category: {self.Name: sql1}})
+            return finalize(post=False)
+
+
         if not self._newmode: sql1, sql2, alterargs = self._GetAlterSQL()
 
         if wx.YES != controls.YesNoMessageBox(
@@ -5502,31 +5541,11 @@ class SchemaObjectPage(wx.Panel):
                     for category in ("index", "view", "trigger"):
                         for subitem in reltable.get(category) or ():
                             data[category][subitem["name"]] = subitem["sql"]
-            if data:
-                try:
-                    v = self._db.execute("PRAGMA schema_version", log=False).fetchone().values()[0]
-                    data.update(version=v)
-                    sql, err = grammar.generate(data, category="ALTER MASTER")
-                    if err: logger.warn("Error syncing sqlite_master contents: %s.", err)
-                    else: self._db.executescript(sql)
-                except Exception:
-                    logger.warn("Error syncing sqlite_master contents.", exc_info=True)
-                    try: self._db.execute("ROLLBACK")
-                    except Exception: pass
+            if data: self._UpdateSqliteMaster(data)
         finally:
             busy.Close()
 
-        self._item.update(name=meta2["name"], meta=self._AssignColumnIDs(meta2),
-                          sql0=self._item["sql0" if self._sql0_applies else "sql"])
-        if "view" != self._category: self._item.update(
-            tbl_name=meta2["name" if "table" == self._category else "table"])
-        self._original = copy.deepcopy(self._item)
-        if self._show_alter: self._OnToggleAlterSQL()
-        self._has_alter = True
-        self._newmode = False
-        self._OnToggleEdit(parse=True)
-        self._PostEvent(updated=True)
-        return True
+        return finalize()
 
 
     def _OnActions(self, event):
