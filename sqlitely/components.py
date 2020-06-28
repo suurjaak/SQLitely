@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.06.2020
+@modified    28.06.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -5815,6 +5815,8 @@ class ExportProgressPanel(wx.Panel):
         opts, ctrls = (x[index] for x in (self._tasks, self._ctrls))
 
         def after(name, count, error):
+            if not ctrls["text"]: return
+
             ctrls["text"].Parent.Freeze()
             total = count
             subopts = name and opts.get("multi") and opts["subtasks"].setdefault(name, {})
@@ -5852,7 +5854,8 @@ class ExportProgressPanel(wx.Panel):
             if count is not None or error is not None:
                 self._panel.Layout()
 
-        if opts["pending"]: wx.CallAfter(after, name, count, error)
+        if opts["pending"] and any(x is not None for x in (name, count, error)):
+            wx.CallAfter(after, name, count, error)
         wx.YieldIfNeeded()
         return opts["pending"]
 
