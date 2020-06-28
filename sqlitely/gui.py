@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.06.2020
+@modified    28.06.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -104,6 +104,15 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         icons = images.get_appicons()
         self.SetIcons(icons)
+
+        self.trayicon = wx.adv.TaskBarIcon()
+        if self.trayicon.IsAvailable():
+            if conf.TrayIconEnabled:
+                self.trayicon.SetIcon(self.TRAY_ICON.Icon, conf.Title)
+            self.trayicon.Bind(wx.adv.EVT_TASKBAR_LEFT_DCLICK, self.on_toggle_iconize)
+            self.trayicon.Bind(wx.adv.EVT_TASKBAR_RIGHT_DOWN,  self.on_open_tray_menu)
+        else:
+            conf.WindowIconized = False
 
         panel = self.panel_main = wx.Panel(self)
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -229,12 +238,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.Center(wx.HORIZONTAL)
             self.Position.top = 50
         self.list_db.SetFocus()
-
-        self.trayicon = wx.adv.TaskBarIcon()
-        if conf.TrayIconEnabled:
-            self.trayicon.SetIcon(self.TRAY_ICON.Icon, conf.Title)
-        self.trayicon.Bind(wx.adv.EVT_TASKBAR_LEFT_DCLICK, self.on_toggle_iconize)
-        self.trayicon.Bind(wx.adv.EVT_TASKBAR_RIGHT_DOWN, self.on_open_tray_menu)
 
         if conf.WindowIconized:
             conf.WindowIconized = False
@@ -426,8 +429,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_file.AppendSeparator()
         menu_options = self.menu_options = menu_file.Append(wx.ID_ANY,
             "Advanced opt&ions", "Edit advanced program options")
-        menu_iconize = self.menu_iconize = menu_file.Append(wx.ID_ANY,
-            "Minimize to &tray", "Minimize %s window to notification area" % conf.Title)
+        if self.trayicon.IsAvailable():
+            menu_iconize = self.menu_iconize = menu_file.Append(wx.ID_ANY,
+                "Minimize to &tray", "Minimize %s window to notification area" % conf.Title)
         menu_exit = self.menu_exit = \
             menu_file.Append(wx.ID_ANY, "E&xit\tAlt-X", "Exit")
 
@@ -546,9 +550,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             "Show Python &console\t%s-E" % controls.KEYS.NAME_CTRL,
             "Show/hide a Python shell environment window", kind=wx.ITEM_CHECK)
         menu_help.AppendSeparator()
-        menu_tray = self.menu_tray = menu_help.Append(wx.ID_ANY,
-            "Display &icon in notification area",
-            "Show/hide %s icon in system tray" % conf.Title, kind=wx.ITEM_CHECK)
+        if self.trayicon.IsAvailable():
+            menu_tray = self.menu_tray = menu_help.Append(wx.ID_ANY,
+                "Display &icon in notification area",
+                "Show/hide %s icon in system tray" % conf.Title, kind=wx.ITEM_CHECK)
         menu_autoupdate_check = self.menu_autoupdate_check = menu_help.Append(
             wx.ID_ANY, "Automatic up&date check",
             "Automatically check for program updates periodically", kind=wx.ITEM_CHECK)
@@ -563,7 +568,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         [self.history_file.AddFileToHistory(f) for f in conf.RecentFiles[::-1]]
         self.Bind(wx.EVT_MENU_RANGE, self.on_recent_file, id=wx.ID_FILE1,
                   id2=wx.ID_FILE1 + conf.MaxRecentFiles)
-        menu_tray.Check(conf.TrayIconEnabled)
+        if self.trayicon.IsAvailable():
+            menu_tray.Check(conf.TrayIconEnabled)
         menu_autoupdate_check.Check(conf.UpdateCheckAutomatic)
         menu_tools_export_spreadsheet.Enabled = bool(importexport.xlsxwriter)
 
@@ -574,12 +580,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_save_active_database_as, menu_save_database_as)
         self.Bind(wx.EVT_MENU, self.on_open_options, menu_options)
         self.Bind(wx.EVT_MENU, self.on_exit, menu_exit)
-        self.Bind(wx.EVT_MENU, self.on_toggle_iconize, menu_iconize)
         self.Bind(wx.EVT_MENU, self.on_check_update, menu_update)
         self.Bind(wx.EVT_MENU, self.on_menu_homepage, menu_homepage)
         self.Bind(wx.EVT_MENU, self.on_showhide_log, menu_log)
         self.Bind(wx.EVT_MENU, self.on_toggle_console, menu_console)
-        self.Bind(wx.EVT_MENU, self.on_toggle_trayicon, menu_tray)
+        if self.trayicon.IsAvailable():
+            self.Bind(wx.EVT_MENU, self.on_toggle_iconize, menu_iconize)
+            self.Bind(wx.EVT_MENU, self.on_toggle_trayicon, menu_tray)
         self.Bind(wx.EVT_MENU, self.on_toggle_autoupdate_check,
                   menu_autoupdate_check)
         self.Bind(wx.EVT_MENU, self.on_about, menu_about)
