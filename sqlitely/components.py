@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.06.2020
+@modified    29.06.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -1971,11 +1971,9 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             self._dialog_export.SetFilterIndex(importexport.EXPORT_EXTS.index(conf.LastExportType))
         if wx.ID_OK != self._dialog_export.ShowModal(): return
 
-        filename = self._dialog_export.GetPath()
-        extname = importexport.EXPORT_EXTS[self._dialog_export.FilterIndex]
-        conf.LastExportType = extname
-        if not filename.lower().endswith(".%s" % extname):
-            filename += ".%s" % extname
+        filename = controls.get_dialog_path(self._dialog_export)
+        extname = os.path.splitext(filename)[-1].lstrip(".")
+        if extname in importexport.EXPORT_EXTS: conf.LastExportType = extname
         try:
             make_iterable = self._grid.Table.GetRowIterator
             name = ""
@@ -2180,7 +2178,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
-        filename = dialog.GetPath()
+        filename = controls.get_dialog_path(dialog)
         try:
             importexport.export_sql(filename, self._db, self._stc.Text, "SQL window.")
             util.start_file(filename)
@@ -2603,11 +2601,9 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             self._dialog_export.SetFilterIndex(importexport.EXPORT_EXTS.index(conf.LastExportType))
         if wx.ID_OK != self._dialog_export.ShowModal(): return
 
-        filename = self._dialog_export.GetPath()
-        extname = importexport.EXPORT_EXTS[self._dialog_export.FilterIndex]
-        conf.LastExportType = extname
-        if not filename.lower().endswith(".%s" % extname):
-            filename += ".%s" % extname
+        filename = controls.get_dialog_path(self._dialog_export)
+        extname = os.path.splitext(filename)[-1].lstrip(".")
+        if extname in importexport.EXPORT_EXTS: conf.LastExportType = extname
         try:
             grid = self._grid.Table
             args = {"make_iterable": grid.GetRowIterator, "filename": filename,
@@ -5206,7 +5202,7 @@ class SchemaObjectPage(wx.Panel):
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
-        filename = dialog.GetPath()
+        filename = controls.get_dialog_path(dialog)
         title = " ".join(filter(bool, (category, grammar.quote(name))))
         if self._show_alter: title = " ".join((action, title))
         try:
@@ -8868,8 +8864,8 @@ class ColumnDialog(wx.Dialog):
             if filteridx >= 0: dlg.SetFilterIndex(filteridx)
             if wx.ID_OK != dlg.ShowModal(): return
 
-            filename = dlg.GetPath()
-            filetype = fmts[dlg.FilterIndex].upper()
+            filename = get_dialog_path(dlg)
+            filetype = os.path.splitext(filename)[-1].lstrip(".").upper()
             v = convert(filetype)
             if not v: return
             with open(filename, "wb") as f: f.write(v)
@@ -9156,7 +9152,7 @@ class ColumnDialog(wx.Dialog):
         )
         if wx.ID_OK != dlg.ShowModal(): return
 
-        filename = dlg.GetPath()
+        filename = controls.get_dialog_path(dlg)
         v = value.encode("utf-8") if isinstance(value, unicode) else str(value)
         with open(filename, "wb") as f: f.write(v)
 

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.06.2020
+@modified    29.06.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1457,7 +1457,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
-        path = dialog.GetPath()
+        path = controls.get_dialog_path(dialog)
         wx.YieldIfNeeded() # Allow dialog to disappear
 
         new_filenames = []
@@ -3256,10 +3256,8 @@ class DatabasePage(wx.Panel):
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
-        filename = dialog.GetPath()
-        extname = ["html", "sql", "txt"][dialog.FilterIndex]
-        if not filename.lower().endswith(".%s" % extname):
-            filename += ".%s" % extname
+        filename = controls.get_dialog_path(dialog)
+        extname = os.path.splitext(filename)[-1].lstrip(".")
 
         try:
             importexport.export_stats(filename, self.db, self.statistics)
@@ -3630,9 +3628,8 @@ class DatabasePage(wx.Panel):
                 style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER)
             if wx.ID_OK != dlg.ShowModal(): return
 
-            newfile = dlg.GetPath()
-            if newfile[-3:].lower() != ".db": newfile += ".db"
-            if newfile == self.db.filename:
+            newfile = controls.get_dialog_path(dlg)
+            if os.path.abspath(newfile) == os.path.abspath(self.db.filename):
                 wx.MessageBox("Cannot recover data from %s to itself."
                               % self.db, conf.Title, wx.ICON_ERROR)
                 return
@@ -4146,7 +4143,7 @@ class DatabasePage(wx.Panel):
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
-        filename = dialog.GetPath()
+        filename = controls.get_dialog_path(dialog)
         try:
             title = "PRAGMA settings." if "PRAGMA" == title else \
                     "Database %s." % (title or "schema")
@@ -4277,7 +4274,7 @@ class DatabasePage(wx.Panel):
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
-        filename = dialog.GetPath()
+        filename = controls.get_dialog_path(dialog)
         args = {"filename": filename, "db": self.db}
         opts = {"filename": filename, "multi": True,
                 "name":     "database dump",
@@ -4319,7 +4316,7 @@ class DatabasePage(wx.Panel):
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
-        filename = dialog.GetPath()
+        filename = controls.get_dialog_path(dialog)
         args = {"filename": filename, "db": self.db, "title": title,
                 "category": category}
         opts = {"filename": filename, "multi": True, "category": category,
@@ -4427,7 +4424,7 @@ class DatabasePage(wx.Panel):
             )
             if wx.ID_OK != dialog.ShowModal(): return
 
-            filename2 = dialog.GetPath()
+            filename2 = controls.get_dialog_path(dialog)
             if filename1 != filename2 and filename2 in conf.DBsOpen: return wx.MessageBox(
                 "%s is already open in %s." % (filename2, conf.Title),
                 conf.Title, wx.OK | wx.ICON_WARNING
@@ -4858,7 +4855,7 @@ class DatabasePage(wx.Panel):
         wx.YieldIfNeeded() # Allow dialog to disappear
         extname = importexport.EXPORT_EXTS[self.dialog_savefile.FilterIndex]
         conf.LastExportType = extname
-        path = self.dialog_savefile.GetPath()
+        path = controls.get_dialog_path(self.dialog_savefile)
         filenames = [path]
         if len(items) > 1:
             path, _ = os.path.split(path)
@@ -4942,7 +4939,7 @@ class DatabasePage(wx.Panel):
         if wx.ID_OK != dialog.ShowModal(): return
         wx.YieldIfNeeded() # Allow dialog to disappear
 
-        filename2 = dialog.GetPath()
+        filename2 = controls.get_dialog_path(dialog)
         is_samefile = util.lceq(self.db.filename, filename2)
         file_exists = is_samefile or os.path.isfile(filename2)
 

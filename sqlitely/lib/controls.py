@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    17.06.2020
+@modified    29.06.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -4623,3 +4623,26 @@ def YesNoMessageBox(message, caption, icon=wx.ICON_NONE, defaultno=False):
     dlg = wx.MessageDialog(None, message, caption, style)
     dlg.SetOKCancelLabels("&Yes", "&No")
     return wx.YES if wx.ID_OK == dlg.ShowModal() else wx.NO
+
+
+def get_dialog_path(dialog):
+    """
+    Returns the file path chosen in FileDialog, adding extension if dialog result
+    has none even though a filter has been selected, or if dialog result has a 
+    different extension than what is available in selected filter.
+    """
+    result = dialog.GetPath()
+
+    # "SQLite database (*.db;*.sqlite;*.sqlite3)|*.db;*.sqlite;*.sqlite3|All files|*.*"
+    wcs = dialog.Wildcard.split("|")
+    wcs = wcs[1::2] if len(wcs) > 1 else wcs
+    wcs = [[y.lstrip("*") for y in x.split(";")] for x in wcs] # [['.ext1', '.ext2'], ..]
+
+    extension = os.path.splitext(result)[-1].lower()
+    selexts = wcs[dialog.FilterIndex] if 0 <= dialog.FilterIndex < len(wcs) else None
+    if result and selexts and extension not in selexts and dialog.ExtraStyle & wx.FD_SAVE:
+        ext = next((x for x in selexts if "*" not in x), None)
+        if ext: result += ext
+
+    return result
+
