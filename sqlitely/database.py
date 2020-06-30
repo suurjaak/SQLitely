@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.06.2020
+@modified    30.06.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1064,7 +1064,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         visited = CaselessDict()
         for vv in result.values() if data else ():
-            skip.update({v["name"]: True for v in vv})
+            skip.update({v: True for v in vv})
         for mycategory, items in result.items() if data else ():
             if mycategory not in SUBCATEGORIES: continue # for mycategory, items
             for item in items:
