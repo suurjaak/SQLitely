@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.06.2020
+@modified    30.06.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -1629,7 +1629,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         self._dialog_export = wx.FileDialog(self, defaultDir=os.getcwd(),
             message="Save query as", wildcard=importexport.EXPORT_WILDCARD,
-            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT |
+                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2153,7 +2154,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         """
         dialog = wx.FileDialog(self, message="Open", defaultFile="",
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
-            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
+            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN |
+                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
@@ -2174,7 +2176,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         filename = "%s SQL" % os.path.splitext(os.path.basename(self._db.name))[0]
         dialog = wx.FileDialog(self, message="Save as", defaultFile=filename,
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
-            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE |
+                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
@@ -2211,7 +2214,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._dialog_export = wx.FileDialog(self, defaultDir=os.getcwd(),
             message="Save %s as" % self._category,
             wildcard=importexport.EXPORT_WILDCARD,
-            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT |
+                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -5198,7 +5202,8 @@ class SchemaObjectPage(wx.Panel):
         filename = " ".join((action, category, name))
         dialog = wx.FileDialog(self, message="Save as", defaultFile=filename,
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
-            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE |
+                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
@@ -6109,7 +6114,8 @@ class ImportDialog(wx.Dialog):
 
         self._dialog_file = wx.FileDialog(self, message="Open",
             wildcard=importexport.IMPORT_WILDCARD,
-            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST | wx.RESIZE_BORDER
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST |
+                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
 
         splitter = wx.SplitterWindow(self, style=wx.BORDER_NONE)
@@ -8859,7 +8865,8 @@ class ColumnDialog(wx.Dialog):
 
             dlg = wx.FileDialog(self, message="Save image as", wildcard=wildcard,
                 defaultFile=util.safe_filename(self._name),
-                style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
+                style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT |
+                      wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
             )
             if filteridx >= 0: dlg.SetFilterIndex(filteridx)
             if wx.ID_OK != dlg.ShowModal(): return
@@ -9130,7 +9137,7 @@ class ColumnDialog(wx.Dialog):
                        "|" + wildcard
             filteridx = 0
         dlg = wx.FileDialog(self, message="Open", defaultFile="", wildcard=wildcard,
-            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
+            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if filteridx >= 0: dlg.SetFilterIndex(filteridx)
         if wx.ID_OK != dlg.ShowModal(): return
@@ -9148,7 +9155,7 @@ class ColumnDialog(wx.Dialog):
 
         dlg = wx.FileDialog(self, message="Save value as", wildcard="All files|*.*",
             defaultFile=util.safe_filename(self._name),
-            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dlg.ShowModal(): return
 

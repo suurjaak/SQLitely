@@ -63,7 +63,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    29.06.2020
+@modified    30.06.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -858,7 +858,8 @@ class FormDialog(wx.Dialog):
         dialog = wx.FileDialog(
             self, message="Open file", defaultFile="",
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
-            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
+            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN |
+                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
         fpath = path + (field["name"], )
