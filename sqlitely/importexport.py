@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.06.2020
+@modified    30.06.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -114,7 +114,7 @@ def export_data(make_iterable, filename, title, db, columns,
             if is_csv or is_xlsx:
                 if is_csv:
                     dialect = csv.excel
-                    dialect.delimiter, dialect.lineterminator = ";", "\r"
+                    dialect.delimiter = ";" # default "," is not actually used by Excel
                     writer = csv.writer(f, dialect)
                     if query:
                         flat = query.replace("\r", " ").replace("\n", " ")
