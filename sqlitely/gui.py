@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.06.2020
+@modified    30.06.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1937,7 +1937,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         if ongoing_pages:
             if wx.YES != controls.YesNoMessageBox(
-                "There are ongoing exports in %s:\n\n\n%s\n\n"
+                "There are ongoing exports in %s:\n\n%s\n\n"
                 "Are you sure you want to cancel them?" % (
                     util.plural("file", ongoing_pages, single="this"),
                     "\n".join(sorted(ongoing_pages.values()))
