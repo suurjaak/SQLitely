@@ -244,15 +244,16 @@ def export_data_multiple(filename, title, db, category, progress=None):
 
             try:
                 cursor = db.execute("SELECT * FROM %s" % grammar.quote(name))
+                row = next(cursor, None)
+                iterable = itertools.chain([] if row is None else [row], cursor)
 
-                for i, row in enumerate(cursor, 1):
-                    if i == 1:
-                        writer.add_sheet(name)
-                        colnames = [x["name"] for x in item["columns"]]
-                        writer.set_header(True)
-                        writer.writerow(colnames, "bold")
-                        writer.set_header(False)
+                writer.add_sheet(name)
+                colnames = [x["name"] for x in item["columns"]]
+                writer.set_header(True)
+                writer.writerow(colnames, "bold")
+                writer.set_header(False)
 
+                for i, row in enumerate(iterable, 1):
                     count = i
                     writer.writerow([row[c] for c in colnames])
                     if not i % 100 and progress and not progress(name=name, count=i):
