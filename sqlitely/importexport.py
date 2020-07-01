@@ -578,7 +578,7 @@ def get_import_file_data(filename):
                         buffer = re.sub(r"^\s*[,]\s*", "", buffer[index:])
                     except ValueError: # Not enough data to decode, read more
                         break # while started and buffer
-                if columns and f.tell() > MAX_IMPORT_FILESIZE_FOR_COUNT:
+                if columns and any(x > MAX_IMPORT_FILESIZE_FOR_COUNT for x in (size, f.tell())):
                     break # for chunk
             if rows and f.tell() < size: rows = -1
         sheets.append({"rows": rows, "columns": columns, "name": "<JSON data>"})
