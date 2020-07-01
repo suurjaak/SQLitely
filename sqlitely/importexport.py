@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.06.2020
+@modified    01.07.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -715,7 +715,7 @@ def import_data(filename, db, table, columns,
 
 def iter_file_rows(filename, columns, sheet=None):
     """
-    Yields rows as [value, ] from spreadsheet file.
+    Yields rows as [value, ] from spreadsheet or JSON file.
 
     @param   filename    file path to open
     @param   columns     list of column indexes to return
@@ -740,7 +740,7 @@ def iter_file_rows(filename, columns, sheet=None):
             iterable = itertools.chain([firstline], f)
             csvfile = csv.reader(iterable, csv.Sniffer().sniff(firstline, ",;\t"))
             for row in csvfile:
-                yield [row[i] for i in columns]
+                yield [row[i] if i < len(row) else None for i in columns]
     elif is_json:
         started, buffer = False, ""
         decoder = json.JSONDecoder(object_pairs_hook=collections.OrderedDict)
@@ -756,7 +756,10 @@ def iter_file_rows(filename, columns, sheet=None):
                         # Strip interleaving commas from between dicts
                         buffer = re.sub(r"^\s*[,]\s*", "", buffer[index:])
                         if isinstance(data, collections.OrderedDict):
-                            yield data.values()
+                            row = data.values()
+                            if len(row) < len(columns):
+                                row += [None] * (len(columns) - len(row))
+                            yield row
                     except ValueError: # Not enough data to decode, read more
                         break # while started and buffer
                 if f.tell() >= size: break # for chunk
