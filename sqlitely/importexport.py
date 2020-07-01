@@ -544,19 +544,22 @@ def get_import_file_data(filename):
     is_csv, is_json, is_xls, is_xlsx = \
         (extname == x for x in ("csv", "json", "xls", "xlsx"))
     if is_csv:
-        rows = -1 if size > MAX_IMPORT_FILESIZE_FOR_COUNT else 0
         with open(filename, "rbU") as f:
             firstline = next(f, "")
-            if not rows: rows = sum((1 for _ in f), 1 if firstline else 0)
-        if firstline.startswith("\xFF\xFE"): # Unicode little endian header
-            try:
-                firstline = firstline.decode("utf-16") # GMail CSVs can be in UTF-16
-            except UnicodeDecodeError:
-                firstline = firstline[2:].replace("\x00", "")
-            else: # CSV has trouble with Unicode: turn back to string
-                firstline = firstline.encode("latin1", errors="xmlcharrefreplace")
-        csvfile = csv.reader([firstline], csv.Sniffer().sniff(firstline, ",;\t"))
-        sheets.append({"rows": rows, "columns": next(csvfile), "name": "<no name>"})
+
+            if firstline.startswith("\xFF\xFE"): # Unicode little endian header
+                try:
+                    firstline = firstline.decode("utf-16") # GMail CSVs can be in UTF-16
+                except UnicodeDecodeError:
+                    firstline = firstline[2:].replace("\x00", "")
+                else: # CSV has trouble with Unicode: turn back to str
+                    firstline = firstline.encode("latin1", errors="xmlcharrefreplace")
+            iterable = itertools.chain([firstline], f)
+            csvfile = csv.reader(iterable, csv.Sniffer().sniff(firstline, ",;\t"))
+            rows, columns = -1, next(csvfile)
+            if 0 < size <= MAX_IMPORT_FILESIZE_FOR_COUNT:
+                rows = sum((1 for _ in csvfile), 1 if firstline else 0)
+        sheets.append({"rows": rows, "columns": columns, "name": "<no name>"})
     elif is_json:
         rows, columns, buffer, started = 0, {}, "", False
         decoder = json.JSONDecoder(object_pairs_hook=collections.OrderedDict)
