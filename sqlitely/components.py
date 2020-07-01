@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.06.2020
+@modified    01.07.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -21,6 +21,7 @@ import json
 import logging
 import math
 import pickle
+import Queue
 import os
 import re
 import string
@@ -6732,23 +6733,46 @@ class ImportDialog(wx.Dialog):
 
 
     def _OnProgressCallback(self, **kwargs):
-        if self: wx.CallAfter(self._OnProgress, **kwargs)            
+        """
+        Handler for worker callback, returns whether importing should continue,
+        True/False/None (yes/no/no+rollback). Blocks on error until user choice.
+        """
+        if not self: return
+        q = None
+        if self._importing and kwargs.get("error") and not kwargs.get("done"):
+            q = Queue.Queue()
+        wx.CallAfter(self._OnProgress, callback=q.put if q else None, **kwargs)
+        return q.get() if q else self._importing
 
 
     def _OnProgress(self, **kwargs):
         """
         Handler for import progress report, updates progress bar,
-        updates dialog if done. Returns whether importing should continue,
-        True/False/None (yes/no/no+rollback).
+        updates dialog if done. Invokes "callback" from arguments if present.
         """
         if not self: return
         result = self._importing
 
+        callback = kwargs.pop("callback", None)
         self._progress.update(kwargs)
         VARS = "count", "errorcount", "error", "index", "done"
         count, errorcount, error, index, done = (kwargs.get(x) for x in VARS)
 
-        msg_shown = False
+        if count is not None:
+            total = self._sheet["rows"]
+            if total < 0: text = util.plural("row", count)
+            else:
+                if self._has_header: total -= 1
+                percent = int(100 * util.safedivf(count + (errorcount or 0), total))
+                text = "%s%% (%s of %s)" % (percent, util.plural("row", count), total)
+                self._gauge.Value = percent
+            if errorcount:
+                text += ", %s" % util.plural("error", errorcount)
+            self._info_gauge.Label = text
+            self._gauge.ContainingSizer.Layout()
+            self.Refresh()
+            wx.Yield()
+
         if error and not done and self._importing:
             dlg = wx.MessageDialog(self, "Error inserting row #%s.\n\n%s" % (
                 index + (not self._has_header), error), conf.Title,
@@ -6759,53 +6783,36 @@ class ImportDialog(wx.Dialog):
             if wx.ID_CANCEL != res:
                 result = self._importing = False if wx.ID_YES == res else None
 
-        def after():
-            if not self: return
-            if count is not None:
-                total = self._sheet["rows"]
-                if total < 0: text = util.plural("row", count)
-                else:
-                    if self._has_header: total -= 1
-                    percent = int(100 * util.safedivf(count + (errorcount or 0), total))
-                    text = "%s%% (%s of %s)" % (percent, util.plural("row", count), total)
-                    self._gauge.Value = percent
-                if errorcount:
-                    text += ", %s" % util.plural("error", errorcount)
-                self._info_gauge.Label = text
-                self._gauge.ContainingSizer.Layout()
+        if done:
+            success = self._importing
+            if success: self._importing = False
+            if success is not None: self._PostEvent()
+            SHOW = (self._button_restart, )
+            HIDE = (self._button_ok, self._button_reset)
+            if not isinstance(self.Parent, DataObjectPage): SHOW += (self._button_open, )
+            for c in SHOW: c.Show(), c.Enable()
+            for c in HIDE: c.Hide()
+            self._gauge.Value = self._gauge.Value # Stop pulse, if any
+            self._button_cancel.Label = "&Close"
+            self._button_ok.ContainingSizer.Layout()
+            self.Layout()
+            if success is None: self._button_open.Disable()
+            elif self._button_open.Shown: self._button_open.SetFocus()
+            else: self._button_cancel.SetFocus()
 
-            if done:
-                success = self._importing
-                if success: self._importing = False
-                if success is not None: self._PostEvent()
-                SHOW = (self._button_restart, )
-                HIDE = (self._button_ok, self._button_reset)
-                if not isinstance(self.Parent, DataObjectPage): SHOW += (self._button_open, )
-                for c in SHOW: c.Show(), c.Enable()
-                for c in HIDE: c.Hide()
-                self._gauge.Value = self._gauge.Value
-                self._button_cancel.Label = "&Close"
-                self._button_ok.ContainingSizer.Layout()
-                self.Layout()
-                if success is None: self._button_open.Disable()
-                elif self._button_open.Shown: self._button_open.SetFocus()
-                else: self._button_cancel.SetFocus()
-                if msg_shown: return
+            if error: msg = "Error on data import:\n\n%s" % error
+            else: msg = "Data import %s.\n\n%s inserted into %stable %s.%s%s" % (
+                "complete" if success else "cancelled",
+                util.plural("row", count),
+                "new " if self._table.get("new") else "" ,
+                grammar.quote(self._table["name"], force=True),
+                ("\n%s failed." % util.plural("row", self._progress["errorcount"])) if self._progress.get("errorcount") else "",
+                ("\n\nAll changes rolled back." if success is None else ""),
+            )
+            icon = wx.ICON_ERROR if error else wx.ICON_INFORMATION if success else wx.ICON_WARNING
+            wx.MessageBox(msg, conf.Title, wx.OK | icon)
 
-                if error: msg = "Error on data import:\n\n%s" % error
-                else: msg = "Data import %s.\n\n%s inserted into %stable %s.%s%s" % (
-                    "complete" if success else "cancelled",
-                    util.plural("row", count),
-                    "new " if self._table.get("new") else "" ,
-                    grammar.quote(self._table["name"], force=True),
-                    ("\n%s failed." % util.plural("row", self._progress["errorcount"])) if self._progress.get("errorcount") else "",
-                    ("\n\nAll changes rolled back." if success is None else ""),
-                )
-                icon = wx.ICON_ERROR if error else wx.ICON_INFORMATION if success else wx.ICON_WARNING
-                wx.MessageBox(msg, conf.Title, wx.OK | icon)
-        wx.CallAfter(after)
-
-        return result
+        if callable(callback): callback(result)
 
 
     def _OnRestart(self, event=None):
