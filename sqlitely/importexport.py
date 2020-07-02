@@ -661,6 +661,7 @@ def import_data(filename, db, table, columns,
             for row in iter_file_rows(filename, list(columns), sheet):
                 index += 1
                 if has_header and not index: continue # for row
+                lastcount, lasterrorcount = count, errorcount
 
                 try:
                     cursor.execute(sql, row)
@@ -680,7 +681,8 @@ def import_data(filename, db, table, columns,
                                     " and rolling back" if result is None else "")
                         if result is None: cursor.execute("ROLLBACK")
                         break # for row
-                if progress and (count and not count % 100 or errorcount and not errorcount % 100):
+                if progress and (count != lastcount and not count % 100 or
+                                 errorcount != lasterrorcount and not errorcount % 100):
                     result = progress(count=count, errorcount=errorcount)
                     if not result:
                         logger.info("Cancelling%s import on user request.",
@@ -690,7 +692,7 @@ def import_data(filename, db, table, columns,
             if result:
                 cursor.execute("COMMIT")
                 db.log_query("IMPORT", [create_sql, sql] if create_sql else [sql],
-                             util.plural("row", count))
+                             [filename, util.plural("row", count)])
             logger.info("Finished importing %s from %s%s to table %s.",
                         util.plural("row", count),
                         filename, (" sheet '%s'" % sheet) if sheet else "",
