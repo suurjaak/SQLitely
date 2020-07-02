@@ -15,6 +15,9 @@ Stand-alone GUI components for wx:
 - HintedTextCtrl(wx.TextCtrl):
   A text control with a hint text shown when no value, hidden when focused.
 
+- MessageDialog(wx.Dialog):
+  A modal message dialog that is closable from another thread.
+
 - NonModalOKDialog(wx.Dialog):
   A simple non-modal dialog with an OK button, stays on top of parent.
 
@@ -63,7 +66,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    30.06.2020
+@modified    02.07.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -1026,6 +1029,66 @@ class HintedTextCtrl(wx.TextCtrl):
             self.SetForegroundColour(self._hint_colour)
             self._hint_on = True
         wx.CallAfter(setattr, self, "_ignore_change", False)
+
+
+
+class MessageDialog(wx.Dialog):
+    """
+    A modal message dialog that is closable from another thread.
+    """
+
+    BSTYLES = (wx.OK, wx.CANCEL,  wx.YES, wx.NO, wx.APPLY, wx.CLOSE, wx.HELP,
+               wx.CANCEL_DEFAULT, wx.NO_DEFAULT)
+    ISTYLES = {wx.ICON_INFORMATION: wx.ART_INFORMATION, wx.ICON_QUESTION: wx.ART_QUESTION,
+               wx.ICON_WARNING:     wx.ART_WARNING,     wx.ICON_ERROR:    wx.ART_ERROR}
+    IDS = {wx.OK: wx.ID_OK, wx.CANCEL: wx.ID_CANCEL, wx.YES: wx.ID_YES, wx.NO: wx.ID_NO,
+           wx.APPLY: wx.ID_APPLY, wx.CLOSE: wx.ID_CLOSE, wx.HELP: wx.ID_HELP}
+    AFFIRMS = (wx.YES,    wx.OK)
+    ESCAPES = (wx.CANCEL, wx.NO, wx.CLOSE)
+
+    def __init__(self, parent, message, caption=wx.MessageBoxCaptionStr,
+                 style=wx.OK | wx.CAPTION | wx.CLOSE_BOX, pos=wx.DefaultPosition):
+
+        bstyle, wstyle = 0, (style | wx.CAPTION | wx.CLOSE_BOX)
+        for b in self.BSTYLES:
+            if style & b: bstyle, wstyle = bstyle | b, wstyle ^ b
+        for b in self.ISTYLES:
+            if style & b: bstyle, wstyle = bstyle ^ b, wstyle ^ b
+        super(MessageDialog, self).__init__(parent, title=caption, style=wstyle, pos=pos)
+
+        self._text = wx.StaticText(self, label=message)
+        self._icon = None
+        for b, i in self.ISTYLES.items():
+            if style & b:
+                bmp = wx.ArtProvider.GetBitmap(i, wx.ART_FRAME_ICON, (32, 32))
+                self._icon = wx.StaticBitmap(self, bitmap=bmp)
+                break # for b, i
+
+        self.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_text    = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_buttons = self.CreateStdDialogButtonSizer(style)
+
+        if self._icon: sizer_text.Add(self._icon, border=10, flag=wx.RIGHT)
+        sizer_text.Add(self._text, flag=wx.GROW)
+        self.Sizer.Add(sizer_text, border=10, flag=wx.ALL)
+        self.Sizer.Add(sizer_buttons, border=10, flag=wx.ALL | wx.ALIGN_RIGHT)
+
+        for b in self.BSTYLES:
+            if bstyle & b and b in self.IDS:
+                self.Bind(wx.EVT_BUTTON, self._OnButton, id=self.IDS[b])
+
+        affirm = next((self.IDS[b] for b in self.AFFIRMS if bstyle & b), None)
+        escape = next((self.IDS[b] for b in self.ESCAPES if bstyle & b), None)
+        if affirm: self.SetAffirmativeId(affirm)
+        if escape: self.SetEscapeId(escape)
+
+        self.Layout()
+        self.Fit()
+        self.CenterOnParent()
+
+
+    def _OnButton(self, event):
+        self.EndModal(event.EventObject.Id)
 
 
 

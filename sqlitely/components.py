@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.07.2020
+@modified    02.07.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -6110,7 +6110,7 @@ class ImportDialog(wx.Dialog):
         self._has_pk      = False # Whether new table has auto-increment primary key
         self._importing   = False # Whether import underway
         self._table_fixed = False # Whether table selection is immutable
-        self._progress   = {}    # {count}
+        self._progress   = {}     # {count}
         self._worker = workers.WorkerThread()
 
         self._dialog_file = wx.FileDialog(self, message="Open",
@@ -6170,6 +6170,7 @@ class ImportDialog(wx.Dialog):
         button_reset   = wx.Button(self, label="&Reset")
         button_cancel  = wx.Button(self, label="&Cancel", id=wx.CANCEL)
 
+        self._dlg_cancel     = None
         self._info_file      = info_file
         self._button_file    = button_file
         self._splitter       = splitter
@@ -6751,7 +6752,6 @@ class ImportDialog(wx.Dialog):
         updates dialog if done. Invokes "callback" from arguments if present.
         """
         if not self: return
-        result = self._importing
 
         callback = kwargs.pop("callback", None)
         self._progress.update(kwargs)
@@ -6770,8 +6770,11 @@ class ImportDialog(wx.Dialog):
                 text += ", %s" % util.plural("error", errorcount)
             self._info_gauge.Label = text
             self._gauge.ContainingSizer.Layout()
-            self.Refresh()
-            wx.Yield()
+            wx.YieldIfNeeded()
+
+        if (error or done) and self._dlg_cancel:
+            self._dlg_cancel.EndModal(wx.ID_CANCEL)
+            self._dlg_cancel = None
 
         if error and not done and self._importing:
             dlg = wx.MessageDialog(self, "Error inserting row #%s.\n\n%s" % (
@@ -6781,7 +6784,7 @@ class ImportDialog(wx.Dialog):
             dlg.SetYesNoCancelLabels("&Abort", "Abort and &rollback", "&Ignore errors")
             res = dlg.ShowModal()
             if wx.ID_CANCEL != res:
-                result = self._importing = False if wx.ID_YES == res else None
+                self._importing = False if wx.ID_YES == res else None
 
         if done:
             success = self._importing
@@ -6812,7 +6815,7 @@ class ImportDialog(wx.Dialog):
             icon = wx.ICON_ERROR if error else wx.ICON_INFORMATION if success else wx.ICON_WARNING
             wx.MessageBox(msg, conf.Title, wx.OK | icon)
 
-        if callable(callback): callback(result)
+        if callable(callback): callback(self._importing)
 
 
     def _OnRestart(self, event=None):
@@ -6886,12 +6889,14 @@ class ImportDialog(wx.Dialog):
         Handler for cancelling import, closes dialog if nothing underway,
         confirms and cancels work if import underway.
         """
-        if not self._importing: return wx.CallAfter(self.EndModal, wx.CANCEL)
+        if not self._importing: return wx.CallAfter(self.EndModal, wx.ID_CANCEL)
 
-        if wx.YES != controls.YesNoMessageBox("Import is currently underway, "
-            "are you sure you want to cancel it?", conf.Title, wx.ICON_WARNING,
-            defaultno=True
-        ) or not self._importing: return
+        dlg = self._dlg_cancel = controls.MessageDialog(self,
+            "Import is currently underway, are you sure you want to cancel it?",
+            conf.Title, wx.ICON_WARNING | wx.YES | wx.NO | wx.NO_DEFAULT)
+        res = dlg.ShowModal()
+        self._dlg_cancel = None
+        if wx.ID_YES != res or not self._importing: return
 
         qname = grammar.quote(self._table["name"], force=True)
         changes = "%s%stable %s." % (
@@ -6900,18 +6905,22 @@ class ImportDialog(wx.Dialog):
             "new " if self._table.get("new") else "", qname
         ) if (self._progress.get("count") or self._table.get("new")) else ""
 
-        keep = wx.MessageBox("Keep changes?\n\n%s" % changes.strip().capitalize(),
+        dlg = self._dlg_cancel = controls.MessageDialog(self,
+            "Keep changes?\n\n%s" % changes.strip().capitalize(),
             conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.CANCEL_DEFAULT
-        ) if changes else wx.NO
-        if wx.CANCEL == keep or not self._importing: return
+        ) if changes else None
+        keep = dlg.ShowModal() if changes else wx.ID_NO
+        self._dlg_cancel = None
 
-        self._importing = None if wx.NO == keep else False
+        if wx.ID_CANCEL == keep or not self._importing: return
+
+        self._importing = None if wx.ID_NO == keep else False
         self._worker.stop_work()
         self._gauge.Value = self._gauge.Value # Stop pulse, if any
 
-        if wx.YES == keep: self._PostEvent()
+        if wx.ID_YES == keep: self._PostEvent()
 
-        if isinstance(event, wx.CloseEvent): return wx.CallAfter(self.EndModal, wx.CANCEL)
+        if isinstance(event, wx.CloseEvent): return wx.CallAfter(self.EndModal, wx.ID_CANCEL)
 
         SHOW = (self._button_restart, )
         HIDE = (self._button_ok, self._button_reset)
