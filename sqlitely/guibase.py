@@ -13,7 +13,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.06.2020
+@modified    02.07.2020
 """
 import datetime
 import logging
@@ -25,6 +25,7 @@ import wx
 import wx.lib.inspection
 import wx.lib.newevent
 import wx.py
+import wx.stc
 
 from . lib.controls import ColourManager, KEYS
 from . lib import util, wx_accel
@@ -118,12 +119,28 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
         ColourManager.Manage(panel, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
 
         button_clear = wx.Button(parent=panel, label="C&lear log", size=(100, -1))
-        button_clear.Bind(wx.EVT_BUTTON, lambda event: self.log.Clear())
-        edit_log = self.log = wx.TextCtrl(panel, style=wx.TE_MULTILINE)
-        edit_log.SetEditable(False)
-        # Read-only controls tend to be made grey by default
-        ColourManager.Manage(edit_log, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
-        ColourManager.Manage(edit_log, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
+        edit_log = self.log = wx.stc.StyledTextCtrl(panel)
+        edit_log.SetMarginCount(0)
+        edit_log.SetReadOnly(True)
+        edit_log.SetTabWidth(edit_log.TabWidth * 2)
+        edit_log.SetWrapMode(wx.stc.STC_WRAP_WORD)
+
+        def on_clear(event=None):
+            edit_log.SetReadOnly(False)
+            edit_log.ClearAll()
+            edit_log.SetReadOnly(True)
+        def on_colour(event=None):
+            fgcolour, bgcolour = (
+                wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
+                for x in (wx.SYS_COLOUR_GRAYTEXT, wx.SYS_COLOUR_WINDOW)
+            )
+            edit_log.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT,
+                                  "back:%s,fore:%s" % (bgcolour, fgcolour))
+            edit_log.StyleClearAll() # Apply the new default style to all styles
+
+        button_clear.Bind(wx.EVT_BUTTON,     on_clear)
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED, on_colour)
+        on_colour()
 
         sizer.Add(button_clear, border=5, flag=wx.ALIGN_RIGHT | wx.TOP |
                   wx.RIGHT)
@@ -212,11 +229,13 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
         if not hasattr(self, "log") \
         or hasattr(conf, "LogEnabled") and not conf.LogEnabled: return
 
+        self.log.SetReadOnly(False)
         try: self.log.AppendText(text + "\n")
         except Exception:
             try: self.log.AppendText(text.decode("utf-8", "replace") + "\n")
             except Exception as e: print("Exception %s: %s in log_message" %
                                          (e.__class__.__name__, e))
+        self.log.SetReadOnly(True)
 
 
     def on_toggle_console(self, *_):
