@@ -5233,14 +5233,14 @@ class DatabasePage(wx.Panel):
                     wx.MessageBox("%s, cannot drop." % lock,
                                   conf.Title, wx.OK | wx.ICON_WARNING)
                     continue # for name
+                page = self.data_pages.get(category, {}).get(name)
+                if page: page.Close(force=True)
                 self.db.executeaction("DROP %s %s" % (category.upper(),
                                       grammar.quote(name)), name="DROP")
                 deleteds += [name]
         finally:
             for name in deleteds:
                 page = self.schema_pages[category].get(name)
-                if page: page.Close(force=True)
-                page = self.data_pages.get(category, {}).get(name)
                 if page: page.Close(force=True)
             if deleteds:
                 self.on_pragma_refresh(reload=True)
