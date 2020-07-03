@@ -130,10 +130,13 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
             edit_log.ClearAll()
             edit_log.SetReadOnly(True)
         def on_colour(event=None):
-            fgcolour, bgcolour = (
+            if event: event.Skip()
+            fgcolour, crcolour, bgcolour = (
                 wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
-                for x in (wx.SYS_COLOUR_GRAYTEXT, wx.SYS_COLOUR_WINDOW)
+                for x in (wx.SYS_COLOUR_GRAYTEXT, wx.SYS_COLOUR_BTNTEXT,
+                          wx.SYS_COLOUR_WINDOW)
             )
+            edit_log.SetCaretForeground(crcolour)
             edit_log.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT,
                                   "back:%s,fore:%s" % (bgcolour, fgcolour))
             edit_log.StyleClearAll() # Apply the new default style to all styles
