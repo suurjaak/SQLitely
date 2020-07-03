@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.06.2020
+@modified    03.07.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3213,7 +3213,7 @@ class DatabasePage(wx.Panel):
         self.tb_sql.EnableTool(wx.ID_COPY, False)
         self.tb_sql.EnableTool(wx.ID_SAVE, False)
 
-        self.db.populate_schema(parse=True)
+        if event: self.db.populate_schema(parse=True)
         sql = self.db.get_sql()
         self.stc_schema.SetReadOnly(False)
         self.stc_schema.SetText(sql + ("\n" if sql else ""))
@@ -5188,7 +5188,7 @@ class DatabasePage(wx.Panel):
         opens table if specified.
         """
         table, open = (getattr(event, x, None) for x in ("table", "open"))
-        self.reload_schema(count=True, parse=True)
+        self.reload_schema(count=True)
         self.update_page_header(updated=True)
         if table in self.data_pages["table"]:
             self.data_pages["table"][table].Reload()

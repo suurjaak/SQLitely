@@ -711,9 +711,9 @@ def import_data(filename, db, table, columns,
         db.unlock("table", table, filename)
 
     if result is not None and create_sql:
-        db.populate_schema(category="table", name=table, count=True, parse=True)
+        db.populate_schema(category="table", name=table, parse=True)
     elif result:
-        db.populate_schema(category="table", name=table, count=True)
+        db.populate_schema(category="table", name=table)
 
     return result
 

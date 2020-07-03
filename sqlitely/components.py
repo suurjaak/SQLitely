@@ -6918,8 +6918,6 @@ class ImportDialog(wx.Dialog):
         self._worker.stop_work()
         self._gauge.Value = self._gauge.Value # Stop pulse, if any
 
-        if wx.ID_YES == keep: self._PostEvent()
-
         if isinstance(event, wx.CloseEvent): return wx.CallAfter(self.EndModal, wx.ID_CANCEL)
 
         SHOW = (self._button_restart, )
