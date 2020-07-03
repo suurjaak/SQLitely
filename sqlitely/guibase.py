@@ -13,7 +13,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.07.2020
+@modified    03.07.2020
 """
 import datetime
 import logging
@@ -75,9 +75,9 @@ class GUILogHandler(logging.Handler):
         if record.exc_info:
             text += "\n\n" + "".join(traceback.format_exception(*record.exc_info))
         if "\n" in text:
-            text = text.replace("\n", "\n\t\t") # Indent linebreaks
+            text = text.replace("\n", "\n\t\t\t") # Indent linebreaks
             text = re.sub(r"^\s+$", "", text, flags=re.M) # Unindent whitespace-only lines
-        msg = "%s.%03d\t%s" % (now.strftime("%H:%M:%S"), now.microsecond / 1000, text)
+        msg = "%s.%03d\t%s" % (now.strftime("%Y-%m-%d %H:%M:%S"), now.microsecond / 1000, text)
 
         window = wx.GetApp() and wx.GetApp().GetTopWindow()
         if window:
