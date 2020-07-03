@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.07.2020
+@modified    03.07.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -570,12 +570,13 @@ def get_import_file_data(filename):
                     buffer = re.sub("^//[^\n]*$", "", buffer.lstrip(), flags=re.M).lstrip()
                     if buffer[:1] == "[": buffer, started = buffer[1:].lstrip(), True
                 while started and buffer:
+                    # Strip whitespace and interleaving commas from between dicts
+                    buffer = re.sub(r"^\s*[,]?\s*", "", buffer)
                     try:
                         data, index = decoder.raw_decode(buffer)
+                        buffer = buffer[index:]
                         if isinstance(data, collections.OrderedDict):
                             columns, rows = columns or data, rows + 1
-                        # Strip interleaving commas from between dicts
-                        buffer = re.sub(r"^\s*[,]\s*", "", buffer[index:])
                     except ValueError: # Not enough data to decode, read more
                         break # while started and buffer
                 if columns and any(x > MAX_IMPORT_FILESIZE_FOR_COUNT for x in (size, f.tell())):
@@ -756,10 +757,11 @@ def iter_file_rows(filename, columns, sheet=None):
                     buffer = re.sub("^//[^\n]*$", "", buffer.lstrip(), flags=re.M).lstrip()
                     if buffer[:1] == "[": buffer, started = buffer[1:].lstrip(), True
                 while started and buffer:
+                    # Strip whitespace and interleaving commas from between dicts
+                    buffer = re.sub(r"^\s*[,]?\s*", "", buffer)
                     try:
                         data, index = decoder.raw_decode(buffer)
-                        # Strip interleaving commas from between dicts
-                        buffer = re.sub(r"^\s*[,]\s*", "", buffer[index:])
+                        buffer = buffer[index:]
                         if isinstance(data, collections.OrderedDict):
                             row = data.values()
                             if len(row) < len(columns):
