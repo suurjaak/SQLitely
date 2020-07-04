@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.07.2020
+@modified    04.07.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -4163,7 +4163,7 @@ class SchemaObjectPage(wx.Panel):
         for c in self._ctrls.values():
             if not isinstance(c, controls.SQLiteTextCtrl): continue # for c
             c.AutoCompClearAdded()
-            if singlewords and not c.Wheelable: c.AutoCompAddWords(singlewords)
+            if singlewords and (not words or not c.Wheelable): c.AutoCompAddWords(singlewords)
             elif words and c.Wheelable:
                 c.AutoCompAddWords(words)
                 for w, ww in subwords.items(): c.AutoCompAddSubWords(w, ww)
@@ -4945,6 +4945,8 @@ class SchemaObjectPage(wx.Panel):
                 meta.pop("columns", None)
                 if ["upon"] == path: meta.pop("table", None)
             elif ["table"] == path: self._PopulateAutoComp()
+        elif "index" == self._category:
+            if ["table"] == path: self._PopulateAutoComp()
         elif "table" == self._category:
             if "constraints" == path[0] and "table" == path[-1]:
                 # Foreign table changed, clear foreign cols
