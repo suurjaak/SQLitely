@@ -5515,7 +5515,6 @@ class SchemaObjectPage(wx.Panel):
         if not self._newmode and self._sql0_applies \
         and self._item["sql"]  == self._original["sql"] \
         and self._item["sql0"] != self._original["sql0"]:
-            " @todo do master update only "
             self._UpdateSqliteMaster({self._category: {self.Name: sql1}})
             return finalize(post=False)
 
