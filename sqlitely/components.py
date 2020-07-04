@@ -2875,6 +2875,7 @@ class SchemaObjectPage(wx.Panel):
         self._buttons  = {}  # {name: wx.Button}
         self._sizers   = {}  # {child sizer: parent sizer}
         self._col_updater = None # Column update cascade callback timer
+        self._alter_sqler = None # ALTER SQL populate callback timer
         # Pending column updates as {__id__: {col: {}, ?rename: newname, ?remove: bool}}
         self._col_updates = {}
         self._ignore_change = False
@@ -4171,18 +4172,32 @@ class SchemaObjectPage(wx.Panel):
 
     def _PopulateSQL(self):
         """Populates CREATE SQL window."""
+
+        def set_sql(sql):
+            if sql is None: return
+            scrollpos = self._ctrls["sql"].GetScrollPos(wx.VERTICAL)
+            self._ctrls["sql"].SetReadOnly(False)
+            self._ctrls["sql"].SetText(sql.rstrip() + "\n")
+            self._ctrls["sql"].SetReadOnly(True)
+            self._ctrls["sql"].ScrollToLine(scrollpos)
+
+        def set_alter_sql():
+            self._alter_sqler = None
+            sql, _, _ = self._GetAlterSQL()
+            set_sql(sql)
+
         if self._editmode:
             sql, _ = grammar.generate(self._item["meta"])
             if sql is not None: self._item["sql"] = sql
         sql = self._item["sql0" if self._sql0_applies else "sql"]
 
-        if self._show_alter: sql, _, _ = self._GetAlterSQL()
-        if sql is None: return
-        scrollpos = self._ctrls["sql"].GetScrollPos(wx.VERTICAL)
-        self._ctrls["sql"].SetReadOnly(False)
-        self._ctrls["sql"].SetText(sql.rstrip() + "\n")
-        self._ctrls["sql"].SetReadOnly(True)
-        self._ctrls["sql"].ScrollToLine(scrollpos)
+        if self._show_alter:
+            if "table" == self._category:
+                if self._alter_sqler: self._alter_sqler.Stop()
+                self._alter_sqler = wx.CallLater(500, set_alter_sql)
+            else: set_alter_sql()
+        else:
+            set_sql(sql)
 
 
     def _GetAlterSQL(self):
