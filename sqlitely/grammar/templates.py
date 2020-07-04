@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    21.06.2020
+@modified    04.07.2020
 ------------------------------------------------------------------------------
 """
 
@@ -56,7 +56,7 @@ ALTER TABLE {{ Q(data["name"]) }} RENAME COLUMN {{ Q(c1) }} TO {{ Q(c2) }};{{ LF
 %endfor
 
 %for i, c in enumerate(data.get("add", [])):
-    %if not i:
+    %if not i and (data["name"] != data["name2"] or data.get("columns")):
 {{ LF() }}
     %endif
 ALTER TABLE {{ Q(data["name"]) }} ADD COLUMN{{ WS(" ") }}
