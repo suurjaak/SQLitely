@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.07.2020
+@modified    04.07.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -222,7 +222,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     guibase.status("Detecting databases under %s.", t, log=True)
                     self.window.button_folder.Label = "Stop &import from folder"
                     for f in folders: self.window.worker_folder.work(f)
-                if filenames: self.window.load_database_pages(filenames)
+                if filenames: self.window.load_database_pages(filenames, clearselection=True)
 
         self.DropTarget = FileDrop(self)
         self.notebook.DropTarget = FileDrop(self)
@@ -777,10 +777,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         def on_recent_file(event):
             if conf.WindowIconized: self.on_toggle_iconize()
             filename = history_file.GetHistoryFile(event.Id - wx.ID_FILE1)
-            self.load_database_page(filename)
+            self.load_database_page(filename, clearselection=True)
         def open_item(filename, *_, **__):
             if conf.WindowIconized: self.on_toggle_iconize()
-            self.load_database_page(filename)
+            self.load_database_page(filename, clearselection=True)
 
         history_file = wx.FileHistory(conf.MaxRecentFiles)
         history_file.UseMenu(menu_recent)
@@ -1068,7 +1068,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.edit_filter.SetFocus()
         elif self.list_db.GetFirstSelected() >= 0 and self.dbs_selected \
         and not event.AltDown() and event.KeyCode in controls.KEYS.ENTER:
-            self.load_database_pages(self.dbs_selected, clearselection=False)
+            self.load_database_pages(self.dbs_selected)
         elif event.KeyCode in controls.KEYS.DELETE and self.dbs_selected:
             self.on_remove_database(None)
 
@@ -1729,7 +1729,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                   wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK == dialog.ShowModal():
-            self.load_database_pages(dialog.GetPaths())
+            self.load_database_pages(dialog.GetPaths(), clearselection=True)
 
 
     def on_new_database(self, event):
@@ -1744,14 +1744,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for OpenDatabaseEvent, updates db list and loads the event
         database.
         """
-        self.load_database_pages([os.path.realpath(event.file)])
+        self.load_database_pages([os.path.realpath(event.file)], clearselection=True)
 
 
     def on_recent_file(self, event):
         """Handler for clicking an entry in Recent Files menu."""
         filename = self.history_file.GetHistoryFile(event.Id - wx.ID_FILE1)
         self.update_database_list(filename)
-        self.load_database_page(filename)
+        self.load_database_page(filename, clearselection=True)
 
 
     def on_detect_databases(self, event):
@@ -1840,7 +1840,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_open_current_database(self, event):
         """Handler for clicking to open selected files from database list."""
-        self.load_database_pages(self.dbs_selected, clearselection=False)
+        self.load_database_pages(self.dbs_selected)
 
 
     def on_open_from_list_db(self, event):
@@ -2139,16 +2139,17 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         return db
 
 
-    def load_database_page(self, filename):
+    def load_database_page(self, filename, clearselection=False):
         """
         Tries to load the specified database, if not already open, create a
         subpage for it, if not already created, and focuses the subpage.
         If filename is None, creates a temporary file database.
 
-        @return  database page instance
+        @param   clearselection  clear previously selected files in database list
+        @return                  database page instance
         """
-        page, db = None, self.dbs.get(filename)
-        if db: page = next((x for x in self.db_pages if x and x.db == db), None)
+        page, page0, db = None, None, self.dbs.get(filename)
+        if db: page = page0 = next((x for x in self.db_pages if x and x.db == db), None)
         if not page:
             if not db: db = self.load_database(filename)
             if db:
@@ -2164,6 +2165,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         else:
             page.handle_command("refresh")
         if page:
+            while not page0 and clearselection and self.list_db.GetSelectedItemCount():
+                self.list_db.Select(self.list_db.GetFirstSelected(), False)
             if filename:
                 self.list_db.Select(0, on=False) # Deselect home row
                 for i in range(1, self.list_db.GetItemCount()):
@@ -2179,7 +2182,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         return page
 
 
-    def load_database_pages(self, filenames, clearselection=True):
+    def load_database_pages(self, filenames, clearselection=False):
         """
         Tries to load the specified databases, if not already open, create
         subpages for them, if not already created, and focus the subpages.
