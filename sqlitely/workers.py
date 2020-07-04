@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.06.2020
+@modified    04.07.2020
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -26,6 +26,7 @@ from . lib import util
 from . lib.vendor import step
 from . import conf
 from . import database
+from . import grammar
 from . searchparser import flatten, match_words, SearchQueryParser
 from . import templates
 
@@ -240,6 +241,10 @@ class SearchThread(WorkerThread):
                             break # while row
 
                         row = cursor.fetchone()
+                except Exception:
+                    logger.exception("Error searching %s %s.", category,
+                                     grammar.quote(item["name"], force=True))
+                    continue # for item
                 finally: util.try_until(lambda: cursor.close())
 
                 if not self._drop_results:
