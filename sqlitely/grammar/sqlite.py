@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    30.05.2020
+@modified    26.06.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -19,7 +19,7 @@ import sys
 import traceback
 import uuid
 
-from antlr4 import InputStream, CommonTokenStream, TerminalNode
+from antlr4 import InputStream, CommonTokenStream, TerminalNode, Token
 
 from .. lib import util
 from .. lib.vendor import step
@@ -50,19 +50,20 @@ def parse(sql, category=None):
     return result, err
 
 
-def generate(data, indent="  "):
+def generate(data, indent="  ", category=None):
     """
     Returns SQL statement from data structure.
 
-    @param   data    {"__type__": "CREATE TABLE"|.., ..}
-    @param   indent  indentation level to use. If falsy,
-                     result is not indented in any, including linefeeds.
-    @return          (SQL string, None) or (None, error)
+    @param   data      {"__type__": "CREATE TABLE"|.., ..}
+    @param   indent    indentation level to use. If falsy,
+                       result is not indented in any, including linefeeds.
+    @param   category  data category if not using data["__type__"]
+    @return            (SQL string, None) or (None, error)
     """
     if not data: return None, "Empty schema item"
     result, err, generator = None, None, Generator(indent)
     try:
-        result, err = generator.generate(data)
+        result, err = generator.generate(data, category=category)
     except Exception as e:
         logger.exception("Error generating SQL for %s.", data)
         err = util.format_exc(e)
@@ -86,12 +87,13 @@ def transform(sql, flags=None, renames=None, indent="  "):
                       result is not indented in any, including linefeeds.
     @return           (SQL string, None) or (None, error)
     """
-    result, err, parser, generator = None, None, Parser(), Generator(indent)
+    result, err, parser = None, None, Parser()
     try:
         data, err = parser.parse(sql, renames=renames)
-        if data:
+        if data and (flags or not indent):
             if flags: data.update(flags)
-            result, err = generator.generate(data)
+            result, err = Generator(indent).generate(data)
+        elif data: result = parser.get_text()
     except Exception as e:
         logger.exception("Error transforming SQL %s.", sql)
         err = util.format_exc(e)
@@ -112,11 +114,11 @@ def quote(val, force=False):
 
 def unquote(val):
     """
-    Returns unquoted string, if string within '' or "" or [].
+    Returns unquoted string, if string within '' or "" or `` or [].
     Always returns unicode.
     """
     result = uni(val)
-    if re.match(r"^([\"].*[\"])|([\'].*[\'])|([\[].*[\]])$", result, re.DOTALL):
+    if re.match(r"^([\"].*[\"])|([\'].*[\'])|([\`].*[\`])|([\[].*[\]])$", result, re.DOTALL):
         result, sep = result[1:-1], result[0]
         if sep != "[": result = result.replace(sep * 2, sep)
     return result
@@ -209,6 +211,7 @@ class CTX(object):
     UPDATE               = SQLiteParser.Update_stmtContext
     COLUMN_NAME          = SQLiteParser.Column_nameContext
     INDEX_NAME           = SQLiteParser.Index_nameContext
+    SCHEMA_NAME          = SQLiteParser.Database_nameContext
     TABLE_NAME           = SQLiteParser.Table_nameContext
     TRIGGER_NAME         = SQLiteParser.Trigger_nameContext
     VIEW_NAME            = SQLiteParser.View_nameContext
@@ -271,7 +274,8 @@ class Parser(object):
     }
     RENAME_CTXS = {"index": CTX.INDEX_NAME, "trigger": CTX.TRIGGER_NAME,
                    "view":  (CTX.VIEW_NAME, CTX.TABLE_NAME), "column":  CTX.COLUMN_NAME,
-                   "table": (CTX.TABLE_NAME, CTX.FOREIGN_TABLE)}
+                   "table": (CTX.TABLE_NAME, CTX.FOREIGN_TABLE),
+                   "virtual table": CTX.TABLE_NAME}
     CATEGORIES = {"index":   SQL.CREATE_INDEX,   "table": SQL.CREATE_TABLE,
                   "trigger": SQL.CREATE_TRIGGER, "view":  SQL.CREATE_VIEW,
                   "virtual table":  SQL.CREATE_VIRTUAL_TABLE}
@@ -307,9 +311,9 @@ class Parser(object):
 
 
     def __init__(self):
-        self._category = None
-        self._stream   = None
-        self._repls    = [] # [(start index, end index, replacement)]
+        self._category = None # "CREATE TABLE" etc
+        self._stream   = None # antlr TokenStream
+        self._repls    = []   # [(start index, end index, replacement)]
 
 
     def parse(self, sql, category=None, renames=None):
@@ -332,7 +336,7 @@ class Parser(object):
 
         """
         def parse_tree(sql):
-            self._stream  = CommonTokenStream(SQLiteLexer(InputStream(sql)))
+            self._stream = CommonTokenStream(SQLiteLexer(InputStream(sql)))
             parser, listener = SQLiteParser(self._stream), self.ErrorListener()
             parser.removeErrorListeners()
             parser.addErrorListener(listener)
@@ -369,10 +373,15 @@ class Parser(object):
             if renames and "schema" in renames:
                 if isinstance(renames["schema"], dict):
                     for v1, v2 in renames["schema"].items():
-                        if result.get("schema", "").lower() == v1.lower():
-                            result["schema"] = v2
+                        if util.lceq(result.get("schema"), v1):
+                            if v2: result["schema"] = v2
+                            else: result.pop("schema", None)
                 elif renames["schema"]: result["schema"] = renames["schema"]
                 else: result.pop("schema", None)
+                self.rename_schema(ctx, renames)
+
+            cc = self._stream.filterForChannel(0, len(self._stream.tokens) - 1, channel=2)
+            result["__comments__"] = [x.text for x in cc or []]
 
             return result
 
@@ -385,6 +394,42 @@ class Parser(object):
                 sql, tries = e.message, tries + 1
                 if tries > 1: error = "Failed to parse SQL"
         return result, error
+
+
+    def rename_schema(self, ctx, renames):
+        """Alters stream tokens to add, change or remove schema name, for get_text()."""
+        srenames = renames["schema"]
+
+        sctx = next((x for x in ctx.children if isinstance(x, CTX.SCHEMA_NAME)), None)
+        if sctx:
+            # Schema present in statement: modify content or remove token
+            if isinstance(srenames, basestring):
+                sctx.start.text = util.to_unicode(srenames)
+            elif srenames is None or isinstance(srenames, dict) \
+            and any(v is None and util.lceq(k, self.u(sctx)) for k, v in srenames.items()):
+                idx = self._stream.tokens.index(sctx.start)
+                del self._stream.tokens[idx:idx + 2] # Remove schema and dot tokens
+            elif isinstance(srenames, dict) \
+            and any(util.lceq(k, self.u(sctx)) for k, v in srenames.items()):
+                sctx.start.text = util.to_unicode(next(v for k, v in srenames.items()
+                                                       if util.lceq(k, self.u(sctx))))
+        elif isinstance(srenames, basestring):
+            # Schema not present in statement: insert tokens before item name token
+            cname = next(k for k, v in self.CATEGORIES.items() if v == self._category)
+            ctype = self.RENAME_CTXS[cname]
+            nctx = next((x for x in ctx.children if isinstance(x, ctype)), None)
+            if nctx:
+                ntoken = Token()
+                ntoken.text = util.to_unicode(srenames)
+                dtoken = Token()
+                dtoken.text = u"."
+                idx = self._stream.tokens.index(nctx.start)
+                self._stream.tokens[idx:idx] = [ntoken, dtoken]
+
+
+    def get_text(self):
+        """Returns full text of current input stream."""
+        return self._stream.getText()
 
 
     def t(self, ctx):
@@ -406,7 +451,7 @@ class Parser(object):
         if ctx and ctx2:
             interval = ctx.getSourceInterval()[0], ctx2.getSourceInterval()[1]
         else: interval = ctx.getSourceInterval()
-        result = self._stream.getText(interval)
+        result = self._stream.getText(*interval)
 
         for c, r in ((ctx, "^%s"), (ctx2, "%s$")) if ctx and ctx2 else ():
             if not isinstance(c, TerminalNode): continue # for c, r
@@ -479,7 +524,7 @@ class Parser(object):
 
         result["columns"] = [self.build_table_column(x) for x in ctx.column_def()]
         if self._repls:
-            sql, shift = self._stream.getText((0, sys.maxint)), 0
+            sql, shift = self._stream.getText(0, sys.maxint), 0
             for start, end, repl in self._repls:
                 sql = sql[:start + shift] + repl + sql[end + shift:]
                 shift = len(repl) - end + start
@@ -582,7 +627,7 @@ class Parser(object):
         if ctx.K_EXISTS(): result["exists"]  = True
         result["module"] = {"name":  self.u(ctx.module_name)}
         args = ctx.module_argument()
-        if args: result["module"]["arguments"] =  [self.u(x) for x in args]
+        if args: result["module"]["arguments"] =  [self.r(x) for x in args]
 
         return result
 
@@ -632,8 +677,8 @@ class Parser(object):
                 # resulting in DEFAULT and everything preceding being parsed
                 # as type if DEFAULT value is double-quoted.
                 start, end = ctx.type_name().getSourceInterval()
-                inter = self._stream.getText((start, end))
-                cstart = len(self._stream.getText((0, start - 1)))
+                inter = self._stream.getText(start, end)
+                cstart = len(self._stream.getText(0, start - 1))
                 cend   = cstart + len(inter)
                 xstart = type_raw.find("DEFAULT") + 7
                 repl, in_quotes, i = inter[:xstart], False, xstart
@@ -927,6 +972,7 @@ class Generator(object):
         "ALTER INDEX":             templates.ALTER_INDEX,
         "ALTER TRIGGER":           templates.ALTER_TRIGGER,
         "ALTER VIEW":              templates.ALTER_VIEW,
+        "ALTER MASTER":            templates.ALTER_MASTER,
         SQL.CREATE_INDEX:          templates.CREATE_INDEX,
         SQL.CREATE_TABLE:          templates.CREATE_TABLE,
         SQL.CREATE_TRIGGER:        templates.CREATE_TRIGGER,
@@ -1031,9 +1077,9 @@ class Generator(object):
         return self.token(self._indent, "PRE") if self._indent else ""
 
 
-    def quote(self, val):
+    def quote(self, val, force=False):
         """Returns token for quoted value."""
-        return self.token(quote(val), "Q")
+        return self.token(quote(val, force=force), "Q")
 
 
     def padding(self, key, data, quoted=False):
@@ -1080,7 +1126,6 @@ class Generator(object):
 
 
 def test():
-    import json
     logging.basicConfig()
 
     TEST_STATEMENTS = [

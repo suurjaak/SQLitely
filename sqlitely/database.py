@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.06.2020
+@modified    30.06.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -464,7 +464,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
 
 
-    def __init__(self, filename=None, log_error=True):
+    def __init__(self, filename=None, log_error=True, parse=False):
         """
         Initializes a new database object from the file.
 
@@ -472,6 +472,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                             file deleted on close
         @param   log_error  if False, exceptions on opening the database
                             are not written to log (written by default)
+        @param   parse      parse all CREATE statements in full, complete metadata
         """
         self.filename = filename
         self.name = filename
@@ -497,14 +498,14 @@ WARNING: misuse can easily result in a corrupt database file.""",
         #      ?meta: {full metadata}}}}
         self.schema = defaultdict(CaselessDict)
         self.connection = None
-        self.open(log_error=log_error)
+        self.open(log_error=log_error, parse=parse)
 
 
     def __str__(self):
         return self.name
 
 
-    def open(self, log_error=True):
+    def open(self, log_error=True, parse=False):
         """Opens the database."""
         try:
             self.connection = sqlite3.connect(self.filename,
@@ -513,7 +514,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             self.connection.text_factory = str
             self.compile_options = [x.values()[0] for x in
                                     self.execute("PRAGMA compile_options", log=False).fetchall()]
-            self.populate_schema()
+            self.populate_schema(parse=parse)
             self.update_fileinfo()
         except Exception:
             if log_error: logger.exception("Error opening database %s.", self.filename)
@@ -667,9 +668,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
             relateds = self.get_related(category, name, data=True)
             if not relateds: return
             subkey = (hash(key), category, name)
-            for subcategory, items in relateds.items():
-                for item in items:
-                    self.locks[subcategory][item["name"].lower()].add(subkey)
+            for subcategory, itemmap in relateds.items():
+                for subname in itemmap:
+                    self.locks[subcategory][subname.lower()].add(subkey)
             qname = util.unprint(grammar.quote(self.schema[category][name]["name"], force=True))
             self.locklabels[subkey] = " ".join(filter(bool, (category, qname, label, "cascade")))
 
@@ -682,8 +683,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if category and name:
             subkey = (hash(key), category, name)
             relateds = self.get_related(category, name, data=True)
-            for subcategory, items in relateds.items():
-                for subname in (x["name"].lower() for x in items):
+            for subcategory, itemmap in relateds.items():
+                for subname in (x.lower() for x in itemmap):
                     self.locks[subcategory][subname].discard(subkey)
                     if not self.locks[subcategory][subname]:
                         self.locks[subcategory].pop(subname)
@@ -900,7 +901,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 and re.search(r"TOKENIZE\s*[\W]*icu[\W]", row["sql"], re.I):
                     continue # for row
 
-            row["sql"] = row["sql0"] = row["sql"].strip()
+            sql = row["sql"].strip().replace("\r\n", "\n")
+            sql = re.sub("\n\s+\)[\s;]*$", "\n)", sql)
+            if not sql.endswith(";"): sql += ";"
+            row["sql"] = row["sql0"] = sql
             self.schema[row["type"]][row["name"]] = row
 
         for mycategory, itemmap in self.schema.items():
@@ -938,11 +942,13 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if opts0 and opts0.get("meta") and opts["sql0"] == opts0["sql0"]:
                     meta, sql = opts0["meta"], opts0["sql"]
                 elif parse:
-                    meta, _ = grammar.parse(opts["sql"])
+                    meta, _ = grammar.parse(opts["sql0"])
                     if meta: sql, _ = grammar.generate(meta)
-                if meta and sql:
-                    opts.update(meta=meta, sql=sql)
-                    if "table" == mycategory: opts["columns"] = meta["columns"]
+                if meta: opts.update(meta=meta)
+                if sql and (not meta or not meta.get("__comments__")):
+                    opts.update(sql=sql)
+                if meta and "table" == mycategory and meta.get("columns"):
+                    opts["columns"] = meta["columns"]
 
                 # Retrieve table row counts
                 if "table" == mycategory and count:
@@ -1009,7 +1015,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
     def get_related(self, category, name, own=None, data=False, skip=None):
         """
         Returns database objects related to specified object in any way,
-        like triggers selecting from a view, as {category: [{item}, ]}.
+        like triggers selecting from a view,
+        as {category: CaselessDict({name: item, })}.
 
         @param   own   if true, returns only direct ownership relations,
                        like table's own indexes and triggers for table,
@@ -1052,20 +1059,22 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 or own is not None and bool(own) is not is_own:
                     continue # for subname, subitem
 
-                result.setdefault(subcategory, []).append(copy.deepcopy(subitem))
+                if subcategory not in result: result[subcategory] = CaselessDict()
+                result[subcategory][subname] = copy.deepcopy(subitem)
 
         visited = CaselessDict()
         for vv in result.values() if data else ():
-            skip.update({v["name"]: True for v in vv})
+            skip.update({v: True for v in vv})
         for mycategory, items in result.items() if data else ():
             if mycategory not in SUBCATEGORIES: continue # for mycategory, items
             for item in items:
                 if item["name"] in visited: continue # for item
                 visited[item["name"]] = True
                 subresult = self.get_related(mycategory, item["name"], own, data, skip)
-                for subcategory, subitems in subresult.items():
-                    result.setdefault(subcategory, []).extend(subitems)
-                    visited.update({x["name"]: True for x in subitems})
+                for subcategory, subitemmap in subresult.items():
+                    if subcategory not in result: result[subcategory] = CaselessDict()
+                    result[subcategory].update(subitemmap)
+                    visited.update(subitemmap)
                     skip.update(visited)
 
         return result
@@ -1103,11 +1112,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 names = tuple(x["name"] for x in c["key"])
                 mykeys[names] = {"name": names, "pk": {}}
         relateds = {} if pks_only else self.get_related("table", table, False)
-        for item2 in relateds.get("table", []):
+        for name2, item2 in relateds.get("table", {}).items():
             for fk in [x for x in get_fks(item2) if table in x["table"]]:
                 keys = fk["table"][table]
                 lk = mykeys.get(keys) or {"name": keys}
-                lk.setdefault("table", CaselessDict())[item2["name"]] = fk["name"]
+                lk.setdefault("table", CaselessDict())[name2] = fk["name"]
                 mykeys[keys] = lk
         lks = sorted(mykeys.values(), key=lambda x: (len(x["name"]), "pk" not in x, x["name"]))
 
@@ -1161,12 +1170,13 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     if err: raise Exception(err)
                     return sql
 
-                sql = opts["sql"]
+                sql = sql0 = opts["sql"]
                 kws = {x: transform[x] for x in ("flags", "renames")
                        if transform and x in transform}
                 if not opts.get("meta") or kws or indent != "  ":
                     sql, err = grammar.transform(sql, indent=indent, **kws)
                     if err and kws: raise Exception(err)
+                    elif not sql: sql = sql0
                 sqls.setdefault(category, []).append(sql)
 
         return "\n\n".join("\n\n".join(vv) for vv in sqls.values())

@@ -15,6 +15,9 @@ Stand-alone GUI components for wx:
 - HintedTextCtrl(wx.TextCtrl):
   A text control with a hint text shown when no value, hidden when focused.
 
+- MessageDialog(wx.Dialog):
+  A modal message dialog that is closable from another thread.
+
 - NonModalOKDialog(wx.Dialog):
   A simple non-modal dialog with an OK button, stays on top of parent.
 
@@ -63,7 +66,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    17.06.2020
+@modified    02.07.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -858,7 +861,8 @@ class FormDialog(wx.Dialog):
         dialog = wx.FileDialog(
             self, message="Open file", defaultFile="",
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
-            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
+            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN |
+                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
         fpath = path + (field["name"], )
@@ -1025,6 +1029,66 @@ class HintedTextCtrl(wx.TextCtrl):
             self.SetForegroundColour(self._hint_colour)
             self._hint_on = True
         wx.CallAfter(setattr, self, "_ignore_change", False)
+
+
+
+class MessageDialog(wx.Dialog):
+    """
+    A modal message dialog that is closable from another thread.
+    """
+
+    BSTYLES = (wx.OK, wx.CANCEL,  wx.YES, wx.NO, wx.APPLY, wx.CLOSE, wx.HELP,
+               wx.CANCEL_DEFAULT, wx.NO_DEFAULT)
+    ISTYLES = {wx.ICON_INFORMATION: wx.ART_INFORMATION, wx.ICON_QUESTION: wx.ART_QUESTION,
+               wx.ICON_WARNING:     wx.ART_WARNING,     wx.ICON_ERROR:    wx.ART_ERROR}
+    IDS = {wx.OK: wx.ID_OK, wx.CANCEL: wx.ID_CANCEL, wx.YES: wx.ID_YES, wx.NO: wx.ID_NO,
+           wx.APPLY: wx.ID_APPLY, wx.CLOSE: wx.ID_CLOSE, wx.HELP: wx.ID_HELP}
+    AFFIRMS = (wx.YES,    wx.OK)
+    ESCAPES = (wx.CANCEL, wx.NO, wx.CLOSE)
+
+    def __init__(self, parent, message, caption=wx.MessageBoxCaptionStr,
+                 style=wx.OK | wx.CAPTION | wx.CLOSE_BOX, pos=wx.DefaultPosition):
+
+        bstyle, wstyle = 0, (style | wx.CAPTION | wx.CLOSE_BOX)
+        for b in self.BSTYLES:
+            if style & b: bstyle, wstyle = bstyle | b, wstyle ^ b
+        for b in self.ISTYLES:
+            if style & b: bstyle, wstyle = bstyle ^ b, wstyle ^ b
+        super(MessageDialog, self).__init__(parent, title=caption, style=wstyle, pos=pos)
+
+        self._text = wx.StaticText(self, label=message)
+        self._icon = None
+        for b, i in self.ISTYLES.items():
+            if style & b:
+                bmp = wx.ArtProvider.GetBitmap(i, wx.ART_FRAME_ICON, (32, 32))
+                self._icon = wx.StaticBitmap(self, bitmap=bmp)
+                break # for b, i
+
+        self.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_text    = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_buttons = self.CreateStdDialogButtonSizer(style)
+
+        if self._icon: sizer_text.Add(self._icon, border=10, flag=wx.RIGHT)
+        sizer_text.Add(self._text, flag=wx.GROW)
+        self.Sizer.Add(sizer_text, border=10, flag=wx.ALL)
+        self.Sizer.Add(sizer_buttons, border=10, flag=wx.ALL | wx.ALIGN_RIGHT)
+
+        for b in self.BSTYLES:
+            if bstyle & b and b in self.IDS:
+                self.Bind(wx.EVT_BUTTON, self._OnButton, id=self.IDS[b])
+
+        affirm = next((self.IDS[b] for b in self.AFFIRMS if bstyle & b), None)
+        escape = next((self.IDS[b] for b in self.ESCAPES if bstyle & b), None)
+        if affirm: self.SetAffirmativeId(affirm)
+        if escape: self.SetEscapeId(escape)
+
+        self.Layout()
+        self.Fit()
+        self.CenterOnParent()
+
+
+    def _OnButton(self, event):
+        self.EndModal(event.EventObject.Id)
 
 
 
@@ -4623,3 +4687,26 @@ def YesNoMessageBox(message, caption, icon=wx.ICON_NONE, defaultno=False):
     dlg = wx.MessageDialog(None, message, caption, style)
     dlg.SetOKCancelLabels("&Yes", "&No")
     return wx.YES if wx.ID_OK == dlg.ShowModal() else wx.NO
+
+
+def get_dialog_path(dialog):
+    """
+    Returns the file path chosen in FileDialog, adding extension if dialog result
+    has none even though a filter has been selected, or if dialog result has a 
+    different extension than what is available in selected filter.
+    """
+    result = dialog.GetPath()
+
+    # "SQLite database (*.db;*.sqlite;*.sqlite3)|*.db;*.sqlite;*.sqlite3|All files|*.*"
+    wcs = dialog.Wildcard.split("|")
+    wcs = wcs[1::2] if len(wcs) > 1 else wcs
+    wcs = [[y.lstrip("*") for y in x.split(";")] for x in wcs] # [['.ext1', '.ext2'], ..]
+
+    extension = os.path.splitext(result)[-1].lower()
+    selexts = wcs[dialog.FilterIndex] if 0 <= dialog.FilterIndex < len(wcs) else None
+    if result and selexts and extension not in selexts and dialog.ExtraStyle & wx.FD_SAVE:
+        ext = next((x for x in selexts if "*" not in x), None)
+        if ext: result += ext
+
+    return result
+

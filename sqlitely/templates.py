@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.06.2020
+@modified    27.06.2020
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -17,7 +17,7 @@ import re
 from . import conf
 
 # Modules imported inside templates:
-#import collections, itertools, json, math, os, pyparsing, sys, urllib, wx
+#import collections, itertools, json, logging, math, os, pyparsing, sys, urllib, wx
 #from sqlitely import conf, grammar, images, searchparser, templates
 #from sqlitely.lib import util
 
@@ -254,6 +254,10 @@ HTML data export template for the rows part.
 @param   ?progress  callback(count) returning whether to cancel, if any
 """
 DATA_ROWS_HTML = """
+<%
+i = 0
+progress = isdef("progress") and progress
+%>
 %for i, row in enumerate(rows, 1):
 <%
 namespace["row_count"] += 1
@@ -264,12 +268,12 @@ namespace["row_count"] += 1
 %endfor
 </tr>
 <%
-if not i % 100 and isdef("progress") and progress and not progress(count=i):
+if not i % 100 and not progress(count=i):
     break # for i, row
 %>
 %endfor
 <%
-if isdef("progress") and progress: progress(name=name, count=i)
+if progress: progress(name=name, count=i)
 %>
 """
 
@@ -353,6 +357,7 @@ DATA_ROWS_JSON = """<%
 import collections, json
 from sqlitely import templates
 
+progress = isdef("progress") and progress
 rows = iter(rows)
 i, row, nextrow = 1, next(rows, None), next(rows, None)
 indent = "  " if nextrow else ""
@@ -363,9 +368,9 @@ while row:
     echo("  " + text.replace("\\n", "\\n  ") + (",\\n" if nextrow else "\\n"))
 
     i, row, nextrow = i + 1, nextrow, next(rows, None)
-    if not i % 100 and isdef("progress") and progress and not progress(count=i):
+    if not i % 100 and progress and not progress(count=i):
         break # while row
-if isdef("progress") and progress: progress(name=name, count=i)
+if progress: progress(name=name, count=i)
 %>"""
 
 
@@ -420,6 +425,7 @@ DATA_ROWS_SQL = """<%
 from sqlitely import grammar, templates
 
 str_cols = ", ".join(grammar.quote(c["name"]) for c in columns)
+progress = isdef("progress") and progress
 %>
 %for i, row in enumerate(rows, 1):
 <%
@@ -428,12 +434,12 @@ values = [grammar.format(row[c["name"]], c) for c in columns]
 %>
 INSERT INTO {{ name }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
 <%
-if not i % 100 and isdef("progress") and progress and not progress(name=name, count=i):
+if not i % 100 and progress and not progress(name=name, count=i):
     break # for i, row
 %>
 %endfor
 <%
-if isdef("progress") and progress: progress(name=name, count=i)
+if progress: progress(name=name, count=i)
 %>
 """
 
@@ -532,6 +538,7 @@ TXT data export template for the rows part.
 DATA_ROWS_TXT = """<%
 from sqlitely import templates
 
+progress = isdef("progress") and progress
 %>
 %for i, row in enumerate(rows, 1):
 <%
@@ -549,12 +556,12 @@ values.append((value.ljust if columnjusts[c["name"]] else value.rjust)(columnwid
     %endfor
 | {{ " | ".join(values) }} |
 <%
-if not i % 100 and isdef("progress") and progress and not progress(count=i):
+if not i % 100 and progress and not progress(count=i):
     break # for i, row
 %>
 %endfor
 <%
-if isdef("progress") and progress: progress(name=name, count=i)
+if progress: progress(name=name, count=i)
 %>
 """
 
@@ -1651,7 +1658,7 @@ countstr = util.count(item)
 <%
 rels = [] # [(source, keys, target, keys)]
 %>
-            %for item2 in relateds.get("table", ()):
+            %for item2 in relateds.get("table", {}).values():
 <%
 
 lks2, fks2 = db.get_keys(item2["name"])
@@ -1691,7 +1698,7 @@ for col in fks2:
     </td>
 
     <td>
-            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
                 %if "table" != item2["type"] and util.lceq(item2.get("tbl_name"), item["name"]):
 <%
 flags["has_direct"] = True
@@ -1700,7 +1707,7 @@ flags["has_direct"] = True
                 %endif
             %endfor
 
-            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
                 %if "table" != item2["type"] and not util.lceq(item2.get("tbl_name"), item["name"]):
                     %if flags.get("has_direct") and not flags.get("has_indirect"):
   <br />
@@ -1767,7 +1774,7 @@ mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "v
             %endif
     </td>
     <td>
-            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
                 %if not util.lceq(item2["name"], item["tbl_name"]):
   <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a></em><br />
                 %endif
@@ -1787,11 +1794,11 @@ mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "v
     </td>
 
     <td>
-            %for item2 in (x for c in ("table", "view") for x in relateds.get(c, ()) if x["name"].lower() in item["meta"]["__tables__"]):
+            %for item2 in (x for c in ("table", "view") for x in relateds.get(c, {}).values() if x["name"].lower() in item["meta"]["__tables__"]):
       {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a><br />
             %endfor
 
-            %for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, ()) if util.lceq(x.get("tbl_name"), item["name"])):
+            %for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, {}).values() if util.lceq(x.get("tbl_name"), item["name"])):
                 %if not i:
       <br />
                 %endif
@@ -1801,7 +1808,7 @@ mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "v
     </td>
 
     <td>
-            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ()) if item["name"].lower() in x["meta"]["__tables__"]):
+            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values() if item["name"].lower() in x["meta"]["__tables__"]):
       <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urllib.quote(item2["name"], safe="") }}">{{ util.unprint(item2["name"]) }}</a></em><br />
             %endfor
     </td>
@@ -2002,7 +2009,7 @@ for item in db.schema.get(category).values():
             row["Size in bytes"] = util.format_bytes(size, max_units=False, with_units=False) if size != "" else ""
 
         rels = [] # [(source, keys, target, keys)]
-        for item2 in relateds.get("table", ()):
+        for item2 in relateds.get("table", {}).values():
             lks2, fks2 = db.get_keys(item2["name"])
             for col in lks2:
                 for table, keys in col.get("table", {}).items():
@@ -2020,12 +2027,12 @@ for item in db.schema.get(category).values():
         row["Related tables"] = reltexts or [""]
 
         othertexts = []
-        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
             if "table" != item2["type"] and util.lceq(item2.get("tbl_name"), item["name"]):
                 flags["has_direct"] = True
                 s = "%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"])))
                 othertexts.append(s)
-        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
             if "table" != item2["type"] and not util.lceq(item2.get("tbl_name"), item["name"]):
                 if flags.get("has_direct") and not flags.get("has_indirect"):
                     flags["has_indirect"] = True
@@ -2046,7 +2053,7 @@ for item in db.schema.get(category).values():
         if item.get("meta", {}).get("columns"):
             row["When"] += " OF " + ", ".join(util.unprint(grammar.quote(c["name"])) for c in item["meta"]["columns"])
         usetexts = []
-        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ())):
+        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
             if not util.lceq(item2["name"], item["tbl_name"]):
                 usetexts.append("%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"]))))
         row["Uses"] = usetexts or [""]
@@ -2055,16 +2062,16 @@ for item in db.schema.get(category).values():
         row["Columns"] = str(len(item["columns"]))
 
         usetexts = []
-        for item2 in (x for c in ("table", "view") for x in relateds.get(c, ()) if x["name"].lower() in item["meta"]["__tables__"]):
+        for item2 in (x for c in ("table", "view") for x in relateds.get(c, {}).values() if x["name"].lower() in item["meta"]["__tables__"]):
             usetexts.append("%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"]))))
-        for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, ()) if util.lceq(x.get("tbl_name"), item["name"])):
+        for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, {}).values() if util.lceq(x.get("tbl_name"), item["name"])):
             if not i:
                 usetexts.append("")
                 usetexts.append("%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"]))))
         row["Uses"] = usetexts or [""]
 
         usedbytexts = []
-        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, ()) if item["name"].lower() in x["meta"]["__tables__"]):
+        for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values() if item["name"].lower() in x["meta"]["__tables__"]):
             usedbytexts.append("%s %s" % (item2["type"], util.unprint(grammar.quote(item2["name"]))))
         row["Used by"] = usedbytexts or [""]
 
@@ -2181,13 +2188,17 @@ Database dump SQL template.
 @param   ?progress  callback(count) returning whether to cancel, if any
 """
 DUMP_SQL = """<%
-import itertools
+import itertools, logging
+from sqlitely.lib import util
 from sqlitely.lib.vendor.step import Template
 from sqlitely import grammar, templates
+
+logger = logging.getLogger("sqlitely")
 
 is_initial = lambda o, v: o["initial"](db, v) if callable(o.get("initial")) else o.get("initial")
 pragma_first = {k: v for k, v in pragma.items() if is_initial(db.PRAGMA[k], v)}
 pragma_last  = {k: v for k, v in pragma.items() if not is_initial(db.PRAGMA[k], v)}
+progress = isdef("progress") and progress
 %>
 -- Database dump.
 -- Source: {{ db.name }}.
@@ -2205,14 +2216,25 @@ pragma_last  = {k: v for k, v in pragma.items() if not is_initial(db.PRAGMA[k], 
 %for table in data:
 <%
 if progress and not progress(): break # for table
-row = next(table["rows"], None)
-if not row: continue # for table
-rows = itertools.chain([row], table["rows"])
+try:
+    row = next(table["rows"], None)
+    if not row: continue # for table
+    rows = itertools.chain([row], table["rows"])
+except Exception as e:
+    logger.exception("Error exporting table %s from %s.", grammar.quote(table["name"]), db)
+    if progress and not progress(name=table["name"], error=util.format_exc(e)):
+        break # for table
+    else: continue # for table
 %>
 
 -- Table {{ grammar.quote(table["name"], force=True) }} data:
 <%
-Template(templates.DATA_ROWS_SQL).stream(buffer, dict(table, progress=progress, rows=rows))
+try:
+    Template(templates.DATA_ROWS_SQL).stream(buffer, dict(table, progress=progress, rows=rows))
+except Exception as e:
+    logger.exception("Error exporting table %s from %s.", grammar.quote(table["name"]), db)
+    if progress and not progress(name=table["name"], error=util.format_exc(e)):
+        break # for table
 %>
 
 %endfor

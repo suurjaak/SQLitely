@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.06.2020
+@modified    04.07.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -21,6 +21,7 @@ import json
 import logging
 import math
 import pickle
+import Queue
 import os
 import re
 import string
@@ -713,18 +714,18 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         refresh_idxs, reload_idxs = [], []
         pks = [y for x in self.db.get_keys(self.name, True)[0] for y in x["name"]]
         rels = self.db.get_related("table", self.name, own=True)
-        actions = {x["meta"].get("action"): True for x in rels.get("trigger", [])}
+        actions = {x["meta"].get("action"): True for x in rels.get("trigger", {}).values()}
 
         try:
             for idx in self.idx_changed.copy():
                 row = self.rows_all[idx]
-                refresh, reload = self._CommitRow(row, pks, rels, actions)
+                refresh, reload = self._CommitRow(row, pks, actions)
                 if refresh: refresh_idxs.append(idx)
                 if reload:  reload_idxs.append(idx)
 
             for idx in self.idx_new[:]:
                 row = self.rows_all[idx]
-                refresh, reload = self._CommitRow(row, pks, rels, actions)
+                refresh, reload = self._CommitRow(row, pks, actions)
                 if refresh: refresh_idxs.append(idx)
                 if reload:  reload_idxs.append(idx)
 
@@ -781,12 +782,12 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         """
         pks = [y for x in self.db.get_keys(self.name, True)[0] for y in x["name"]]
         rels = self.db.get_related("table", self.name, own=True)
-        actions = {x["meta"].get("action"): True for x in rels.get("trigger", [])}
+        actions = {x["meta"].get("action"): True for x in rels.get("trigger", {}).values()}
         refresh = False
 
         idx, row = rowdata[self.KEY_ID], rowdata
         try:
-            refresh, _ = self._CommitRow(row, pks, rels, actions)
+            refresh, _ = self._CommitRow(row, pks, actions)
             self.rows_all[idx].update(row)
         except Exception as e:
             msg = "Error saving changes in %s." % grammar.quote(self.name)
@@ -1210,7 +1211,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         return rows, cols
 
 
-    def _CommitRow(self, rowdata, pks, rels, actions):
+    def _CommitRow(self, rowdata, pks, actions):
         """
         Saves changes to the specified row, returns
         (whether should refresh data in grid, whether should reload data from db).
@@ -1629,7 +1630,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         self._dialog_export = wx.FileDialog(self, defaultDir=os.getcwd(),
             message="Save query as", wildcard=importexport.EXPORT_WILDCARD,
-            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT |
+                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -1971,11 +1973,9 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             self._dialog_export.SetFilterIndex(importexport.EXPORT_EXTS.index(conf.LastExportType))
         if wx.ID_OK != self._dialog_export.ShowModal(): return
 
-        filename = self._dialog_export.GetPath()
-        extname = importexport.EXPORT_EXTS[self._dialog_export.FilterIndex]
-        conf.LastExportType = extname
-        if not filename.lower().endswith(".%s" % extname):
-            filename += ".%s" % extname
+        filename = controls.get_dialog_path(self._dialog_export)
+        extname = os.path.splitext(filename)[-1].lstrip(".")
+        if extname in importexport.EXPORT_EXTS: conf.LastExportType = extname
         try:
             make_iterable = self._grid.Table.GetRowIterator
             name = ""
@@ -2155,7 +2155,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         """
         dialog = wx.FileDialog(self, message="Open", defaultFile="",
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
-            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
+            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN |
+                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
@@ -2176,11 +2177,12 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         filename = "%s SQL" % os.path.splitext(os.path.basename(self._db.name))[0]
         dialog = wx.FileDialog(self, message="Save as", defaultFile=filename,
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
-            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE |
+                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
-        filename = dialog.GetPath()
+        filename = controls.get_dialog_path(dialog)
         try:
             importexport.export_sql(filename, self._db, self._stc.Text, "SQL window.")
             util.start_file(filename)
@@ -2213,7 +2215,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._dialog_export = wx.FileDialog(self, defaultDir=os.getcwd(),
             message="Save %s as" % self._category,
             wildcard=importexport.EXPORT_WILDCARD,
-            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT |
+                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2253,7 +2256,6 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         button_export  = wx.Button(self, label="Export to fi&le")
         button_export.ToolTip    = "Export to file"
         button_actions = wx.Button(self, label="Other &actions ..")
-        button_actions.Show("table" == self._category)
 
         grid = self._grid = wx.grid.Grid(self)
         SQLiteGridBaseMixin.__init__(self)
@@ -2556,36 +2558,40 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         menu = wx.Menu()
         item_export   = wx.MenuItem(menu, -1, "&Export to another database")
-        item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
-        item_reindex  = wx.MenuItem(menu, -1, "Reindex table")
-        item_truncate = wx.MenuItem(menu, -1, "Truncate table")
-        item_drop     = wx.MenuItem(menu, -1, "Drop table")
+        if "table" == self._category:
+            item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
+            item_reindex  = wx.MenuItem(menu, -1, "Reindex table")
+            item_truncate = wx.MenuItem(menu, -1, "Truncate table")
+        item_drop     = wx.MenuItem(menu, -1, "Drop %s" % self._category)
 
         menu.Append(item_export)
-        menu.Append(item_import)
+        if "table" == self._category:
+            menu.Append(item_import)
         menu.AppendSeparator()
-        menu.Append(item_reindex)
-        menu.Append(item_truncate)
+        if "table" == self._category:
+            menu.Append(item_reindex)
+            menu.Append(item_truncate)
         menu.Append(item_drop)
 
-        if "index" not in self._db.get_related("table", self._item["name"], own=True):
-            item_reindex.Enable(False)
-        if not self._grid.Table.GetNumberRows(total=True):
-            item_truncate.Enable(False)
+        if "table" == self._category:
+            if "index" not in self._db.get_related("table", self._item["name"], own=True):
+                item_reindex.Enable(False)
+            if not self._grid.Table.GetNumberRows(total=True):
+                item_truncate.Enable(False)
 
         menu.Bind(wx.EVT_MENU, self._OnExportToDB, item_export)
-        menu.Bind(wx.EVT_MENU, on_import,          item_import)
-        menu.Bind(wx.EVT_MENU, on_reindex,         item_reindex)
-        menu.Bind(wx.EVT_MENU, self.Truncate,      item_truncate)
+        if "table" == self._category:
+            menu.Bind(wx.EVT_MENU, on_import,          item_import)
+            menu.Bind(wx.EVT_MENU, on_reindex,         item_reindex)
+            menu.Bind(wx.EVT_MENU, self.Truncate,      item_truncate)
         menu.Bind(wx.EVT_MENU, on_drop,            item_drop)
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
 
 
     def _OnExportToDB(self, event=None):
         """Handler for exporting table grid contents to another database."""
-        tables = [self._item["name"]]
         selects = {self._item["name"]: self._grid.Table.GetSQL(sort=True, filter=True)}
-        self._PostEvent(export_db=True, tables=tables, selects=selects)
+        self._PostEvent(export_db=True, names=self._item["name"], selects=selects)
 
 
     def _OnExport(self, event=None):
@@ -2600,11 +2606,9 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             self._dialog_export.SetFilterIndex(importexport.EXPORT_EXTS.index(conf.LastExportType))
         if wx.ID_OK != self._dialog_export.ShowModal(): return
 
-        filename = self._dialog_export.GetPath()
-        extname = importexport.EXPORT_EXTS[self._dialog_export.FilterIndex]
-        conf.LastExportType = extname
-        if not filename.lower().endswith(".%s" % extname):
-            filename += ".%s" % extname
+        filename = controls.get_dialog_path(self._dialog_export)
+        extname = os.path.splitext(filename)[-1].lstrip(".")
+        if extname in importexport.EXPORT_EXTS: conf.LastExportType = extname
         try:
             grid = self._grid.Table
             args = {"make_iterable": grid.GetRowIterator, "filename": filename,
@@ -2855,20 +2859,29 @@ class SchemaObjectPage(wx.Panel):
                                         **item.get("meta", {})))
             names = sum(map(list, db.schema.values()), [])
             item["meta"]["name"] = util.make_unique(item["meta"]["name"], names)
+
         item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
+        if "sql" not in item or item["meta"].get("__comments__"):
+            sql, _ = grammar.generate(item["meta"])
+            if sql is not None:
+                item = dict(item, sql=sql, sql0=item.get("sql0", sql))
+        else:
+            item = dict(item, sql0=item["sql"])
         self._item     = copy.deepcopy(item)
         self._original = copy.deepcopy(item)
+        self._sql0_applies = True # Can current schema be parsed from item's sql0
 
         self._ctrls    = {}  # {}
         self._buttons  = {}  # {name: wx.Button}
         self._sizers   = {}  # {child sizer: parent sizer}
         self._col_updater = None # Column update cascade callback timer
+        self._alter_sqler = None # ALTER SQL populate callback timer
         # Pending column updates as {__id__: {col: {}, ?rename: newname, ?remove: bool}}
         self._col_updates = {}
         self._ignore_change = False
         self._has_alter     = False
         self._show_alter    = False
-        self._fks_on        = db.execute("PRAGMA foreign_keys", log=False).fetchone()["foreign_keys"]
+        self._fks_on        = db.execute("PRAGMA foreign_keys", log=False).fetchone().values()[0]
         self._backup        = None # State variables copy for RestoreBackup
         self._types    = self._GetColumnTypes()
         self._tables   = [x["name"] for x in db.get_category("table").values()]
@@ -2908,7 +2921,8 @@ class SchemaObjectPage(wx.Panel):
         tb.AddTool(wx.ID_SAVE, "", bmp2, shortHelp="Save SQL to file")
         tb.Realize()
 
-        stc = self._ctrls["sql"] = controls.SQLiteTextCtrl(panel2, style=wx.BORDER_STATIC)
+        stc = self._ctrls["sql"] = controls.SQLiteTextCtrl(panel2, traversable=True,
+                                                           style=wx.BORDER_STATIC)
         stc.SetReadOnly(True)
         stc._toggle = "skip"
 
@@ -2918,8 +2932,8 @@ class SchemaObjectPage(wx.Panel):
         button_edit    = self._buttons["edit"]    = wx.Button(panel2, label="Edit")
         button_refresh = self._buttons["refresh"] = wx.Button(panel2, label="Refresh")
         button_test    = self._buttons["test"]    = wx.Button(panel2, label="Test")
-        button_import  = self._buttons["import"]  = wx.Button(panel2, label="Import SQL")
-        button_cancel  = self._buttons["cancel"]  = wx.Button(panel2, label="Cancel")
+        button_import  = self._buttons["import"]  = wx.Button(panel2, label="Edit S&QL")
+        button_cancel  = self._buttons["cancel"]  = wx.Button(panel2, label="&Cancel")
         button_actions = self._buttons["actions"] = wx.Button(panel2, label="Actions ..")
         button_close   = self._buttons["close"]   = wx.Button(panel2, label="Close")
         button_edit._toggle   = button_refresh._toggle = "skip"
@@ -2927,7 +2941,7 @@ class SchemaObjectPage(wx.Panel):
         button_import._toggle = button_cancel._toggle  = button_test._toggle  = "show skip"
         button_refresh.ToolTip = "Reload statement, and database tables"
         button_test.ToolTip    = "Test saving schema object, checking SQL validity"
-        button_import.ToolTip  = "Import %s definition from external SQL" % item["type"]
+        button_import.ToolTip  = "Edit SQL statement directly"
 
         sizer_name.Add(label_name, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_name.Add(edit_name, proportion=1)
@@ -2968,8 +2982,6 @@ class SchemaObjectPage(wx.Panel):
         self._BindDataHandler(self._OnChange, edit_name, ["name"])
 
         self._Populate()
-        if "sql" not in self._original and "sql" in self._item:
-            self._original["sql"] = self._item["sql"]
 
         has_cols = self._hasmeta or self._category in ("table", "index", "view")
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
@@ -2996,6 +3008,11 @@ class SchemaObjectPage(wx.Panel):
         splitter.SashInvisible = not has_cols
         wx_accel.accelerate(self)
         button_edit.Enabled = self._hasmeta
+        if grammar.SQL.CREATE_VIRTUAL_TABLE == util.get(self._item, "meta", "__type__"):
+            button_edit.Enabled = False
+            self._panel_category.Hide()
+            splitter.SetMinimumPaneSize(0)
+            splitter.SashPosition = 0
         def after():
             if not self: return
             if self._newmode: edit_name.SetFocus(), edit_name.SelectAll()
@@ -3017,7 +3034,8 @@ class SchemaObjectPage(wx.Panel):
         """Returns whether there are unsaved changes."""
         result = False
         if self._editmode:
-            result = (self._original.get("sql") != self._item.get("sql"))
+            a, b = self._original, self._item
+            result = a["sql"] != b["sql"] or a["sql0"] != b["sql0"]
         return result
 
 
@@ -3028,7 +3046,7 @@ class SchemaObjectPage(wx.Panel):
         @param   backup  back up unsaved changes for RestoreBackup
         """
         VARS = ["_newmode", "_editmode", "_item", "_original", "_has_alter",
-                "_types", "_tables", "_views"]
+                "_sql0_applies", "_types", "_tables", "_views"]
         myvars = {x: copy.deepcopy(getattr(self, x)) for x in VARS} if backup else None
         result = self._OnSave()
         if result and backup: self._backup = myvars
@@ -3224,7 +3242,7 @@ class SchemaObjectPage(wx.Panel):
         label_upon = wx.StaticText(panel, label="&Upon:")
         list_upon = self._ctrls["upon"] = wx.ComboBox(panel,
             style=wx.CB_DROPDOWN | wx.CB_READONLY, choices=self.UPON)
-        label_action = wx.StaticText(panel, label="&Action:")
+        label_action = wx.StaticText(panel, label="Ac&tion:")
         list_action = self._ctrls["action"] = wx.ComboBox(panel,
             style=wx.CB_DROPDOWN | wx.CB_READONLY, choices=self.ACTION)
         label_table._toggle = "skip"
@@ -3562,7 +3580,7 @@ class SchemaObjectPage(wx.Panel):
         """Populates panel with table-specific data."""
         meta = self._item.get("meta") or {}
 
-        self._ctrls["without"].Value   = bool(meta.get("without"))
+        self._ctrls["without"].Value = bool(meta.get("without"))
 
         for i, grid in enumerate((self._grid_columns, self._grid_constraints)):
             if i and not self._hasmeta: continue # for i, grid
@@ -4090,7 +4108,7 @@ class SchemaObjectPage(wx.Panel):
             if "hide"    in action: b.Show(not edit)
             if not ("disable" in action or "skip" in action): b.Enable(edit)
 
-        self._buttons["edit"].Label = "Save" if edit else "Edit"
+        self._buttons["edit"].Label = "&Save" if edit else "Edit"
         tooltip = "Validate and confirm SQL, and save to database schema"
         self._buttons["edit"].ToolTip = tooltip if edit else ""
         self._buttons["edit"].ContainingSizer.Layout()
@@ -4146,30 +4164,46 @@ class SchemaObjectPage(wx.Panel):
         for c in self._ctrls.values():
             if not isinstance(c, controls.SQLiteTextCtrl): continue # for c
             c.AutoCompClearAdded()
-            if singlewords and c.LinesOnScreen() < 2: c.AutoCompAddWords(singlewords)
-            elif words and c.LinesOnScreen() > 1:
+            if singlewords and (not words or not c.Wheelable): c.AutoCompAddWords(singlewords)
+            elif words and c.Wheelable:
                 c.AutoCompAddWords(words)
                 for w, ww in subwords.items(): c.AutoCompAddSubWords(w, ww)
 
 
     def _PopulateSQL(self):
         """Populates CREATE SQL window."""
-        sql, _ = grammar.generate(self._item["meta"])
-        if sql is not None: self._item["sql"] = sql
-        elif not self._hasmeta: sql = self._item["sql"]
-        if self._show_alter: sql, _ = self._GetAlterSQL()
-        if sql is None: return
-        scrollpos = self._ctrls["sql"].GetScrollPos(wx.VERTICAL)
-        self._ctrls["sql"].SetReadOnly(False)
-        self._ctrls["sql"].SetText(sql.rstrip() + "\n")
-        self._ctrls["sql"].SetReadOnly(True)
-        self._ctrls["sql"].ScrollToLine(scrollpos)
+
+        def set_sql(sql):
+            if sql is None: return
+            scrollpos = self._ctrls["sql"].GetScrollPos(wx.VERTICAL)
+            self._ctrls["sql"].SetReadOnly(False)
+            self._ctrls["sql"].SetText(sql.rstrip() + "\n")
+            self._ctrls["sql"].SetReadOnly(True)
+            self._ctrls["sql"].ScrollToLine(scrollpos)
+
+        def set_alter_sql():
+            self._alter_sqler = None
+            sql, _, _ = self._GetAlterSQL()
+            set_sql(sql)
+
+        if self._editmode:
+            sql, _ = grammar.generate(self._item["meta"])
+            if sql is not None: self._item["sql"] = sql
+        sql = self._item["sql0" if self._sql0_applies else "sql"]
+
+        if self._show_alter:
+            if "table" == self._category:
+                if self._alter_sqler: self._alter_sqler.Stop()
+                self._alter_sqler = wx.CallLater(500, set_alter_sql)
+            else: set_alter_sql()
+        else:
+            set_sql(sql)
 
 
     def _GetAlterSQL(self):
         """
         Returns ALTER SQLs for carrying out schema changes,
-        as (sql, full sql with savepoints).
+        as (sql, full sql with savepoints, {generate args}).
         """
         if   "table"   == self._category: return self._GetAlterTableSQL()
         elif "index"   == self._category: return self._GetAlterIndexSQL()
@@ -4179,8 +4213,8 @@ class SchemaObjectPage(wx.Panel):
 
     def _GetAlterTableSQL(self):
         """Returns SQLs for carrying out table change."""
-        result = "", ""
-        if self._original["sql"] == self._item["sql"]: return result
+        result = "", "", None
+        if not self.IsChanged(): return result
 
         can_simple = True
         old, new = self._original["meta"], self._item["meta"]
@@ -4236,13 +4270,25 @@ class SchemaObjectPage(wx.Panel):
                 can_simple = not ("view" in rels or any(
                     not util.lceq(old["name"], x["name"])
                     and old["name"].lower() in x.get("meta", {}).get("__tables__", ())
-                    for c in ("table", "trigger") for x in rels.get(c, ())
+                    for c in ("table", "trigger") for x in rels.get(c, {}).values()
                 ))
+
+        sql = self._item["sql0" if self._sql0_applies else "sql"]
+        renames = {"table":  {old["name"]: new["name"]}
+                             if old["name"] != new["name"] else {},
+                   "column": {new["name"]: {
+                                  colmap1[c2["__id__"]]["name"]: c2["name"]
+                                  for c2 in cols2 if c2["__id__"] in colmap1
+                                  and colmap1[c2["__id__"]]["name"] != c2["name"]}}}
+        for k, v in renames.items():
+            if not v or not any(x.values() if isinstance(x, dict) else x
+                                for x in v.values()): renames.pop(k)
 
         if can_simple:
             # Possible to use just simple ALTER TABLE statements
+
             args = {"name": old["name"], "name2": new["name"],
-                    "__type__": grammar.SQL.ALTER_TABLE}
+                    "sql": sql, "__type__": grammar.SQL.ALTER_TABLE}
 
             for c2 in cols2:
                 c1 = colmap1.get(c2["__id__"])
@@ -4253,6 +4299,12 @@ class SchemaObjectPage(wx.Panel):
                 c1 = colmap1.get(c2["__id__"])
                 if c2["__id__"] not in colmap1:
                     args.setdefault("add", []).append(c2)
+
+            for category, itemmap in self._db.get_related("table", old["name"]).items():
+                for item in itemmap.values():
+                    sql, _ = grammar.transform(item["sql"], renames=renames)
+                    args.setdefault(category, []).append(dict(item, sql=sql, sql0=sql))
+
         else:
             # Need to re-create table, first under temporary name to copy data.
             names_existing = set(sum((list(self._db.schema[x])
@@ -4266,26 +4318,20 @@ class SchemaObjectPage(wx.Panel):
                              and x.update(table=tempname))) # Rename in constraints
             meta["name"] = tempname
 
+            sql, _ = grammar.transform(sql, renames={"table": {new["name"]: tempname}})
             args = {"name": old["name"], "name2": new["name"], "tempname": tempname,
-                    "fks": self._fks_on, "meta": meta, "__type__": "COMPLEX ALTER TABLE",
+                    "sql": sql, "fks": self._fks_on, "__type__": "COMPLEX ALTER TABLE",
                     "columns": [(colmap1[c2["__id__"]]["name"], c2["name"])
                                 for c2 in cols2 if c2["__id__"] in colmap1]}
 
-            renames = {"table":  {old["name"]: new["name"]}
-                                 if old["name"] != new["name"] else {},
-                       "column": {new["name"]: {
-                                      colmap1[c2["__id__"]]["name"]: c2["name"]
-                                      for c2 in cols2 if c2["__id__"] in colmap1
-                                      and colmap1[c2["__id__"]]["name"] != c2["name"]}}}
-            for k, v in renames.items():
-                if not v or not any(x.values() if isinstance(x, dict) else x
-                                    for x in v.values()): renames.pop(k)
-
-            for category, items in self._db.get_related("table", old["name"], own=not renames).items():
-                for item in items:
+            for category, itemmap in self._db.get_related("table", old["name"]).items():
+                for item in itemmap.values():
                     is_our_item = util.lceq(item["meta"].get("table"), old["name"])
                     sql, _ = grammar.transform(item["sql"], renames=renames)
-                    if sql == item["sql"] and not is_our_item: continue # for item
+                    if sql == item["sql"] and not is_our_item and "view" != category:
+                        # Views need recreating, as SQLite can raise "no such table" error
+                        # otherwise when dropping the old table.
+                        continue # for item
 
                     if "table" == category:
                         mytempname = util.make_unique(item["name"], names_existing)
@@ -4297,52 +4343,62 @@ class SchemaObjectPage(wx.Panel):
                         myitem, myrenames = dict(item), renames
                     sql, _ = grammar.transform(item["sql"], renames=myrenames)
                     myitem.update(sql=sql)
+                    if "table" == category:
+                        sql0, _ = grammar.transform(item["sql"], renames=renames)
+                        myitem.update(sql0=sql0)
                     args.setdefault(category, []).append(myitem)
                     if category not in ("table", "view"): continue # for item
 
                     subrelateds = self._db.get_related(category, item["name"], own=True)
-                    for subcategory, subitems in subrelateds.items():
-                        for subitem in subitems:
-                            # Re-create table indexes and triggers, and view triggers
+                    if "table" == category:
+                        # Views need recreating, as SQLite can raise "no such table" error
+                        # otherwise when dropping the old table.
+                        others = self._db.get_related(category, item["name"], own=False)
+                        if "view" in others: subrelateds["view"] = others["view"]
+                    for subcategory, subitemmap in subrelateds.items():
+                        for subitem in subitemmap.values():
+                            if any(x["name"] == subitem["name"] for x in args.get(subcategory, [])):
+                                continue # for subitem
+                            # Re-create table indexes and views and triggers, and view triggers
                             sql, _ = grammar.transform(subitem["sql"], renames=renames) \
                                      if renames else (subitem["sql"], None)
                             args.setdefault(subcategory, []).append(dict(subitem, sql=sql))
 
         short, _ = grammar.generate(dict(args, no_tx=True))
         full,  _ = grammar.generate(args)
-        return short, full
+        return short, full, args
 
 
     def _GetAlterIndexSQL(self):
         """Returns SQLs for carrying out index change."""
-        result = "", ""
-        if self._original["sql"] == self._item["sql"]: return result
+        result = "", "", None
+        if not self.IsChanged(): return result
 
-        old, new = self._original["meta"], self._item["meta"]
-        args = {"name": old["name"], "name2": new["name"],
-                "meta": new, "__type__": "ALTER INDEX"}
+        args = {"name": self._original["name"],
+                "sql": self._item["sql0" if self._sql0_applies else "sql"],
+                "__type__": "ALTER INDEX"}
         short, _ = grammar.generate(dict(args, no_tx=True))
         full,  _ = grammar.generate(args)
-        return short, full
+        return short, full, args
 
 
     def _GetAlterTriggerSQL(self):
-        """Returns SQLs for carrying out triggre change."""
-        result = "", ""
-        if self._original["sql"] == self._item["sql"]: return result
+        """Returns SQLs for carrying out trigger change."""
+        result = "", "", None
+        if not self.IsChanged(): return result
 
-        old, new = self._original["meta"], self._item["meta"]
-        args = {"name": old["name"], "name2": new["name"],
-                "meta": new, "__type__": "ALTER TRIGGER"}
+        args = {"name": self._original["name"],
+                "sql": self._item["sql0" if self._sql0_applies else "sql"],
+                "__type__": "ALTER TRIGGER"}
         short, _ = grammar.generate(dict(args, no_tx=True))
         full,  _ = grammar.generate(args)
-        return short, full
+        return short, full, args
 
 
     def _GetAlterViewSQL(self):
         """Returns SQLs for carrying out view change."""
-        result = "", ""
-        if self._original["sql"] == self._item["sql"]: return result
+        result = "", "", None
+        if not self.IsChanged(): return result
 
         renames = {}
         old, new = self._original["meta"], self._item["meta"]
@@ -4358,12 +4414,13 @@ class SchemaObjectPage(wx.Panel):
                 renames.setdefault("column", {}).setdefault(new["name"], {})
                 renames["column"][new["name"]][c1["name"]] = c2["name"]
 
-        args = {"name": old["name"], "name2": new["name"],
-                "meta": new, "__type__": "ALTER VIEW"}
+        args = {"name": old["name"],
+                "sql": self._item["sql0" if self._sql0_applies else "sql"],
+                "__type__": "ALTER VIEW"}
 
-        for category, items in self._db.get_related("view", old["name"], own=not renames).items():
-            for item in items:
-                is_view_trigger = util.lceq(item["meta"]["table"], old["name"])
+        for category, itemmap in self._db.get_related("view", old["name"], own=not renames).items():
+            for item in itemmap.values():
+                is_view_trigger = "trigger" == category and util.lceq(item["meta"]["table"], old["name"])
                 sql, _ = grammar.transform(item["sql"], renames=renames)
                 if sql == item["sql"] and not is_view_trigger: continue # for item
 
@@ -4371,13 +4428,13 @@ class SchemaObjectPage(wx.Panel):
                 if "view" != category: continue
 
                 # Re-create view triggers
-                for subitem in self._db.get_related("view", item["name"], own=True).values():
+                for subitem in self._db.get_related("view", item["name"], own=True).get("trigger", {}).values():
                     sql, _ = grammar.transform(subitem["sql"], renames=renames)
                     args.setdefault(subitem["type"], []).append(dict(subitem, sql=sql))
 
         short, _ = grammar.generate(dict(args, no_tx=True))
         full,  _ = grammar.generate(args)
-        return short, full
+        return short, full, args
 
 
     def _GetColumnTypes(self):
@@ -4714,6 +4771,24 @@ class SchemaObjectPage(wx.Panel):
         panel.Parent.ContainingSizer.Layout()
 
 
+    def _UpdateSqliteMaster(self, schema):
+        """
+        Updates CREATE-statements in sqlite_master directly.
+
+        @param   schema  {category: {name: CREATE SQL}}
+        """
+        try:
+            v = self._db.execute("PRAGMA schema_version", log=False).fetchone().values()[0]
+            schema = dict(schema, version=v)
+            sql, err = grammar.generate(schema, category="ALTER MASTER")
+            if err: logger.warn("Error syncing sqlite_master contents: %s.", err)
+            else: self._db.executescript(sql)
+        except Exception:
+            logger.warn("Error syncing sqlite_master contents.", exc_info=True)
+            try: self._db.execute("ROLLBACK")
+            except Exception: pass
+
+
     def _OnAddConstraint(self, event):
         """Opens popup for choosing constraint type."""
         menu = wx.Menu()
@@ -4725,8 +4800,10 @@ class SchemaObjectPage(wx.Panel):
             self.Freeze()
             try:
                 self._AddRow(["constraints"], len(constraints) - 1, constraint)
+                self._sql0_applies = False
                 self._PopulateSQL()
                 self._grid_constraints.GoToCell(len(constraints) - 1, 0)
+                self._PostEvent(modified=True)
             finally: self.Thaw()
 
         menu = wx.Menu()
@@ -4755,6 +4832,7 @@ class SchemaObjectPage(wx.Panel):
         self.Freeze()
         try:
             self._AddRow(path, len(ptr) - 1, value)
+            self._sql0_applies = False
             self._PopulateSQL()
             self._grid_columns.GoToCell(self._grid_columns.NumberRows - 1, 0)
             self._OnSize()
@@ -4786,6 +4864,7 @@ class SchemaObjectPage(wx.Panel):
         self.Freeze()
         try:
             self._RemoveRow(path, index)
+            self._sql0_applies = False
             self._PopulateSQL()
             self.Layout()
         finally: self.Thaw()
@@ -4808,6 +4887,7 @@ class SchemaObjectPage(wx.Panel):
             self._RemoveRow(path, index)
             self._AddRow(path, index2, ptr[index2], insert=True)
             grid.SetGridCursor(index2, col)
+            self._sql0_applies = False
             self._PopulateSQL()
         finally: self.Thaw()
         self._PostEvent(modified=True)
@@ -4843,6 +4923,7 @@ class SchemaObjectPage(wx.Panel):
         try:
             self._RemoveRow(path2, index)
             ctrls = self._AddRow(path2, index, data2, insert=True)
+            self._sql0_applies = False
             self._PopulateSQL()
             ctrls[-1].SetFocus()
         finally: self.Thaw()
@@ -4879,6 +4960,8 @@ class SchemaObjectPage(wx.Panel):
                 meta.pop("columns", None)
                 if ["upon"] == path: meta.pop("table", None)
             elif ["table"] == path: self._PopulateAutoComp()
+        elif "index" == self._category:
+            if ["table"] == path: self._PopulateAutoComp()
         elif "table" == self._category:
             if "constraints" == path[0] and "table" == path[-1]:
                 # Foreign table changed, clear foreign cols
@@ -4907,6 +4990,7 @@ class SchemaObjectPage(wx.Panel):
             if not rebuild: self._PopulateAutoComp()
             meta.pop("columns", None)
 
+        self._sql0_applies = False
         self._Populate() if rebuild else self._PopulateSQL()
         self._PostEvent(modified=True)
 
@@ -5078,7 +5162,9 @@ class SchemaObjectPage(wx.Panel):
             self._panel_constraints.ContainingSizer.Layout()
             t = "Constraints" + ("(%s)" % len(constraints) if constraints else "")
             self._notebook_table.SetPageText(1, t)
+            self._sql0_applies = False
             self._PopulateSQL()
+            self._PostEvent(modified=True)
         finally: self.Thaw()
         wx.CallAfter(self._SizeConstraintsGrid)
 
@@ -5101,7 +5187,9 @@ class SchemaObjectPage(wx.Panel):
             event.EventObject.GetPrevSibling().Value = True
             event.EventObject.GetNextSibling().Value = True
             coldata["notnull"] = {}
+        self._sql0_applies = False
         self._PopulateSQL()
+        self._PostEvent(modified=True)
 
 
     def _OnToggleAlterSQL(self, event=None):
@@ -5132,11 +5220,12 @@ class SchemaObjectPage(wx.Panel):
         filename = " ".join((action, category, name))
         dialog = wx.FileDialog(self, message="Save as", defaultFile=filename,
             wildcard="SQL file (*.sql)|*.sql|All files|*.*",
-            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE | wx.RESIZE_BORDER
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE |
+                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
-        filename = dialog.GetPath()
+        filename = controls.get_dialog_path(dialog)
         title = " ".join(filter(bool, (category, grammar.quote(name))))
         if self._show_alter: title = " ".join((action, title))
         try:
@@ -5150,27 +5239,26 @@ class SchemaObjectPage(wx.Panel):
 
 
     def _OnImportSQL(self, event=None):
-        """Handler for importing from external SQL, opens dialog."""
+        """Handler for editing SQL directly, opens dialog."""
         props = [{"name": "sql", "label": "SQL:", "component": controls.SQLiteTextCtrl,
                   "tb": [{"type": "paste", "help": "Paste from clipboard"},
                          {"type": "open",  "help": "Load from file"}, ]}]
-        data, title = {"sql": self._item["sql"]}, "Import definition from SQL"
-        words = {}
+        data, words = {"sql": self._item["sql0" if self._sql0_applies else "sql"]}, {}
         for category in ("table", "view"):
             for item in self._db.get_category(category).values():
-                if self._category in ("trigger", "view"):
+                if self._category in ("index", "trigger", "view"):
                     myname = grammar.quote(item["name"])
                     words[myname] = []
                 if not item.get("columns"): continue # for item
                 ww = [grammar.quote(c["name"]) for c in item["columns"]]
-                if self._category in ("trigger", "view"): words[myname] = ww
+                if self._category in ("index", "trigger", "view"): words[myname] = ww
                 if "trigger" == self._category \
                 and util.lceq(item["name"], self._item["meta"].get("table")):
                     words["OLD"] = words["NEW"] = ww
 
         def onclose(mydata):
             sql = mydata.get("sql", "")
-            if not sql or sql == data["sql"]: return True
+            if sql.strip() in ("", data["sql"]): return True
             meta, err = grammar.parse(sql, self._category)
 
             if not err and "INSTEAD OF" == meta.get("upon") and "table" in meta \
@@ -5191,23 +5279,26 @@ class SchemaObjectPage(wx.Panel):
             wx.MessageBox("Failed to parse SQL.\n\n%s" % err,
                           conf.Title, wx.OK | wx.ICON_ERROR)
 
-        dlg = controls.FormDialog(self.TopLevelParent, title, props, data,
-                                  autocomp=words, onclose=onclose)
+        dlg = controls.FormDialog(self.TopLevelParent, "Edit SQL",
+                                  props, data, autocomp=words, onclose=onclose)
         wx_accel.accelerate(dlg)
         if wx.ID_OK != dlg.ShowModal(): return
         sql = dlg.GetData().get("sql", "").strip().replace("\r\n", "\n")
-        if not sql or sql == data["sql"].strip(): return
+        if not sql.endswith(";"): sql += ";"
+        if not sql or sql == data["sql"]: return
 
         logger.info("Importing %s definition from SQL:\n\n%s", self._category, sql)
         meta, _ = grammar.parse(sql, self._category)
-        if self._show_alter: self._OnToggleAlterSQL()
-        self._item.update(sql=sql, meta=self._AssignColumnIDs(meta))
+        self._item.update(sql=sql, sql0=sql, meta=self._AssignColumnIDs(meta))
+        self._sql0_applies = True
         self._Populate()
+        self._PostEvent(modified=True)
 
 
-    def _OnRefresh(self, event=None):
+
+    def _OnRefresh(self, event=None, parse=False):
         """Handler for clicking refresh, updates database data in controls."""
-        self._db.populate_schema()
+        self._db.populate_schema(count=parse, parse=parse)
         prevs = {"_types": self._types, "_tables": self._tables,
                  "_views": self._views, "_item": self._item}
         self._types = self._GetColumnTypes()
@@ -5222,7 +5313,10 @@ class SchemaObjectPage(wx.Panel):
             )
             if item:
                 item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
+                sql, _ = grammar.generate(item["meta"])
+                if sql is not None: item.update(sql=sql, sql0=item.get("sql0", sql))
                 self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
+                self._sql0_applies = True
 
         if not event or any(prevs[x] != getattr(self, x) for x in prevs):
             self._Populate()
@@ -5240,7 +5334,7 @@ class SchemaObjectPage(wx.Panel):
         self._OnSave() if self._editmode else self._OnToggleEdit()
 
 
-    def _OnToggleEdit(self, event=None):
+    def _OnToggleEdit(self, event=None, parse=False):
         """Handler for toggling edit mode."""
         is_changed = self.IsChanged()
         if is_changed and wx.YES != controls.YesNoMessageBox(
@@ -5278,9 +5372,10 @@ class SchemaObjectPage(wx.Panel):
             else:
                 self._buttons["edit"].ToolTip = ""
                 if self._show_alter: self._OnToggleAlterSQL()
-                if is_changed: self._OnRefresh()
+                if is_changed or parse: self._OnRefresh(parse=parse)
                 else:
                     self._item = copy.deepcopy(self._original)
+                    self._sql0_applies = True
                     self._ToggleControls(self._editmode)
                 self._buttons["edit"].SetFocus()
         finally: self.Thaw()
@@ -5347,7 +5442,7 @@ class SchemaObjectPage(wx.Panel):
         errors, sql = [], self._item["sql"]
         if self.IsChanged(): errors, _ = self._Validate()
         if not errors and self.IsChanged():
-            if not self._newmode: sql, _ = self._GetAlterSQL()
+            if not self._newmode: sql, _, _ = self._GetAlterSQL()
             sql2 = "PRAGMA foreign_keys = off;\n\nSAVEPOINT test;\n\n" \
                    "%s;\n\nROLLBACK TO SAVEPOINT test;" % sql
             if ("table" == self._category and not self._newmode
@@ -5401,8 +5496,30 @@ class SchemaObjectPage(wx.Panel):
                                       (lock, "create" if self._newmode else "alter"),
                                       conf.Title, wx.OK | wx.ICON_WARNING)
 
-        sql1 = sql2 = self._item["sql"]
-        if not self._newmode: sql1, sql2 = self._GetAlterSQL()
+        def finalize(post=True):
+            """Updates UI after successful save, returns True."""
+            self._item.update(name=meta2["name"], meta=self._AssignColumnIDs(meta2),
+                              sql0=self._item["sql0" if self._sql0_applies else "sql"])
+            if "view" != self._category: self._item.update(
+                tbl_name=meta2["name" if "table" == self._category else "table"])
+            self._original = copy.deepcopy(self._item)
+            if self._show_alter: self._OnToggleAlterSQL()
+            self._has_alter = True
+            self._newmode = False
+            self._OnToggleEdit(parse=True)
+            if post: self._PostEvent(updated=True)
+            return True
+
+
+        sql1 = sql2 = self._item["sql0" if self._sql0_applies else "sql"]
+        if not self._newmode and self._sql0_applies \
+        and self._item["sql"]  == self._original["sql"] \
+        and self._item["sql0"] != self._original["sql0"]:
+            self._UpdateSqliteMaster({self._category: {self.Name: sql1}})
+            return finalize(post=False)
+
+
+        if not self._newmode: sql1, sql2, alterargs = self._GetAlterSQL()
 
         if wx.YES != controls.YesNoMessageBox(
             "Execute the following schema change?\n\n%s" % sql1.strip(),
@@ -5423,19 +5540,30 @@ class SchemaObjectPage(wx.Panel):
             msg = "Error saving changes:\n\n%s" % util.format_exc(e)
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
             return
+        else:
+            # Modify sqlite_master directly, as "ALTER TABLE x RENAME TO y"
+            # sets a quoted name "y" to CREATE statements, including related objects,
+            # regardless of whether the name required quoting.
+            data = defaultdict(dict) # {category: {name: SQL}}
+            if not self._newmode and "table" == self._category \
+            and ("tempname" in alterargs or alterargs["name"] != alterargs["name2"]):
+                if alterargs["name2"] == grammar.quote(alterargs["name2"]):
+                    data["table"][alterargs["name2"]] = self._item["sql0" if self._sql0_applies else "sql"]
+                    for category in ("index", "view", "trigger"):
+                        for subitem in alterargs.get(category) or ():
+                            data[category][subitem["name"]] = subitem["sql"]
+                for reltable in alterargs.get("table") or ():
+                    if reltable["name"] != grammar.quote(reltable["name"]):
+                        continue # for reltable
+                    data["table"][reltable["name"]] = reltable["sql0"]
+                    for category in ("index", "view", "trigger"):
+                        for subitem in reltable.get(category) or ():
+                            data[category][subitem["name"]] = subitem["sql"]
+            if data: self._UpdateSqliteMaster(data)
         finally:
             busy.Close()
 
-        self._item.update(name=meta2["name"], meta=self._AssignColumnIDs(meta2))
-        if "view" != self._category: self._item.update(
-            tbl_name=meta2["name" if "table" == self._category else "table"])
-        self._original = copy.deepcopy(self._item)
-        if self._show_alter: self._OnToggleAlterSQL()
-        self._has_alter = True
-        self._newmode = False
-        self._OnToggleEdit()
-        self._PostEvent(updated=True)
-        return True
+        return finalize()
 
 
     def _OnActions(self, event):
@@ -5443,10 +5571,11 @@ class SchemaObjectPage(wx.Panel):
         menu = wx.Menu()
         if self._category in ("table", ):
             item_export_data = wx.MenuItem(menu, -1, "Export table to another database")
-            item_export      = wx.MenuItem(menu, -1, "Export table structure to another database")
             menu.Append(item_export_data)
-            menu.Append(item_export)
             menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(export=True, data=True), item_export_data)
+        if self._category in ("table", "view", ):
+            item_export      = wx.MenuItem(menu, -1, "Export %s structure to another database" % self._category)
+            menu.Append(item_export)
             menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(export=True), item_export)
         if self._category in ("table", "index"):
             item_reindex = wx.MenuItem(menu, -1, "Reindex")
@@ -5474,7 +5603,7 @@ class ExportProgressPanel(wx.Panel):
     def __init__(self, parent, category=None):
         wx.Panel.__init__(self, parent)
 
-        self._tasks = []     # [{callable, pending, count, ?unit, ?multi, ?total, ?is_total_estimated}]
+        self._tasks = []     # [{callable, pending, count, ?unit, ?multi, ?total, ?is_total_estimated, ?subtasks, ?open}]
         self._ctrls   = []   # [{title, gauge, text, cancel, open, folder}]
         self._category = category
         self._current = None # Current task index
@@ -5508,21 +5637,24 @@ class ExportProgressPanel(wx.Panel):
         Run tasks.
 
         @param   tasks    [{
-                            callable: task function to invoke,
-                            ?unit:    result item unit name, by default "row",
-                            ?total:   total number of items to process,
+                            callable:     task function to invoke,
+                            ?unit:        result item unit name, by default "row",
+                            ?total:       total number of items to process,
                             ?is_total_estimated: whether total is approximate,
-                            ?multi:     whether there are subtasks
-                                        reported individually by name,
-                            ?subtotals: {name: {total, ?is_total_estimated}}
-                                        for subtasks,
+                            ?multi:       whether there are subtasks
+                                          reported individually by name,
+                            ?on_complete: callback function invoked on completion
+                                          with (result={result, ?count, ?error, ?subtasks: {name: {..}}})
+                            ?subtotals:   {name: {total, ?is_total_estimated}}
+                                           for subtasks,
+                            ?open:        whether to not show open-button on completion
                           }]
         """
         self.Stop()
         if isinstance(tasks, dict): tasks = [tasks]
-        self._tasks = [dict(x, count=0, pending=True) for x in tasks]
+        self._tasks = [dict(x, pending=True) for x in tasks]
         for x in self._tasks:
-            if x.get("multi"): x["subtotals"] = dict(x.get("subtotals", {}))
+            if x.get("multi"): x["subtasks"] = dict(x.get("subtotals", {}))
         self._Populate()
         self._RunNext()
 
@@ -5537,40 +5669,6 @@ class ExportProgressPanel(wx.Panel):
         return [x for x in self._tasks if x["pending"]]
 
 
-    def OnProgress(self, index=0, count=None, name=None, **_):
-        """
-        Handler for task progress report, updates progress bar.
-        Returns true if task should continue.
-        """
-        if not self or not self._tasks: return
-
-        opts, ctrls = (x[index] for x in (self._tasks, self._ctrls))
-
-        if opts["pending"] and count is not None:
-            ctrls["text"].Parent.Freeze()
-
-            if name and opts.get("multi"):
-                subopts = opts["subtotals"].setdefault(name, {})
-                subopts["count"] = count
-                subpercent, subtext = self._FormatPercent(subopts, opts.get("unit"))
-                subtitle = "Processing %s." % " ".join(filter(bool,
-                           (self._category, grammar.quote(name))))
-                if subpercent is not None: ctrls["subgauge"].Value = subpercent
-                ctrls["subtext"].Label  = subtext
-                ctrls["subtitle"].Label = subtitle
-                count = sum(x.get("count", 0) for x in opts["subtotals"].values())
-
-            opts["count"] = count
-            percent, text = self._FormatPercent(opts)
-            if percent is not None: ctrls["gauge"].Value = percent
-            ctrls["text"].Label = text
-            ctrls["text"].Parent.Layout()
-            ctrls["text"].Parent.Thaw()
-
-        wx.YieldIfNeeded()
-        return opts["pending"]
-
-
     def Stop(self):
         """Stops running tasks, if any."""
         self._worker.stop_work()
@@ -5582,7 +5680,9 @@ class ExportProgressPanel(wx.Panel):
         """Returns (integer, "x% (y of z units)") or (None, "y units")."""
         count, total = opts.get("count"), opts.get("total")
         unit = unit or opts.get("unit", "row")
-        if total is None:
+        if count is None and total is None:
+            percent, text = None, ""
+        elif total is None:
             percent, text = None, util.plural(unit, count)
         else:
             percent = int(100 * util.safedivf(count, total))
@@ -5619,6 +5719,9 @@ class ExportProgressPanel(wx.Panel):
                 subgauge = ctrls["subgauge"] = wx.Gauge(parent, range=100, size=(300,-1),
                                                style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
                 subtext  = ctrls["subtext"]  = wx.StaticText(parent)
+                errtext  = ctrls["errtext"]  = wx.StaticText(parent)
+                ColourManager.Manage(errtext, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
+                errtext.Hide()
 
             cancel = ctrls["cancel"] = wx.Button(panel, label="Cancel")
             open   = ctrls["open"]   = wx.Button(panel, label="Open file")
@@ -5641,6 +5744,7 @@ class ExportProgressPanel(wx.Panel):
                 parent.Sizer.Add(subtitle, border=10, flag=wx.TOP | wx.ALIGN_CENTER)
                 parent.Sizer.Add(subgauge, flag=wx.ALIGN_CENTER)
                 parent.Sizer.Add(subtext,  flag=wx.ALIGN_CENTER)
+                parent.Sizer.Add(errtext,  border=10, flag=wx.ALL | wx.GROW)
 
             sizer.Add(parent, flag=wx.ALIGN_CENTER)
             sizer.Add(sizer_buttons, border=5, flag=wx.TOP | wx.ALIGN_CENTER)
@@ -5662,10 +5766,10 @@ class ExportProgressPanel(wx.Panel):
         if not self: return
         index = next((i for i, x in enumerate(self._tasks)
                       if x["pending"]), None)
-        if index is None: return
+        if index is None: return self._OnComplete()
 
         opts, self._current = self._tasks[index], index
-        title = 'Exporting "%s".' % opts["filename"]
+        title = 'Exporting to "%s".' % opts["filename"]
         guibase.status(title, log=True, flash=True)
         self.Freeze()
         self._ctrls[index]["title"].Label = title
@@ -5675,7 +5779,7 @@ class ExportProgressPanel(wx.Panel):
             self._ctrls[index]["subgauge"].Pulse()
         self.Layout()
         self.Thaw()
-        progress = functools.partial(self.OnProgress, index)
+        progress = functools.partial(self._OnProgress, index)
         callable = functools.partial(opts["callable"], progress=progress)
         self._worker.work(callable, index=index)
 
@@ -5691,6 +5795,7 @@ class ExportProgressPanel(wx.Panel):
         self._Populate()
         do_close = (event.EventObject is self._button_close)
         wx.PostEvent(self, ProgressEvent(self.Id, close=do_close))
+        if any(x["pending"] for x in self._tasks): self._OnComplete()
 
 
     def _OnCancel(self, index, event=None):
@@ -5707,6 +5812,72 @@ class ExportProgressPanel(wx.Panel):
         if self._tasks[index]["pending"]: self._OnResult(self._tasks[index], index)
 
 
+    def _OnComplete(self, result=None):
+        """Invoke on_complete if given."""
+        if not self._tasks or any(x["pending"] for x in self._tasks): return
+        opts = self._tasks[-1]
+        if not opts.get("on_complete"): return
+
+        myresult = {k: opts[k] for k in ("result", "error", "count", "subtasks")
+                    if opts.get(k) is not None}
+        opts.pop("on_complete")(result=myresult) # Avoid calling more than once
+
+
+    def _OnProgress(self, index=0, count=None, name=None, error=None, **_):
+        """
+        Handler for task progress report, updates progress bar.
+        Returns true if task should continue.
+        """
+        if not self or not self._tasks: return
+
+        opts, ctrls = (x[index] for x in (self._tasks, self._ctrls))
+
+        def after(name, count, error):
+            if not ctrls["text"]: return
+
+            ctrls["text"].Parent.Freeze()
+            total = count
+            subopts = name and opts.get("multi") and opts["subtasks"].setdefault(name, {})
+
+            if subopts is not None and count is not None:
+                subopts["count"] = count
+                subpercent, subtext = self._FormatPercent(subopts, opts.get("unit"))
+                subtitle = "Processing %s." % " ".join(filter(bool,
+                           (self._category, grammar.quote(name))))
+                if subpercent is not None: ctrls["subgauge"].Value = subpercent
+                ctrls["subtext"].Label  = subtext
+                ctrls["subtitle"].Label = subtitle
+                total = sum(x.get("count", 0) for x in opts["subtasks"].values())
+            if error is not None:
+                if subopts is not None:
+                    subopts.update(error=error)
+                    myerror = "Failed to export %s. %s." % (grammar.quote(name, force=True), error)
+                    ctrls["subgauge"].Value = ctrls["subgauge"].Value # Stop pulse
+                else:
+                    opts["error"] = error
+                    myerror = "Export failed. %s." % error
+                    wx.CallAfter(self.Stop)
+                ctrls["errtext"].Label += ("\n" if ctrls["errtext"].Label else "") + myerror
+                ctrls["errtext"].Show()
+            elif subopts is not None:
+                if "error" not in subopts: subopts["result"] = True
+
+            if total is not None:
+                opts["count"] = total
+                percent, text = self._FormatPercent(opts)
+                if percent is not None: ctrls["gauge"].Value = percent
+                ctrls["text"].Label = text
+
+            ctrls["text"].Parent.Thaw()
+            if count is not None or error is not None:
+                self._panel.Layout()
+
+        if opts["pending"] and any(x is not None for x in (name, count, error)):
+            wx.CallAfter(after, name, count, error)
+        wx.YieldIfNeeded()
+        return opts["pending"]
+
+
     def _OnResult(self, result, index=None):
         """
         Handler for task result, shows error if any, starts next if any.
@@ -5720,21 +5891,31 @@ class ExportProgressPanel(wx.Panel):
         opts, ctrls = (x[index] for x in (self._tasks, self._ctrls))
         unit = opts.get("unit", "row")
         if "error" in result:
-            self.Layout()
             self._current = None
-            if opts["pending"]: ctrls["text"] = result["error"]
-            if opts["pending"] and len(self._tasks) > 1:
+            ctrls["title"].Label = 'Failed to export "%s".' % opts["filename"]
+            ctrls["text"].Label = result["error"]
+            opts.update(error=result["error"], result=False)
+            self.Layout()
+            if not opts["pending"] or len(self._tasks) < 2:
                 error = "Error saving %s:\n\n%s" % (opts["filename"], result["error"])
                 wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         elif "done" in result:
-            guibase.status('Exported "%s".', opts["filename"], log=True, flash=True)
+            opts.update(result=result.get("result", True))
+            if opts["result"]:
+                guibase.status('Exported to "%s".', opts["filename"], log=True, flash=True)
             if opts["pending"]:
                 ctrls["gauge"].Value = 100
-                ctrls["title"].Label = 'Exported "%s".' % opts["filename"]
-                ctrls["text"].Label = util.plural(unit, opts["count"])
-                ctrls["open"].Show()
-                ctrls["open"].SetFocus()
-                ctrls["folder"].Show()
+                if opts["result"]:
+                    ctrls["title"].Label = 'Exported to "%s".' % opts["filename"]
+                lbl = "" if opts.get("count") is None else util.plural(unit, opts["count"])
+                try:
+                    bsize = os.path.getsize(opts["filename"])
+                    lbl += (", " if lbl else "") + util.format_bytes(bsize)
+                except Exception: pass
+                ctrls["text"].Label = lbl
+                if opts.get("open") is not False:
+                    ctrls["open"].Show(), ctrls["open"].SetFocus()
+                if opts["result"]: ctrls["folder"].Show()
             if opts.get("multi"):
                 ctrls["subgauge"].Shown = ctrls["subtitle"].Shown = False
                 ctrls["subtext"].Shown = False
@@ -5755,6 +5936,7 @@ class ExportProgressPanel(wx.Panel):
         if self._current is None: wx.CallAfter(self._RunNext)
         wx.CallAfter(lambda: self and self.Layout())
         self.Thaw()
+        self._OnComplete()
 
 
     def _OnOpen(self, index, event=None):
@@ -5944,12 +6126,13 @@ class ImportDialog(wx.Dialog):
         self._has_pk      = False # Whether new table has auto-increment primary key
         self._importing   = False # Whether import underway
         self._table_fixed = False # Whether table selection is immutable
-        self._progress   = {}    # {count}
+        self._progress   = {}     # {count}
         self._worker = workers.WorkerThread()
 
         self._dialog_file = wx.FileDialog(self, message="Open",
             wildcard=importexport.IMPORT_WILDCARD,
-            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST | wx.RESIZE_BORDER
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST |
+                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
 
         splitter = wx.SplitterWindow(self, style=wx.BORDER_NONE)
@@ -5965,8 +6148,6 @@ class ImportDialog(wx.Dialog):
 
         sizer_b1     = wx.BoxSizer(wx.VERTICAL)
         sizer_b2     = wx.BoxSizer(wx.VERTICAL)
-        sizer_l1     = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_l2     = wx.BoxSizer(wx.HORIZONTAL)
         sizer_pk     = wx.BoxSizer(wx.HORIZONTAL)
 
         info_file = wx.StaticText(self)
@@ -6005,6 +6186,7 @@ class ImportDialog(wx.Dialog):
         button_reset   = wx.Button(self, label="&Reset")
         button_cancel  = wx.Button(self, label="&Cancel", id=wx.CANCEL)
 
+        self._dlg_cancel     = None
         self._info_file      = info_file
         self._button_file    = button_file
         self._splitter       = splitter
@@ -6568,23 +6750,48 @@ class ImportDialog(wx.Dialog):
 
 
     def _OnProgressCallback(self, **kwargs):
-        if self: wx.CallAfter(self._OnProgress, **kwargs)            
+        """
+        Handler for worker callback, returns whether importing should continue,
+        True/False/None (yes/no/no+rollback). Blocks on error until user choice.
+        """
+        if not self: return
+        q = None
+        if self._importing and kwargs.get("error") and not kwargs.get("done"):
+            q = Queue.Queue()
+        wx.CallAfter(self._OnProgress, callback=q.put if q else None, **kwargs)
+        return q.get() if q else self._importing
 
 
     def _OnProgress(self, **kwargs):
         """
         Handler for import progress report, updates progress bar,
-        updates dialog if done. Returns whether importing should continue,
-        True/False/None (yes/no/no+rollback).
+        updates dialog if done. Invokes "callback" from arguments if present.
         """
         if not self: return
-        result = self._importing
 
+        callback = kwargs.pop("callback", None)
         self._progress.update(kwargs)
         VARS = "count", "errorcount", "error", "index", "done"
         count, errorcount, error, index, done = (kwargs.get(x) for x in VARS)
 
-        msg_shown = False
+        if count is not None:
+            total = self._sheet["rows"]
+            if total < 0: text = util.plural("row", count)
+            else:
+                if self._has_header: total -= 1
+                percent = int(100 * util.safedivf(count + (errorcount or 0), total))
+                text = "%s%% (%s of %s)" % (percent, util.plural("row", count), total)
+                self._gauge.Value = percent
+            if errorcount:
+                text += ", %s" % util.plural("error", errorcount)
+            self._info_gauge.Label = text
+            self._gauge.ContainingSizer.Layout()
+            wx.YieldIfNeeded()
+
+        if (error or done) and self._dlg_cancel:
+            self._dlg_cancel.EndModal(wx.ID_CANCEL)
+            self._dlg_cancel = None
+
         if error and not done and self._importing:
             dlg = wx.MessageDialog(self, "Error inserting row #%s.\n\n%s" % (
                 index + (not self._has_header), error), conf.Title,
@@ -6593,55 +6800,38 @@ class ImportDialog(wx.Dialog):
             dlg.SetYesNoCancelLabels("&Abort", "Abort and &rollback", "&Ignore errors")
             res = dlg.ShowModal()
             if wx.ID_CANCEL != res:
-                result = self._importing = False if wx.ID_YES == res else None
+                self._importing = False if wx.ID_YES == res else None
 
-        def after():
-            if not self: return
-            if count is not None:
-                total = self._sheet["rows"]
-                if total < 0: text = util.plural("row", count)
-                else:
-                    if self._has_header: total -= 1
-                    percent = int(100 * util.safedivf(count + (errorcount or 0), total))
-                    text = "%s%% (%s of %s)" % (percent, util.plural("row", count), total)
-                    self._gauge.Value = percent
-                if errorcount:
-                    text += ", %s" % util.plural("error", errorcount)
-                self._info_gauge.Label = text
-                self._gauge.ContainingSizer.Layout()
+        if done:
+            success = self._importing
+            if success: self._importing = False
+            if success is not None: self._PostEvent()
+            SHOW = (self._button_restart, )
+            HIDE = (self._button_ok, self._button_reset)
+            if not isinstance(self.Parent, DataObjectPage): SHOW += (self._button_open, )
+            for c in SHOW: c.Show(), c.Enable()
+            for c in HIDE: c.Hide()
+            self._gauge.Value = self._gauge.Value # Stop pulse, if any
+            self._button_cancel.Label = "&Close"
+            self._button_ok.ContainingSizer.Layout()
+            self.Layout()
+            if success is None: self._button_open.Disable()
+            elif self._button_open.Shown: self._button_open.SetFocus()
+            else: self._button_cancel.SetFocus()
 
-            if done:
-                success = self._importing
-                if success: self._importing = False
-                if success is not None: self._PostEvent()
-                SHOW = (self._button_restart, )
-                HIDE = (self._button_ok, self._button_reset)
-                if not isinstance(self.Parent, DataObjectPage): SHOW += (self._button_open, )
-                for c in SHOW: c.Show(), c.Enable()
-                for c in HIDE: c.Hide()
-                self._gauge.Value = self._gauge.Value
-                self._button_cancel.Label = "&Close"
-                self._button_ok.ContainingSizer.Layout()
-                self.Layout()
-                if success is None: self._button_open.Disable()
-                elif self._button_open.Shown: self._button_open.SetFocus()
-                else: self._button_cancel.SetFocus()
-                if msg_shown: return
+            if error: msg = "Error on data import:\n\n%s" % error
+            else: msg = "Data import %s.\n\n%s inserted into %stable %s.%s%s" % (
+                "complete" if success else "cancelled",
+                util.plural("row", count),
+                "new " if self._table.get("new") else "" ,
+                grammar.quote(self._table["name"], force=True),
+                ("\n%s failed." % util.plural("row", self._progress["errorcount"])) if self._progress.get("errorcount") else "",
+                ("\n\nAll changes rolled back." if success is None else ""),
+            )
+            icon = wx.ICON_ERROR if error else wx.ICON_INFORMATION if success else wx.ICON_WARNING
+            wx.MessageBox(msg, conf.Title, wx.OK | icon)
 
-                if error: msg = "Error on data import:\n\n%s" % error
-                else: msg = "Data import %s.\n\n%s inserted into %stable %s.%s%s" % (
-                    "complete" if success else "cancelled",
-                    util.plural("row", count),
-                    "new " if self._table.get("new") else "" ,
-                    grammar.quote(self._table["name"], force=True),
-                    ("\n%s failed." % util.plural("row", self._progress["errorcount"])) if self._progress.get("errorcount") else "",
-                    ("\n\nAll changes rolled back." if success is None else ""),
-                )
-                icon = wx.ICON_ERROR if error else wx.ICON_INFORMATION if success else wx.ICON_WARNING
-                wx.MessageBox(msg, conf.Title, wx.OK | icon)
-        wx.CallAfter(after)
-
-        return result
+        if callable(callback): callback(self._importing)
 
 
     def _OnRestart(self, event=None):
@@ -6715,12 +6905,14 @@ class ImportDialog(wx.Dialog):
         Handler for cancelling import, closes dialog if nothing underway,
         confirms and cancels work if import underway.
         """
-        if not self._importing: return wx.CallAfter(self.EndModal, wx.CANCEL)
+        if not self._importing: return wx.CallAfter(self.EndModal, wx.ID_CANCEL)
 
-        if wx.YES != controls.YesNoMessageBox("Import is currently underway, "
-            "are you sure you want to cancel it?", conf.Title, wx.ICON_WARNING,
-            defaultno=True
-        ) or not self._importing: return
+        dlg = self._dlg_cancel = controls.MessageDialog(self,
+            "Import is currently underway, are you sure you want to cancel it?",
+            conf.Title, wx.ICON_WARNING | wx.YES | wx.NO | wx.NO_DEFAULT)
+        res = dlg.ShowModal()
+        self._dlg_cancel = None
+        if wx.ID_YES != res or not self._importing: return
 
         qname = grammar.quote(self._table["name"], force=True)
         changes = "%s%stable %s." % (
@@ -6729,18 +6921,20 @@ class ImportDialog(wx.Dialog):
             "new " if self._table.get("new") else "", qname
         ) if (self._progress.get("count") or self._table.get("new")) else ""
 
-        keep = wx.MessageBox("Keep changes?\n\n%s" % changes.strip().capitalize(),
+        dlg = self._dlg_cancel = controls.MessageDialog(self,
+            "Keep changes?\n\n%s" % changes.strip().capitalize(),
             conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.CANCEL_DEFAULT
-        ) if changes else wx.NO
-        if wx.CANCEL == keep or not self._importing: return
+        ) if changes else None
+        keep = dlg.ShowModal() if changes else wx.ID_NO
+        self._dlg_cancel = None
 
-        self._importing = None if wx.NO == keep else False
+        if wx.ID_CANCEL == keep or not self._importing: return
+
+        self._importing = None if wx.ID_NO == keep else False
         self._worker.stop_work()
         self._gauge.Value = self._gauge.Value # Stop pulse, if any
 
-        if wx.YES == keep: self._PostEvent()
-
-        if isinstance(event, wx.CloseEvent): return wx.CallAfter(self.EndModal, wx.CANCEL)
+        if isinstance(event, wx.CloseEvent): return wx.CallAfter(self.EndModal, wx.ID_CANCEL)
 
         SHOW = (self._button_restart, )
         HIDE = (self._button_ok, self._button_reset)
@@ -8109,8 +8303,8 @@ class ColumnDialog(wx.Dialog):
             ctrl2 = stctxt if ctrl1 is stchex else stchex
             state["scrolling"][stchex] = state["scrolling"][stctxt] = True
 
-            pos1, pos2 = (x.GetScrollPos(wx.VERTICAL) for x in (ctrl1, ctrl2))
-            if not isinstance(event, wx.ScrollWinEvent):         pos1  = ctrl1.FirstVisibleLine
+            pos1 = ctrl1.GetScrollPos(wx.VERTICAL)
+            if not isinstance(event, wx.ScrollWinEvent):           pos1 = ctrl1.FirstVisibleLine
             elif event.EventType == wx.wxEVT_SCROLLWIN_THUMBTRACK: pos1 = event.Position
             elif event.EventType == wx.wxEVT_SCROLLWIN_LINEDOWN: pos1 += 1
             elif event.EventType == wx.wxEVT_SCROLLWIN_LINEUP:   pos1 -= 1
@@ -8543,7 +8737,10 @@ class ColumnDialog(wx.Dialog):
                 x = util.parse_time(value)
                 if isinstance(x, datetime.time): t = x
             if isinstance(t, datetime.time):
-                u = t.microsecond or None
+                u = t.microsecond
+                if not u and (state["numeric"] and not float(value) % 1 or
+                              isinstance(value, basestring) and ".0" not in value):
+                    u = None
             if getattr(dt or t, "tzinfo", None):
                 z = (dt or t).tzinfo.utcoffset(jan).total_seconds() * 3600
 
@@ -8698,13 +8895,14 @@ class ColumnDialog(wx.Dialog):
 
             dlg = wx.FileDialog(self, message="Save image as", wildcard=wildcard,
                 defaultFile=util.safe_filename(self._name),
-                style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
+                style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT |
+                      wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
             )
             if filteridx >= 0: dlg.SetFilterIndex(filteridx)
             if wx.ID_OK != dlg.ShowModal(): return
 
-            filename = dlg.GetPath()
-            filetype = fmts[dlg.FilterIndex].upper()
+            filename = get_dialog_path(dlg)
+            filetype = os.path.splitext(filename)[-1].lstrip(".").upper()
             v = convert(filetype)
             if not v: return
             with open(filename, "wb") as f: f.write(v)
@@ -8969,7 +9167,7 @@ class ColumnDialog(wx.Dialog):
                        "|" + wildcard
             filteridx = 0
         dlg = wx.FileDialog(self, message="Open", defaultFile="", wildcard=wildcard,
-            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.RESIZE_BORDER
+            style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if filteridx >= 0: dlg.SetFilterIndex(filteridx)
         if wx.ID_OK != dlg.ShowModal(): return
@@ -8987,11 +9185,11 @@ class ColumnDialog(wx.Dialog):
 
         dlg = wx.FileDialog(self, message="Save value as", wildcard="All files|*.*",
             defaultFile=util.safe_filename(self._name),
-            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.RESIZE_BORDER
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
         if wx.ID_OK != dlg.ShowModal(): return
 
-        filename = dlg.GetPath()
+        filename = controls.get_dialog_path(dlg)
         v = value.encode("utf-8") if isinstance(value, unicode) else str(value)
         with open(filename, "wb") as f: f.write(v)
 

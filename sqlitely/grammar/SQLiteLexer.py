@@ -1,4 +1,4 @@
-# Generated from SQLite.g4 by ANTLR 4.7.2
+# Generated from SQLite.g4 by ANTLR 4.8
 # encoding: utf-8
 from __future__ import print_function
 from antlr4 import *
@@ -1159,7 +1159,7 @@ def serializedATN():
         buf.write(u"\3\u0581\u057e\3\2\2\2\u0581\u0580\3\2\2\2\u0582\u0583")
         buf.write(u"\3\2\2\2\u0583\u0584\b\u009d\2\2\u0584\u013a\3\2\2\2")
         buf.write(u"\u0585\u0586\t\t\2\2\u0586\u0587\3\2\2\2\u0587\u0588")
-        buf.write(u"\b\u009e\2\2\u0588\u013c\3\2\2\2\u0589\u058a\13\2\2\2")
+        buf.write(u"\b\u009e\3\2\u0588\u013c\3\2\2\2\u0589\u058a\13\2\2\2")
         buf.write(u"\u058a\u013e\3\2\2\2\u058b\u058c\t\n\2\2\u058c\u0140")
         buf.write(u"\3\2\2\2\u058d\u058e\t\13\2\2\u058e\u0142\3\2\2\2\u058f")
         buf.write(u"\u0590\t\f\2\2\u0590\u0144\3\2\2\2\u0591\u0592\t\r\2")
@@ -1183,7 +1183,8 @@ def serializedATN():
         buf.write(u"\u05c0\t$\2\2\u05c0\u0174\3\2\2\2\37\2\u04f9\u04fb\u0503")
         buf.write(u"\u0505\u050d\u0515\u0518\u051d\u0523\u0526\u052a\u052f")
         buf.write(u"\u0531\u0537\u053b\u0540\u0542\u0544\u054a\u054f\u0555")
-        buf.write(u"\u0557\u055f\u0561\u0565\u0570\u057b\u0581\3\2\3\2")
+        buf.write(u"\u0557\u055f\u0561\u0565\u0570\u057b\u0581\4\2\4\2\2")
+        buf.write(u"\3\2")
         return buf.getvalue()
 
 
@@ -1436,7 +1437,7 @@ class SQLiteLexer(Lexer):
 
     def __init__(self, input=None, output=sys.stdout):
         super(SQLiteLexer, self).__init__(input, output=output)
-        self.checkVersion("4.7.2")
+        self.checkVersion("4.8")
         self._interp = LexerATNSimulator(self, self.atn, self.decisionsToDFA, PredictionContextCache())
         self._actions = None
         self._predicates = None

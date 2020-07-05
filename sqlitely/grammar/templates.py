@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    30.05.2020
+@modified    04.07.2020
 ------------------------------------------------------------------------------
 """
 
@@ -32,10 +32,10 @@ Released under the MIT License.
 Simple ALTER TABLE.
 
 @param   data {
-             name:      table old name,
-             name2:     table new name if renamed else old name,
+             name:      table old name
+             name2:     table new name if renamed else old name
              ?columns:  [(column name in old, column name in new)]
-             ?add:      [{column data}],
+             ?add:      [{column data}]
              ?no_tx:    whether to not include savepoint
          }
 """
@@ -56,7 +56,7 @@ ALTER TABLE {{ Q(data["name"]) }} RENAME COLUMN {{ Q(c1) }} TO {{ Q(c2) }};{{ LF
 %endfor
 
 %for i, c in enumerate(data.get("add", [])):
-    %if not i:
+    %if not i and (data["name"] != data["name2"] or data.get("columns")):
 {{ LF() }}
     %endif
 ALTER TABLE {{ Q(data["name"]) }} ADD COLUMN{{ WS(" ") }}
@@ -79,24 +79,26 @@ copy rows from existing to new, drop existing, rename new to existing. Steps:
  2. BEGIN TRANSACTION
  3. CREATE TABLE tempname
  4. INSERT INTO tempname (..) SELECT .. FROM oldname
- 5. DROP TABLE oldname
- 8. ALTER TABLE tempname RENAME TO oldname
+ 5. DROP all related indexes-views-triggers
  6. for every related table affected by change:
+    - DROP all related indexes-views-triggers
+ 7. DROP TABLE oldname
+ 8. ALTER TABLE tempname RENAME TO oldname
+ 9. for every related table affected by change:
     - CREATE TABLE related_tempname
     - INSERT INTO related_tempname SELECT * FROM related_name
     - DROP TABLE related_name
     - ALTER TABLE related_tempname RENAME TO related_name
     - CREATE indexes-triggers for related_name
- 7. DROP all related indexes-views-triggers
- 9. CREATE indexes-views-triggers
-10. COMMIT TRANSACTION
-11. PRAGMA foreign_keys = on
+10. CREATE indexes-views-triggers
+11. COMMIT TRANSACTION
+12. PRAGMA foreign_keys = on
 
 @param   data {
-             name:      table old name,
-             name2:     table new name if renamed else old name,
-             tempname:  table temporary name,
-             meta:      {table CREATE metainfo, using temporary name}
+             name:      table old name
+             name2:     table new name if renamed else old name
+             tempname:  table temporary name
+             sql:       table CREATE statement with tempname
              columns:   [(column name in old, column name in new)]
              fks:       whether foreign_keys PRAGMA is on
              ?table:    [{related table {name, tempname, sql, ?index, ?trigger}, using new names}, ]
@@ -120,7 +122,7 @@ SAVEPOINT alter_table;{{ LF() }}
 {{ LF() }}
 
 %endif
-{{ Template(templates.CREATE_TABLE).expand(dict(locals(), data=data["meta"], root=data["meta"])) }}{{ LF() }}
+{{ WS(data["sql"]) }}{{ LF() }}
 {{ LF() }}
 
 %if data.get("columns"):
@@ -138,11 +140,25 @@ FROM {{ Q(data["name"]) }};{{ LF() }}
 {{ LF() }}
 %endif
 
+%for category in CATEGORIES:
+    %for x in data.get(category) or []:
+DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
+    %endfor
+%endfor
+
+%for reltable in data.get("table") or []:
+    %for category in CATEGORIES:
+        %for x in reltable.get(category) or []:
+DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
+        %endfor
+    %endfor
+%endfor
+
 DROP TABLE {{ Q(data["name"]) }};{{ LF() }}
 {{ LF() }}
 
 ALTER TABLE {{ Q(data["tempname"]) }} RENAME TO {{ Q(data["name2"]) }};{{ LF() }}
-{{ LF() if data.get("table") else '' }}
+{{ LF() }}
 
 %for reltable in data.get("table") or []:
 {{ WS(reltable["sql"]) }}{{ LF() }}
@@ -157,19 +173,12 @@ ALTER TABLE {{ Q(reltable["tempname"]) }} RENAME TO {{ Q(reltable["name"]) }};{{
 {{ LF() }}
 %endfor
 
-%for category in CATEGORIES:
-    %for x in data.get(category) or []:
-DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
-    %endfor
-%endfor
-{{ LF() if any(data.get(x) for x in CATEGORIES) else '' }}
-
 <%
 sep = False
 %>
 %for category in CATEGORIES:
     %for x in data.get(category) or []:
-{{ LF() if sep else '' }}
+{{ LF() if sep else "" }}
 {{ WS(x["sql"]) }}{{ LF() }}
 <%
 sep = True
@@ -178,13 +187,13 @@ sep = True
 %endfor
 
 %if not data.get("no_tx"):
-
+{{ LF() }}
 RELEASE SAVEPOINT alter_table;{{ LF() }}
 {{ LF() }}
 %endif
 
 %if data["fks"]:
-
+{{ LF() }}
 PRAGMA foreign_keys = on;{{ LF() }}
 %endif
 """
@@ -200,9 +209,8 @@ ALTER INDEX: re-create index.
 4. COMMIT TRANSACTION
 
 @param   data {
-             name:      index old name,
-             name2:     index new name if renamed else old name,
-             meta:      {index CREATE metainfo, using new name}
+             name:      index old name
+             sql:       index CREATE statement, using new name
              ?no_tx:    whether to not include savepoint
          }
 """
@@ -215,7 +223,7 @@ SAVEPOINT alter_index;{{ LF() }}
 DROP INDEX {{ Q(data["name"]) }};{{ LF() }}
 {{ LF() }}
 
-{{ Template(templates.CREATE_INDEX).expand(dict(locals(), data=data["meta"], root=data["meta"])) }}{{ LF() }}
+{{ WS(data["sql"]) }}{{ LF() }}
 {{ LF() }}
 
 %if not data.get("no_tx"):
@@ -236,8 +244,7 @@ ALTER TRIGGER: re-create trigger.
 
 @param   data {
              name:      trigger old name,
-             name2:     trigger new name if renamed else old name,
-             meta:      {trigger CREATE metainfo, using new name}
+             sql:       trigger CREATE statement, using new name
              ?no_tx:    whether to not include savepoint
          }
 """
@@ -250,7 +257,7 @@ SAVEPOINT alter_trigger;{{ LF() }}
 DROP TRIGGER {{ Q(data["name"]) }};{{ LF() }}
 {{ LF() }}
 
-{{ Template(templates.CREATE_TRIGGER).expand(dict(locals(), data=data["meta"], root=data["meta"])) }}{{ LF() }}
+{{ WS(data["sql"]) }}{{ LF() }}
 {{ LF() }}
 
 %if not data.get("no_tx"):
@@ -272,9 +279,8 @@ ALTER VIEW: re-create view, re-create triggers and other views using this view.
 6. COMMIT TRANSACTION
 
 @param   data {
-             name:      view old name,
-             name2:     view new name if renamed else old name,
-             meta:      {view CREATE metainfo, using new name}
+             name:      view old name
+             sql:       view CREATE statement, using new name
              ?trigger:  [{related trigger {name, sql}, using new names}, ]
              ?view:     [{related view {name, sql}, using new names}, ]
              ?no_tx:    whether to not include savepoint
@@ -297,9 +303,9 @@ DROP VIEW {{ Q(data["name"]) }};{{ LF() }}
 DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
     %endfor
 %endfor
-{{ LF() if any(data.get(x) for x in CATEGORIES) else '' }}
+{{ LF() if any(data.get(x) for x in CATEGORIES) else "" }}
 
-{{ Template(templates.CREATE_VIEW).expand(dict(locals(), data=data["meta"], root=data["meta"])) }}{{ LF() }}
+{{ WS(data["sql"]) }}{{ LF() }}
 {{ LF() }}
 
 %for category in CATEGORIES:
@@ -307,12 +313,59 @@ DROP {{ category.upper() }} IF EXISTS {{ Q(x["name"]) }};{{ LF() }}
 {{ WS(x["sql"]) }}{{ LF() }}
     %endfor
 %endfor
-{{ LF() if any(data.get(x) for x in CATEGORIES) else '' }}
+{{ LF() if any(data.get(x) for x in CATEGORIES) else "" }}
 
 %if not data.get("no_tx"):
 RELEASE SAVEPOINT alter_view;{{ LF() }}
 {{ LF() }}
 %endif
+"""
+
+
+
+"""
+Alter sqlite_master directly.
+
+1. BEGIN TRANSACTION
+3. UPDATE sqlite_master SET sql = .. WHERE type = x AND name = y;
+4. COMMIT TRANSACTION
+
+@param   data {
+             version:   schema_version PRAGMA to set afterward
+             ?table:    {name: CREATE SQL, }
+             ?index:    {name: CREATE SQL, }
+             ?trigger:  {name: CREATE SQL, }
+             ?view:     {name: CREATE SQL, }
+         }
+"""
+ALTER_MASTER = """<%
+CATEGORIES = ["table", "index", "view", "trigger"]
+%>
+{{ WS("-- Overwrite CREATE statements in sqlite_master directly,") }}{{ LF() }}
+{{ WS("-- to avoid table names being force-quoted by SQLite") }}{{ LF() }}
+{{ WS("-- upon executing ALTER TABLE .. RENAME TO ..") }}{{ LF() }}
+
+SAVEPOINT alter_master;{{ LF() }}
+{{ LF() }}
+
+PRAGMA writable_SCHEMA = ON;{{ LF() }}
+{{ LF() }}
+
+%for category in CATEGORIES:
+    %for name, sql in data.get(category, {}).items():
+UPDATE sqlite_master {{ WS("SET sql = ") }}{{ Q(sql.rstrip(";"), force=True) }}{{ LF() }}
+WHERE {{ WS("type = ") }}{{ Q(category, force=True) }} {{ WS(" AND name = ") }}{{ Q(name, force=True) }};{{ LF() }}
+{{ LF() }}
+    %endfor
+%endfor
+
+PRAGMA schema_version = {{ data["version"] }};{{ LF() }}
+{{ LF() }}
+
+PRAGMA writable_SCHEMA = OFF;{{ LF() }}
+{{ LF() }}
+
+RELEASE SAVEPOINT alter_master;{{ LF() }}
 """
 
 
@@ -559,7 +612,18 @@ CREATE VIRTUAL TABLE
 USING {{ data["module"]["name"] }}
 
 %if data["module"].get("arguments"):
+    %if len(data["module"]["arguments"]) > 2:
+  ({{ LF() }}
+        %for i, arg in enumerate(data["module"]["arguments"]):
+  {{ PRE() }}{{ arg }}
+  {{ CM("arguments", i, root=data["module"]) }}
+  {{ LF() }}
+        %endfor
+  )
+    %else:
+  {{ GLUE() }}
   ({{ ", ".join(data["module"]["arguments"]) }})
+    %endif
 %endif
 {{ GLUE() }};
 """

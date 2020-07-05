@@ -472,10 +472,8 @@ error_message
  ;
 
 module_argument
- : keyword
- | signed_number
- | IDENTIFIER
- | STRING_LITERAL
+ : column_def
+ | expr
  ;
 
 column_alias
@@ -873,11 +871,11 @@ BLOB_LITERAL
  ;
 
 SINGLE_LINE_COMMENT
- : '--' ~[\r\n]* -> channel(HIDDEN)
+ : '--' ~[\r\n]* -> channel(2)
  ;
 
 MULTILINE_COMMENT
- : '/*' .*? ( '*/' | EOF ) -> channel(HIDDEN)
+ : '/*' .*? ( '*/' | EOF ) -> channel(2)
  ;
 
 SPACES

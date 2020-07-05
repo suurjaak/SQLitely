@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.06.2020
+@modified    04.07.2020
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -26,6 +26,7 @@ from . lib import util
 from . lib.vendor import step
 from . import conf
 from . import database
+from . import grammar
 from . searchparser import flatten, match_words, SearchQueryParser
 from . import templates
 
@@ -240,6 +241,10 @@ class SearchThread(WorkerThread):
                             break # while row
 
                         row = cursor.fetchone()
+                except Exception:
+                    logger.exception("Error searching %s %s.", category,
+                                     grammar.quote(item["name"], force=True))
+                    continue # for item
                 finally: util.try_until(lambda: cursor.close())
 
                 if not self._drop_results:
@@ -384,9 +389,8 @@ class AnalyzerThread(WorkerThread):
     def stop(self, drop=True):
         """Stops the worker thread."""
         super(AnalyzerThread, self).stop(drop)
-        try: self._process.kill()
-        except Exception: pass
-        self._process = None
+        p, self._process = self._process, None
+        p and util.try_until(p.kill)
 
 
     def stop_work(self, drop=True):
@@ -394,9 +398,8 @@ class AnalyzerThread(WorkerThread):
         Signals to stop the currently ongoing work, if any.
         """
         super(AnalyzerThread, self).stop_work(drop)
-        try: self._process.kill()
-        except Exception: pass
-        self._process = None
+        p, self._process = self._process, None
+        p and util.try_until(p.kill)
 
 
     def run(self):
@@ -406,7 +409,7 @@ class AnalyzerThread(WorkerThread):
             if not path: continue # while self._is_running
 
             self._is_working, self._drop_results = True, False
-            filesize, output, rows, error = 0, "", [], None
+            filesize, rows, output, error = 0, [], "", None
 
             if os.path.exists(path): filesize = os.path.getsize(path)
             else: error = "File does not exist."
@@ -427,14 +430,19 @@ class AnalyzerThread(WorkerThread):
                     try: self._process = subprocess.Popen(args, **pargs)
                     except Exception:
                         if mypath == paths[-1]: raise
-                    else: break # for mypath
-                if self._process: output, error = self._process.communicate()
+                    else:
+                        try: output, error = self._process.communicate()
+                        except Exception as e:
+                            if not self._process: break # for mypath
+                            try:
+                                self._process.kill()
+                                output, error = self._process.communicate()
+                            except Exception: pass
+                            if mypath == paths[-1]: raise e
+                        else:
+                            if not self._process \
+                            or output and output.strip().startswith("/**"): break # for mypath
             except Exception as e:
-                if self._process:
-                    try:
-                        self._process.kill()
-                        output, error = self._process.communicate()
-                    except Exception: pass
                 error = error or getattr(e, "output", None)
                 if error: error = error.split("\n")[0].strip()
                 else: error = util.format_exc(e)
@@ -443,7 +451,7 @@ class AnalyzerThread(WorkerThread):
                 if output and not output.strip().startswith("/**"):
                     output, error = "", output.split("\n")[0].strip()
                     logger.info("Error getting statistics for %s: %s.", path, error)
-                else:
+                elif self._process:
                     logger.info("Finished statistics analysis for %s.", path)
             self._process = None
 
@@ -518,7 +526,8 @@ class ChecksumThread(WorkerThread):
                             sha1.update(buf), md5.update(buf)
                             buf = f.read(BLOCKSIZE)
                             if not self._is_working: break # while len
-                    logger.info("Finished checksum calculation for %s.", path)
+                    if self._is_working:
+                        logger.info("Finished checksum calculation for %s.", path)
                 except Exception as e:
                     logger.exception("Error calculating checksum for %s.", path)
                     error = util.format_exc(e)
