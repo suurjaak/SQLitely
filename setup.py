@@ -8,14 +8,49 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.06.2020
+@modified    05.07.2020
 ------------------------------------------------------------------------------
 """
+import atexit
+import os
+import stat
+import sys
 import setuptools
+from setuptools.command.install import install
 
 from sqlitely import conf
 
+
+class CustomInstall(install):
+    """Sets executable bits on sqlite_analyzer binaries after installation."""
+
+    def __init__(self, *args, **kwargs):
+        install.__init__(self, *args, **kwargs)
+        if "nt" != os.name: atexit.register(self._post_install)
+
+    def _post_install(self):
+
+        def find_module_path(name):
+            paths = list(sys.path)
+            if getattr(self, "install_purelib", None):
+                paths.insert(0, self.install_purelib)
+            for p in paths:
+                try:
+                    if os.path.isdir(p) and name in os.listdir(p):
+                        return os.path.join(p, name)
+                except Exception: pass
+
+        install_path = find_module_path(conf.Title.lower())
+        bin_path = os.path.join(install_path, "bin") if install_path else None
+        mask = stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
+        for f in os.listdir(bin_path) if bin_path else ():
+            p = os.path.join(bin_path, f)
+            try: os.chmod(p, mask)
+            except Exception: pass
+
+
 setuptools.setup(
+    cmdclass={"install": CustomInstall},
     name=conf.Title,
     version=conf.Version,
     description="SQLite database tool",
