@@ -4,7 +4,7 @@ sqlitely\. Sets execute flag permission on .sh files.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  20.11.2019
+@modified  05.07.2020
 """
 import glob
 import os
@@ -43,7 +43,8 @@ if "__main__" == __name__:
             zi.compress_type = zipfile.ZIP_DEFLATED
             zi.create_system = 3 # UNIX
             zi.external_attr = 0644 << 16L # Permission flag -rw-r--r--
-            if os.path.splitext(filename)[-1] in [".sh"]:
+            if os.path.splitext(filename)[-1] in [".sh"] \
+            or os.path.split(subdir)[-1]      in ["bin"]:
                 zi.external_attr = 0755 << 16L # Permission flag -rwxr-xr-x
             print("Adding %s, %s bytes" % (zi.filename, os.path.getsize(fullpath)))
             zf.writestr(zi, open(fullpath, "rb").read())
