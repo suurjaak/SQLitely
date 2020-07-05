@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.07.2020
+@modified    05.07.2020
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -23,8 +23,8 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.0.dev342"
-VersionDate = "04.07.2020"
+Version = "1.0.dev343"
+VersionDate = "05.07.2020"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -322,6 +322,8 @@ def save():
     parser.optionxform = str # Force case-sensitivity on names
     parser.add_section(section)
     try:
+        try: os.makedirs(os.path.split(ConfigFile)[0])
+        except Exception: pass
         f = open(ConfigFile, "wb")
         f.write("# %s %s configuration written on %s.\n" % (Title, Version,
                 datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
