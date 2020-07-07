@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>SQLitely | Index</title>
+<meta name="generator" content="Jekyll v3.8.7" />
+<meta property="og:title" content="SQLitely" />
+<meta property="og:locale" content="en_US" />
+<link rel="canonical" href="https://suurjaak.github.io/SQLitely/" />
+<meta property="og:url" content="https://suurjaak.github.io/SQLitely/" />
+<meta property="og:site_name" content="SQLitely" />
+
+
+    <link rel="stylesheet" href="css/style.css">
+    <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1><a href="https://suurjaak.github.io/SQLitely/">SQLitely</a></h1>
+        
+        
+
+        <p></p>
+
+        
+        <p class="view"><a href="https://github.com/suurjaak/SQLitely">View the Project on GitHub <small>suurjaak/SQLitely</small></a></p>
+        
+
+        
+
+        
+      </header>
+      <section>
+
+      <h1 id="sqlitely-10">SQLitely 1.0</h1>
+
+<p>SQLitely is an SQLite database tool, written in Python.</p>
+
+<p>It can:</p>
+
+<ul>
+  <li>detect and manage SQLite databases in bulk</li>
+  <li>create new or temporary databases</li>
+  <li>create and alter tables, indexes, triggers and views</li>
+  <li>modify table data</li>
+  <li>free-form search over all database data and metadata</li>
+  <li>export data and metadata in various formats (text, HTML, spreadsheet, JSON, SQL)</li>
+  <li>import data to tables from spreadsheet or JSON</li>
+  <li>view database table and index size statistics</li>
+  <li>copy tables from one database to another</li>
+  <li>execute direct SQL queries</li>
+  <li>manage database PRAGMA directives</li>
+  <li>fix database corruption</li>
+</ul>
+
+<p>Downloads, help texts, and more screenshots at
+http://suurjaak.github.io/SQLitely.</p>
+
+<p><a href="https://raw.github.com/suurjaak/SQLitely/gh-pages/img/collage.png"><img src="https://raw.github.com/suurjaak/SQLitely/gh-pages/img/th_collage.png" alt="Screenshots" /></a></p>
+
+<h2 id="using-the-program">Using The Program</h2>
+
+<p>SQLitely can search over all columns of all tables with a simple
+<a href="http://suurjaak.github.io/SQLitely/help.html">query syntax</a>.
+Keywords can search from specific tables and columns only
+(<code class="language-plaintext highlighter-rouge">table:foo</code>, <code class="language-plaintext highlighter-rouge">column:bar</code>), or from certain dates only 
+(<code class="language-plaintext highlighter-rouge">date:2012</code>, <code class="language-plaintext highlighter-rouge">date:2010..2013-06</code>). Search supports 
+wildcards, exact phrases, grouping, excluding, and either-or queries.</p>
+
+<p>SQLitely can show disk space usage for each table and index,
+in bytes and overall percentage. (Depending on the size of the database,
+this analysis can take a while.)</p>
+
+<p>SQLitely offers a convenient way for complex ALTER TABLE operations.
+Columns and constraints can be changed, reordered, added, dropped;
+the program automatically performs the multiple steps required for SQLite table
+modifications while retaining existing data (creating a temporary table,
+copying data, dropping old table, and renaming temporary table as old).
+Additionally, when renaming tables or columns, all related tables, indexes,
+triggers and views are altered automatically.</p>
+
+<p>SQLitely can check database integrity for corruption, and copy as much data
+as possible over into a new database.</p>
+
+<p>SQLitely has been tested under Windows 7 and Ubuntu Linux. In source code form,
+it should run wherever Python and the required Python packages are installed.</p>
+
+<p>If running from pip installation, run <code class="language-plaintext highlighter-rouge">sqlitely</code> from the command-line. 
+If running straight from source code, launch <code class="language-plaintext highlighter-rouge">sqlitely.sh</code> where shell 
+scripts are supported, or <code class="language-plaintext highlighter-rouge">sqlitely.bat</code> under Windows, or open 
+a terminal and run <code class="language-plaintext highlighter-rouge">python -m sqlitely.main</code> in SQLitely directory.</p>
+
+<h2 id="installation">Installation</h2>
+
+<p>Windows: download and launch the latest setup from
+https://suurjaak.github.io/SQLitely/downloads.html.</p>
+
+<p>Mac/Linux/other: install Python2 and pip, run <code class="language-plaintext highlighter-rouge">pip install sqlitely</code>.</p>
+
+<p>The pip installation will add the <code class="language-plaintext highlighter-rouge">sqlitely</code> command to path.</p>
+
+<p>Windows installers have been provided for convenience. The program itself 
+is stand-alone, can work from any directory, and does not need additional
+installation. The installed program can be copied to a USB stick and used
+elsewhere, same goes for the source code.</p>
+
+<h2 id="source-dependencies">Source Dependencies</h2>
+
+<p>If running from source code, SQLitely needs Python 2.7,
+and the following 3rd-party Python packages:</p>
+
+<ul>
+  <li>antlr4-python2-runtime (https://pypi.org/project/antlr4-python2-runtime)</li>
+  <li>openpyxl (https://pypi.org/project/openpyxl)</li>
+  <li>Pillow (https://pypi.org/project/Pillow)</li>
+  <li>pyparsing (https://pypi.org/project/pyparsing)</li>
+  <li>pytz (https://pythonhosted.org/pytz/)</li>
+  <li>wxPython 4.0+ (https://wxpython.org)</li>
+  <li>xlrd (https://pypi.org/project/xlrd)</li>
+  <li>XlsxWriter (https://pypi.org/project/XlsxWriter)</li>
+</ul>
+
+<p>All dependencies can be installed by running <code class="language-plaintext highlighter-rouge">pip install -r requirements.txt</code>
+in SQLitely source distribution folder.</p>
+
+<p>If openpyxl or pyparsing or xlrd or XlsxWriter are not available,
+the program will function regardless, only with lesser service - 
+lacking Excel import-export or full search syntax.</p>
+
+<p>Python 3 is yet unsupported.</p>
+
+<h2 id="attribution">Attribution</h2>
+
+<p>Includes sqlite_analyzer, a command-line utility for table space analysis,
+(c) 2000, D. Richard Hipp, https://www.sqlite.org.</p>
+
+<p>Includes a modified version of step, Simple Template Engine for Python,
+(c) 2012, Daniele Mazzocchio, https://github.com/dotpy/step.</p>
+
+<p>Includes a modified version of SQLite.g4 from sqlite-parser,
+(c) 2013, Bart Kiers, https://github.com/bkiers/sqlite-parser.</p>
+
+<p>SQL lexer and parser generated with ANTLR v4.8,
+(c) 2012 The ANTLR Project, https://github.com/antlr/antlr4.</p>
+
+<p>Includes several icons from Fugue Icons,
+(c) 2010 Yusuke Kamiyamane, https://p.yusukekamiyamane.com.</p>
+
+<p>Includes fonts Carlito Regular and Carlito Bold,
+https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts.</p>
+
+<p>Binaries compiled with PyInstaller, https://www.pyinstaller.org.</p>
+
+<p>Installers created with Nullsoft Scriptable Install System,
+https://nsis.sourceforge.net/.</p>
+
+<h2 id="license">License</h2>
+
+<p>Copyright (c) 2019 by Erki Suurjaak.
+Released as free open source software under the MIT License,
+see <a href="/SQLitely/LICENSE.md">LICENSE.md</a> for full license text.</p>
+
+
+      </section>
+      <footer>
+        
+        <p>This project is maintained by <a href="https://github.com/suurjaak">suurjaak</a></p>
+        
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="js/scale.fix.js"></script>
+    
+  </body>
+</html>
