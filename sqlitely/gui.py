@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.07.2020
+@modified    07.07.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -246,7 +246,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         else:
             self.Show(True)
         wx.CallLater(20000, self.update_check)
-        wx.CallLater(0, self.populate_database_list)
+        wx.CallLater(1, self.populate_database_list)
         logger.info("Started application.")
 
 
@@ -731,7 +731,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             except (TypeError, ValueError):
                 pass
         # Schedule a check for due date, should the program run that long.
-        millis = min(sys.maxint, util.timedelta_seconds(interval) * 1000)
+        millis = max(1, min(sys.maxint, util.timedelta_seconds(interval) * 1000))
         wx.CallLater(millis, self.update_check)
 
 
@@ -3541,7 +3541,7 @@ class DatabasePage(wx.Panel):
             if "table" != opts["type"]: self.pragma_ctrls[name].Disable()
         self.page_pragma.Layout()
         self.update_page_header()
-        wx.CallLater(0, self.on_pragma_refresh, reload=True)
+        wx.CallLater(1, self.on_pragma_refresh, reload=True)
 
 
     def on_check_fks(self, event=None):

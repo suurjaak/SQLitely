@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.07.2020
+@modified    07.07.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -2393,7 +2393,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         self._OnChange(updated=True)
         # Refresh cell colours; without CallLater wx 2.8 can crash
-        wx.CallLater(0, lambda: self and self._grid.ForceRefresh())
+        wx.CallLater(1, lambda: self and self._grid.ForceRefresh())
         return True
 
 
@@ -2420,7 +2420,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         self._grid.Table.UndoChanges()
         # Refresh scrollbars and colours; without CallAfter wx 2.8 can crash
-        wx.CallLater(0, lambda: self and (self._grid.ContainingSizer.Layout(),
+        wx.CallLater(1, lambda: self and (self._grid.ContainingSizer.Layout(),
                                           self._grid.ForceRefresh()))
         self._backup = None
         self._OnChange(updated=True)
@@ -2726,7 +2726,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._backup = None
         self._OnChange(updated=True)
         # Refresh cell colours; without CallLater wx 2.8 can crash
-        wx.CallLater(0, lambda: self and self._grid.ForceRefresh())
+        wx.CallLater(1, lambda: self and self._grid.ForceRefresh())
 
 
     def _OnRollback(self, event=None):
@@ -3018,7 +3018,7 @@ class SchemaObjectPage(wx.Panel):
             if self._newmode: edit_name.SetFocus(), edit_name.SelectAll()
             else: button_edit.SetFocus()
             wx.CallLater(100, self.SendSizeEvent)
-        wx.CallLater(0, after)
+        wx.CallLater(1, after)
 
 
     def Close(self, force=False):
@@ -3599,7 +3599,7 @@ class SchemaObjectPage(wx.Panel):
                 adder([collection], j, opts)
             if grid.NumberRows:
                 setcursor = lambda g, r, c: lambda: (self and g.SetGridCursor(r, c))
-                wx.CallLater(0, setcursor(grid, min(row, grid.NumberRows - 1), col))
+                wx.CallLater(1, setcursor(grid, min(row, grid.NumberRows - 1), col))
                 if i: wx.CallAfter(self._SizeConstraintsGrid)
             panel.Layout()
 
@@ -6340,7 +6340,7 @@ class ImportDialog(wx.Dialog):
             self.Position = x + (w - w2)  / 2, y + (h - h2) / 2
 
         wx_accel.accelerate(self)
-        wx.CallLater(0, button_file.SetFocus)
+        wx.CallLater(1, button_file.SetFocus)
 
 
     def SetFile(self, data):
@@ -7307,7 +7307,7 @@ class DataDialog(wx.Dialog):
                         (wx.ACCEL_NORMAL, wx.WXK_F10,   wx.ID_SAVE),
                         (wx.ACCEL_NORMAL, wx.WXK_F11,   wx.ID_HIGHEST)]
         wx_accel.accelerate(self, accelerators=accelerators)
-        wx.CallLater(0, lambda: self and self._edits.values()[0].SetFocus())
+        wx.CallLater(1, lambda: self and self._edits.values()[0].SetFocus())
         wx.CallAfter(self._OnFit, initial=True)
 
 
@@ -7783,7 +7783,7 @@ class HistoryDialog(wx.Dialog):
         self.MinSize = (400, 400)
         grid.SetFocus()
         if grid.NumberRows:
-            wx.CallLater(0, lambda: self and grid.GoToCell(grid.NumberRows - 1, 0))
+            wx.CallLater(1, lambda: self and grid.GoToCell(grid.NumberRows - 1, 0))
 
 
     def _Convert(self, x):
@@ -8368,7 +8368,7 @@ class ColumnDialog(wx.Dialog):
             ctrl2.SetFirstVisibleLine(ctrl1.FirstVisibleLine)
             stctxt.UpdateBytes(stchex.Value) # Restore bytes
             self._Populate(ctrl1.Value, skip=NAME)
-            wx.CallLater(0, state["changing"].clear)
+            wx.CallLater(1, state["changing"].clear)
 
         def on_undo(*a, **kw): stchex.Undo()
         def on_redo(*a, **kw): stchex.Redo()
@@ -8471,7 +8471,7 @@ class ColumnDialog(wx.Dialog):
             stc.Text = "" if value is None else util.to_unicode(value)
             if reset: stc.EmptyUndoBuffer()
             validate(stc.Text, propagate=False)
-            wx.CallLater(0, state.update, {"changing": False})
+            wx.CallLater(1, state.update, {"changing": False})
 
 
         tb     = self._MakeToolBar(page, NAME, label="", filelabel="", undo=on_undo, redo=on_redo)
@@ -9081,7 +9081,7 @@ class ColumnDialog(wx.Dialog):
             return
         if self._timer: self._timer.Stop()
         callback = functools.partial(do_handle, event.EventObject, self._col)
-        self._timer = wx.CallLater(delay, callback)
+        self._timer = wx.CallLater(max(1, delay), callback)
 
 
     def _OnClose(self, event=None):

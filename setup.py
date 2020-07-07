@@ -49,6 +49,12 @@ class CustomInstall(install):
             except Exception: pass
 
 
+def readfile(path):
+    """Returns contents of path, relative to current file."""
+    root = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(root, path)) as f: return f.read().decode("utf-8")
+
+
 setuptools.setup(
     cmdclass={"install": CustomInstall},
     name=conf.Title,
@@ -81,5 +87,6 @@ setuptools.setup(
         "Programming Language :: Python :: 2.7",
     ],
 
-    long_description="SQLitely is an SQLite database tool, written in Python.",
+    long_description_content_type="text/markdown",
+    long_description=readfile("README.md"),
 )
