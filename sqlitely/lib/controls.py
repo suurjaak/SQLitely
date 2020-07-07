@@ -66,7 +66,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    02.07.2020
+@modified    07.07.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -1377,7 +1377,7 @@ class NoteButton(wx.Panel, wx.Button):
         and event.UnicodeKey in KEYS.SPACE + KEYS.ENTER:
             button_event = wx.PyCommandEvent(wx.EVT_BUTTON.typeId, self.Id)
             button_event.EventObject = self
-            wx.CallLater(0, wx.PostEvent, self, button_event)
+            wx.CallLater(1, wx.PostEvent, self, button_event)
             skip = False
             self.Refresh()
         if skip: event.Skip()
@@ -1728,7 +1728,7 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
             self.Parent.ContainingSizer.Layout()
         self._fit = True
         doFit()
-        wx.CallLater(0, doFit) # Might need recalculation after first layout
+        wx.CallLater(1, doFit) # Might need recalculation after first layout
 
 
     def GetBestChildSize(self):
@@ -4069,7 +4069,7 @@ class TabbedHtmlWindow(wx.Panel):
             evt.SetSelection(event.GetSelection())
             evt.SetEventObject(self)
             wx.PostEvent(self, evt) # Forward event to external listeners
-        wx.CallLater(0, after)
+        wx.CallLater(1, after)
 
 
     def _OnMenu(self, event):
