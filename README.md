@@ -10,8 +10,7 @@ It can:
 - create and alter tables, indexes, triggers and views
 - modify table data
 - free-form search over all database data and metadata
-- export data and metadata in various formats
-  (text, HTML, spreadsheet, JSON, SQL)
+- export data and metadata in various formats (text, HTML, spreadsheet, JSON, SQL)
 - import data to tables from spreadsheet or JSON
 - view database table and index size statistics
 - copy tables from one database to another
@@ -66,7 +65,7 @@ Installation
 Windows: download and launch the latest setup from
 https://suurjaak.github.io/SQLitely/downloads.html.
 
-Mac/Linux/other: install Python and pip, run `pip install sqlitely`.
+Mac/Linux/other: install Python2 and pip, run `pip install sqlitely`.
 
 The pip installation will add the `sqlitely` command to path.
 
@@ -81,14 +80,18 @@ Source Dependencies
 
 If running from source code, SQLitely needs Python 2.7,
 and the following 3rd-party Python packages:
-* antlr4-python2-runtime (https://pypi.org/project/antlr4-python2-runtime)
-* openpyxl (https://pypi.org/project/openpyxl)
-* Pillow (https://pypi.org/project/Pillow)
-* pyparsing (https://pypi.org/project/pyparsing)
-* pytz (https://pythonhosted.org/pytz/)
-* wxPython 4.0+ (https://wxpython.org)
-* xlrd (https://pypi.org/project/xlrd)
-* XlsxWriter (https://pypi.org/project/XlsxWriter)
+
+- antlr4-python2-runtime (https://pypi.org/project/antlr4-python2-runtime)
+- openpyxl (https://pypi.org/project/openpyxl)
+- Pillow (https://pypi.org/project/Pillow)
+- pyparsing (https://pypi.org/project/pyparsing)
+- pytz (https://pythonhosted.org/pytz/)
+- wxPython 4.0+ (https://wxpython.org)
+- xlrd (https://pypi.org/project/xlrd)
+- XlsxWriter (https://pypi.org/project/XlsxWriter)
+
+All dependencies can be installed by running `pip install -r requirements.txt`
+in SQLitely source distribution folder.
 
 If openpyxl or pyparsing or xlrd or XlsxWriter are not available,
 the program will function regardless, only with lesser service - 
