@@ -23,22 +23,33 @@
     <div class="wrapper">
       <header>
         <h1><a href="https://suurjaak.github.io/SQLitely/">SQLitely</a></h1>
-        
-        
 
         <p></p>
 
-        
-        <p class="view"><a href="https://github.com/suurjaak/SQLitely">View the Project on GitHub <small>suurjaak/SQLitely</small></a></p>
-        
+        <p class="view">
 
-        
+          <a href="index.html">Index</a><br />
+          <span class="subview">
+            <a href="#using">Using the program</a><br />
+            <a href="#attribution">Attribution</a><br />
+            <a href="#license">License</a><br />
+          </span>
+          <a href="downloads.html">Downloads</a><br />
+          <a href="install.html">Installation</a><br />
+          <a href="screens.html">Screenshots</a><br />
+          <a href="https://github.com/suurjaak/SQLitely">View the Project on GitHub <small>suurjaak/SQLitely</small></a>
 
-        
+          <ul>
+            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_1.0_setup.exe">Download <strong>Setup</strong></a></li>
+            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_1.0_x64_setup.exe">Download <strong>64bit Setup</strong></a></li>
+            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_1.0-src.zip">Download <strong>Source</strong></a></li>
+          </ul>
+        </p>
+
       </header>
       <section>
 
-      <h1 id="sqlitely-10">SQLitely 1.0</h1>
+<h1 id="sqlitely-10">SQLitely 1.0</h1>
 
 <p>SQLitely is an SQLite database tool, written in Python.</p>
 
@@ -59,10 +70,6 @@
   <li>fix database corruption</li>
 </ul>
 
-<p>Downloads, help texts, and more screenshots at
-http://suurjaak.github.io/SQLitely.</p>
-
-<p><a href="https://raw.github.com/suurjaak/SQLitely/gh-pages/img/collage.png"><img src="https://raw.github.com/suurjaak/SQLitely/gh-pages/img/th_collage.png" alt="Screenshots" /></a></p>
 
 <h2 id="using-the-program">Using The Program</h2>
 
@@ -96,75 +103,53 @@ If running straight from source code, launch <code class="language-plaintext hig
 scripts are supported, or <code class="language-plaintext highlighter-rouge">sqlitely.bat</code> under Windows, or open 
 a terminal and run <code class="language-plaintext highlighter-rouge">python -m sqlitely.main</code> in SQLitely directory.</p>
 
-<h2 id="installation">Installation</h2>
-
-<p>Windows: download and launch the latest setup from
-https://suurjaak.github.io/SQLitely/downloads.html.</p>
-
-<p>Mac/Linux/other: install Python2 and pip, run <code class="language-plaintext highlighter-rouge">pip install sqlitely</code>.</p>
-
-<p>The pip installation will add the <code class="language-plaintext highlighter-rouge">sqlitely</code> command to path.</p>
-
-<p>Windows installers have been provided for convenience. The program itself 
-is stand-alone, can work from any directory, and does not need additional
-installation. The installed program can be copied to a USB stick and used
-elsewhere, same goes for the source code.</p>
-
-<h2 id="source-dependencies">Source Dependencies</h2>
-
-<p>If running from source code, SQLitely needs Python 2.7,
-and the following 3rd-party Python packages:</p>
-
-<ul>
-  <li>antlr4-python2-runtime (https://pypi.org/project/antlr4-python2-runtime)</li>
-  <li>openpyxl (https://pypi.org/project/openpyxl)</li>
-  <li>Pillow (https://pypi.org/project/Pillow)</li>
-  <li>pyparsing (https://pypi.org/project/pyparsing)</li>
-  <li>pytz (https://pythonhosted.org/pytz/)</li>
-  <li>wxPython 4.0+ (https://wxpython.org)</li>
-  <li>xlrd (https://pypi.org/project/xlrd)</li>
-  <li>XlsxWriter (https://pypi.org/project/XlsxWriter)</li>
-</ul>
-
-<p>All dependencies can be installed by running <code class="language-plaintext highlighter-rouge">pip install -r requirements.txt</code>
-in SQLitely source distribution folder.</p>
-
-<p>If openpyxl or pyparsing or xlrd or XlsxWriter are not available,
-the program will function regardless, only with lesser service - 
-lacking Excel import-export or full search syntax.</p>
-
-<p>Python 3 is yet unsupported.</p>
-
 <h2 id="attribution">Attribution</h2>
 
 <p>Includes sqlite_analyzer, a command-line utility for table space analysis,
-(c) 2000, D. Richard Hipp, https://www.sqlite.org.</p>
+(c) 2000, D. Richard Hipp, <a href="https://www.sqlite.org">www.sqlite.org</a>.</p>
 
 <p>Includes a modified version of step, Simple Template Engine for Python,
-(c) 2012, Daniele Mazzocchio, https://github.com/dotpy/step.</p>
+(c) 2012, Daniele Mazzocchio, <a href="https://github.com/dotpy/step">github.com/dotpy/step</a>.</p>
 
 <p>Includes a modified version of SQLite.g4 from sqlite-parser,
-(c) 2013, Bart Kiers, https://github.com/bkiers/sqlite-parser.</p>
+(c) 2013, Bart Kiers, <a href="https://github.com/bkiers/sqlite-parser">github.com/bkiers/sqlite-parser</a>.</p>
 
 <p>SQL lexer and parser generated with ANTLR v4.8,
-(c) 2012 The ANTLR Project, https://github.com/antlr/antlr4.</p>
+(c) 2012 The ANTLR Project, <a href="https://github.com/antlr/antlr4">github.com/antlr/antlr4</a>.</p>
 
 <p>Includes several icons from Fugue Icons,
-(c) 2010 Yusuke Kamiyamane, https://p.yusukekamiyamane.com.</p>
+(c) 2010 Yusuke Kamiyamane, <a href="https://p.yusukekamiyamane.com">p.yusukekamiyamane.com</a>.</p>
 
 <p>Includes fonts Carlito Regular and Carlito Bold,
-https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts.</p>
+<a href="https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts">fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts</a>.</p>
 
-<p>Binaries compiled with PyInstaller, https://www.pyinstaller.org.</p>
+<p>Binaries compiled with PyInstaller, <a href="https://www.pyinstaller.org">www.pyinstaller.org</a>.</p>
 
-<p>Installers created with Nullsoft Scriptable Install System,
-https://nsis.sourceforge.net/.</p>
+<p>Installers created with Nullsoft Scriptable Install System, <a href="https://nsis.sourceforge.net/">nsis.sourceforge.net/</a>.</p>
 
 <h2 id="license">License</h2>
 
-<p>Copyright (c) 2019 by Erki Suurjaak.
-Released as free open source software under the MIT License,
-see <a href="/SQLitely/LICENSE.md">LICENSE.md</a> for full license text.</p>
+<p>The MIT License</p>
+
+<p>Copyright (c) 2019 by Erki Suurjaak</p>
+
+<p>Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:</p>
+
+<p>The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.</p>
+
+<p>The software is provided "as is", without warranty of any kind, express or
+implied, including but not limited to the warranties of merchantability,
+fitness for a particular purpose and noninfringement. In no event shall the
+authors or copyright holders be liable for any claim, damages or other
+liability, whether in an action of contract, tort or otherwise, arising from,
+out of or in connection with the software or the use or other dealings in
+the software.<p>
 
 
       </section>
