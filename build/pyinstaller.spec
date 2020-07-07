@@ -6,11 +6,10 @@ depending on current environment.
 Pyinstaller-provided names and variables: Analysis, EXE, PYZ, SPEC, TOC.
 
 @created   23.08.2019
-@modified  17.06.2020
+@modified  06.07.2020
 """
 import os
 import platform
-import struct
 import sys
 
 DEBUG = False
@@ -45,7 +44,7 @@ pyz = PYZ(a.pure)
 sys.path.append(APPPATH)
 from sqlitely import conf
 
-is_64bit = (struct.calcsize("P") * 8 == 64)
+is_64bit = ("64" in platform.architecture()[0])
 ext = ".exe" if "nt" == os.name else ""
 app_file = "%s_%s%s%s" % (NAME, conf.Version, "_x64" if is_64bit else "", ext)
 
