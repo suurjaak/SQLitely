@@ -13,7 +13,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.07.2020
+@modified    24.07.2020
 """
 import datetime
 import logging
@@ -23,7 +23,6 @@ import traceback
 
 import wx
 import wx.lib.inspection
-import wx.lib.newevent
 import wx.py
 import wx.stc
 
