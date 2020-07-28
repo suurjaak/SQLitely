@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.07.2020
+@modified    28.07.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1182,9 +1182,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for dragging items around in dblist, saves file order."""
         event.Skip()
         def save_list_order():
-            del conf.DBFiles[:]
-            for i in range(self.list_db.GetItemCountFull()):
-                conf.DBFiles.append(self.list_db.GetItemTextFull(i))
+            conf.DBFiles = [self.list_db.GetItemText(i)
+                            for i in range(1, self.list_db.GetItemCountFull())]
             conf.save()
         wx.CallAfter(save_list_order) # Allow list to update items
 
