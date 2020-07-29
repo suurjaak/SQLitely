@@ -633,24 +633,27 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         @param   val   value to filter by, matched by substring
         """
         value = val
+        rows_before = self.GetNumberRows()
         if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
             value = val.replace(",", ".").strip() # Allow comma for decimals
         if value: self.filters[col] = value
         else: self.filters.pop(col, None)
-        self.Filter(self.GetNumberRows(present=True))
+        self.Filter(rows_before)
 
 
     def RemoveFilter(self, col):
         """Removes filter on the specified column, if any."""
         if col not in self.filters: return
+        rows_before = self.GetNumberRows()
         self.filters.pop(col)
-        self.Filter(self.GetNumberRows(present=True))
+        self.Filter(rows_before)
 
 
     def ClearFilter(self, refresh=True):
         """Clears all added filters."""
+        rows_before = self.GetNumberRows()
         self.filters.clear()
-        if refresh: self.Filter(self.GetNumberRows(present=True))
+        if refresh: self.Filter(rows_before)
 
 
     def ClearSort(self, refresh=True):
