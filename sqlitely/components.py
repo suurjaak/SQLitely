@@ -7595,11 +7595,11 @@ class DataDialog(wx.Dialog):
 
         item_dialog   = wx.MenuItem(menu, -1, "&Open column dialog")
         item_data     = wx.MenuItem(menu, -1, "&Copy value")
-        item_name     = wx.MenuItem(menu, -1, "Copy co&lumn name")
+        item_name     = wx.MenuItem(menu, -1, "Copy column &name")
         item_sql      = wx.MenuItem(menu, -1, "Copy SET &SQL")
         if self._editable:
             item_reset    = wx.MenuItem(menu, -1, "&Reset")
-            item_null     = wx.MenuItem(menu, -1, "Set &NULL")
+            item_null     = wx.MenuItem(menu, -1, "Set NU&LL")
             item_default  = wx.MenuItem(menu, -1, "Set D&EFAULT")
             item_date     = wx.MenuItem(menu, -1, "Set local &date")
             item_datetime = wx.MenuItem(menu, -1, "Set local date&time")
