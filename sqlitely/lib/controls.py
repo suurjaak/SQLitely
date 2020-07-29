@@ -3132,6 +3132,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
                 frompos = max(pos + direction * 3, 0)
                 topos   = sself.Length if frompos + 3 > sself.Length else frompos + 3
                 self.Remove(frompos, topos)
+                if idx: sself.SetSelection(*(pos + direction * 3 - idx, ) * 2)
             else:
                 self._Populate()
                 sself.SetSelection(*(pos + direction * 3 - idx, ) * 2)
