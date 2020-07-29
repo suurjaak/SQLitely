@@ -2096,6 +2096,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         if isinstance(self._grid.Table, SQLiteGridBase):
             self._grid.Table.CloseCursor()
         self._grid.Table = None
+        self._grid.ForceRefresh() # Update scrollbars
         self.Refresh()
         self._button_export.Enabled = False
         self._tbgrid.Disable()
