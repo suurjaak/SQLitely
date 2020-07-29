@@ -5839,8 +5839,8 @@ class ExportProgressPanel(wx.Panel):
             if not ctrls["text"]: return
 
             ctrls["text"].Parent.Freeze()
-            total = count
-            subopts = name and opts.get("multi") and opts["subtasks"].setdefault(name, {})
+            total, subopts = count, None
+            if name and opts.get("multi"): subopts = opts["subtasks"].setdefault(name, {}) 
 
             if subopts is not None and count is not None:
                 subopts["count"] = count
