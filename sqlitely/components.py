@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.07.2020
+@modified    29.07.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -8257,7 +8257,7 @@ class ColumnDialog(wx.Dialog):
         tb   = self._MakeToolBar(page, NAME, label="", filelabel="", undo=False, redo=False)
         tedit = controls.HintedTextCtrl(page, escape=False, style=wx.TE_MULTILINE | wx.TE_RICH2 | wx.TE_PROCESS_TAB)
         nedit = controls.HintedTextCtrl(page, escape=False)
-        button_set  = wx.Button(page, label="&Set ..")
+        button_set  = wx.Button(page, label="S&et ..")
         button_case = wx.Button(page, label="Change c&ase ..")
         button_copy = wx.Button(page, label="&Copy ..")
 
