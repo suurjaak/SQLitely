@@ -1410,7 +1410,7 @@ class SQLiteGridBaseMixin(object):
                 return self._grid.Table.SeekToRow(seekrow)
 
         def seekahead():
-            if not self: return
+            if not self or not self._grid.Table: return
 
             scrollpos = self._grid.GetScrollPos(wx.VERTICAL)
             scrollrange = self._grid.GetScrollRange(wx.VERTICAL)
