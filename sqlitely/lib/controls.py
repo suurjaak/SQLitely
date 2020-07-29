@@ -3133,7 +3133,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
                 self.Remove(frompos, topos)
             else:
                 self._Populate()
-                sself.SetSelection(pos + 1 + idx, pos + 1 + idx)
+                sself.SetSelection(*(pos + direction * 3 - idx, ) * 2)
         elif not event.HasModifiers() \
         and (unichr(event.UnicodeKey) in self.MASK or event.KeyCode in self.NUMPAD_NUMS) \
         and (not event.ShiftDown() or unichr(event.UnicodeKey) not in string.digits):
