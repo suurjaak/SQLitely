@@ -66,7 +66,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    07.07.2020
+@modified    29.07.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -2848,8 +2848,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         return str(self._bytes)
     def SetText(self, text):
         """Set current content as non-hex-encoded string."""
-        v = text.encode("utf-8") if isinstance(text, unicode) else str(text)
-        return self.SetValue(v)
+        return self.SetValue(self._AdaptValue(v))
     Text = property(GetText, SetText)
 
 
@@ -2924,8 +2923,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         elif self._fixed:
             self.SetSelection(selection[0], selection[0])
 
-        if isinstance(text, unicode): text = text.encode("utf-8")
-        text = re.sub("[^0-9a-fA-F]", "", text)
+        text = re.sub("[^0-9a-fA-F]", "", self._AdaptValue(text))
         text = text[:len(text) - len(text) % 2]
         if not text: return
 
@@ -3024,7 +3022,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         elif isinstance(value, float): v = struct.pack(">f", value)
         elif is_long:                  v = struct.pack(">q", value)
         elif value is None:            v = ""
-        else: v = value.encode("utf-8") if isinstance(value, unicode) else str(value)
+        else: v = self._AdaptValue(value)
 
         self._type      = type(value) if is_long or not isinstance(value, long) else str
         self._fixed     = is_long or value is None or isinstance(value, (int, float))
@@ -3190,6 +3188,13 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         self._QueueEvents(singlepos=event.LeftUp())
 
 
+    def _AdaptValue(self, value):
+        """Returns the value as str for hex representation."""
+        if not isinstance(value, unicode): return str(value)
+        try: return value.encode("latin1")
+        except Exception: return value.encode("utf-8")
+
+
     def _QueueEvents(self, singlepos=False):
         """Raises CaretPositionEvent or LinePositionEvent or SelectionEvent if changed after."""
         sself = super(HexTextCtrl, self)
@@ -3310,8 +3315,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         return str(self._bytes)
     def SetText(self, text):
         """Set current content as raw byte string."""
-        v = text.encode("utf-8") if isinstance(text, unicode) else str(text)
-        return self.SetValue(v)
+        return self.SetValue(self._AdaptValue(v))
     Text = property(GetText, SetText)
 
 
@@ -3445,7 +3449,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         elif isinstance(value, float): v = struct.pack(">f", value)
         elif is_long:                  v = struct.pack(">q", value)
         elif value is None:            v = ""
-        else: v = value.encode("utf-8") if isinstance(value, unicode) else str(value)
+        else: v = self._AdaptValue(value)
 
         self._bytes[:] = v
         self._text[:]  = re.sub("[^\x20-\x7e]", ".", v)
@@ -3499,7 +3503,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
             self.SetSelection(selection[0], selection[0])
 
         pos = self.CurrentPos
-        if isinstance(text, unicode): text = text.encode("utf-8")
+        text = self._AdaptValue(text)
         maxlen = min(len(text), self.Length - pos) if self._fixed else len(text)
         text = text[:maxlen]
 
@@ -3601,6 +3605,13 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         """Handler for mouse event, fires position change events."""
         self._QueueEvents()
         event.Skip()
+
+
+    def _AdaptValue(self, value):
+        """Returns the value as str for hex representation."""
+        if not isinstance(value, unicode): return str(value)
+        try: return value.encode("latin1")
+        except Exception: return value.encode("utf-8")
 
 
     def _QueueEvents(self):
