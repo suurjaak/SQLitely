@@ -3120,7 +3120,8 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             linepos   = pos - self.PositionFromLine(line)
             direction = -(event.KeyCode in KEYS.BACKSPACE)
 
-            if not self._bytes or pos == self.GetLastPosition() and not direction:
+            if not self._bytes or not pos and direction \
+            or pos == self.GetLastPosition() and not direction:
                 return
 
             bpos, idx = self.CurrentPos, linepos % 3
