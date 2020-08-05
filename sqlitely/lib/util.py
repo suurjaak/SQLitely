@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.06.2020
+@modified    05.08.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -624,13 +624,15 @@ def to_unicode(value, encoding=None):
     result = value
     if not isinstance(value, unicode):
         encoding = encoding or locale.getpreferredencoding()
-        if isinstance(value, str):
-            try:
-                result = unicode(value, encoding)
+        if not isinstance(value, str):
+            try: value = str(value)
+            except Exception: value = repr(value)
+        try: result = unicode(value, encoding)
+        except Exception:
+            try: result = unicode(value, "utf-8", errors="backslashreplace")
             except Exception:
-                result = unicode(value, "utf-8", errors="replace")
-        else:
-            result = unicode(str(value), errors="replace")
+                try: result = unicode(value, "latin1", errors="backslashreplace")
+                except Exception: value = unicode(value, "latin1", errors="replace")
     return result
 
 
