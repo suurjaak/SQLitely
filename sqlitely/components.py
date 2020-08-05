@@ -8090,7 +8090,7 @@ class ColumnDialog(wx.Dialog):
         if not self: return
         if value is None and "notnull" in self._coldata and not reset: return
 
-        v, affinity = value, self._gridbase.db.get_affinity(self._coldata)
+        v, affinity = value, database.Database.get_affinity(self._coldata)
         if affinity in ("INTEGER", "REAL") and not isinstance(v, (int, float)):
             try:
                 valc = value.replace(",", ".") # Allow comma separator
@@ -8248,7 +8248,7 @@ class ColumnDialog(wx.Dialog):
 
         def update(value, reset=False):
             state["changing"] = True
-            num = self._gridbase.db.get_affinity(self._coldata) in ("INTEGER", "REAL")
+            num = database.Database.get_affinity(self._coldata) in ("INTEGER", "REAL")
             tedit.Shown, nedit.Shown = not num, num
             edit = tedit if tedit.Shown else nedit
             v = "" if value is None else util.to_unicode(value)
@@ -8722,8 +8722,16 @@ class ColumnDialog(wx.Dialog):
             dbutton.Enabled = tbutton.Enabled = ubutton.Enabled = zbutton.Enabled = False
             state["numeric"] = False
             dtlabel.Font, tslabel.Font = font_bold, font_normal
-            if not isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
-                if self._gridbase.db.get_affinity(self._coldata) in ("INTEGER", "REAL"):
+
+            if isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
+                if isinstance(value, datetime.datetime):
+                    dt, d, t = value, value.date(), value.time()
+                    x = calendar.timegm(dt.timetuple()) + dt.microsecond / 1e6
+                    if x >= 0: ts = x if x % 1 else int(x)
+                elif isinstance(value, datetime.date): d = value
+                elif isinstance(value, datetime.time): t = value
+            else:
+                if database.Database.get_affinity(self._coldata) in ("INTEGER", "REAL"):
                     state["numeric"] = True
                     dtlabel.Font, tslabel.Font = font_normal, font_bold
                     try: x = datetime.datetime.utcfromtimestamp(float(value))
