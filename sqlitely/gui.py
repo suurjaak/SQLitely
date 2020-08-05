@@ -1350,7 +1350,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             or data_old["last_modified"] != data["last_modified"]:
                 if not data_old or "name" not in data_old:
                     self.list_db.AppendRow(data, [1])
-                self.db_datas.setdefault(filename, {}).update(data)
+                self.db_datas.setdefault(filename, defaultdict(lambda: None, name=filename))
+                self.db_datas[filename].update(data)
                 result = True
 
         if self.button_missing.Shown != (self.list_db.GetItemCount() > 1):
@@ -2158,7 +2159,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if db:
                 guibase.status("Opening database %s." % db, flash=True)
                 tab_title = self.get_unique_tab_title(db.name)
-                self.db_datas.setdefault(db.filename, {})["title"] = tab_title
+                self.db_datas.setdefault(db.filename, defaultdict(lambda: None, name=db.filename))
+                self.db_datas[db.filename]["title"] = tab_title
                 page = DatabasePage(self.notebook, tab_title, db, self.memoryfs)
                 conf.DBsOpen[db.filename] = db
                 self.db_pages[page] = db
