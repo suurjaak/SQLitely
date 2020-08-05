@@ -2916,7 +2916,8 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     def GetValue(self):
         """Returns current content as original type (string or number)."""
         v = str(self._bytes)
-        if   self._type is   int: v = struct.unpack(">l", v)[0]
+        if v == "" and self._type in (int, float, long): v = None
+        elif self._type is   int: v = struct.unpack(">l", v)[0]
         elif self._type is float: v = struct.unpack(">f", v)[0]
         elif self._type is  long: v = struct.unpack(">q", v)[0]
         return v
@@ -2933,7 +2934,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     OriginalBytes = property(GetOriginalBytes)
 
 
-    def UpdateValue(self, value, value0):
+    def UpdateValue(self, value, value0=None):
         """Update current content as typed value (string or number)."""
         HexByteCommand(self).Submit(self._AdaptValue(value), value0)
 
@@ -3399,7 +3400,8 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
     def GetValue(self):
         """Returns current content as original type (string or number)."""
         v = str(self._bytes)
-        if   self._type is   int: v = struct.unpack(">l", v)[0]
+        if v == "" and self._type in (int, float, long): v = None
+        elif self._type is   int: v = struct.unpack(">l", v)[0]
         elif self._type is float: v = struct.unpack(">f", v)[0]
         elif self._type is  long: v = struct.unpack(">q", v)[0]
         return v
@@ -3417,7 +3419,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
     OriginalBytes = property(GetOriginalBytes)
 
 
-    def UpdateValue(self, value, value0):
+    def UpdateValue(self, value, value0=None):
         """Update current content as typed value (string or number), retaining history."""
         HexByteCommand(self).Submit(self._AdaptValue(value), value0)
 
