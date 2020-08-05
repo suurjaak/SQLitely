@@ -16,6 +16,7 @@ from collections import defaultdict, Counter, OrderedDict
 import copy
 import datetime
 import functools
+import HTMLParser
 import io
 import json
 import logging
@@ -27,6 +28,7 @@ import re
 import string
 import sys
 import time
+import urllib
 import warnings
 
 import PIL
@@ -8156,6 +8158,28 @@ class ColumnDialog(wx.Dialog):
 
             on_change(edit.Value)
 
+        def do_transform(category):
+            edit = tedit if tedit.Shown else nedit
+            if not edit.Value: return
+            try:
+                if "whitespace" == category:
+                    edit.Value = edit.Value.strip()                   # Empty surrounding ws
+                    edit.Value = re.sub("[ \t]+\n", "\n", edit.Value) # Empty ws-only lines
+                    edit.Value = re.sub("[\r\n]+",  "\n", edit.Value) # Collapse blank lines
+                    edit.Value = re.sub("[ \t]+",   " ",  edit.Value) # Collapse spaces+tabs
+                elif "urlencode" == category:
+                    edit.Value = urllib.quote(util.to_str(edit.Value, "utf-8"))
+                elif "urldecode" == category:
+                    edit.Value = urllib.unquote(util.to_str(edit.Value, "utf-8"))
+                elif "htmlescape" == category:
+                    edit.Value = util.html_escape(edit.Value)
+                elif "htmlunescape" == category:
+                    edit.Value = HTMLParser.HTMLParser().unescape(edit.Value)
+                elif "htmlstrip" == category:
+                    edit.Value = re.sub("<[^>]+?>", "", edit.Value)
+            except Exception: raise # @todo pass
+            else: on_change(edit.Value)
+
         def on_set(event):
             menu = wx.Menu()
 
@@ -8207,6 +8231,32 @@ class ColumnDialog(wx.Dialog):
             menu.Bind(wx.EVT_MENU, lambda e: do_case("invert"),    item_invert)
             menu.Bind(wx.EVT_MENU, lambda e: do_case("snake"),     item_snake)
             menu.Bind(wx.EVT_MENU, lambda e: do_case("alternate"), item_alternate)
+
+            event.EventObject.PopupMenu(menu, (0, event.EventObject.Size[1]))
+
+        def on_transform(event):
+            menu = wx.Menu()
+
+            item_wspace    = wx.MenuItem(menu, -1, "Collapse &whitespace")
+            item_urlenc    = wx.MenuItem(menu, -1, "&URL-encode")
+            item_urldec    = wx.MenuItem(menu, -1, "URL-&decode")
+            item_hescape   = wx.MenuItem(menu, -1, "Escape &HTML entities")
+            item_hunescape = wx.MenuItem(menu, -1, "Unescape HTML &entities")
+            item_hstrip    = wx.MenuItem(menu, -1, "Strip HTML &tags")
+
+            menu.Append(item_wspace)
+            menu.Append(item_urlenc)
+            menu.Append(item_urldec)
+            menu.Append(item_hescape)
+            menu.Append(item_hunescape)
+            menu.Append(item_hstrip)
+
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("whitespace"),   item_wspace)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("urlencode"),    item_urlenc)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("urldecode"),    item_urldec)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("htmlescape"),   item_hescape)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("htmlunescape"), item_hunescape)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("htmlstrip"),    item_hstrip)
 
             event.EventObject.PopupMenu(menu, (0, event.EventObject.Size[1]))
 
@@ -8264,17 +8314,19 @@ class ColumnDialog(wx.Dialog):
         tb   = self._MakeToolBar(page, NAME, label="", filelabel="", undo=False, redo=False)
         tedit = controls.HintedTextCtrl(page, escape=False, style=wx.TE_MULTILINE | wx.TE_RICH2 | wx.TE_PROCESS_TAB)
         nedit = controls.HintedTextCtrl(page, escape=False)
-        button_set  = wx.Button(page, label="S&et ..")
-        button_case = wx.Button(page, label="Change c&ase ..")
-        button_copy = wx.Button(page, label="&Copy ..")
+        button_set   = wx.Button(page, label="S&et ..")
+        button_case  = wx.Button(page, label="Change c&ase ..")
+        button_xform = wx.Button(page, label="&Transform ..")
+        button_copy  = wx.Button(page, label="&Copy ..")
 
         page.Sizer    = wx.BoxSizer(wx.VERTICAL)
         sizer_header  = wx.BoxSizer(wx.HORIZONTAL)
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
 
         sizer_header.Add(tb,   border=5, flag=wx.ALL)
-        sizer_buttons.Add(button_set,  border=5, flag=wx.RIGHT)
-        sizer_buttons.Add(button_case, border=5, flag=wx.RIGHT)
+        sizer_buttons.Add(button_set,   border=5, flag=wx.RIGHT)
+        sizer_buttons.Add(button_case,  border=5, flag=wx.RIGHT)
+        sizer_buttons.Add(button_xform, border=5, flag=wx.RIGHT)
         sizer_buttons.Add(button_copy)
 
         page.Sizer.Add(sizer_header,   flag=wx.GROW)
@@ -8284,9 +8336,10 @@ class ColumnDialog(wx.Dialog):
 
         tedit.Bind(wx.EVT_TEXT, functools.partial(self._OnChar, name=NAME, handler=on_change))
         nedit.Bind(wx.EVT_TEXT, functools.partial(self._OnChar, name=NAME, handler=on_change))
-        button_set .Bind(wx.EVT_BUTTON, on_set)
-        button_case.Bind(wx.EVT_BUTTON, on_case)
-        button_copy.Bind(wx.EVT_BUTTON, on_copy)
+        button_set  .Bind(wx.EVT_BUTTON, on_set)
+        button_case .Bind(wx.EVT_BUTTON, on_case)
+        button_xform.Bind(wx.EVT_BUTTON, on_transform)
+        button_copy .Bind(wx.EVT_BUTTON, on_copy)
 
         self._getters[NAME] = lambda: tedit.GetValue() if tedit.Shown else nedit.GetValue()
         self._setters[NAME] = update
@@ -8483,7 +8536,7 @@ class ColumnDialog(wx.Dialog):
         cb     = wx.CheckBox(page, label="&Validate")
         status = wx.StaticText(page)
 
-        hint.Label = "Value shown as JSON, with simple validation check"
+        hint.Label = "Value in JSON highlight, with simple validation check"
         cb.ToolTip = "Show warning if value is not parseable as JSON"
         cb.Value   = True
         ColourManager.Manage(hint, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
