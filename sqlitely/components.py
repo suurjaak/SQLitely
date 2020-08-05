@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.07.2020
+@modified    05.08.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -7934,7 +7934,7 @@ class ColumnDialog(wx.Dialog):
     }
 
     def __init__(self, parent, gridbase, row, col, rowdata=None,
-                 id=wx.ID_ANY, title="Column Editor", pos=wx.DefaultPosition, size=wx.DefaultSize,
+                 id=wx.ID_ANY, title="Column Editor", pos=wx.DefaultPosition, size=(750, 450),
                  style=wx.CAPTION | wx.CLOSE_BOX | wx.MAXIMIZE_BOX | wx.RESIZE_BORDER,
                  name=wx.DialogNameStr):
         """
@@ -8326,15 +8326,13 @@ class ColumnDialog(wx.Dialog):
             if state["changing"].get(ctrl1): return
 
             ctrl2 = stctxt if ctrl1 is stchex else stchex
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                if ctrl2.Value == ctrl1.Value: return
+            value = ctrl1.Value if value is None else value
 
             state["changing"][ctrl2] = True
-            ctrl2.UpdateValue(ctrl1.Value)
+            ctrl2.UpdateValue(value, ctrl1.OriginalBytes)
             ctrl2.SetFirstVisibleLine(ctrl1.FirstVisibleLine)
             wx.CallAfter(state["changing"].update, {ctrl2: False})
-            self._Populate(ctrl1.Value, skip=NAME)
+            self._Populate(value, skip=NAME)
 
         def on_paste(value, propagate=False):
             stchex.InsertInto(value)
@@ -8347,8 +8345,7 @@ class ColumnDialog(wx.Dialog):
         def on_select(event):
             ctrl1 = event.EventObject
             ctrl2 = stctxt if ctrl1 is stchex else stchex
-            if ctrl1.Anchor <= ctrl1.CurrentPos: ctrl2.SetSelection(*ctrl1.GetSelection())
-            else: ctrl2.SetAnchor(ctrl1.Anchor + (ctrl1 is stchex)), ctrl2.SetCurrentPos(ctrl1.CurrentPos)
+            ctrl2.SetSelection(*ctrl1.GetSelection())
 
         def on_tab(event):
             ctrl1 = event.EventObject
@@ -8367,10 +8364,9 @@ class ColumnDialog(wx.Dialog):
             if not (ctrl2.CanUndo() if event.ModificationType & wx.stc.STC_PERFORMED_UNDO 
             else ctrl2.CanRedo()): return
 
-            state["changing"][ctrl2] = state["changing"][stctxt] = True
+            state["changing"][stchex] = state["changing"][stctxt] = True
             ctrl2.Undo() if event.ModificationType & wx.stc.STC_PERFORMED_UNDO else ctrl2.Redo()
             ctrl2.SetFirstVisibleLine(ctrl1.FirstVisibleLine)
-            stctxt.UpdateBytes(stchex.Value) # Restore bytes
             self._Populate(ctrl1.Value, skip=NAME)
             wx.CallLater(1, state["changing"].clear)
 
@@ -8426,8 +8422,8 @@ class ColumnDialog(wx.Dialog):
         page.Sizer.Add(stc_sizer, border=5, flag=wx.RIGHT | wx.GROW, proportion=1)
         page.Sizer.Add(sizer_footer, flag=wx.GROW)
 
-        handler1 = functools.partial(self._OnChar, name=NAME, handler=functools.partial(on_change, stchex))
-        handler2 = functools.partial(self._OnChar, name=NAME, handler=functools.partial(on_change, stctxt))
+        handler1 = functools.partial(self._OnChar, name=NAME, handler=functools.partial(on_change, stchex), delay=0)
+        handler2 = functools.partial(self._OnChar, name=NAME, handler=functools.partial(on_change, stctxt), delay=0)
         stchex.Bind(wx.EVT_CHAR_HOOK,        handler1)
         stchex.Bind(wx.EVT_KEY_DOWN,         on_tab)
         stchex.Bind(wx.stc.EVT_STC_MODIFIED, on_undoredo)
@@ -9075,7 +9071,7 @@ class ColumnDialog(wx.Dialog):
         if not handler or changestate is True \
         or isinstance(changestate, dict) and changestate.get(event.EventObject) \
         or isinstance(event, wx.KeyEvent) and (event.HasModifiers()
-        or 0 < event.UnicodeKey < wx.WXK_SPACE
+        or 0 <= event.UnicodeKey < wx.WXK_SPACE
         and event.KeyCode not in controls.KEYS.COMMAND + controls.KEYS.TAB) \
         or isinstance(event, wx.stc.StyledTextEvent) and not event.ModificationType & (
             wx.stc.STC_MOD_BEFOREDELETE | wx.stc.STC_MOD_BEFOREINSERT | 

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.07.2020
+@modified    05.08.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -629,7 +629,10 @@ def to_unicode(value, encoding=None):
             except Exception: value = repr(value)
         try: result = unicode(value, encoding)
         except Exception:
-            result = unicode(value, "utf-8", errors="backslashreplace")
+            try: result = unicode(value, "utf-8", errors="backslashreplace")
+            except Exception:
+                try: result = unicode(value, "latin1", errors="backslashreplace")
+                except Exception: value = unicode(value, "latin1", errors="replace")
     return result
 
 
