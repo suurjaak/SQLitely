@@ -7171,7 +7171,7 @@ class DataDialog(wx.Dialog):
     """
 
     def __init__(self, parent, gridbase, row, id=wx.ID_ANY,
-                 title="Data form", pos=wx.DefaultPosition, size=(400, 400),
+                 title="Data form", pos=wx.DefaultPosition, size=(350, 250),
                  style=wx.CAPTION | wx.CLOSE_BOX | wx.MAXIMIZE_BOX | wx.RESIZE_BORDER,
                  name=wx.DialogNameStr):
         """
@@ -7407,10 +7407,8 @@ class DataDialog(wx.Dialog):
             w, h = (min(a, b) for a, b in zip((w, h), topwindow.Size))
             minsize = self.MinSize
             if self.MinSize[1] > h: self.MinSize = self.MinSize[0], h
-            xwindow = topwindow if w > self.Parent.Size[0] else self.Parent
-            ywindow = topwindow if h > self.Parent.Size[1] else self.Parent
-            x = xwindow.ScreenPosition[0] + (xwindow.Size[0] - w) / 2
-            y = ywindow.ScreenPosition[1] + max(0, (ywindow.Size[1] - h) / 2)
+            x = topwindow.ScreenPosition[0] + (topwindow.Size[0] - w) / 2
+            y = topwindow.ScreenPosition[1] + max(0, (topwindow.Size[1] - h) / 2)
             self.Size, self.Position = (w, h), (x, y)
 
         if initial: after(w, h)
@@ -8031,7 +8029,12 @@ class ColumnDialog(wx.Dialog):
 
         self._Populate(self._value, reset=True)
         self._SetLabel()
-        self.CenterOnParent()
+        self.Layout()
+        if pos == wx.DefaultPosition:
+            top = wx.GetApp().TopWindow
+            (x, y), (w, h), (w2, h2) = top.Position, top.Size, self.Size
+            self.Position = (x + (w - w2)  / 2), (y + (h - h2) / 2)
+        else: self.CenterOnParent()
         wx.CallAfter(self.Layout)
 
 
