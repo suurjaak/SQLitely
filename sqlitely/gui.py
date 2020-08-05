@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.07.2020
+@modified    05.08.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -349,8 +349,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
              "Open the database."),
             ("button_saveas", "Save &as..", images.ButtonSaveAs,
              "Save a copy under another name."),
-            ("button_remove", "Remove", images.ButtonRemove,
-             "Remove from list."), ]
+            ("button_remove", "Remove", images.ButtonRemoveType,
+             "Remove from list."),
+            ("button_delete", "Delete", images.ButtonRemove,
+             "Delete from disk."), ]
         for name, label, img, note in BUTTONS_DETAIL:
             button = controls.NoteButton(panel_detail, label, note, img.Bitmap)
             setattr(self, name, button)
@@ -378,6 +380,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.button_open.Bind(wx.EVT_BUTTON,      self.on_open_current_database)
         self.button_saveas.Bind(wx.EVT_BUTTON,    self.on_save_database_as)
         self.button_remove.Bind(wx.EVT_BUTTON,    self.on_remove_database)
+        self.button_delete.Bind(wx.EVT_BUTTON,    self.on_delete_database)
 
         panel_main.Sizer.Add(label_main, border=10, flag=wx.ALL)
         panel_main.Sizer.Add((0, 10))
@@ -394,6 +397,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         panel_detail.Sizer.Add(self.button_open,   flag=wx.GROW)
         panel_detail.Sizer.Add(self.button_saveas, flag=wx.GROW)
         panel_detail.Sizer.Add(self.button_remove, flag=wx.GROW)
+        panel_detail.Sizer.Add(self.button_delete, flag=wx.GROW)
         panel_right.Sizer.Add(panel_main,   proportion=1, flag=wx.GROW)
         panel_right.Sizer.Add(panel_detail, proportion=1, flag=wx.GROW)
         sizer_header.Add(label_count, flag=wx.ALIGN_BOTTOM)
