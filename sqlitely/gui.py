@@ -97,6 +97,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.db_filter = "" # Current database list filter
         self.db_filter_timer = None # Database list filter callback timer
         self.db_menustate    = {}   # {filename: {} if refresh or {full: True} if reload}
+        self.columndlg = None       # Dummy column dialog for Help -> Show column editor tool
         self.page_db_latest = None  # Last opened database page
         # List of Notebook pages user has visited, used for choosing page to
         # show when closing one.
@@ -554,6 +555,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_console = self.menu_console = menu_help.Append(wx.ID_ANY,
             "Show Python &console\t%s-E" % controls.KEYS.NAME_CTRL,
             "Show/hide a Python shell environment window", kind=wx.ITEM_CHECK)
+        menu_editor = self.menu_editor = menu_help.Append(wx.ID_ANY,
+            "Show column &editor tool",
+            "Show/hide a dummy column editor", kind=wx.ITEM_CHECK)
         menu_help.AppendSeparator()
         if self.trayicon.IsAvailable():
             menu_tray = self.menu_tray = menu_help.Append(wx.ID_ANY,
@@ -579,19 +583,20 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_tools_export_spreadsheet.Enabled = bool(importexport.xlsxwriter)
 
         menu.Bind(wx.EVT_MENU_OPEN, self.on_menu_open)
-        self.Bind(wx.EVT_MENU, self.on_new_database, menu_new_database)
-        self.Bind(wx.EVT_MENU, self.on_open_database, menu_open_database)
-        self.Bind(wx.EVT_MENU, self.on_save_active_database, menu_save_database)
+        self.Bind(wx.EVT_MENU, self.on_new_database,            menu_new_database)
+        self.Bind(wx.EVT_MENU, self.on_open_database,           menu_open_database)
+        self.Bind(wx.EVT_MENU, self.on_save_active_database,    menu_save_database)
         self.Bind(wx.EVT_MENU, self.on_save_active_database_as, menu_save_database_as)
-        self.Bind(wx.EVT_MENU, self.on_open_options, menu_options)
-        self.Bind(wx.EVT_MENU, self.on_exit, menu_exit)
-        self.Bind(wx.EVT_MENU, self.on_check_update, menu_update)
-        self.Bind(wx.EVT_MENU, self.on_menu_homepage, menu_homepage)
-        self.Bind(wx.EVT_MENU, self.on_showhide_log, menu_log)
-        self.Bind(wx.EVT_MENU, self.on_toggle_console, menu_console)
+        self.Bind(wx.EVT_MENU, self.on_open_options,            menu_options)
+        self.Bind(wx.EVT_MENU, self.on_exit,                    menu_exit)
+        self.Bind(wx.EVT_MENU, self.on_check_update,            menu_update)
+        self.Bind(wx.EVT_MENU, self.on_menu_homepage,           menu_homepage)
+        self.Bind(wx.EVT_MENU, self.on_showhide_log,            menu_log)
+        self.Bind(wx.EVT_MENU, self.on_toggle_console,          menu_console)
+        self.Bind(wx.EVT_MENU, self.on_toggle_columneditor,     menu_editor)
         if self.trayicon.IsAvailable():
-            self.Bind(wx.EVT_MENU, self.on_toggle_iconize, menu_iconize)
-            self.Bind(wx.EVT_MENU, self.on_toggle_trayicon, menu_tray)
+            self.Bind(wx.EVT_MENU, self.on_toggle_iconize,      menu_iconize)
+            self.Bind(wx.EVT_MENU, self.on_toggle_trayicon,     menu_tray)
         self.Bind(wx.EVT_MENU, self.on_toggle_autoupdate_check,
                   menu_autoupdate_check)
         self.Bind(wx.EVT_MENU, self.on_about, menu_about)
@@ -798,6 +803,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                                 text="Show &icon in notification area")
         item_console = wx.MenuItem(menu, -1, kind=wx.ITEM_CHECK,
                                    text="Show Python &console")
+        item_editor = wx.MenuItem(menu, -1, kind=wx.ITEM_CHECK,
+                                  text="Show column &editor tool")
         item_exit = wx.MenuItem(menu, -1, "E&xit %s" % conf.Title)
 
         boldfont = wx.Font(item_toggle.Font)
@@ -837,17 +844,20 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu.Append(item_toggle)
         menu.Append(item_icon)
         menu.Append(item_console)
+        menu.Append(item_editor)
         menu.AppendSeparator()
         menu.Append(item_exit)
         item_icon.Check(True)
         item_console.Check(self.frame_console.Shown)
+        item_editor.Check(bool(self.columndlg and self.columndlg.Shown))
 
         menu.Bind(wx.EVT_MENU_RANGE, on_recent_file, id=wx.ID_FILE1,
                   id2=wx.ID_FILE1 + conf.MaxRecentFiles)
-        menu.Bind(wx.EVT_MENU, self.on_toggle_iconize,  item_toggle)
-        menu.Bind(wx.EVT_MENU, self.on_toggle_trayicon, item_icon)
-        menu.Bind(wx.EVT_MENU, self.on_toggle_console,  item_console)
-        menu.Bind(wx.EVT_MENU, self.on_exit,            item_exit)
+        menu.Bind(wx.EVT_MENU, self.on_toggle_iconize,      item_toggle)
+        menu.Bind(wx.EVT_MENU, self.on_toggle_trayicon,     item_icon)
+        menu.Bind(wx.EVT_MENU, self.on_toggle_console,      item_console)
+        menu.Bind(wx.EVT_MENU, self.on_toggle_columneditor, item_editor)
+        menu.Bind(wx.EVT_MENU, self.on_exit,                item_exit)
         self.trayicon.PopupMenu(menu)
 
 
@@ -1665,6 +1675,38 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.page_log.is_hidden = True
             self.notebook.RemovePage(self.notebook.GetPageIndex(self.page_log))
             self.menu_log.Check(False)
+
+
+    def on_toggle_columneditor(self, event):
+        """Handler for clicking to show/hide dummy column editor."""
+        if self.columndlg is None:
+            cols = [{"name": "text",   "type": "TEXT"},
+                    {"name": "number", "type": "INTEGER"},
+                    {"name": "date",   "type": "DATETIME"}]
+            rowdata = {"text": "", "number": 0, "date": datetime.datetime.now()}
+
+            dummydb = lambda: None
+            dummydb.get_keys = lambda *a, **kw: ([], [])
+
+            dummygridbase = lambda: None
+            dummygridbase.category = "dummy"
+            dummygridbase.columns = cols
+            dummygridbase.db = dummydb
+            dummygridbase.name = "dummy"
+            dummygridbase.KEY_NEW = components.SQLiteGridBase.KEY_NEW
+            dummygridbase.GetRowData = lambda *a, **kw: rowdata
+
+            def onclose(event):
+                event.Skip()
+                if not isinstance(event, wx.ShowEvent) or not event.Show:
+                    self.menu_editor.Check(False)
+
+            self.columndlg = components.ColumnDialog(None, dummygridbase, 0, 0, rowdata)
+            self.columndlg.SetIcons(images.get_appicons())
+            self.columndlg.Bind(wx.EVT_CLOSE, onclose)
+            self.columndlg.Bind(wx.EVT_SHOW,  onclose)
+        self.columndlg.Show(not self.columndlg.Shown)
+        self.menu_editor.Check(self.columndlg.Shown)
 
 
     def on_open_options(self, event):
