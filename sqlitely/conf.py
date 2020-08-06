@@ -23,7 +23,7 @@ import sys
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.1.dev14"
+Version = "1.1.dev15"
 VersionDate = "06.08.2020"
 
 if getattr(sys, "frozen", False):

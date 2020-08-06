@@ -8294,6 +8294,18 @@ class ColumnDialog(wx.Dialog):
 
             event.EventObject.PopupMenu(menu, (0, event.EventObject.Size[1]))
 
+        def on_colour(event=None):
+            if event: event.Skip()
+            fgcolour, crcolour, bgcolour = (
+                wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
+                for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_BTNTEXT,
+                          wx.SYS_COLOUR_WINDOW)
+            )
+            tedit.SetCaretForeground(crcolour)
+            tedit.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT,
+                               "back:%s,fore:%s" % (bgcolour, fgcolour))
+            tedit.StyleClearAll() # Apply the new default style to all styles
+
         def on_change(value):
             self._Populate(value, skip=NAME)
 
@@ -8316,12 +8328,17 @@ class ColumnDialog(wx.Dialog):
 
 
         tb   = self._MakeToolBar(page, NAME, label="", filelabel="", undo=False, redo=False)
-        tedit = controls.HintedTextCtrl(page, escape=False, style=wx.TE_MULTILINE | wx.TE_RICH2 | wx.TE_PROCESS_TAB)
-        nedit = controls.HintedTextCtrl(page, escape=False)
+        tedit = wx.stc.StyledTextCtrl(page)
+        nedit = controls.HintedTextCtrl(page, escape=False, size=(350, -1))
         button_set   = wx.Button(page, label="S&et ..")
         button_case  = wx.Button(page, label="Change c&ase ..")
         button_xform = wx.Button(page, label="&Transform ..")
         button_copy  = wx.Button(page, label="&Copy ..")
+
+        tedit.SetMarginCount(0)
+        tedit.SetTabWidth(tedit.TabWidth * 2)
+        tedit.SetWrapMode(wx.stc.STC_WRAP_WORD)
+        on_colour()
 
         page.Sizer    = wx.BoxSizer(wx.VERTICAL)
         sizer_header  = wx.BoxSizer(wx.HORIZONTAL)
@@ -8335,9 +8352,10 @@ class ColumnDialog(wx.Dialog):
 
         page.Sizer.Add(sizer_header,   flag=wx.GROW)
         page.Sizer.Add(tedit,          border=5, flag=wx.ALL | wx.GROW, proportion=1)
-        page.Sizer.Add(nedit,          border=5, flag=wx.ALL | wx.GROW)
+        page.Sizer.Add(nedit,          border=5, flag=wx.ALL)
         page.Sizer.Add(sizer_buttons,  border=5, flag=wx.LEFT | wx.BOTTOM | wx.GROW)
 
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED, on_colour)
         tedit.Bind(wx.EVT_TEXT, functools.partial(self._OnChar, name=NAME, handler=on_change))
         nedit.Bind(wx.EVT_TEXT, functools.partial(self._OnChar, name=NAME, handler=on_change))
         button_set  .Bind(wx.EVT_BUTTON, on_set)
