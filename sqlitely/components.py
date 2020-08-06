@@ -8163,7 +8163,11 @@ class ColumnDialog(wx.Dialog):
             edit = tedit if tedit.Shown else nedit
             if not edit.Value: return
             try:
-                if "whitespace" == category:
+                if "spaces" == category:
+                    edit.Value = edit.Value.replace("\t", " " * 4)
+                elif "tabs" == category:
+                    edit.Value = edit.Value.replace(" " * 4, "\t")
+                elif "whitespace" == category:
                     edit.Value = edit.Value.strip()                   # Empty surrounding ws
                     edit.Value = re.sub("[ \t]+\n", "\n", edit.Value) # Empty ws-only lines
                     edit.Value = re.sub("[\r\n]+",  "\n", edit.Value) # Collapse blank lines
@@ -8255,13 +8259,17 @@ class ColumnDialog(wx.Dialog):
         def on_transform(event):
             menu = wx.Menu()
 
+            item_tabs      = wx.MenuItem(menu, -1, "Spaces to &tabs")
+            item_spaces    = wx.MenuItem(menu, -1, "Tabs to &spaces")
             item_wspace    = wx.MenuItem(menu, -1, "Collapse &whitespace")
             item_urlenc    = wx.MenuItem(menu, -1, "&URL-encode")
             item_urldec    = wx.MenuItem(menu, -1, "URL-&decode")
             item_hescape   = wx.MenuItem(menu, -1, "Escape &HTML entities")
             item_hunescape = wx.MenuItem(menu, -1, "Unescape HTML &entities")
-            item_hstrip    = wx.MenuItem(menu, -1, "Strip HTML &tags")
+            item_hstrip    = wx.MenuItem(menu, -1, "Strip &HTML tags")
 
+            menu.Append(item_tabs)
+            menu.Append(item_spaces)
             menu.Append(item_wspace)
             menu.Append(item_urlenc)
             menu.Append(item_urldec)
@@ -8269,6 +8277,8 @@ class ColumnDialog(wx.Dialog):
             menu.Append(item_hunescape)
             menu.Append(item_hstrip)
 
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("tabs"),         item_tabs)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("spaces"),       item_spaces)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("whitespace"),   item_wspace)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("urlencode"),    item_urlenc)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("urldecode"),    item_urldec)
@@ -8353,7 +8363,8 @@ class ColumnDialog(wx.Dialog):
         button_copy  = wx.Button(page, label="&Copy ..")
 
         tedit.SetMarginCount(0)
-        tedit.SetTabWidth(tedit.TabWidth * 2)
+        tedit.SetTabWidth(4)
+        tedit.SetUseTabs(False)
         tedit.SetWrapMode(wx.stc.STC_WRAP_WORD)
         on_colour()
 
@@ -8372,9 +8383,12 @@ class ColumnDialog(wx.Dialog):
         page.Sizer.Add(nedit,          border=5, flag=wx.ALL)
         page.Sizer.Add(sizer_buttons,  border=5, flag=wx.LEFT | wx.BOTTOM | wx.GROW)
 
+        handler = functools.partial(self._OnChar, name=NAME, handler=on_change)
+
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, on_colour)
-        tedit.Bind(wx.EVT_TEXT, functools.partial(self._OnChar, name=NAME, handler=on_change))
-        nedit.Bind(wx.EVT_TEXT, functools.partial(self._OnChar, name=NAME, handler=on_change))
+        tedit.Bind(wx.EVT_TEXT, handler)
+        tedit.Bind(wx.stc.EVT_STC_MODIFIED, handler)
+        nedit.Bind(wx.EVT_TEXT, handler)
         button_set  .Bind(wx.EVT_BUTTON, on_set)
         button_case .Bind(wx.EVT_BUTTON, on_case)
         button_xform.Bind(wx.EVT_BUTTON, on_transform)
