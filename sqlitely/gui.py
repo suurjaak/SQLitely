@@ -1217,7 +1217,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.db_filter_timer = None
             if search != self.db_filter: return
             self.list_db.SetFilter(search)
-            self.update_database_count()
+            self.update_database_list()
 
         if self.db_filter_timer: self.db_filter_timer.Stop()
         self.db_filter = search
@@ -1434,21 +1434,44 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_clear_databases(self, event):
         """Handler for clicking to clear the database list."""
+        count = self.list_db.GetItemCount() - 1
+        total = len([v for v in self.db_datas.values() if "name" in v])
+        t = "all" if count == total else "current"
         if (self.list_db.GetItemCount() > 1) and wx.YES != controls.YesNoMessageBox(
-            "Are you sure you want to clear the list of all databases?",
+            "Are you sure you want to clear the list of %s databases?" % t,
             conf.Title, wx.ICON_INFORMATION, defaultno=True
         ): return
 
-        self.list_db.Populate([])
-        del conf.DBFiles[:]
+        if count == total:
+            self.list_db.Populate([])
+            del conf.DBFiles[:]
+            del conf.RecentFiles[:]
+            conf.LastSearchResults.clear()
+            while self.history_file.Count:
+                self.history_file.RemoveFileFromHistory(0)
+            for k, v in (self.db_datas.items()): v.pop("name", None)
+        else:
+            files = [self.list_db.GetItemMappedData(i)["name"]
+                     for i in range(1, self.list_db.GetItemCount())]
+            for f in files:
+                self.db_datas.get(f, {}).pop("name", None)
+                conf.LastSearchResults.pop(f, None)
+                for lst in conf.DBFiles, conf.RecentFiles:
+                    if f in lst: lst.remove(f)
+            self.list_db.Freeze()
+            try:
+                for i in range(self.list_db.GetItemCount())[::-1]:
+                    if self.list_db.GetItemText(i) in files:
+                        self.list_db.DeleteItem(i)
+            finally: self.list_db.Thaw()
+            # Remove from recent file history
+            historyfiles = [(i, self.history_file.GetHistoryFile(i))
+                            for i in range(self.history_file.Count)]
+            for i in [i for i, f in historyfiles if f in files][::-1]:
+                self.history_file.RemoveFileFromHistory(i)
+
         del conf.LastSelectedFiles[:]
-        del conf.RecentFiles[:]
-        conf.LastSearchResults.clear()
-        while self.history_file.Count:
-            self.history_file.RemoveFileFromHistory(0)
         del self.dbs_selected[:]
-        for v in self.db_datas.values(): v.pop("name", None)
-        self.dbs.clear()
         conf.save()
         self.update_database_list()
 
