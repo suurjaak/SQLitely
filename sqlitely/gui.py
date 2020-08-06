@@ -1708,15 +1708,17 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
             kws = dict(title="Value editor", style=wx.CAPTION | wx.CLOSE_BOX | 
                        wx.MINIMIZE_BOX | wx.MAXIMIZE_BOX | wx.RESIZE_BORDER | 
-                       wx.DIALOG_NO_PARENT, row=0, col=0, rowdata=rowdata)
+                       wx.DIALOG_NO_PARENT, row=0, col=0, rowdata=rowdata,
+                       columnlabel="type")
             dlg = components.ColumnDialog(None, dummygridbase, **kws)
             dlg.SetIcons(images.get_appicons())
             dlg.Bind(wx.EVT_CLOSE, onclose)
             dlg.Bind(wx.EVT_SHOW,  onclose)
             dlg._button_reset.Show()
+            dlg._label_meta.Hide()
             dlg.Size = 640, 390
             d = wx.Display(self)
-            dlg.Position = (a - b for a, b in zip(d.ClientArea[2:], dlg.Size))
+            dlg.Position = [a - b for a, b in zip(d.ClientArea[2:], dlg.Size)]
             self.columndlg = dlg
         self.columndlg.Show(not self.columndlg.Shown)
         self.menu_editor.Check(self.columndlg.Shown)

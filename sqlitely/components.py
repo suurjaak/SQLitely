@@ -7932,15 +7932,16 @@ class ColumnDialog(wx.Dialog):
         wx.BITMAP_TYPE_TIFF: "TIFF",
     }
 
-    def __init__(self, parent, gridbase, row, col, rowdata=None,
+    def __init__(self, parent, gridbase, row, col, rowdata=None, columnlabel="column",
                  id=wx.ID_ANY, title="Column Editor", pos=wx.DefaultPosition, size=(750, 450),
                  style=wx.CAPTION | wx.CLOSE_BOX | wx.MAXIMIZE_BOX | wx.RESIZE_BORDER,
                  name=wx.DialogNameStr):
         """
-        @param   gridbase  SQLiteGridBase instance
-        @param   row       row index in gridbase
-        @param   col       column index in gridbase
-        @param   rowdata   current row data dictionary, if not taking from gridbase
+        @param   gridbase     SQLiteGridBase instance
+        @param   row          row index in gridbase
+        @param   col          column index in gridbase
+        @param   rowdata      current row data dictionary, if not taking from gridbase
+        @param   columnlabel  label for column in buttons and other texts
         """
         super(self.__class__, self).__init__(parent, id, title, pos, size, style, name)
 
@@ -7955,15 +7956,16 @@ class ColumnDialog(wx.Dialog):
         self._rowdata0 = gridbase.GetRowData(row, original=True)
         self._coldatas = copy.deepcopy(gridbase.columns) # [{name, }, ]
         self._coldata  = self._coldatas[col]
+        self._collabel = columnlabel
 
         self._name     = self._coldata["name"]     # Column name
         self._value    = self._rowdata[self._name] # Column raw value
         self._gridbase = gridbase
 
-        button_prev  = wx.Button(self,     label="&Previous column")
-        label_cols   = wx.StaticText(self, label="&Select column:")
+        button_prev  = wx.Button(self,     label="&Previous %s" % columnlabel)
+        label_cols   = wx.StaticText(self, label="&Select %s:" % columnlabel)
         list_cols    = wx.Choice(self)
-        button_next  = wx.Button(self, label="&Next column")
+        button_next  = wx.Button(self, label="&Next %s" % columnlabel)
 
         nb = wx.Notebook(self)
 
@@ -8056,14 +8058,14 @@ class ColumnDialog(wx.Dialog):
         tb.SetToolBitmapSize(bmp1.Size)
 
         if load:
-            tb.AddTool(wx.ID_OPEN,  "", bmp1, shortHelp="Load column value from file%s" % asfilelabel)
+            tb.AddTool(wx.ID_OPEN,  "", bmp1, shortHelp="Load %s value from file%s" % (self._collabel, asfilelabel))
         if save:
-            tb.AddTool(wx.ID_SAVE,  "", bmp2, shortHelp="Save column value to file%s"   % asfilelabel)
+            tb.AddTool(wx.ID_SAVE,  "", bmp2, shortHelp="Save %s value to file%s"   % (self._collabel, asfilelabel))
         if (load or save) and (copy or paste): tb.AddSeparator()
         if copy:
-            tb.AddTool(wx.ID_COPY,  "", bmp3, shortHelp="Copy column value%s"  % aslabel)
+            tb.AddTool(wx.ID_COPY,  "", bmp3, shortHelp="Copy %s value%s"  % (self._collabel, aslabel))
         if paste:
-            tb.AddTool(wx.ID_PASTE, "", bmp4, shortHelp="Paste column value%s" % aslabel)
+            tb.AddTool(wx.ID_PASTE, "", bmp4, shortHelp="Paste %s value%s" % (self._collabel, aslabel))
         if (load or save or copy or paste) and (undo or redo): tb.AddSeparator()
         if undo:
             tb.AddTool(wx.ID_UNDO,  "", bmp5, shortHelp="Undo")
@@ -8121,7 +8123,7 @@ class ColumnDialog(wx.Dialog):
 
 
     def _SetLabel(self):
-        label = "Column #%s: %s" % (self._col + 1, grammar.quote(self._name))
+        label = "%s #%s: %s" % (self._collabel.capitalize(), self._col + 1, grammar.quote(self._name))
         if self._coldata.get("type"):    label += " " + self._coldata["type"]
         if "notnull" in self._coldata:   label += " NOT NULL"
         if self._coldata.get("default"): label += " DEFAULT " + self._coldata["default"]
@@ -8269,17 +8271,17 @@ class ColumnDialog(wx.Dialog):
                     guibase.status(status, *args, flash=True)
             def on_copy_data(event=None):
                 text = util.to_unicode(self._value)
-                mycopy(text, "Copied column data to clipboard")
+                mycopy(text, "Copied %s data to clipboard" % self._collabel)
             def on_copy_name(event=None):
                 text = util.to_unicode(self._name)
-                mycopy(text, "Copied column name to clipboard")
+                mycopy(text, "Copied %s name to clipboard" % self._collabel)
             def on_copy_sql(event=None):
                 text = "%s = %s" % (grammar.quote(self._name),
                                     grammar.format(self._value, self._coldata))
-                mycopy(text, "Copied column UPDATE SQL to clipboard")
+                mycopy(text, "Copied %s UPDATE SQL to clipboard" % self._collabel)
 
             item_data = wx.MenuItem(menu, -1, "Copy &value")
-            item_name = wx.MenuItem(menu, -1, "Copy column &name")
+            item_name = wx.MenuItem(menu, -1, "Copy %s &name" % self._collabel)
             item_sql  = wx.MenuItem(menu, -1, "Copy &SET SQL")
 
             menu.Append(item_data)
