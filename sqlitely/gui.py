@@ -798,6 +798,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         history_file.UseMenu(menu_recent)
 
         label = ["Minimize to", "Restore from"][conf.WindowIconized] + " &tray"
+        item_new = wx.MenuItem(menu, -1, "&New database")
         item_toggle = wx.MenuItem(menu, -1, label)
         item_icon = wx.MenuItem(menu, -1, kind=wx.ITEM_CHECK,
                                 text="Show &icon in notification area")
@@ -840,6 +841,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         item_recent = menu.AppendSubMenu(menu_recent, "&Recent files")
         menu.Enable(item_recent.Id, bool(conf.RecentFiles))
+        menu.Append(item_new)
         menu.AppendSeparator()
         menu.Append(item_toggle)
         menu.Append(item_icon)
@@ -854,6 +856,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         menu.Bind(wx.EVT_MENU_RANGE, on_recent_file, id=wx.ID_FILE1,
                   id2=wx.ID_FILE1 + conf.MaxRecentFiles)
+        menu.Bind(wx.EVT_MENU, self.on_new_database,        item_new)
         menu.Bind(wx.EVT_MENU, self.on_toggle_iconize,      item_toggle)
         menu.Bind(wx.EVT_MENU, self.on_toggle_trayicon,     item_icon)
         menu.Bind(wx.EVT_MENU, self.on_toggle_console,      item_console)
@@ -1792,6 +1795,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         Handler for new database menu or button, opens a temporary file database.
         """
+        if conf.WindowIconized: self.on_toggle_iconize()
         self.load_database_page(None)
 
 
