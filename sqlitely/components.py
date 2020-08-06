@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.08.2020
+@modified    06.08.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -40,7 +40,6 @@ import wx.lib
 import wx.lib.mixins.listctrl
 import wx.lib.newevent
 import wx.lib.resizewidget
-import wx.lib.scrolledpanel
 import wx.stc
 import wx.svg
 
@@ -8010,10 +8009,11 @@ class ColumnDialog(wx.Dialog):
         self.Sizer.Add(nb,           border=5, flag=wx.TOP | wx.LEFT | wx.RIGHT | wx.GROW, proportion=1)
         self.Sizer.Add(sizer_footer, border=5, flag=wx.ALL | wx.GROW)
 
-        self._list_cols   = list_cols
-        self._button_prev = button_prev
-        self._button_next = button_next
-        self._label_meta  = label_meta
+        self._list_cols    = list_cols
+        self._button_prev  = button_prev
+        self._button_next  = button_next
+        self._button_reset = button_reset
+        self._label_meta   = label_meta
 
 
         self.Bind(wx.EVT_BUTTON, functools.partial(self._OnColumn, direction=-1), button_prev)
@@ -8025,7 +8025,7 @@ class ColumnDialog(wx.Dialog):
         self.Bind(wx.EVT_SIZE,   lambda e: (e.Skip(), self._SetLabel()))
         self.Bind(wx.EVT_CLOSE,  self._OnClose, id=wx.ID_CANCEL)
 
-        self.MinSize = 750, 450
+        self.MinSize = 500, 350
         self.Layout()
         wx_accel.accelerate(self)
 
@@ -8036,7 +8036,6 @@ class ColumnDialog(wx.Dialog):
             top = wx.GetApp().TopWindow
             (x, y), (w, h), (w2, h2) = top.Position, top.Size, self.Size
             self.Position = (x + (w - w2)  / 2), (y + (h - h2) / 2)
-        else: self.CenterOnParent()
         wx.CallAfter(self.Layout)
 
 
@@ -8306,7 +8305,10 @@ class ColumnDialog(wx.Dialog):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 if v != edit.Value: edit.ChangeValue(v)
-            if reset: tedit.DiscardEdits(), nedit.DiscardEdits()
+            if reset:
+                tedit.DiscardEdits(), nedit.DiscardEdits()
+                button_case.Enable(tedit.Shown)
+                button_xform.Enable(tedit.Shown)
             page.Layout()
             wx.CallAfter(state.update, {"changing": False})
 
@@ -8449,33 +8451,35 @@ class ColumnDialog(wx.Dialog):
 
         tb      = self._MakeToolBar(page, NAME, filelabel="binary", paste=on_paste, undo=on_undo, redo=on_redo)
         hint    = wx.StaticText(page)
-        stchex  = controls.HexTextCtrl(page,  style=wx.BORDER_NONE)
-        stctxt  = controls.ByteTextCtrl(page, style=wx.BORDER_NONE)
+        panel   = wx.ScrolledWindow(page)
+        stchex  = controls.HexTextCtrl(panel,  style=wx.BORDER_NONE)
+        stctxt  = controls.ByteTextCtrl(panel, style=wx.BORDER_NONE)
         status1 = wx.StaticText(page)
         status2 = wx.StaticText(page)
 
+        panel.SetScrollRate(20, 0)
         hint.Label = "Value as hexadecimal bytes"
         ColourManager.Manage(hint,    "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
         stchex.UseVerticalScrollBar = False
 
         page.Sizer     = wx.BoxSizer(wx.VERTICAL)
         sizer_header   = wx.BoxSizer(wx.HORIZONTAL)
-        stc_sizer      = wx.BoxSizer(wx.HORIZONTAL)
+        panel.Sizer    = wx.BoxSizer(wx.HORIZONTAL)
         sizer_footer   = wx.BoxSizer(wx.HORIZONTAL)
 
         sizer_header.Add(tb,   border=5, flag=wx.ALL)
         sizer_header.AddStretchSpacer()
         sizer_header.Add(hint, border=5, flag=wx.ALL | wx.ALIGN_BOTTOM)
 
-        stc_sizer.Add(stchex,  flag=wx.GROW, proportion=1)
-        stc_sizer.Add(stctxt, flag=wx.GROW, proportion=1)
+        panel.Sizer.Add(stchex, flag=wx.GROW)
+        panel.Sizer.Add(stctxt, flag=wx.GROW)
 
         sizer_footer.Add(status1, border=5, flag=wx.ALL)
         sizer_footer.AddStretchSpacer()
         sizer_footer.Add(status2, border=5, flag=wx.ALL)
 
         page.Sizer.Add(sizer_header, flag=wx.GROW)
-        page.Sizer.Add(stc_sizer, border=5, flag=wx.RIGHT | wx.GROW, proportion=1)
+        page.Sizer.Add(panel, border=5, flag=wx.RIGHT | wx.GROW, proportion=1)
         page.Sizer.Add(sizer_footer, flag=wx.GROW)
 
         handler1 = functools.partial(self._OnChar, name=NAME, handler=functools.partial(on_change, stchex), delay=0)
@@ -8838,18 +8842,19 @@ class ColumnDialog(wx.Dialog):
 
         tb      = self._MakeToolBar(page, NAME, load=False, save=False, undo=False, redo=False)
         hint    = wx.StaticText(page)
-        dcb     = wx.CheckBox(page, label="&Date:")
-        dedit   = wx.adv.CalendarCtrl(page, style=wx.BORDER_NONE)
-        dbutton = wx.Button(page, label="Today", size=(50, 18))
-        tcb     = wx.CheckBox(page, label="&Time:")
-        tedit   = wx.adv.TimePickerCtrl(page)
-        tbutton = wx.Button(page, label="Now", size=(50, 18))
-        ucb     = wx.CheckBox(page, label="&Microseconds:")
-        uedit   = wx.SpinCtrl(page, size=(70, -1))
-        ubutton = wx.Button(page, label="Now", size=(50, 18))
-        zcb     = wx.CheckBox(page, label="Time&zone:")
-        zedit   = wx.Choice(page, size=(70, -1))
-        zbutton = wx.Button(page, label="Local", size=(50, 18))
+        panel   = wx.ScrolledWindow(page)
+        dcb     = wx.CheckBox(panel, label="&Date:")
+        dedit   = wx.adv.CalendarCtrl(panel, style=wx.BORDER_NONE)
+        dbutton = wx.Button(panel, label="Today", size=(50, 18))
+        tcb     = wx.CheckBox(panel, label="&Time:")
+        tedit   = wx.adv.TimePickerCtrl(panel)
+        tbutton = wx.Button(panel, label="Now", size=(50, 18))
+        ucb     = wx.CheckBox(panel, label="&Microseconds:")
+        uedit   = wx.SpinCtrl(panel, size=(70, -1))
+        ubutton = wx.Button(panel, label="Now", size=(50, 18))
+        zcb     = wx.CheckBox(panel, label="Time&zone:")
+        zedit   = wx.Choice(panel, size=(70, -1))
+        zbutton = wx.Button(panel, label="Local", size=(50, 18))
         dtlabel = wx.StaticText(page, label="Dat&e or time:", style=wx.ALIGN_RIGHT)
         dtedit  = wx.TextCtrl(page, size=(200, -1))
         tslabel = wx.StaticText(page, label="&Unix timestamp:", style=wx.ALIGN_RIGHT)
@@ -8857,6 +8862,7 @@ class ColumnDialog(wx.Dialog):
 
         hint.Label = "Value as date or time"
         ColourManager.Manage(hint, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
+        panel.SetScrollRate(20, 20)
         tedit.SetTime(0, 0, 0)
         uedit.SetRange(0, 999999)
         dcb.Value = tcb.Value = ucb.Value = False
@@ -8865,7 +8871,7 @@ class ColumnDialog(wx.Dialog):
         tslabel.Font = font_bold
         dtlabel.MinSize = tslabel.MinSize = tslabel.Size
         tslabel.Font = font_normal
-        dtedit.MinSize = tsedit.MinSize = (250, -1)
+        panel.MinSize = (300, 300)
 
         jan = datetime.datetime.now().replace(month=1, day=2, hour=1)
         offset = lambda z: z.utcoffset(jan).total_seconds() / 3600
@@ -8877,6 +8883,7 @@ class ColumnDialog(wx.Dialog):
         page.Sizer   = wx.BoxSizer(wx.VERTICAL)
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
         sizer_center = wx.BoxSizer(wx.HORIZONTAL)
+        panel.Sizer  = wx.BoxSizer(wx.VERTICAL)
         sizer_left   = wx.GridBagSizer(vgap=5, hgap=5)
         sizer_right  = wx.FlexGridSizer(cols=2, vgap=20, hgap=5)
 
@@ -8897,13 +8904,15 @@ class ColumnDialog(wx.Dialog):
         sizer_left.Add(zedit,    pos=(4, 1))
         sizer_left.Add(zbutton,  pos=(4, 2), flag=wx.ALIGN_CENTER_VERTICAL)
 
+        panel.Sizer.Add(sizer_left, proportion=1, flag=wx.GROW)
+
         sizer_right.Add(dtlabel, flag=wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_right.Add(dtedit, border=5, flag=wx.RIGHT)
         sizer_right.Add(tslabel, flag=wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_right.Add(tsedit, border=5, flag=wx.RIGHT)
 
         sizer_center.AddStretchSpacer()
-        sizer_center.Add(sizer_left,  border=10, flag=wx.RIGHT | wx.ALIGN_CENTER)
+        sizer_center.Add(panel,       border=10, flag=wx.RIGHT | wx.ALIGN_CENTER, proportion=1)
         sizer_center.Add(sizer_right, border=10, flag=wx.TOP   | wx.ALIGN_CENTER)
         sizer_center.AddStretchSpacer()
 

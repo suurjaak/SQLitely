@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.08.2020
+@modified    06.08.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -97,7 +97,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.db_filter = "" # Current database list filter
         self.db_filter_timer = None # Database list filter callback timer
         self.db_menustate    = {}   # {filename: {} if refresh or {full: True} if reload}
-        self.columndlg = None       # Dummy column dialog for Help -> Show column editor tool
+        self.columndlg = None       # Dummy column dialog for Help -> Show value editor
         self.page_db_latest = None  # Last opened database page
         # List of Notebook pages user has visited, used for choosing page to
         # show when closing one.
@@ -556,8 +556,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             "Show Python &console\t%s-E" % controls.KEYS.NAME_CTRL,
             "Show/hide a Python shell environment window", kind=wx.ITEM_CHECK)
         menu_editor = self.menu_editor = menu_help.Append(wx.ID_ANY,
-            "Show column &editor tool",
-            "Show/hide a dummy column editor", kind=wx.ITEM_CHECK)
+            "Show value &editor",
+            "Show/hide a dummy column value editor", kind=wx.ITEM_CHECK)
         menu_help.AppendSeparator()
         if self.trayicon.IsAvailable():
             menu_tray = self.menu_tray = menu_help.Append(wx.ID_ANY,
@@ -804,7 +804,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         item_console = wx.MenuItem(menu, -1, kind=wx.ITEM_CHECK,
                                    text="Show Python &console")
         item_editor = wx.MenuItem(menu, -1, kind=wx.ITEM_CHECK,
-                                  text="Show column &editor tool")
+                                  text="Show value &editor")
         item_exit = wx.MenuItem(menu, -1, "E&xit %s" % conf.Title)
 
         boldfont = wx.Font(item_toggle.Font)
@@ -843,6 +843,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu.AppendSeparator()
         menu.Append(item_toggle)
         menu.Append(item_icon)
+        menu.AppendSeparator()
         menu.Append(item_console)
         menu.Append(item_editor)
         menu.AppendSeparator()
@@ -1678,12 +1679,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
 
     def on_toggle_columneditor(self, event):
-        """Handler for clicking to show/hide dummy column editor."""
+        """Handler for clicking to show/hide dummy column value editor."""
         if self.columndlg is None:
-            cols = [{"name": "text",   "type": "TEXT"},
-                    {"name": "number", "type": "INTEGER"},
-                    {"name": "date",   "type": "DATETIME"}]
-            rowdata = {"text": "", "number": 0, "date": datetime.datetime.now()}
+            cols = [{"name": "text",    "type": "TEXT"},
+                    {"name": "float",   "type": "REAL"},
+                    {"name": "integer", "type": "INTEGER"},
+                    {"name": "long",    "type": "BIGINT"}]
+            rowdata = {"text": "", "integer": 0, "long": 0L, "float": 0.0}
 
             dummydb = lambda: None
             dummydb.get_keys = lambda *a, **kw: ([], [])
@@ -1694,17 +1696,25 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             dummygridbase.db = dummydb
             dummygridbase.name = "dummy"
             dummygridbase.KEY_NEW = components.SQLiteGridBase.KEY_NEW
-            dummygridbase.GetRowData = lambda *a, **kw: rowdata
+            dummygridbase.GetRowData = lambda *a, **kw: dict(rowdata)
 
             def onclose(event):
                 event.Skip()
                 if not isinstance(event, wx.ShowEvent) or not event.Show:
                     self.menu_editor.Check(False)
 
-            self.columndlg = components.ColumnDialog(None, dummygridbase, 0, 0, rowdata)
-            self.columndlg.SetIcons(images.get_appicons())
-            self.columndlg.Bind(wx.EVT_CLOSE, onclose)
-            self.columndlg.Bind(wx.EVT_SHOW,  onclose)
+            kws = dict(title="Value editor", style=wx.CAPTION | wx.CLOSE_BOX | 
+                       wx.MINIMIZE_BOX | wx.MAXIMIZE_BOX | wx.RESIZE_BORDER | 
+                       wx.DIALOG_NO_PARENT, row=0, col=0, rowdata=rowdata)
+            dlg = components.ColumnDialog(None, dummygridbase, **kws)
+            dlg.SetIcons(images.get_appicons())
+            dlg.Bind(wx.EVT_CLOSE, onclose)
+            dlg.Bind(wx.EVT_SHOW,  onclose)
+            dlg._button_reset.Show()
+            dlg.Size = 640, 390
+            d = wx.Display(self)
+            dlg.Position = (a - b for a, b in zip(d.ClientArea[2:], dlg.Size))
+            self.columndlg = dlg
         self.columndlg.Show(not self.columndlg.Shown)
         self.menu_editor.Check(self.columndlg.Shown)
 
