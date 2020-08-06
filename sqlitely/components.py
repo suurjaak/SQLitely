@@ -8489,8 +8489,8 @@ class ColumnDialog(wx.Dialog):
         tb      = self._MakeToolBar(page, NAME, filelabel="binary", paste=on_paste, undo=on_undo, redo=on_redo)
         hint    = wx.StaticText(page)
         panel   = wx.ScrolledWindow(page)
-        stchex  = controls.HexTextCtrl(panel,  style=wx.BORDER_NONE)
-        stctxt  = controls.ByteTextCtrl(panel, style=wx.BORDER_NONE)
+        stchex  = controls.HexTextCtrl(panel,  style=wx.BORDER_STATIC)
+        stctxt  = controls.ByteTextCtrl(panel, style=wx.BORDER_STATIC)
         status1 = wx.StaticText(page)
         status2 = wx.StaticText(page)
 
