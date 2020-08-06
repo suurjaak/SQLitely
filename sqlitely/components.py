@@ -8188,21 +8188,38 @@ class ColumnDialog(wx.Dialog):
                 self._Populate(None)
             def on_default(event=None):
                 self._Populate(self._gridbase.db.get_default(self._coldata))
+            def on_date(event=None):
+                self._Populate(datetime.date.today())
+            def on_datetime(event=None):
+                self._Populate(datetime.datetime.now().isoformat()[:19].replace("T", " "))
+            def on_stamp(event=None):
+                self._Populate(datetime.datetime.utcnow().replace(tzinfo=util.UTC).isoformat())
 
-            item_null    = wx.MenuItem(menu, -1, "Set &NULL")
-            item_default = wx.MenuItem(menu, -1, "Set &DEFAULT")
+            item_null     = wx.MenuItem(menu, -1, "Set &NULL")
+            item_default  = wx.MenuItem(menu, -1, "Set D&EFAULT")
+            item_date     = wx.MenuItem(menu, -1, "Set local &date")
+            item_datetime = wx.MenuItem(menu, -1, "Set local date&time")
+            item_stamp    = wx.MenuItem(menu, -1, "Set ISO8601 timesta&mp")
 
             menu.Append(item_null)
             menu.Append(item_default)
+            menu.Append(item_date)
+            menu.Append(item_datetime)
+            menu.Append(item_stamp)
 
             is_pk = any(util.lceq(self._name, y) for x in 
                         self._gridbase.db.get_keys(self._gridbase.name, True)[0]
                         for y in x["name"])
             item_null   .Enable("notnull" not in self._coldata or is_pk and self._rowdata[self._gridbase.KEY_NEW])
             item_default.Enable("default" in self._coldata)
+            x = database.Database.get_affinity(self._coldata) not in ("INTEGER", "REAL")
+            item_date.Enabled = item_datetime.Enabled = item_stamp.Enabled = x
 
-            menu.Bind(wx.EVT_MENU, on_null,    item_null)
-            menu.Bind(wx.EVT_MENU, on_default, item_default)
+            menu.Bind(wx.EVT_MENU, on_null,     item_null)
+            menu.Bind(wx.EVT_MENU, on_default,  item_default)
+            menu.Bind(wx.EVT_MENU, on_date,     item_date)
+            menu.Bind(wx.EVT_MENU, on_datetime, item_datetime)
+            menu.Bind(wx.EVT_MENU, on_stamp,    item_stamp)
 
             event.EventObject.PopupMenu(menu, (0, event.EventObject.Size[1]))
 
@@ -8817,7 +8834,11 @@ class ColumnDialog(wx.Dialog):
                         ts = float(value)
                         if not ts % 1: ts = int(ts)
                 else: x = util.parse_datetime(value)
-                if isinstance(x, datetime.datetime): dt, d, t = x, x.date(), x.time()
+                if isinstance(x, datetime.datetime):
+                    dt, d, t = x, x.date(), x.time()
+                    if ts is None:
+                        y = calendar.timegm(dt.timetuple()) + dt.microsecond / 1e6
+                        if y >= 0: ts = y if y % 1 else int(y)
             if not dt and not isinstance(value, (datetime.date, datetime.time)):
                 x = util.parse_date(value)
                 if isinstance(x, datetime.date): d = x
