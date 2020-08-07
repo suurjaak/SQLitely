@@ -77,7 +77,9 @@ setuptools.setup(
     platforms=["any"],
     keywords="sqlite database",
 
-    install_requires=["antlr4-python2-runtime==4.8", "openpyxl<=3.0.0", "Pillow<=6.2.2", "pyparsing", "pytz", "wxPython>=4.0", "xlrd", "XlsxWriter"],
+    install_requires=["antlr4-python2-runtime==4.8", "appdirs", "openpyxl<=3.0.0",
+                      "Pillow<=6.2.2", "pyparsing", "pytz", "wxPython>=4.0",
+                      "xlrd", "XlsxWriter"],
     entry_points={"gui_scripts": ["sqlitely = sqlitely.main:run"]},
 
     packages=setuptools.find_packages(),
