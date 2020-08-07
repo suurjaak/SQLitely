@@ -4787,7 +4787,7 @@ class SchemaObjectPage(wx.Panel):
             schema = dict(schema, version=v)
             sql, err = grammar.generate(schema, category="ALTER MASTER")
             if err: logger.warn("Error syncing sqlite_master contents: %s.", err)
-            else: self._db.executescript(sql)
+            else: self._db.executescript(sql, name="ALTER")
         except Exception:
             logger.warn("Error syncing sqlite_master contents.", exc_info=True)
             try: self._db.execute("ROLLBACK")
