@@ -8186,7 +8186,7 @@ class ColumnDialog(wx.Dialog):
                     edit.Value = HTMLParser.HTMLParser().unescape(edit.Value)
                 elif "htmlstrip" == category:
                     edit.Value = re.sub("<[^>]+?>", "", edit.Value)
-            except Exception: raise # @todo pass
+            except Exception: pass
             else: on_change(edit.Value)
 
         def on_set(event):
@@ -8414,11 +8414,10 @@ class ColumnDialog(wx.Dialog):
         def on_scroll(event):
             """Handler for scrolling one STC, scrolls the other in sync."""
             event.Skip()
-            ctrl1 = event.EventObject
+            ctrl1, ctrl2 = event.EventObject, event.EventObject.Mirror
             if state["scrolling"].get(ctrl1): return
 
-            ctrl2 = stctxt if ctrl1 is stchex else stchex
-            state["scrolling"][stchex] = state["scrolling"][stctxt] = True
+            state["scrolling"][ctrl1] = state["scrolling"][ctrl2] = True
 
             pos1 = ctrl1.GetScrollPos(wx.VERTICAL)
             if not isinstance(event, wx.ScrollWinEvent):           pos1 = ctrl1.FirstVisibleLine
@@ -8433,58 +8432,37 @@ class ColumnDialog(wx.Dialog):
             if isinstance(event, controls.CaretPositionEvent):
                 ctrl2.SetSelection(event.Int, event.Int)
 
-            state["scrolling"][stchex] = state["scrolling"][stctxt] = False
-
-        def on_change(ctrl1, value=None):
-            if state["changing"].get(ctrl1): return
-
-            ctrl2 = stctxt if ctrl1 is stchex else stchex
-            value = ctrl1.Value if value is None else value
-
-            state["changing"][ctrl2] = True
-            ctrl2.UpdateValue(value, ctrl1.OriginalBytes, ctrl1.Selection)
-            ctrl2.SetFirstVisibleLine(ctrl1.FirstVisibleLine)
-            wx.CallAfter(state["changing"].update, {ctrl2: False})
-            self._Populate(value, skip=NAME)
+            state["scrolling"][ctrl1] = state["scrolling"][ctrl2] = False
 
         def on_paste(value, propagate=False):
-            stchex.InsertInto(value)
-            if propagate: self._Populate(stchex.Value, skip=NAME)
+            ctrl = self.FindFocus()
+            if ctrl not in (stchex, stctxt): ctrl = stchex
+            ctrl.InsertInto(value)
+            if propagate: self._Populate(ctrl.Value, skip=NAME)
 
         def on_position(event):
             on_scroll(event)
             set_status()
 
         def on_select(event):
-            ctrl1 = event.EventObject
-            ctrl2 = stctxt if ctrl1 is stchex else stchex
+            ctrl1, ctrl2 = event.EventObject, event.EventObject.Mirror
             ctrl2.SetSelection(*ctrl1.GetSelection())
 
         def on_tab(event):
-            ctrl1 = event.EventObject
-            ctrl2 = stctxt if ctrl1 is stchex else stchex
-            if event.KeyCode in controls.KEYS.TAB: ctrl2.SetFocus()
+            if event.KeyCode in controls.KEYS.TAB:
+                event.EventObject.Mirror.SetFocus()
             else: event.Skip()
 
-        def on_undoredo(event):
+        def on_change(event):
             event.Skip()
-            if not event.ModificationType & (wx.stc.STC_PERFORMED_UNDO | wx.stc.STC_PERFORMED_REDO) \
-            or any(state["changing"].values()):
-                return
-            ctrl1 = event.EventObject
+            if event.ModificationType & (
+                wx.stc.STC_PERFORMED_UNDO | wx.stc.STC_PERFORMED_REDO |
+                wx.stc.STC_MOD_DELETETEXT | wx.stc.STC_MOD_INSERTTEXT
+            ):
+                self._Populate(event.EventObject.Value, skip=NAME)
 
-            ctrl2 = stctxt if ctrl1 is stchex else stchex
-            if not (ctrl2.CanUndo() if event.ModificationType & wx.stc.STC_PERFORMED_UNDO 
-            else ctrl2.CanRedo()): return
-
-            state["changing"][stchex] = state["changing"][stctxt] = True
-            ctrl2.Undo() if event.ModificationType & wx.stc.STC_PERFORMED_UNDO else ctrl2.Redo()
-            ctrl2.SetFirstVisibleLine(ctrl1.FirstVisibleLine)
-            self._Populate(ctrl1.Value, skip=NAME)
-            wx.CallLater(1, state["changing"].clear)
-
-        def on_undo(*a, **kw): stchex.Undo()
-        def on_redo(*a, **kw): stchex.Redo()
+        def on_undo(*a, **kw): stchex.Undo(mirror=True)
+        def on_redo(*a, **kw): stchex.Redo(mirror=True)
 
         def set_status():
             status1.Label = "Offset: %s (0x%X)" % (stchex.CurrentPos, stchex.CurrentPos)
@@ -8492,35 +8470,34 @@ class ColumnDialog(wx.Dialog):
             page.Layout()
 
         def update(value, reset=False, propagate=False):
-            state["changing"][stchex] = state["changing"][stctxt] = True
             if reset or state["pristine"]:
-                stchex.Value = stctxt.Value = value
-                stchex.EmptyUndoBuffer(), stctxt.EmptyUndoBuffer()
+                stchex.Value = value
+                stchex.EmptyUndoBuffer(mirror=True)
             else:
-                for s in stchex, stctxt: s.UpdateValue(value)
+                stchex.UpdateValue(value, mirror=True)
             state["pristine"] = False
             set_status()
             if propagate: self._Populate(value, skip=NAME)
-            wx.CallAfter(state["changing"].clear)
 
 
         tb      = self._MakeToolBar(page, NAME, filelabel="binary", paste=on_paste, undo=on_undo, redo=on_redo)
         hint    = wx.StaticText(page)
         panel   = wx.ScrolledWindow(page)
-        stchex  = controls.HexTextCtrl(panel,  style=wx.BORDER_STATIC)
+        stchex  = controls.HexTextCtrl (panel, style=wx.BORDER_STATIC)
         stctxt  = controls.ByteTextCtrl(panel, style=wx.BORDER_STATIC)
         status1 = wx.StaticText(page)
         status2 = wx.StaticText(page)
 
         panel.SetScrollRate(20, 0)
         hint.Label = "Value as hexadecimal bytes"
-        ColourManager.Manage(hint,    "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
+        ColourManager.Manage(hint, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
         stchex.UseVerticalScrollBar = False
+        stchex.Mirror, stctxt.Mirror = stctxt, stchex
 
-        page.Sizer     = wx.BoxSizer(wx.VERTICAL)
-        sizer_header   = wx.BoxSizer(wx.HORIZONTAL)
-        panel.Sizer    = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_footer   = wx.BoxSizer(wx.HORIZONTAL)
+        page.Sizer   = wx.BoxSizer(wx.VERTICAL)
+        sizer_header = wx.BoxSizer(wx.HORIZONTAL)
+        panel.Sizer  = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_footer = wx.BoxSizer(wx.HORIZONTAL)
 
         sizer_header.Add(tb,   border=5, flag=wx.ALL)
         sizer_header.AddStretchSpacer()
@@ -8537,20 +8514,13 @@ class ColumnDialog(wx.Dialog):
         page.Sizer.Add(panel, border=5, flag=wx.RIGHT | wx.GROW, proportion=1)
         page.Sizer.Add(sizer_footer, flag=wx.GROW)
 
-        SKIP = controls.KEYS.ESCAPE + controls.KEYS.INSERT + controls.KEYS.TAB
-        handler1 = functools.partial(self._OnChar, name=NAME, handler=functools.partial(on_change, stchex), delay=0, skip=SKIP)
-        handler2 = functools.partial(self._OnChar, name=NAME, handler=functools.partial(on_change, stctxt), delay=0, skip=SKIP)
-        stchex.Bind(wx.EVT_CHAR_HOOK,        handler1)
         stchex.Bind(wx.EVT_KEY_DOWN,         on_tab)
-        stchex.Bind(wx.stc.EVT_STC_MODIFIED, on_undoredo)
-        stchex.Bind(wx.stc.EVT_STC_MODIFIED, handler1)
+        stchex.Bind(wx.stc.EVT_STC_MODIFIED, on_change)
         stchex.Bind(controls.EVT_CARET_POS,  on_position)
         stchex.Bind(controls.EVT_LINE_POS,   on_scroll)
         stchex.Bind(controls.EVT_SELECT,     on_select)
-        stctxt.Bind(wx.EVT_CHAR_HOOK,        handler2)
         stctxt.Bind(wx.EVT_KEY_DOWN,         on_tab)
-        stctxt.Bind(wx.stc.EVT_STC_MODIFIED, on_undoredo)
-        stctxt.Bind(wx.stc.EVT_STC_MODIFIED, handler2)
+        stctxt.Bind(wx.stc.EVT_STC_MODIFIED, on_change)
         stctxt.Bind(wx.EVT_SCROLLWIN,        on_scroll)
         stctxt.Bind(controls.EVT_CARET_POS,  on_position)
         stctxt.Bind(controls.EVT_LINE_POS,   on_scroll)
@@ -8559,7 +8529,7 @@ class ColumnDialog(wx.Dialog):
         self._getters[NAME] = stchex.GetValue
         self._setters[NAME] = update
         self._reprers[NAME] = stchex.GetHex
-        state = self._state.setdefault(NAME, {"pristine": True, "scrolling": {}, "changing": {}})
+        state = self._state.setdefault(NAME, {"pristine": True, "scrolling": {}})
         return page
 
 
