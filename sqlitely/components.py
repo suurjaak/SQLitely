@@ -8172,10 +8172,10 @@ class ColumnDialog(wx.Dialog):
                 elif "tabs" == category:
                     edit.Value = edit.Value.replace(" " * 4, "\t")
                 elif "whitespace" == category:
-                    edit.Value = edit.Value.strip()                   # Empty surrounding ws
-                    edit.Value = re.sub("[ \t]+\n", "\n", edit.Value) # Empty ws-only lines
-                    edit.Value = re.sub("[\r\n]+",  "\n", edit.Value) # Collapse blank lines
-                    edit.Value = re.sub("[ \t]+",   " ",  edit.Value) # Collapse spaces+tabs
+                    v = edit.Value.strip()          # Empty surrounding ws
+                    v = re.sub("[ \t]+\n", "\n", v) # Empty ws-only lines
+                    v = re.sub("[\r\n]+",  "\n", v) # Collapse blank lines
+                    edit.Value = re.sub("[ \t]+",   " ",  v) # Collapse spaces+tabs
                 elif "urlencode" == category:
                     edit.Value = urllib.quote(util.to_str(edit.Value, "utf-8"))
                 elif "urldecode" == category:
