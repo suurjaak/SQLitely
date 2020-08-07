@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.08.2020
+@modified    07.08.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -5318,8 +5318,12 @@ class SchemaObjectPage(wx.Panel):
             )
             if item:
                 item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
-                sql, _ = grammar.generate(item["meta"])
-                if sql is not None: item.update(sql=sql, sql0=item.get("sql0", sql))
+                if item["meta"].get("__comments__"):
+                    sql, _ = grammar.generate(item["meta"])
+                    if sql is not None:
+                        item = dict(item, sql=sql, sql0=item.get("sql0", sql))
+                else:
+                    item = dict(item, sql0=item["sql"])
                 self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
                 self._sql0_applies = True
 
