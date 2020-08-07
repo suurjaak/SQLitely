@@ -66,7 +66,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    05.08.2020
+@modified    07.08.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -2753,20 +2753,20 @@ class HexByteCommand(wx.Command):
         self._state1["Selection"] = ctrl.GetSelection()
         self._state2 = None
 
-    def Store(self, value=None, value0=None):
+    def Store(self, value=None, value0=None, selection=None):
         """
         Takes snapshot of current control state for undo,
         stores command in command processor.
         """
-        self._state2 = self._GetState(value, value0)
+        self._state2 = self._GetState(value, value0, selection)
         self._ctrl._undoredo.Store(self)
 
-    def Submit(self, value=None, value0=None):
+    def Submit(self, value=None, value0=None, selection=None):
         """
         Takes snapshot of current control state for undo,
         stores command in command processor and carries out do.
         """
-        self._state2 = self._GetState(value, value0)
+        self._state2 = self._GetState(value, value0, selection)
         self._ctrl._undoredo.Submit(self)
 
     def Do(self):
@@ -2777,10 +2777,10 @@ class HexByteCommand(wx.Command):
         """Applies control undo-action."""
         return self._Apply(self._state1)
 
-    def _GetState(self, value=None, value0=None):
+    def _GetState(self, value=None, value0=None, selection=None):
         """Returns current control state."""
         state = {k: getattr(self._ctrl, k) for k in self.ATTRS}
-        state["Selection"] = self._ctrl.GetSelection()
+        state["Selection"] = selection or self._ctrl.GetSelection()
         if value is not None:
             state["_bytes"] = bytearray(value)
             if value0 is not None:
@@ -2934,9 +2934,9 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     OriginalBytes = property(GetOriginalBytes)
 
 
-    def UpdateValue(self, value, value0=None):
+    def UpdateValue(self, value, value0=None, selection=None):
         """Update current content as typed value (string or number)."""
-        HexByteCommand(self).Submit(self._AdaptValue(value), value0)
+        HexByteCommand(self).Submit(self._AdaptValue(value), value0, selection)
 
 
     def GetAnchor(self):
@@ -2960,6 +2960,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     def SetSelection(self, from_, to_):
         """Selects the bytes from first position up to but not including second."""
         return super(HexTextCtrl, self).SetSelection(self._PosIn(from_), self._PosIn(to_) - (from_ != to_))
+    Selection = property(GetSelection)
 
 
     def GetHex(self):
@@ -3419,9 +3420,9 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
     OriginalBytes = property(GetOriginalBytes)
 
 
-    def UpdateValue(self, value, value0=None):
+    def UpdateValue(self, value, value0=None, selection=None):
         """Update current content as typed value (string or number), retaining history."""
-        HexByteCommand(self).Submit(self._AdaptValue(value), value0)
+        HexByteCommand(self).Submit(self._AdaptValue(value), value0, selection)
 
 
     def UpdateBytes(self, value):
@@ -3453,7 +3454,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
     def SetSelection(self, from_, to_):
         from_, to_ = self._PosIn(from_), self._PosIn(to_)
         return super(ByteTextCtrl, self).SetSelection(from_, to_)
-    Selection = property(GetSelection, SetSelection)
+    Selection = property(GetSelection)
 
 
     def Undo(self):
@@ -3581,6 +3582,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         """Handler for character input, displays printable character."""
         if self._fixed and not self._bytes: return # NULL number
 
+        self._QueueEvents()
         cmd = HexByteCommand(self)
         selection = self.GetSelection()
         if selection[0] != selection[1] and not self._fixed:
@@ -3615,7 +3617,6 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
 
     def OnKeyDown(self, event):
         """Handler for key down, fires position change events."""
-        self._QueueEvents()
 
         if event.CmdDown() and not event.AltDown() and not event.ShiftDown() \
         and ord("Z") == event.KeyCode:
@@ -3648,6 +3649,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
             if not self._fixed: event.Skip() # Disallow changing overtype if length fixed
 
         if event.KeyCode in KEYS.LEFT + KEYS.RIGHT:
+            self._QueueEvents()
             event.Skip()
             direction = -1 if event.KeyCode in KEYS.LEFT else 1
             if event.ShiftDown() and direction > 0:
@@ -3658,6 +3660,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
                     self.CharRightExtend() # include first char at next line 
 
         elif event.KeyCode in KEYS.DELETE + KEYS.BACKSPACE:
+            self._QueueEvents()
             if self._fixed: return
 
             cmd = HexByteCommand(self)
@@ -3694,7 +3697,9 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
                 sself.SetSelection(*(pos + direction, ) * 2)
             cmd.Store()
         elif event.KeyCode in KEYS.ENTER + KEYS.TAB: pass
-        else: event.Skip()
+        else:
+            self._QueueEvents()
+            event.Skip()
 
 
     def OnMouse(self, event):

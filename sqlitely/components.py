@@ -8442,7 +8442,7 @@ class ColumnDialog(wx.Dialog):
             value = ctrl1.Value if value is None else value
 
             state["changing"][ctrl2] = True
-            ctrl2.UpdateValue(value, ctrl1.OriginalBytes)
+            ctrl2.UpdateValue(value, ctrl1.OriginalBytes, ctrl1.Selection)
             ctrl2.SetFirstVisibleLine(ctrl1.FirstVisibleLine)
             wx.CallAfter(state["changing"].update, {ctrl2: False})
             self._Populate(value, skip=NAME)
@@ -8537,8 +8537,9 @@ class ColumnDialog(wx.Dialog):
         page.Sizer.Add(panel, border=5, flag=wx.RIGHT | wx.GROW, proportion=1)
         page.Sizer.Add(sizer_footer, flag=wx.GROW)
 
-        handler1 = functools.partial(self._OnChar, name=NAME, handler=functools.partial(on_change, stchex), delay=0)
-        handler2 = functools.partial(self._OnChar, name=NAME, handler=functools.partial(on_change, stctxt), delay=0)
+        SKIP = controls.KEYS.ESCAPE + controls.KEYS.INSERT + controls.KEYS.TAB
+        handler1 = functools.partial(self._OnChar, name=NAME, handler=functools.partial(on_change, stchex), delay=0, skip=SKIP)
+        handler2 = functools.partial(self._OnChar, name=NAME, handler=functools.partial(on_change, stctxt), delay=0, skip=SKIP)
         stchex.Bind(wx.EVT_CHAR_HOOK,        handler1)
         stchex.Bind(wx.EVT_KEY_DOWN,         on_tab)
         stchex.Bind(wx.stc.EVT_STC_MODIFIED, on_undoredo)
@@ -9187,7 +9188,7 @@ class ColumnDialog(wx.Dialog):
         return page
 
 
-    def _OnChar(self, event, name=None, handler=None, mask=None, delay=1000):
+    def _OnChar(self, event, name=None, handler=None, mask=None, delay=1000, skip=None):
         if isinstance(event, wx.KeyEvent) and mask and not event.HasModifiers() \
         and unichr(event.UnicodeKey) not in mask \
         and event.KeyCode not in controls.KEYS.NAVIGATION + controls.KEYS.COMMAND: 
@@ -9205,10 +9206,10 @@ class ColumnDialog(wx.Dialog):
         or isinstance(event, wx.KeyEvent) and (event.HasModifiers()
         or 0 <= event.UnicodeKey < wx.WXK_SPACE
         and event.KeyCode not in controls.KEYS.COMMAND + controls.KEYS.TAB) \
+        or isinstance(event, wx.KeyEvent) and skip \
+        and not event.HasModifiers() and event.KeyCode in skip \
         or isinstance(event, wx.stc.StyledTextEvent) and not event.ModificationType & (
-            wx.stc.STC_MOD_BEFOREDELETE | wx.stc.STC_MOD_BEFOREINSERT | 
-            wx.stc.STC_MOD_DELETETEXT   | wx.stc.STC_MOD_INSERTCHECK  | 
-            wx.stc.STC_MOD_INSERTTEXT
+            wx.stc.STC_MOD_DELETETEXT | wx.stc.STC_MOD_INSERTTEXT
         ):
             return
         if self._timer: self._timer.Stop()
