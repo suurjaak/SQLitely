@@ -66,7 +66,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    07.08.2020
+@modified    08.08.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -2986,14 +2986,20 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
 
     def GetAnchor(self):
-        return self._PosOut(super(HexTextCtrl, self).Anchor)
+        sself = super(HexTextCtrl, self)
+        result = self._PosOut(sself.Anchor)
+        if sself.Anchor == self.GetLastPosition(): result += 1
+        return result
     def SetAnchor(self, anchor):
         return super(HexTextCtrl, self).SetAnchor(self._PosIn(anchor))
     Anchor = property(GetAnchor, SetAnchor)
 
 
     def GetCurrentPos(self):
-        return self._PosOut(super(HexTextCtrl, self).CurrentPos)
+        sself = super(HexTextCtrl, self)
+        result = self._PosOut(sself.CurrentPos)
+        if sself.CurrentPos == self.GetLastPosition(): result += 1
+        return result
     def SetCurrentPos(self, caret):
         return super(HexTextCtrl, self).SetCurrentPos(self._PosIn(caret))
     CurrentPos = property(GetCurrentPos, SetCurrentPos)
