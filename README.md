@@ -50,8 +50,9 @@ SQLitely can check database integrity for corruption, and copy as much data
 as possible over into a new database.
 
 
-SQLitely has been tested under Windows 7 and Ubuntu Linux. In source code form,
-it should run wherever Python and the required Python packages are installed.
+SQLitely has been tested under Windows 10, Windows 7 and Ubuntu Linux.
+In source code form, it should run wherever Python and the required 
+Python packages are installed.
 
 If running from pip installation, run `sqlitely` from the command-line. 
 If running straight from source code, launch `sqlitely.sh` where shell 
