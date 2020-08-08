@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.07.2020
+@modified    29.07.2020
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -323,7 +323,7 @@ class DetectDatabaseThread(WorkerThread):
 
             self._is_working, self._drop_results = True, False
             all_filenames = set() # To handle potential duplicates
-            for filenames in database.detect_databases():
+            for filenames in database.detect_databases(lambda: self._is_working):
                 filenames = all_filenames.symmetric_difference(filenames)
                 if not self._drop_results:
                     self.postback({"filenames": filenames})

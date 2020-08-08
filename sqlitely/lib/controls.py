@@ -66,7 +66,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    07.07.2020
+@modified    08.08.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -2048,6 +2048,21 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         finally: self.Thaw()
 
 
+    def RefreshRow(self, row):
+        """
+        Refreshes row with specified index from item data.
+        """
+        if row < 0: row = row % self.GetItemCount()
+        if row not in self._data_map or not row and not self._top_row: return
+
+        data = not row and self._top_row or self._data_map[row]
+        for i, col_name in enumerate([c[0] for c in self._columns]):
+            col_value = self._formatters[col_name](data, col_name)
+            self.SetStringItem(row, i, col_value)
+        self.SetItemTextColour(row,       self.ForegroundColour)
+        self.SetItemBackgroundColour(row, self.BackgroundColour)
+
+
     def ResetColumnWidths(self):
         """Resets the stored column widths, triggering a fresh autolayout."""
         self._col_widths.clear()
@@ -2745,6 +2760,102 @@ CaretPositionEvent, EVT_CARET_POS = wx.lib.newevent.NewCommandEvent()
 LinePositionEvent,  EVT_LINE_POS  = wx.lib.newevent.NewCommandEvent()
 SelectionEvent,     EVT_SELECT    = wx.lib.newevent.NewCommandEvent()
 
+class HexByteCommand(wx.Command):
+    """Undoable-redoable action for HexTextCtrl/ByteTextCtrl undo-redo."""
+    ATTRS = ["_bytes", "_bytes0"]
+
+    def __init__(self, ctrl):
+        """Takes snapshot of current control state for do."""
+        super(HexByteCommand, self).__init__(canUndo=True)
+        self._ctrl   = ctrl
+        self._done   = False
+        self._state1 = copy.deepcopy({k: getattr(ctrl, k) for k in self.ATTRS})
+        self._state1["Selection"] = ctrl.GetSelection()
+        self._state2 = None
+
+    def Store(self, value=None):
+        """
+        Takes snapshot of current control state for undo,
+        stores command in command processor.
+        """
+        self._state2 = self._GetState(value)
+        self._ctrl._undoredo.Store(self)
+        self._done = True
+        self._UpdateMirror(self._state2)
+
+    def Submit(self, value=None, value0=None, selection=None, mirror=False):
+        """
+        Takes snapshot of current control state for undo,
+        stores command in command processor and carries out do.
+        """
+        self._state2 = self._GetState(value, value0, selection)
+        self._ctrl._undoredo.Submit(self)
+        self._done = True
+        if mirror: self._UpdateMirror(self._state2)
+
+    def Do(self, mirror=False):
+        """Applies control do-action."""
+        result = self._Apply(self._state2)
+        if self._done and result and self._ctrl.Mirror and mirror:
+            self._ctrl.Mirror.Redo()
+        return result
+
+    def Undo(self, mirror=False):
+        """Applies control undo-action."""
+        result = self._Apply(self._state1)
+        if result and self._ctrl.Mirror and mirror:
+            self._ctrl.Mirror.Undo()
+        return result
+
+    def _GetState(self, value=None, value0=None, selection=None):
+        """Returns current control state."""
+        state = {k: getattr(self._ctrl, k) for k in self.ATTRS}
+        state["Selection"] = selection or self._ctrl.GetSelection()
+        if value is not None:
+            state["_bytes"] = bytearray(value)
+            if value0 is not None:
+                state["_bytes0"] = value0
+            else:
+                diff = len(state["_bytes0"]) - len(state["_bytes"])
+                if diff < 0: state["_bytes0"] = state["_bytes0"] + [None] * abs(diff)
+                elif diff:   state["_bytes0"] = state["_bytes0"][:len(state["_bytes0"]) - diff]
+        return copy.deepcopy(state)
+
+    def _UpdateMirror(self, state):
+        """Updates linked control, if any."""
+        if not self._ctrl.Mirror: return
+        v, v0, sel = (state[k] for k in self.ATTRS + ["Selection"])
+        HexByteCommand(self._ctrl.Mirror).Submit(v, v0, sel)
+
+    def _Apply(self, state):
+        """Applies state to control and populates it."""
+        if not self._ctrl: return False
+        for k in self.ATTRS: setattr(self._ctrl, k, state[k])
+        self._ctrl._Populate()
+        self._ctrl.SetSelection(*state["Selection"])
+        return True
+
+
+class HexByteCommandProcessor(wx.CommandProcessor):
+    """Command processor for mirrored hex and byte controls."""
+
+    def __init__(self, ctrl, maxCommands=-1):
+        super(HexByteCommandProcessor, self).__init__(maxCommands)
+        self._ctrl = ctrl
+
+    def Redo(self, mirror=False):
+        result = super(HexByteCommandProcessor, self).Redo()
+        if result and mirror and self._ctrl.Mirror:
+            self._ctrl.Mirror.Redo(mirror=False)
+        return result
+
+    def Undo(self, mirror=False):
+        result = super(HexByteCommandProcessor, self).Undo()
+        if result and mirror and self._ctrl.Mirror:
+            self._ctrl.Mirror.Undo(mirror=False)
+        return result
+
+
 class HexTextCtrl(wx.stc.StyledTextCtrl):
     """
     A StyledTextCtrl configured for hexadecimal editing.
@@ -2772,10 +2883,12 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     def __init__(self, *args, **kwargs):
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
 
-        self._fixed  = False # Fixed-length value
-        self._type   = str   # Value type: str, int, float, long
-        self._bytes0 = []    # [byte or None, ]
-        self._bytes  = bytearray()
+        self._fixed    = False # Fixed-length value
+        self._type     = str   # Value type: str, int, float, long
+        self._bytes0   = []    # [byte or None, ]
+        self._bytes    = bytearray()
+        self._mirror   = None # Linked control
+        self._undoredo = HexByteCommandProcessor(self)
 
         self.SetStyleSpecs()
         cw = self.TextWidth(0, "X")
@@ -2837,6 +2950,15 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         return result
 
 
+    def GetMirror(self):
+        """Returns the linked control that gets updated on any local change."""
+        return self._mirror
+    def SetMirror(self, mirror):
+        """Sets the linked control that gets updated on any local change."""
+        self._mirror = mirror
+    Mirror = property(GetMirror, SetMirror)
+
+
     def GetLength(self):
         """Returns the number of bytes in the document."""
         return len(self._bytes)
@@ -2848,58 +2970,64 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         return str(self._bytes)
     def SetText(self, text):
         """Set current content as non-hex-encoded string."""
-        v = text.encode("utf-8") if isinstance(text, unicode) else str(text)
-        return self.SetValue(v)
+        return self.SetValue(text if isinstance(text, basestring) else str(text))
     Text = property(GetText, SetText)
 
 
     def GetValue(self):
         """Returns current content as original type (string or number)."""
         v = str(self._bytes)
-        if   self._type is   int: v = struct.unpack(">l", v)[0]
+        if v == "" and self._type in (int, float, long): v = None
+        elif self._type is   int: v = struct.unpack(">l", v)[0]
         elif self._type is float: v = struct.unpack(">f", v)[0]
         elif self._type is  long: v = struct.unpack(">q", v)[0]
         return v
 
     def SetValue(self, value):
-        """Set current content as typed value (string or number)."""
+        """Set current content as typed value (string or number), clears undo."""
         self._SetValue(value)
         self._Populate()
 
     Value = property(GetValue, SetValue)
 
 
-    def UpdateValue(self, value):
+    def GetOriginalBytes(self): return list(self._bytes0)
+    OriginalBytes = property(GetOriginalBytes)
+
+
+    def UpdateValue(self, value, mirror=False):
         """Update current content as typed value (string or number)."""
-        bytes0 = self._bytes0[:]
-        self._SetValue(value)
-        maxlen = min(len(bytes0), len(self._bytes0))
-        grow   = max(len(self._bytes0) - len(bytes0), 0)
-        self._bytes0[:maxlen] = bytes0[:maxlen] + [None] * grow
-        self._Populate()
+        HexByteCommand(self).Submit(self._AdaptValue(value), mirror=mirror)
 
 
     def GetAnchor(self):
-        return super(HexTextCtrl, self).Anchor / 3
+        sself = super(HexTextCtrl, self)
+        result = self._PosOut(sself.Anchor)
+        if sself.Anchor == self.GetLastPosition(): result += 1
+        return result
     def SetAnchor(self, anchor):
-        return super(HexTextCtrl, self).SetAnchor(anchor * 3)
+        return super(HexTextCtrl, self).SetAnchor(self._PosIn(anchor))
     Anchor = property(GetAnchor, SetAnchor)
 
 
     def GetCurrentPos(self):
-        return super(HexTextCtrl, self).CurrentPos / 3
+        sself = super(HexTextCtrl, self)
+        result = self._PosOut(sself.CurrentPos)
+        if sself.CurrentPos == self.GetLastPosition(): result += 1
+        return result
     def SetCurrentPos(self, caret):
-        return super(HexTextCtrl, self).SetCurrentPos(caret * 3)
+        return super(HexTextCtrl, self).SetCurrentPos(self._PosIn(caret))
     CurrentPos = property(GetCurrentPos, SetCurrentPos)
 
 
     def GetSelection(self):
         """Returns the current byte selection span, as (from_, to_)."""
         from_, to_ = super(HexTextCtrl, self).GetSelection()
-        return from_ / 3, (to_ + (from_ != to_)) / 3
+        return self._PosOut(from_), self._PosOut(to_) + (from_ != to_)
     def SetSelection(self, from_, to_):
         """Selects the bytes from first position up to but not including second."""
-        return super(HexTextCtrl, self).SetSelection(from_ * 3, to_ * 3 - (from_ != to_))
+        return super(HexTextCtrl, self).SetSelection(self._PosIn(from_), self._PosIn(to_) - (from_ != to_))
+    Selection = property(GetSelection)
 
 
     def GetHex(self):
@@ -2915,72 +3043,67 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
         self._QueueEvents()
 
+        cmd = HexByteCommand(self)
         selection = self.GetSelection()
         if selection[0] != selection[1] and not self._fixed:
             del self._bytes [selection[0]:selection[1] + 1]
             del self._bytes0[selection[0]:selection[1] + 1]
-            del self._text  [selection[0]:selection[1] + 1]
-            self.DeleteBack()
-        elif self._fixed:
-            self.SetSelection(selection[0], selection[0])
 
-        if isinstance(text, unicode): text = text.encode("utf-8")
-        text = re.sub("[^0-9a-fA-F]", "", text)
+        text = re.sub("[^0-9a-fA-F]", "", self._AdaptValue(text))
         text = text[:len(text) - len(text) % 2]
-        if not text: return
-
-        bpos = pos / 3 + (pos == self.GetLastPosition())
         v = bytearray.fromhex(text)
         maxlen = min(len(v), len(self._bytes) - bpos) if self._fixed else len(v)
         v = v[:maxlen]
 
+        bpos = pos / 3 + (pos == self.GetLastPosition())
         if bpos + maxlen > len(self._bytes):
             self._bytes0.extend([None] * (bpos + maxlen - len(self._bytes)))
         if self.Overtype:
             self._bytes[bpos:bpos + maxlen] = v
         else:
-            self._bytes0[bpos:bpos] = [None] * len(v)
             self._bytes [bpos:bpos] = v
+            self._bytes0[bpos:bpos] = [None] * len(v)
 
-        self._Populate()        
+        self._Populate()
+        self.SetSelection(selection[0] + len(v), selection[0] + len(v))
+        self.EnsureCaretVisible()
+        cmd.Store()
 
 
-    def Undo(self):
-        """"""
-        if not self.CanUndo(): return
-        self._QueueEvents()
-        sself = super(HexTextCtrl, self)
-        pos, anchor = sself.CurrentPos, sself.Anchor
-        sself.Undo()
-        v = bytearray.fromhex(re.sub("[^0-9a-fA-F]", "", sself.Text))
-        self._bytes[:]  = v
-        self._Restyle()
-        self._Remargin()
-        sself.SetCurrentPos(min(pos,    sself.Length))
-        sself.SetAnchor    (min(anchor, sself.Length))
+    def EmptyUndoBuffer(self, mirror=False):
+        """Deletes undo history."""
+        super(HexTextCtrl, self).EmptyUndoBuffer()
+        self._undoredo.ClearCommands()
+        if mirror and self._mirror:  self._mirror.EmptyUndoBuffer()
+
+
+    def Undo(self, mirror=False):
+        """Undos the last change, if any."""
+        if not self._undoredo.CanUndo(): return
+        self._undoredo.Undo(mirror=mirror)
         evt = wx.stc.StyledTextEvent(wx.stc.wxEVT_STC_MODIFIED, self.Id)
         evt.SetModificationType(wx.stc.STC_PERFORMED_UNDO)
         evt.SetEventObject(self)
         wx.PostEvent(self, evt)
 
 
-    def Redo(self):
-        """"""
-        if not self.CanRedo(): return
-        self._QueueEvents()
-        sself = super(HexTextCtrl, self)
-        pos, anchor = sself.CurrentPos, sself.Anchor
-        sself.Redo()
-        v = bytearray.fromhex(re.sub("[^0-9a-fA-F]", "", sself.Text))
-        self._bytes[:]  = v
-        self._Restyle()
-        self._Remargin()
-        sself.SetCurrentPos(min(pos,    sself.Length))
-        sself.SetAnchor    (min(anchor, sself.Length))
+    def Redo(self, mirror=False):
+        """Redos the last undo, if any."""
+        if not self._undoredo.CanRedo(): return
+        self._undoredo.Redo(mirror=mirror)
         evt = wx.stc.StyledTextEvent(wx.stc.wxEVT_STC_MODIFIED, self.Id)
         evt.SetModificationType(wx.stc.STC_PERFORMED_REDO)
         evt.SetEventObject(self)
         wx.PostEvent(self, evt)
+
+
+    def _PosIn(self, pos):
+        line, linebpos = divmod(pos, self.WIDTH)
+        return line * self.WIDTH * 3 + linebpos * 3
+    def _PosOut(self, pos):
+        line = self.LineFromPosition(pos)
+        linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
+        return line * self.WIDTH + linepos / 3
 
 
     def _Populate(self):
@@ -2991,7 +3114,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             if i < count - 1:
                 text += "\n" if i and not (i + 1) % self.WIDTH else " "
             fulltext += text
-        super(HexTextCtrl, self).SetText(str(fulltext))
+        super(HexTextCtrl, self).ChangeValue(str(fulltext))
         self._Restyle()
         self._Remargin()
 
@@ -3017,20 +3140,17 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
 
     def _SetValue(self, value):
-        """Set current content as typed value (string or number)."""
+        """Set current content as typed value (string or number), clears undo."""
         is_long = isinstance(value, long) and not isinstance(value, int) \
                   and -2**63 <= value < 2**63
-        if   isinstance(value, int):   v = struct.pack(">l", value)
-        elif isinstance(value, float): v = struct.pack(">f", value)
-        elif is_long:                  v = struct.pack(">q", value)
-        elif value is None:            v = ""
-        else: v = value.encode("utf-8") if isinstance(value, unicode) else str(value)
+        v = self._AdaptValue(value)
 
         self._type      = type(value) if is_long or not isinstance(value, long) else str
         self._fixed     = is_long or value is None or isinstance(value, (int, float))
         self._bytes0[:] = map(ord, v)
         self._bytes[:]  = v
         if self._fixed: self.SetOvertype(True)
+        self._undoredo.ClearCommands()
 
 
     def OnFocus(self, event):
@@ -3068,11 +3188,23 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
         if event.CmdDown() and not event.AltDown() and not event.ShiftDown() \
         and ord("Z") == event.KeyCode:
-            return self.Undo()
+            return self.Undo(mirror=True)
 
         if event.CmdDown() and not event.AltDown() and (not event.ShiftDown() \
         and ord("Y") == event.KeyCode) or (event.ShiftDown() and ord("Z") == event.KeyCode):
-            return self.Redo()
+            return self.Redo(mirror=True)
+
+        if event.CmdDown() and not event.AltDown() and (not event.ShiftDown()
+        and ord("V") == event.KeyCode or event.ShiftDown() and event.KeyCode in KEYS.INSERT):
+            text = None
+            if wx.TheClipboard.Open():
+                if wx.TheClipboard.IsSupported(wx.DataFormat(wx.DF_TEXT)):
+                    o = wx.TextDataObject()
+                    wx.TheClipboard.GetData(o)
+                    text = o.Text
+                wx.TheClipboard.Close()
+            if text is not None: self.InsertInto(text)
+            return
 
         if not event.HasModifiers() and (event.KeyCode in KEYS.ENTER + KEYS.SPACE
         or (unichr(event.UnicodeKey) not in self.MASK and event.KeyCode not in self.NUMPAD_NUMS) \
@@ -3088,6 +3220,8 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
         if event.KeyCode in KEYS.LEFT + KEYS.RIGHT:
             direction = -1 if event.KeyCode in KEYS.LEFT else 1
+            pos0 = sself.CurrentPos
+            linepos0 = pos0 - self.PositionFromLine(self.LineFromPosition(pos0))
             if event.ShiftDown():
                 func = self.WordLeftExtend if direction < 0 else self.WordRightEndExtend
             else:
@@ -3096,7 +3230,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             pos = sself.CurrentPos
             linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
             if not event.ShiftDown() and linepos >= self.WIDTH * 3 - 1 \
-            or event.ShiftDown() and not linepos:
+            or event.ShiftDown() and (not linepos and not linepos0 or not linepos0 and linepos >= self.WIDTH * 3 - 1):
                 func()
             if direction < 0 and not self.GetSelectionEmpty() and pos > sself.GetSelection()[0]:
                 self.CharLeftExtend()
@@ -3109,45 +3243,52 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         elif event.KeyCode in KEYS.DELETE + KEYS.BACKSPACE:
             if self._fixed: return
 
+            cmd = HexByteCommand(self)
             selection = self.GetSelection()
             if selection[0] != selection[1]:
-                del self._bytes [selection[0]:selection[1] + 1]
-                del self._bytes0[selection[0]:selection[1] + 1]
-                self._Populate()
+                del self._bytes [selection[0]:selection[1]]
+                del self._bytes0[selection[0]:selection[1]]
+                self.SetSelection(selection[0], selection[0])
+                cmd.Submit(mirror=True)
                 return
 
-            pos       = sself.CurrentPos
-            line0     = sself.FirstVisibleLine
-            line      = self.LineFromPosition(pos)
-            linepos   = pos - self.PositionFromLine(line)
-            direction = -(event.KeyCode in KEYS.BACKSPACE)
+            pos        = sself.CurrentPos
+            line0      = sself.FirstVisibleLine
+            line       = self.LineFromPosition(pos)
+            linepos    = pos - self.PositionFromLine(line)
+            direction  = -(event.KeyCode in KEYS.BACKSPACE)
+            is_lastpos = (pos == self.GetLastPosition())
 
-            if not self._bytes or pos == self.GetLastPosition() and not direction:
+            if not self._bytes or not pos and direction \
+            or is_lastpos and not direction:
                 return
 
             bpos, idx = self.CurrentPos, linepos % 3
-            if pos == self.GetLastPosition(): idx = 0
-            for bb in self._bytes0, self._bytes: del bb[bpos]
+            if is_lastpos: bpos, idx = min(bpos, len(self._bytes) - 1), 0
+            for bb in self._bytes, self._bytes0: del bb[bpos]
+
             if line == self.LineCount - 1 and (not direction or linepos):
                 # Last line and not backspacing from first byte
-                frompos = max(pos + direction * 3, 0)
+                frompos = max(pos + (-idx if idx else direction * 3), 0)
                 topos   = sself.Length if frompos + 3 > sself.Length else frompos + 3
                 self.Remove(frompos, topos)
+                if idx:
+                    if bpos >= len(self._bytes): self.DeleteBack()
+                    sself.SetSelection(frompos, frompos)
             else:
                 self._Populate()
-                sself.SetSelection(pos + 1 + idx, pos + 1 + idx)
+                sself.SetSelection(*(pos + direction * 3 - idx, ) * 2)
+            cmd.Store()
         elif not event.HasModifiers() \
         and (unichr(event.UnicodeKey) in self.MASK or event.KeyCode in self.NUMPAD_NUMS) \
         and (not event.ShiftDown() or unichr(event.UnicodeKey) not in string.digits):
             if self._fixed and not self._bytes: return # NULL number
 
-
+            cmd = HexByteCommand(self)
             selection = self.GetSelection()
             if selection[0] != selection[1] and not self._fixed:
                 del self._bytes [selection[0]:selection[1] + 1]
                 del self._bytes0[selection[0]:selection[1] + 1]
-                self.DeleteBack()
-                self.DeleteBack()
 
             line0 = sself.FirstVisibleLine
             pos   = sself.CurrentPos
@@ -3160,6 +3301,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             elif idx > 1: idx, pos = 0, pos - idx
             elif not idx and not self.Overtype:
                 self._bytes.insert(bpos, 0), self._bytes0.insert(bpos, None)
+            bpos = min(bpos, len(self._bytes) - 1)
 
             number = self.NUMPAD_NUMS[event.KeyCode] if event.KeyCode in self.NUMPAD_NUMS \
                      else int(unichr(event.UnicodeKey), 16)
@@ -3169,15 +3311,17 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             b2 = number if idx else byte & 0x0F
             byte = b1 * 16 + b2
             self._bytes[bpos] = byte
-            if (self.Overtype or idx) and pos < self.GetLastPosition():
+
+            if selection[0] != selection[1] and not self._fixed \
+            or not ((self.Overtype or idx) and pos < self.GetLastPosition()):
+                self._Populate()
+                self.SetFirstVisibleLine(line0)
+            else:
                 sself.Replace(pos - idx, pos - idx + 2, "%02X" % byte)
                 self.StartStyling(pos - idx)
                 self.SetStyling(2, self.STYLE_CHANGED if self._bytes[bpos] != self._bytes0[bpos] else 0)
-            else:
-                self._Populate()
-                self.SetFirstVisibleLine(line0)
             sself.SetSelection(pos + 1 + idx, pos + 1 + idx)
-
+            cmd.Store()
         elif event.KeyCode in KEYS.INSERT and not event.HasAnyModifiers():
             if not self._fixed: event.Skip() # Disallow changing overtype if length fixed
         elif event.KeyCode not in KEYS.TAB:
@@ -3188,6 +3332,21 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         """Handler for mouse event, moves care to word boundary."""
         event.Skip()
         self._QueueEvents(singlepos=event.LeftUp())
+
+
+    def _AdaptValue(self, value):
+        """Returns the value as str for hex representation."""
+        is_long = isinstance(value, long) and not isinstance(value, int) \
+                  and -2**63 <= value < 2**63
+        if   isinstance(value, int):   v = struct.pack(">l", value)
+        elif isinstance(value, float): v = struct.pack(">f", value)
+        elif is_long:                  v = struct.pack(">q", value)
+        elif value is None:            v = ""
+        elif isinstance(value, unicode):
+            try: v = value.encode("latin1")
+            except Exception: v = value.encode("utf-8")
+        else: v = str(value)
+        return v
 
 
     def _QueueEvents(self, singlepos=False):
@@ -3252,7 +3411,8 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         self._type   = str   # Value type: str, int, float, long
         self._bytes0 = []    # [byte or None, ]
         self._bytes  = bytearray() # Raw bytes
-        self._text   = bytearray() # Display bytes
+        self._mirror = None  # Linked control
+        self._undoredo = HexByteCommandProcessor(self)
 
         self.SetEOLMode(wx.stc.STC_EOL_LF)
         self.SetWrapMode(wx.stc.STC_WRAP_CHAR)
@@ -3305,40 +3465,49 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         return result
 
 
+    def GetMirror(self):
+        """Returns the linked control that gets updated on any local change."""
+        return self._mirror
+    def SetMirror(self, mirror):
+        """Sets the linked control that gets updated on any local change."""
+        self._mirror = mirror
+    Mirror = property(GetMirror, SetMirror)
+
+
     def GetText(self):
         """Returns current content as raw byte string."""
         return str(self._bytes)
     def SetText(self, text):
         """Set current content as raw byte string."""
-        v = text.encode("utf-8") if isinstance(text, unicode) else str(text)
-        return self.SetValue(v)
+        return self.SetValue(self._AdaptValue(v))
     Text = property(GetText, SetText)
 
 
     def GetValue(self):
         """Returns current content as original type (string or number)."""
         v = str(self._bytes)
-        if   self._type is   int: v = struct.unpack(">l", v)[0]
+        if v == "" and self._type in (int, float, long): v = None
+        elif self._type is   int: v = struct.unpack(">l", v)[0]
         elif self._type is float: v = struct.unpack(">f", v)[0]
         elif self._type is  long: v = struct.unpack(">q", v)[0]
         return v
 
     def SetValue(self, value):
-        """Set current content as typed value (string or number)."""
+        """Set current content as typed value (string or number), clears undo."""
         self._SetValue(value)
         self._Populate()
+        self._undoredo.ClearCommands()
 
     Value = property(GetValue, SetValue)
 
 
-    def UpdateValue(self, value):
+    def GetOriginalBytes(self): return list(self._bytes0)
+    OriginalBytes = property(GetOriginalBytes)
+
+
+    def UpdateValue(self, value, mirror=False):
         """Update current content as typed value (string or number), retaining history."""
-        bytes0 = self._bytes0[:]
-        self._SetValue(value)
-        maxlen = min(len(bytes0), len(self._bytes0))
-        grow   = max(len(self._bytes0) - len(bytes0), 0)
-        self._bytes0[:maxlen] = bytes0[:maxlen] + [None] * grow
-        self._Populate()
+        HexByteCommand(self).Submit(self._AdaptValue(value), mirror=mirror)
 
 
     def UpdateBytes(self, value):
@@ -3346,7 +3515,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         self._SetValue(value, noreset=True)
         if len(self._bytes0) < len(self._bytes):
             self._bytes0.extend([None] * (len(self._bytes) - len(self._bytes0)))
-        self._Restyle()
+        self._Populate()
 
 
     def GetAnchor(self):
@@ -3370,35 +3539,32 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
     def SetSelection(self, from_, to_):
         from_, to_ = self._PosIn(from_), self._PosIn(to_)
         return super(ByteTextCtrl, self).SetSelection(from_, to_)
-    Selection = property(GetSelection, SetSelection)
+    Selection = property(GetSelection)
 
 
-    def Undo(self):
-        """"""
-        if not self.CanUndo(): return
-        sself = super(ByteTextCtrl, self)
-        pos, anchor = sself.CurrentPos, sself.Anchor
-        sself.Undo()
-        self._Restyle()
-        sself.SetCurrentPos(min(pos,    sself.Length))
-        sself.SetAnchor    (min(anchor, sself.Length))
+    def EmptyUndoBuffer(self, mirror=False):
+        """Deletes undo history."""
+        super(ByteTextCtrl, self).EmptyUndoBuffer()
+        self._undoredo.ClearCommands()
+        if mirror and self._mirror:  self._mirror.EmptyUndoBuffer()
+
+
+    def Undo(self, mirror=False):
+        """Undos the last change, if any."""
+        if not self._undoredo.CanUndo(): return
+        self._undoredo.Undo(mirror=mirror)
         evt = wx.stc.StyledTextEvent(wx.stc.wxEVT_STC_MODIFIED, self.Id)
         evt.SetModificationType(wx.stc.STC_PERFORMED_UNDO)
         evt.SetEventObject(self)
         wx.PostEvent(self, evt)
 
 
-    def Redo(self):
-        """"""
-        if not self.CanRedo(): return
-        sself = super(ByteTextCtrl, self)
-        pos, anchor = sself.CurrentPos, sself.Anchor
-        sself.Redo()
-        self._Restyle()
-        sself.SetCurrentPos(min(pos,    sself.Length))
-        sself.SetAnchor    (min(anchor, sself.Length))
+    def Redo(self, mirror=False):
+        """Redos the last undo, if any."""
+        if not self._undoredo.CanRedo(): return
+        self._undoredo.Redo(mirror=mirror)
         evt = wx.stc.StyledTextEvent(wx.stc.wxEVT_STC_MODIFIED, self.Id)
-        evt.SetModificationType(wx.stc.STC_PERFORMED_REDO)
+        evt.SetModificationType(wx.stc.STC_PERFORMED_UNDO)
         evt.SetEventObject(self)
         wx.PostEvent(self, evt)
 
@@ -3407,8 +3573,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         line, linepos = divmod(pos, self.WIDTH)
         return line * (self.WIDTH + 1) + linepos
     def _PosOut(self, pos):
-        linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
-        return self.CurrentLine * self.WIDTH + linepos
+        return pos - self.LineFromPosition(pos)
 
 
     def _Populate(self):
@@ -3416,14 +3581,12 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         count = len(self._bytes)
         fulltext = bytearray()
         for i, c in enumerate(self._bytes):
-            text = chr(self._text[i])
+            fulltext += re.sub("[^\x20-\x7e]", ".", chr(self._bytes[i]))
             if i and i < count - 1 and not (i + 1) % self.WIDTH:
-                text += "\n"
-            fulltext += text
-        self._text[:] = fulltext
+                fulltext += "\n"
         fullstr = str(fulltext)
         if super(ByteTextCtrl, self).Text != fullstr:
-            super(ByteTextCtrl, self).SetText(fullstr)
+            super(ByteTextCtrl, self).ChangeValue(fullstr)
         self._Restyle()
 
 
@@ -3441,14 +3604,9 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         """Set current content as typed value (string or number)."""
         is_long = isinstance(value, long) and not isinstance(value, int) \
                   and -2**63 <= value < 2**63
-        if   isinstance(value, int):   v = struct.pack(">l", value)
-        elif isinstance(value, float): v = struct.pack(">f", value)
-        elif is_long:                  v = struct.pack(">q", value)
-        elif value is None:            v = ""
-        else: v = value.encode("utf-8") if isinstance(value, unicode) else str(value)
+        v = self._AdaptValue(value)
 
         self._bytes[:] = v
-        self._text[:]  = re.sub("[^\x20-\x7e]", ".", v)
         if not noreset: 
             self._type      = type(value) if is_long or not isinstance(value, long) else str
             self._fixed     = is_long or value is None or isinstance(value, (int, float))
@@ -3479,95 +3637,100 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         if self.Zoom: self.Zoom = 0
 
 
-    def OnPaste(self, event=None, text=None):
-        """Handles paste event."""
-        if event:
-            text = event.String
-            event.SetString("") # Cancel default paste
+    def InsertInto(self, text):
+        """Inserts string at current insertion point."""
         if self._fixed and not self._bytes: return # NULL number
         if self.CurrentPos == self.GetLastPosition() and self._fixed: pass
 
         self._QueueEvents()
+        cmd = HexByteCommand(self)
 
         selection = self.GetSelection()
         if selection[0] != selection[1] and not self._fixed:
-            del self._bytes [selection[0]:selection[1] + 1]
-            del self._bytes0[selection[0]:selection[1] + 1]
-            del self._text  [selection[0]:selection[1] + 1]
-            self.DeleteBack()
-        elif self._fixed:
-            self.SetSelection(selection[0], selection[0])
+            del self._bytes [selection[0]:selection[1]]
+            del self._bytes0[selection[0]:selection[1]]
 
         pos = self.CurrentPos
-        if isinstance(text, unicode): text = text.encode("utf-8")
-        maxlen = min(len(text), self.Length - pos) if self._fixed else len(text)
-        text = text[:maxlen]
+        v = self._AdaptValue(text)
+        maxlen = min(len(v), self.Length - pos) if self._fixed else len(v)
+        v = v[:maxlen]
 
         if pos + maxlen > len(self._bytes):
             self._bytes0.extend([None] * (pos + maxlen - len(self._bytes)))
         if self.Overtype:
-            self._bytes[pos:pos + maxlen] = text
-            self._text [pos:pos + maxlen] = re.sub("[^\x20-\x7e]", ".", text)
+            self._bytes[pos:pos + maxlen] = v
         else:
-            self._bytes0[pos:pos] = [None] * len(text)
-            self._bytes [pos:pos] = text
-            self._text  [pos:pos] = re.sub("[^\x20-\x7e]", ".", text)
+            self._bytes0[pos:pos] = [None] * len(v)
+            self._bytes [pos:pos] = v
         self._Populate()
+        self.SetSelection(selection[0] + len(v), selection[0] + len(v))
+        self.EnsureCaretVisible()
+        cmd.Store()
+
+
+    def OnPaste(self, event):
+        """Handles paste event."""
+        text = event.String
+        event.SetString("") # Cancel default paste
+        self.InsertInto(text)
 
 
     def OnChar(self, event):
         """Handler for character input, displays printable character."""
         if self._fixed and not self._bytes: return # NULL number
 
+        self._QueueEvents()
+        cmd = HexByteCommand(self)
         selection = self.GetSelection()
         if selection[0] != selection[1] and not self._fixed:
             del self._bytes [selection[0]:selection[1] + 1]
             del self._bytes0[selection[0]:selection[1] + 1]
-            del self._text  [selection[0]:selection[1] + 1]
             self.DeleteBack()
         elif self._fixed:
             self.SetSelection(selection[0], selection[0])
 
+        sself = super(ByteTextCtrl, self)
         if not event.UnicodeKey: event.Skip()
-        elif self.CurrentPos == self.GetLastPosition() and self._fixed: pass
+        elif sself.CurrentPos == self.GetLastPosition() and self._fixed: pass
         else:
-            pos   = self.CurrentPos
+            pos, bpos = sself.CurrentPos, self.CurrentPos
             tbyte = re.sub("[^\x20-\x7e]", ".", chr(event.KeyCode))
-            if pos >= len(self._bytes):
-                self._bytes0.append(None), self._bytes.append(0), self._text.append(0)
+            if bpos >= len(self._bytes) or pos >= self.GetLastPosition():
+                self._bytes0.append(None), self._bytes.append(0)
             elif not self.Overtype:
-                self._bytes0.insert(pos, None), self._bytes.insert(pos, 0), self._text.insert(pos, 0)
-            self._bytes[pos] = event.KeyCode
-            self._text [pos] = tbyte
+                self._bytes0.insert(pos, None), self._bytes.insert(pos, 0)
+            if (not tbyte or event.KeyCode == self._bytes[bpos]) \
+            and (selection[0] == selection[1] or self._fixed): return
+            if tbyte: self._bytes[bpos] = event.KeyCode
 
             if self.Overtype and pos < self.GetLastPosition():
                 self.Replace(pos, pos + 1, tbyte)
                 self.StartStyling(pos)
-                self.SetStyling(1, self.STYLE_CHANGED if self._bytes0[pos] != self._bytes[pos] else 0)
+                self.SetStyling(1, self.STYLE_CHANGED if self._bytes0[bpos] != self._bytes[bpos] else 0)
             else: self._Populate()
             self.SetSelection(pos + 1, pos + 1)
+        cmd.Store()
 
 
     def OnKeyDown(self, event):
         """Handler for key down, fires position change events."""
-        self._QueueEvents()
 
         if event.CmdDown() and not event.AltDown() and not event.ShiftDown() \
         and ord("Z") == event.KeyCode:
-            return self.Undo()
+            return self.Undo(mirror=True)
 
-        if event.CmdDown() and not event.AltDown() and (not event.ShiftDown() \
+        elif event.CmdDown() and not event.AltDown() and (not event.ShiftDown() \
         and ord("Y") == event.KeyCode) or (event.ShiftDown() and ord("Z") == event.KeyCode):
-            return self.Redo()
+            return self.Redo(mirror=True)
 
-        if event.CmdDown() and not event.AltDown() and not event.ShiftDown() \
+        elif event.CmdDown() and not event.AltDown() and not event.ShiftDown() \
         and event.KeyCode in KEYS.INSERT + (ord("C"), ):
             if wx.TheClipboard.Open():
                 wx.TheClipboard.SetData(wx.TextDataObject(str(self._bytes)))
                 wx.TheClipboard.Close()
             return
 
-        if event.CmdDown() and not event.AltDown() and (not event.ShiftDown()
+        elif event.CmdDown() and not event.AltDown() and (not event.ShiftDown()
         and ord("V") == event.KeyCode or event.ShiftDown() and event.KeyCode in KEYS.INSERT):
             text = None
             if wx.TheClipboard.Open():
@@ -3576,31 +3739,85 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
                     wx.TheClipboard.GetData(o)
                     text = o.Text
                 wx.TheClipboard.Close()
-            if text is not None: self.OnPaste(text=text)
+            if text is not None: self.InsertInto(text)
             return
 
-        if   event.KeyCode in KEYS.INSERT and not event.HasAnyModifiers():
+        elif event.KeyCode in KEYS.INSERT and not event.HasAnyModifiers():
             if not self._fixed: event.Skip() # Disallow changing overtype if length fixed
+
+        if event.KeyCode in KEYS.LEFT + KEYS.RIGHT:
+            self._QueueEvents()
+            event.Skip()
+            direction = -1 if event.KeyCode in KEYS.LEFT else 1
+            if event.ShiftDown() and direction > 0:
+                sself = super(ByteTextCtrl, self)
+                pos = sself.CurrentPos
+                linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
+                if linepos >= self.WIDTH:  # Already at line end:
+                    self.CharRightExtend() # include first char at next line 
+
         elif event.KeyCode in KEYS.DELETE + KEYS.BACKSPACE:
+            self._QueueEvents()
             if self._fixed: return
-            pos = self.CurrentPos
-            selection = self.GetSelection()
+
+            cmd = HexByteCommand(self)
+            selection = list(self.GetSelection())
+            if selection[0] != selection[1]:
+                del self._bytes [selection[0]:selection[1]]
+                del self._bytes0[selection[0]:selection[1]]
+                self.SetSelection(selection[0], selection[0])
+                cmd.Submit(mirror=True)
+                return
+
+            sself = super(ByteTextCtrl, self)
+            pos       = sself.CurrentPos
+            line0     = sself.FirstVisibleLine
+            line      = self.LineFromPosition(pos)
+            linepos   = pos - self.PositionFromLine(line)
             direction = -(event.KeyCode in KEYS.BACKSPACE)
 
-            del self._bytes [selection[0] + direction:selection[1] + direction + 1]
-            del self._bytes0[selection[0] + direction:selection[1] + direction + 1]
-            del self._text  [selection[0] + direction:selection[1] + direction + 1]
-            pos2 = min(pos + direction, self.CurrentPos)
-            self._Populate()
-            self.SetSelection(pos2, pos2)
-        elif event.KeyCode in KEYS.TAB: pass
-        else: event.Skip()
+            if not self._bytes or not pos and direction \
+            or pos == self.GetLastPosition() and not direction:
+                return
+
+            bpos = self.CurrentPos
+            if pos == self.GetLastPosition(): bpos = bpos - 1
+            for bb in self._bytes, self._bytes0: del bb[bpos]
+
+            if line == self.LineCount - 1 and (not direction or linepos):
+                # Last line and not backspacing from first byte
+                frompos = max(pos + direction, 0)
+                topos   = sself.Length if frompos + 1 > sself.Length else frompos + 1
+                self.Remove(frompos, topos)
+            else:
+                self._Populate()
+                sself.SetSelection(*(pos + direction, ) * 2)
+            cmd.Store()
+        elif event.KeyCode in KEYS.ENTER + KEYS.TAB: pass
+        else:
+            self._QueueEvents()
+            event.Skip()
 
 
     def OnMouse(self, event):
         """Handler for mouse event, fires position change events."""
         self._QueueEvents()
         event.Skip()
+
+
+    def _AdaptValue(self, value):
+        """Returns the value as str for byte representation."""
+        is_long = isinstance(value, long) and not isinstance(value, int) \
+                  and -2**63 <= value < 2**63
+        if   isinstance(value, int):   v = struct.pack(">l", value)
+        elif isinstance(value, float): v = struct.pack(">f", value)
+        elif is_long:                  v = struct.pack(">q", value)
+        elif value is None:            v = ""
+        elif isinstance(value, unicode):
+            try: v = value.encode("latin1")
+            except Exception: v = value.encode("utf-8")
+        else: v = str(value)
+        return v
 
 
     def _QueueEvents(self):

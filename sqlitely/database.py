@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.06.2020
+@modified    29.07.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -902,7 +902,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     continue # for row
 
             sql = row["sql"].strip().replace("\r\n", "\n")
-            sql = re.sub("\n\s+\)[\s;]*$", "\n)", sql)
+            sql = re.sub("\n\s+\)[\s;]*$", "\n)", sql) # Strip trailing whitespace and ;
             if not sql.endswith(";"): sql += ";"
             row["sql"] = row["sql0"] = sql
             self.schema[row["type"]][row["name"]] = row
@@ -1565,12 +1565,13 @@ def is_sqlite_file(filename, path=None, empty=False, ext=True):
     return result
 
 
-def detect_databases():
+def detect_databases(progress=None):
     """
     Tries to detect SQLite database files on the current computer, looking
     under "Documents and Settings", and other potential locations.
 
-    @yield   each value is a list of detected database paths
+    @param   progress  callback function returning whether task should continue
+    @yield             each value is a list of detected database paths
     """
 
     # First, search system directories for database files.
@@ -1586,21 +1587,27 @@ def detect_databases():
                         "/Users" if "mac" == os.name else "/home"]
     search_paths = map(util.to_unicode, search_paths)
     for search_path in filter(os.path.exists, search_paths):
+        if progress and not progress(): return
         logger.info("Looking for SQLite databases under %s.", search_path)
         for root, _, files in os.walk(search_path):
             results = []
             for f in files:
+                if progress and not progress(): break # for f
                 if is_sqlite_file(f, root):
                     results.append(os.path.realpath(os.path.join(root, f)))
             if results: yield results
+    if progress and not progress(): return
 
     # Then search current working directory for database files.
     search_path = util.to_unicode(os.getcwd())
     logger.info("Looking for SQLite databases under %s.", search_path)
     for root, _, files in os.walk(search_path):
+        if progress and not progress(): return
         results = []
-        for f in (x for x in files if is_sqlite_file(x, root)):
-            results.append(os.path.realpath(os.path.join(root, f)))
+        for f in files:
+            if progress and not progress(): break # for f
+            if is_sqlite_file(f, root):
+                results.append(os.path.realpath(os.path.join(root, f)))
         if results: yield results
 
 

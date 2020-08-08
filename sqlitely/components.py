@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.07.2020
+@modified    08.08.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -16,6 +16,7 @@ from collections import defaultdict, Counter, OrderedDict
 import copy
 import datetime
 import functools
+import HTMLParser
 import io
 import json
 import logging
@@ -27,6 +28,7 @@ import re
 import string
 import sys
 import time
+import urllib
 import warnings
 
 import PIL
@@ -38,7 +40,6 @@ import wx.lib
 import wx.lib.mixins.listctrl
 import wx.lib.newevent
 import wx.lib.resizewidget
-import wx.lib.scrolledpanel
 import wx.stc
 import wx.svg
 
@@ -633,24 +634,27 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         @param   val   value to filter by, matched by substring
         """
         value = val
+        rows_before = self.GetNumberRows()
         if self.db.get_affinity(self.columns[col]) in ("INTEGER", "REAL"):
             value = val.replace(",", ".").strip() # Allow comma for decimals
         if value: self.filters[col] = value
         else: self.filters.pop(col, None)
-        self.Filter(self.GetNumberRows(present=True))
+        self.Filter(rows_before)
 
 
     def RemoveFilter(self, col):
         """Removes filter on the specified column, if any."""
         if col not in self.filters: return
+        rows_before = self.GetNumberRows()
         self.filters.pop(col)
-        self.Filter(self.GetNumberRows(present=True))
+        self.Filter(rows_before)
 
 
     def ClearFilter(self, refresh=True):
         """Clears all added filters."""
+        rows_before = self.GetNumberRows()
         self.filters.clear()
-        if refresh: self.Filter(self.GetNumberRows(present=True))
+        if refresh: self.Filter(rows_before)
 
 
     def ClearSort(self, refresh=True):
@@ -1407,7 +1411,7 @@ class SQLiteGridBaseMixin(object):
                 return self._grid.Table.SeekToRow(seekrow)
 
         def seekahead():
-            if not self: return
+            if not self or not self._grid.Table: return
 
             scrollpos = self._grid.GetScrollPos(wx.VERTICAL)
             scrollrange = self._grid.GetScrollRange(wx.VERTICAL)
@@ -2093,6 +2097,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         if isinstance(self._grid.Table, SQLiteGridBase):
             self._grid.Table.CloseCursor()
         self._grid.Table = None
+        self._grid.ForceRefresh() # Update scrollbars
         self.Refresh()
         self._button_export.Enabled = False
         self._tbgrid.Disable()
@@ -4782,7 +4787,7 @@ class SchemaObjectPage(wx.Panel):
             schema = dict(schema, version=v)
             sql, err = grammar.generate(schema, category="ALTER MASTER")
             if err: logger.warn("Error syncing sqlite_master contents: %s.", err)
-            else: self._db.executescript(sql)
+            else: self._db.executescript(sql, name="ALTER")
         except Exception:
             logger.warn("Error syncing sqlite_master contents.", exc_info=True)
             try: self._db.execute("ROLLBACK")
@@ -5313,8 +5318,12 @@ class SchemaObjectPage(wx.Panel):
             )
             if item:
                 item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
-                sql, _ = grammar.generate(item["meta"])
-                if sql is not None: item.update(sql=sql, sql0=item.get("sql0", sql))
+                if item["meta"].get("__comments__"):
+                    sql, _ = grammar.generate(item["meta"])
+                    if sql is not None:
+                        item = dict(item, sql=sql, sql0=item.get("sql0", sql))
+                else:
+                    item = dict(item, sql0=item["sql"])
                 self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
                 self._sql0_applies = True
 
@@ -5836,8 +5845,8 @@ class ExportProgressPanel(wx.Panel):
             if not ctrls["text"]: return
 
             ctrls["text"].Parent.Freeze()
-            total = count
-            subopts = name and opts.get("multi") and opts["subtasks"].setdefault(name, {})
+            total, subopts = count, None
+            if name and opts.get("multi"): subopts = opts["subtasks"].setdefault(name, {}) 
 
             if subopts is not None and count is not None:
                 subopts["count"] = count
@@ -7167,7 +7176,7 @@ class DataDialog(wx.Dialog):
     """
 
     def __init__(self, parent, gridbase, row, id=wx.ID_ANY,
-                 title="Data form", pos=wx.DefaultPosition, size=(400, 400),
+                 title="Data form", pos=wx.DefaultPosition, size=(350, 250),
                  style=wx.CAPTION | wx.CLOSE_BOX | wx.MAXIMIZE_BOX | wx.RESIZE_BORDER,
                  name=wx.DialogNameStr):
         """
@@ -7403,10 +7412,8 @@ class DataDialog(wx.Dialog):
             w, h = (min(a, b) for a, b in zip((w, h), topwindow.Size))
             minsize = self.MinSize
             if self.MinSize[1] > h: self.MinSize = self.MinSize[0], h
-            xwindow = topwindow if w > self.Parent.Size[0] else self.Parent
-            ywindow = topwindow if h > self.Parent.Size[1] else self.Parent
-            x = xwindow.ScreenPosition[0] + (xwindow.Size[0] - w) / 2
-            y = ywindow.ScreenPosition[1] + max(0, (ywindow.Size[1] - h) / 2)
+            x = topwindow.ScreenPosition[0] + (topwindow.Size[0] - w) / 2
+            y = topwindow.ScreenPosition[1] + max(0, (topwindow.Size[1] - h) / 2)
             self.Size, self.Position = (w, h), (x, y)
 
         if initial: after(w, h)
@@ -7595,11 +7602,11 @@ class DataDialog(wx.Dialog):
 
         item_dialog   = wx.MenuItem(menu, -1, "&Open column dialog")
         item_data     = wx.MenuItem(menu, -1, "&Copy value")
-        item_name     = wx.MenuItem(menu, -1, "Copy co&lumn name")
+        item_name     = wx.MenuItem(menu, -1, "Copy column &name")
         item_sql      = wx.MenuItem(menu, -1, "Copy SET &SQL")
         if self._editable:
             item_reset    = wx.MenuItem(menu, -1, "&Reset")
-            item_null     = wx.MenuItem(menu, -1, "Set &NULL")
+            item_null     = wx.MenuItem(menu, -1, "Set NU&LL")
             item_default  = wx.MenuItem(menu, -1, "Set D&EFAULT")
             item_date     = wx.MenuItem(menu, -1, "Set local &date")
             item_datetime = wx.MenuItem(menu, -1, "Set local date&time")
@@ -7929,15 +7936,16 @@ class ColumnDialog(wx.Dialog):
         wx.BITMAP_TYPE_TIFF: "TIFF",
     }
 
-    def __init__(self, parent, gridbase, row, col, rowdata=None,
-                 id=wx.ID_ANY, title="Column Editor", pos=wx.DefaultPosition, size=wx.DefaultSize,
+    def __init__(self, parent, gridbase, row, col, rowdata=None, columnlabel="column",
+                 id=wx.ID_ANY, title="Column Editor", pos=wx.DefaultPosition, size=(750, 450),
                  style=wx.CAPTION | wx.CLOSE_BOX | wx.MAXIMIZE_BOX | wx.RESIZE_BORDER,
                  name=wx.DialogNameStr):
         """
-        @param   gridbase  SQLiteGridBase instance
-        @param   row       row index in gridbase
-        @param   col       column index in gridbase
-        @param   rowdata   current row data dictionary, if not taking from gridbase
+        @param   gridbase     SQLiteGridBase instance
+        @param   row          row index in gridbase
+        @param   col          column index in gridbase
+        @param   rowdata      current row data dictionary, if not taking from gridbase
+        @param   columnlabel  label for column in buttons and other texts
         """
         super(self.__class__, self).__init__(parent, id, title, pos, size, style, name)
 
@@ -7952,15 +7960,16 @@ class ColumnDialog(wx.Dialog):
         self._rowdata0 = gridbase.GetRowData(row, original=True)
         self._coldatas = copy.deepcopy(gridbase.columns) # [{name, }, ]
         self._coldata  = self._coldatas[col]
+        self._collabel = columnlabel
 
         self._name     = self._coldata["name"]     # Column name
         self._value    = self._rowdata[self._name] # Column raw value
         self._gridbase = gridbase
 
-        button_prev  = wx.Button(self,     label="&Previous column")
-        label_cols   = wx.StaticText(self, label="&Select column:")
+        button_prev  = wx.Button(self,     label="&Previous %s" % columnlabel)
+        label_cols   = wx.StaticText(self, label="&Select %s:" % columnlabel)
         list_cols    = wx.Choice(self)
-        button_next  = wx.Button(self, label="&Next column")
+        button_next  = wx.Button(self, label="&Next %s" % columnlabel)
 
         nb = wx.Notebook(self)
 
@@ -8006,10 +8015,11 @@ class ColumnDialog(wx.Dialog):
         self.Sizer.Add(nb,           border=5, flag=wx.TOP | wx.LEFT | wx.RIGHT | wx.GROW, proportion=1)
         self.Sizer.Add(sizer_footer, border=5, flag=wx.ALL | wx.GROW)
 
-        self._list_cols   = list_cols
-        self._button_prev = button_prev
-        self._button_next = button_next
-        self._label_meta  = label_meta
+        self._list_cols    = list_cols
+        self._button_prev  = button_prev
+        self._button_next  = button_next
+        self._button_reset = button_reset
+        self._label_meta   = label_meta
 
 
         self.Bind(wx.EVT_BUTTON, functools.partial(self._OnColumn, direction=-1), button_prev)
@@ -8021,13 +8031,17 @@ class ColumnDialog(wx.Dialog):
         self.Bind(wx.EVT_SIZE,   lambda e: (e.Skip(), self._SetLabel()))
         self.Bind(wx.EVT_CLOSE,  self._OnClose, id=wx.ID_CANCEL)
 
-        self.MinSize = 750, 450
+        self.MinSize = 500, 350
         self.Layout()
         wx_accel.accelerate(self)
 
         self._Populate(self._value, reset=True)
         self._SetLabel()
-        self.CenterOnParent()
+        self.Layout()
+        if pos == wx.DefaultPosition:
+            top = wx.GetApp().TopWindow
+            (x, y), (w, h), (w2, h2) = top.Position, top.Size, self.Size
+            self.Position = (x + (w - w2)  / 2), (y + (h - h2) / 2)
         wx.CallAfter(self.Layout)
 
 
@@ -8048,14 +8062,14 @@ class ColumnDialog(wx.Dialog):
         tb.SetToolBitmapSize(bmp1.Size)
 
         if load:
-            tb.AddTool(wx.ID_OPEN,  "", bmp1, shortHelp="Load column value from file%s" % asfilelabel)
+            tb.AddTool(wx.ID_OPEN,  "", bmp1, shortHelp="Load %s value from file%s" % (self._collabel, asfilelabel))
         if save:
-            tb.AddTool(wx.ID_SAVE,  "", bmp2, shortHelp="Save column value to file%s"   % asfilelabel)
+            tb.AddTool(wx.ID_SAVE,  "", bmp2, shortHelp="Save %s value to file%s"   % (self._collabel, asfilelabel))
         if (load or save) and (copy or paste): tb.AddSeparator()
         if copy:
-            tb.AddTool(wx.ID_COPY,  "", bmp3, shortHelp="Copy column value%s"  % aslabel)
+            tb.AddTool(wx.ID_COPY,  "", bmp3, shortHelp="Copy %s value%s"  % (self._collabel, aslabel))
         if paste:
-            tb.AddTool(wx.ID_PASTE, "", bmp4, shortHelp="Paste column value%s" % aslabel)
+            tb.AddTool(wx.ID_PASTE, "", bmp4, shortHelp="Paste %s value%s" % (self._collabel, aslabel))
         if (load or save or copy or paste) and (undo or redo): tb.AddSeparator()
         if undo:
             tb.AddTool(wx.ID_UNDO,  "", bmp5, shortHelp="Undo")
@@ -8083,7 +8097,7 @@ class ColumnDialog(wx.Dialog):
         if not self: return
         if value is None and "notnull" in self._coldata and not reset: return
 
-        v, affinity = value, self._gridbase.db.get_affinity(self._coldata)
+        v, affinity = value, database.Database.get_affinity(self._coldata)
         if affinity in ("INTEGER", "REAL") and not isinstance(v, (int, float)):
             try:
                 valc = value.replace(",", ".") # Allow comma separator
@@ -8113,7 +8127,7 @@ class ColumnDialog(wx.Dialog):
 
 
     def _SetLabel(self):
-        label = "Column #%s: %s" % (self._col + 1, grammar.quote(self._name))
+        label = "%s #%s: %s" % (self._collabel.capitalize(), self._col + 1, grammar.quote(self._name))
         if self._coldata.get("type"):    label += " " + self._coldata["type"]
         if "notnull" in self._coldata:   label += " NOT NULL"
         if self._coldata.get("default"): label += " DEFAULT " + self._coldata["default"]
@@ -8149,6 +8163,32 @@ class ColumnDialog(wx.Dialog):
 
             on_change(edit.Value)
 
+        def do_transform(category):
+            edit = tedit if tedit.Shown else nedit
+            if not edit.Value: return
+            try:
+                if "spaces" == category:
+                    edit.Value = edit.Value.replace("\t", " " * 4)
+                elif "tabs" == category:
+                    edit.Value = edit.Value.replace(" " * 4, "\t")
+                elif "whitespace" == category:
+                    v = edit.Value.strip()          # Empty surrounding ws
+                    v = re.sub("[ \t]+\n", "\n", v) # Empty ws-only lines
+                    v = re.sub("[\r\n]+",  "\n", v) # Collapse blank lines
+                    edit.Value = re.sub("[ \t]+",   " ",  v) # Collapse spaces+tabs
+                elif "urlencode" == category:
+                    edit.Value = urllib.quote(util.to_str(edit.Value, "utf-8"))
+                elif "urldecode" == category:
+                    edit.Value = urllib.unquote(util.to_str(edit.Value, "utf-8"))
+                elif "htmlescape" == category:
+                    edit.Value = util.html_escape(edit.Value)
+                elif "htmlunescape" == category:
+                    edit.Value = HTMLParser.HTMLParser().unescape(edit.Value)
+                elif "htmlstrip" == category:
+                    edit.Value = re.sub("<[^>]+?>", "", edit.Value)
+            except Exception: pass
+            else: on_change(edit.Value)
+
         def on_set(event):
             menu = wx.Menu()
 
@@ -8156,21 +8196,38 @@ class ColumnDialog(wx.Dialog):
                 self._Populate(None)
             def on_default(event=None):
                 self._Populate(self._gridbase.db.get_default(self._coldata))
+            def on_date(event=None):
+                self._Populate(datetime.date.today())
+            def on_datetime(event=None):
+                self._Populate(datetime.datetime.now().isoformat()[:19].replace("T", " "))
+            def on_stamp(event=None):
+                self._Populate(datetime.datetime.utcnow().replace(tzinfo=util.UTC).isoformat())
 
-            item_null    = wx.MenuItem(menu, -1, "Set &NULL")
-            item_default = wx.MenuItem(menu, -1, "Set &DEFAULT")
+            item_null     = wx.MenuItem(menu, -1, "Set &NULL")
+            item_default  = wx.MenuItem(menu, -1, "Set D&EFAULT")
+            item_date     = wx.MenuItem(menu, -1, "Set local &date")
+            item_datetime = wx.MenuItem(menu, -1, "Set local date&time")
+            item_stamp    = wx.MenuItem(menu, -1, "Set ISO8601 timesta&mp")
 
             menu.Append(item_null)
             menu.Append(item_default)
+            menu.Append(item_date)
+            menu.Append(item_datetime)
+            menu.Append(item_stamp)
 
             is_pk = any(util.lceq(self._name, y) for x in 
                         self._gridbase.db.get_keys(self._gridbase.name, True)[0]
                         for y in x["name"])
             item_null   .Enable("notnull" not in self._coldata or is_pk and self._rowdata[self._gridbase.KEY_NEW])
             item_default.Enable("default" in self._coldata)
+            x = database.Database.get_affinity(self._coldata) not in ("INTEGER", "REAL")
+            item_date.Enabled = item_datetime.Enabled = item_stamp.Enabled = x
 
-            menu.Bind(wx.EVT_MENU, on_null,    item_null)
-            menu.Bind(wx.EVT_MENU, on_default, item_default)
+            menu.Bind(wx.EVT_MENU, on_null,     item_null)
+            menu.Bind(wx.EVT_MENU, on_default,  item_default)
+            menu.Bind(wx.EVT_MENU, on_date,     item_date)
+            menu.Bind(wx.EVT_MENU, on_datetime, item_datetime)
+            menu.Bind(wx.EVT_MENU, on_stamp,    item_stamp)
 
             event.EventObject.PopupMenu(menu, (0, event.EventObject.Size[1]))
 
@@ -8203,6 +8260,38 @@ class ColumnDialog(wx.Dialog):
 
             event.EventObject.PopupMenu(menu, (0, event.EventObject.Size[1]))
 
+        def on_transform(event):
+            menu = wx.Menu()
+
+            item_tabs      = wx.MenuItem(menu, -1, "Spaces to &tabs")
+            item_spaces    = wx.MenuItem(menu, -1, "Tabs to &spaces")
+            item_wspace    = wx.MenuItem(menu, -1, "Collapse &whitespace")
+            item_urlenc    = wx.MenuItem(menu, -1, "&URL-encode")
+            item_urldec    = wx.MenuItem(menu, -1, "URL-&decode")
+            item_hescape   = wx.MenuItem(menu, -1, "Escape &HTML entities")
+            item_hunescape = wx.MenuItem(menu, -1, "Unescape HTML &entities")
+            item_hstrip    = wx.MenuItem(menu, -1, "Strip &HTML tags")
+
+            menu.Append(item_tabs)
+            menu.Append(item_spaces)
+            menu.Append(item_wspace)
+            menu.Append(item_urlenc)
+            menu.Append(item_urldec)
+            menu.Append(item_hescape)
+            menu.Append(item_hunescape)
+            menu.Append(item_hstrip)
+
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("tabs"),         item_tabs)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("spaces"),       item_spaces)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("whitespace"),   item_wspace)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("urlencode"),    item_urlenc)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("urldecode"),    item_urldec)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("htmlescape"),   item_hescape)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("htmlunescape"), item_hunescape)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("htmlstrip"),    item_hstrip)
+
+            event.EventObject.PopupMenu(menu, (0, event.EventObject.Size[1]))
+
         def on_copy(event):
             menu = wx.Menu()
 
@@ -8213,17 +8302,17 @@ class ColumnDialog(wx.Dialog):
                     guibase.status(status, *args, flash=True)
             def on_copy_data(event=None):
                 text = util.to_unicode(self._value)
-                mycopy(text, "Copied column data to clipboard")
+                mycopy(text, "Copied %s data to clipboard" % self._collabel)
             def on_copy_name(event=None):
                 text = util.to_unicode(self._name)
-                mycopy(text, "Copied column name to clipboard")
+                mycopy(text, "Copied %s name to clipboard" % self._collabel)
             def on_copy_sql(event=None):
                 text = "%s = %s" % (grammar.quote(self._name),
                                     grammar.format(self._value, self._coldata))
-                mycopy(text, "Copied column UPDATE SQL to clipboard")
+                mycopy(text, "Copied %s UPDATE SQL to clipboard" % self._collabel)
 
             item_data = wx.MenuItem(menu, -1, "Copy &value")
-            item_name = wx.MenuItem(menu, -1, "Copy column &name")
+            item_name = wx.MenuItem(menu, -1, "Copy %s &name" % self._collabel)
             item_sql  = wx.MenuItem(menu, -1, "Copy &SET SQL")
 
             menu.Append(item_data)
@@ -8236,12 +8325,24 @@ class ColumnDialog(wx.Dialog):
 
             event.EventObject.PopupMenu(menu, (0, event.EventObject.Size[1]))
 
+        def on_colour(event=None):
+            if event: event.Skip()
+            fgcolour, crcolour, bgcolour = (
+                wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
+                for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_BTNTEXT,
+                          wx.SYS_COLOUR_WINDOW)
+            )
+            tedit.SetCaretForeground(crcolour)
+            tedit.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT,
+                               "back:%s,fore:%s" % (bgcolour, fgcolour))
+            tedit.StyleClearAll() # Apply the new default style to all styles
+
         def on_change(value):
             self._Populate(value, skip=NAME)
 
         def update(value, reset=False):
             state["changing"] = True
-            num = self._gridbase.db.get_affinity(self._coldata) in ("INTEGER", "REAL")
+            num = database.Database.get_affinity(self._coldata) in ("INTEGER", "REAL")
             tedit.Shown, nedit.Shown = not num, num
             edit = tedit if tedit.Shown else nedit
             v = "" if value is None else util.to_unicode(value)
@@ -8249,37 +8350,53 @@ class ColumnDialog(wx.Dialog):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 if v != edit.Value: edit.ChangeValue(v)
-            if reset: tedit.DiscardEdits(), nedit.DiscardEdits()
+            if reset:
+                tedit.DiscardEdits(), nedit.DiscardEdits()
+                button_case.Enable(tedit.Shown)
+                button_xform.Enable(tedit.Shown)
             page.Layout()
             wx.CallAfter(state.update, {"changing": False})
 
 
         tb   = self._MakeToolBar(page, NAME, label="", filelabel="", undo=False, redo=False)
-        tedit = controls.HintedTextCtrl(page, escape=False, style=wx.TE_MULTILINE | wx.TE_RICH2 | wx.TE_PROCESS_TAB)
-        nedit = controls.HintedTextCtrl(page, escape=False)
-        button_set  = wx.Button(page, label="&Set ..")
-        button_case = wx.Button(page, label="Change c&ase ..")
-        button_copy = wx.Button(page, label="&Copy ..")
+        tedit = wx.stc.StyledTextCtrl(page)
+        nedit = controls.HintedTextCtrl(page, escape=False, size=(350, -1))
+        button_set   = wx.Button(page, label="S&et ..")
+        button_case  = wx.Button(page, label="Change c&ase ..")
+        button_xform = wx.Button(page, label="&Transform ..")
+        button_copy  = wx.Button(page, label="&Copy ..")
+
+        tedit.SetMarginCount(0)
+        tedit.SetTabWidth(4)
+        tedit.SetUseTabs(False)
+        tedit.SetWrapMode(wx.stc.STC_WRAP_WORD)
+        on_colour()
 
         page.Sizer    = wx.BoxSizer(wx.VERTICAL)
         sizer_header  = wx.BoxSizer(wx.HORIZONTAL)
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
 
         sizer_header.Add(tb,   border=5, flag=wx.ALL)
-        sizer_buttons.Add(button_set,  border=5, flag=wx.RIGHT)
-        sizer_buttons.Add(button_case, border=5, flag=wx.RIGHT)
+        sizer_buttons.Add(button_set,   border=5, flag=wx.RIGHT)
+        sizer_buttons.Add(button_case,  border=5, flag=wx.RIGHT)
+        sizer_buttons.Add(button_xform, border=5, flag=wx.RIGHT)
         sizer_buttons.Add(button_copy)
 
         page.Sizer.Add(sizer_header,   flag=wx.GROW)
         page.Sizer.Add(tedit,          border=5, flag=wx.ALL | wx.GROW, proportion=1)
-        page.Sizer.Add(nedit,          border=5, flag=wx.ALL | wx.GROW)
+        page.Sizer.Add(nedit,          border=5, flag=wx.ALL)
         page.Sizer.Add(sizer_buttons,  border=5, flag=wx.LEFT | wx.BOTTOM | wx.GROW)
 
-        tedit.Bind(wx.EVT_TEXT, functools.partial(self._OnChar, name=NAME, handler=on_change))
-        nedit.Bind(wx.EVT_TEXT, functools.partial(self._OnChar, name=NAME, handler=on_change))
-        button_set .Bind(wx.EVT_BUTTON, on_set)
-        button_case.Bind(wx.EVT_BUTTON, on_case)
-        button_copy.Bind(wx.EVT_BUTTON, on_copy)
+        handler = functools.partial(self._OnChar, name=NAME, handler=on_change)
+
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED, on_colour)
+        tedit.Bind(wx.EVT_TEXT, handler)
+        tedit.Bind(wx.stc.EVT_STC_MODIFIED, handler)
+        nedit.Bind(wx.EVT_TEXT, handler)
+        button_set  .Bind(wx.EVT_BUTTON, on_set)
+        button_case .Bind(wx.EVT_BUTTON, on_case)
+        button_xform.Bind(wx.EVT_BUTTON, on_transform)
+        button_copy .Bind(wx.EVT_BUTTON, on_copy)
 
         self._getters[NAME] = lambda: tedit.GetValue() if tedit.Shown else nedit.GetValue()
         self._setters[NAME] = update
@@ -8297,11 +8414,10 @@ class ColumnDialog(wx.Dialog):
         def on_scroll(event):
             """Handler for scrolling one STC, scrolls the other in sync."""
             event.Skip()
-            ctrl1 = event.EventObject
+            ctrl1, ctrl2 = event.EventObject, event.EventObject.Mirror
             if state["scrolling"].get(ctrl1): return
 
-            ctrl2 = stctxt if ctrl1 is stchex else stchex
-            state["scrolling"][stchex] = state["scrolling"][stctxt] = True
+            state["scrolling"][ctrl1] = state["scrolling"][ctrl2] = True
 
             pos1 = ctrl1.GetScrollPos(wx.VERTICAL)
             if not isinstance(event, wx.ScrollWinEvent):           pos1 = ctrl1.FirstVisibleLine
@@ -8316,62 +8432,37 @@ class ColumnDialog(wx.Dialog):
             if isinstance(event, controls.CaretPositionEvent):
                 ctrl2.SetSelection(event.Int, event.Int)
 
-            state["scrolling"][stchex] = state["scrolling"][stctxt] = False
-
-        def on_change(ctrl1, value=None):
-            if state["changing"].get(ctrl1): return
-
-            ctrl2 = stctxt if ctrl1 is stchex else stchex
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                if ctrl2.Value == ctrl1.Value: return
-
-            state["changing"][ctrl2] = True
-            ctrl2.UpdateValue(ctrl1.Value)
-            ctrl2.SetFirstVisibleLine(ctrl1.FirstVisibleLine)
-            wx.CallAfter(state["changing"].update, {ctrl2: False})
-            self._Populate(ctrl1.Value, skip=NAME)
+            state["scrolling"][ctrl1] = state["scrolling"][ctrl2] = False
 
         def on_paste(value, propagate=False):
-            stchex.InsertInto(value)
-            if propagate: self._Populate(stchex.Value, skip=NAME)
+            ctrl = self.FindFocus()
+            if ctrl not in (stchex, stctxt): ctrl = stchex
+            ctrl.InsertInto(value)
+            if propagate: self._Populate(ctrl.Value, skip=NAME)
 
         def on_position(event):
             on_scroll(event)
             set_status()
 
         def on_select(event):
-            ctrl1 = event.EventObject
-            ctrl2 = stctxt if ctrl1 is stchex else stchex
-            if ctrl1.Anchor <= ctrl1.CurrentPos: ctrl2.SetSelection(*ctrl1.GetSelection())
-            else: ctrl2.SetAnchor(ctrl1.Anchor + (ctrl1 is stchex)), ctrl2.SetCurrentPos(ctrl1.CurrentPos)
+            ctrl1, ctrl2 = event.EventObject, event.EventObject.Mirror
+            ctrl2.SetSelection(*ctrl1.GetSelection())
 
         def on_tab(event):
-            ctrl1 = event.EventObject
-            ctrl2 = stctxt if ctrl1 is stchex else stchex
-            if event.KeyCode in controls.KEYS.TAB: ctrl2.SetFocus()
+            if event.KeyCode in controls.KEYS.TAB:
+                event.EventObject.Mirror.SetFocus()
             else: event.Skip()
 
-        def on_undoredo(event):
+        def on_change(event):
             event.Skip()
-            if not event.ModificationType & (wx.stc.STC_PERFORMED_UNDO | wx.stc.STC_PERFORMED_REDO) \
-            or any(state["changing"].values()):
-                return
-            ctrl1 = event.EventObject
+            if event.ModificationType & (
+                wx.stc.STC_PERFORMED_UNDO | wx.stc.STC_PERFORMED_REDO |
+                wx.stc.STC_MOD_DELETETEXT | wx.stc.STC_MOD_INSERTTEXT
+            ):
+                self._Populate(event.EventObject.Value, skip=NAME)
 
-            ctrl2 = stctxt if ctrl1 is stchex else stchex
-            if not (ctrl2.CanUndo() if event.ModificationType & wx.stc.STC_PERFORMED_UNDO 
-            else ctrl2.CanRedo()): return
-
-            state["changing"][ctrl2] = state["changing"][stctxt] = True
-            ctrl2.Undo() if event.ModificationType & wx.stc.STC_PERFORMED_UNDO else ctrl2.Redo()
-            ctrl2.SetFirstVisibleLine(ctrl1.FirstVisibleLine)
-            stctxt.UpdateBytes(stchex.Value) # Restore bytes
-            self._Populate(ctrl1.Value, skip=NAME)
-            wx.CallLater(1, state["changing"].clear)
-
-        def on_undo(*a, **kw): stchex.Undo()
-        def on_redo(*a, **kw): stchex.Redo()
+        def on_undo(*a, **kw): stchex.Undo(mirror=True)
+        def on_redo(*a, **kw): stchex.Redo(mirror=True)
 
         def set_status():
             status1.Label = "Offset: %s (0x%X)" % (stchex.CurrentPos, stchex.CurrentPos)
@@ -8379,62 +8470,57 @@ class ColumnDialog(wx.Dialog):
             page.Layout()
 
         def update(value, reset=False, propagate=False):
-            state["changing"][stchex] = state["changing"][stctxt] = True
             if reset or state["pristine"]:
                 stchex.Value = stctxt.Value = value
-                stchex.EmptyUndoBuffer(), stctxt.EmptyUndoBuffer()
+                stchex.EmptyUndoBuffer(mirror=True)
             else:
-                for s in stchex, stctxt: s.UpdateValue(value)
+                stchex.UpdateValue(value, mirror=True)
             state["pristine"] = False
             set_status()
             if propagate: self._Populate(value, skip=NAME)
-            wx.CallAfter(state["changing"].clear)
 
 
         tb      = self._MakeToolBar(page, NAME, filelabel="binary", paste=on_paste, undo=on_undo, redo=on_redo)
         hint    = wx.StaticText(page)
-        stchex  = controls.HexTextCtrl(page,  style=wx.BORDER_NONE)
-        stctxt  = controls.ByteTextCtrl(page, style=wx.BORDER_NONE)
+        panel   = wx.ScrolledWindow(page)
+        stchex  = controls.HexTextCtrl (panel, style=wx.BORDER_STATIC)
+        stctxt  = controls.ByteTextCtrl(panel, style=wx.BORDER_STATIC)
         status1 = wx.StaticText(page)
         status2 = wx.StaticText(page)
 
+        panel.SetScrollRate(20, 0)
         hint.Label = "Value as hexadecimal bytes"
-        ColourManager.Manage(hint,    "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
+        ColourManager.Manage(hint, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
         stchex.UseVerticalScrollBar = False
+        stchex.Mirror, stctxt.Mirror = stctxt, stchex
 
-        page.Sizer     = wx.BoxSizer(wx.VERTICAL)
-        sizer_header   = wx.BoxSizer(wx.HORIZONTAL)
-        stc_sizer      = wx.BoxSizer(wx.HORIZONTAL)
-        sizer_footer   = wx.BoxSizer(wx.HORIZONTAL)
+        page.Sizer   = wx.BoxSizer(wx.VERTICAL)
+        sizer_header = wx.BoxSizer(wx.HORIZONTAL)
+        panel.Sizer  = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_footer = wx.BoxSizer(wx.HORIZONTAL)
 
         sizer_header.Add(tb,   border=5, flag=wx.ALL)
         sizer_header.AddStretchSpacer()
         sizer_header.Add(hint, border=5, flag=wx.ALL | wx.ALIGN_BOTTOM)
 
-        stc_sizer.Add(stchex,  flag=wx.GROW, proportion=1)
-        stc_sizer.Add(stctxt, flag=wx.GROW, proportion=1)
+        panel.Sizer.Add(stchex, flag=wx.GROW)
+        panel.Sizer.Add(stctxt, flag=wx.GROW)
 
         sizer_footer.Add(status1, border=5, flag=wx.ALL)
         sizer_footer.AddStretchSpacer()
         sizer_footer.Add(status2, border=5, flag=wx.ALL)
 
         page.Sizer.Add(sizer_header, flag=wx.GROW)
-        page.Sizer.Add(stc_sizer, border=5, flag=wx.RIGHT | wx.GROW, proportion=1)
+        page.Sizer.Add(panel, border=5, flag=wx.RIGHT | wx.GROW, proportion=1)
         page.Sizer.Add(sizer_footer, flag=wx.GROW)
 
-        handler1 = functools.partial(self._OnChar, name=NAME, handler=functools.partial(on_change, stchex))
-        handler2 = functools.partial(self._OnChar, name=NAME, handler=functools.partial(on_change, stctxt))
-        stchex.Bind(wx.EVT_CHAR_HOOK,        handler1)
         stchex.Bind(wx.EVT_KEY_DOWN,         on_tab)
-        stchex.Bind(wx.stc.EVT_STC_MODIFIED, on_undoredo)
-        stchex.Bind(wx.stc.EVT_STC_MODIFIED, handler1)
+        stchex.Bind(wx.stc.EVT_STC_MODIFIED, on_change)
         stchex.Bind(controls.EVT_CARET_POS,  on_position)
         stchex.Bind(controls.EVT_LINE_POS,   on_scroll)
         stchex.Bind(controls.EVT_SELECT,     on_select)
-        stctxt.Bind(wx.EVT_CHAR_HOOK,        handler2)
         stctxt.Bind(wx.EVT_KEY_DOWN,         on_tab)
-        stctxt.Bind(wx.stc.EVT_STC_MODIFIED, on_undoredo)
-        stctxt.Bind(wx.stc.EVT_STC_MODIFIED, handler2)
+        stctxt.Bind(wx.stc.EVT_STC_MODIFIED, on_change)
         stctxt.Bind(wx.EVT_SCROLLWIN,        on_scroll)
         stctxt.Bind(controls.EVT_CARET_POS,  on_position)
         stctxt.Bind(controls.EVT_LINE_POS,   on_scroll)
@@ -8443,7 +8529,7 @@ class ColumnDialog(wx.Dialog):
         self._getters[NAME] = stchex.GetValue
         self._setters[NAME] = update
         self._reprers[NAME] = stchex.GetHex
-        state = self._state.setdefault(NAME, {"pristine": True, "scrolling": {}, "changing": {}})
+        state = self._state.setdefault(NAME, {"pristine": True, "scrolling": {}})
         return page
 
 
@@ -8480,7 +8566,7 @@ class ColumnDialog(wx.Dialog):
         cb     = wx.CheckBox(page, label="&Validate")
         status = wx.StaticText(page)
 
-        hint.Label = "Value shown as JSON, with simple validation check"
+        hint.Label = "Value in JSON highlight, with simple validation check"
         cb.ToolTip = "Show warning if value is not parseable as JSON"
         cb.Value   = True
         ColourManager.Manage(hint, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
@@ -8719,8 +8805,16 @@ class ColumnDialog(wx.Dialog):
             dbutton.Enabled = tbutton.Enabled = ubutton.Enabled = zbutton.Enabled = False
             state["numeric"] = False
             dtlabel.Font, tslabel.Font = font_bold, font_normal
-            if not isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
-                if self._gridbase.db.get_affinity(self._coldata) in ("INTEGER", "REAL"):
+
+            if isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
+                if isinstance(value, datetime.datetime):
+                    dt, d, t = value, value.date(), value.time()
+                    x = calendar.timegm(dt.timetuple()) + dt.microsecond / 1e6
+                    if x >= 0: ts = x if x % 1 else int(x)
+                elif isinstance(value, datetime.date): d = value
+                elif isinstance(value, datetime.time): t = value
+            else:
+                if database.Database.get_affinity(self._coldata) in ("INTEGER", "REAL"):
                     state["numeric"] = True
                     dtlabel.Font, tslabel.Font = font_normal, font_bold
                     try: x = datetime.datetime.utcfromtimestamp(float(value))
@@ -8729,7 +8823,11 @@ class ColumnDialog(wx.Dialog):
                         ts = float(value)
                         if not ts % 1: ts = int(ts)
                 else: x = util.parse_datetime(value)
-                if isinstance(x, datetime.datetime): dt, d, t = x, x.date(), x.time()
+                if isinstance(x, datetime.datetime):
+                    dt, d, t = x, x.date(), x.time()
+                    if ts is None:
+                        y = calendar.timegm(dt.timetuple()) + dt.microsecond / 1e6
+                        if y >= 0: ts = y if y % 1 else int(y)
             if not dt and not isinstance(value, (datetime.date, datetime.time)):
                 x = util.parse_date(value)
                 if isinstance(x, datetime.date): d = x
@@ -8774,18 +8872,19 @@ class ColumnDialog(wx.Dialog):
 
         tb      = self._MakeToolBar(page, NAME, load=False, save=False, undo=False, redo=False)
         hint    = wx.StaticText(page)
-        dcb     = wx.CheckBox(page, label="&Date:")
-        dedit   = wx.adv.CalendarCtrl(page, style=wx.BORDER_NONE)
-        dbutton = wx.Button(page, label="Today", size=(50, 18))
-        tcb     = wx.CheckBox(page, label="&Time:")
-        tedit   = wx.adv.TimePickerCtrl(page)
-        tbutton = wx.Button(page, label="Now", size=(50, 18))
-        ucb     = wx.CheckBox(page, label="&Microseconds:")
-        uedit   = wx.SpinCtrl(page, size=(70, -1))
-        ubutton = wx.Button(page, label="Now", size=(50, 18))
-        zcb     = wx.CheckBox(page, label="Time&zone:")
-        zedit   = wx.Choice(page, size=(70, -1))
-        zbutton = wx.Button(page, label="Local", size=(50, 18))
+        panel   = wx.ScrolledWindow(page)
+        dcb     = wx.CheckBox(panel, label="&Date:")
+        dedit   = wx.adv.CalendarCtrl(panel, style=wx.BORDER_NONE)
+        dbutton = wx.Button(panel, label="Today", size=(50, 18))
+        tcb     = wx.CheckBox(panel, label="&Time:")
+        tedit   = wx.adv.TimePickerCtrl(panel)
+        tbutton = wx.Button(panel, label="Now", size=(50, 18))
+        ucb     = wx.CheckBox(panel, label="&Microseconds:")
+        uedit   = wx.SpinCtrl(panel, size=(70, -1))
+        ubutton = wx.Button(panel, label="Now", size=(50, 18))
+        zcb     = wx.CheckBox(panel, label="Time&zone:")
+        zedit   = wx.Choice(panel, size=(70, -1))
+        zbutton = wx.Button(panel, label="Local", size=(50, 18))
         dtlabel = wx.StaticText(page, label="Dat&e or time:", style=wx.ALIGN_RIGHT)
         dtedit  = wx.TextCtrl(page, size=(200, -1))
         tslabel = wx.StaticText(page, label="&Unix timestamp:", style=wx.ALIGN_RIGHT)
@@ -8793,6 +8892,7 @@ class ColumnDialog(wx.Dialog):
 
         hint.Label = "Value as date or time"
         ColourManager.Manage(hint, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
+        panel.SetScrollRate(20, 20)
         tedit.SetTime(0, 0, 0)
         uedit.SetRange(0, 999999)
         dcb.Value = tcb.Value = ucb.Value = False
@@ -8801,7 +8901,7 @@ class ColumnDialog(wx.Dialog):
         tslabel.Font = font_bold
         dtlabel.MinSize = tslabel.MinSize = tslabel.Size
         tslabel.Font = font_normal
-        dtedit.MinSize = tsedit.MinSize = (250, -1)
+        panel.MinSize = (300, 300)
 
         jan = datetime.datetime.now().replace(month=1, day=2, hour=1)
         offset = lambda z: z.utcoffset(jan).total_seconds() / 3600
@@ -8813,6 +8913,7 @@ class ColumnDialog(wx.Dialog):
         page.Sizer   = wx.BoxSizer(wx.VERTICAL)
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
         sizer_center = wx.BoxSizer(wx.HORIZONTAL)
+        panel.Sizer  = wx.BoxSizer(wx.VERTICAL)
         sizer_left   = wx.GridBagSizer(vgap=5, hgap=5)
         sizer_right  = wx.FlexGridSizer(cols=2, vgap=20, hgap=5)
 
@@ -8833,13 +8934,15 @@ class ColumnDialog(wx.Dialog):
         sizer_left.Add(zedit,    pos=(4, 1))
         sizer_left.Add(zbutton,  pos=(4, 2), flag=wx.ALIGN_CENTER_VERTICAL)
 
+        panel.Sizer.Add(sizer_left, proportion=1, flag=wx.GROW)
+
         sizer_right.Add(dtlabel, flag=wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_right.Add(dtedit, border=5, flag=wx.RIGHT)
         sizer_right.Add(tslabel, flag=wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_right.Add(tsedit, border=5, flag=wx.RIGHT)
 
         sizer_center.AddStretchSpacer()
-        sizer_center.Add(sizer_left,  border=10, flag=wx.RIGHT | wx.ALIGN_CENTER)
+        sizer_center.Add(panel,       border=10, flag=wx.RIGHT | wx.ALIGN_CENTER, proportion=1)
         sizer_center.Add(sizer_right, border=10, flag=wx.TOP   | wx.ALIGN_CENTER)
         sizer_center.AddStretchSpacer()
 
@@ -9055,7 +9158,7 @@ class ColumnDialog(wx.Dialog):
         return page
 
 
-    def _OnChar(self, event, name=None, handler=None, mask=None, delay=1000):
+    def _OnChar(self, event, name=None, handler=None, mask=None, delay=1000, skip=None):
         if isinstance(event, wx.KeyEvent) and mask and not event.HasModifiers() \
         and unichr(event.UnicodeKey) not in mask \
         and event.KeyCode not in controls.KEYS.NAVIGATION + controls.KEYS.COMMAND: 
@@ -9071,12 +9174,12 @@ class ColumnDialog(wx.Dialog):
         if not handler or changestate is True \
         or isinstance(changestate, dict) and changestate.get(event.EventObject) \
         or isinstance(event, wx.KeyEvent) and (event.HasModifiers()
-        or 0 < event.UnicodeKey < wx.WXK_SPACE
+        or 0 <= event.UnicodeKey < wx.WXK_SPACE
         and event.KeyCode not in controls.KEYS.COMMAND + controls.KEYS.TAB) \
+        or isinstance(event, wx.KeyEvent) and skip \
+        and not event.HasModifiers() and event.KeyCode in skip \
         or isinstance(event, wx.stc.StyledTextEvent) and not event.ModificationType & (
-            wx.stc.STC_MOD_BEFOREDELETE | wx.stc.STC_MOD_BEFOREINSERT | 
-            wx.stc.STC_MOD_DELETETEXT   | wx.stc.STC_MOD_INSERTCHECK  | 
-            wx.stc.STC_MOD_INSERTTEXT
+            wx.stc.STC_MOD_DELETETEXT | wx.stc.STC_MOD_INSERTTEXT
         ):
             return
         if self._timer: self._timer.Stop()

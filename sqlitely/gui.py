@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.07.2020
+@modified    06.08.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -97,6 +97,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.db_filter = "" # Current database list filter
         self.db_filter_timer = None # Database list filter callback timer
         self.db_menustate    = {}   # {filename: {} if refresh or {full: True} if reload}
+        self.columndlg = None       # Dummy column dialog for Help -> Show value editor
         self.page_db_latest = None  # Last opened database page
         # List of Notebook pages user has visited, used for choosing page to
         # show when closing one.
@@ -349,8 +350,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
              "Open the database."),
             ("button_saveas", "Save &as..", images.ButtonSaveAs,
              "Save a copy under another name."),
-            ("button_remove", "Remove", images.ButtonRemove,
-             "Remove from list."), ]
+            ("button_remove", "Remove", images.ButtonRemoveType,
+             "Remove from list."),
+            ("button_delete", "Delete", images.ButtonRemove,
+             "Delete from disk."), ]
         for name, label, img, note in BUTTONS_DETAIL:
             button = controls.NoteButton(panel_detail, label, note, img.Bitmap)
             setattr(self, name, button)
@@ -378,6 +381,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.button_open.Bind(wx.EVT_BUTTON,      self.on_open_current_database)
         self.button_saveas.Bind(wx.EVT_BUTTON,    self.on_save_database_as)
         self.button_remove.Bind(wx.EVT_BUTTON,    self.on_remove_database)
+        self.button_delete.Bind(wx.EVT_BUTTON,    self.on_delete_database)
 
         panel_main.Sizer.Add(label_main, border=10, flag=wx.ALL)
         panel_main.Sizer.Add((0, 10))
@@ -394,6 +398,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         panel_detail.Sizer.Add(self.button_open,   flag=wx.GROW)
         panel_detail.Sizer.Add(self.button_saveas, flag=wx.GROW)
         panel_detail.Sizer.Add(self.button_remove, flag=wx.GROW)
+        panel_detail.Sizer.Add(self.button_delete, flag=wx.GROW)
         panel_right.Sizer.Add(panel_main,   proportion=1, flag=wx.GROW)
         panel_right.Sizer.Add(panel_detail, proportion=1, flag=wx.GROW)
         sizer_header.Add(label_count, flag=wx.ALIGN_BOTTOM)
@@ -550,6 +555,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_console = self.menu_console = menu_help.Append(wx.ID_ANY,
             "Show Python &console\t%s-E" % controls.KEYS.NAME_CTRL,
             "Show/hide a Python shell environment window", kind=wx.ITEM_CHECK)
+        menu_editor = self.menu_editor = menu_help.Append(wx.ID_ANY,
+            "Show value &editor",
+            "Show/hide a dummy column value editor", kind=wx.ITEM_CHECK)
         menu_help.AppendSeparator()
         if self.trayicon.IsAvailable():
             menu_tray = self.menu_tray = menu_help.Append(wx.ID_ANY,
@@ -575,19 +583,20 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_tools_export_spreadsheet.Enabled = bool(importexport.xlsxwriter)
 
         menu.Bind(wx.EVT_MENU_OPEN, self.on_menu_open)
-        self.Bind(wx.EVT_MENU, self.on_new_database, menu_new_database)
-        self.Bind(wx.EVT_MENU, self.on_open_database, menu_open_database)
-        self.Bind(wx.EVT_MENU, self.on_save_active_database, menu_save_database)
+        self.Bind(wx.EVT_MENU, self.on_new_database,            menu_new_database)
+        self.Bind(wx.EVT_MENU, self.on_open_database,           menu_open_database)
+        self.Bind(wx.EVT_MENU, self.on_save_active_database,    menu_save_database)
         self.Bind(wx.EVT_MENU, self.on_save_active_database_as, menu_save_database_as)
-        self.Bind(wx.EVT_MENU, self.on_open_options, menu_options)
-        self.Bind(wx.EVT_MENU, self.on_exit, menu_exit)
-        self.Bind(wx.EVT_MENU, self.on_check_update, menu_update)
-        self.Bind(wx.EVT_MENU, self.on_menu_homepage, menu_homepage)
-        self.Bind(wx.EVT_MENU, self.on_showhide_log, menu_log)
-        self.Bind(wx.EVT_MENU, self.on_toggle_console, menu_console)
+        self.Bind(wx.EVT_MENU, self.on_open_options,            menu_options)
+        self.Bind(wx.EVT_MENU, self.on_exit,                    menu_exit)
+        self.Bind(wx.EVT_MENU, self.on_check_update,            menu_update)
+        self.Bind(wx.EVT_MENU, self.on_menu_homepage,           menu_homepage)
+        self.Bind(wx.EVT_MENU, self.on_showhide_log,            menu_log)
+        self.Bind(wx.EVT_MENU, self.on_toggle_console,          menu_console)
+        self.Bind(wx.EVT_MENU, self.on_toggle_columneditor,     menu_editor)
         if self.trayicon.IsAvailable():
-            self.Bind(wx.EVT_MENU, self.on_toggle_iconize, menu_iconize)
-            self.Bind(wx.EVT_MENU, self.on_toggle_trayicon, menu_tray)
+            self.Bind(wx.EVT_MENU, self.on_toggle_iconize,      menu_iconize)
+            self.Bind(wx.EVT_MENU, self.on_toggle_trayicon,     menu_tray)
         self.Bind(wx.EVT_MENU, self.on_toggle_autoupdate_check,
                   menu_autoupdate_check)
         self.Bind(wx.EVT_MENU, self.on_about, menu_about)
@@ -746,7 +755,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.trayicon.SetIcon(self.TRAY_ICON.Icon, conf.Title)
             if self.menu_console.IsChecked(): self.frame_console.Hide()
         else:
-            self.Iconize(False), self.Show(), self.Raise()
+            self.Iconize(False), self.Show(), self.Restore()
             conf.WindowPosition = self.Position[:]
             if self.menu_console.IsChecked():
                 self.frame_console.Show(), self.frame_console.Iconize(False)
@@ -789,11 +798,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         history_file.UseMenu(menu_recent)
 
         label = ["Minimize to", "Restore from"][conf.WindowIconized] + " &tray"
+        item_new = wx.MenuItem(menu, -1, "&New database")
         item_toggle = wx.MenuItem(menu, -1, label)
         item_icon = wx.MenuItem(menu, -1, kind=wx.ITEM_CHECK,
                                 text="Show &icon in notification area")
         item_console = wx.MenuItem(menu, -1, kind=wx.ITEM_CHECK,
                                    text="Show Python &console")
+        item_editor = wx.MenuItem(menu, -1, kind=wx.ITEM_CHECK,
+                                  text="Show value &editor")
         item_exit = wx.MenuItem(menu, -1, "E&xit %s" % conf.Title)
 
         boldfont = wx.Font(item_toggle.Font)
@@ -829,21 +841,27 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         item_recent = menu.AppendSubMenu(menu_recent, "&Recent files")
         menu.Enable(item_recent.Id, bool(conf.RecentFiles))
+        menu.Append(item_new)
         menu.AppendSeparator()
         menu.Append(item_toggle)
         menu.Append(item_icon)
+        menu.AppendSeparator()
         menu.Append(item_console)
+        menu.Append(item_editor)
         menu.AppendSeparator()
         menu.Append(item_exit)
         item_icon.Check(True)
         item_console.Check(self.frame_console.Shown)
+        item_editor.Check(bool(self.columndlg and self.columndlg.Shown))
 
         menu.Bind(wx.EVT_MENU_RANGE, on_recent_file, id=wx.ID_FILE1,
                   id2=wx.ID_FILE1 + conf.MaxRecentFiles)
-        menu.Bind(wx.EVT_MENU, self.on_toggle_iconize,  item_toggle)
-        menu.Bind(wx.EVT_MENU, self.on_toggle_trayicon, item_icon)
-        menu.Bind(wx.EVT_MENU, self.on_toggle_console,  item_console)
-        menu.Bind(wx.EVT_MENU, self.on_exit,            item_exit)
+        menu.Bind(wx.EVT_MENU, self.on_new_database,        item_new)
+        menu.Bind(wx.EVT_MENU, self.on_toggle_iconize,      item_toggle)
+        menu.Bind(wx.EVT_MENU, self.on_toggle_trayicon,     item_icon)
+        menu.Bind(wx.EVT_MENU, self.on_toggle_console,      item_console)
+        menu.Bind(wx.EVT_MENU, self.on_toggle_columneditor, item_editor)
+        menu.Bind(wx.EVT_MENU, self.on_exit,                item_exit)
         self.trayicon.PopupMenu(menu)
 
 
@@ -1182,9 +1200,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for dragging items around in dblist, saves file order."""
         event.Skip()
         def save_list_order():
-            del conf.DBFiles[:]
-            for i in range(self.list_db.GetItemCountFull()):
-                conf.DBFiles.append(self.list_db.GetItemTextFull(i))
+            conf.DBFiles = [self.list_db.GetItemText(i)
+                            for i in range(1, self.list_db.GetItemCountFull())]
             conf.save()
         wx.CallAfter(save_list_order) # Allow list to update items
 
@@ -1200,7 +1217,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.db_filter_timer = None
             if search != self.db_filter: return
             self.list_db.SetFilter(search)
-            self.update_database_count()
+            self.update_database_list()
 
         if self.db_filter_timer: self.db_filter_timer.Stop()
         self.db_filter = search
@@ -1323,7 +1340,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         @param   filename  possibly new filename, if any (single string or list)
         @return            True if was file was new or changed, False otherwise
         """
-        result = False
+        result, refresh_idxs = False, []
         # Insert into database lists, if not already there
         if isinstance(filenames, basestring): filenames = [filenames]
         for filename in filenames:
@@ -1347,7 +1364,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             or data_old["last_modified"] != data["last_modified"]:
                 if not data_old or "name" not in data_old:
                     self.list_db.AppendRow(data, [1])
-                self.db_datas.setdefault(filename, {}).update(data)
+                self.db_datas.setdefault(filename, defaultdict(lambda: None, name=filename))
+                self.db_datas[filename].update(data)
+                idx = next((i for i in range(1, self.list_db.GetItemCount())
+                            if self.list_db.GetItemText(i) == filename), None)
+                if idx: refresh_idxs.append(idx)
                 result = True
 
         if self.button_missing.Shown != (self.list_db.GetItemCount() > 1):
@@ -1355,6 +1376,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.button_clear.Show(self.list_db.GetItemCount() > 1)
             self.panel_db_main.Layout()
         self.update_database_count()
+        for idx in refresh_idxs: self.list_db.RefreshRow(idx)
         return result
 
 
@@ -1398,10 +1420,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     self.label_modified.Value = dt.strftime("%Y-%m-%d %H:%M:%S")
                     data = self.db_datas[filename]
                     if data["size"] == sz and data["last_modified"] == dt \
-                    and data.get("tables") is not None:
+                    and data.get("tables"):
                         # File does not seem changed: use cached values
                         self.label_tables.Value = data["tables"]
                     else:
+                        data.update(size=sz, last_modified=dt)
+                        idx = next((i for i in range(1, self.list_db.GetItemCount())
+                                    if self.list_db.GetItemText(i) == filename), None)
+                        if idx: self.list_db.RefreshRow(idx)
                         wx.CallLater(10, self.update_database_stats, filename)
                 else:
                     self.label_size.Value = "File does not exist."
@@ -1416,21 +1442,44 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_clear_databases(self, event):
         """Handler for clicking to clear the database list."""
+        count = self.list_db.GetItemCount() - 1
+        total = len([v for v in self.db_datas.values() if "name" in v])
+        t = "all" if count == total else "current"
         if (self.list_db.GetItemCount() > 1) and wx.YES != controls.YesNoMessageBox(
-            "Are you sure you want to clear the list of all databases?",
+            "Are you sure you want to clear the list of %s databases?" % t,
             conf.Title, wx.ICON_INFORMATION, defaultno=True
         ): return
 
-        self.list_db.Populate([])
-        del conf.DBFiles[:]
+        if count == total:
+            self.list_db.Populate([])
+            del conf.DBFiles[:]
+            del conf.RecentFiles[:]
+            conf.LastSearchResults.clear()
+            while self.history_file.Count:
+                self.history_file.RemoveFileFromHistory(0)
+            for k, v in (self.db_datas.items()): v.pop("name", None)
+        else:
+            files = [self.list_db.GetItemMappedData(i)["name"]
+                     for i in range(1, self.list_db.GetItemCount())]
+            for f in files:
+                self.db_datas.get(f, {}).pop("name", None)
+                conf.LastSearchResults.pop(f, None)
+                for lst in conf.DBFiles, conf.RecentFiles:
+                    if f in lst: lst.remove(f)
+            self.list_db.Freeze()
+            try:
+                for i in range(self.list_db.GetItemCount())[::-1]:
+                    if self.list_db.GetItemText(i) in files:
+                        self.list_db.DeleteItem(i)
+            finally: self.list_db.Thaw()
+            # Remove from recent file history
+            historyfiles = [(i, self.history_file.GetHistoryFile(i))
+                            for i in range(self.history_file.Count)]
+            for i in [i for i, f in historyfiles if f in files][::-1]:
+                self.history_file.RemoveFileFromHistory(i)
+
         del conf.LastSelectedFiles[:]
-        del conf.RecentFiles[:]
-        conf.LastSearchResults.clear()
-        while self.history_file.Count:
-            self.history_file.RemoveFileFromHistory(0)
         del self.dbs_selected[:]
-        for v in self.db_datas.values(): v.pop("name", None)
-        self.dbs.clear()
         conf.save()
         self.update_database_list()
 
@@ -1663,6 +1712,50 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.menu_log.Check(False)
 
 
+    def on_toggle_columneditor(self, event):
+        """Handler for clicking to show/hide dummy column value editor."""
+        if self.columndlg is None:
+            cols = [{"name": "text",    "type": "TEXT"},
+                    {"name": "float",   "type": "REAL"},
+                    {"name": "integer", "type": "INTEGER"},
+                    {"name": "long",    "type": "BIGINT"}]
+            rowdata = {"text": "", "integer": 0, "long": 0L, "float": 0.0}
+
+            dummydb = lambda: None
+            dummydb.get_keys = lambda *a, **kw: ([], [])
+
+            dummygridbase = lambda: None
+            dummygridbase.category = "dummy"
+            dummygridbase.columns = cols
+            dummygridbase.db = dummydb
+            dummygridbase.name = "dummy"
+            dummygridbase.KEY_NEW = components.SQLiteGridBase.KEY_NEW
+            dummygridbase.GetRowData = lambda *a, **kw: dict(rowdata)
+
+            def onclose(event):
+                event.Skip()
+                if not isinstance(event, wx.ShowEvent) or not event.Show:
+                    self.menu_editor.Check(False)
+
+            kws = dict(title="Value editor", style=wx.CAPTION | wx.CLOSE_BOX | 
+                       wx.MINIMIZE_BOX | wx.MAXIMIZE_BOX | wx.RESIZE_BORDER | 
+                       wx.DIALOG_NO_PARENT, row=0, col=0, rowdata=rowdata,
+                       columnlabel="type")
+            dlg = components.ColumnDialog(None, dummygridbase, **kws)
+            dlg.SetIcons(images.get_appicons())
+            dlg.Bind(wx.EVT_CLOSE, onclose)
+            dlg.Bind(wx.EVT_SHOW,  onclose)
+            dlg._button_reset.Show()
+            dlg._label_meta.Hide()
+            dlg.Size = 640, 390
+            d = wx.Display(self)
+            dlg.Position = [d.ClientArea[i] + a - b
+                            for i, (a, b) in enumerate(zip(d.ClientArea[2:], dlg.Size))]
+            self.columndlg = dlg
+        self.columndlg.Show(not self.columndlg.Shown)
+        self.menu_editor.Check(self.columndlg.Shown)
+
+
     def on_open_options(self, event):
         """
         Handler for opening advanced options, creates the property dialog
@@ -1736,6 +1829,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         Handler for new database menu or button, opens a temporary file database.
         """
+        if conf.WindowIconized: self.on_toggle_iconize()
         self.load_database_page(None)
 
 
@@ -1760,6 +1854,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         detection in a background thread.
         """
         if self.worker_detection.is_working():
+            guibase.status()
             self.worker_detection.stop_work()
             self.button_detect.Label = "Detect databases"
         else:
@@ -2155,7 +2250,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if db:
                 guibase.status("Opening database %s." % db, flash=True)
                 tab_title = self.get_unique_tab_title(db.name)
-                self.db_datas.setdefault(db.filename, {})["title"] = tab_title
+                self.db_datas.setdefault(db.filename, defaultdict(lambda: None, name=db.filename))
+                self.db_datas[db.filename]["title"] = tab_title
                 page = DatabasePage(self.notebook, tab_title, db, self.memoryfs)
                 conf.DBsOpen[db.filename] = db
                 self.db_pages[page] = db

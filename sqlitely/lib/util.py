@@ -8,13 +8,14 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.06.2020
+@modified    05.08.2020
 ------------------------------------------------------------------------------
 """
 import collections
 import contextlib
 import ctypes
 import datetime
+import htmlentitydefs
 import locale
 import math
 import os
@@ -29,7 +30,6 @@ import warnings
 
 from PIL import Image
 import pytz
-import wx
 
 
 class CaselessDict(dict):
@@ -267,6 +267,16 @@ def unprint(s, escape=True):
     enc = "unicode_escape" if isinstance(s, unicode) else "string_escape"
     repl = (lambda m: m.group(0).encode(enc)) if escape else ""
     return re.sub(r"[\x00-\x1f]", repl, s)
+
+
+def html_escape(v):
+    """Converts characters like "ä" in string to HTML entities like "&auml;"."""
+    lookup, patterns = {}, []
+    for cp, n in htmlentitydefs.codepoint2name.items():
+        c = unichr(cp)
+        if "'" != c: patterns.append(c); lookup[c] = n
+    subst = lambda m: "&%s;" % lookup[m.group(0)]
+    return re.sub("[%s]" % "".join(patterns), subst, v)
 
 
 def format_bytes(size, precision=2, max_units=True, with_units=True):
@@ -616,21 +626,41 @@ def path_to_url(path, encoding="utf-8"):
     return url
 
 
+def to_str(value, encoding=None):
+    """
+    Returns the value as an 8-bit  string. Tries encoding as UTF-8 if
+    locale encoding fails.
+    """
+    result = value
+    if isinstance(value, unicode):
+        encoding = encoding or locale.getpreferredencoding()
+        try: result = value.encode(encoding)
+        except Exception:
+            try: result = value.encode("utf-8", errors="backslashreplace")
+            except Exception:
+                try: result = value.encode("latin1", errors="backslashreplace")
+                except Exception: result = value.encode("latin1", errors="replace")
+    elif not isinstance(value, str): result = str(value)
+    return result
+
+
 def to_unicode(value, encoding=None):
     """
     Returns the value as a Unicode string. Tries decoding as UTF-8 if
-    locale encoading fails.
+    locale decoding fails.
     """
     result = value
     if not isinstance(value, unicode):
         encoding = encoding or locale.getpreferredencoding()
-        if isinstance(value, str):
-            try:
-                result = unicode(value, encoding)
+        if not isinstance(value, str):
+            try: value = str(value)
+            except Exception: value = repr(value)
+        try: result = unicode(value, encoding)
+        except Exception:
+            try: result = unicode(value, "utf-8", errors="backslashreplace")
             except Exception:
-                result = unicode(value, "utf-8", errors="replace")
-        else:
-            result = unicode(str(value), errors="replace")
+                try: result = unicode(value, "latin1", errors="backslashreplace")
+                except Exception: result = unicode(value, "latin1", errors="replace")
     return result
 
 

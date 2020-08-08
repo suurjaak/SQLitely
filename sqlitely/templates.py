@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.06.2020
+@modified    05.08.2020
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -724,6 +724,8 @@ under the MIT License.
 <ul>
   <li>ANTLR4,
       <a href="https://www.antlr.org/"><font color="{{ conf.LinkColour }}">antlr.org</font></a></li>
+  <li>appdirs,
+      <a href="https://pypi.org/project/appdirs/"><font color="{{ conf.LinkColour }}">pypi.org/project/appdirs</font></a></li>
   <li>openpyxl,
       <a href="https://pypi.org/project/openpyxl"><font color="{{ conf.LinkColour }}">
           pypi.org/project/openpyxl</font></a></li>
