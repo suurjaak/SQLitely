@@ -1854,6 +1854,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         detection in a background thread.
         """
         if self.worker_detection.is_working():
+            guibase.status()
             self.worker_detection.stop_work()
             self.button_detect.Label = "Detect databases"
         else:
