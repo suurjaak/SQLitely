@@ -902,7 +902,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     continue # for row
 
             sql = row["sql"].strip().replace("\r\n", "\n")
-            sql = re.sub("\n\s+\)[\s;]*$", "\n)", sql)
+            sql = re.sub("\n\s+\)[\s;]*$", "\n)", sql) # Strip trailing whitespace and ;
             if not sql.endswith(";"): sql += ";"
             row["sql"] = row["sql0"] = sql
             self.schema[row["type"]][row["name"]] = row

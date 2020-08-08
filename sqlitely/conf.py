@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.08.2020
+@modified    08.08.2020
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -20,11 +20,13 @@ import os
 import platform
 import sys
 
+import appdirs
+
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.1.dev9"
-VersionDate = "05.08.2020"
+Version = "1.1"
+VersionDate = "08.08.2020"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -170,8 +172,8 @@ UnexpectedErrorCount = 0
 
 """URLs for download list, changelog, submitting feedback and homepage."""
 DownloadURL  = "https://erki.lap.ee/downloads/SQLitely/"
-ChangelogURL = "https://suurjaak.github.com/SQLitely/changelog.html"
-HomeUrl      = "https://suurjaak.github.com/SQLitely/"
+ChangelogURL = "https://suurjaak.github.io/SQLitely/changelog.html"
+HomeUrl      = "https://suurjaak.github.io/SQLitely"
 
 """Minimum allowed size for the main window, as (width, height)."""
 MinWindowSize = (600, 400)
@@ -277,13 +279,22 @@ StatusFlashLength = 20
 MaxRecentFiles = 20
 
 """Font files used for measuring text extent in export."""
-FontXlsxFile = os.path.join(ResourceDirectory, "Carlito.ttf")
+FontXlsxFile     = os.path.join(ResourceDirectory, "Carlito.ttf")
 FontXlsxBoldFile = os.path.join(ResourceDirectory, "CarlitoBold.ttf")
 
 
 def load():
     """Loads FileDirectives from ConfigFile into this module's attributes."""
-    global Defaults
+    global Defaults, ConfigFile
+
+    configpaths = [ConfigFile]
+    if not Defaults:
+        # Instantiate OS- and user-specific path
+        try:
+            p = appdirs.user_config_dir(Title, False)
+            configpaths.append(os.path.join(p, "%s.ini" % Title.lower()))
+        except Exception: pass
+
     section = "*"
     module = sys.modules[__name__]
     VARTYPES = (basestring, bool, int, long, list, tuple, dict, type(None))
@@ -293,7 +304,10 @@ def load():
     parser = RawConfigParser()
     parser.optionxform = str # Force case-sensitivity on names
     try:
-        parser.read(ConfigFile)
+        # Try user-specific path first, then path under application folder
+        for path in configpaths[::-1]:
+            if os.path.isfile(path) and parser.read(ConfigFile):
+                break # for path
 
         def parse_value(name):
             try: # parser.get can throw an error if value not found
@@ -316,15 +330,26 @@ def load():
 
 def save():
     """Saves FileDirectives into ConfigFile."""
+    configpaths = [ConfigFile]
+    try:
+        p = appdirs.user_config_dir(Title, False)
+        configpaths.append(os.path.join(p, "%s.ini" % Title.lower()))
+    except Exception: pass
+
     section = "*"
     module = sys.modules[__name__]
     parser = RawConfigParser()
     parser.optionxform = str # Force case-sensitivity on names
     parser.add_section(section)
     try:
-        try: os.makedirs(os.path.split(ConfigFile)[0])
-        except Exception: pass
-        f = open(ConfigFile, "wb")
+        for path in configpaths:
+            # Try path under application folder first, then user-specific path
+            try: os.makedirs(os.path.split(path)[0])
+            except Exception: pass
+            try: f = open(path, "wb")
+            except Exception: continue # for path
+            else: break # for path
+
         f.write("# %s %s configuration written on %s.\n" % (Title, Version,
                 datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         for name in FileDirectives:

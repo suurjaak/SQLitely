@@ -8,11 +8,12 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.07.2020
+@modified    06.08.2020
 ------------------------------------------------------------------------------
 """
 import atexit
 import os
+import re
 import stat
 import sys
 import setuptools
@@ -52,7 +53,15 @@ class CustomInstall(install):
 def readfile(path):
     """Returns contents of path, relative to current file."""
     root = os.path.dirname(os.path.abspath(__file__))
-    with open(os.path.join(root, path)) as f: return f.read().decode("utf-8")
+    with open(os.path.join(root, path)) as f: s = f.read().decode("utf-8")
+    md_link_rgx = r"\[(.+)\]\((.+)+\)"
+    def repl(m):
+        m2 = re.search(md_link_rgx, m.group(1))
+        if m2: return "%s: %s" % (m2.group(1), m2.group(2)) # Image link
+        elif m.group(1) == m.group(2): return m.group(1)    # Local link
+        else: return "%s (%s)" % (m.group(1), m.group(2)) # Web link
+    s = re.sub(md_link_rgx, repl, s)
+    return s
 
 
 setuptools.setup(
@@ -68,7 +77,9 @@ setuptools.setup(
     platforms=["any"],
     keywords="sqlite database",
 
-    install_requires=["antlr4-python2-runtime==4.8", "openpyxl<=3.0.0", "Pillow<=6.2.2", "pyparsing", "pytz", "wxPython>=4.0", "xlrd", "XlsxWriter"],
+    install_requires=["antlr4-python2-runtime==4.8", "appdirs", "openpyxl<=3.0.0",
+                      "Pillow<=6.2.2", "pyparsing", "pytz", "wxPython>=4.0",
+                      "xlrd", "XlsxWriter"],
     entry_points={"gui_scripts": ["sqlitely = sqlitely.main:run"]},
 
     packages=setuptools.find_packages(),
