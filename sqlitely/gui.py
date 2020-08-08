@@ -1340,7 +1340,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         @param   filename  possibly new filename, if any (single string or list)
         @return            True if was file was new or changed, False otherwise
         """
-        result = False
+        result, refresh_idxs = False, []
         # Insert into database lists, if not already there
         if isinstance(filenames, basestring): filenames = [filenames]
         for filename in filenames:
@@ -1366,6 +1366,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     self.list_db.AppendRow(data, [1])
                 self.db_datas.setdefault(filename, defaultdict(lambda: None, name=filename))
                 self.db_datas[filename].update(data)
+                idx = next((i for i in range(1, self.list_db.GetItemCount())
+                            if self.list_db.GetItemText(i) == filename), None)
+                if idx: refresh_idxs.append(idx)
                 result = True
 
         if self.button_missing.Shown != (self.list_db.GetItemCount() > 1):
@@ -1373,6 +1376,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.button_clear.Show(self.list_db.GetItemCount() > 1)
             self.panel_db_main.Layout()
         self.update_database_count()
+        for idx in refresh_idxs: self.list_db.RefreshRow(idx)
         return result
 
 
@@ -1416,10 +1420,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     self.label_modified.Value = dt.strftime("%Y-%m-%d %H:%M:%S")
                     data = self.db_datas[filename]
                     if data["size"] == sz and data["last_modified"] == dt \
-                    and data.get("tables") is not None:
+                    and data.get("tables"):
                         # File does not seem changed: use cached values
                         self.label_tables.Value = data["tables"]
                     else:
+                        data.update(size=sz, last_modified=dt)
+                        idx = next((i for i in range(1, self.list_db.GetItemCount())
+                                    if self.list_db.GetItemText(i) == filename), None)
+                        if idx: self.list_db.RefreshRow(idx)
                         wx.CallLater(10, self.update_database_stats, filename)
                 else:
                     self.label_size.Value = "File does not exist."
