@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.08.2020
+@modified    08.08.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -8471,7 +8471,7 @@ class ColumnDialog(wx.Dialog):
 
         def update(value, reset=False, propagate=False):
             if reset or state["pristine"]:
-                stchex.Value = value
+                stchex.Value = stctxt.Value = value
                 stchex.EmptyUndoBuffer(mirror=True)
             else:
                 stchex.UpdateValue(value, mirror=True)
