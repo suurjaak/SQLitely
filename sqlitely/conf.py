@@ -172,8 +172,8 @@ UnexpectedErrorCount = 0
 
 """URLs for download list, changelog, submitting feedback and homepage."""
 DownloadURL  = "https://erki.lap.ee/downloads/SQLitely/"
-ChangelogURL = "https://suurjaak.github.com/SQLitely/changelog.html"
-HomeUrl      = "https://suurjaak.github.com/SQLitely/"
+ChangelogURL = "https://suurjaak.github.io/SQLitely/changelog.html"
+HomeUrl      = "https://suurjaak.github.io/SQLitely"
 
 """Minimum allowed size for the main window, as (width, height)."""
 MinWindowSize = (600, 400)
