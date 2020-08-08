@@ -1749,7 +1749,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             dlg._label_meta.Hide()
             dlg.Size = 640, 390
             d = wx.Display(self)
-            dlg.Position = [a - b for a, b in zip(d.ClientArea[2:], dlg.Size)]
+            dlg.Position = [d.ClientArea[i] + a - b
+                            for i, (a, b) in enumerate(zip(d.ClientArea[2:], dlg.Size))]
             self.columndlg = dlg
         self.columndlg.Show(not self.columndlg.Shown)
         self.menu_editor.Check(self.columndlg.Shown)
