@@ -1,5 +1,5 @@
-SQLitely 1.0
-============
+SQLitely
+========
 
 SQLitely is an SQLite database tool, written in Python.
 
