@@ -1366,8 +1366,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     self.list_db.AppendRow(data, [1])
                 self.db_datas.setdefault(filename, defaultdict(lambda: None, name=filename))
                 self.db_datas[filename].update(data)
-                idx = next((i for i in range(1, self.list_db.GetItemCount())
-                            if self.list_db.GetItemText(i) == filename), None)
+                idx = self.list_db.FindItem(0, filename)
                 if idx: refresh_idxs.append(idx)
                 result = True
 
@@ -1425,8 +1424,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                         self.label_tables.Value = data["tables"]
                     else:
                         data.update(size=sz, last_modified=dt)
-                        idx = next((i for i in range(1, self.list_db.GetItemCount())
-                                    if self.list_db.GetItemText(i) == filename), None)
+                        idx = self.list_db.FindItem(0, filename)
                         if idx: self.list_db.RefreshRow(idx)
                         wx.CallLater(10, self.update_database_stats, filename)
                 else:
