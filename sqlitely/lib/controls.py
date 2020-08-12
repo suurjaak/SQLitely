@@ -66,7 +66,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    11.08.2020
+@modified    12.08.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -2058,6 +2058,17 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             if self._id_rows: self.RefreshRows()
 
 
+    def FindItem(self, text):
+        """
+        Find an item whose primary label matches the text.
+
+        @return   item index, or -1 if not found
+        """
+        for i in range(self.GetItemCount()):
+            if self.GetItemText(i) == text: return i
+        return -1
+
+
     def RefreshRows(self):
         """
         Clears the list and inserts all unfiltered rows, auto-sizing the
@@ -2080,13 +2091,12 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
 
     def RefreshRow(self, row):
-        """
-        Refreshes row with specified index from item data.
-        """
+        """Refreshes row with specified index from item data."""
+        if not self.GetItemCount(): return
         if row < 0: row = row % self.GetItemCount()
-        if row not in self._data_map or not row and not self._top_row: return
+        data = not row and self._top_row or self._data_map.get(self.GetItemData(row))
+        if not data: return
 
-        data = not row and self._top_row or self._data_map[row]
         for i, col_name in enumerate([c[0] for c in self._columns]):
             col_value = self._formatters[col_name](data, col_name)
             self.SetStringItem(row, i, col_value)

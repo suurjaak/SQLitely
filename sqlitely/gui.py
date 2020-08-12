@@ -1366,8 +1366,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     self.list_db.AppendRow(data, [1])
                 self.db_datas.setdefault(filename, defaultdict(lambda: None, name=filename))
                 self.db_datas[filename].update(data)
-                idx = self.list_db.FindItem(0, filename)
-                if idx: refresh_idxs.append(idx)
+                idx = self.list_db.FindItem(filename)
+                if idx > 0: refresh_idxs.append(idx)
                 result = True
 
         if self.button_missing.Shown != (self.list_db.GetItemCount() > 1):
@@ -1424,8 +1424,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                         self.label_tables.Value = data["tables"]
                     else:
                         data.update(size=sz, last_modified=dt)
-                        idx = self.list_db.FindItem(0, filename)
-                        if idx: self.list_db.RefreshRow(idx)
+                        idx = self.list_db.FindItem(filename)
+                        if idx > 0: self.list_db.RefreshRow(idx)
                         wx.CallLater(10, self.update_database_stats, filename)
                 else:
                     self.label_size.Value = "File does not exist."
