@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.08.2020
+@modified    13.08.2020
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -25,8 +25,8 @@ import appdirs
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.1"
-VersionDate = "08.08.2020"
+Version = "1.1.dev29"
+VersionDate = "13.08.2020"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -320,9 +320,7 @@ def load():
                 value = value_raw
             return value, True
 
-        for name in FileDirectives:
-            [setattr(module, name, v) for v, s in [parse_value(name)] if s]
-        for name in OptionalFileDirectives:
+        for name in FileDirectives + OptionalFileDirectives:
             [setattr(module, name, v) for v, s in [parse_value(name)] if s]
     except Exception:
         pass # Fail silently
