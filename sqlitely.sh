@@ -1,2 +1,2 @@
 #!/bin/bash
-exec >/dev/null 2>&1 python -m sqlitely.main "$@"
+exec >/dev/null 2>&1 python -m sqlitely "$@"

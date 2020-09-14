@@ -1,1 +1,1 @@
-@start pythonw -m "sqlitely.main" %*
+@start pythonw -m sqlitely %*
