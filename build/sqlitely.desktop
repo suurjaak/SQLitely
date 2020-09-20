@@ -1,8 +1,0 @@
-[Desktop Entry]
-Version=1.0
-Type=Application
-Terminal=false
-Exec=sqlitely
-Name=SQLitely
-Icon=sqlitely
-Categories=Utility;Database;GTK;
