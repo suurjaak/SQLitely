@@ -8143,50 +8143,63 @@ class ColumnDialog(wx.Dialog):
 
         def do_case(category):
             edit = tedit if tedit.Shown else nedit
-            if not edit.Value: return
-            if   "upper"    == category: edit.Value = edit.Value.upper()
-            elif "lower"    == category: edit.Value = edit.Value.lower()
-            elif "title"    == category: edit.Value = edit.Value.title()
-            elif "invert"   == category: edit.Value = edit.Value.swapcase()
-            elif "sentence" == category:
-                v = "".join(x.capitalize() if x else ""
-                            for x in re.split("([\.\?\!]\s+)|(\r*\n\r*\n+)", edit.Value))
-                edit.Value = v
-            elif "snake" == category:
-                v = re.sub("[%s]" % re.escape(string.punctuation), "", edit.Value)
-                edit.Value = re.sub("\s+", "_", v)
-            elif "alternate" == category:
-                v = "".join(x.lower() if i % 2 else x.upper()
-                            for i, x in enumerate(edit.Value))
-                edit.Value = v
+            value = edit.StringSelection or edit.Value
+            if not value: return
 
+            if   "upper"    == category: value = value.upper()
+            elif "lower"    == category: value = value.lower()
+            elif "title"    == category: value = value.title()
+            elif "invert"   == category: value = value.swapcase()
+            elif "sentence" == category:
+                value = "".join(x.capitalize() if x else ""
+                                for x in re.split("([\.\?\!]\s+)|(\r*\n\r*\n+)", value))
+            elif "snake" == category:
+                v = re.sub("[%s]" % re.escape(string.punctuation), "", value)
+                value = re.sub("\s+", "_", v)
+            elif "alternate" == category:
+                value = "".join(x.lower() if i % 2 else x.upper()
+                                for i, x in enumerate(value))
+
+            if not edit.StringSelection: edit.Value = value
+            else:
+                v, (p1, p2) = edit.Value, edit.GetSelection()
+                edit.Value = v[:p1] + value + v[p2:]
+                edit.SetSelection(p1, p1 + len(value))
             on_change(edit.Value)
 
         def do_transform(category):
             edit = tedit if tedit.Shown else nedit
-            if not edit.Value: return
+            value = edit.StringSelection or edit.Value
+            if not value: return
+
             try:
                 if "spaces" == category:
-                    edit.Value = edit.Value.replace("\t", " " * 4)
+                    value = value.replace("\t", " " * 4)
                 elif "tabs" == category:
-                    edit.Value = edit.Value.replace(" " * 4, "\t")
+                    value = value.replace(" " * 4, "\t")
                 elif "whitespace" == category:
-                    v = edit.Value.strip()          # Empty surrounding ws
+                    v = value.strip()          # Empty surrounding ws
                     v = re.sub("[ \t]+\n", "\n", v) # Empty ws-only lines
                     v = re.sub("[\r\n]+",  "\n", v) # Collapse blank lines
-                    edit.Value = re.sub("[ \t]+",   " ",  v) # Collapse spaces+tabs
+                    value = re.sub("[ \t]+",   " ",  v) # Collapse spaces+tabs
                 elif "urlencode" == category:
-                    edit.Value = urllib.quote(util.to_str(edit.Value, "utf-8"))
+                    value = urllib.quote(util.to_str(value, "utf-8"))
                 elif "urldecode" == category:
-                    edit.Value = urllib.unquote(util.to_str(edit.Value, "utf-8"))
+                    value = urllib.unquote(util.to_str(value, "utf-8"))
                 elif "htmlescape" == category:
-                    edit.Value = util.html_escape(edit.Value)
+                    value = util.html_escape(value)
                 elif "htmlunescape" == category:
-                    edit.Value = HTMLParser.HTMLParser().unescape(edit.Value)
+                    value = HTMLParser.HTMLParser().unescape(value)
                 elif "htmlstrip" == category:
-                    edit.Value = re.sub("<[^>]+?>", "", edit.Value)
+                    value = re.sub("<[^>]+?>", "", value)
             except Exception: pass
-            else: on_change(edit.Value)
+            else:
+                if not edit.StringSelection: edit.Value = value
+                else:
+                    v, (p1, p2) = edit.Value, edit.GetSelection()
+                    edit.Value = v[:p1] + value + v[p2:]
+                    edit.SetSelection(p1, p1 + len(value))
+                on_change(edit.Value)
 
         def on_set(event):
             menu = wx.Menu()
