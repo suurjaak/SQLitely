@@ -25,7 +25,7 @@ import appdirs
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.1.dev30"
+Version = "1.1.dev31"
 VersionDate = "19.09.2020"
 
 if getattr(sys, "frozen", False):
