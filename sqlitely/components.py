@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.08.2020
+@modified    19.09.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -743,7 +743,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             result = True
         except Exception as e:
             msg = "Error saving changes in %s." % grammar.quote(self.name)
-            logger.exception(msg); guibase.status(msg, flash=True)
+            logger.exception(msg); guibase.status(msg)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         for idx in reload_idxs:
@@ -795,7 +795,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             self.rows_all[idx].update(row)
         except Exception as e:
             msg = "Error saving changes in %s." % grammar.quote(self.name)
-            logger.exception(msg); guibase.status(msg, flash=True)
+            logger.exception(msg); guibase.status(msg)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         if refresh:
@@ -920,7 +920,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status(status, *args, flash=True)
+                guibase.status(status, *args)
 
         def on_event(event=None, **kwargs):
             """Fires event to parent grid."""
@@ -1823,7 +1823,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self._grid.Enable()
 
         if "error" in result:
-            guibase.status("Error running SQL.", flash=True)
+            guibase.status("Error running SQL.")
             lock = self._db.get_lock(category=None)
             error = "Error running SQL:\n\n%s" % (lock or result["error"])
             return wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
@@ -1871,8 +1871,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             self._label_help.Show(bool(cursor and cursor.description))
             self._label_rows.Show(bool(cursor and cursor.description))
             self._label_help.Parent.Layout()
-            guibase.status('Executed SQL "%s" (%s).', sql, self._db,
-                           log=True, flash=True)
+            guibase.status('Executed SQL "%s" (%s).', sql, self._db, log=True)
 
             self._last_sql = sql
             self._last_is_script = script
@@ -1891,7 +1890,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             self._PopulateCount()
         except Exception as e:
             logger.exception("Error running SQL %s.", sql)
-            guibase.status("Error running SQL.", flash=True)
+            guibase.status("Error running SQL.")
             error = "Error running SQL:\n\n%s" % util.format_exc(e)
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         finally:
@@ -2007,7 +2006,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         except Exception as e:
             msg = "Error saving %s."
             logger.exception(msg, filename)
-            guibase.status(msg, flash=True)
+            guibase.status(msg)
             error = "Error saving %s:\n\n%s" % (filename, util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
@@ -2112,7 +2111,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         if wx.TheClipboard.Open():
             d = wx.TextDataObject(self._last_sql)
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-            guibase.status("Copied SQL to clipboard", flash=True)
+            guibase.status("Copied SQL to clipboard.")
 
 
     def _OnCopySQL(self, event=None):
@@ -2120,7 +2119,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         if wx.TheClipboard.Open():
             d = wx.TextDataObject()
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-            guibase.status("Copied SQL to clipboard", flash=True)
+            guibase.status("Copied SQL to clipboard.")
 
 
     def _OnGotoRow(self, event=None):
@@ -2170,7 +2169,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             self._stc.LoadFile(filename)
         except Exception as e:
             msg = "Error loading SQL from %s." % filename
-            logger.exception(msg); guibase.status(msg, flash=True)
+            logger.exception(msg); guibase.status(msg)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
@@ -2193,7 +2192,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving SQL to %s." % filename
-            logger.exception(msg); guibase.status(msg, flash=True)
+            logger.exception(msg); guibase.status(msg)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
@@ -2631,7 +2630,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         except Exception as e:
             msg = "Error saving %s."
             logger.exception(msg, filename)
-            guibase.status(msg, flash=True)
+            guibase.status(msg)
             error = "Error saving %s:\n\n%s" % (filename, util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
@@ -5211,7 +5210,7 @@ class SchemaObjectPage(wx.Panel):
         if wx.TheClipboard.Open():
             d = wx.TextDataObject(self._ctrls["sql"].GetText())
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-            guibase.status("Copied SQL to clipboard", flash=True)
+            guibase.status("Copied SQL to clipboard.")
 
 
     def _OnSaveSQL(self, event=None):
@@ -5238,7 +5237,7 @@ class SchemaObjectPage(wx.Panel):
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving SQL to %s." % filename
-            logger.exception(msg); guibase.status(msg, flash=True)
+            logger.exception(msg); guibase.status(msg)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
@@ -5779,7 +5778,7 @@ class ExportProgressPanel(wx.Panel):
 
         opts, self._current = self._tasks[index], index
         title = 'Exporting to "%s".' % opts["filename"]
-        guibase.status(title, log=True, flash=True)
+        guibase.status(title, log=True)
         self.Freeze()
         self._ctrls[index]["title"].Label = title
         self._ctrls[index]["gauge"].Pulse()
@@ -5911,7 +5910,7 @@ class ExportProgressPanel(wx.Panel):
         elif "done" in result:
             opts.update(result=result.get("result", True))
             if opts["result"]:
-                guibase.status('Exported to "%s".', opts["filename"], log=True, flash=True)
+                guibase.status('Exported to "%s".', opts["filename"], log=True)
             if opts["pending"]:
                 ctrls["gauge"].Value = 100
                 if opts["result"]:
@@ -7569,7 +7568,7 @@ class DataDialog(wx.Dialog):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status(status, *args, flash=True)
+                guibase.status(status, *args)
         def on_copy_data(event=None):
             text = util.to_unicode(self._data[coldata["name"]])
             mycopy(text, "Copied column data to clipboard")
@@ -7659,7 +7658,7 @@ class DataDialog(wx.Dialog):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status(status, *args, flash=True)
+                guibase.status(status, *args)
 
         def on_copy_data(event=None):
             text = "\t".join(util.to_unicode(self._data[c["name"]])
@@ -8299,7 +8298,7 @@ class ColumnDialog(wx.Dialog):
                 if wx.TheClipboard.Open():
                     d = wx.TextDataObject(text)
                     wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                    guibase.status(status, *args, flash=True)
+                    guibase.status(status, *args)
             def on_copy_data(event=None):
                 text = util.to_unicode(self._value)
                 mycopy(text, "Copied %s data to clipboard" % self._collabel)
