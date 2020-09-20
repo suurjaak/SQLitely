@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.06.2020
+@modified    19.09.2020
 ------------------------------------------------------------------------------
 """
 import argparse
@@ -20,6 +20,7 @@ import os
 import sys
 import threading
 import traceback
+import warnings
 
 import wx
 
@@ -131,6 +132,7 @@ def run_gui(filenames):
 
 def run():
     """Parses command-line arguments and runs GUI."""
+    warnings.simplefilter("ignore", UnicodeWarning)
     conf.load()
     argparser = argparse.ArgumentParser(description=ARGUMENTS["description"])
     for arg in ARGUMENTS["arguments"]:
