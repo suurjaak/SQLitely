@@ -3,7 +3,7 @@
 ::
 :: @author    Erki Suurjaak
 :: @created   15.01.2013
-:: @modified  23.04.2015
+:: @modified  06.07.2020
 @echo off
 set SOURCE_DIR=%CD%
 set WILDCARD=*.spec

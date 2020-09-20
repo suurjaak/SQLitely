@@ -1,6 +1,12 @@
 CHANGELOG
 =========
 
+1.2, 2020-09-19
+---------------
+- added support for single-user install;
+- minor fixes and UI tweaks.
+
+
 1.1, 2020-08-08
 ---------------
 - added value editor tool;
