@@ -8467,11 +8467,13 @@ class ColumnDialog(wx.Dialog):
 
         def on_change(event):
             event.Skip()
-            if event.ModificationType & (
+            if not state["skip"] and event.ModificationType & (
                 wx.stc.STC_PERFORMED_UNDO | wx.stc.STC_PERFORMED_REDO |
                 wx.stc.STC_MOD_DELETETEXT | wx.stc.STC_MOD_INSERTTEXT
             ):
+                state["skip"] = True # Avoid handling mirror event
                 self._Populate(event.EventObject.Value, skip=NAME)
+                wx.CallAfter(state.update, skip=False)
 
         def on_undo(*a, **kw): stchex.Undo(mirror=True)
         def on_redo(*a, **kw): stchex.Redo(mirror=True)
@@ -8482,14 +8484,16 @@ class ColumnDialog(wx.Dialog):
             page.Layout()
 
         def update(value, reset=False, propagate=False):
+            state["skip"] = True
             if reset or state["pristine"]:
                 stchex.Value = stctxt.Value = value
                 stchex.EmptyUndoBuffer(mirror=True)
             else:
-                stchex.UpdateValue(value, mirror=True)
+                stchex.UpdateValue(value); stctxt.UpdateValue(value)
             state["pristine"] = False
             set_status()
             if propagate: self._Populate(value, skip=NAME)
+            wx.CallAfter(state.update, skip=False)
 
 
         tb      = self._MakeToolBar(page, NAME, filelabel="binary", paste=on_paste, undo=on_undo, redo=on_redo)
@@ -8541,7 +8545,7 @@ class ColumnDialog(wx.Dialog):
         self._getters[NAME] = stchex.GetValue
         self._setters[NAME] = update
         self._reprers[NAME] = stchex.GetHex
-        state = self._state.setdefault(NAME, {"pristine": True, "scrolling": {}})
+        state = self._state.setdefault(NAME, {"pristine": True, "skip": False, "scrolling": {}})
         return page
 
 

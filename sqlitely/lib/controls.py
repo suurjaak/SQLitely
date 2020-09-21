@@ -66,7 +66,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    19.09.2020
+@modified    21.09.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -3010,7 +3010,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
 
         self._fixed    = False # Fixed-length value
-        self._type     = str   # Value type: str, int, float, long
+        self._type     = str   # Value type: str, unicode, int, float, long
         self._bytes0   = []    # [byte or None, ]
         self._bytes    = bytearray()
         self._mirror   = None # Linked control
@@ -3104,9 +3104,12 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         """Returns current content as original type (string or number)."""
         v = str(self._bytes)
         if v == "" and self._type in (int, float, long): v = None
-        elif self._type is   int: v = struct.unpack(">l", v)[0]
-        elif self._type is float: v = struct.unpack(">f", v)[0]
-        elif self._type is  long: v = struct.unpack(">q", v)[0]
+        elif self._type is     int: v = struct.unpack(">l", v)[0]
+        elif self._type is   float: v = struct.unpack(">f", v)[0]
+        elif self._type is    long: v = struct.unpack(">q", v)[0]
+        elif self._type is unicode:
+            try: v = v.decode("utf-8")
+            except Exception: v = v.decode("latin1")
         return v
 
     def SetValue(self, value):
@@ -3534,7 +3537,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
 
         self._fixed  = False # Fixed-length value
-        self._type   = str   # Value type: str, int, float, long
+        self._type   = str   # Value type: str, unicode, int, float, long
         self._bytes0 = []    # [byte or None, ]
         self._bytes  = bytearray() # Raw bytes
         self._mirror = None  # Linked control
@@ -3613,9 +3616,12 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         """Returns current content as original type (string or number)."""
         v = str(self._bytes)
         if v == "" and self._type in (int, float, long): v = None
-        elif self._type is   int: v = struct.unpack(">l", v)[0]
-        elif self._type is float: v = struct.unpack(">f", v)[0]
-        elif self._type is  long: v = struct.unpack(">q", v)[0]
+        elif self._type is     int: v = struct.unpack(">l", v)[0]
+        elif self._type is   float: v = struct.unpack(">f", v)[0]
+        elif self._type is    long: v = struct.unpack(">q", v)[0]
+        elif self._type is unicode:
+            try: v = v.decode("utf-8")
+            except Exception: v = v.decode("latin1")
         return v
 
     def SetValue(self, value):
