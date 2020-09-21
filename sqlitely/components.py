@@ -7175,7 +7175,7 @@ class DataDialog(wx.Dialog):
     """
 
     def __init__(self, parent, gridbase, row, id=wx.ID_ANY,
-                 title="Data form", pos=wx.DefaultPosition, size=(350, 250),
+                 title="Data form", pos=wx.DefaultPosition, size=(400, 250),
                  style=wx.CAPTION | wx.CLOSE_BOX | wx.MAXIMIZE_BOX | wx.RESIZE_BORDER,
                  name=wx.DialogNameStr):
         """
