@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.09.2020
+@modified    21.09.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -8148,7 +8148,7 @@ class ColumnDialog(wx.Dialog):
 
             if   "upper"    == category: value = value.upper()
             elif "lower"    == category: value = value.lower()
-            elif "title"    == category: value = value.title()
+            elif "title"    == category: value = util.titlecase(value)
             elif "invert"   == category: value = value.swapcase()
             elif "sentence" == category:
                 value = "".join(x.capitalize() if x else ""
