@@ -3394,6 +3394,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
             bpos, idx = self.CurrentPos, linepos % 3
             if is_lastpos: bpos, idx = min(bpos, len(self._bytes) - 1), 0
+            elif direction and not idx: bpos -= 1 # Backspacing over previous byte
             for bb in self._bytes, self._bytes0: del bb[bpos]
 
             if line == self.LineCount - 1 and (not direction or linepos):
