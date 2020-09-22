@@ -6,7 +6,7 @@
 ; /DSUFFIX64=<"_x64" for 64-bit installer>
 ;
 ; @created   22.08.2019
-; @modified  19.09.2020
+; @modified  22.09.2020
 
 Unicode True
 
@@ -131,6 +131,9 @@ Function un.onUninstSuccess
 FunctionEnd
 
 Section "MainSection" SEC01
+  ${nsProcess::KillProcess} "${PROGEXE}" $R4
+  Call RefreshSysTray
+
   SetOutPath "$INSTDIR"
   SetOverwrite ifnewer
   File "${PROGEXE}"
