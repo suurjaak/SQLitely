@@ -113,16 +113,18 @@ FunctionEnd
 
 Function FinishPage_Leave
   ReadINIStr $0 "$PLUGINSDIR\iospecial.ini" "Field 6" "State"
-  StrCmp $0 "0" +4
+  StrCmp $0 "0" end
   ${RegisterExtension} "$INSTDIR\${PROGEXE}" ".db"      "SQLite3 database file"
   ${RegisterExtension} "$INSTDIR\${PROGEXE}" ".sqlite"  "SQLite3 database file"
   ${RegisterExtension} "$INSTDIR\${PROGEXE}" ".sqlite3" "SQLite3 database file"
+  end:
 FunctionEnd
 
 Function un.onInit
-  MessageBox MB_ICONQUESTION|MB_YESNO|MB_DEFBUTTON2 "Are you sure you want to uninstall $(^Name)?" IDYES +2
+  MessageBox MB_ICONQUESTION|MB_YESNO|MB_DEFBUTTON2 "Are you sure you want to uninstall $(^Name)?" IDYES
   Abort
   !insertmacro MULTIUSER_UNINIT
+  end:
 FunctionEnd
 
 Function un.onUninstSuccess
