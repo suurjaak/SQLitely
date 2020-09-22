@@ -13,7 +13,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.07.2020
+@modified    19.09.2020
 """
 import datetime
 import logging
@@ -52,9 +52,8 @@ def status(text, *args, **kwargs):
             msg = text % args if args else text
         except Exception: msg = text
     msg = re.sub("[\n\r\t]+", " ", msg)
-    log, flash = (kwargs.get(x) for x in ("log", "flash"))
-    if log: logger.info(msg)
-    try: window.set_status(msg, timeout=flash)
+    if kwargs.get("log"): logger.info(msg)
+    try: window.set_status(msg, timeout=kwargs.get("flash", True))
     except Exception: pass
 
 
@@ -113,6 +112,7 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
             conf.ConsoleHistoryCommands = []
         for cmd in conf.ConsoleHistoryCommands:
             console.addHistory(cmd)
+        ColourManager.Register(console)
         console.Bind(wx.EVT_KEY_DOWN, self.on_keydown_console)
         self.widget_inspector = wx.lib.inspection.InspectionTool()
 

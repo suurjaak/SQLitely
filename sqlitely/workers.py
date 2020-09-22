@@ -8,12 +8,13 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.07.2020
+@modified    22.09.2020
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
 import hashlib
 import logging
+import multiprocessing.connection
 import os
 import Queue
 import re
@@ -539,3 +540,42 @@ class ChecksumThread(WorkerThread):
             elif self._is_working:
                 self.postback({"sha1": sha1.hexdigest(), "md5": md5.hexdigest()})
             self._is_working = False
+
+
+
+class IPCListener(WorkerThread):    
+    """
+    Inter-process communication server that listens on a port and posts
+    received data to application.
+    """
+
+    def __init__(self, authkey, port, callback, limit=10000):
+        super(IPCListener, self).__init__(callback)
+        self._listener = None   # multiprocessing.connection.Listener
+        self._authkey = authkey # Listener authentication text
+        self._port = port
+        self._limit = limit
+
+
+    def run(self):
+        self._is_running = True
+        port, limit = self._port, self._limit
+        while not self._listener and limit and self._is_running:
+            kwargs = {"address": ("localhost", port), "authkey": self._authkey}
+            try:    self._listener = multiprocessing.connection.Listener(**kwargs)
+            except Exception: port, limit = port + 1, limit - 1
+            else:   self._is_working = True
+        self._port = port
+
+        while self._is_running:
+            try: self._callback(self._listener.accept().recv())
+            except Exception: logger.exception("Error on IPC port %s.", self._port)
+        self._is_working = False
+        l, self._listener = self._listener, None
+        l and util.try_until(l.close)
+
+
+    def stop(self, drop=True):
+        super(IPCListener, self).stop(drop)
+        l, self._listener = self._listener, None
+        l and util.try_until(l.close)

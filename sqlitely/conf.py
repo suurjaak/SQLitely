@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.08.2020
+@modified    22.09.2020
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -19,23 +19,27 @@ import json
 import os
 import platform
 import sys
+import urllib
 
 import appdirs
+import wx
 
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.1"
-VersionDate = "08.08.2020"
+Version = "1.2.dev13"
+VersionDate = "22.09.2020"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
     ApplicationDirectory = os.path.dirname(sys.executable)
+    ApplicationFile = os.path.realpath(sys.executable)
     ResourceDirectory = os.path.join(getattr(sys, "_MEIPASS", ""), "media")
     BinDirectory = os.path.join(getattr(sys, "_MEIPASS", ""), "bin")
     EtcDirectory = ApplicationDirectory
 else:
     ApplicationDirectory = os.path.realpath(os.path.dirname(__file__))
+    ApplicationFile = os.path.join(ApplicationDirectory, "main.py")
     ResourceDirectory = os.path.join(ApplicationDirectory, "media")
     BinDirectory = os.path.join(ApplicationDirectory, "bin")
     EtcDirectory = os.path.join(ApplicationDirectory, "etc")
@@ -44,11 +48,11 @@ else:
 ConfigFile = "%s.ini" % os.path.join(EtcDirectory, Title.lower())
 
 """List of attribute names that can be saved to and loaded from ConfigFile."""
-FileDirectives = ["ConsoleHistoryCommands", "DBFiles", "DBSort",
-    "LastActivePage", "LastExportType", "LastSearchResults", "LastSelectedFiles",
-    "LastUpdateCheck", "RecentFiles", "SearchHistory", "SearchInMeta",
-    "SearchInData", "SearchUseNewTab", "SearchCaseSensitive", "SQLWindowTexts",
-    "TrayIconEnabled", "UpdateCheckAutomatic",
+FileDirectives = ["AllowMultipleInstances", "ConsoleHistoryCommands", "DBFiles",
+    "DBSort", "LastActivePage", "LastExportType", "LastSearchResults",
+    "LastSelectedFiles", "LastUpdateCheck", "RecentFiles", "SearchHistory",
+    "SearchInMeta", "SearchInData", "SearchUseNewTab", "SearchCaseSensitive",
+    "SQLWindowTexts", "TrayIconEnabled", "UpdateCheckAutomatic",
     "WindowIconized", "WindowPosition", "WindowSize",
 ]
 """List of user-modifiable attributes, saved if changed from default."""
@@ -72,6 +76,18 @@ DBExtensions = [".db", ".sqlite", ".sqlite3"]
 
 """Database list sort state, [col, ascending]."""
 DBSort = []
+
+"""Whether program can have multiple instances running, or reuses one instance."""
+AllowMultipleInstances = False
+
+"""
+Port for inter-process communication, receiving data from other
+launched instances if not AllowMultipleInstances.
+"""
+IPCPort = 59987
+
+"""Identifier for inter-process communication."""
+IPCName = urllib.quote_plus("%s-%s" % (wx.GetUserId(), ApplicationFile))
 
 """History of commands entered in console."""
 ConsoleHistoryCommands = []
@@ -320,9 +336,7 @@ def load():
                 value = value_raw
             return value, True
 
-        for name in FileDirectives:
-            [setattr(module, name, v) for v, s in [parse_value(name)] if s]
-        for name in OptionalFileDirectives:
+        for name in FileDirectives + OptionalFileDirectives:
             [setattr(module, name, v) for v, s in [parse_value(name)] if s]
     except Exception:
         pass # Fail silently
@@ -350,8 +364,8 @@ def save():
             except Exception: continue # for path
             else: break # for path
 
-        f.write("# %s %s configuration written on %s.\n" % (Title, Version,
-                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        f.write("# %s configuration written on %s.\n" %
+                (Title, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         for name in FileDirectives:
             try: parser.set(section, name, json.dumps(getattr(module, name)))
             except Exception: pass

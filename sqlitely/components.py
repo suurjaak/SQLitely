@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.08.2020
+@modified    21.09.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -743,7 +743,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             result = True
         except Exception as e:
             msg = "Error saving changes in %s." % grammar.quote(self.name)
-            logger.exception(msg); guibase.status(msg, flash=True)
+            logger.exception(msg); guibase.status(msg)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         for idx in reload_idxs:
@@ -795,7 +795,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             self.rows_all[idx].update(row)
         except Exception as e:
             msg = "Error saving changes in %s." % grammar.quote(self.name)
-            logger.exception(msg); guibase.status(msg, flash=True)
+            logger.exception(msg); guibase.status(msg)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         if refresh:
@@ -920,7 +920,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status(status, *args, flash=True)
+                guibase.status(status, *args)
 
         def on_event(event=None, **kwargs):
             """Fires event to parent grid."""
@@ -1823,7 +1823,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self._grid.Enable()
 
         if "error" in result:
-            guibase.status("Error running SQL.", flash=True)
+            guibase.status("Error running SQL.")
             lock = self._db.get_lock(category=None)
             error = "Error running SQL:\n\n%s" % (lock or result["error"])
             return wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
@@ -1871,8 +1871,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             self._label_help.Show(bool(cursor and cursor.description))
             self._label_rows.Show(bool(cursor and cursor.description))
             self._label_help.Parent.Layout()
-            guibase.status('Executed SQL "%s" (%s).', sql, self._db,
-                           log=True, flash=True)
+            guibase.status('Executed SQL "%s" (%s).', sql, self._db, log=True)
 
             self._last_sql = sql
             self._last_is_script = script
@@ -1891,7 +1890,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             self._PopulateCount()
         except Exception as e:
             logger.exception("Error running SQL %s.", sql)
-            guibase.status("Error running SQL.", flash=True)
+            guibase.status("Error running SQL.")
             error = "Error running SQL:\n\n%s" % util.format_exc(e)
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         finally:
@@ -2007,7 +2006,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         except Exception as e:
             msg = "Error saving %s."
             logger.exception(msg, filename)
-            guibase.status(msg, flash=True)
+            guibase.status(msg)
             error = "Error saving %s:\n\n%s" % (filename, util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
@@ -2112,7 +2111,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         if wx.TheClipboard.Open():
             d = wx.TextDataObject(self._last_sql)
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-            guibase.status("Copied SQL to clipboard", flash=True)
+            guibase.status("Copied SQL to clipboard.")
 
 
     def _OnCopySQL(self, event=None):
@@ -2120,7 +2119,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         if wx.TheClipboard.Open():
             d = wx.TextDataObject()
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-            guibase.status("Copied SQL to clipboard", flash=True)
+            guibase.status("Copied SQL to clipboard.")
 
 
     def _OnGotoRow(self, event=None):
@@ -2170,7 +2169,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             self._stc.LoadFile(filename)
         except Exception as e:
             msg = "Error loading SQL from %s." % filename
-            logger.exception(msg); guibase.status(msg, flash=True)
+            logger.exception(msg); guibase.status(msg)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
@@ -2193,7 +2192,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving SQL to %s." % filename
-            logger.exception(msg); guibase.status(msg, flash=True)
+            logger.exception(msg); guibase.status(msg)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
@@ -2631,7 +2630,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         except Exception as e:
             msg = "Error saving %s."
             logger.exception(msg, filename)
-            guibase.status(msg, flash=True)
+            guibase.status(msg)
             error = "Error saving %s:\n\n%s" % (filename, util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
@@ -5211,7 +5210,7 @@ class SchemaObjectPage(wx.Panel):
         if wx.TheClipboard.Open():
             d = wx.TextDataObject(self._ctrls["sql"].GetText())
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-            guibase.status("Copied SQL to clipboard", flash=True)
+            guibase.status("Copied SQL to clipboard.")
 
 
     def _OnSaveSQL(self, event=None):
@@ -5238,7 +5237,7 @@ class SchemaObjectPage(wx.Panel):
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving SQL to %s." % filename
-            logger.exception(msg); guibase.status(msg, flash=True)
+            logger.exception(msg); guibase.status(msg)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
@@ -5779,7 +5778,7 @@ class ExportProgressPanel(wx.Panel):
 
         opts, self._current = self._tasks[index], index
         title = 'Exporting to "%s".' % opts["filename"]
-        guibase.status(title, log=True, flash=True)
+        guibase.status(title, log=True)
         self.Freeze()
         self._ctrls[index]["title"].Label = title
         self._ctrls[index]["gauge"].Pulse()
@@ -5911,7 +5910,7 @@ class ExportProgressPanel(wx.Panel):
         elif "done" in result:
             opts.update(result=result.get("result", True))
             if opts["result"]:
-                guibase.status('Exported to "%s".', opts["filename"], log=True, flash=True)
+                guibase.status('Exported to "%s".', opts["filename"], log=True)
             if opts["pending"]:
                 ctrls["gauge"].Value = 100
                 if opts["result"]:
@@ -7176,7 +7175,7 @@ class DataDialog(wx.Dialog):
     """
 
     def __init__(self, parent, gridbase, row, id=wx.ID_ANY,
-                 title="Data form", pos=wx.DefaultPosition, size=(350, 250),
+                 title="Data form", pos=wx.DefaultPosition, size=(400, 250),
                  style=wx.CAPTION | wx.CLOSE_BOX | wx.MAXIMIZE_BOX | wx.RESIZE_BORDER,
                  name=wx.DialogNameStr):
         """
@@ -7569,7 +7568,7 @@ class DataDialog(wx.Dialog):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status(status, *args, flash=True)
+                guibase.status(status, *args)
         def on_copy_data(event=None):
             text = util.to_unicode(self._data[coldata["name"]])
             mycopy(text, "Copied column data to clipboard")
@@ -7659,7 +7658,7 @@ class DataDialog(wx.Dialog):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                guibase.status(status, *args, flash=True)
+                guibase.status(status, *args)
 
         def on_copy_data(event=None):
             text = "\t".join(util.to_unicode(self._data[c["name"]])
@@ -8144,50 +8143,63 @@ class ColumnDialog(wx.Dialog):
 
         def do_case(category):
             edit = tedit if tedit.Shown else nedit
-            if not edit.Value: return
-            if   "upper"    == category: edit.Value = edit.Value.upper()
-            elif "lower"    == category: edit.Value = edit.Value.lower()
-            elif "title"    == category: edit.Value = edit.Value.title()
-            elif "invert"   == category: edit.Value = edit.Value.swapcase()
-            elif "sentence" == category:
-                v = "".join(x.capitalize() if x else ""
-                            for x in re.split("([\.\?\!]\s+)|(\r*\n\r*\n+)", edit.Value))
-                edit.Value = v
-            elif "snake" == category:
-                v = re.sub("[%s]" % re.escape(string.punctuation), "", edit.Value)
-                edit.Value = re.sub("\s+", "_", v)
-            elif "alternate" == category:
-                v = "".join(x.lower() if i % 2 else x.upper()
-                            for i, x in enumerate(edit.Value))
-                edit.Value = v
+            value = edit.StringSelection or edit.Value
+            if not value: return
 
+            if   "upper"    == category: value = value.upper()
+            elif "lower"    == category: value = value.lower()
+            elif "title"    == category: value = util.titlecase(value)
+            elif "invert"   == category: value = value.swapcase()
+            elif "sentence" == category:
+                value = "".join(x.capitalize() if x else ""
+                                for x in re.split("([\.\?\!]\s+)|(\r*\n\r*\n+)", value))
+            elif "snake" == category:
+                v = re.sub("[%s]" % re.escape(string.punctuation), "", value)
+                value = re.sub("\s+", "_", v)
+            elif "alternate" == category:
+                value = "".join(x.lower() if i % 2 else x.upper()
+                                for i, x in enumerate(value))
+
+            if not edit.StringSelection: edit.Value = value
+            else:
+                v, (p1, p2) = edit.Value, edit.GetSelection()
+                edit.Value = v[:p1] + value + v[p2:]
+                edit.SetSelection(p1, p1 + len(value))
             on_change(edit.Value)
 
         def do_transform(category):
             edit = tedit if tedit.Shown else nedit
-            if not edit.Value: return
+            value = edit.StringSelection or edit.Value
+            if not value: return
+
             try:
                 if "spaces" == category:
-                    edit.Value = edit.Value.replace("\t", " " * 4)
+                    value = value.replace("\t", " " * 4)
                 elif "tabs" == category:
-                    edit.Value = edit.Value.replace(" " * 4, "\t")
+                    value = value.replace(" " * 4, "\t")
                 elif "whitespace" == category:
-                    v = edit.Value.strip()          # Empty surrounding ws
+                    v = value.strip()          # Empty surrounding ws
                     v = re.sub("[ \t]+\n", "\n", v) # Empty ws-only lines
                     v = re.sub("[\r\n]+",  "\n", v) # Collapse blank lines
-                    edit.Value = re.sub("[ \t]+",   " ",  v) # Collapse spaces+tabs
+                    value = re.sub("[ \t]+",   " ",  v) # Collapse spaces+tabs
                 elif "urlencode" == category:
-                    edit.Value = urllib.quote(util.to_str(edit.Value, "utf-8"))
+                    value = urllib.quote(util.to_str(value, "utf-8"))
                 elif "urldecode" == category:
-                    edit.Value = urllib.unquote(util.to_str(edit.Value, "utf-8"))
+                    value = urllib.unquote(util.to_str(value, "utf-8"))
                 elif "htmlescape" == category:
-                    edit.Value = util.html_escape(edit.Value)
+                    value = util.html_escape(value)
                 elif "htmlunescape" == category:
-                    edit.Value = HTMLParser.HTMLParser().unescape(edit.Value)
+                    value = HTMLParser.HTMLParser().unescape(value)
                 elif "htmlstrip" == category:
-                    edit.Value = re.sub("<[^>]+?>", "", edit.Value)
+                    value = re.sub("<[^>]+?>", "", value)
             except Exception: pass
-            else: on_change(edit.Value)
+            else:
+                if not edit.StringSelection: edit.Value = value
+                else:
+                    v, (p1, p2) = edit.Value, edit.GetSelection()
+                    edit.Value = v[:p1] + value + v[p2:]
+                    edit.SetSelection(p1, p1 + len(value))
+                on_change(edit.Value)
 
         def on_set(event):
             menu = wx.Menu()
@@ -8299,7 +8311,7 @@ class ColumnDialog(wx.Dialog):
                 if wx.TheClipboard.Open():
                     d = wx.TextDataObject(text)
                     wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                    guibase.status(status, *args, flash=True)
+                    guibase.status(status, *args)
             def on_copy_data(event=None):
                 text = util.to_unicode(self._value)
                 mycopy(text, "Copied %s data to clipboard" % self._collabel)
@@ -8455,11 +8467,13 @@ class ColumnDialog(wx.Dialog):
 
         def on_change(event):
             event.Skip()
-            if event.ModificationType & (
+            if not state["skip"] and event.ModificationType & (
                 wx.stc.STC_PERFORMED_UNDO | wx.stc.STC_PERFORMED_REDO |
                 wx.stc.STC_MOD_DELETETEXT | wx.stc.STC_MOD_INSERTTEXT
             ):
+                state["skip"] = True # Avoid handling mirror event
                 self._Populate(event.EventObject.Value, skip=NAME)
+                wx.CallAfter(state.update, skip=False)
 
         def on_undo(*a, **kw): stchex.Undo(mirror=True)
         def on_redo(*a, **kw): stchex.Redo(mirror=True)
@@ -8470,14 +8484,16 @@ class ColumnDialog(wx.Dialog):
             page.Layout()
 
         def update(value, reset=False, propagate=False):
+            state["skip"] = True
             if reset or state["pristine"]:
                 stchex.Value = stctxt.Value = value
                 stchex.EmptyUndoBuffer(mirror=True)
             else:
-                stchex.UpdateValue(value, mirror=True)
+                stchex.UpdateValue(value); stctxt.UpdateValue(value)
             state["pristine"] = False
             set_status()
             if propagate: self._Populate(value, skip=NAME)
+            wx.CallAfter(state.update, skip=False)
 
 
         tb      = self._MakeToolBar(page, NAME, filelabel="binary", paste=on_paste, undo=on_undo, redo=on_redo)
@@ -8529,7 +8545,7 @@ class ColumnDialog(wx.Dialog):
         self._getters[NAME] = stchex.GetValue
         self._setters[NAME] = update
         self._reprers[NAME] = stchex.GetHex
-        state = self._state.setdefault(NAME, {"pristine": True, "scrolling": {}})
+        state = self._state.setdefault(NAME, {"pristine": True, "skip": False, "scrolling": {}})
         return page
 
 

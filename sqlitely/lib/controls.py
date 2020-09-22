@@ -66,7 +66,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    08.08.2020
+@modified    21.09.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -189,8 +189,9 @@ class ColourManager(object):
     colourmap         = {} # {colour name in container: wx.SYS_COLOUR_XYZ}
     darkcolourmap     = {} # {colour name in container: wx.SYS_COLOUR_XYZ}
     darkoriginals     = {} # {colour name in container: original value}
-    # {ctrl: (prop name: colour name in container)}
-    ctrls             = collections.defaultdict(dict)
+    regctrls          = set() # {ctrl, }
+    # {ctrl: (prop name: colour name in container or wx.SYS_COLOUR_XYZ)}
+    ctrlprops         = collections.defaultdict(dict)
 
 
     @classmethod
@@ -250,8 +251,19 @@ class ColourManager(object):
                          or system colour ID like wx.SYS_COLOUR_WINDOW
         """
         if not ctrl: return
-        cls.ctrls[ctrl][prop] = colour
+        cls.ctrlprops[ctrl][prop] = colour
         cls.UpdateControlColour(ctrl, prop, colour)
+
+
+    @classmethod
+    def Register(cls, ctrl):
+        """
+        Registers a control for special handling, e.g. refreshing STC colours
+        for instances of wx.py.shell.Shell on system colour change.
+        """
+        if isinstance(ctrl, wx.py.shell.Shell):
+            cls.regctrls.add(ctrl)
+            cls.SetShellStyles(ctrl)
 
 
     @classmethod
@@ -318,13 +330,17 @@ class ColourManager(object):
     @classmethod
     def UpdateControls(cls):
         """Updates all managed controls."""
-        for ctrl, props in cls.ctrls.items():
+        for ctrl, props in cls.ctrlprops.items():
             if not ctrl: # Component destroyed
-                cls.ctrls.pop(ctrl)
+                cls.ctrlprops.pop(ctrl)
                 continue # for ctrl, props
 
             for prop, colour in props.items():
                 cls.UpdateControlColour(ctrl, prop, colour)
+
+        for ctrl in cls.regctrls:
+            if not ctrl: cls.regctrls.discard(ctrl)
+            elif isinstance(ctrl, wx.py.shell.Shell): cls.SetShellStyles(ctrl)
 
 
     @classmethod
@@ -335,6 +351,75 @@ class ColourManager(object):
             setattr(ctrl, prop, mycolour)
         elif hasattr(ctrl, "Set" + prop):
             getattr(ctrl, "Set" + prop)(mycolour)
+
+
+    @classmethod
+    def SetShellStyles(cls, stc):
+        """Sets system colours to Python shell console."""
+
+        fg    = cls.GetColour(wx.SYS_COLOUR_WINDOWTEXT)
+        bg    = cls.GetColour(wx.SYS_COLOUR_WINDOW)
+        btbg  = cls.GetColour(wx.SYS_COLOUR_BTNFACE)
+        grfg  = cls.GetColour(wx.SYS_COLOUR_GRAYTEXT)
+        ibg   = cls.GetColour(wx.SYS_COLOUR_INFOBK)
+        ifg   = cls.GetColour(wx.SYS_COLOUR_INFOTEXT)
+        hlfg  = cls.GetColour(wx.SYS_COLOUR_HOTLIGHT)
+        q3bg  = cls.GetColour(wx.SYS_COLOUR_INFOBK)
+        q3sfg = wx.Colour(127,   0,   0) # brown  #7F0000
+        deffg = wx.Colour(  0, 127, 127) # teal   #007F7F
+        eolbg = wx.Colour(224, 192, 224) # pink   #E0C0E0
+        strfg = wx.Colour(127,   0, 127) # purple #7F007F
+
+        if sum(fg) > sum(bg): # Background darker than foreground
+            deffg = cls.Adjust(deffg, bg, -1)
+            eolbg = cls.Adjust(eolbg, bg, -1)
+            q3bg  = cls.Adjust(q3bg,  bg)
+            q3sfg = cls.Adjust(q3sfg, bg, -1)
+            strfg = cls.Adjust(strfg, bg, -1)
+
+        faces = dict(wx.py.editwindow.FACES,
+                     q3bg =cls.ColourHex(q3bg),  backcol  =cls.ColourHex(bg),
+                     q3fg =cls.ColourHex(ifg),   forecol  =cls.ColourHex(fg),
+                     deffg=cls.ColourHex(deffg), calltipbg=cls.ColourHex(ibg),
+                     eolbg=cls.ColourHex(eolbg), calltipfg=cls.ColourHex(ifg),
+                     q3sfg=cls.ColourHex(q3sfg), linenobg =cls.ColourHex(btbg),
+                     strfg=cls.ColourHex(strfg), linenofg =cls.ColourHex(grfg),
+                     keywordfg=cls.ColourHex(hlfg))
+
+        # Default style
+        stc.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT, "face:%(mono)s,size:%(size)d,"
+                                                   "back:%(backcol)s,fore:%(forecol)s" % faces)
+        stc.SetCaretForeground(fg)
+        stc.StyleClearAll()
+        stc.SetSelForeground(True, cls.GetColour(wx.SYS_COLOUR_HIGHLIGHTTEXT))
+        stc.SetSelBackground(True, cls.GetColour(wx.SYS_COLOUR_HIGHLIGHT))
+
+        # Built in styles
+        stc.StyleSetSpec(wx.stc.STC_STYLE_LINENUMBER,  "back:%(linenobg)s,fore:%(linenofg)s,"
+                                                       "face:%(mono)s,size:%(lnsize)d" % faces)
+        stc.StyleSetSpec(wx.stc.STC_STYLE_CONTROLCHAR, "face:%(mono)s" % faces)
+        stc.StyleSetSpec(wx.stc.STC_STYLE_BRACELIGHT,  "fore:#0000FF,back:#FFFF88")
+        stc.StyleSetSpec(wx.stc.STC_STYLE_BRACEBAD,    "fore:#FF0000,back:#FFFF88")
+
+        # Python styles
+        stc.StyleSetSpec(wx.stc.STC_P_DEFAULT,      "face:%(mono)s" % faces)
+        stc.StyleSetSpec(wx.stc.STC_P_COMMENTLINE,  "fore:#007F00,face:%(mono)s" % faces)
+        stc.StyleSetSpec(wx.stc.STC_P_NUMBER,       "")
+        stc.StyleSetSpec(wx.stc.STC_P_STRING,       "fore:%(strfg)s,face:%(mono)s" % faces)
+        stc.StyleSetSpec(wx.stc.STC_P_CHARACTER,    "fore:%(strfg)s,face:%(mono)s" % faces)
+        stc.StyleSetSpec(wx.stc.STC_P_WORD,         "fore:%(keywordfg)s,bold" % faces)
+        stc.StyleSetSpec(wx.stc.STC_P_TRIPLE,       "fore:%(q3sfg)s" % faces)
+        stc.StyleSetSpec(wx.stc.STC_P_TRIPLEDOUBLE, "fore:%(q3fg)s,back:%(q3bg)s" % faces)
+        stc.StyleSetSpec(wx.stc.STC_P_CLASSNAME,    "fore:%(deffg)s,bold" % faces)
+        stc.StyleSetSpec(wx.stc.STC_P_DEFNAME,      "fore:%(deffg)s,bold" % faces)
+        stc.StyleSetSpec(wx.stc.STC_P_OPERATOR,     "")
+        stc.StyleSetSpec(wx.stc.STC_P_IDENTIFIER,   "")
+        stc.StyleSetSpec(wx.stc.STC_P_COMMENTBLOCK, "fore:#7F7F7F")
+        stc.StyleSetSpec(wx.stc.STC_P_STRINGEOL,    "fore:#000000,face:%(mono)s,"
+                                                    "back:%(eolbg)s,eolfilled" % faces)
+
+        stc.CallTipSetBackground(faces['calltipbg'])
+        stc.CallTipSetForeground(faces['calltipfg'])
 
 
 
@@ -1486,30 +1571,36 @@ class ProgressWindow(wx.Dialog):
     """
 
     def __init__(self, parent, title, message="", maximum=100, cancel=True,
-                 style=wx.CAPTION | wx.CLOSE_BOX | wx.FRAME_FLOAT_ON_PARENT):
-        wx.Dialog.__init__(self, parent, title=title, style=style)
+                 style=wx.CAPTION | wx.CLOSE_BOX | wx.FRAME_FLOAT_ON_PARENT,
+                 agwStyle=wx.ALIGN_LEFT):
+        """
+        @param   message   message shown on top of gauge
+        @param   maximum   gauge maximum value
+        @param   cancel    whether dialog is cancelable and has cancel-button,
+                           optionally a callable returning whether to cancel
+        @param   agwStyle  message alignment flags
+        """
+        wx.Dialog.__init__(self, parent=parent, title=title, style=style)
         self._is_cancelled = False
+        self._oncancel = cancel if callable(cancel) else lambda *a, **kw: True
 
-        self.Sizer = wx.BoxSizer(wx.VERTICAL)
-        panel = self._panel = wx.Panel(self)
-        sizer = self._panel.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
-        label = self._label_message = wx.StaticText(panel, label=message)
-        sizer.Add(label, border=2*8, flag=wx.LEFT | wx.TOP)
-        gauge = self._gauge = wx.Gauge(panel, range=maximum, size=(300,-1),
-                              style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
+        label = self._label = wx.StaticText(self, label=message, style=agwStyle)
+        sizer.Add(label, border=2*8, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
+        gauge = self._gauge = wx.Gauge(self, range=maximum, size=(300,-1),
+                                       style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
         sizer.Add(gauge, border=2*8, flag=wx.LEFT | wx.RIGHT | wx.TOP | wx.GROW)
         gauge.Value = 0
         if cancel:
-            self._button_cancel = wx.Button(self._panel, id=wx.ID_CANCEL)
+            self._button_cancel = wx.Button(self, id=wx.ID_CANCEL)
             sizer.Add(self._button_cancel, border=8,
                       flag=wx.TOP | wx.BOTTOM | wx.ALIGN_CENTER_HORIZONTAL)
-            self.Bind(wx.EVT_BUTTON, self.OnCancel, self._button_cancel)
-            self.Bind(wx.EVT_CLOSE, self.OnCancel)
+            self.Bind(wx.EVT_BUTTON, self._OnCancel, self._button_cancel)
+            self.Bind(wx.EVT_CLOSE,  self._OnCancel)
         else:
             sizer.Add((8, 8))
 
-        self.Sizer.Add(panel, flag=wx.GROW)
         self.Fit()
         self.Layout()
         self.Refresh()
@@ -1523,22 +1614,47 @@ class ProgressWindow(wx.Dialog):
         @return  False if dialog was cancelled by user, True otherwise
         """
         if message is not None:
-            self._label_message.Label = message
+            self._label.Label = message
         self._gauge.Value = value
-        self.Refresh()
+        self.Layout()
         return not self._is_cancelled
 
 
-    def OnCancel(self, event):
-        """
-        Handler for cancelling the dialog, hides the window.
-        """
-        self._is_cancelled = True
-        self.Hide()
+    def Pulse(self, pulse=True):
+        """Sets the progress bar to pulse, or stops pulse."""
+        if pulse: self._gauge.Pulse()
+        else: self._gauge.Value = self._gauge.Value
+
+
+    def GetValue(self):
+        """Returns progress bar value."""
+        return self._gauge.Value
+    def SetValue(self, value):
+        """Sets progress bar value."""
+        self._gauge.Value = value
+    Value = property(GetValue, SetValue)
+
+
+    def GetMessage(self):
+        """Returns message value."""
+        return self._label.Label
+    def SetMessage(self, message):
+        """Sets message value."""
+        self._label.Label = message
+        self.Fit()
+        self.Layout()
+    Message = property(GetMessage, SetMessage)
 
 
     def SetGaugeForegroundColour(self, colour):
         self._gauge.ForegroundColour = colour
+
+
+    def _OnCancel(self, event):
+        """Handler for cancelling the dialog, hides the window."""
+        if not self._oncancel(): return
+        self._is_cancelled = True
+        self.Hide()
 
 
 
@@ -2027,6 +2143,17 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             if self._id_rows: self.RefreshRows()
 
 
+    def FindItem(self, text):
+        """
+        Find an item whose primary label matches the text.
+
+        @return   item index, or -1 if not found
+        """
+        for i in range(self.GetItemCount()):
+            if self.GetItemText(i) == text: return i
+        return -1
+
+
     def RefreshRows(self):
         """
         Clears the list and inserts all unfiltered rows, auto-sizing the
@@ -2049,13 +2176,12 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
 
     def RefreshRow(self, row):
-        """
-        Refreshes row with specified index from item data.
-        """
+        """Refreshes row with specified index from item data."""
+        if not self.GetItemCount(): return
         if row < 0: row = row % self.GetItemCount()
-        if row not in self._data_map or not row and not self._top_row: return
+        data = not row and self._top_row or self._data_map.get(self.GetItemData(row))
+        if not data: return
 
-        data = not row and self._top_row or self._data_map[row]
         for i, col_name in enumerate([c[0] for c in self._columns]):
             col_value = self._formatters[col_name](data, col_name)
             self.SetStringItem(row, i, col_value)
@@ -2096,7 +2222,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
     def GetItemCountFull(self):
         """Returns the full row count, including items hidden by filter."""
-        return len(self._id_rows)
+        return len(self._id_rows) + bool(self._top_row)
 
 
     def GetItemTextFull(self, idx):
@@ -2884,7 +3010,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
 
         self._fixed    = False # Fixed-length value
-        self._type     = str   # Value type: str, int, float, long
+        self._type     = str   # Value type: str, unicode, int, float, long
         self._bytes0   = []    # [byte or None, ]
         self._bytes    = bytearray()
         self._mirror   = None # Linked control
@@ -2978,9 +3104,12 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         """Returns current content as original type (string or number)."""
         v = str(self._bytes)
         if v == "" and self._type in (int, float, long): v = None
-        elif self._type is   int: v = struct.unpack(">l", v)[0]
-        elif self._type is float: v = struct.unpack(">f", v)[0]
-        elif self._type is  long: v = struct.unpack(">q", v)[0]
+        elif self._type is     int: v = struct.unpack(">l", v)[0]
+        elif self._type is   float: v = struct.unpack(">f", v)[0]
+        elif self._type is    long: v = struct.unpack(">q", v)[0]
+        elif self._type is unicode:
+            try: v = v.decode("utf-8")
+            except Exception: v = v.decode("latin1")
         return v
 
     def SetValue(self, value):
@@ -3265,6 +3394,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
             bpos, idx = self.CurrentPos, linepos % 3
             if is_lastpos: bpos, idx = min(bpos, len(self._bytes) - 1), 0
+            elif direction and not idx: bpos -= 1 # Backspacing over previous byte
             for bb in self._bytes, self._bytes0: del bb[bpos]
 
             if line == self.LineCount - 1 and (not direction or linepos):
@@ -3408,7 +3538,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
 
         self._fixed  = False # Fixed-length value
-        self._type   = str   # Value type: str, int, float, long
+        self._type   = str   # Value type: str, unicode, int, float, long
         self._bytes0 = []    # [byte or None, ]
         self._bytes  = bytearray() # Raw bytes
         self._mirror = None  # Linked control
@@ -3487,9 +3617,12 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         """Returns current content as original type (string or number)."""
         v = str(self._bytes)
         if v == "" and self._type in (int, float, long): v = None
-        elif self._type is   int: v = struct.unpack(">l", v)[0]
-        elif self._type is float: v = struct.unpack(">f", v)[0]
-        elif self._type is  long: v = struct.unpack(">q", v)[0]
+        elif self._type is     int: v = struct.unpack(">l", v)[0]
+        elif self._type is   float: v = struct.unpack(">f", v)[0]
+        elif self._type is    long: v = struct.unpack(">q", v)[0]
+        elif self._type is unicode:
+            try: v = v.decode("utf-8")
+            except Exception: v = v.decode("latin1")
         return v
 
     def SetValue(self, value):

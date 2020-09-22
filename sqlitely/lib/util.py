@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.08.2020
+@modified    21.09.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -330,9 +330,11 @@ def plural(word, items=None, numbers=True, single="1", sep="", pref="", suf=""):
     """
     count   = len(items) if hasattr(items, "__len__") else items or 0
     isupper = word[-1:].isupper()
-    suffix = "es" if word and word[-1:].lower() in "xyz" else "s" if word else ""
+    suffix = "es" if word and word[-1:].lower() in "xyz" \
+             and not word[-2:].lower().endswith("ay") \
+             else "s" if word else ""
     if isupper: suffix = suffix.upper()
-    if count != 1 and "y" == word[-1:].lower():
+    if count != 1 and "es" == suffix and "y" == word[-1:].lower():
         word = word[:-1] + ("I" if isupper else "i")
     result = word + ("" if 1 == count else suffix)
     if numbers and items is not None:
@@ -624,6 +626,27 @@ def path_to_url(path, encoding="utf-8"):
             url += "/" + urllib.quote(part)
     url = "file:%s%s" % ("" if url.startswith("///") else "///" , url)
     return url
+
+
+def titlecase(text):
+    """
+    Returns a titlecased version of text, leaving URLs as is 
+    and not considering apostrophe as word separator.
+    """
+    re_url = re.compile(r"((?:(?:(?:(?:[a-z]+)?://)|(?:www\.))" # protocol:// or www.
+                         r"(?:[\w.:_\-/?#%@]+))"                # domain + path etc
+                        r"|(?:[\w\-_.]+)@(?:[\w\-_.]+))", re.I) # e-mail address
+    re_inter = re.compile(r'([\s!"“#%&()*+,.\/:;?@\\[\]_`{|}~])')
+    done = []
+    for i, part in enumerate(re_url.split(text)):
+        if i % 2:
+            done.append(part) # Found URL: leave as is
+            continue # for i, part
+
+        for word in re_inter.split(part):
+            if i % 2: done.append(word) # Whitespace or separator: leave as is
+            elif word: done.append(word[0].upper() + word[1:].lower())
+    return "".join(done)
 
 
 def to_str(value, encoding=None):

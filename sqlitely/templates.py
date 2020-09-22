@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.08.2020
+@modified    14.09.2020
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -755,7 +755,7 @@ under the MIT License.
 %if getattr(sys, 'frozen', False):
 Installer and binary executable created with:
 <ul>
-  <li>Nullsoft Scriptable Install System, <a href="https://nsis.sourceforge.net/"><font color="{{ conf.LinkColour }}">nsis.sourceforge.net</font></a></li>
+  <li>Nullsoft Scriptable Install System, <a href="https://nsis.sourceforge.io"><font color="{{ conf.LinkColour }}">nsis.sourceforge.io</font></a></li>
   <li>PyInstaller, <a href="https://www.pyinstaller.org"><font color="{{ conf.LinkColour }}">pyinstaller.org</font></a></li>
 </ul><br /><br />
 %endif
