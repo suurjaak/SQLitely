@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.08.2020
+@modified    22.09.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -102,6 +102,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         # List of Notebook pages user has visited, used for choosing page to
         # show when closing one.
         self.pages_visited = []
+        self.ipc_listener = None # workers.IPCListener instance
 
         icons = images.get_appicons()
         self.SetIcons(icons)
@@ -240,6 +241,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.Center(wx.HORIZONTAL)
             self.Position.top = 50
         self.list_db.SetFocus()
+
+        if not conf.AllowMultipleInstances:
+            args = conf.IPCName, conf.IPCPort, self.on_ipc
+            self.ipc_listener = workers.IPCListener(*args)
+            self.ipc_listener.start()
 
         if conf.WindowIconized:
             conf.WindowIconized = False
@@ -566,6 +572,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_autoupdate_check = self.menu_autoupdate_check = menu_help.Append(
             wx.ID_ANY, "Automatic up&date check",
             "Automatically check for program updates periodically", kind=wx.ITEM_CHECK)
+        menu_allow_multi = self.menu_allow_multi = menu_help.Append(
+            wx.ID_ANY, "Allow &multiple instances",
+            "Allow multiple %s instances to run at the same time" % conf.Title,
+            kind=wx.ITEM_CHECK)
         menu_help.AppendSeparator()
         menu_about = self.menu_about = menu_help.Append(
             wx.ID_ANY, "&About %s" % conf.Title,
@@ -580,6 +590,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if self.trayicon.IsAvailable():
             menu_tray.Check(conf.TrayIconEnabled)
         menu_autoupdate_check.Check(conf.UpdateCheckAutomatic)
+        menu_allow_multi.Check(conf.AllowMultipleInstances)
         menu_tools_export_spreadsheet.Enabled = bool(importexport.xlsxwriter)
 
         menu.Bind(wx.EVT_MENU_OPEN, self.on_menu_open)
@@ -599,6 +610,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.Bind(wx.EVT_MENU, self.on_toggle_trayicon,     menu_tray)
         self.Bind(wx.EVT_MENU, self.on_toggle_autoupdate_check,
                   menu_autoupdate_check)
+        self.Bind(wx.EVT_MENU, self.on_toggle_allow_multi, menu_allow_multi)
         self.Bind(wx.EVT_MENU, self.on_about, menu_about)
 
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["refresh"]), menu_view_refresh)
@@ -742,6 +754,22 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         # Schedule a check for due date, should the program run that long.
         millis = max(1, min(sys.maxint, util.timedelta_seconds(interval) * 1000))
         wx.CallLater(millis, self.update_check)
+
+
+    def on_toggle_allow_multi(self, event):
+        """
+        Handler for toggling allowing multiple instances, starts-stops the
+        IPC server.
+        """
+        allow = conf.AllowMultipleInstances = event.IsChecked()
+        conf.save()
+        if allow:
+            self.ipc_listener.stop()
+            self.ipc_listener = None
+        else:
+            args = conf.IPCName, conf.IPCPort, self.ipc_callback
+            self.ipc_listener = workers.IPCListener(*args)
+            self.ipc_listener.start()
 
 
     def on_toggle_iconize(self, event=None):
@@ -925,6 +953,24 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if not self.IsIconized():
             conf.WindowPosition = event.Position[:]
             conf.save()
+
+
+    def on_ipc(self, data):
+        """
+        Handler for responding to an inter-process message from another
+        program instance that was launched and then exited because of
+        conf.AllowMultipleInstances. Raises the program window and loads
+        given databases if any.
+        """
+        def after(data):
+            if not self: return
+
+            if conf.WindowIconized: self.on_toggle_iconize()
+            else: self.Restore()
+            self.Raise()
+            data = data if isinstance(data, (list, set, tuple)) else filter(bool, [data])
+            if data: self.load_database_pages(data, clearselection=True)
+        wx.CallAfter(after, data)
 
 
     def on_sys_colour_change(self, event):

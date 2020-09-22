@@ -1,8 +1,9 @@
 CHANGELOG
 =========
 
-1.2, 2020-09-19
+1.2, 2020-09-22
 ---------------
+- added option to have only single instance running;
 - added support for single-user install;
 - minor fixes and UI tweaks.
 

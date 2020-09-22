@@ -9,13 +9,14 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.09.2020
+@modified    22.09.2020
 ------------------------------------------------------------------------------
 """
 import argparse
 import functools
 import glob
 import logging
+import multiprocessing.connection
 import os
 import sys
 import threading
@@ -91,13 +92,36 @@ def install_thread_excepthook():
     threading.Thread.__init__ = init
 
 
+def ipc_send(authkey, port, data, limit=10000):
+    """
+    Sends data to another program instance via multiprocessing,
+    climbing port number higher until success or reaching step limit.
+
+    @return  True if operation successful, False otherwise
+    """
+    result = False
+    while not result and limit:
+        kwargs = {"address": ("localhost", port), "authkey": authkey}
+        try:   multiprocessing.connection.Client(**kwargs).send(data)
+        except Exception: port, limit = port + 1, limit - 1
+        else:  result = True
+    return result
+
+
 def run_gui(filenames):
     """Main GUI program entrance."""
     global logger
+    filenames = filter(os.path.isfile, filenames)
 
     # Set up logging to GUI log window
     logger.addHandler(guibase.GUILogHandler())
     logger.setLevel(logging.DEBUG)
+
+    singlechecker = wx.SingleInstanceChecker(conf.IPCName)
+    if not conf.AllowMultipleInstances and singlechecker.IsAnotherRunning():
+        data = map(os.path.realpath, filenames)
+        if ipc_send(conf.IPCName, conf.IPCPort, data): return
+        else: logger.error("Failed to communicate with allowed instance.")
 
     install_thread_excepthook()
     sys.excepthook = except_hook
@@ -125,9 +149,10 @@ def run_gui(filenames):
     window.run_console("from sqlitely.lib import controls, util, wx_accel")
 
     window.run_console("self = wx.GetApp().TopWindow # Application main window")
-    for f in filter(os.path.isfile, filenames):
+    for f in filenames:
         wx.CallAfter(wx.PostEvent, window, gui.OpenDatabaseEvent(-1, file=f))
     app.MainLoop()
+    del singlechecker
 
 
 def run():
