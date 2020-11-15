@@ -1220,8 +1220,9 @@ from sqlitely import conf
 ratio = util.safedivf(size, total)
 if 0.99 <= ratio < 1: ratio = 0.99
 percent = int(round(100 * ratio))
-text_cell1 = "&nbsp;%d%%&nbsp;" % round(percent) if (round(percent) > 30) else ""
-text_cell2 = "" if text_cell1 else "&nbsp;%d%%&nbsp;" % percent
+numtext = "%d" % round(percent)
+text_cell1 = "&nbsp;%s%%&nbsp;" % numtext if (len(numtext) * 7 + 25 < ratio * conf.StatisticsPlotWidth) else ""
+text_cell2 = "" if text_cell1 else "&nbsp;%s%%&nbsp;" % numtext
 fgcolour = conf.PlotTableColour if "table" == category else conf.PlotIndexColour
 
 %>
@@ -1232,7 +1233,7 @@ fgcolour = conf.PlotTableColour if "table" == category else conf.PlotIndexColour
     <font color="#FFFFFF" size="2"><b>{{! text_cell1 }}</b></font>
 %endif
   </td>
-  <td bgcolor="{{ conf.PlotBgColour }}" width="{{ int(round((1 - ratio) * conf.StatisticsPlotWidth)) }}" align="center">
+  <td bgcolor="{{ conf.PlotBgColour }}" width="{{ int(round((1 - ratio) * conf.StatisticsPlotWidth)) }}">
 %if text_cell2:
     <font color="{{ fgcolour }}" size="2"><b>{{! text_cell2 }}</b></font>
 %endif
@@ -1851,7 +1852,7 @@ mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "v
 
 
 """
-Database statistics row plot for HTML exoprt.
+Database statistics row plot for HTML export.
 
 @param   category  "table" or "index"
 @param   size      item size
