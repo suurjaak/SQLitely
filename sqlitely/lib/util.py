@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.09.2020
+@modified    03.10.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -35,17 +35,22 @@ import pytz
 class CaselessDict(dict):
     """
     A case-insensitive dict for string keys, keys are returned in original case
-    in case-insensitive order. Keys can be strings, or tuples of strings, or None.
+    in case-insensitive order, unless insertorder given in constructor.
+    Keys can be strings, or tuples of strings, or None.
     """
 
-    def __init__(self, iterable=None, **kwargs):
-        self._data = {} # {lowercase key: value}
-        self._keys = {} # {lowercase key: original key}
+    def __init__(self, iterable=None, insertorder=False, **kwargs):
+        self._data  = {} # {lowercase key: value}
+        self._keys  = {} # {lowercase key: original key}
+        self._order = [] if insertorder else None # [lowercase key]
         self.update(iterable, **kwargs)
 
-    def clear(self): self._data.clear(), self._keys.clear()
+    def clear(self):
+        self._data.clear(), self._keys.clear()
+        if self._order: del self._order[:]
 
-    def copy(self): return type(self)((k, self[k]) for k in self)
+    def copy(self):
+        return type(self)(((k, self[k]) for k in self), self._order is not None)
 
     @staticmethod
     def fromkeys(S, v=None): return CaselessDict((k, v) for k in S)
@@ -69,8 +74,9 @@ class CaselessDict(dict):
             raise TypeError("pop expected at most 2 arguments, got %s" %
                             (len(args) + 1))
         if key in self:
-            v = self[key]
+            v, lc = self[key], self._(key)
             del self[key]
+            if self._order and lc in self._order: self._order.remove(lc)
             return v
         elif args: return args[0]
         else: raise KeyError(key)
@@ -78,8 +84,9 @@ class CaselessDict(dict):
     def popitem(self):
         if not self: raise KeyError("popitem(): dictionary is empty")
         k = next(iter(self))
-        v = self[k]
+        v, lc = self[k], self._(k)
         del self[k]
+        if self._order and lc in self._order: self._order.remove(lc)
         return k, v
 
     def setdefault(self, key, value=None):
@@ -98,22 +105,36 @@ class CaselessDict(dict):
 
     def __contains__(self, key): return self._(key) in self._data
 
+    def __eq__(self, other):
+        return isinstance(other, type(self)) and \
+               self._data == other._data and self._order == other._order
+
+    def __ne__(self, other):
+        return not (self == other)
+
     def __delitem__(self, key):
         lc = self._(key)
-        del self._data[lc], self._keys[lc]
+        del self._data[lc]
+        del self._keys[lc]
+        if self._order and lc in self._order: self._order.remove(lc)
 
     def __getitem__(self, key): return self._data[self._(key)]
 
     def __len__(self): return len(self._data)
 
     def __iter__(self):
+        if self._order is not None:
+            return iter(self._keys[k] for k in self._order)
         sortkey = lambda (a, b): a if isinstance(a, tuple) else (a, )
         return iter(x for _, x in sorted(self._keys.items(), key=sortkey))
 
     def __setitem__(self, key, value):
         lc, self._keys[lc], self._data[lc] = self._(key), key, value
+        if self._order is not None and lc not in self._order:
+            self._order.append(lc)
 
     def _(self, key):
+        """Returns lowercased key value."""
         if key is None: return key
         if isinstance(key, basestring): return key.lower()
         return tuple(x.lower() if isinstance(x, basestring) else x for x in key)
