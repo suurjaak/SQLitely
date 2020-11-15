@@ -1,8 +1,9 @@
 CHANGELOG
 =========
 
-1.2, 2020-09-22
+1.2, 2020-11-15
 ---------------
+- added schema diagram;
 - added option to have only single instance running;
 - added support for single-user install;
 - minor fixes and UI tweaks.

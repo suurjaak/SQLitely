@@ -66,7 +66,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    21.09.2020
+@modified    14.11.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -82,7 +82,6 @@ import sys
 import wx
 import wx.html
 import wx.lib.agw.flatnotebook
-import wx.lib.agw.gradientbutton
 import wx.lib.agw.labelbook
 try: # ShapedButton requires PIL, might not be installed
     import wx.lib.agw.shapedbutton
@@ -125,6 +124,10 @@ class KEYS(object):
     PAGING     = PAGEUP + PAGEDOWN
     NAVIGATION = ARROW + PAGING + HOME + END + TAB
     COMMAND    = ENTER + INSERT + DELETE + SPACE + BACKSPACE + ESCAPE
+
+    NUMPAD_ARROW = wx.WXK_NUMPAD_END,  wx.WXK_NUMPAD_DOWN,  wx.WXK_NUMPAD_PAGEDOWN, \
+                   wx.WXK_NUMPAD_LEFT,                      wx.WXK_NUMPAD_RIGHT,    \
+                   wx.WXK_NUMPAD_HOME, wx.WXK_NUMPAD_UP,    wx.WXK_NUMPAD_PAGEUP
 
     NAME_CTRL  = "Cmd" if "darwin" == sys.platform else "Ctrl"
 
@@ -5060,3 +5063,14 @@ def get_dialog_path(dialog):
 
     return result
 
+
+def get_tool_rect(toolbar, id_tool):
+    """Returns position and size of a toolbar tool by ID."""
+    bmpsize, toolsize, packing = toolbar.ToolBitmapSize, toolbar.ToolSize, toolbar.ToolPacking
+    result = wx.Rect(0, 0, *toolsize)
+    for i in range(toolbar.GetToolPos(id_tool)):
+        tool = toolbar.GetToolByPos(i)
+        result.x += packing + (1 if tool.IsSeparator() else bmpsize[0] if tool.IsButton()
+                               else tool.Control.Size[0])
+
+    return result

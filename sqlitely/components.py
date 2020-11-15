@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.09.2020
+@modified    15.11.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -22,6 +22,7 @@ import json
 import logging
 import math
 import pickle
+import random
 import Queue
 import os
 import re
@@ -9005,6 +9006,7 @@ class ColumnDialog(wx.Dialog):
 
 
         def on_save(value):
+            FMTS = sorted(x for x in self.IMAGE_FORMATS.values() if "SVG" != x)
             fmts = [x.lower() for x in flist.Items]
             wildcard = "|".join("%s image (*.%s)|*.%s" % (x.upper(), x, x)
                                 for x in fmts)
@@ -9350,3 +9352,891 @@ def get_grid_selection(grid, cursor=True):
             rows, cols = [grid.GridCursorRow], [grid.GridCursorCol]
     rows, cols = (sorted(set(y for y in x if y >= 0)) for x in (rows, cols))
     return rows, cols
+
+
+
+class SchemaDiagram(wx.ScrolledWindow):
+    """
+    Panel that shows a visual diagram of database schema.
+    """
+
+    EXPORT_FORMATS = {
+        wx.BITMAP_TYPE_BMP:  "BMP",
+        wx.BITMAP_TYPE_PNG:  "PNG",
+        #0xFFFF:             "SVG", @todo
+    }
+
+    # Default gradient end on white background
+    COLOUR_GRAD_TO = wx.Colour(103, 103, 255)
+    VIRTUALSZ = 2000, 2000 # Default virtual size
+
+    MINW      = 100 # Item minimum width
+    LINEH     =  15 # Item column line height
+    HEADERP   =   5 # Vertical margin between header and columns
+    HEADERH   =  20 # Item header height (header contains name)
+    FOOTERH   =   5 # Item footer height
+    BRADIUS   =   5 # Item rounded corner radius
+    FMARGIN   =   2 # Focused item border margin
+    CARDINALW =   7 # Horizontal width of cardinality crowfoot
+    CARDINALH =   3 # Vertical step for cardinality crowfoot
+    LPAD      =  15 # Left padding
+    HPAD      =  20 # Right and middle padding 
+    GPAD      =  30 # Padding between grid items
+    MAX_TITLE =  50 # Item name max len
+    MAX_TEXT  =  40 # Column name/type max len
+    MOVE_STEP =  10 # Pixels to move item on arrow key
+
+
+
+    def __init__(self, parent, db, *args, **kwargs):
+        super(SchemaDiagram, self).__init__(parent, *args, **kwargs)
+        self._db    = db
+        self._ids   = {} # {DC ops ID: name or (name1, name2, (cols)) or None}
+        self._objs  = util.CaselessDict() # {name: {id, bmp, bmpsel, bmpseldrag, category, name}}
+        self._lines = util.CaselessDict() # {(name1, name2, (cols)): {id, pts}}
+        self._sels  = util.CaselessDict(insertorder=True) # {name selected: DC ops ID}
+        self._order = []   # [{obj dict}, ]
+        self._page  = None # DatabasePage instance
+        self._dc    = wx.adv.PseudoDC()
+
+        self._dragpos     = None # (x, y) of last drag event
+        self._dragrect    = None # Selection (x, y, w, h) currently being dragged
+        self._dragrectabs = None # Selection being dragged, with non-negative dimensions
+        self._dragrectid  = None # DC ops ID for selection rect
+        self._show_lines  = True
+        self._show_labels = True
+        self._show_stats  = False
+
+        self._colour_border = wx.NullColour
+        self._colour_line   = wx.NullColour
+        self._colour_shadow = wx.NullColour
+        self._colour_grad1  = wx.NullColour
+        self._colour_grad2  = wx.NullColour
+        self._colour_dragbg = wx.NullColour
+
+        FMTS = sorted(self.EXPORT_FORMATS.values())
+        wildcard = "|".join("%s image (*.%s)|*.%s" % (x, x.lower(), x.lower())
+                            for x in FMTS)
+        self._dlg_save = wx.FileDialog(self, message="Save diagram as", wildcard=wildcard,
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
+        filteridx = FMTS.index("PNG") if "PNG" in FMTS else 0
+        if filteridx >= 0: self._dlg_save.SetFilterIndex(filteridx)
+
+        self._worker_graph = workers.GraphWorker(self._OnWorkerGraph)
+
+        ColourManager.Manage(self, "BackgroundColour",   wx.SYS_COLOUR_WINDOW)
+        ColourManager.Manage(self, "ForegroundColour",   wx.SYS_COLOUR_WINDOWTEXT)
+        ColourManager.Manage(self, "BorderColour",       wx.SYS_COLOUR_GRAYTEXT)
+        ColourManager.Manage(self, "LineColour",         wx.SYS_COLOUR_BTNTEXT)
+        ColourManager.Manage(self, "GradientColourFrom", wx.SYS_COLOUR_WINDOW)
+        self._UpdateColours()
+        self.SetVirtualSize(self.VIRTUALSZ)
+        self.SetScrollRate(20, 20)
+        self.SetFont(wx.Font(8, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
+                             wx.FONTWEIGHT_NORMAL, faceName="Verdana"))
+
+        self.Bind(wx.EVT_ERASE_BACKGROUND,    lambda x: None) # Reduces flicker
+        self.Bind(wx.EVT_MOUSE_EVENTS,        self._OnMouse)
+        self.Bind(wx.EVT_PAINT,               self._OnPaint)
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED,  self._OnSysColourChange)
+        self.Bind(wx.EVT_SCROLLWIN,           self._OnScroll)
+        self.Bind(wx.EVT_SCROLL_THUMBRELEASE, self._OnScroll)
+        self.Bind(wx.EVT_SCROLL_CHANGED,      self._OnScroll)
+        self.Bind(wx.EVT_CHAR_HOOK,           self._OnKey)
+        self.Bind(wx.EVT_CONTEXT_MENU,        lambda e: self.OpenContextMenu())
+
+
+    def SetBorderColour(self, colour): self._colour_border = colour
+    def GetBorderColour(self):         return self._colour_border
+    BorderColour = property(GetBorderColour, SetBorderColour)
+
+
+    def SetLineColour(self, colour): self._colour_line = colour
+    def GetLineColour(self):         return self._colour_line
+    LineColour = property(GetLineColour, SetLineColour)
+
+
+    def SetShadowColour(self, colour): self._colour_shadow = colour
+    def GetShadowColour(self):         return self._colour_shadow
+    ShadowColour = property(GetShadowColour, SetShadowColour)
+
+
+    def SetGradientColourFrom(self, colour): self._colour_grad1 = colour
+    def GetGradientColourFrom(self):         return self._colour_grad1
+    GradientColourFrom = property(GetGradientColourFrom, SetGradientColourFrom)
+
+
+    def SetGradientColourTo(self, colour): self._colour_grad2 = colour
+    def GetGradientColourTo(self):         return self._colour_grad2
+    GradientColourTo = property(GetGradientColourTo, SetGradientColourTo)
+
+
+    def SetDatabasePage(self, page): self._page = page
+    def GetDatabasePage(self):         return self._page
+    DatabasePage = property(GetDatabasePage, SetDatabasePage)
+
+
+    def ShowLines(self, show=True):
+        """Sets showing foreign relation lines on or off."""
+        show = bool(show)
+        if show == self._show_lines: return
+        self._show_lines = show
+        if show: self.RecordLines(); self.RecordItems()
+        else:
+            for opts in self._lines.values(): self._dc.ClearId(opts["id"])
+        self.Refresh()
+
+
+    def ShowLineLabels(self, show=True):
+        """Sets showing foreign relation line labels on or off."""
+        show = bool(show)
+        if show == self._show_labels: return
+        self._show_labels = show
+        self.Redraw()
+
+
+    def SaveFile(self):
+        """Opens file dialog and exports diagram in selected format."""
+        title = os.path.splitext(os.path.basename(self._db.name))[0]
+        self._dlg_save.Filename = util.safe_filename(title + " schema")
+        if wx.ID_OK != self._dlg_save.ShowModal(): return
+
+        filename = controls.get_dialog_path(self._dlg_save)
+        filetype = os.path.splitext(filename)[-1].lstrip(".").upper()
+        wxtype   = next(k for k, v in self.EXPORT_FORMATS.items() if v == filetype)
+
+        bounds = wx.Rect()
+        for k in self._ids: bounds.Union(self._dc.GetIdBounds(k))
+        bounds.Inflate(10, 10)
+
+        bmp = wx.Bitmap(self.VirtualSize)
+        dc = wx.MemoryDC(bmp)
+        dc.Font = self.Font
+        dc.Background = controls.BRUSH(self.BackgroundColour)
+        dc.Clear()
+        self._dc.DrawToDCClipped(dc, bounds)
+
+        bmp2 = wx.Bitmap(bounds.Width, bounds.Height)
+        dc2 = wx.MemoryDC(bmp2)
+        dc2.Blit(0, 0, bounds.Width, bounds.Height, dc, bounds.Left, bounds.Top)
+        del dc
+        bmp2.SaveFile(filename, wxtype)
+        guibase.status("Exported schema diagram to %s.", filename, log=True)
+        util.start_file(filename)
+
+
+    def OpenContextMenu(self):
+        """Opens context menu, for focused schema item if any."""
+        if not self._page: return
+        menu = wx.Menu()
+
+        def cmd(*args):
+            return lambda e: self._page.handle_command(*args)
+        def clipboard_copy(text, *_, **__):
+            if wx.TheClipboard.Open():
+                d = wx.TextDataObject(text() if callable(text) else text)
+                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+
+        if not self._sels:
+            submenu, keys = wx.Menu(), []
+            menu.AppendSubMenu(submenu, text="Create &new ..")
+            for category in database.Database.CATEGORIES:
+                key = next((x for x in category if x not in keys), category[0])
+                keys.append(key)
+                it = wx.MenuItem(submenu, -1, "New " + category.replace(key, "&" + key, 1))
+                submenu.Append(it)
+
+        else:
+            o = self._objs[next(iter(self._sels))] # @todo multiselect
+            item_name = wx.MenuItem(menu, wx.ID_ANY, "%s %s" % (
+                        o["category"].capitalize(),
+                        util.unprint(grammar.quote(o["name"], force=True))))
+            item_name.Font = self.Parent.Font.Bold()
+            menu.Append(item_name)
+            menu.AppendSeparator()
+
+            item_reidx  = item_trunc = None
+            item_data   = menu.Append(wx.ID_ANY, "Open %s &data"   % o["category"])
+            item_schema = menu.Append(wx.ID_ANY, "Open %s &schema" % o["category"])
+            item_copy   = menu.Append(wx.ID_ANY, "&Copy name")
+            item_sql    = menu.Append(wx.ID_ANY, "&Copy %s S&QL" % o["category"])
+            item_sqlall = menu.Append(wx.ID_ANY, "&Copy all &related SQL")
+            menu.AppendSeparator()
+            if "table" == o["category"]:
+                submenu = wx.Menu()
+                menu.AppendSubMenu(submenu, text="Create &new ..")
+                for category in "index", "trigger", "view":
+                    it = wx.MenuItem(submenu, -1, "New &%s" % category)
+                    submenu.Append(it)
+                    menu.Bind(wx.EVT_MENU, cmd("create", category, o["category"], o["name"]), it)
+                item_reidx = menu.Append(wx.ID_ANY, "Reindex %s"  % o["category"])
+                item_trunc = menu.Append(wx.ID_ANY, "Truncate %s" % o["category"])
+            item_drop = menu.Append(wx.ID_ANY, "Drop %s" % o["category"])
+
+            menu.Bind(wx.EVT_MENU, cmd("data",   o["category"], o["name"]), item_data)
+            menu.Bind(wx.EVT_MENU, cmd("schema", o["category"], o["name"]), item_schema)
+            menu.Bind(wx.EVT_MENU, cmd("drop",   o["category"], o["name"]), item_drop)
+
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, o["name"]), item_copy)
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
+                      functools.partial(self._db.get_sql, o["category"], o["name"])), item_sql)
+            menu.Bind(wx.EVT_MENU, cmd("copy", "related", o["category"], o["name"]), item_sqlall)
+
+            if item_reidx:
+                menu.Bind(wx.EVT_MENU, cmd("reindex",  o["category"], o["name"]), item_trunc)
+            if item_trunc:
+                menu.Bind(wx.EVT_MENU, cmd("truncate", o["name"]), item_trunc)
+
+        self.PopupMenu(menu)
+
+
+    def Populate(self):
+        """Draws the current database schema to wx.PseudoDC."""
+        if not self: return
+
+        self._dc.RemoveAll()
+        self.SetFont(wx.Font(8, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
+                             wx.FONTWEIGHT_NORMAL, faceName="Verdana"))
+
+        self._ids  .clear()
+        self._objs .clear()
+        self._lines.clear()
+        del self._order[:]
+        self._sels.clear()
+        for name1 in self._db.get_category("table"):
+            for fk in self._db.get_keys(name1, pks_only=True)[1]:
+                name2, rname = list(fk["table"])[0], ", ".join(fk["name"])
+                key = name1, name2, tuple(n.lower() for n in fk["name"])
+                lid = len(self._ids) + 1
+                self._ids[lid] = key
+                self._lines[key] = {"id": lid, "pts": [], "name": rname}
+        for category in "table", "view":
+            for name, opts in self._db.get_category(category).items():
+                oid = len(self._ids) + 1
+                bmp = self._MakeItemBitmap(category, opts)
+                bmpsel = self._MakeFocusedBitmap(bmp)
+                bmpseldrag = self._MakeFocusedBitmap(self._MakeItemBitmap(category, opts, dragrect=True))
+                self._ids[oid] = name
+                self._objs[name] = {"id": oid, "category": category, "name": name,
+                                    "bmp": bmp, "bmpsel": bmpsel, "bmpseldrag": bmpseldrag}
+                self._order.append(self._objs[name])
+        self.PositionItemsGrid()
+        self.Redraw()
+
+
+    def Redraw(self, remake=False):
+        """Redraws all, remaking item bitmaps if specified."""
+        for o in self._objs.values() if remake else ():
+            opts = self._db.get_category(o["category"], o["name"])
+            o["bmp"] = self._MakeItemBitmap(o["category"], opts)
+            o["bmpsel"] = self._MakeFocusedBitmap(o["bmp"])
+            o["bmpseldrag"] = self._MakeFocusedBitmap(self._MakeItemBitmap(o["category"], opts, dragrect=True))
+        self.RecordSelectionRect()
+        self.RecordLines()
+        self.RecordItems()
+        self.Refresh()
+
+
+    def RecordItems(self):
+        """Records all schema items to DC."""
+        for o in self._order:
+            if o["name"] not in self._sels: self.RecordItem(o["name"])
+        for name in self._sels: self.RecordItem(name)
+
+
+    def RecordItem(self, name):
+        """Records a single schema item to DC."""
+        if name not in self._objs: return
+
+        o = self._objs[name]
+        bounds = self._dc.GetIdBounds(o["id"])
+        self._dc.RemoveId(o["id"])
+        self._dc.SetId(o["id"])
+        bmp = o[("bmpseldrag" if self._dragrect else "bmpsel") if o["name"] in self._sels else "bmp"]
+        pos = [a - (o["name"] in self._sels) * 2 for a in bounds[:2]]
+        self._dc.DrawBitmap(bmp, pos, useMask=True)
+        self._dc.SetIdBounds(o["id"], bounds)
+        self._dc.SetId(-1)
+
+
+    def RecordSelectionRect(self):
+        """Records selection rectangle currently being dragged."""
+        if not self._dragrectid: return
+
+        self._dc.ClearId(self._dragrectid)
+        self._dc.SetId(self._dragrectid)
+        self._dc.SetPen(controls.PEN(self._colour_dragfg))
+        self._dc.SetBrush(controls.BRUSH(self._colour_dragbg))
+        #self._dc.SetBrush(wx.TRANSPARENT_BRUSH)
+
+        self._dc.DrawRectangle(self._dragrectabs)
+        self._dc.SetIdBounds(self._dragrectid, self._dragrectabs)
+        self._dc.SetId(-1)
+
+
+    def RecordLines(self):
+        """Records foreign relation lines to DC if showing lines is enabled."""
+        if not self._show_lines: return
+
+        # {name2: {False: [(name1, cols) at top], True: [(name1, cols) at bottom]}}
+        vertslots = defaultdict(lambda: defaultdict(list))
+        ellipsize = lambda s, n: (s[:n] + "..") if len(s) > n else s
+
+        # First pass: determine starting X-Y and ending Y
+        for (name1, name2, cols), opts in self._lines.items():
+            b1, b2 = (self._dc.GetIdBounds(o["id"])
+                      for o in map(self._objs.get, (name1, name2)))
+            idx = next((i  for i, c in enumerate(self._db.schema["table"][name1]["columns"])
+                        if c["name"].lower() in cols), 0) # Column index in table
+
+            b1_more_left = b1.Left + b1.Width / 2 > b2.Left + b2.Width / 2
+            use_left = True
+            if   b2.Left  < b1.Left < b2.Right: use_left = b1_more_left
+            elif b1.Left  < b2.Left < b1.Right: use_left = b1_more_left
+            elif b1.Right < b2.Left:            use_left = False
+            x1 = (b1.Left - 1) if use_left else (b1.Right + 1)
+            if not (2 * self.CARDINALW < x1 < self.VirtualSize.Width - 2 * self.CARDINALW):
+                # Choose other side if too close to edge
+                x1 = (b1.Left - 1) if not use_left else (b1.Right + 1)
+
+            y1 = b1.Top + self.HEADERH + self.HEADERP + (idx + 0.5) * self.LINEH
+            y2 = b2.Top if y1 < b2.Top else b2.Bottom
+
+            if b1.Contains(b2.Left + b2.Width / 2, y2):
+                # Choose other side if within b1
+                y2 = b2.Top if y1 >= b2.Top else b2.Bottom
+
+
+
+            opts["pts"] = [[x1, y1], [-1, y2]]
+            vertslots[name2][y2 == b2.Bottom].append((name1, cols))
+
+        # Second pass: determine ending X
+        get_opts = lambda name2, name1, cols: self._lines[(name1, name2, cols)]
+        for name2 in vertslots:
+            for slots in vertslots[name2].values():
+                slots.sort(key=lambda x: -get_opts(name2, *x)["pts"][0][0])
+                for i, (name1, cols) in enumerate(slots):
+                    b2 = self._dc.GetIdBounds(self._objs[name2]["id"])
+                    step = 2 * self.BRADIUS
+                    while step > 1 and len(slots) * step > b2.Width - 2 * self.BRADIUS:
+                        step -= 1
+                    opts = get_opts(name2, name1, cols)
+                    opts["pts"][1][0] = b2.Left + b2.Width / 2 + (len(slots) / 2 - i) * step
+
+
+        # Final pass: determine ending X, insert waypoints
+        for (name1, name2, cols), opts in sorted(self._lines.items(),
+                key=lambda x: any(n in self._sels for n in x[0][:2])):
+            b1, b2 = (self._dc.GetIdBounds(o["id"])
+                      for o in map(self._objs.get, (name1, name2)))
+
+            pts = (pt1, pt2) = opts["pts"]
+            slots = vertslots[name2][pt2[1] == b2.Bottom]
+            idx = slots.index((name1, cols))
+            b1_more_left = b1.Left + b1.Width / 2 > b2.Left + b2.Width / 2
+
+
+            # Make 1..3 waypoints between start and end points
+            wpts = []
+            if b1.Left - 2 * self.CARDINALW <= pt2[0] <= b1.Right + 2 * self.CARDINALW:
+                # End point straight above or below start item
+                b1_side = b1.Top if pt1[1] > pt2[1] else b1.Bottom
+                ptm1 = pt1[0] + 2 * self.CARDINALW * (-1 if b1_more_left else 1), pt1[1]
+                ptm2 = ptm1[0], pt2[1] + (b1_side - pt2[1]) / 2
+
+                if b2.Left < pt2[0] < b2.Right \
+                and b2.Top - 2 * self.BRADIUS < ptm2[1] < b2.Bottom + 2 * self.BRADIUS:
+                    ptm2 = ptm2[0], (b2.Top if pt1[1] > b2.Top else b2.Bottom) + 2 * self.BRADIUS * (-1 if pt1[1] > b2.Top else 1)
+
+                ptm3 = pt2[0], ptm2[1]
+                # (pt1.x +- cardinal step, pt1.y), (pt1.x +- cardinal step, halfway to pt2.y), (pt2x, halfway to pt2.y)
+                wpts += [ptm1, ptm2, ptm3]
+            else:
+                ptm = pt2[0], pt1[1]
+                if not  b2.Contains(ptm[0], ptm[1] - self.CARDINALW) \
+                and not b2.Contains(ptm[0], ptm[1] + self.CARDINALW):
+                    # Middle point not within end item: single waypoint (pt2.x, pt1.y)
+                    wpts.append(ptm)
+                else: # Middle point within end item
+                    pt2_in_b2 = b2.Contains(pt2[0], pt2[1] + self.CARDINALW * (idx + 1))
+                    b2_side   = b2.Left if pt1[0] < pt2[0] else b2.Right
+                    ptm3 = pt2[0], pt2[1] + self.CARDINALW * (idx + 1) * (-1 if pt2_in_b2 else 1)
+
+                    if b2.Contains(ptm3):
+                        ptm3 = ptm3[0], pt2[1] + self.CARDINALW * (idx + 1) * (+1 if pt2_in_b2 else -1)
+
+                    ptm2 = pt1[0] + (b2_side - pt1[0]) / 2, ptm3[1]
+                    ptm1 = ptm2[0], pt1[1]
+                    # (halfway to pt2.x, pt1.y), (halfway to pt2.x, pt2.y +- vertical step), (pt2.x, pt2.y +- vertical step)
+                    wpts += [ptm1, ptm2, ptm3]
+            pts[-1:-1] = wpts
+
+            self._dc.RemoveId(opts["id"])
+            self._dc.SetId(opts["id"])
+
+            lcolour = self.LineColour
+            if self._dragrect and not any(self._dragrectabs.Contains(b) for b in (b1, b2)) \
+            or self._sels and name1 not in self._sels and name2 not in self._sels:
+                # Draw lines of not-focused items more faintly
+                lcolour = controls.ColourManager.Adjust(lcolour, self.BackgroundColour, 0.7)
+            self._dc.SetPen(controls.PEN(lcolour))
+
+            cpts, bounds = [], wx.Rect()
+            for i, wpt1 in enumerate(pts[:-1]):
+                wpt2 = pts[i + 1]
+                bounds.Union(wx.Rect(wx.Point(wpt1), wx.Point(wpt2)))
+
+                # Make rounded corners
+                mywpt1, mywpt2 = wpt1[:], wpt2[:]
+                axis = 0 if wpt1[0] != wpt2[0] else 1
+                direction = 1 if wpt1[axis] < wpt2[axis] else -1
+                if i: # Not first step: shift start 1px further
+                    shift = 1 if direction > 0 else 0
+                    mywpt1 = wpt1[0] + (1 - axis) * shift, wpt1[1] + axis * shift
+                elif direction < 0: # First step going backward: shift start 1px closer
+                    mywpt1 = mywpt1[0] + 1, mywpt1[1]
+                if i < len(pts) - 2: # Not last step: shift end 1px closer
+                    shift = -1 if direction < 0 else 0
+                    mywpt2 = wpt2[0] - (1 - axis) * shift, wpt2[1] - axis * shift
+                if i: # Add smoothing point at corner between this and last step
+                    wpt0 = pts[i - 1]
+                    dx = -1 if not axis and direction < 0 else 0
+                    dy = -1     if axis and direction < 0 else 0
+                    cpt = (mywpt1[0] + axis       * (-1 if wpt0[0] < wpt1[0] else 1) + dx,
+                           mywpt1[1] + (1 - axis) * (-1 if wpt0[1] < wpt1[1] else 1) + dy)
+                    cpts.append(cpt)
+
+                self._dc.DrawLine(mywpt1, mywpt2)
+
+            # Draw cardinality crowfoot
+            ptc0 = pt1[0] + self.CARDINALW * (-1 if pt1[0] > pts[1][0] else 1), pt1[1]
+            ptc1 = pt1[0], ptc0[1] - self.CARDINALH
+            ptc2 = pt1[0], ptc0[1] + self.CARDINALH
+            self._dc.DrawLines([ptc1, ptc0])
+            self._dc.DrawLines([ptc2, ptc0])
+
+            # Draw foreign key label
+            if self._show_labels:
+                tname = ellipsize(opts["name"], self.MAX_TEXT)
+                textent = self.GetFullTextExtent(tname)
+                tw, th = textent[0] + textent[3], textent[1] + textent[2]
+                tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
+                                  if pts[i][0] == pts[i+1][0])
+                tx = tpt1[0] - tw / 2
+                ty = min(tpt1[1], tpt2[1]) - th / 2 + abs(tpt1[1] - tpt2[1]) / 2
+                tbg = self.BackgroundColour
+                if self._dragrect and self._dragrectabs.Contains((tx, ty, tw, th)):
+                    tbg = self._colour_dragbg
+                self._dc.SetBrush(controls.BRUSH(tbg))
+                self._dc.SetPen(controls.PEN(tbg))
+                self._dc.DrawRectangle(tx, ty, tw, th)
+                self._dc.SetTextForeground(lcolour)
+                self._dc.DrawText(tname, tx, ty)
+                bounds.Union((tx, ty, tw, th))
+
+            # Draw inner rounded corners
+            ccolour = controls.ColourManager.Adjust(lcolour, self.BackgroundColour)
+            self._dc.SetPen(controls.PEN(ccolour))
+            for cpt in cpts: self._dc.DrawPoint(cpt)
+
+            self._dc.SetIdBounds(opts["id"], bounds)
+            self._dc.SetId(-1)
+            opts["pts"] = pts
+
+
+    def PositionItemsGrid(self):
+        """Calculates item positions using a simple grid layout."""
+        self._worker_graph.stop_work(drop=True)
+        MAXH = max(500, self.ClientSize[1])
+
+        def get_dx(colrects, col):
+            result = 0
+            for rr in colrects[:col]:
+                ww = [r.Width for r in rr]
+                median = sorted(ww)[len(rr) / 2]
+                result += max(w for w in ww if w < 1.5 * median)
+            return self.GPAD + result + col * self.GPAD
+
+        def get_dy(colrects, col):
+            result = max(r.Bottom for r in colrects[col]) if colrects[col] else 0
+            return self.GPAD + result
+
+        col, colrects = 0, [[]] # [[col 0 rect 0, rect 1, ], ]
+        for o in self._order:
+            x, y = get_dx(colrects, col), get_dy(colrects, col)
+            rect = wx.Rect(x, y, *o["bmp"].Size)
+
+            xrect = next((r for r in colrects[-2][::-1] if r.Intersects(rect)),
+                         None) if col else None
+            while xrect or colrects[-1] and y + o["bmp"].Height > MAXH:
+
+                # Step lower or to next col if prev col has wide item
+                if xrect and xrect.Bottom + self.GPAD + o["bmp"].Height > MAXH:
+                    col, colrects, y = col + 1, colrects + [[]], self.GPAD
+                elif xrect:
+                    y = xrect.Bottom + self.GPAD
+
+                if colrects[-1] and y + o["bmp"].Height > MAXH:
+                    col, colrects, y = col + 1, colrects + [[]], self.GPAD
+
+                rect = wx.Rect(get_dx(colrects, col), y, *o["bmp"].Size)
+                xrect = next((r for r in colrects[-2][::-1] if r.Intersects(rect)),
+                             None) if col else None
+
+            self._dc.SetIdBounds(o["id"], rect)
+            colrects[-1].append(rect)
+
+
+    def PositionItemsGraph(self):
+        """Calculates item positions using a force-directed graph."""
+        if self._worker_graph.is_working(): return
+
+        start, delta = self.GetViewStart(), self.GetScrollPixelsPerUnit()
+
+        nodes = [{"name": o["name"], "x": b.Left, "y": b.Top, "size": tuple(b.Size)}
+                 for o in self._objs.values() for b in [self._dc.GetIdBounds(o["id"])]]
+        links = [(n1, n2) for n1, n2, opts in self._lines]
+
+        bounds = [0, 0] + list(self.VirtualSize)
+        viewport = [p * d for p, d in zip(start, delta)] + list(self.ClientSize)
+        self._worker_graph.work((nodes, links, bounds, viewport))
+
+
+    def _MakeItemBitmap(self, category, opts, dragrect=False):
+        """Returns wx.Bitmap representing a schema item like table."""
+        w, h = self.MINW, self.HEADERH + self.HEADERP + self.FOOTERH
+        font, boldfont = self.Font, self.Font.Bold()
+        ellipsize = lambda s, n: (s[:n] + "..") if len(s) > n else s
+
+        # Measure title width
+        title = ellipsize(opts["name"], self.MAX_TITLE)
+        extent = self.GetFullTextExtent(title, boldfont) # (w, h, descent, lead)
+        w = max(w, extent[0] + extent[3] + 2 * self.HPAD)
+
+        # Measure column text widths
+        colmax = {"name": 0, "type": 0}
+        for c in opts.get("columns") or []:
+            for k in ["name", "type"]:
+                v = c.get(k)
+                if not v: continue # for k
+                extent = self.GetFullTextExtent(ellipsize(v, self.MAX_TEXT), font)
+                if v: colmax[k] = max(colmax[k], extent[0] + extent[3])
+        w = max(w, self.LPAD + 2 * self.HPAD + sum(colmax.values()))
+        h += self.LINEH * len(opts.get("columns") or [])
+
+        # Make transparency mask for excluding content outside rounded corners
+        bmp = wx.Bitmap(w, h)
+        mdc = wx.MemoryDC(bmp)
+        mdc.Background = wx.TRANSPARENT_BRUSH
+        mdc.Clear()
+        mdc.Pen, mdc.Brush = wx.RED_PEN, wx.RED_BRUSH
+        mdc.DrawRoundedRectangle(0, 0, bmp.Width, bmp.Height, self.BRADIUS)
+        del mdc
+        mask = wx.Mask(bmp, wx.TRANSPARENT_BRUSH.Colour)
+
+        dc = wx.MemoryDC(bmp)
+        dc.TextForeground = self.ForegroundColour
+
+        # Fill header and footer gradient, make blank middle
+        bg, gradfrom = self.BackgroundColour, self.GradientColourFrom
+        if dragrect:
+            bg = gradfrom = self._colour_dragbg
+        dc.GradientFillLinear((0, 0, w, h), bg, self.GradientColourTo)
+        dc.Pen, dc.Brush = controls.PEN(self.BorderColour), wx.TRANSPARENT_BRUSH
+        dc.DrawRoundedRectangle(0, 0, w, h, self.BRADIUS)
+        dc.Pen   = controls.PEN(bg)
+        dc.Brush = controls.BRUSH(bg)
+        dc.DrawRectangle(1, self.HEADERH, w - 2, h - self.HEADERH - self.FOOTERH)
+        dc.Pen = controls.PEN(self.BorderColour)
+        dc.DrawLine(0, self.HEADERH, w, self.HEADERH)
+
+        # Draw title
+        dc.SetFont(boldfont)
+        dc.DrawLabel(title, (0, 1, w, self.HEADERH), wx.ALIGN_CENTER)
+
+        # Draw columns: name and type, and primary/foreign key icons
+        dc.SetFont(font)
+
+        pks, fks = (sum((list(c["name"]) for c in x), [])
+                    for x in self._db.get_keys(opts["name"]))
+        for i, col in enumerate(opts.get("columns") or []):
+            for j, k in enumerate(["name", "type"]):
+                text = col.get(k)
+                if not text: continue # for j, k
+                dx = self.LPAD + j * (colmax["name"] + self.HPAD)
+                dy = self.HEADERH + self.HEADERP + i * self.LINEH
+                dc.DrawText(ellipsize(text, self.MAX_TEXT), dx, dy)
+            if col["name"] in pks:
+                dc.DrawBitmap(images.DiagramPK.Bitmap, 3, dy + 1, useMask=True)
+            if col["name"] in fks:
+                b, bw = images.DiagramFK.Bitmap, images.DiagramFK.Bitmap.Width
+                dc.DrawBitmap(b, w - bw - 6, dy + 1, useMask=True)
+
+        del dc
+        bmp.SetMask(mask)
+        return bmp
+
+
+    def _MakeFocusedBitmap(self, bmp):
+        """Returns a bitmap highlighted for focus."""
+
+        # Make transparency mask for excluding content outside rounded corners
+        bmp2 = wx.Bitmap(*[a + 2 * self.FMARGIN for a in bmp.Size])
+        mdc = wx.MemoryDC(bmp2)
+        mdc.Background = wx.TRANSPARENT_BRUSH
+        mdc.Clear()
+        mdc.Pen   = controls.PEN  (self.ShadowColour)
+        mdc.Brush = controls.BRUSH(self.ShadowColour)
+        mdc.DrawRoundedRectangle(0, 0, bmp2.Width, bmp2.Height, self.BRADIUS)
+        del mdc
+        mask = wx.Mask(bmp2, wx.TRANSPARENT_BRUSH.Colour)
+
+        dc = wx.MemoryDC(bmp2)
+        dc.DrawBitmap(bmp, self.FMARGIN, self.FMARGIN, useMask=True)
+        del dc
+        bmp2.SetMask(mask)
+        return bmp2
+
+
+    def _UpdateColours(self):
+        """Adjusts shadow and drag and gradient colours according to system theme."""
+        self._colour_dragfg = controls.ColourManager.GetColour(wx.SYS_COLOUR_HOTLIGHT)
+        self._colour_dragbg = controls.ColourManager.Adjust(self._colour_dragfg, self.BackgroundColour, 0.6)
+        self.ShadowColour = controls.ColourManager.Adjust(self.BorderColour, self.BackgroundColour, 0.6)
+        if wx.WHITE == controls.ColourManager.GetColour(wx.SYS_COLOUR_WINDOW):
+            self.GradientColourTo = self.COLOUR_GRAD_TO
+        else:
+            self.GradientColourTo = controls.ColourManager.GetColour(wx.SYS_COLOUR_HOTLIGHT)
+
+
+    def _OnMouse(self, event):
+        """Handler for mouse events: focus, drag, menu."""
+        event.Skip()
+
+        if event.LeftDown() or event.RightDown() or event.LeftDClick():
+            self._dragpos = event.X, event.Y
+            start, delta = self.GetViewStart(), self.GetScrollPixelsPerUnit()
+            x, y = (x + p * d for x, p, d in zip(event.Position, start, delta))
+            oid = next((a for a in self._dc.FindObjects(x, y, radius=5)
+                        if isinstance(self._ids.get(a), basestring)), None)
+            if oid and event.LeftDown() and 1 == len(self._sels) \
+            and self._ids[oid] in self._sels \
+            and not (wx.GetKeyState(wx.WXK_SHIFT) or wx.GetKeyState(wx.WXK_COMMAND)): return
+
+            name, fullbounds = self._ids.get(oid), wx.Rect()
+            sels0 = self._sels.copy()
+            if oid:
+                if wx.GetKeyState(wx.WXK_SHIFT) or wx.GetKeyState(wx.WXK_COMMAND):
+                    if name in sels0: self._sels.pop(name)
+                    else: self._sels[name] = oid
+                else:
+                    if name not in sels0: self._sels.clear()
+                    self._sels[name] = oid
+            else:
+                self._sels.clear()
+
+
+            forder = [n for n in sels0 if n not in self._sels] + list(self._sels)
+            for i, myname in enumerate(forder):
+                o = self._objs[myname]
+                bounds = self._dc.GetIdBounds(o["id"])
+                fullbounds.Union(bounds)
+                if sels0 == self._sels: continue # for i, myname
+
+                if myname in self._sels:
+                    self._order.remove(o); self._order.append(o)
+                if not self._show_lines: # No need to redraw everything
+                    self._dc.RemoveId(o["id"])
+                    self._ids.pop(o["id"])
+                    o["id"] = max(self._ids) + 1
+                    self._dc.SetId(o["id"])
+                    bmp = o["bmpsel" if myname in self._sels else "bmp"]
+                    pos = [a - (myname in self._sels) * 2 for a in bounds[:2]]
+                    self._dc.DrawBitmap(bmp, pos, useMask=True)
+                    self._dc.SetIdBounds(o["id"], bounds)
+                    self._dc.SetId(-1)
+                    self._ids[o["id"]] = o["name"]
+
+            if not self._show_lines:
+                fullbounds.Inflate(2 * self.BRADIUS, 2 * self.BRADIUS)
+                self.RefreshRect(fullbounds, eraseBackground=False)
+            elif sels0 != self._sels: self.Redraw()
+
+            if   event.RightDown():  self.OpenContextMenu()
+            elif event.LeftDClick():
+                if oid and self._page:
+                    self._page.handle_command("schema", o["category"], o["name"])
+
+
+        elif event.Dragging() or event.LeftUp():
+            if event.LeftUp() and self.HasCapture(): self.ReleaseMouse()
+
+            if not self._dragpos \
+            or self._sels and not event.Dragging() and self._dragrect is None: return
+
+            if event.Dragging() and not self.HasCapture(): self.CaptureMouse()
+
+            dx, dy = (a - b for a, b in zip(event.Position, self._dragpos))
+            refrect, refnames = wx.Rect(), []
+
+            if event.Dragging() and not self._sels and not self._dragrect:
+                self._dragrect    = wx.Rect(wx.Point(self._dragpos), wx.Size())
+                self._dragrectabs = wx.Rect(self._dragrect)
+
+            if self._dragrect:
+                if not self._dragrectid: self._dragrectid = max(self._ids) + 1
+                r, r0 = self._dragrect, wx.Rect(self._dragrect)
+                if r.Left + dx < 0 or r.Right  + dx > self.VirtualSize.Width:  dx = 0
+                if r.Top  + dy < 0 or r.Bottom + dy > self.VirtualSize.Height: dy = 0
+                self._dragrect = wx.Rect(r.Left, r.Top, r.Width + dx, r.Height + dy)
+
+                if r.Width  < 0: r = wx.Rect(r.Left + r.Width, r.Top, -r.Width,  r.Height)
+                if r.Height < 0: r = wx.Rect(r.Left, r.Top + r.Height, r.Width, -r.Height)
+                self._dragrectabs = wx.Rect(r)
+                r = wx.Rect(self._dragrect)
+
+                for name, o in self._objs.items(): # First pass: gather unselected items
+                    ro = self._dc.GetIdBounds(o["id"])
+                    if not self._dragrectabs.Contains(ro) and name in self._sels:
+                        refnames.append(name); self._sels.pop(name); refrect.Union(ro)
+
+                for name, o in self._objs.items(): # Second pass: gather selected items
+                    ro = self._dc.GetIdBounds(o["id"])
+                    if self._dragrectabs.Contains(ro): self._sels[name] = o["id"]
+                r.Union(r0)
+                r.Inflate(2 * self.BRADIUS, 2 * self.BRADIUS)
+                refrect.Union(r)
+
+            for name in self._sels if not self._dragrect else ():
+                # First pass: check if any item goes overboard
+                r = self._dc.GetIdBounds(self._objs[name]["id"])
+                if r.Left + dx < 0 or r.Right  + dx > self.VirtualSize.Width:  dx = 0
+                if r.Top  + dy < 0 or r.Bottom + dy > self.VirtualSize.Height: dy = 0
+
+            for name in self._sels if not self._dragrect else ():
+                # Second pass: reposition item
+                r = self._dc.GetIdBounds(self._objs[name]["id"])
+                r0 = wx.Rect(r)
+                r.Offset(dx, dy)
+                self._dc.TranslateId(self._objs[name]["id"], dx, dy)
+
+                r.Union(r0)
+                r.Inflate(2 * self.BRADIUS, 2 * self.BRADIUS)
+                refrect.Union(r)
+
+            if event.LeftUp():
+                if self._dragrect:
+                    self._dc.RemoveId(self._dragrectid)
+                    self._dragrectid = self._dragrect = self._dragrectabs = None
+
+            if self._show_lines: self.Redraw()
+            else:
+                for name in refnames: self.RecordItem(name)
+                if self._dragrectid:  self.RecordSelectionRect()
+                start, delta = self.GetViewStart(), self.GetScrollPixelsPerUnit()
+                refrect.Offset(*[-p * d for p, d in zip(start, delta)])
+                self.RefreshRect(refrect, eraseBackground=False)
+
+            self._dragpos = event.X, event.Y
+
+
+    def _OnKey(self, event):
+        """Handler for keypress."""
+        items = map(self._objs.get, self._sels)
+
+        if event.CmdDown() and event.UnicodeKey == ord('A'):
+            self._sels.update(self._objs) # Select all
+            self.Redraw()
+        elif event.KeyCode in controls.KEYS.TAB and self._objs:
+            if self._sels:
+                name1 = next(iter(self._sels))
+                idx2  = self._objs.keys().index(name1) + (-1 if event.ShiftDown() else 1)
+                self._sels.clear()
+                o = self._objs[self._objs.keys()[idx2]] if idx2 < len(self._objs) else None
+            else: o = None if event.ShiftDown() else next(iter(self._objs.values()))  
+            if o: self._sels[o["name"]] = o["id"]
+            else: event.Skip() # Propagate tab to next component
+            self.Redraw()
+        elif event.KeyCode in controls.KEYS.ESCAPE and items:
+            self._sels.clear() # Select none
+            self.Redraw()
+        elif event.KeyCode in controls.KEYS.DELETE and items:
+            self._page.handle_command("drop", None, *[o["name"] for o in items])
+        elif event.KeyCode in controls.KEYS.INSERT:
+            self.OpenContextMenu()
+        elif event.KeyCode in controls.KEYS.ENTER and items:
+            for o in items: self._page.handle_command("schema", o["category"], o["name"])
+        elif event.KeyCode in controls.KEYS.ARROW + controls.KEYS.NUMPAD_ARROW and items:
+            dx, dy = 0, 0
+            if event.KeyCode in controls.KEYS.UP:    dy = -self.MOVE_STEP
+            if event.KeyCode in controls.KEYS.DOWN:  dy = +self.MOVE_STEP
+            if event.KeyCode in controls.KEYS.LEFT:  dx = -self.MOVE_STEP
+            if event.KeyCode in controls.KEYS.RIGHT: dx = +self.MOVE_STEP
+            if event.KeyCode == wx.WXK_NUMPAD_END:      dx, dy = -self.MOVE_STEP, +self.MOVE_STEP
+            if event.KeyCode == wx.WXK_NUMPAD_PAGEDOWN: dx, dy = +self.MOVE_STEP, +self.MOVE_STEP
+            if event.KeyCode == wx.WXK_NUMPAD_HOME:     dx, dy = -self.MOVE_STEP, -self.MOVE_STEP
+            if event.KeyCode == wx.WXK_NUMPAD_PAGEUP:   dx, dy = +self.MOVE_STEP, -self.MOVE_STEP
+
+            # First pass: constrain dx-dy so that all items remain within diagram bounds
+            for o in items:
+                r = self._dc.GetIdBounds(o["id"])
+                r0 = wx.Rect(r)
+                r.Offset(dx, dy)
+                if r.Left < 0: dx = -r0.Left
+                if r.Top  < 0: dy = -r0.Top
+                if r.Right  > self.VirtualSize.Width:  dx = self.VirtualSize.Width  - r0.Right
+                if r.Bottom > self.VirtualSize.Height: dy = self.VirtualSize.Height - r0.Bottom
+
+            # Second pass: move items
+            for o in items: self._dc.TranslateId(o["id"], dx, dy)
+            self.Redraw()
+
+        else: event.Skip() # Allow to propagate to other handlers
+
+
+    def _OnWorkerGraph(self, items):
+        """Callback handler for graph worker, updates item positions."""
+
+        def after():
+            if not self: return
+
+            self.Freeze()
+            for name, opts in items.items():
+                o = self._objs.get(name)
+                if not o: continue # for
+
+                bounds = self._dc.GetIdBounds(o["id"])
+                dx, dy = opts["x"] - bounds.Left, opts["y"] - bounds.Top
+                bounds.Offset(dx, dy)
+                self._dc.TranslateId(o["id"], dx, dy)
+                self._dc.SetIdBounds(o["id"], bounds)
+            self.Redraw()
+            self.Thaw()
+
+        wx.CallAfter(after)
+
+
+    def _OnPaint(self, event):
+        """Handler for paint event, redraws current scroll content."""
+        dc = wx.BufferedPaintDC(self)
+        dc.Background = wx.Brush(self.BackgroundColour)
+        dc.Clear()
+        self.DoPrepareDC(dc) # For proper scroll position
+        start, delta = self.GetViewStart(), self.GetScrollPixelsPerUnit()
+        rgn = self.GetUpdateRegion()
+        rgn.Offset(*[p * d for p, d in zip(start, delta)])
+        self._dc.DrawToDCClipped(dc, rgn.GetBox())
+
+
+    def _OnSysColourChange(self, event):
+        """Handler for system colour change, refreshes content."""
+        event.Skip()
+        self._UpdateColours()
+        wx.CallAfter(self.Redraw, remake=True)
+
+
+    def _OnScroll(self, event):
+        """Handler for scroll, queues refresh."""
+        event.Skip()
+        wx.CallAfter(lambda: self and self.Refresh())

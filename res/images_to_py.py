@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  17.06.2020
+@modified  14.11.2020
 ------------------------------------------------------------------------------
 """
 import base64
@@ -53,6 +53,10 @@ IMAGES = {
         "Small icon for remove by type button on start page.",
     "ButtonSaveAs.png":
         "Small icon for save as button on start page.",
+    "DiagramFK.png":
+        "Foreign key icon for schema diagram tables.",
+    "DiagramPK.png":
+        "Primary key icon for schema diagram tables.",
     "HelpData.png":
         "Help image on default search page for data page.",
     "HelpInfo.png":
@@ -67,6 +71,8 @@ IMAGES = {
         "Help image on default search page for SQL window page.",
     "PageData.png":
         "Icon for the Data page in a database tab.",
+    "PageDiagram.png":
+        "Icon for the Diagram page in a database tab.",
     "PageInfo.png":
         "Icon for the Info page in a database tab.",
     "PagePragma.png":
@@ -91,6 +97,10 @@ IMAGES = {
         "Toolbar icon for goto button in data grids.",
     "ToolbarInsert.png":
         "Toolbar icon for insert button in database table grids.",
+    "ToolbarLayoutGraph.png":
+        "Toolbar icon for graph layout in schema diagram.",
+    "ToolbarLayoutGrid.png":
+        "Toolbar icon for grid layout in schema diagram.",
     "ToolbarRefresh.png":
         "Toolbar icon for refresh button.",
     "ToolbarRollback.png":

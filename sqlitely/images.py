@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.06.2020
+@modified    15.11.2020
 ------------------------------------------------------------------------------
 """
 try:
@@ -592,6 +592,24 @@ ButtonSaveAs = PyEmbeddedImage(
     "q10hTiTgg1u6rquiRoMhlUqpYnpXMxJGTIB2hjiU6/TwhDv1eGzmVXXje40xoYophGhGeNcq"
     "wMSfpAxoNLRz+k154Q7Kjby/ZM7ldxqiw4f6YkOFVpDHDe1fU98r/gowAMaC+CTtivcaAAAA"
     "AElFTkSuQmCC"
+)
+
+
+"""Foreign key icon for schema diagram tables."""
+DiagramFK = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAAAkAAAAJCAYAAADgkQYQAAAAgUlEQVQY07WOoQ6CYBhFz7cR"
+    "KX8xUUhk0Gi1kCjiCxB8A56C7sgmm9lJhGLwBbTQeYVLwA1H1rPdcnfCgb+T11JeSwBePyjo"
+    "3vTfwrWD/QqyzOzykGxTSkU4C2bgHBzucErArcHbRnA8Aw2w+5hPwAfFi4YgnRuqm0Q4rX1N"
+    "328YAfwyK7ymXJVhAAAAAElFTkSuQmCC"
+)
+
+
+"""Primary key icon for schema diagram tables."""
+DiagramPK = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAAAkAAAAJCAYAAADgkQYQAAAAeElEQVQY062NoQ3CYBgFr8nP"
+    "CAUDiinw9aTmGwHNIgwAG4DCt7VFU1+FIRhGOEQrQOB6yVP38h5MilVoHf7zyf5ito5Mr3qb"
+    "yXz721hsVglAj3IqYXcG3sDXaFM+0ngIhfAK6EZZAA2Q78Fnqz1D7gcBrEO7pUzOB7efM3jL"
+    "z9hXAAAAAElFTkSuQmCC"
 )
 
 
@@ -1553,6 +1571,45 @@ PageData = PyEmbeddedImage(
 )
 
 
+"""Icon for the Diagram page in a database tab."""
+PageDiagram = PyEmbeddedImage(
+    "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"
+)
+
+
 """Icon for the Info page in a database tab."""
 PageInfo = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAK3RFWHRDcmVhdGlvbiBUaW1l"
@@ -1677,40 +1734,40 @@ PageSQL = PyEmbeddedImage(
 
 """Icon for the Schema page in a database tab."""
 PageSchema = PyEmbeddedImage(
-    "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAG5klEQVRYw32XT4jdVxXHP+fc"
-    "33sz781M2sS205Ym1NhQbVWw2FJiRZCCWoLiHwwouHOhSxXsorpwIbaLLuxaEFeCWbSLCIJF"
-    "pVH8t6rEaAm1pARJMjHJJG/mvd+95xwX9zfvz7zRHzzOvfecc+95v3O+33N/wtxz5sJW/P7C"
-    "VS5d3ibvjGjEKSkRLD4REAQgAEgnEZB5Y5kN+it9TjywzjMf3OTUo5uyZPL8mfPx1+0hzzze"
-    "54mjd7MqsJKCjBCwFIR3zhIC0gUkcxt2ge49t1vlrbev8MfzN3j/0bt46dRxmQbw7Vf/FW9d"
-    "h+ee3mR9dcxopIylQRpnJTuxsC0QgkQiNONaiAggIZFgvy0QCNZLrCfYNuXsG9c5edT4wWeO"
-    "ibz+1vV44VfX+Mijx7h/WLg9HJCS07PChB5JfH4nBHAJigpNFJIHQaJIjxCl57YUABIYmRVv"
-    "yBPj6o7x5j8v8/Kph9DfXbjKypH7sWGf0doqoop4UCTwBI5i0us2KrRJCRIaPSQaXIQ2NUj3"
-    "nkKckJY2gQkUTQSBAjuN0g5W2WictfVNfnvhKvqPa86hYY/UA5eEWtCqEhJIJMQVE6v/0Fen"
-    "awGENxQZ0BSd+obk6VpRUHYIyYQEq6WACE2/z/q6cOmq0dxqGw57IUUftUA8gQcTGdA3n87V"
-    "61gx1BMcIMUT47ToN5HBNBOG1sIMEF9lN0MjIQQJLzBRhQgiKyHCJGI6tyn+lI/fF3z+WOq2"
-    "rfLn7yh/vhZ41gW/kFlRejgYhCuIUxya8MAQiguRIcL2AIaITOciSoQhkigWS9VeDCbZAF3w"
-    "m7dLGA5EJIKMe9CYGxGBmeDOnJPMUYUs0Ib7cqFbgVIO8pOFFCABrkQIRNAQgTmU0v2r0H1s"
-    "MjfvxlaWsW4GuV22XaSPhIRVKBuEO41HYBbkUil1nr1EZmy2NxaBG2N4Zxs2h1V3ZQduTYRc"
-    "lv32ExICGoGVAIcmIijFKcUhBEI62g2kAruyvkTVS3DuknDu3eC7T1XdS3+qZFNtF/3mSVwp"
-    "mIIG3XnQJHNaU3JOXYPpfOa7ysJ8Jr07sLXF9YP9at9waTEGNY2WabCgFMhGx+kzuYegiGCG"
-    "ptlBEUEE5DJrV/O2sS8PEok2rbDKHSJaPHo0Ho5FUEqtBem8H79XOP2Y7G+aC1X+yOFaM987"
-    "yRJS5sc/+1tw8T+VG3p5GxXHSjCiQd1sWoS5KJMW2lbZaODJB4VssNMKOy2MWhakOXgsr++N"
-    "swlPPiisJWhbmJgxNmViG6RsCGMa98C9vkZ3JVwRwDqwv/iGcnMX0Kg69al88dlal99/fW5d"
-    "vKLZlSMDePUrgblQTKA4KRravjHSHocnhSa6XJYSWPGOIKB0kCo5aFvqASGIzKRHgghyZrpe"
-    "0RNECDnt7QFtGzQeTDSgSbTRJyoMQUMIU0pWHIMQzGr+shm5CCoJx1BmMqJCL5fZOqGo1H2y"
-    "SQWfQc4CroyaIRsm9OM2htGYB3gNILeCJ+e1r/VY69fof/JF5eIWfOu1qlNreO5x+PpTsLle"
-    "gzzzVeWVc8Kv33aIhLrw8ueER+5RAF74pLCb4fRPR0heR3pBiOEOjZtBBO5OLgn34OHDszo+"
-    "epcwmtQidQ/UYa3Hgs3Dh4VBAznXStcQHtgQjt5V9ZvrXSqKk8WxIkRIbUYeNWfFnJwV1wMo"
-    "NOrmrqAe2AG3LrNaC0Sl2oOo+E5ewSVwFwStTFjzSA2gBK4HXyr3dOq1eR0YQKnNTMM54HzM"
-    "ggKYR3ejgibcK+wiyFYhudMuOu62THUawSQv20wKtRkFKMFuxx3zTy6KUd8AAhGOfPT530R6"
-    "4EPczkNu3up31yahqfem2VxsHwb+hwwW/ebehYgR4Wzeo2S9yYM3L6KHBoqPW1YawdIuImP6"
-    "boizMN8bqwFphEtLzxwxXZzv8xNn+nMgJ1jVgk+CQyu76JPHV9jauszdG4l+BH1PNLJL6BjK"
-    "Gj0pqBqDDOqQVf+vXU9GpJLqDbq3Q9JMT0aEjvFIrErmyNC4dWWLp44fRk9/7DiT7X9zZ2fE"
-    "Q/etoOqMVRDNNEwoNiSTmMiAkD4qTvE1WkmMta4lcdyGGImJzuyyD6tdGlC0zyDd4fi9ia3t"
-    "28TOu3z66ffVdvXDs3+Pl89c5L0fPsnG3YcY3xFaD0wdpJn70IsDeuLsF4CLLiFAcFZwNoZ9"
-    "rmxf453zf+FHXzrBNz716KzL//iXb8YrZy4yWX0Ph47cg/d6mCrJ46AvrVksIovfjrKMUcHR"
-    "vMONrev0/Rbf+fJjfPPZD8j+5s0vzl2Is3+4zMUrt8huJG+Q2UmziwZORAaEkD0LRRC0a2bT"
-    "C5FUXWqU4w/1+OwTJ/jCJ05Mz/0vU2Ofu8TsaboAAAAASUVORK5CYII="
+    "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"
 )
 
 
@@ -1843,6 +1900,21 @@ ToolbarInsert = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAB3RJTUUH3AEbFAgw5n8+0gAA"
     "AAlwSFlzAAALEgAACxIB0t1+/AAAAARnQU1BAACxjwv8YQUAAAAvSURBVHjaY2AY3oCP78R/"
     "EManholSSwbeAEZ0PxOj6dMnC7g+il2AF4yQWBgGAADm3wucN+5mGAAAAABJRU5ErkJggg=="
+)
+
+
+"""Toolbar icon for graph layout in schema diagram."""
+ToolbarLayoutGraph = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAYUlEQVQ4y7WSOxLAIAgFV8bW"
+    "K1vkyjmANjZmZIaPeR2KII8FgN4GvQ0CEveLT7MKwPMWrig4hq+IqYmWdDgv5kKKT5KdWPhF"
+    "Dg92ME5EavHKrdulBagQdFcAS5uq/CK9xgkeQylQJCRMfQAAAABJRU5ErkJggg=="
+)
+
+
+"""Toolbar icon for grid layout in schema diagram."""
+ToolbarLayoutGrid = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAKklEQVQ4y2NgoBAwMjAwMDAI"
+    "1f2Hi7xrIkmMiVIXUGzAwIPRQBwNxMEBAEK3GxB2GwaNAAAAAElFTkSuQmCC"
 )
 
 

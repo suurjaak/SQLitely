@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.09.2020
+@modified    15.11.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2452,12 +2452,14 @@ class DatabasePage(wx.Panel):
         self.create_page_search(notebook)
         self.create_page_data(notebook)
         self.create_page_schema(notebook)
+        self.create_page_diagram(notebook)
         self.create_page_sql(notebook)
         self.create_page_pragma(notebook)
         self.create_page_info(notebook)
 
-        IMAGES = [images.PageSearch, images.PageData, images.PageSchema,
-                  images.PageSQL, images.PagePragma, images.PageInfo]
+        IMAGES = [images.PageSearch,  images.PageData, images.PageSchema,
+                  images.PageDiagram, images.PageSQL,  images.PagePragma,
+                  images.PageInfo]
         il = wx.ImageList(32, 32)
         idxs = [il.Add(x.Bitmap) for x in IMAGES]
         notebook.AssignImageList(il)
@@ -2470,6 +2472,8 @@ class DatabasePage(wx.Panel):
             style=wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
 
         self.Layout()
+        # Hack to get diagram-page diagram lay itself out
+        self.notebook.SetSelection(self.pageorder[self.page_diagram])
         # Hack to get info-page multiline TextCtrls to layout without quirks.
         self.notebook.SetSelection(self.pageorder[self.page_info])
         # Hack to get SQL window size to layout without quirks.
@@ -2737,6 +2741,60 @@ class DatabasePage(wx.Panel):
                   self.on_notebook_menu, nb)
         self.Bind(wx.EVT_CONTEXT_MENU, self.on_notebook_menu, nb.GetTabArea())
         self.register_notebook_hotkeys(nb)
+
+
+    def create_page_diagram(self, notebook):
+        """Creates a page for schema visual diagram."""
+        page = self.page_diagram = wx.Panel(notebook)
+        self.pageorder[page] = len(self.pageorder)
+        notebook.AddPage(page, "Diagram")
+        sizer = page.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_top    = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_middle = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_bottom = wx.BoxSizer(wx.HORIZONTAL)
+
+        tb = self.tb_diagram = wx.ToolBar(page, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        button_export = self.button_diagram_export = wx.Button(page, label="Export &diagram")
+        diagram = self.diagram = components.SchemaDiagram(page, self.db)
+        panel = wx.Panel(page)
+        cb_rels  = self.cb_diagram_rels   = wx.CheckBox(page, label="Foreign &relations")
+        cb_lbls  = self.cb_diagram_labels = wx.CheckBox(page, label="Foreign &labels")
+        cb_stats = self.cb_diagram_stats  = wx.CheckBox(page, label="&Statistics")
+
+        bmp1 = images.ToolbarLayoutGrid.Bitmap
+        bmp2 = images.ToolbarLayoutGraph.Bitmap
+        tb.SetToolBitmapSize(bmp1.Size)
+        tb.AddCheckTool(wx.ID_STATIC,  "", bmp1, shortHelp="Grid layout (click for options)")
+        tb.AddCheckTool(wx.ID_NETWORK, "", bmp2, shortHelp="Graph layout")
+        tb.ToggleTool(wx.ID_STATIC,   True)
+        tb.Realize()
+        diagram.DatabasePage = self
+        cb_rels.Enabled = cb_lbls.Enabled = cb_stats.Enabled = False
+        cb_rels.Value = True
+        cb_lbls.Value = True
+        cb_rels.ToolTip  = "Show foreign relations between tables"
+        cb_lbls.ToolTip  = "Show labels on foreign relations between tables"
+        cb_stats.ToolTip = "Show table size information"
+
+        sizer_top.Add(tb, flag=wx.ALIGN_BOTTOM)
+        sizer_top.AddStretchSpacer()
+        sizer_top.Add(button_export, border=5, flag=wx.RIGHT | wx.BOTTOM)
+        sizer_middle.Add(diagram,     proportion=1, flag=wx.GROW)
+        sizer_middle.Add(panel,       border=5,     flag=wx.GROW | wx.LEFT | wx.RIGHT)
+        sizer_bottom.Add(cb_rels,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
+        sizer_bottom.Add(cb_lbls,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
+        sizer_bottom.Add(cb_stats,    border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
+
+        sizer.Add(sizer_top,    border=5, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
+        sizer.Add(sizer_middle, border=5, flag=wx.LEFT | wx.RIGHT | wx.GROW, proportion=1)
+        sizer.Add(sizer_bottom, border=5, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
+
+        tb.Bind(wx.EVT_TOOL, self.on_diagram_grid,  id=wx.ID_STATIC)
+        tb.Bind(wx.EVT_TOOL, self.on_diagram_graph, id=wx.ID_NETWORK)
+
+        self.Bind(wx.EVT_CHECKBOX, self.on_diagram_relations, cb_rels)
+        self.Bind(wx.EVT_CHECKBOX, self.on_diagram_labels,    cb_lbls)
+        self.Bind(wx.EVT_BUTTON, self.on_diagram_export, button_export)
 
 
     def create_page_sql(self, notebook):
@@ -3152,6 +3210,11 @@ class DatabasePage(wx.Panel):
                 info += "%s%s is a temporary file." % ("\n\n" if info else "", self.db)
             return info
 
+        def clipboard_copy(text, *_, **__):
+            if wx.TheClipboard.Open():
+                d = wx.TextDataObject(text() if callable(text) else text)
+                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+
 
         if "data" == cmd:
             self.notebook.SetSelection(self.pageorder[self.page_data])
@@ -3162,8 +3225,15 @@ class DatabasePage(wx.Panel):
         elif "create" == cmd:
             self.notebook.SetSelection(self.pageorder[self.page_schema])
             category = args[0]
+            sourcecat, sourcename = (list(args[1:]) + [None, None])[:2]
             newdata = {"type": category,
                        "meta": {"__type__": "CREATE %s" % category.upper()}}
+            if category in ("index", "trigger"):
+                if "table" == sourcecat:
+                    newdata["meta"]["table"] = sourcename
+                elif "trigger" == category and "view" == sourcecat:
+                    newdata["meta"]["table"] = sourcename
+                    newdata["meta"]["upon"] = grammar.SQL.INSTEAD_OF
             self.add_schema_page(newdata)
         elif "schema" == cmd:
             self.notebook.SetSelection(self.pageorder[self.page_schema])
@@ -3268,6 +3338,25 @@ class DatabasePage(wx.Panel):
             self.on_check_fks()
         elif "import" == cmd:
             components.ImportDialog(self, self.db).ShowModal()
+        elif "copy" == cmd:
+            target = args[0]
+            if "related" == target:
+                category, name = args[1:]
+                logger.info("cat %r nme %r", category, name)
+                sqls = OrderedDict({name: self.db.get_sql(category, name)})
+
+                def collect(relateds):
+                    for category, item in ((c, v) for c, vv in relateds.items() for v in vv.values()):
+                        sqls[item["name"]] = item["sql"]
+                        if category not in ("table", "view"): continue # for category, item
+                        subrelateds = self.db.get_related("table", item["name"], own=True)
+                        for subitemmap in subrelateds.values():
+                            for subitem in subitemmap.values():
+                                sqls[subitem["name"]] = subitem["sql"]
+
+                collect(self.db.get_related(category, name, own=True))
+                collect(self.db.get_related(category, name))
+                clipboard_copy("\n\n".join(x.rstrip(";") + ";" for x in sqls.values()) + "\n\n")
 
         elif "export" == cmd:
             arg = args[0]
@@ -3370,6 +3459,7 @@ class DatabasePage(wx.Panel):
         self.statistics = {}
         self.worker_analyzer.work(self.db.filename)
         self.db.lock(None, None, self.db, label="statistics analysis")
+        self.cb_diagram_stats.Disable()
         wx.CallAfter(self.populate_statistics)
 
 
@@ -3431,9 +3521,15 @@ class DatabasePage(wx.Panel):
         if not self: return
         self.statistics = result
         self.db.unlock(None, None, self.db)
-        wx.CallAfter(self.populate_statistics)
-        wx.CallAfter(guibase.status, "Statistics analysis complete.")
-        self.update_page_header(updated=True)
+
+        def after():
+            if not self: return
+            if result and "error" not in result:
+                guibase.status("Statistics analysis complete.")
+                self.cb_diagram_stats.Enable()
+                self.populate_statistics()
+                self.update_page_header(updated=True)
+        wx.CallAfter(after)
 
 
     def on_checksum_result(self, result):
@@ -3475,6 +3571,74 @@ class DatabasePage(wx.Panel):
         bmp = images.ToolbarStop.Bitmap if self.worker_analyzer.is_working() \
               else images.ToolbarStopped.Bitmap
         self.tb_stats.SetToolNormalBitmap(wx.ID_STOP, bmp)
+
+
+    def on_diagram_relations(self, event):
+        """Handler for toggling foreign relations checkbox, shows or hides diagram lines."""
+        self.diagram.ShowLines(self.cb_diagram_rels.Value)
+        self.cb_diagram_labels.Enable(self.cb_diagram_rels.Value)
+
+
+    def on_diagram_labels(self, event):
+        """Handler for toggling foreign labels checkbox, shows or hides diagram line labels."""
+        self.diagram.ShowLineLabels(self.cb_diagram_labels.Value)
+
+
+    def on_diagram_export(self, event):
+        """Handler for exporting diagram, opens file dialog."""
+        self.diagram.SaveFile()
+
+
+    def on_diagram_grid(self, event):
+        """Handler for choosing diagram grid layout, opens options menu."""
+
+        if self.tb_diagram.GetToolState(wx.ID_NETWORK):
+            self.tb_diagram.ToggleTool(wx.ID_NETWORK, False)
+            self.diagram.PositionItemsGrid()
+            self.diagram.Redraw()
+            return
+
+
+        menu = wx.Menu()
+        item_vertical   = wx.MenuItem(menu, -1, "&Vertical grid", kind=wx.ITEM_RADIO)
+        item_horizontal = wx.MenuItem(menu, -1, "&Horizontal grid", kind=wx.ITEM_RADIO)
+
+        submenu = wx.Menu()
+        item_name    = wx.MenuItem(submenu, -1, "&name", kind=wx.ITEM_RADIO)
+        item_columns = wx.MenuItem(submenu, -1, "&column count", kind=wx.ITEM_RADIO)
+        item_rows    = wx.MenuItem(submenu, -1, "&row count", kind=wx.ITEM_RADIO)
+        item_bytes   = wx.MenuItem(submenu, -1, "&byte count", kind=wx.ITEM_RADIO)
+        item_reverse = wx.MenuItem(submenu, -1, "&Reverse order", kind=wx.ITEM_CHECK)
+
+
+        menu.Append(item_vertical)
+        menu.Append(item_horizontal)
+        menu.AppendSeparator()
+        menu.AppendSubMenu(submenu, text="&Order by ..")
+        submenu.Append(item_name)
+        submenu.Append(item_columns)
+        submenu.Append(item_rows)
+        submenu.Append(item_bytes)
+        submenu.AppendSeparator()
+        submenu.Append(item_reverse)
+
+        item_vertical.Check(True)
+        item_name.Check(True)
+        item_rows.Enable(False)
+        item_bytes.Enable(False)
+        #menu.Bind(wx.EVT_MENU, on_selectall, item_horizontal)
+
+        rect = controls.get_tool_rect(self.tb_diagram, wx.ID_STATIC)
+        self.diagram.PopupMenu(menu, rect.Right + 2, -rect.Height - 2)
+        self.tb_diagram.ToggleTool(wx.ID_STATIC,  True)
+
+
+    def on_diagram_graph(self, event):
+        """Handler for choosing diagram graph layout, toggles grid layout off."""
+        if self.tb_diagram.GetToolState(wx.ID_STATIC):
+            self.diagram.PositionItemsGraph()
+        self.tb_diagram.ToggleTool(wx.ID_NETWORK, True)
+        self.tb_diagram.ToggleTool(wx.ID_STATIC,  False)
 
 
     def on_pragma_change(self, event):
@@ -4053,7 +4217,7 @@ class DatabasePage(wx.Panel):
             if path and os.path.exists(path):
                 util.start_file(path)
             else:
-                e = "The file \"%s\" cannot be found on this computer." % \
+                e = 'The file "%s" cannot be found on this computer.' % \
                     filename
                 wx.MessageBox(e, conf.Title, wx.OK | wx.ICON_WARNING)
         elif link_data:
@@ -4821,6 +4985,7 @@ class DatabasePage(wx.Panel):
             if not self.save_underway: self.update_page_header(updated=updated)
         if updated:
             self.load_tree_schema()
+            self.diagram.Redraw(remake=True)
             for k, p in self.schema_pages[category].items():
                 if p is event.source and name != k:
                     name0 = k
@@ -5336,29 +5501,37 @@ class DatabasePage(wx.Panel):
 
 
     def on_drop_items(self, category, names, event=None):
-        """Handler for deleting schema items, confirms choice."""
+        """
+        Handler for deleting schema items, confirms choice.
+
+        @param   category  None if names are under more than one category
+        """
         if not self: return
+        categories = {category: names} if category else \
+                     {c: [n for n in names if n in xx]
+                      for c, xx in self.db.schema.items() if set(names) & set(xx)}
         extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
-                if "table" == category else ""
-        itemtext = "all " + util.plural(category, names)
+                if "table" in categories else ""
+        itemtext = "the " + " and ".join(util.plural(c, nn) for c, nn in categories.items())
         if len(names) == 1:
-            itemtext = "the %s %s" % (category, grammar.quote(names[0], force=True))
+            itemtext = "the %s %s" % (next(iter(categories)), grammar.quote(names[0], force=True))
 
         if wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to drop %s?%s" % (itemtext, extra),
             conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
 
-        items = self.db.get_category(category, names).values() \
-                if "table" == category else ()
-        if "table" == category and any(x.get("count") for x in items):
+        items = self.db.get_category("table", categories["table"]).values() \
+                if "table" in categories else ()
+        if any(x.get("count") for x in items):
             if wx.YES != controls.YesNoMessageBox(
                 "Are you REALLY sure you want to drop the %s?\n\n"
-                "%s currently %s %s." %
-                (itemtext, "They" if len(names) > 1 else "It",
-                 "contain" if len(names) > 1 else "contains",
-                 util.count(items, "row")),
-                conf.Title, wx.ICON_WARNING, defaultno=True
+                "%s currently %s %s." % (
+                    util.plural("table", categories["table"]),
+                    "They" if len(categories["table"]) > 1 else "It",
+                    "contain" if len(categories["table"]) > 1 else "contains",
+                    util.count(items, "row")
+                ), conf.Title, wx.ICON_WARNING, defaultno=True
             ): return
         lock = self.db.get_lock(category=None)
         if lock: return wx.MessageBox("%s, cannot drop." % lock,
@@ -5367,6 +5540,7 @@ class DatabasePage(wx.Panel):
         deleteds = []
         try:
             for name in names:
+                category = next((c for c, xx in self.db.schema.items() if name in xx), None)
                 lock = self.db.get_lock(category, name)
                 if lock:
                     wx.MessageBox("%s, cannot drop." % lock,
@@ -5379,6 +5553,7 @@ class DatabasePage(wx.Panel):
                 deleteds += [name]
         finally:
             for name in deleteds:
+                category = next((c for c, xx in self.db.schema.items() if name in xx), None)
                 page = self.schema_pages[category].get(name)
                 if page: page.Close(force=True)
             if deleteds:
@@ -5484,6 +5659,7 @@ class DatabasePage(wx.Panel):
         self.update_tabheader()
         self.load_tree_data()
         self.update_info_panel()
+        self.diagram.Populate()
         wx.CallLater(100, self.reload_schema, parse=True)
         if conf.RunStatistics: self.on_update_statistics()
 
@@ -5495,6 +5671,9 @@ class DatabasePage(wx.Panel):
         self.load_tree_data()
         self.load_tree_schema()
         self.on_update_stc_schema()
+        self.diagram.Populate()
+        self.cb_diagram_rels.Enable()
+        self.cb_diagram_labels.Enable(self.cb_diagram_rels.Value)
         self.update_autocomp()
 
 
@@ -6027,33 +6206,12 @@ class DatabasePage(wx.Panel):
             tree.FindAndActivateItem(type=data["type"], name=data["name"],
                                      level=data["level"])
         def create_object(category, *_, **__):
-            newdata = {"type": category,
-                       "meta": {"__type__": "CREATE %s" % category.upper()}}
-            if category in ("index", "trigger"):
-                if "table" == data["type"]:
-                    newdata["meta"]["table"] = data["name"]
-                elif data.get("parent") and "table" == data["parent"]["type"]:
-                    newdata["meta"]["table"] = data["parent"]["name"]
-                elif "trigger" == category and \
-                data.get("parent") and "view" == data["parent"]["type"]:
-                    newdata["meta"]["table"] = data["parent"]["name"]
-                    newdata["meta"]["upon"] = grammar.SQL.INSTEAD_OF
-            self.add_schema_page(newdata)
+            sourcecat, sourcename = data["type"], data["name"]
+            if data.get("parent"):
+                sourcecat, sourcename = data["parent"]["type"], data["parent"]["name"]
+            self.handle_command("create", category, sourcecat, sourcename)
         def copy_related(*_, **__):
-            sqls = OrderedDict({data["name"]: self.db.get_sql(data["type"], data["name"])})
-
-            def collect(relateds):
-                for category, item in ((c, v) for c, vv in relateds.items() for v in vv):
-                    sqls[item["name"]] = item["sql"]
-                    if category not in ("table", "view"): continue # for category, item
-                    subrelateds = self.db.get_related("table", item["name"], own=True)
-                    for subitemmap in subrelateds.values():
-                        for subitem in subitemmap.values():
-                            sqls[subitem["name"]] = subitem["sql"]
-
-            collect(self.db.get_related(data["type"], data["name"], own=True))
-            collect(self.db.get_related(data["type"], data["name"]))
-            clipboard_copy("\n\n".join(x.rstrip(";") + ";" for x in sqls.values()) + "\n\n")
+            self.handle_command("copy", "related", data["type"], data["name"])
 
         menu = wx.Menu()
         boldfont = self.Font
