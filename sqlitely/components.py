@@ -9599,10 +9599,11 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         def cmd(*args):
             return lambda e: self._page.handle_command(*args)
-        def clipboard_copy(text, *_, **__):
+        def clipboard_copy(text, label, *_, **__):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text() if callable(text) else text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+                if label: guibase.status("Copied %s to clipboard.", label)
 
         if not self._sels:
             submenu, keys = wx.Menu(), []
@@ -9657,12 +9658,13 @@ class SchemaDiagram(wx.ScrolledWindow):
             menu.Bind(wx.EVT_MENU, cmd("schema", None, *names), item_schema)
             menu.Bind(wx.EVT_MENU, cmd("drop",   None, *names), item_drop)
 
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, "\n".join(map(grammar.quote, names))), item_copy)
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, "\n".join(map(grammar.quote, names)),
+                                                     util.plural("name", names, numbers=False)), item_copy)
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
                       lambda: "\n\n".join(
                           self._db.get_sql(c, o["name"])
                           for c, oo in categories.items() for o in oo
-                      )), item_sql)
+                      ), "%s SQL" % catlabel), item_sql)
             menu.Bind(wx.EVT_MENU, cmd("copy", "related", None, *names), item_sqlall)
 
             if item_reidx:
