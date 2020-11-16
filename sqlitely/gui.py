@@ -2754,6 +2754,7 @@ class DatabasePage(wx.Panel):
         sizer_bottom = wx.BoxSizer(wx.HORIZONTAL)
 
         tb = self.tb_diagram = wx.ToolBar(page, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        combo_zoom = self.combo_zoom = wx.ComboBox(tb, size=(60, -1), style=wx.CB_DROPDOWN)
         button_export = self.button_diagram_export = wx.Button(page, label="Export &diagram")
         diagram = self.diagram = components.SchemaDiagram(page, self.db)
         panel = wx.Panel(page)
@@ -2761,11 +2762,31 @@ class DatabasePage(wx.Panel):
         cb_lbls  = self.cb_diagram_labels = wx.CheckBox(page, label="Foreign &labels")
         cb_stats = self.cb_diagram_stats  = wx.CheckBox(page, label="&Statistics")
 
-        bmp1 = images.ToolbarLayoutGrid.Bitmap
-        bmp2 = images.ToolbarLayoutGraph.Bitmap
+        i, level = 0, diagram.ZOOM_MIN
+        while level <= diagram.ZOOM_MAX:
+            if not i or not (100 * level) % 1:
+                combo_zoom.Append("%s%%" % util.round_float(100 * level, 2))
+                combo_zoom.SetClientData(combo_zoom.Count - 1, level)
+            i, level = i + 1, level + diagram.ZOOM_STEP
+        combo_zoom.SetValue("%s%%" % util.round_float(100 * diagram.ZOOM_DEFAULT, 2))
+        combo_zoom.ToolTip = "Zoom"
+        bmp1 = images.ToolbarZoomIn.Bitmap
+        bmp2 = images.ToolbarZoomOut.Bitmap
+        bmp3 = images.ToolbarZoom100.Bitmap
+        bmp4 = images.ToolbarZoomFit.Bitmap
+        bmp5 = images.ToolbarLayoutGrid.Bitmap
+        bmp6 = images.ToolbarLayoutGraph.Bitmap
         tb.SetToolBitmapSize(bmp1.Size)
-        tb.AddCheckTool(wx.ID_STATIC,  "", bmp1, shortHelp="Grid layout (click for options)")
-        tb.AddCheckTool(wx.ID_NETWORK, "", bmp2, shortHelp="Graph layout")
+        tb.AddTool(wx.ID_ZOOM_IN,  "", bmp1, shortHelp="Zoom in one step")
+        tb.AddTool(wx.ID_ZOOM_OUT, "", bmp2, shortHelp="Zoom out one step")
+        tb.AddSeparator()
+        tb.AddTool(wx.ID_ZOOM_100, "", bmp3, shortHelp="Reset zoom")
+        tb.AddTool(wx.ID_ZOOM_FIT, "", bmp4, shortHelp="Zoom to fit")
+        tb.AddControl(combo_zoom)
+        tb.AddSeparator()
+        tb.AddCheckTool(wx.ID_STATIC,  "", bmp5, shortHelp="Grid layout (click for options)")
+        tb.AddCheckTool(wx.ID_NETWORK, "", bmp6, shortHelp="Graph layout")
+        tb.EnableTool(wx.ID_ZOOM_100, False)
         tb.ToggleTool(wx.ID_STATIC,   True)
         tb.Realize()
         diagram.DatabasePage = self
@@ -2789,9 +2810,15 @@ class DatabasePage(wx.Panel):
         sizer.Add(sizer_middle, border=5, flag=wx.LEFT | wx.RIGHT | wx.GROW, proportion=1)
         sizer.Add(sizer_bottom, border=5, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
 
-        tb.Bind(wx.EVT_TOOL, self.on_diagram_grid,  id=wx.ID_STATIC)
-        tb.Bind(wx.EVT_TOOL, self.on_diagram_graph, id=wx.ID_NETWORK)
+        tb.Bind(wx.EVT_TOOL, lambda e: self.on_diagram_zoom(+1),  id=wx.ID_ZOOM_IN)
+        tb.Bind(wx.EVT_TOOL, lambda e: self.on_diagram_zoom(-1),  id=wx.ID_ZOOM_OUT)
+        tb.Bind(wx.EVT_TOOL, lambda e: self.on_diagram_zoom(0),   id=wx.ID_ZOOM_100)
+        tb.Bind(wx.EVT_TOOL, self.on_diagram_zoom_fit, id=wx.ID_ZOOM_FIT)
+        tb.Bind(wx.EVT_TOOL, self.on_diagram_grid,     id=wx.ID_STATIC)
+        tb.Bind(wx.EVT_TOOL, self.on_diagram_graph,    id=wx.ID_NETWORK)
 
+        self.Bind(wx.EVT_COMBOBOX, self.on_diagram_zoom_combo, combo_zoom)
+        self.Bind(wx.EVT_TEXT,     self.on_diagram_zoom_combo, combo_zoom)
         self.Bind(wx.EVT_CHECKBOX, self.on_diagram_relations, cb_rels)
         self.Bind(wx.EVT_CHECKBOX, self.on_diagram_labels,    cb_lbls)
         self.Bind(wx.EVT_BUTTON, self.on_diagram_export, button_export)
@@ -3218,10 +3245,12 @@ class DatabasePage(wx.Panel):
 
         if "data" == cmd:
             self.notebook.SetSelection(self.pageorder[self.page_data])
-            category, name = args
-            page = self.data_pages[category].get(name) or \
-                   self.add_data_page(self.db.get_category(category, name))
-            self.notebook_data.SetSelection(self.notebook_data.GetPageIndex(page))
+            names = args[1:]
+            for name in names:
+                category = next((c for c, xx in self.db.schema.items() if name in xx), None)
+                page = self.data_pages[category].get(name) or \
+                       self.add_data_page(self.db.get_category(category, name))
+                self.notebook_data.SetSelection(self.notebook_data.GetPageIndex(page))
         elif "create" == cmd:
             self.notebook.SetSelection(self.pageorder[self.page_schema])
             category = args[0]
@@ -3237,34 +3266,42 @@ class DatabasePage(wx.Panel):
             self.add_schema_page(newdata)
         elif "schema" == cmd:
             self.notebook.SetSelection(self.pageorder[self.page_schema])
-            category, name = args
-            page = self.schema_pages[category].get(name) or \
-                   self.add_schema_page(self.db.get_category(category, name))
-            self.notebook_schema.SetSelection(self.notebook_schema.GetPageIndex(page))
+            names = args[1:]
+            for name in names:
+                category = next((c for c, xx in self.db.schema.items() if name in xx), None)
+                page = self.schema_pages[category].get(name) or \
+                       self.add_schema_page(self.db.get_category(category, name))
+                self.notebook_schema.SetSelection(self.notebook_schema.GetPageIndex(page))
         elif "drop" == cmd:
             category = args[0]
             names = args[1:] if len(args) > 1 else list(self.db.schema[category])
             self.on_drop_items(category, names)
         elif "truncate" == cmd:
-            self.on_truncate(args[0]) if args else self.on_truncate_all()
+            self.on_truncate(args) if args else self.on_truncate_all()
         elif "reindex" == cmd:
             if not self.db.schema.get("index"):
                 return wx.MessageBox("No indexes to re-create.", conf.Title,
                                      wx.ICON_INFORMATION)
 
-            category, name = (list(args) + [None, None])[:2]
+            category = (list(args) + [None])[0]
+            names = args[1:]
+
             targets = indexes = list(self.db.schema["index"])
-            if name and "table" == category:
-                targets = [name]
-                indexes = [n for k, m in self.db.get_related(category, name, own=True).items()
+            if names and "table" == category:
+                targets = names
+                indexes = [n for name in names for k, m in self.db.get_related(category, name, own=True).items()
                            if "index" == k for n in m]
-                label = "%s on table %s" % (util.plural("index", indexes, single="the"),
-                                            grammar.quote(name, force=True))
-                lock = self.db.get_lock(category, name)
-            elif name:
-                targets = indexes = [name]
-                label = "the index %s" % grammar.quote(name, force=True)
-                lock = self.db.get_lock("table", self.db.schema["index"][name]["tbl_name"])
+                names = [n for n in names if any("index" == k for k in self.db.get_related(category, n, own=True))]
+                label = "%s on %s %s" % (util.plural("index", indexes, single="the"),
+                                         util.plural("table", names, numbers=False),
+                                         ", ".join(grammar.quote(name, force=True) for name in names))
+                lock = any(self.db.get_lock(category, n) for n in names)
+            elif names:
+                targets = indexes = names
+                label = "%s %s" % (util.plural("index", names, numbers=False, single="the"),
+                                   ", ".join(grammar.quote(name, force=True) for name in names))
+                lock = any(self.db.get_lock("table", self.db.schema["index"][name]["tbl_name"])
+                           for name in names)
             elif "table" == category:
                 targets = list(self.db.schema["table"])
                 label = "indexes on all tables"
@@ -3272,6 +3309,9 @@ class DatabasePage(wx.Panel):
             else:
                 label = "all indexes"
                 lock = self.db.get_lock("table")
+            if not indexes: return wx.MessageBox("No indexes to re-create.",
+                                                 conf.Title, wx.ICON_INFORMATION)
+                
             if wx.YES != controls.YesNoMessageBox(
                 "Are you sure you want to re-create %s?" % label,
                 conf.Title, wx.ICON_INFORMATION, defaultno=True
@@ -3280,7 +3320,7 @@ class DatabasePage(wx.Panel):
             if lock: return wx.MessageBox("%s, cannot reindex." % lock,
                                           conf.Title, wx.OK | wx.ICON_WARNING)
 
-            sql = "REINDEX" if not name else \
+            sql = "REINDEX" if not names else \
                   "\n\n".join("REINDEX main.%s;" % grammar.quote(x) for x in targets)
             busy = controls.BusyPanel(self, "Re-creating %s.." % label)
             try:
@@ -3341,22 +3381,26 @@ class DatabasePage(wx.Panel):
         elif "copy" == cmd:
             target = args[0]
             if "related" == target:
-                category, name = args[1:]
-                logger.info("cat %r nme %r", category, name)
-                sqls = OrderedDict({name: self.db.get_sql(category, name)})
+
+                sqls = defaultdict(OrderedDict) # {category: {name: sql}}
 
                 def collect(relateds):
                     for category, item in ((c, v) for c, vv in relateds.items() for v in vv.values()):
-                        sqls[item["name"]] = item["sql"]
+                        sqls[category][item["name"]] = item["sql"]
                         if category not in ("table", "view"): continue # for category, item
                         subrelateds = self.db.get_related("table", item["name"], own=True)
-                        for subitemmap in subrelateds.values():
+                        for subcategory, subitemmap in subrelateds.items():
                             for subitem in subitemmap.values():
-                                sqls[subitem["name"]] = subitem["sql"]
+                                sqls[subcategory][subitem["name"]] = subitem["sql"]
 
-                collect(self.db.get_related(category, name, own=True))
-                collect(self.db.get_related(category, name))
-                clipboard_copy("\n\n".join(x.rstrip(";") + ";" for x in sqls.values()) + "\n\n")
+                names = args[2:]
+                for name in names:
+                    category = next(c for c, xx in self.db.schema.items() if name in xx)
+                    sqls[category][name] = self.db.get_sql(category, name)
+                    collect(self.db.get_related(category, name, own=True))
+                    collect(self.db.get_related(category, name))
+                clipboard_copy("\n\n".join(x.rstrip(";") + ";" for c in sqls for x in sqls[c].values()) + "\n\n")
+                guibase.status("Copied SQL to clipboard.")
 
         elif "export" == cmd:
             arg = args[0]
@@ -3589,26 +3633,56 @@ class DatabasePage(wx.Panel):
         self.diagram.SaveFile()
 
 
-    def on_diagram_grid(self, event):
+    def on_diagram_zoom(self, direction=0, event=None):
+        """Handler for zooming diagram in or out or to 100%."""
+        if direction: self.diagram.Zoom += self.diagram.ZOOM_STEP * direction
+        else: self.diagram.Zoom = self.diagram.ZOOM_DEFAULT
+        self.tb_diagram.EnableTool(wx.ID_ZOOM_IN,  self.diagram.Zoom < self.diagram.ZOOM_MAX)
+        self.tb_diagram.EnableTool(wx.ID_ZOOM_OUT, self.diagram.Zoom > self.diagram.ZOOM_MIN)
+        self.tb_diagram.EnableTool(wx.ID_ZOOM_100, self.diagram.Zoom != self.diagram.ZOOM_DEFAULT)
+        self.combo_zoom.Value = "%s%%" % util.round_float(100 * self.diagram.Zoom, 2)
+
+
+    def on_diagram_zoom_combo(self, event):
+        """Handler for zoom step change in combobox."""
+        if not event.ClientData: return
+        self.diagram.Zoom = event.ClientData
+        self.tb_diagram.EnableTool(wx.ID_ZOOM_IN,  self.diagram.Zoom < self.diagram.ZOOM_MAX)
+        self.tb_diagram.EnableTool(wx.ID_ZOOM_OUT, self.diagram.Zoom > self.diagram.ZOOM_MIN)
+        self.tb_diagram.EnableTool(wx.ID_ZOOM_100, self.diagram.Zoom != self.diagram.ZOOM_DEFAULT)
+
+
+    def on_diagram_zoom_fit(self, event=None):
+        """Handler for zooming diagram to fit."""
+        self.diagram.ZoomToFit()
+        self.tb_diagram.EnableTool(wx.ID_ZOOM_IN,  self.diagram.Zoom < self.diagram.ZOOM_MAX)
+        self.tb_diagram.EnableTool(wx.ID_ZOOM_OUT, self.diagram.Zoom > self.diagram.ZOOM_MIN)
+        self.tb_diagram.EnableTool(wx.ID_ZOOM_100, self.diagram.Zoom != self.diagram.ZOOM_DEFAULT)
+        self.combo_zoom.Value = "%s%%" % util.round_float(100 * self.diagram.Zoom, 2)
+
+
+    def on_diagram_grid(self, event=None):
         """Handler for choosing diagram grid layout, opens options menu."""
 
-        if self.tb_diagram.GetToolState(wx.ID_NETWORK):
-            self.tb_diagram.ToggleTool(wx.ID_NETWORK, False)
-            self.diagram.PositionItemsGrid()
-            self.diagram.Redraw()
-            return
+        was_grid = not self.tb_diagram.GetToolState(wx.ID_STATIC)
+        self.tb_diagram.ToggleTool(wx.ID_NETWORK, False)
+        self.tb_diagram.ToggleTool(wx.ID_STATIC,  True)
+        if not was_grid: return self.diagram.SetLayout(self.diagram.LAYOUT_GRID)
 
+
+        def set_option(**kws):
+            self.diagram.SetLayout(self.diagram.LAYOUT_GRID, kws)
 
         menu = wx.Menu()
-        item_vertical   = wx.MenuItem(menu, -1, "&Vertical grid", kind=wx.ITEM_RADIO)
-        item_horizontal = wx.MenuItem(menu, -1, "&Horizontal grid", kind=wx.ITEM_RADIO)
+        item_vertical   = wx.MenuItem(menu, -1, "&Vertical grid",   kind=wx.ITEM_CHECK)
+        item_horizontal = wx.MenuItem(menu, -1, "&Horizontal grid", kind=wx.ITEM_CHECK)
 
         submenu = wx.Menu()
-        item_name    = wx.MenuItem(submenu, -1, "&name", kind=wx.ITEM_RADIO)
-        item_columns = wx.MenuItem(submenu, -1, "&column count", kind=wx.ITEM_RADIO)
-        item_rows    = wx.MenuItem(submenu, -1, "&row count", kind=wx.ITEM_RADIO)
-        item_bytes   = wx.MenuItem(submenu, -1, "&byte count", kind=wx.ITEM_RADIO)
-        item_reverse = wx.MenuItem(submenu, -1, "&Reverse order", kind=wx.ITEM_CHECK)
+        item_name    = wx.MenuItem(submenu, -1, "&name",          kind=wx.ITEM_CHECK)
+        item_columns = wx.MenuItem(submenu, -1, "&column count",  kind=wx.ITEM_CHECK)
+        item_rows    = wx.MenuItem(submenu, -1, "&row count",     kind=wx.ITEM_CHECK)
+        item_bytes   = wx.MenuItem(submenu, -1, "&byte count",    kind=wx.ITEM_CHECK)
+        item_reverse = wx.MenuItem(submenu, -1, "Re&verse order", kind=wx.ITEM_CHECK)
 
 
         menu.Append(item_vertical)
@@ -3622,11 +3696,24 @@ class DatabasePage(wx.Panel):
         submenu.AppendSeparator()
         submenu.Append(item_reverse)
 
-        item_vertical.Check(True)
-        item_name.Check(True)
-        item_rows.Enable(False)
-        item_bytes.Enable(False)
-        #menu.Bind(wx.EVT_MENU, on_selectall, item_horizontal)
+        opts = self.diagram.GetLayoutOptions(self.diagram.LAYOUT_GRID)
+        item_vertical.Check  (bool(opts.get("vertical")))
+        item_horizontal.Check(not opts.get("vertical"))
+        item_name.Check   (opts.get("order") == "name")
+        item_columns.Check(opts.get("order") == "columns")
+        item_rows.Check   (opts.get("order") == "rows")
+        item_bytes.Check  (opts.get("order") == "bytes")
+        item_rows.Enable  (bool(self.statistics.get("data")))
+        item_bytes.Enable (bool(self.statistics.get("data")))
+        item_reverse.Check(bool(opts.get("reverse")))
+
+        menu.Bind(wx.EVT_MENU, lambda e: set_option(vertical=True),   item_vertical)
+        menu.Bind(wx.EVT_MENU, lambda e: set_option(vertical=False),  item_horizontal)
+        menu.Bind(wx.EVT_MENU, lambda e: set_option(order="name"),    item_name)
+        menu.Bind(wx.EVT_MENU, lambda e: set_option(order="columns"), item_columns)
+        menu.Bind(wx.EVT_MENU, lambda e: set_option(order="rows"),    item_rows)
+        menu.Bind(wx.EVT_MENU, lambda e: set_option(order="bytes"),   item_bytes)
+        menu.Bind(wx.EVT_MENU, lambda e: set_option(reverse=e.IsChecked()), item_reverse)
 
         rect = controls.get_tool_rect(self.tb_diagram, wx.ID_STATIC)
         self.diagram.PopupMenu(menu, rect.Right + 2, -rect.Height - 2)
@@ -3635,8 +3722,7 @@ class DatabasePage(wx.Panel):
 
     def on_diagram_graph(self, event):
         """Handler for choosing diagram graph layout, toggles grid layout off."""
-        if self.tb_diagram.GetToolState(wx.ID_STATIC):
-            self.diagram.PositionItemsGraph()
+        self.diagram.SetLayout(self.diagram.LAYOUT_GRAPH)
         self.tb_diagram.ToggleTool(wx.ID_NETWORK, True)
         self.tb_diagram.ToggleTool(wx.ID_STATIC,  False)
 
@@ -5512,7 +5598,10 @@ class DatabasePage(wx.Panel):
                       for c, xx in self.db.schema.items() if set(names) & set(xx)}
         extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
                 if "table" in categories else ""
-        itemtext = "the " + " and ".join(util.plural(c, nn) for c, nn in categories.items())
+        itemtext = " and ".join("%s %s" % (
+            util.plural(c, nn, numbers=False),
+            ", ".join(grammar.quote(n, force=True) for n in nn)
+        ) for c, nn in categories.items())
         if len(names) == 1:
             itemtext = "the %s %s" % (next(iter(categories)), grammar.quote(names[0], force=True))
 
@@ -5562,29 +5651,41 @@ class DatabasePage(wx.Panel):
                 self.update_page_header(updated=True)
 
 
-    def on_truncate(self, name, event=None):
+    def on_truncate(self, names, event=None):
         """Handler for deleting all rows from a table, confirms choice."""
-        if name in self.data_pages["table"]:
-            return self.data_pages["table"][name].Truncate()
+        names = [names] if isinstance(names, basestring) else names
 
         if wx.YES != controls.YesNoMessageBox(
-            "Are you sure you want to delete all rows from this table?\n\n"
-            "This action is not undoable.",
+            "Are you sure you want to delete all rows from %s %s?\n\n"
+            "This action is not undoable." % (
+                util.plural("table", names, numbers=False),
+                ", ".join(grammar.quote(name, force=True) for name in names)
+            ),
             conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
 
-        lock = self.db.get_lock("table", name)
-        if lock: return wx.MessageBox("%s, cannot truncate." % lock,
-                                      conf.Title, wx.OK | wx.ICON_WARNING)
 
-        sql = "DELETE FROM %s" % grammar.quote(name)
-        count = self.db.executeaction(sql, name="TRUNCATE")
-        self.db.schema["table"][name]["count"] = 0
-        self.db.schema["table"][name].pop("is_count_estimated", None)
+        locks = [n for n in names if self.db.get_lock("table", n)]
+        if locks: return wx.MessageBox("%s, cannot truncate." % "\n".join(locks),
+                                       conf.Title, wx.OK | wx.ICON_WARNING)
+
+        count = 0
+        for name in names:
+            sql = "DELETE FROM %s" % grammar.quote(name)
+            count += self.db.executeaction(sql, name="TRUNCATE")
+            self.db.schema["table"][name]["count"] = 0
+            self.db.schema["table"][name].pop("is_count_estimated", None)
+
+            if name in self.data_pages["table"]:
+                self.data_pages["table"][name].Reload(force=True)
+
         self.load_tree_data()
         self.update_page_header(updated=True)
-        wx.MessageBox("Deleted %s from table %s." % (util.plural("row", count),
-                      grammar.quote(name)), conf.Title)
+        wx.MessageBox("Deleted %s from %s %s." % (
+                          util.plural("row", count),
+                          util.plural("table", names, numbers=False),
+                          ", ".join(grammar.quote(name, force=True) for name in names),
+                      ), conf.Title)
 
 
     def on_truncate_all(self, event=None):

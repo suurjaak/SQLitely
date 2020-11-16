@@ -1989,6 +1989,84 @@ ToolbarTitle = PyEmbeddedImage(
 )
 
 
+"""Toolbar icon for zoom 100% button on diagram page."""
+ToolbarZoom100 = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9i"
+    "ZSBJbWFnZVJlYWR5ccllPAAAAqlJREFUeNqMUk1ME0EUnt2dsqV/FHTDT6EVG7KgFCUEiwkJ"
+    "BDQhmpigiQeSxkSNB01UihwIFxM82QAn40U9eNAbXkw4mBA0GiENNYYoSA9EatMWIt1uW3aX"
+    "3c460xTE0oMv+fLmvf2+9+bNPgoU7Gj9GcB33QZH6jvzsdlsAeXl5c00TY/isA/DgRHFmEMI"
+    "BSRJWs1mMwDyXXewuHNfuGe6jgYVRZri3TDR0WIM8042kfiN5IVlyRP6Ls/i735MewNdp6/n"
+    "BbIs74tx12aEtKkL/fYfbXyZqbXB2kpTFFVhRpmGGihW2dXwzKwwpWpohc5k0qAYopgadbtA"
+    "oqmRNR7jzK7x6W+1A7c+1bCQttAUoLwem40/Tm0RHi2KIiiBvrYWS5LcJp6SkxP3T6ZIfiut"
+    "KCtRUYxu78jtrVaR8KAsK6CEOeprTT/JIZnZFWANJWFeBWdlWXwLG8kbIYOnVhw0QjQogWgs"
+    "LqmEeMplr2MNtIXkiWcNjJXkY/EdjfBog8EMSmAu+CVVBRmawY9nujm+ZCF54sk7IB2AxSXB"
+    "TnjQoTzGHVEeuq7noZZ5nn9eGprp8OxEGzlz+snD9vjebGoOSaHljDa/KFeyrC0Ai4fHBVyG"
+    "3eWzg71K9bNXAh2JsvGBbusvZx20RGJadm4ha3r7PsVBg82P9OwqLBKfwBt42e8fnfD5hh5V"
+    "Nt19Nx+8cW0+mP5nExnGFNC07CrRwAPiLo6rvjQyMjbm812dTCa3X1oVIUxRzIfDPykH0ptB"
+    "sPF1GsDC/Bfdbv788PDYPZ/vytNIZOM1LhheD03iwtQh+Xoo8DdwOp3A6/U+WFvb1Ht6+l9A"
+    "CM/hrQX/a4Rp5DiuG3fsFQQhpmnax/wdAdAKUA949UBMODmq8A5VBa8XgEogV+TzvD8CDAAz"
+    "2GLXqDw2dAAAAABJRU5ErkJggg=="
+)
+
+
+"""Toolbar icon for zoom to fit button on diagram page."""
+ToolbarZoomFit = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9i"
+    "ZSBJbWFnZVJlYWR5ccllPAAAApZJREFUeNqMUl1IU2EY/r5v39nczmZqLn+ZkMQ0UpDQORGU"
+    "lZEEAwsKjNFFN/1Q4WwXEnRTd7JCuqibCuoi6KIiJCFJNKK0pVFGDC1ERfYTzf12djxn3+n7"
+    "Dqe0uYteeHjPc97ned/vDwItymvbgL39HNhZ26pynjcDo9HYgBDyUeqiqKFYo5gghAwLghDM"
+    "ZNIA29vPU3PrX+OfUBTSJ4rCDXs9juxvLFq02wyRyE+SnZ4Xmua+Zsdo3UtlT+GhM7MgP+jU"
+    "BozR2En3roizubiyhOf0CELIakRRlJczsZWHzyIVkkx6cTqdAgXC19pSGmlrslT2ewN17Mfz"
+    "W07gvvBOLT4eccjvP0fDbz8kfCiZTIICcDU3mteZmPHROx2JxIa0zDLjopwjLfssSabD2axY"
+    "aAU1tVWmZfbx6n4PwAgKBoxiNBso31FkxHpbtdlEvTWIEAQKYC0UFiTWwHniBTBwyFxs5KpY"
+    "ZpxFKPxLZjrEcTwogInAx0QZnajWm93j5qyQq2SZcXqQcGY2XsJ00OVy0YlEBT1gFZK+qUMq"
+    "7X9y5ezuVJejnNfrENy8IaCbCiSiV0e+85Kc68X5m6cN6riNeWdft1jhv/sDffmGwoc7LaKt"
+    "GptXQ3JmYjpjGp1K8Jgr9hIlE8R55r30BR71en3XPJ7+66V7Lo5PBk6fmgyk/nmJOp1pWJYz"
+    "QebBW8ztVmuFe3BwaMjjOe5fX489sIjxRQh1r7dfUg6kogGw8ukmwNr+j9TX23sGBoYueTzH"
+    "bq+urjyiDReX5vy0MdxmX5ob3iQ2mw04HI7LCwtRpavrwD2M8UHt1f5XMGWR1WrtpBO74/F4"
+    "SJblN+oaAZA1SFuytIUzTQ5q51CmZUUDKYBcXlZ1vwUYAJuxTN2JWg2HAAAAAElFTkSuQmCC"
+)
+
+
+"""Toolbar icon for zoom in button on diagram page."""
+ToolbarZoomIn = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9i"
+    "ZSBJbWFnZVJlYWR5ccllPAAAAphJREFUeNqMUk1oE0EUnt1MdvP/0xL6kzZRQ0krpigFo1Bo"
+    "aRWrQmkreCgsHgSPalN76FlPhtajF/XgQU/WCkIEIVRRbImtStHG5tDaEJJUbbebn93tTmad"
+    "DRFrE8EHHx9v5vvemzcz1OD1z6BWmM0WYDQa22maniBpH4GbIEUQxRiHRVGMFwp5AME/QlXx"
+    "sCyL034fzHZ1GBJ+D5vN/sTS/LIYWPoiRch+iMieQkmSqsykazvGaPpcv+Nrp58xtTWZDxj1"
+    "OqvdjPOtjVCocyiJmQg/rSC8QufzObAfgrAz4fOCbNtB1uA0M4xmHrjytpGFtIWmABUM2Gz+"
+    "Q9R3TQcFQag1QV9nR2vcaWGaDIzOgbBq1HQaywjXFXcRf+yI9ceL6HofGUGuVcDd0mT6Rro7"
+    "znAR7+/F4yPP7ITsi7NDjCiVisTrhhjTtQqk0hlRqbezvCY26Glrx9lZy0pkKC8ruIx0poiI"
+    "NwX1enOtAtHYh52jXo8lt5XbVeqtTAvRWTSjICpprAKwsMg7yFoUuuXbgLxrGaqqlqEwgfvv"
+    "FkdnugLFVLPTiMnc+diT/ozGNE3p3n/MyXMLkpNlbWFY/f6qV7+7fHK4V26494inkyk2M9Bt"
+    "5T3NECXTqBCdL5iev9qxQb0thNVCHO4zHyY/cCQUmrjJcaO3nG1XX87FLl+ai+X++ok6nSmM"
+    "UCGueeAe8wmXq2FwfHxykuMuTm1vbz20ynyConSvq6+oBHKbMbDx6Q6AlfnP+3z+02Njk9c4"
+    "7sLdZHLjMSmYWFuaIoWpKvvaUvhP4vF4QDAYvLG6uqn29PQ/gBCeoigK/G9oSoPL5eomHXt5"
+    "nk8jhN6UzwgAqkDZw8qeXNOUqMo91FVYrQDXQGkfl3W/BBgAxGBcIB0lbbYAAAAASUVORK5C"
+    "YII="
+)
+
+
+"""Toolbar icon for zoom out button on diagram page."""
+ToolbarZoomOut = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9i"
+    "ZSBJbWFnZVJlYWR5ccllPAAAAoJJREFUeNqMUktoE1EUfW/m5f8xsQ2lTZwgoaQVUyylpkKh"
+    "pfUviFVwURhcuBEFpalZZK0rQ3XpRl240F11IUQQQxTRljRRKUraLKoNIU016TS/yWQmb3wJ"
+    "qaZpFl443Lmce859c9+DoBGdtqPAOXIddNiG67VOpwcajaaPoigvKScIrARJgiDG2M/zfKxY"
+    "LADkHLlBxMN/hTshy3hKEPj7TgdKD/Wr405GlU5ncHlhmXdFv5cDhPeQthfw5LUIaA0ytQ8h"
+    "KnB20rQy4NRqmU6djoIA1jgsA/ltOJuZD2R6RQmfQYVCHrQJ7/CgOd17UKU265TKHXHdnHy7"
+    "XUbjt5Xsr49L216Uy+XaGUwM9B+ImfXKbrWSNgkS3kWWKhI3eNjw+3XwxwQql4V2BlZbt/Yn"
+    "mW46xQbsrWTk5QUlX66WiNaKMKbaGSRTG7zYsU/F1ZrJ+WEzKYi4kNooSUSbRAqFrp1BMPx5"
+    "+4id0eez+YqoQJBuJskiwWKEMxFtEFmFe4Dcax2yLNchKl2PP0Wm54dcpWSPWYMViG66IUgv"
+    "fckLocWyWaUy+lHraGJgV1SWj02NC12PnnFUIqnaOD1qEJgepE+kpGJwoah+9W7biBRGD5aL"
+    "MdQiPkRe4EWPx3uHZafvmntvvgmFr14JhfO7XiJNa/2SVIzVNKhJPGKxdJ2fnfX5WPby3NZW"
+    "9qlB4OIQ0u/3rqgK8pthsP71AUCN/z/ncDhPzMz4brHspYeJxPpzYhhfi84RY7hHvhb1/ysY"
+    "hgFut/v26uqmPDY2+QQhdBxCCP43ap1qi8UySiaOcxyXkiTpQ/2MAEgNiE1ZbKprPVXY2MP+"
+    "RpYbwG1Qbcn1vj8CDAB57iYdx8iq9gAAAABJRU5ErkJggg=="
+)
+
+
 """Transparent 1x1 GIF."""
 TransparentPixel = PyEmbeddedImage(
     "R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="

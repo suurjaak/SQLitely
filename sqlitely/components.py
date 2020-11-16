@@ -9385,6 +9385,17 @@ class SchemaDiagram(wx.ScrolledWindow):
     MAX_TITLE =  50 # Item name max len
     MAX_TEXT  =  40 # Column name/type max len
     MOVE_STEP =  10 # Pixels to move item on arrow key
+    FONT_SIZE =   8 # Default font size
+    FONT_FACE = "Verdana"
+    FONT_SPAN = (1, 16) # Minimum and maximum font size for zoom
+
+    LAYOUT_GRID  = "grid"
+    LAYOUT_GRAPH = "graph"
+
+    ZOOM_STEP = 1. / FONT_SIZE
+    ZOOM_MIN  = FONT_SPAN[0] / float(FONT_SIZE)
+    ZOOM_MAX  = FONT_SPAN[1] / float(FONT_SIZE)
+    ZOOM_DEFAULT = 1.0
 
 
 
@@ -9396,6 +9407,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._lines = util.CaselessDict() # {(name1, name2, (cols)): {id, pts}}
         self._sels  = util.CaselessDict(insertorder=True) # {name selected: DC ops ID}
         self._order = []   # [{obj dict}, ]
+        self._zoom  = 1.   # Zoom scale, 1 == 100%
         self._page  = None # DatabasePage instance
         self._dc    = wx.adv.PseudoDC()
 
@@ -9406,6 +9418,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._show_lines  = True
         self._show_labels = True
         self._show_stats  = False
+        self._layout = {"layout": "grid", "active": True,
+                        "grid": {"order": "name", "reverse": False, "vertical": True}}
 
         self._colour_border = wx.NullColour
         self._colour_line   = wx.NullColour
@@ -9432,8 +9446,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._UpdateColours()
         self.SetVirtualSize(self.VIRTUALSZ)
         self.SetScrollRate(20, 20)
-        self.SetFont(wx.Font(8, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
-                             wx.FONTWEIGHT_NORMAL, faceName="Verdana"))
+        self.SetFont(wx.Font(self.FONT_SIZE, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
+                             wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE))
 
         self.Bind(wx.EVT_ERASE_BACKGROUND,    lambda x: None) # Reduces flicker
         self.Bind(wx.EVT_MOUSE_EVENTS,        self._OnMouse)
@@ -9446,35 +9460,87 @@ class SchemaDiagram(wx.ScrolledWindow):
         self.Bind(wx.EVT_CONTEXT_MENU,        lambda e: self.OpenContextMenu())
 
 
-    def SetBorderColour(self, colour): self._colour_border = colour
     def GetBorderColour(self):         return self._colour_border
+    def SetBorderColour(self, colour): self._colour_border = colour
     BorderColour = property(GetBorderColour, SetBorderColour)
 
 
-    def SetLineColour(self, colour): self._colour_line = colour
     def GetLineColour(self):         return self._colour_line
+    def SetLineColour(self, colour): self._colour_line = colour
     LineColour = property(GetLineColour, SetLineColour)
 
 
-    def SetShadowColour(self, colour): self._colour_shadow = colour
     def GetShadowColour(self):         return self._colour_shadow
+    def SetShadowColour(self, colour): self._colour_shadow = colour
     ShadowColour = property(GetShadowColour, SetShadowColour)
 
 
-    def SetGradientColourFrom(self, colour): self._colour_grad1 = colour
     def GetGradientColourFrom(self):         return self._colour_grad1
+    def SetGradientColourFrom(self, colour): self._colour_grad1 = colour
     GradientColourFrom = property(GetGradientColourFrom, SetGradientColourFrom)
 
 
-    def SetGradientColourTo(self, colour): self._colour_grad2 = colour
     def GetGradientColourTo(self):         return self._colour_grad2
+    def SetGradientColourTo(self, colour): self._colour_grad2 = colour
     GradientColourTo = property(GetGradientColourTo, SetGradientColourTo)
 
 
-    def SetDatabasePage(self, page): self._page = page
     def GetDatabasePage(self):         return self._page
+    def SetDatabasePage(self, page): self._page = page
     DatabasePage = property(GetDatabasePage, SetDatabasePage)
 
+
+    """Returns current zoom level, 1 being 100% and .5 being 50%."""
+    def GetZoom(self): return self._zoom
+    def SetZoom(self, zoom):
+        zoom = float(zoom) - zoom % self.ZOOM_STEP # Even out to allowed step
+        zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
+        if self._zoom == zoom: return
+        self._zoom = zoom
+
+        font = self.Font
+        font.PointSize = self.FONT_SIZE * zoom
+        self.Font = font
+
+        zoom0 = self._zoom
+        self.SetVirtualSize(*[int(x * self._zoom) for x in self.VIRTUALSZ])
+
+        for k in ("MINW", "LINEH", "HEADERP", "HEADERH", "FOOTERH", "BRADIUS",
+        "FMARGIN", "CARDINALW", "CARDINALH", "LPAD", "HPAD", "GPAD", "MOVE_STEP"):
+            v = getattr(self.__class__, k)
+            setattr(self, k, int(math.ceil(v * self._zoom)))
+
+        for o in self._objs.values():
+            opts = self._db.get_category(o["category"], o["name"])            
+            bmp = self._MakeItemBitmap(o["category"], opts)
+            bmpsel = self._MakeFocusedBitmap(bmp)
+            bmpseldrag = self._MakeFocusedBitmap(self._MakeItemBitmap(o["category"], opts, dragrect=True))
+            o.update(bmp=bmp, bmpsel=bmpsel, bmpseldrag=bmpseldrag)
+            r = self._dc.GetIdBounds(o["id"])
+            pt = [v * self._zoom / zoom0 for v in r.TopLeft]
+            self._dc.SetIdBounds(o["id"], wx.Rect(wx.Point(pt), bmp.Size))
+
+        self.Redraw()
+    Zoom = property(GetZoom, SetZoom)
+
+
+    def ZoomToFit(self):
+        """
+        Centers and zooms to level where all items are visible in viewport,
+        defaulting to 100% zoom level if possible.
+        """
+        self.SetZoom(self.ZOOM_DEFAULT)
+        zoom = zoom0 = self._zoom
+        oids = [o["id"] for o in self._objs.values()]
+        bounds = sum(map(self._dc.GetIdBounds, oids), wx.Rect())
+        while zoom > self.ZOOM_MIN and (bounds.Width > self.ClientSize.Width
+        or bounds.Height > self.ClientSize.Height):
+            zoom0, zoom = zoom, zoom - self.ZOOM_STEP
+            self.SetZoom(zoom)
+            bounds = sum(map(self._dc.GetIdBounds, oids), wx.Rect())
+        delta = self.GetScrollPixelsPerUnit()
+        self.Scroll([(v + 10) / d for v, d in zip(bounds.TopLeft, delta)])
+        
 
     def ShowLines(self, show=True):
         """Sets showing foreign relation lines on or off."""
@@ -9505,15 +9571,14 @@ class SchemaDiagram(wx.ScrolledWindow):
         filetype = os.path.splitext(filename)[-1].lstrip(".").upper()
         wxtype   = next(k for k, v in self.EXPORT_FORMATS.items() if v == filetype)
 
-        bounds = wx.Rect()
-        for k in self._ids: bounds.Union(self._dc.GetIdBounds(k))
+        bounds = sum((map(self._dc.GetIdBounds, self._ids)), wx.Rect())
         bounds.Inflate(10, 10)
 
         bmp = wx.Bitmap(self.VirtualSize)
         dc = wx.MemoryDC(bmp)
-        dc.Font = self.Font
         dc.Background = controls.BRUSH(self.BackgroundColour)
         dc.Clear()
+        dc.Font = self.Font
         self._dc.DrawToDCClipped(dc, bounds)
 
         bmp2 = wx.Bitmap(bounds.Width, bounds.Height)
@@ -9547,45 +9612,61 @@ class SchemaDiagram(wx.ScrolledWindow):
                 submenu.Append(it)
 
         else:
-            o = self._objs[next(iter(self._sels))] # @todo multiselect
-            item_name = wx.MenuItem(menu, wx.ID_ANY, "%s %s" % (
-                        o["category"].capitalize(),
-                        util.unprint(grammar.quote(o["name"], force=True))))
+            items = map(self._objs.get, self._sels)
+            items.sort(key=lambda o: o["name"].lower())
+            categories = {}
+            for o in items: categories.setdefault(o["category"], []).append(o)
+            title = "%s %s" % (
+                        items[0]["category"].capitalize(),
+                        util.unprint(grammar.quote(items[0]["name"], force=True))
+                    ) if len(items) == 1 else \
+                    util.plural(next(iter(categories)), items) if len(categories) == 1 else \
+                    util.plural("item", items)
+            catlabel = util.plural(next(iter(categories)), items, numbers=False) \
+                       if len(categories) == 1 else util.plural("item", items, numbers=False)
+
+            item_name = wx.MenuItem(menu, wx.ID_ANY, title)
             item_name.Font = self.Parent.Font.Bold()
             menu.Append(item_name)
             menu.AppendSeparator()
 
             item_reidx  = item_trunc = None
-            item_data   = menu.Append(wx.ID_ANY, "Open %s &data"   % o["category"])
-            item_schema = menu.Append(wx.ID_ANY, "Open %s &schema" % o["category"])
-            item_copy   = menu.Append(wx.ID_ANY, "&Copy name")
-            item_sql    = menu.Append(wx.ID_ANY, "&Copy %s S&QL" % o["category"])
+            item_data   = menu.Append(wx.ID_ANY, "Open %s &data"   % catlabel)
+            item_schema = menu.Append(wx.ID_ANY, "Open %s &schema" % catlabel)
+            item_copy   = menu.Append(wx.ID_ANY, "&Copy %s" % util.plural("name", items, numbers=False))
+            item_sql    = menu.Append(wx.ID_ANY, "&Copy CREATE S&QL")
             item_sqlall = menu.Append(wx.ID_ANY, "&Copy all &related SQL")
             menu.AppendSeparator()
-            if "table" == o["category"]:
+            if len(items) == 1:
                 submenu = wx.Menu()
                 menu.AppendSubMenu(submenu, text="Create &new ..")
-                for category in "index", "trigger", "view":
-                    it = wx.MenuItem(submenu, -1, "New &%s" % category)
+                for subcategory in ("index", "trigger", "view") if "table" in categories else ["trigger"]:
+                    it = wx.MenuItem(submenu, -1, "New &%s" % subcategory)
                     submenu.Append(it)
-                    menu.Bind(wx.EVT_MENU, cmd("create", category, o["category"], o["name"]), it)
-                item_reidx = menu.Append(wx.ID_ANY, "Reindex %s"  % o["category"])
-                item_trunc = menu.Append(wx.ID_ANY, "Truncate %s" % o["category"])
-            item_drop = menu.Append(wx.ID_ANY, "Drop %s" % o["category"])
+                    menu.Bind(wx.EVT_MENU, cmd("create", subcategory, next(iter(categories)), items[0]["name"]), it)
+            if "table" in categories:
+                label = util.plural("table", categories["table"], numbers=False)
+                item_reidx = menu.Append(wx.ID_ANY, "Reindex %s"  % label)
+                item_trunc = menu.Append(wx.ID_ANY, "Truncate %s" % label)
+            item_drop = menu.Append(wx.ID_ANY, "Drop %s" % catlabel)
 
-            menu.Bind(wx.EVT_MENU, cmd("data",   o["category"], o["name"]), item_data)
-            menu.Bind(wx.EVT_MENU, cmd("schema", o["category"], o["name"]), item_schema)
-            menu.Bind(wx.EVT_MENU, cmd("drop",   o["category"], o["name"]), item_drop)
+            names = [o["name"] for o in items]
+            menu.Bind(wx.EVT_MENU, cmd("data",   None, *names), item_data)
+            menu.Bind(wx.EVT_MENU, cmd("schema", None, *names), item_schema)
+            menu.Bind(wx.EVT_MENU, cmd("drop",   None, *names), item_drop)
 
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, o["name"]), item_copy)
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, "\n".join(map(grammar.quote, names))), item_copy)
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
-                      functools.partial(self._db.get_sql, o["category"], o["name"])), item_sql)
-            menu.Bind(wx.EVT_MENU, cmd("copy", "related", o["category"], o["name"]), item_sqlall)
+                      lambda: "\n\n".join(
+                          self._db.get_sql(c, o["name"])
+                          for c, oo in categories.items() for o in oo
+                      )), item_sql)
+            menu.Bind(wx.EVT_MENU, cmd("copy", "related", None, *names), item_sqlall)
 
             if item_reidx:
-                menu.Bind(wx.EVT_MENU, cmd("reindex",  o["category"], o["name"]), item_trunc)
+                menu.Bind(wx.EVT_MENU, cmd("reindex",  "table", *[o["name"] for o in categories["table"]]), item_reidx)
             if item_trunc:
-                menu.Bind(wx.EVT_MENU, cmd("truncate", o["name"]), item_trunc)
+                menu.Bind(wx.EVT_MENU, cmd("truncate", *[o["name"] for o in categories["table"]]), item_trunc)
 
         self.PopupMenu(menu)
 
@@ -9595,8 +9676,6 @@ class SchemaDiagram(wx.ScrolledWindow):
         if not self: return
 
         self._dc.RemoveAll()
-        self.SetFont(wx.Font(8, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
-                             wx.FONTWEIGHT_NORMAL, faceName="Verdana"))
 
         self._ids  .clear()
         self._objs .clear()
@@ -9620,8 +9699,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self._objs[name] = {"id": oid, "category": category, "name": name,
                                     "bmp": bmp, "bmpsel": bmpsel, "bmpseldrag": bmpseldrag}
                 self._order.append(self._objs[name])
-        self.PositionItemsGrid()
-        self.Redraw()
+        self.SetLayout(self._layout["layout"])
 
 
     def Redraw(self, remake=False):
@@ -9845,50 +9923,113 @@ class SchemaDiagram(wx.ScrolledWindow):
             opts["pts"] = pts
 
 
-    def PositionItemsGrid(self):
+    def SetLayout(self, layout, options=None):
+        """
+        Sets diagram layout style.
+
+        @param   layout   one of LAYOUT_GRID, LAYOUT_GRAPH
+        @param   options  options for grid layout as
+                          {"order": "name", "reverse": False, "vertical": True},
+                          updates current options
+        """
+        if layout not in (self.LAYOUT_GRID, self.LAYOUT_GRAPH): return
+        self._layout["layout"] = layout
+        self._layout["active"] = True
+        if self.LAYOUT_GRID == layout:
+            if options: self._layout[layout].update(options)
+            self._PositionItemsGrid()
+        else: self._PositionItemsGraph()
+
+
+    def GetLayoutOptions(self, layout):
+        """Returns current options for layout, if any"""
+        return copy.copy(self._layout.get(layout))
+
+
+    def _PositionItemsGrid(self):
         """Calculates item positions using a simple grid layout."""
         self._worker_graph.stop_work(drop=True)
-        MAXH = max(500, self.ClientSize[1])
+        MAXW = max(500 * self._zoom, self.ClientSize[0])
+        MAXH = max(500 * self._zoom, self.ClientSize[1])
 
-        def get_dx(colrects, col):
-            result = 0
-            for rr in colrects[:col]:
-                ww = [r.Width for r in rr]
-                median = sorted(ww)[len(rr) / 2]
-                result += max(w for w in ww if w < 1.5 * median)
-            return self.GPAD + result + col * self.GPAD
+        def get_dx(rects, idx):
+            """Returns starting X for column or row."""
+            if self._layout["grid"]["vertical"]:
+                result = 0
+                for rr in rects[:idx]:
+                    ww = [r.Width for r in rr]
+                    median = sorted(ww)[len(rr) / 2]
+                    result += max(w for w in ww if w < 1.5 * median)
+            else:
+                result = rects[idx][-1].Right if rects[idx] else 0
+            return self.GPAD + result + (idx * self.GPAD if self._layout["grid"]["vertical"] else 0)
 
-        def get_dy(colrects, col):
-            result = max(r.Bottom for r in colrects[col]) if colrects[col] else 0
+        def get_dy(rects, idx):
+            """Returns starting Y for column or row."""
+            if self._layout["grid"]["vertical"]:
+                result = max(r.Bottom for r in rects[idx]) if rects[idx] else 0
+            else:
+                result = max(r.Bottom for r in rects[-2]) if len(rects) > 1 else 0
             return self.GPAD + result
 
-        col, colrects = 0, [[]] # [[col 0 rect 0, rect 1, ], ]
-        for o in self._order:
-            x, y = get_dx(colrects, col), get_dy(colrects, col)
-            rect = wx.Rect(x, y, *o["bmp"].Size)
+        tablestats = self._page.statistics.get("data", {}).get("table", [])
+        statmap = util.CaselessDict({x["name"]: x["size_total"] for x in tablestats})
+        direction, do_reverse = (-1 if self._layout["grid"]["reverse"] else 1), False
+        if "columns" == self._layout["grid"]["order"]:
+            sortkey = lambda o: (len(self._db.get_category(o["category"], o["name"])["columns"]) * direction,
+                                 o["name"].lower())
+        elif "rows" == self._layout["grid"]["order"]:
+            sortkey = lambda o: (self._db.get_category(o["category"], o["name"]).get("count", 0) * direction,
+                                 o["name"].lower())
+        elif "bytes" == self._layout["grid"]["order"]:
+            sortkey = lambda o: (statmap.get(o["name"], 0) * direction, o["name"].lower())
+        else:
+            sortkey = lambda o: o["name"].lower()
+            do_reverse = bool(self._layout["grid"]["reverse"])
+        items = sorted(self._order, key=sortkey, reverse=do_reverse)
 
-            xrect = next((r for r in colrects[-2][::-1] if r.Intersects(rect)),
-                         None) if col else None
-            while xrect or colrects[-1] and y + o["bmp"].Height > MAXH:
+        if self._layout["grid"]["vertical"]:
+            col, colrects = 0, [[]] # [[col 0 rect 0, rect 1, ], ]
+            for o in items:
+                x, y = get_dx(colrects, col), get_dy(colrects, col)
+                rect = wx.Rect(x, y, *o["bmp"].Size)
 
-                # Step lower or to next col if prev col has wide item
-                if xrect and xrect.Bottom + self.GPAD + o["bmp"].Height > MAXH:
-                    col, colrects, y = col + 1, colrects + [[]], self.GPAD
-                elif xrect:
-                    y = xrect.Bottom + self.GPAD
-
-                if colrects[-1] and y + o["bmp"].Height > MAXH:
-                    col, colrects, y = col + 1, colrects + [[]], self.GPAD
-
-                rect = wx.Rect(get_dx(colrects, col), y, *o["bmp"].Size)
                 xrect = next((r for r in colrects[-2][::-1] if r.Intersects(rect)),
-                             None) if col else None
+                             None) if col else None # Overlapping rect in previous column
+                while xrect or colrects[-1] and y + o["bmp"].Height > MAXH:
 
-            self._dc.SetIdBounds(o["id"], rect)
-            colrects[-1].append(rect)
+                    # Step lower or to next col if prev col has wide item
+                    if xrect and xrect.Bottom + self.GPAD + o["bmp"].Height > MAXH:
+                        col, colrects, y = col + 1, colrects + [[]], self.GPAD
+                    elif xrect:
+                        y = xrect.Bottom + self.GPAD
+
+                    if colrects[-1] and y + o["bmp"].Height > MAXH:
+                        col, colrects, y = col + 1, colrects + [[]], self.GPAD
+
+                    rect = wx.Rect(get_dx(colrects, col), y, *o["bmp"].Size)
+                    xrect = next((r for r in colrects[-2][::-1] if r.Intersects(rect)),
+                                 None) if col else None
+
+                self._dc.SetIdBounds(o["id"], rect)
+                colrects[-1].append(rect)
+        else:
+            row, rowrects = 0, [[]] # [[row 0 rect 0, rect 1, ], ]
+            for o in items:
+                x, y = get_dx(rowrects, row), get_dy(rowrects, row)
+                rect = wx.Rect(x, y, *o["bmp"].Size)
+
+                if rowrects[-1] and x + o["bmp"].Width > MAXW:
+                    row, rowrects, x = row + 1, rowrects + [[]], self.GPAD
+                    rect = wx.Rect(x, get_dy(rowrects, row), *o["bmp"].Size)
+
+                self._dc.SetIdBounds(o["id"], rect)
+                rowrects[-1].append(rect)
+
+        self.Redraw()
 
 
-    def PositionItemsGraph(self):
+    def _PositionItemsGraph(self):
         """Calculates item positions using a force-directed graph."""
         if self._worker_graph.is_working(): return
 
@@ -9958,6 +10099,11 @@ class SchemaDiagram(wx.ScrolledWindow):
         # Draw columns: name and type, and primary/foreign key icons
         dc.SetFont(font)
 
+        pkbmp, fkbmp = images.DiagramPK.Bitmap, images.DiagramFK.Bitmap
+        if self._zoom != self.ZOOM_DEFAULT:
+            pkbmp = wx.Bitmap(images.DiagramPK.Image.Scale(*[int(math.ceil(x * self._zoom)) for x in pkbmp.Size]))
+            fkbmp = wx.Bitmap(images.DiagramFK.Image.Scale(*[int(math.ceil(x * self._zoom)) for x in fkbmp.Size]))
+
         pks, fks = (sum((list(c["name"]) for c in x), [])
                     for x in self._db.get_keys(opts["name"]))
         for i, col in enumerate(opts.get("columns") or []):
@@ -9968,9 +10114,9 @@ class SchemaDiagram(wx.ScrolledWindow):
                 dy = self.HEADERH + self.HEADERP + i * self.LINEH
                 dc.DrawText(ellipsize(text, self.MAX_TEXT), dx, dy)
             if col["name"] in pks:
-                dc.DrawBitmap(images.DiagramPK.Bitmap, 3, dy + 1, useMask=True)
+                dc.DrawBitmap(pkbmp, 3, dy + 1, useMask=True)
             if col["name"] in fks:
-                b, bw = images.DiagramFK.Bitmap, images.DiagramFK.Bitmap.Width
+                b, bw = fkbmp, fkbmp.Width
                 dc.DrawBitmap(b, w - bw - 6, dy + 1, useMask=True)
 
         del dc
@@ -10012,9 +10158,9 @@ class SchemaDiagram(wx.ScrolledWindow):
 
     def _OnMouse(self, event):
         """Handler for mouse events: focus, drag, menu."""
-        event.Skip()
 
         if event.LeftDown() or event.RightDown() or event.LeftDClick():
+            event.Skip()
             self._dragpos = event.X, event.Y
             start, delta = self.GetViewStart(), self.GetScrollPixelsPerUnit()
             x, y = (x + p * d for x, p, d in zip(event.Position, start, delta))
@@ -10052,6 +10198,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                     o["id"] = max(self._ids) + 1
                     self._dc.SetId(o["id"])
                     bmp = o["bmpsel" if myname in self._sels else "bmp"]
+                    # @todo pos shift vist zoomist sõltuma
                     pos = [a - (myname in self._sels) * 2 for a in bounds[:2]]
                     self._dc.DrawBitmap(bmp, pos, useMask=True)
                     self._dc.SetIdBounds(o["id"], bounds)
@@ -10070,6 +10217,7 @@ class SchemaDiagram(wx.ScrolledWindow):
 
 
         elif event.Dragging() or event.LeftUp():
+            event.Skip()
             if event.LeftUp() and self.HasCapture(): self.ReleaseMouse()
 
             if not self._dragpos \
@@ -10139,6 +10287,13 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self.RefreshRect(refrect, eraseBackground=False)
 
             self._dragpos = event.X, event.Y
+        elif event.WheelRotation:
+            if event.CmdDown():
+                # @todo tsentreeri hiire ümber kui hiir viewpordis
+                self.Zoom += self.ZOOM_STEP * (1 if event.WheelRotation > 0 else -1)
+            else: event.Skip()
+        else:
+            event.Skip()
 
 
     def _OnKey(self, event):
@@ -10148,7 +10303,12 @@ class SchemaDiagram(wx.ScrolledWindow):
         if event.CmdDown() and event.UnicodeKey == ord('A'):
             self._sels.update(self._objs) # Select all
             self.Redraw()
+        elif event.KeyCode in controls.KEYS.PLUS + controls.KEYS.MINUS:
+            self.Zoom += self.ZOOM_STEP * (1 if event.KeyCode in controls.KEYS.PLUS else -1)
+        elif event.KeyCode in controls.KEYS.MULTIPLY:
+            self.Zoom = 1
         elif event.KeyCode in controls.KEYS.TAB and self._objs:
+            # @todo siin veel tööd loogikaga, ühte ja teistpidi tulles ei saa alati minema
             if self._sels:
                 name1 = next(iter(self._sels))
                 idx2  = self._objs.keys().index(name1) + (-1 if event.ShiftDown() else 1)

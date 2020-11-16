@@ -66,7 +66,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    14.11.2020
+@modified    15.11.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -124,6 +124,10 @@ class KEYS(object):
     PAGING     = PAGEUP + PAGEDOWN
     NAVIGATION = ARROW + PAGING + HOME + END + TAB
     COMMAND    = ENTER + INSERT + DELETE + SPACE + BACKSPACE + ESCAPE
+
+    PLUS       = ord("+"), wx.WXK_NUMPAD_ADD
+    MINUS      = ord("-"), wx.WXK_NUMPAD_SUBTRACT
+    MULTIPLY  =  ord("*"), wx.WXK_NUMPAD_MULTIPLY
 
     NUMPAD_ARROW = wx.WXK_NUMPAD_END,  wx.WXK_NUMPAD_DOWN,  wx.WXK_NUMPAD_PAGEDOWN, \
                    wx.WXK_NUMPAD_LEFT,                      wx.WXK_NUMPAD_RIGHT,    \

@@ -115,6 +115,14 @@ IMAGES = {
         "Toolbar icon for tabs toggle button on search page.",
     "ToolbarTitle.png":
         "Toolbar icon for title toggle button on search page.",
+    "ToolbarZoom100.png":
+        "Toolbar icon for zoom 100% button on diagram page.",
+    "ToolbarZoomFit.png":
+        "Toolbar icon for zoom to fit button on diagram page.",
+    "ToolbarZoomIn.png":
+        "Toolbar icon for zoom in button on diagram page.",
+    "ToolbarZoomOut.png":
+        "Toolbar icon for zoom out button on diagram page.",
     "TransparentPixel.gif":
         "Transparent 1x1 GIF.",
     "TreeTrigger.png":
