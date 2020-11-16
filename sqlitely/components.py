@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.11.2020
+@modified    16.11.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -8182,7 +8182,9 @@ class ColumnDialog(wx.Dialog):
                     v = value.strip()          # Empty surrounding ws
                     v = re.sub("[ \t]+\n", "\n", v) # Empty ws-only lines
                     v = re.sub("[\r\n]+",  "\n", v) # Collapse blank lines
-                    value = re.sub("[ \t]+",   " ",  v) # Collapse spaces+tabs
+                    value = re.sub("[ \t]+", " ", v) # Collapse spaces+tabs
+                elif "strip" == category:
+                    value = re.sub("\s+", "", value)
                 elif "urlencode" == category:
                     value = urllib.quote(util.to_str(value, "utf-8"))
                 elif "urldecode" == category:
@@ -8279,6 +8281,7 @@ class ColumnDialog(wx.Dialog):
             item_tabs      = wx.MenuItem(menu, -1, "Spaces to &tabs")
             item_spaces    = wx.MenuItem(menu, -1, "Tabs to &spaces")
             item_wspace    = wx.MenuItem(menu, -1, "Collapse &whitespace")
+            item_strip     = wx.MenuItem(menu, -1, "Stri&p whitespace")
             item_urlenc    = wx.MenuItem(menu, -1, "&URL-encode")
             item_urldec    = wx.MenuItem(menu, -1, "URL-&decode")
             item_hescape   = wx.MenuItem(menu, -1, "Escape &HTML entities")
@@ -8288,6 +8291,7 @@ class ColumnDialog(wx.Dialog):
             menu.Append(item_tabs)
             menu.Append(item_spaces)
             menu.Append(item_wspace)
+            menu.Append(item_strip)
             menu.Append(item_urlenc)
             menu.Append(item_urldec)
             menu.Append(item_hescape)
@@ -8297,6 +8301,7 @@ class ColumnDialog(wx.Dialog):
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("tabs"),         item_tabs)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("spaces"),       item_spaces)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("whitespace"),   item_wspace)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("strip"),        item_strip)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("urlencode"),    item_urlenc)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("urldecode"),    item_urldec)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("htmlescape"),   item_hescape)
@@ -9363,7 +9368,6 @@ class SchemaDiagram(wx.ScrolledWindow):
     EXPORT_FORMATS = {
         wx.BITMAP_TYPE_BMP:  "BMP",
         wx.BITMAP_TYPE_PNG:  "PNG",
-        #0xFFFF:             "SVG", @todo
     }
 
     # Default gradient end on white background
@@ -9635,9 +9639,9 @@ class SchemaDiagram(wx.ScrolledWindow):
 
             item_reidx  = item_trunc = None
             item_data   = menu.Append(wx.ID_ANY, "Open %s &data"   % catlabel)
-            item_schema = menu.Append(wx.ID_ANY, "Open %s &schema" % catlabel)
+            item_schema = menu.Append(wx.ID_ANY, "Open %s &schema\t(Enter)" % catlabel)
             item_copy   = menu.Append(wx.ID_ANY, "&Copy %s" % util.plural("name", items, numbers=False))
-            item_sql    = menu.Append(wx.ID_ANY, "&Copy CREATE S&QL")
+            item_sql    = menu.Append(wx.ID_ANY, "&Copy CREATE S&QL\t(%s-C)" % controls.KEYS.NAME_CTRL)
             item_sqlall = menu.Append(wx.ID_ANY, "&Copy all &related SQL")
             menu.AppendSeparator()
             if len(items) == 1:
@@ -9664,7 +9668,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                       lambda: "\n\n".join(
                           self._db.get_sql(c, o["name"])
                           for c, oo in categories.items() for o in oo
-                      ), "%s SQL" % catlabel), item_sql)
+                      ), "CREATE SQL"), item_sql)
             menu.Bind(wx.EVT_MENU, cmd("copy", "related", None, *names), item_sqlall)
 
             if item_reidx:
@@ -10307,6 +10311,16 @@ class SchemaDiagram(wx.ScrolledWindow):
         if event.CmdDown() and event.UnicodeKey == ord('A'):
             self._sels.update(self._objs) # Select all
             self.Redraw()
+        elif event.CmdDown() and event.UnicodeKey == ord('C'):
+            items = map(self._objs.get, self._sels)
+            items.sort(key=lambda o: o["name"].lower())
+            categories = {}
+            for o in items: categories.setdefault(o["category"], []).append(o)
+            text = "\n\n".join(self._db.get_sql(c, o["name"])
+                               for c, oo in categories.items() for o in oo)
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text)), wx.TheClipboard.Close()
+                guibase.status("Copied CREATE SQL to clipboard.")
         elif event.KeyCode in controls.KEYS.PLUS + controls.KEYS.MINUS:
             self.Zoom += self.ZOOM_STEP * (1 if event.KeyCode in controls.KEYS.PLUS else -1)
         elif event.KeyCode in controls.KEYS.MULTIPLY:
