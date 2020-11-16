@@ -9583,6 +9583,8 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         bmp2 = wx.Bitmap(bounds.Width, bounds.Height)
         dc2 = wx.MemoryDC(bmp2)
+        dc2.Background = controls.BRUSH(self.BackgroundColour)
+        dc2.Clear()
         dc2.Blit(0, 0, bounds.Width, bounds.Height, dc, bounds.Left, bounds.Top)
         del dc
         bmp2.SaveFile(filename, wxtype)
