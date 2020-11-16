@@ -6987,7 +6987,7 @@ class ImportDialog(wx.Dialog):
             for i, c in enumerate(self._cols1):
                 if self._has_header is False: cname = self._MakeColumnName(1, {"index": i})
                 else:
-                    cname = util.make_unique(c["name"] or "col", allcols)
+                    cname = util.make_unique(util.to_unicode(c["name"]) if c["name"] else "col", allcols)
                     allcols.append(cname)
                 self._cols2.append({"name": cname, "index": i, "skip": c["skip"]})
 
