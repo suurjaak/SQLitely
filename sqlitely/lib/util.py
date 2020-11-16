@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.10.2020
+@modified    16.11.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -734,7 +734,7 @@ def shortpath(path):
         wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD 
     ]
     ctypes.windll.kernel32.GetShortPathNameW.restype = wintypes.DWORD
-    buf = ctypes.create_unicode_buffer(path)
+    buf = ctypes.create_unicode_buffer(4 * len(path))
     ctypes.windll.kernel32.GetShortPathNameW(path, buf, len(buf))
     return buf.value
 
