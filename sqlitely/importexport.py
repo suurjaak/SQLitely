@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.07.2020
+@modified    16.11.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -593,13 +593,16 @@ def get_import_file_data(filename):
     elif is_xlsx:
         wb = None
         try:
-            wb = openpyxl.load_workbook(filename, data_only=True, read_only=True)
-            for sheet in wb.worksheets:
-                rows = -1 if size > MAX_IMPORT_FILESIZE_FOR_COUNT \
-                       else sum(1 for _ in sheet.iter_rows())
-                columns = list(next(sheet.values, []))
-                while columns and columns[-1] is None: columns.pop(-1)
-                sheets.append({"rows": rows, "columns": columns, "name": sheet.title})
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore") # openpyxl can throw warnings on styles etc
+
+                wb = openpyxl.load_workbook(filename, data_only=True, read_only=True)
+                for sheet in wb.worksheets:
+                    rows = -1 if size > MAX_IMPORT_FILESIZE_FOR_COUNT \
+                           else sum(1 for _ in sheet.iter_rows())
+                    columns = list(next(sheet.values, []))
+                    while columns and columns[-1] is None: columns.pop(-1)
+                    sheets.append({"rows": rows, "columns": columns, "name": sheet.title})
         finally: wb and wb.close()
 
     return {"name": filename, "size": size, "format": extname, "sheets": sheets}
@@ -777,9 +780,12 @@ def iter_file_rows(filename, columns, sheet=None):
     elif is_xlsx:
         wb = None
         try:
-            wb = openpyxl.load_workbook(filename, data_only=True, read_only=True)
-            for row in wb.get_sheet_by_name(sheet).iter_rows(values_only=True):
-                yield [row[i] if i < len(row) else None for i in columns]
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore") # openpyxl can throw warnings on styles etc
+
+                wb = openpyxl.load_workbook(filename, data_only=True, read_only=True)
+                for row in wb.get_sheet_by_name(sheet).iter_rows(values_only=True):
+                    yield [row[i] if i < len(row) else None for i in columns]
         finally: wb and wb.close()
 
 
