@@ -708,6 +708,19 @@ def to_unicode(value, encoding=None):
     return result
 
 
+def ellipsize(text, limit=50, front=False, ellipsis=".."):
+    """
+    Returns text ellipsized if beyond limit.
+
+    @param   limit     length beyond which text is truncated
+    @param   front     if true, ellipsis is inserted in front
+                       and text is truncated from the end
+    @param   ellipsis  the ellipsis string to use
+    """
+    if front: return (ellipsis + text[-limit + len(ellipsis):]) if len(text) > limit else text
+    return (text[:limit - len(ellipsis)] + ellipsis) if len(text) > limit else text
+
+
 def longpath(path):
     """Returns the path in long Windows form ("Program Files" not PROGRA~1)."""
     result = path

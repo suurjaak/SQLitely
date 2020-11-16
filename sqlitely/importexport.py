@@ -851,7 +851,7 @@ class xlsx_writer(object):
             # Max length 31, no []:\\?/*\x00\x03, cannot start/end with '.
             stripped = name.strip("'")
             safename = re.sub(r"[\[\]\:\\\?\/\*\x00\x03]", " ", stripped)
-            safename = safename[:29] + ".." if len(safename) > 31 else safename
+            safename = util.ellipsize(safename, 31)
             # Ensure unique name, appending (counter) if necessary
             base, counter = safename, 2
             while safename.lower() in self._sheets:

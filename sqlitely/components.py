@@ -1520,7 +1520,7 @@ class SQLiteGridBaseMixin(object):
                 tip = "   NULL  "
             else:
                 tip = unicode(value)
-            tip = tip if len(tip) < 1000 else tip[:1000] + ".."
+            tip = util.ellipsize(tip, 1000)
         if (row, col) != prev_cell or not (event.EventObject.ToolTip) \
         or event.EventObject.ToolTip.Tip != tip:
             event.EventObject.ToolTip = tip
@@ -5439,7 +5439,7 @@ class SchemaObjectPage(wx.Panel):
                        grammar.quote(name, force=True))]
         if not errors:
             meta2, err = grammar.parse(self._item["sql"])
-            if not meta2: errors += [err[:200] + (".." if len(err) > 200 else "")]
+            if not meta2: errors.append(util.ellipsize(err, 200))
         return errors, meta2
 
 
@@ -7361,8 +7361,7 @@ class DataDialog(wx.Dialog):
                 v = self._data[n]
                 c.Value = "" if v is None else util.to_unicode(v)
                 c.Hint  = "<NULL>" if v is None else ""
-                c.ToolTip = "   NULL  " if v is None else \
-                            c.Value if len(c.Value) < 1000 else c.Value[:1000] + ".."
+                c.ToolTip = "   NULL  " if v is None else util.ellipsize(c.Value, 1000)
                 if v != self._original[n]:
                     c.BackgroundColour = wx.Colour(conf.GridRowChangedColour)
             wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
@@ -7380,8 +7379,7 @@ class DataDialog(wx.Dialog):
         self._data[name] = val
         c.Value = "" if val is None else util.to_unicode(val)
         c.Hint  = "<NULL>" if val is None else ""
-        c.ToolTip = "   NULL  " if val is None else \
-                    c.Value if len(c.Value) < 1000 else c.Value[:1000] + ".."
+        c.ToolTip = "   NULL  " if val is None else util.ellipsize(c.Value, 1000)
 
         bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
         if val != self._original[name]: bg = wx.Colour(conf.GridRowChangedColour)
@@ -7458,7 +7456,7 @@ class DataDialog(wx.Dialog):
 
         self._data[name] = value
         c.Hint = ""
-        c.ToolTip = c.Value if len(c.Value) < 1000 else c.Value[:1000] + ".."
+        c.ToolTip = util.ellipsize(c.Value, 1000)
 
         bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
         if value != self._original[name]: bg = wx.Colour(conf.GridRowChangedColour)
@@ -7833,7 +7831,7 @@ class HistoryDialog(wx.Dialog):
         if row < 0 or col < 0 or (row, col) == self._hovered_cell: return
 
         tip = self._grid.Table.GetValue(row, col)
-        event.EventObject.ToolTip = tip if len(tip) < 1000 else tip[:1000] + ".."
+        event.EventObject.ToolTip = util.ellipsize(tip, 1000)
         self._hovered_cell = (row, col)
 
 
@@ -7981,7 +7979,7 @@ class ColumnDialog(wx.Dialog):
             button_ok.Shown = button_reset.Shown = False
             button_cancel.Label = "&Close"
 
-        list_cols.Items = [x[:50] + (x[50:] and "..") for c in self._coldatas
+        list_cols.Items = [util.ellipsize(x, 50) for c in self._coldatas
                            for x in [util.unprint(c["name"])]]
         list_cols.Selection = col
         button_prev.Enabled = bool(list_cols.Selection)
@@ -8131,8 +8129,7 @@ class ColumnDialog(wx.Dialog):
         if self._coldata.get("type"):    label += " " + self._coldata["type"]
         if "notnull" in self._coldata:   label += " NOT NULL"
         if self._coldata.get("default"): label += " DEFAULT " + self._coldata["default"]
-        if len(label) > 500: label =     label[:500] + ".."
-        self._label_meta.Label = label
+        self._label_meta.Label = util.ellipsize(label, 500)
         self._label_meta.Wrap(self.Size[0] - 250)
         self.Layout()
 
@@ -9768,7 +9765,6 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         # {name2: {False: [(name1, cols) at top], True: [(name1, cols) at bottom]}}
         vertslots = defaultdict(lambda: defaultdict(list))
-        ellipsize = lambda s, n: (s[:n] + "..") if len(s) > n else s
 
         # First pass: determine starting X-Y and ending Y
         for (name1, name2, cols), opts in self._lines.items():
@@ -9906,7 +9902,7 @@ class SchemaDiagram(wx.ScrolledWindow):
 
             # Draw foreign key label
             if self._show_labels:
-                tname = ellipsize(util.unprint(opts["name"]), self.MAX_TEXT)
+                tname = util.ellipsize(util.unprint(opts["name"]), self.MAX_TEXT)
                 textent = self.GetFullTextExtent(tname)
                 tw, th = textent[0] + textent[3], textent[1] + textent[2]
                 tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
@@ -10058,10 +10054,9 @@ class SchemaDiagram(wx.ScrolledWindow):
         """Returns wx.Bitmap representing a schema item like table."""
         w, h = self.MINW, self.HEADERH + self.HEADERP + self.FOOTERH
         font, boldfont = self.Font, self.Font.Bold()
-        ellipsize = lambda s, n: (s[:n] + "..") if len(s) > n else s
 
         # Measure title width
-        title = ellipsize(util.unprint(opts["name"]), self.MAX_TITLE)
+        title = util.ellipsize(util.unprint(opts["name"]), self.MAX_TITLE)
         extent = self.GetFullTextExtent(title, boldfont) # (w, h, descent, lead)
         w = max(w, extent[0] + extent[3] + 2 * self.HPAD)
 
@@ -10071,7 +10066,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             for k in ["name", "type"]:
                 v = c.get(k)
                 if not v: continue # for k
-                extent = self.GetFullTextExtent(ellipsize(util.unprint(v), self.MAX_TEXT), font)
+                extent = self.GetFullTextExtent(util.ellipsize(util.unprint(v), self.MAX_TEXT), font)
                 if v: colmax[k] = max(colmax[k], extent[0] + extent[3])
         w = max(w, self.LPAD + 2 * self.HPAD + sum(colmax.values()))
         h += self.LINEH * len(opts.get("columns") or [])
@@ -10122,7 +10117,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 if not text: continue # for j, k
                 dx = self.LPAD + j * (colmax["name"] + self.HPAD)
                 dy = self.HEADERH + self.HEADERP + i * self.LINEH
-                dc.DrawText(ellipsize(util.unprint(text), self.MAX_TEXT), dx, dy)
+                dc.DrawText(util.ellipsize(util.unprint(text), self.MAX_TEXT), dx, dy)
             if col["name"] in pks:
                 dc.DrawBitmap(pkbmp, 3, dy + 1, useMask=True)
             if col["name"] in fks:

@@ -1311,12 +1311,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if check_result:
             version, url, changes = check_result
             MAX = 1000
-            changes = changes[:MAX] + ".." if len(changes) > MAX else changes
             guibase.status("New %s version %s available.", conf.Title, version)
             if wx.YES == controls.YesNoMessageBox(
                 "Newer version (%s) available. You are currently on "
                 "version %s.%s\nDownload and install %s %s?" %
-                (version, conf.Version, "\n\n%s\n" % changes,
+                (version, conf.Version, "\n\n%s\n" % util.ellipsize(changes, MAX),
                  conf.Title, version),
                 "Update information", wx.ICON_INFORMATION
             ):
@@ -2361,8 +2360,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         e.g. "..longpath\myname.db (2)". Title is shortened from the left
         if longer than allowed.
         """
-        if len(title) > conf.MaxTabTitleLength:
-            title = "..%s" % title[-conf.MaxTabTitleLength:]
+        title = util.ellipsize(title, conf.MaxTabTitleLength, front=True)
         all_titles = [self.notebook.GetPageText(i)
                       for i in range(self.notebook.GetPageCount())]
         return util.make_unique(title, all_titles, suffix=" (%s)", case=True)
@@ -4005,10 +4003,9 @@ class DatabasePage(wx.Panel):
         else:
             err = "\n- ".join(errors)
             logger.info("Errors found in %s: %s", self.db, err)
-            err = err[:500] + ".." if len(err) > 500 else err
             msg = "A number of errors were found in %s:\n\n- %s\n\n" \
                   "Recover as much as possible to a new database?" % \
-                  (self.db, err)
+                  (self.db, util.ellipsize(err, 500))
             if wx.YES != wx.MessageBox(msg, conf.Title,
                                        wx.YES | wx.NO | wx.ICON_WARNING): return
 
@@ -4040,11 +4037,10 @@ class DatabasePage(wx.Panel):
             err = ("\n\nErrors occurred during the recovery, "
                   "more details in log window:\n\n- "
                   + "\n- ".join(copyerrors)) if copyerrors else ""
-            err = err[:500] + ".." if len(err) > 500 else err
             guibase.status("Recovery to %s complete." % newfile)
             wx.PostEvent(self, OpenDatabaseEvent(self.Id, file=newfile))
             wx.MessageBox("Recovery to %s complete.%s" %
-                          (newfile, err), conf.Title,
+                          (newfile, util.ellipsize(err, 500)), conf.Title,
                           wx.ICON_INFORMATION)
 
 
@@ -4076,8 +4072,7 @@ class DatabasePage(wx.Panel):
         if errors:
             err = "\n- ".join(errors)
             logger.info("Error running vacuum on %s: %s", self.db, err)
-            err = err[:500] + ".." if len(err) > 500 else err
-            wx.MessageBox(err, conf.Title, wx.OK | wx.ICON_ERROR)
+            wx.MessageBox(util.ellipsize(err, 500), conf.Title, wx.OK | wx.ICON_ERROR)
         else:
             self.update_info_panel()
             wx.MessageBox("VACUUM complete.\n\nSize before: %s.\nSize after:    %s." %
@@ -4431,8 +4426,7 @@ class DatabasePage(wx.Panel):
             else:
                 html += "</table></font>"
             text = tab_data["info"]["text"]
-            title = text[:50] + ".." if len(text) > 50 else text
-            title += " (%s)" % result.get("count", 0)
+            title = "%s (%s)" % (util.ellipsize(text, 50), result.get("count", 0))
             self.notebook_search.SetPageData(search_id, title, html,
                                              tab_data["info"])
         if search_done:
@@ -4485,7 +4479,7 @@ class DatabasePage(wx.Panel):
             bmp = images.ToolbarStop.Bitmap
             self.tb_search_settings.SetToolNormalBitmap(wx.ID_STOP, bmp)
 
-            title = text[:50] + ".." if len(text) > 50 else text
+            title = util.ellipsize(text, 50)
             content = data["partial_html"] + "</table></font>"
             if conf.SearchUseNewTab or not nb.GetTabCount():
                 nb.InsertPage(0, content, title, data["id"], data)
@@ -5002,7 +4996,8 @@ class DatabasePage(wx.Panel):
     def add_schema_page(self, data):
         """Opens and returns schema object page for specified object data."""
         if "name" in data:
-            title = "%s %s" % (data["type"].capitalize(), util.unprint(grammar.quote(data["name"])))
+            title = "%s %s" % (data["type"].capitalize(), 
+            util.unprint(grammar.quote(data["name"])))
             busy = controls.BusyPanel(self.notebook_schema, "Opening %s %s." %
                                       (data["type"], grammar.quote(data["name"], force=True)))
         else:
