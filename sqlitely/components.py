@@ -8561,10 +8561,13 @@ class ColumnDialog(wx.Dialog):
 
 
         def validate(value, propagate=True):
-            status.Label = ""
-            try: state["validate"] and value and json.loads(value)
-            except Exception as e: status.Label = str(e)
-            page.Layout()
+            status.Label, colour = "", wx.SYS_COLOUR_GRAYTEXT
+            if state["validate"] and value:
+                try: json.loads(value)
+                except Exception as e: status.Label, colour = str(e), wx.RED
+                else: status.Label = "Valid"
+                ColourManager.Manage(status, "ForegroundColour", colour)
+                page.Layout()
             if propagate: self._Populate(value, skip=NAME)
 
         def on_toggle_validate(event):
@@ -8592,7 +8595,6 @@ class ColumnDialog(wx.Dialog):
         cb.ToolTip = "Show warning if value is not parseable as JSON"
         cb.Value   = True
         ColourManager.Manage(hint, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
-        status.ForegroundColour = wx.RED
 
         page.Sizer   = wx.BoxSizer(wx.VERTICAL)
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
