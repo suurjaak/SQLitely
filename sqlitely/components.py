@@ -9898,7 +9898,7 @@ class SchemaDiagram(wx.ScrolledWindow):
 
             # Draw foreign key label
             if self._show_labels:
-                tname = ellipsize(opts["name"], self.MAX_TEXT)
+                tname = ellipsize(util.unprint(opts["name"]), self.MAX_TEXT)
                 textent = self.GetFullTextExtent(tname)
                 tw, th = textent[0] + textent[3], textent[1] + textent[2]
                 tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
@@ -10053,7 +10053,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         ellipsize = lambda s, n: (s[:n] + "..") if len(s) > n else s
 
         # Measure title width
-        title = ellipsize(opts["name"], self.MAX_TITLE)
+        title = ellipsize(util.unprint(opts["name"]), self.MAX_TITLE)
         extent = self.GetFullTextExtent(title, boldfont) # (w, h, descent, lead)
         w = max(w, extent[0] + extent[3] + 2 * self.HPAD)
 
@@ -10063,7 +10063,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             for k in ["name", "type"]:
                 v = c.get(k)
                 if not v: continue # for k
-                extent = self.GetFullTextExtent(ellipsize(v, self.MAX_TEXT), font)
+                extent = self.GetFullTextExtent(ellipsize(util.unprint(v), self.MAX_TEXT), font)
                 if v: colmax[k] = max(colmax[k], extent[0] + extent[3])
         w = max(w, self.LPAD + 2 * self.HPAD + sum(colmax.values()))
         h += self.LINEH * len(opts.get("columns") or [])
@@ -10114,7 +10114,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 if not text: continue # for j, k
                 dx = self.LPAD + j * (colmax["name"] + self.HPAD)
                 dy = self.HEADERH + self.HEADERP + i * self.LINEH
-                dc.DrawText(ellipsize(text, self.MAX_TEXT), dx, dy)
+                dc.DrawText(ellipsize(util.unprint(text), self.MAX_TEXT), dx, dy)
             if col["name"] in pks:
                 dc.DrawBitmap(pkbmp, 3, dy + 1, useMask=True)
             if col["name"] in fks:
