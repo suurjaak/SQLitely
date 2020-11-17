@@ -2001,7 +2001,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if tables:
                 s = ""
                 for t in tables:
-                    s += (", " if s else "") + grammar.quote(t["name"])
+                    s += (", " if s else "") + util.ellipsize(util.unprint(grammar.quote(t["name"])), 50)
                     if len(s) > 400:
                         s += ", .."
                         break # for t
