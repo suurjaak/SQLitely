@@ -496,11 +496,9 @@ class FormDialog(wx.Dialog):
             ColourManager.Manage(x, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
         self.Populate(props, data, edit)
 
-        if self._editmode:
-            self.MinSize = (self.WIDTH, panel_items.Size[1] + 80)
-        else:
-            self.MinSize = (self.WIDTH, panel_items.Size[1] + 10)
-            self.Fit()
+        self.Fit()
+        FRAMEH = 2 * wx.SystemSettings.GetMetric(wx.SYS_FRAMESIZE_Y) + wx.SystemSettings.GetMetric(wx.SYS_CAPTION_Y)
+        self.Size = self.MinSize = (self.WIDTH, panel_wrap.VirtualSize[1] + 25 + sizer_buttons.Size[1] + FRAMEH)
         self.CenterOnParent()
 
 
