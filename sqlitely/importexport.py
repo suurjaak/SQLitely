@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+import warnings
 
 # ImageFont for calculating column widths in Excel export, not required.
 try: from PIL import ImageFont
