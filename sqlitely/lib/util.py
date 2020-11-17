@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.11.2020
+@modified    17.11.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -694,7 +694,7 @@ def to_unicode(value, encoding=None):
     locale decoding fails.
     """
     result = value
-    if not isinstance(value, unicode):
+    if type(value) != unicode:
         encoding = encoding or locale.getpreferredencoding()
         if not isinstance(value, str):
             try: value = str(value)
@@ -712,11 +712,13 @@ def ellipsize(text, limit=50, front=False, ellipsis=".."):
     """
     Returns text ellipsized if beyond limit.
 
+    @param   text      value to ellipsize, converted to string if not string
     @param   limit     length beyond which text is truncated
     @param   front     if true, ellipsis is inserted in front
                        and text is truncated from the end
     @param   ellipsis  the ellipsis string to use
     """
+    if type(text) not in (str, unicode): text = to_unicode(text)
     if front: return (ellipsis + text[-limit + len(ellipsis):]) if len(text) > limit else text
     return (text[:limit - len(ellipsis)] + ellipsis) if len(text) > limit else text
 
