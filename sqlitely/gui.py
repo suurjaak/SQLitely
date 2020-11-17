@@ -781,6 +781,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if not conf.TrayIconEnabled:
                 conf.TrayIconEnabled = True
                 self.trayicon.SetIcon(self.TRAY_ICON.Icon, conf.Title)
+                self.menu_tray.Check(True)
             if self.menu_console.IsChecked(): self.frame_console.Hide()
         else:
             self.Iconize(False), self.Show(), self.Restore()
