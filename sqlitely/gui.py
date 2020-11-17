@@ -6121,7 +6121,7 @@ class DatabasePage(wx.Panel):
             dlg.ShowModal()
         def clipboard_copy(text, label, *_, **__):
             if wx.TheClipboard.Open():
-                d = wx.TextDataObject(text)
+                d = wx.TextDataObject(text() if callable(text) else text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
                 if label: guibase.status("Copied %s to clipboard.", label)
         def toggle_items(node, *_, **__):
@@ -6146,7 +6146,8 @@ class DatabasePage(wx.Panel):
                                        conf.MaxTabTitleLength)))
             item_open = wx.MenuItem(menu, -1, "&Open %s data" % data["type"])
             item_open_meta = wx.MenuItem(menu, -1, "Open %s &schema" % data["type"])
-            item_copy = wx.MenuItem(menu, -1, "&Copy name")
+            item_copy      = wx.MenuItem(menu, -1, "&Copy name")
+            item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s S&QL" % data["type"])
 
             item_name.Font = boldfont
 
@@ -6155,6 +6156,7 @@ class DatabasePage(wx.Panel):
             menu.Append(item_open)
             menu.Append(item_open_meta)
             menu.Append(item_copy)
+            menu.Append(item_copy_sql)
 
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
                       item_name)
@@ -6162,6 +6164,10 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, functools.partial(open_meta, data), item_open_meta)
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"], "%s name" % data["type"]),
                       item_copy)
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"], "%s SQL" % data["type"]),
+                      item_copy_sql)
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
+                      functools.partial(self.db.get_sql, data["type"], data["name"]), "%s SQL" % data["type"]), item_copy_sql)
 
             item_file = wx.MenuItem(menu, -1, "Export %s to &file" % data["type"])
             if data["type"] in ("table", "view"):
@@ -6176,8 +6182,9 @@ class DatabasePage(wx.Panel):
             item_name = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
                         util.unprint(grammar.quote(data["parent"]["name"])),
                         util.unprint(grammar.quote(data["name"]))))
-            item_open = wx.MenuItem(menu, -1, "&Open %s data" % data["parent"]["type"])
-            item_copy = wx.MenuItem(menu, -1, "&Copy name")
+            item_open     = wx.MenuItem(menu, -1, "&Open %s data" % data["parent"]["type"])
+            item_copy     = wx.MenuItem(menu, -1, "&Copy name")
+            item_copy_sql = wx.MenuItem(menu, -1, "Copy column S&QL")
 
             item_name.Font = boldfont
 
@@ -6185,11 +6192,15 @@ class DatabasePage(wx.Panel):
             menu.AppendSeparator()
             menu.Append(item_open)
             menu.Append(item_copy)
+            menu.Append(item_copy_sql)
 
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
                       item_name)
-            menu.Bind(wx.EVT_MENU, functools.partial(open_data, data["parent"]),    item_open)
+            menu.Bind(wx.EVT_MENU, functools.partial(open_data, data["parent"]), item_open)
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"], "column name"), item_copy)
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
+                    functools.partial(self.db.get_sql, data["parent"]["type"], data["parent"]["name"], data["name"]),
+                "column SQL"), item_copy_sql)
 
         elif "category" == data.get("type"): # Category list
             item_copy = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
@@ -6339,7 +6350,7 @@ class DatabasePage(wx.Panel):
         if "schema" == data["type"]:
             submenu, keys = wx.Menu(), []
             if any(self.db.schema.values()):
-                item_copy_sql = wx.MenuItem(menu, -1, "Copy schema &SQL")
+                item_copy_sql = wx.MenuItem(menu, -1, "Copy schema S&QL")
                 item_save_sql = wx.MenuItem(menu, -1, "Save schema SQL to fi&le")
                 item_database_meta = wx.MenuItem(menu, -1, "Export all structures to another &database")
                 menu.Append(item_copy_sql)
@@ -6368,7 +6379,7 @@ class DatabasePage(wx.Panel):
             if names:
                 item_drop_all = wx.MenuItem(menu, -1, "Drop all %s" % util.plural(data["category"]))
                 item_copy     = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
-                item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % util.plural(data["category"]))
+                item_copy_sql = wx.MenuItem(menu, -1, "Copy %s S&QL" % util.plural(data["category"]))
                 item_save_sql = wx.MenuItem(menu, -1, "Save %s SQL to fi&le" % util.plural(data["category"]))
                 if data["category"] in ("table", "index"):
                     item_reindex = wx.MenuItem(menu, -1, "Reindex all")
@@ -6425,9 +6436,7 @@ class DatabasePage(wx.Panel):
                 item_copy = wx.MenuItem(menu, -1, "&Copy name")
 
             if has_sql:
-                names = [data["type"]]
-                if "index" == data["parent"]["type"]: names.insert(0, data["parent"]["type"])
-                item_copy_sql = wx.MenuItem(menu, -1, "Copy %s &SQL" % " ".join(names))
+                item_copy_sql = wx.MenuItem(menu, -1, "Copy column S&QL")
 
             if has_name:
                 menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
@@ -6462,7 +6471,7 @@ class DatabasePage(wx.Panel):
             item_open_data = wx.MenuItem(menu, -1, "Open %s &data" % data["type"]) \
                              if data["type"] in ("table", "view") else None
             item_copy      = wx.MenuItem(menu, -1, "&Copy name")
-            item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s &SQL" % data["type"])
+            item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s S&QL" % data["type"])
             item_copy_rel  = wx.MenuItem(menu, -1, "Copy all &related SQL")
             item_drop      = wx.MenuItem(menu, -1, "Drop %s" % data["type"])
             item_reindex   = wx.MenuItem(menu, -1, "Reindex") \

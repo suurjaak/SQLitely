@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.07.2020
+@modified    17.11.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1162,7 +1162,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if names and myname.lower() not in names:
                     continue # for myname, opts
 
-                if names and column and "table" == mycategory:
+                if names and column and mycategory in ("table", "view"):
                     col = next((c for c in opts["columns"]
                                 if util.lceq(c["name"], column)), None)
                     if not col: continue # for myname, opts
