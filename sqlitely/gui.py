@@ -1195,6 +1195,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject("\n".join(files))
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+                guibase.status("Copied file path to clipboard.")
         def open_folder(*a, **kw):
             for f in files: util.select_file(f)
 
@@ -6116,10 +6117,11 @@ class DatabasePage(wx.Panel):
             dlg = components.ImportDialog(self, self.db)
             if "table" == data["type"]: dlg.SetTable(data["name"], fixed=True)
             dlg.ShowModal()
-        def clipboard_copy(text, *_, **__):
+        def clipboard_copy(text, label, *_, **__):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+                if label: guibase.status("Copied %s to clipboard.", label)
         def toggle_items(node, *_, **__):
             tree.ToggleItem(node)
         def create_object(category, *_, **__):
@@ -6156,7 +6158,7 @@ class DatabasePage(wx.Panel):
                       item_name)
             menu.Bind(wx.EVT_MENU, functools.partial(open_data, data), item_open)
             menu.Bind(wx.EVT_MENU, functools.partial(open_meta, data), item_open_meta)
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"], "%s name" % data["type"]),
                       item_copy)
 
             item_file = wx.MenuItem(menu, -1, "Export %s to &file" % data["type"])
@@ -6185,7 +6187,7 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
                       item_name)
             menu.Bind(wx.EVT_MENU, functools.partial(open_data, data["parent"]),    item_open)
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]), item_copy)
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"], "column name"), item_copy)
 
         elif "category" == data.get("type"): # Category list
             item_copy = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
@@ -6194,7 +6196,7 @@ class DatabasePage(wx.Panel):
 
             menu.Append(item_copy)
 
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, ", ".join(data["items"])), item_copy)
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, ", ".join(data["items"]), "%s names" % data["category"]), item_copy)
 
             if data["category"] in ("table", "view"):
                 item_database    = wx.MenuItem(menu, -1, "Export all %s to another &database" % util.plural(data["category"]))
@@ -6305,10 +6307,11 @@ class DatabasePage(wx.Panel):
         def select_item(it, *_, **__):
             if not self: return
             tree.SelectItem(it)
-        def clipboard_copy(text, *_, **__):
+        def clipboard_copy(text, label, *_, **__):
             if wx.TheClipboard.Open():
                 d = wx.TextDataObject(text() if callable(text) else text)
                 wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+                if label: guibase.status("Copied %s to clipboard.", label)
         def toggle_items(node, *_, **__):
             tree.ToggleItem(node)
         def open_data(data, *_, **__):
@@ -6340,7 +6343,7 @@ class DatabasePage(wx.Panel):
                 menu.Append(item_copy_sql)
                 menu.Append(item_save_sql)
                 menu.Append(item_database_meta)
-                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, self.db.get_sql),
+                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, self.db.get_sql, "schema SQL"),
                           item_copy_sql)
                 menu.Bind(wx.EVT_MENU, lambda e: self.save_sql(self.db.get_sql()),
                           item_save_sql)
@@ -6371,10 +6374,10 @@ class DatabasePage(wx.Panel):
 
                 menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["category"], names),
                           item_drop_all)
-                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, lambda: "\n".join(map(grammar.quote, names))),
+                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, lambda: "\n".join(map(grammar.quote, names)), "%s names" % data["category"]),
                           item_copy)
                 menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
-                          functools.partial(self.db.get_sql, **sqlkws)), item_copy_sql)
+                          functools.partial(self.db.get_sql, **sqlkws), "%s SQL" % util.plural(data["category"])), item_copy_sql)
                 menu.Bind(wx.EVT_MENU, lambda e: self.save_sql(self.db.get_sql(**sqlkws), util.plural(data["category"])), item_save_sql)
 
             item_create = wx.MenuItem(menu, -1, "Create &new %s" % data["category"])
@@ -6427,10 +6430,10 @@ class DatabasePage(wx.Panel):
             if has_name:
                 menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
                           item_name)
-                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
+                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"], "column name"),
                           item_copy)
             if has_sql:
-                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, sqltext),
+                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, sqltext, "column SQL"),
                           item_copy_sql)
 
             if has_name:
@@ -6443,7 +6446,7 @@ class DatabasePage(wx.Panel):
             cols = data["parent"].get("columns") or data["parent"].get("meta", {}).get("columns", [])
             names = [x["name"] for x in cols]
             item_copy = wx.MenuItem(menu, -1, "&Copy column names")
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, lambda: "\n".join(map(grammar.quote, names))),
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, lambda: "\n".join(map(grammar.quote, names)), "column names"),
                       item_copy)
             menu.Append(item_copy)
         else: # Single category item, like table
@@ -6479,10 +6482,10 @@ class DatabasePage(wx.Panel):
             if item_open_data:
                 menu.Bind(wx.EVT_MENU, functools.partial(open_data, data),
                           item_open_data)
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"]),
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"], "%s name" % data["type"]),
                       item_copy)
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
-                      functools.partial(self.db.get_sql, **sqlkws)), item_copy_sql)
+                      functools.partial(self.db.get_sql, **sqlkws), "%s SQL" % data["type"]), item_copy_sql)
             menu.Bind(wx.EVT_MENU, copy_related, item_copy_rel)
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["type"], [data["name"]]),
                       item_drop)
