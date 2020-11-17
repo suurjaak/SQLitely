@@ -3570,11 +3570,12 @@ class DatabasePage(wx.Panel):
 
         def after():
             if not self: return
-            if result and "error" not in result:
-                guibase.status("Statistics analysis complete.")
+            if result:
+                if "error" not in result:
+                    guibase.status("Statistics analysis complete.")
                 self.cb_diagram_stats.Enable()
                 self.populate_statistics()
-                self.update_page_header(updated=True)
+                self.update_page_header(updated="error" not in result)
         wx.CallAfter(after)
 
 
