@@ -9499,13 +9499,13 @@ class SchemaDiagram(wx.ScrolledWindow):
         zoom = float(zoom) - zoom % self.ZOOM_STEP # Even out to allowed step
         zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
         if self._zoom == zoom: return
-        self._zoom = zoom
 
         font = self.Font
         font.PointSize = self.FONT_SIZE * zoom
         self.Font = font
 
         zoom0 = self._zoom
+        self._zoom = zoom
         self.SetVirtualSize(*[int(x * self._zoom) for x in self.VIRTUALSZ])
 
         for k in ("MINW", "LINEH", "HEADERP", "HEADERH", "FOOTERH", "BRADIUS",
