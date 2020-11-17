@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.11.2020
+@modified    16.11.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4426,7 +4426,8 @@ class DatabasePage(wx.Panel):
             else:
                 html += "</table></font>"
             text = tab_data["info"]["text"]
-            title = "%s (%s)" % (util.ellipsize(text, 50), result.get("count", 0))
+            title = "%s (%s)" % (util.ellipsize(text, conf.MaxTabTitleLength),
+                                 result.get("count", 0))
             self.notebook_search.SetPageData(search_id, title, html,
                                              tab_data["info"])
         if search_done:
@@ -4479,7 +4480,7 @@ class DatabasePage(wx.Panel):
             bmp = images.ToolbarStop.Bitmap
             self.tb_search_settings.SetToolNormalBitmap(wx.ID_STOP, bmp)
 
-            title = util.ellipsize(text, 50)
+            title = util.ellipsize(text, conf.MaxTabTitleLength)
             content = data["partial_html"] + "</table></font>"
             if conf.SearchUseNewTab or not nb.GetTabCount():
                 nb.InsertPage(0, content, title, data["id"], data)
@@ -4924,7 +4925,12 @@ class DatabasePage(wx.Panel):
 
     def add_data_page(self, data):
         """Opens and returns a data object page for specified object data."""
-        title = "%s %s" % (data["type"].capitalize(), util.unprint(grammar.quote(data["name"])))
+        title = "%s %s" % (data["type"].capitalize(),
+                           util.ellipsize(util.unprint(grammar.quote(data["name"])),
+                                          conf.MaxTabTitleLength))
+        all_titles = [self.notebook_data.GetPageText(i).rstrip("*")
+                      for i in range(self.notebook_data.GetPageCount())]
+        title = util.make_unique(title, all_titles, suffix=" (%s)", case=True)
         self.notebook_data.Freeze()
         try:
             p = components.DataObjectPage(self.notebook_data, self.db, data)
@@ -4996,12 +5002,16 @@ class DatabasePage(wx.Panel):
     def add_schema_page(self, data):
         """Opens and returns schema object page for specified object data."""
         if "name" in data:
-            title = "%s %s" % (data["type"].capitalize(), 
-            util.unprint(grammar.quote(data["name"])))
+            title = "%s %s" % (data["type"].capitalize(),
+                               util.ellipsize(util.unprint(grammar.quote(data["name"])),
+                                              conf.MaxTabTitleLength))
             busy = controls.BusyPanel(self.notebook_schema, "Opening %s %s." %
                                       (data["type"], grammar.quote(data["name"], force=True)))
         else:
             title, busy = "* New %s *" % data["type"], None
+        all_titles = [self.notebook_schema.GetPageText(i).rstrip("*")
+                      for i in range(self.notebook_schema.GetPageCount())]
+        title = util.make_unique(title, all_titles, suffix=" (%s)", case=True)
         self.notebook_schema.Freeze()
         try:
             p = components.SchemaObjectPage(self.notebook_schema, self.db, data, self.toggle_cursors)
@@ -5058,9 +5068,13 @@ class DatabasePage(wx.Panel):
             self.toggle_cursors(category, name)
         if (modified is not None or updated is not None) and event.source:
             if name:
-                suffix = "*" if event.source.IsChanged() else ""
-                title = "%s %s%s" % (category.capitalize(),
-                                     util.unprint(grammar.quote(name)), suffix)
+                title = "%s %s" % (category.capitalize(),
+                                   util.ellipsize(util.unprint(grammar.quote(name)),
+                                                  conf.MaxTabTitleLength))
+                all_titles = [self.notebook_schema.GetPageText(i).rstrip("*")
+                              for i in range(self.notebook_schema.GetPageCount()) if i != idx]
+                title = util.make_unique(title, all_titles, suffix=" (%s)", case=True)
+                if event.source.IsChanged(): title += "*"
                 if self.notebook_schema.GetPageText(idx) != title:
                     self.notebook_schema.SetPageText(idx, title)
             if not self.save_underway: self.update_page_header(updated=updated)
@@ -5188,9 +5202,13 @@ class DatabasePage(wx.Panel):
             self.handle_command("reindex", category, name)
         if (modified is not None or updated is not None) and event.source:
             if name:
-                suffix = "*" if event.source.IsChanged() else ""
-                title = "%s %s%s" % (category.capitalize(),
-                                     util.unprint(grammar.quote(name)), suffix)
+                title = "%s %s" % (category.capitalize(),
+                                   util.ellipsize(util.unprint(grammar.quote(name)),
+                                                  conf.MaxTabTitleLength))
+                all_titles = [self.notebook_data.GetPageText(i).rstrip("*")
+                              for i in range(self.notebook_data.GetPageCount()) if i != idx]
+                title = util.make_unique(title, all_titles, suffix=" (%s)", case=True)
+                if event.source.IsChanged(): title += "*"
                 if self.notebook_data.GetPageText(idx) != title:
                     self.notebook_data.SetPageText(idx, title)
             if not self.save_underway: self.update_page_header()
@@ -6041,9 +6059,7 @@ class DatabasePage(wx.Panel):
             nb = self.notebook_data
             p = self.data_pages[data["type"]].get(data["name"])
             if p: nb.SetSelection(nb.GetPageIndex(p))
-            else:
-                data = self.db.get_category(data["type"], data["name"])
-                self.add_data_page(data)
+            else: self.add_data_page(self.db.get_category(data["type"], data["name"]))
             tree.Expand(tree.GetItemParent(item))
         else:
             tree.Collapse(item) if tree.IsExpanded(item) else tree.Expand(item)
@@ -6061,9 +6077,7 @@ class DatabasePage(wx.Panel):
             nb = self.notebook_schema
             p = self.schema_pages[data["type"]].get(data["name"])
             if p: nb.SetSelection(nb.GetPageIndex(p))
-            else:
-                data = self.db.get_category(data["type"], data["name"])
-                self.add_schema_page(data)
+            else: self.add_schema_page(self.db.get_category(data["type"], data["name"]))
             tree.Expand(tree.GetItemParent(item))
         else:
             tree.Collapse(item) if tree.IsExpanded(item) else tree.Expand(item)
