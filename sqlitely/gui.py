@@ -893,7 +893,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.trayicon.PopupMenu(menu)
 
 
-    def on_change_page(self, event):
+    def on_change_page(self, event=None):
         """
         Handler for changing a page in the main Notebook, remembers the visit.
         """
@@ -1075,6 +1075,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             util.add_unique(conf.RecentFiles, event.filename2, -1,
                             conf.MaxRecentFiles)
             conf.save()
+            if event.source == self.notebook.GetCurrentPage():
+                self.on_change_page() # Update program title
 
         if modified is not None or updated:
             self.db_menustate[event.source.db.filename] = {}
