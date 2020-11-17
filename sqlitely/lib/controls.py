@@ -66,7 +66,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    15.11.2020
+@modified    17.11.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -458,6 +458,9 @@ class FormDialog(wx.Dialog):
     @param   onclose   callable(data) on closing dialog, returning whether to close
     """
 
+    WIDTH = 440
+
+
     def __init__(self, parent, title, props=None, data=None, edit=None, autocomp=None, onclose=None):
         wx.Dialog.__init__(self, parent, title=title,
                           style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER)
@@ -494,9 +497,9 @@ class FormDialog(wx.Dialog):
         self.Populate(props, data, edit)
 
         if self._editmode:
-            self.MinSize = (440, panel_items.Size[1] + 80)
+            self.MinSize = (self.WIDTH, panel_items.Size[1] + 80)
         else:
-            self.MinSize = (440, panel_items.Size[1] + 10)
+            self.MinSize = (self.WIDTH, panel_items.Size[1] + 10)
             self.Fit()
         self.CenterOnParent()
 
@@ -792,7 +795,7 @@ class FormDialog(wx.Dialog):
                     if field.get("help"): myctrl.ToolTip = myctrl.ToolTip = field["help"]
             elif "choices" in field:
                 style = wx.CB_DROPDOWN | (0 if field.get("choicesedit") else wx.CB_READONLY)
-                ctrl = wx.ComboBox(parent, style=style)
+                ctrl = wx.ComboBox(parent, size=(200, -1), style=style)
             else:
                 ctrl = wx.TextCtrl(parent)
 

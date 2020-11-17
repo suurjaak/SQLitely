@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.11.2020
+@modified    17.11.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -9624,7 +9624,8 @@ class SchemaDiagram(wx.ScrolledWindow):
             for o in items: categories.setdefault(o["category"], []).append(o)
             title = "%s %s" % (
                         items[0]["category"].capitalize(),
-                        util.unprint(grammar.quote(items[0]["name"], force=True))
+                        util.ellipsize(util.unprint(grammar.quote(items[0]["name"], force=True)),
+                                       conf.MaxTabTitleLength)
                     ) if len(items) == 1 else \
                     util.plural(next(iter(categories)), items) if len(categories) == 1 else \
                     util.plural("item", items)

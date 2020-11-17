@@ -6137,7 +6137,9 @@ class DatabasePage(wx.Panel):
         item_drop = item_drop_all = item_create = None
         if data.get("type") in ("table", "view"): # Single table/view
             item_name = wx.MenuItem(menu, -1, "%s %s" % (
-                        data["type"].capitalize(), util.unprint(grammar.quote(data["name"], force=True))))
+                        data["type"].capitalize(),
+                        util.ellipsize(util.unprint(grammar.quote(data["name"], force=True)),
+                                       conf.MaxTabTitleLength)))
             item_open = wx.MenuItem(menu, -1, "&Open %s data" % data["type"])
             item_open_meta = wx.MenuItem(menu, -1, "Open %s &schema" % data["type"])
             item_copy = wx.MenuItem(menu, -1, "&Copy name")
@@ -6449,7 +6451,8 @@ class DatabasePage(wx.Panel):
 
             item_name   = wx.MenuItem(menu, -1, "%s %s" % (
                           data["type"].capitalize(),
-                          util.unprint(grammar.quote(data["name"], force=True))))
+                          util.ellipsize(util.unprint(grammar.quote(data["name"], force=True)),
+                                         conf.MaxTabTitleLength)))
             item_open = wx.MenuItem(menu, -1, "&Open %s schema" % data["type"])
             item_open_data = wx.MenuItem(menu, -1, "Open %s &data" % data["type"]) \
                              if data["type"] in ("table", "view") else None
