@@ -5085,7 +5085,7 @@ class DatabasePage(wx.Panel):
             if not self.save_underway: self.update_page_header(updated=updated)
         if updated:
             self.load_tree_schema()
-            self.diagram.Redraw(remake=True)
+            self.diagram.Populate()
             for k, p in self.schema_pages[category].items():
                 if p is event.source and name != k:
                     name0 = k

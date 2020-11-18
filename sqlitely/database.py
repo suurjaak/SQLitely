@@ -496,7 +496,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         self.locklabels = {} # {lock key: label}
         # {"table|index|view|trigger":
         #   {name:
-        #     {name: str, sql: str, ?table: str, ?columns: [], ?count: int,
+        #     {name: str, sql: str, ?table: str, ?columns: [], ?count: int, __id__: unique, 
         #      ?meta: {full metadata}}}}
         self.schema = defaultdict(CaselessDict)
         self.connection = None

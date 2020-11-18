@@ -9430,10 +9430,10 @@ class SchemaDiagram(wx.ScrolledWindow):
         super(SchemaDiagram, self).__init__(parent, *args, **kwargs)
         self._db    = db
         self._ids   = {} # {DC ops ID: name or (name1, name2, (cols)) or None}
-        self._objs  = util.CaselessDict() # {name: {id, bmp, bmpsel, bmpseldrag, category, name}}
+        self._objs  = util.CaselessDict() # {name: {id, category, name, bmp, bmpsel, bmpseldrag, sql0, __id__}}
         self._lines = util.CaselessDict() # {(name1, name2, (cols)): {id, pts}}
         self._sels  = util.CaselessDict(insertorder=True) # {name selected: DC ops ID}
-        self._order = []   # [{obj dict}, ]
+        self._order = []   # [{obj dict}, ] selected items at end
         self._zoom  = 1.   # Zoom scale, 1 == 100%
         self._page  = None # DatabasePage instance
         self._dc    = wx.adv.PseudoDC()
@@ -9704,40 +9704,62 @@ class SchemaDiagram(wx.ScrolledWindow):
 
 
     def Populate(self):
-        """Draws the current database schema to wx.PseudoDC."""
+        """Resets all and draws the database schema, using the current layout style."""
         if not self: return
 
-        self._dc.RemoveAll()
+        objs0 = self._objs.values()
+        rects0 = {o["name"]: self._dc.GetIdBounds(o["id"]) for o in objs0}
+        maxid = max(o["id"] for o in objs0) if objs0 else 0
 
         self._ids  .clear()
         self._objs .clear()
+        self._sels .clear()
         self._lines.clear()
         del self._order[:]
-        self._sels.clear()
+
+        has_new = False
         for name1 in self._db.get_category("table"):
             for fk in self._db.get_keys(name1, pks_only=True)[1]:
                 name2, rname = list(fk["table"])[0], ", ".join(fk["name"])
                 key = name1, name2, tuple(n.lower() for n in fk["name"])
-                lid = len(self._ids) + 1
+                lid, maxid = (maxid + 1, ) * 2
                 self._ids[lid] = key
                 self._lines[key] = {"id": lid, "pts": [], "name": rname}
         for category in "table", "view":
             for name, opts in self._db.get_category(category).items():
-                oid = len(self._ids) + 1
-                bmp = self._MakeItemBitmap(category, opts)
-                bmpsel = self._MakeFocusedBitmap(bmp)
-                bmpseldrag = self._MakeFocusedBitmap(self._MakeItemBitmap(category, opts, dragrect=True))
+                o0 = next((o for o in objs0 if o["__id__"] == opts["__id__"]), None)
+                if o0: oid = o0["id"]
+                else: oid, maxid = (maxid + 1, ) * 2
+                if o0 and o0["sql0"] == opts["sql0"]:
+                    bmp, bmpsel, bmpseldrag = map(o0.get, ("bmp", "bmpsel", "bmpseldrag"))
+                else:
+                    bmp = self._MakeItemBitmap(category, opts)
+                    bmpsel = self._MakeFocusedBitmap(bmp)
+                    bmpseldrag = self._MakeFocusedBitmap(self._MakeItemBitmap(category, opts, dragrect=True))
                 self._ids[oid] = name
                 self._objs[name] = {"id": oid, "category": category, "name": name,
+                                    "__id__": opts["__id__"], "sql0": opts["sql0"],
                                     "bmp": bmp, "bmpsel": bmpsel, "bmpseldrag": bmpseldrag}
                 self._order.append(self._objs[name])
-        self.SetLayout(self._layout["layout"])
+                has_new |= not o0
+
+        if has_new:
+            self._dc.RemoveAll()
+            self.SetLayout(self._layout["layout"])
+        else:
+            self.RecordLines()
+            for o in self._order:
+                o0 = next((x for x in objs0 if x["__id__"] == o["__id__"]), {})
+                self.RecordItem(o["name"], rects0.get(o0.get("name")))
+            self.Refresh()
 
 
     def Redraw(self, remake=False):
         """Redraws all, remaking item bitmaps if specified."""
         for o in self._objs.values() if remake else ():
             opts = self._db.get_category(o["category"], o["name"])
+            if not opts: self._objs.pop(o["name"])
+            if not opts: continue # for o
             o["bmp"] = self._MakeItemBitmap(o["category"], opts)
             o["bmpsel"] = self._MakeFocusedBitmap(o["bmp"])
             o["bmpseldrag"] = self._MakeFocusedBitmap(self._MakeItemBitmap(o["category"], opts, dragrect=True))
@@ -9754,18 +9776,19 @@ class SchemaDiagram(wx.ScrolledWindow):
         for name in self._sels: self.RecordItem(name)
 
 
-    def RecordItem(self, name):
+    def RecordItem(self, name, bounds=None):
         """Records a single schema item to DC."""
         if name not in self._objs: return
 
         o = self._objs[name]
-        bounds = self._dc.GetIdBounds(o["id"])
+        bounds = bounds or self._dc.GetIdBounds(o["id"])
         self._dc.RemoveId(o["id"])
         self._dc.SetId(o["id"])
         bmp = o[("bmpseldrag" if self._dragrect else "bmpsel") if o["name"] in self._sels else "bmp"]
+        # @todo vot siin on zoomist sõltuv shift
         pos = [a - (o["name"] in self._sels) * 2 for a in bounds[:2]]
         self._dc.DrawBitmap(bmp, pos, useMask=True)
-        self._dc.SetIdBounds(o["id"], bounds)
+        self._dc.SetIdBounds(o["id"], wx.Rect(bounds.TopLeft, bmp.Size))
         self._dc.SetId(-1)
 
 
@@ -9815,8 +9838,6 @@ class SchemaDiagram(wx.ScrolledWindow):
                 # Choose other side if within b1
                 y2 = b2.Top if y1 >= b2.Top else b2.Bottom
 
-
-
             opts["pts"] = [[x1, y1], [-1, y2]]
             vertslots[name2][y2 == b2.Bottom].append((name1, cols))
 
@@ -9833,18 +9854,16 @@ class SchemaDiagram(wx.ScrolledWindow):
                     opts = get_opts(name2, name1, cols)
                     opts["pts"][1][0] = b2.Left + b2.Width / 2 + (len(slots) / 2 - i) * step
 
-
-        # Final pass: determine ending X, insert waypoints
+        # Third pass: insert waypoints between starting and ending X-Y
         for (name1, name2, cols), opts in sorted(self._lines.items(),
                 key=lambda x: any(n in self._sels for n in x[0][:2])):
             b1, b2 = (self._dc.GetIdBounds(o["id"])
                       for o in map(self._objs.get, (name1, name2)))
 
-            pts = (pt1, pt2) = opts["pts"]
+            pt1, pt2 = opts["pts"]
             slots = vertslots[name2][pt2[1] == b2.Bottom]
             idx = slots.index((name1, cols))
             b1_more_left = b1.Left + b1.Width / 2 > b2.Left + b2.Width / 2
-
 
             # Make 1..3 waypoints between start and end points
             wpts = []
@@ -9879,7 +9898,14 @@ class SchemaDiagram(wx.ScrolledWindow):
                     ptm1 = ptm2[0], pt1[1]
                     # (halfway to pt2.x, pt1.y), (halfway to pt2.x, pt2.y +- vertical step), (pt2.x, pt2.y +- vertical step)
                     wpts += [ptm1, ptm2, ptm3]
-            pts[-1:-1] = wpts
+            opts["pts"][1:-1] = wpts
+
+
+        # Final pass: draw lines and labels
+        for (name1, name2, cols), opts in sorted(self._lines.items(),
+                key=lambda x: any(n in self._sels for n in x[0][:2])):
+            b1, b2 = (self._dc.GetIdBounds(o["id"])
+                      for o in map(self._objs.get, (name1, name2)))
 
             self._dc.RemoveId(opts["id"])
             self._dc.SetId(opts["id"])
@@ -9891,6 +9917,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 lcolour = controls.ColourManager.Adjust(lcolour, self.BackgroundColour, 0.7)
             self._dc.SetPen(controls.PEN(lcolour))
 
+            pts = opts["pts"]
             cpts, bounds = [], wx.Rect()
             for i, wpt1 in enumerate(pts[:-1]):
                 wpt2 = pts[i + 1]
@@ -9951,7 +9978,6 @@ class SchemaDiagram(wx.ScrolledWindow):
 
             self._dc.SetIdBounds(opts["id"], bounds)
             self._dc.SetId(-1)
-            opts["pts"] = pts
 
 
     def SetLayout(self, layout, options=None):
