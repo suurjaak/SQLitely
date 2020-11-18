@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.11.2020
+@modified    18.11.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -4920,6 +4920,7 @@ class SchemaObjectPage(wx.Panel):
         wx_accel.accelerate(dlg)
         if wx.ID_OK != dlg.ShowModal() or not self._editmode: return
         data2 = dlg.GetData()
+        dlg.Destroy()
         if data == data2: return
 
         util.set(self._item["meta"], data2, path)
@@ -5289,6 +5290,7 @@ class SchemaObjectPage(wx.Panel):
         wx_accel.accelerate(dlg)
         if wx.ID_OK != dlg.ShowModal(): return
         sql = dlg.GetData().get("sql", "").strip().replace("\r\n", "\n")
+        dlg.Destroy()
         if not sql.endswith(";"): sql += ";"
         if not sql or sql == data["sql"]: return
 
@@ -5523,7 +5525,7 @@ class SchemaObjectPage(wx.Panel):
         sql1 = sql2 = self._item["sql0" if self._sql0_applies else "sql"]
         if not self._newmode and self._sql0_applies \
         and self._item["sql"]  == self._original["sql"] \
-        and self._item["sql0"] != self._original["sql0"]:
+        and self._item["sql0"] != self._original["sql0"]: # A formatting change, e.g. comment
             self._UpdateSqliteMaster({self._category: {self.Name: sql1}})
             return finalize(post=False)
 
@@ -6914,14 +6916,18 @@ class ImportDialog(wx.Dialog):
         Handler for cancelling import, closes dialog if nothing underway,
         confirms and cancels work if import underway.
         """
-        if not self._importing: return wx.CallAfter(self.EndModal, wx.ID_CANCEL)
+        def destroy():
+            wx.CallAfter(self.EndModal, wx.ID_CANCEL)
+            wx.CallAfter(lambda: self and self.Destroy())
+        if not self._importing: return destroy()
 
         dlg = self._dlg_cancel = controls.MessageDialog(self,
             "Import is currently underway, are you sure you want to cancel it?",
             conf.Title, wx.ICON_WARNING | wx.YES | wx.NO | wx.NO_DEFAULT)
         res = dlg.ShowModal()
         self._dlg_cancel = None
-        if wx.ID_YES != res or not self._importing: return
+        if wx.ID_YES != res: return
+        if not self._importing: return destroy()
 
         qname = grammar.quote(self._table["name"], force=True)
         changes = "%s%stable %s." % (
@@ -6943,7 +6949,7 @@ class ImportDialog(wx.Dialog):
         self._worker.stop_work()
         self._gauge.Value = self._gauge.Value # Stop pulse, if any
 
-        if isinstance(event, wx.CloseEvent): return wx.CallAfter(self.EndModal, wx.ID_CANCEL)
+        if isinstance(event, wx.CloseEvent): return destroy()
 
         SHOW = (self._button_restart, )
         HIDE = (self._button_ok, self._button_reset)
@@ -7536,7 +7542,8 @@ class DataDialog(wx.Dialog):
     def _OnClose(self, event=None):
         """Handler for closing dialog."""
         if event: event.Skip()
-        else: wx.CallAfter(self.EndModal, wx.CANCEL)
+        elif self.IsModal(): wx.CallAfter(self.EndModal, wx.CANCEL)
+        if self.IsModal(): wx.CallAfter(lambda: self and self.Destroy())
 
 
     def _OnColumnDialog(self, event, col=None):
@@ -7916,7 +7923,9 @@ class HistoryDialog(wx.Dialog):
 
     def _OnClose(self, event=None):
         """Handler for closing dialog."""
-        wx.CallAfter(self.EndModal, wx.OK)
+        if event: event.Skip()
+        elif self.IsModal(): wx.CallAfter(self.EndModal, wx.OK)
+        if self.IsModal(): wx.CallAfter(lambda: self and self.Destroy())
 
 
 
@@ -9213,6 +9222,8 @@ class ColumnDialog(wx.Dialog):
         """Handler for closing dialog."""
         event.Skip()
         if wx.ID_OK == event.Id: self._PropagateChange()
+        if self.IsModal(): wx.CallAfter(self.EndModal, wx.OK)
+        if self.IsModal(): wx.CallAfter(lambda: self and self.Destroy())
 
 
     def _OnColumn(self, event, direction=None):

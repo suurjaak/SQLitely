@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.11.2020
+@modified    18.11.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -6584,6 +6584,8 @@ class AboutDialog(wx.Dialog):
         sizer_buttons.Insert(0, button_update, border=50, flag=wx.RIGHT)
         self.Sizer.Add(sizer_buttons, border=8, flag=wx.ALIGN_CENTER | wx.ALL)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
+        self.Bind(wx.EVT_CLOSE,  lambda e: self.Destroy())
+        self.Bind(wx.EVT_BUTTON, lambda e: self.Destroy(), id=wx.ID_OK)
 
         self.Layout()
         self.Size = (self.Size[0], html.VirtualSize[1] + 70)
