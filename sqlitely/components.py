@@ -9785,10 +9785,9 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._dc.RemoveId(o["id"])
         self._dc.SetId(o["id"])
         bmp = o[("bmpseldrag" if self._dragrect else "bmpsel") if o["name"] in self._sels else "bmp"]
-        # @todo vot siin on zoomist sõltuv shift
-        pos = [a - (o["name"] in self._sels) * 2 for a in bounds[:2]]
+        pos = [a - (o["name"] in self._sels) * 2 * self._zoom for a in bounds[:2]]
         self._dc.DrawBitmap(bmp, pos, useMask=True)
-        self._dc.SetIdBounds(o["id"], wx.Rect(bounds.TopLeft, bmp.Size))
+        self._dc.SetIdBounds(o["id"], wx.Rect(bounds.TopLeft, o["bmp"].Size))
         self._dc.SetId(-1)
 
 
@@ -10254,8 +10253,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                     o["id"] = max(self._ids) + 1
                     self._dc.SetId(o["id"])
                     bmp = o["bmpsel" if myname in self._sels else "bmp"]
-                    # @todo pos shift vist zoomist sõltuma
-                    pos = [a - (myname in self._sels) * 2 for a in bounds[:2]]
+                    pos = [a - (myname in self._sels) * 2 * self._zoom for a in bounds[:2]]
                     self._dc.DrawBitmap(bmp, pos, useMask=True)
                     self._dc.SetIdBounds(o["id"], bounds)
                     self._dc.SetId(-1)
