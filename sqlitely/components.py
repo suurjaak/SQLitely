@@ -9862,14 +9862,13 @@ class SchemaDiagram(wx.ScrolledWindow):
             pt1, pt2 = opts["pts"]
             slots = vertslots[name2][pt2[1] == b2.Bottom]
             idx = slots.index((name1, cols))
-            b1_more_left = b1.Left + b1.Width / 2 > b2.Left + b2.Width / 2
 
             # Make 1..3 waypoints between start and end points
             wpts = []
             if b1.Left - 2 * self.CARDINALW <= pt2[0] <= b1.Right + 2 * self.CARDINALW:
                 # End point straight above or below start item
                 b1_side = b1.Top if pt1[1] > pt2[1] else b1.Bottom
-                ptm1 = pt1[0] + 2 * self.CARDINALW * (-1 if b1_more_left else 1), pt1[1]
+                ptm1 = pt1[0] + 2 * self.CARDINALW * (-1 if pt1[0] < pt2[0] else 1), pt1[1]
                 ptm2 = ptm1[0], pt2[1] + (b1_side - pt2[1]) / 2
 
                 if b2.Left < pt2[0] < b2.Right \
@@ -9945,6 +9944,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self._dc.DrawLine(mywpt1, mywpt2)
 
             # Draw cardinality crowfoot
+            pt1, pt2 = pts[0], pts[-1]
             ptc0 = pt1[0] + self.CARDINALW * (-1 if pt1[0] > pts[1][0] else 1), pt1[1]
             ptc1 = pt1[0], ptc0[1] - self.CARDINALH
             ptc2 = pt1[0], ptc0[1] + self.CARDINALH
