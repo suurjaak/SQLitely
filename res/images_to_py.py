@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  14.11.2020
+@modified  18.11.2020
 ------------------------------------------------------------------------------
 """
 import base64
@@ -87,6 +87,8 @@ IMAGES = {
         "Toolbar icon for case-insensitive toggle button in data grids.",
     "ToolbarClear.png":
         "Toolbar icon for reset sort/filter button in data grids.",
+    "ToolbarColumnForm.png":
+        "Toolbar icon for column form button in data grids.",
     "ToolbarCommit.png":
         "Toolbar icon for commit button in database table grids.",
     "ToolbarDelete.png":

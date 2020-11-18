@@ -1680,6 +1680,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         bmp3 = images.ToolbarClear.Bitmap
         bmp4 = images.ToolbarGoto.Bitmap
         bmp5 = images.ToolbarForm.Bitmap
+        bmp6 = images.ToolbarColumnForm.Bitmap
         tbgrid.SetToolBitmapSize(bmp1.Size)
         tbgrid.AddTool(wx.ID_INFO,    "", bmp1, shortHelp="Copy executed SQL statement to clipboard")
         tbgrid.AddTool(wx.ID_REFRESH, "", bmp2, shortHelp="Re-execute query  (F5)")
@@ -1687,6 +1688,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         tbgrid.AddSeparator()
         tbgrid.AddTool(wx.ID_INDEX,   "", bmp4, shortHelp="Go to row ..  (%s-G)" % controls.KEYS.NAME_CTRL)
         tbgrid.AddTool(wx.ID_EDIT,    "", bmp5, shortHelp="Open row in data form  (F4)")
+        tbgrid.AddTool(wx.ID_MORE,    "", bmp6, shortHelp="Open row cell in column form  (Ctrl-F2)")
         tbgrid.Realize()
         tbgrid.Disable()
 
@@ -1720,7 +1722,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self.Bind(wx.EVT_TOOL,       self._OnResetView,      id=wx.ID_RESET)
         self.Bind(wx.EVT_TOOL,       self._OnGotoRow,        id=wx.ID_INDEX)
         self.Bind(wx.EVT_TOOL,       self._OnOpenForm,       id=wx.ID_EDIT)
-        self.Bind(wx.EVT_TOOL,       self._OnOpenColumnForm, id=wx.ID_PROPERTIES)
+        self.Bind(wx.EVT_TOOL,       self._OnOpenColumnForm, id=wx.ID_MORE)
         self.Bind(wx.EVT_BUTTON,     self._OnExecuteSQL,     button_sql)
         self.Bind(wx.EVT_BUTTON,     self._OnExecuteScript,  button_script)
         self.Bind(wx.EVT_BUTTON,     self._OnExport,         button_export)
@@ -1757,7 +1759,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self.Layout()
         accelerators = [(wx.ACCEL_NORMAL, wx.WXK_F4,  wx.ID_EDIT),
                         (wx.ACCEL_NORMAL, wx.WXK_F5,  wx.ID_REFRESH),
-                        (wx.ACCEL_CMD,    wx.WXK_F2,  wx.ID_PROPERTIES),
+                        (wx.ACCEL_CMD,    wx.WXK_F2,  wx.ID_MORE),
                         (wx.ACCEL_CMD,    ord('G'),   wx.ID_INDEX)]
         wx_accel.accelerate(self, accelerators=accelerators)
         wx.CallAfter(lambda: self and splitter.SplitHorizontally(
@@ -1838,6 +1840,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self._grid.Freeze()
         self._tbgrid.EnableTool(wx.ID_INDEX, False)
         self._tbgrid.EnableTool(wx.ID_EDIT,  False)
+        self._tbgrid.EnableTool(wx.ID_MORE,  False)
         try:
             if cursor and cursor.description is not None \
             and isinstance(self._grid.Table, SQLiteGridBase):
@@ -1961,6 +1964,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         """Populates row count in self._label_rows."""
         super(SQLPage, self)._PopulateCount(reload=reload)
         self._tbgrid.EnableTool(wx.ID_EDIT,  bool(self._grid.NumberRows))
+        self._tbgrid.EnableTool(wx.ID_MORE,  bool(self._grid.NumberRows))
         self._tbgrid.EnableTool(wx.ID_INDEX, bool(self._grid.NumberRows))
 
 
@@ -2151,6 +2155,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         event.Skip()
         enable = event.Row >= 0 and event.Col >= 0 if self._grid.NumberRows else False
         self._tbgrid.EnableTool(wx.ID_EDIT,  enable)
+        self._tbgrid.EnableTool(wx.ID_MORE,  enable)
         self._tbgrid.EnableTool(wx.ID_INDEX, bool(self._grid.NumberRows))
 
 
@@ -2235,8 +2240,9 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         bmp4 = images.ToolbarClear.Bitmap
         bmp5 = images.ToolbarGoto.Bitmap
         bmp6 = images.ToolbarForm.Bitmap
-        bmp7 = images.ToolbarCommit.Bitmap
-        bmp8 = images.ToolbarRollback.Bitmap
+        bmp7 = images.ToolbarColumnForm.Bitmap
+        bmp8 = images.ToolbarCommit.Bitmap
+        bmp9 = images.ToolbarRollback.Bitmap
         tb.SetToolBitmapSize(bmp1.Size)
         tb.AddTool(wx.ID_ADD,     "", bmp1, shortHelp="Add new row")
         tb.AddTool(wx.ID_DELETE,  "", bmp2, shortHelp="Delete current row")
@@ -2246,11 +2252,13 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         tb.AddSeparator()
         tb.AddTool(wx.ID_INDEX,   "", bmp5, shortHelp="Go to row ..  (%s-G)" % controls.KEYS.NAME_CTRL)
         tb.AddTool(wx.ID_EDIT,    "", bmp6, shortHelp="Open row in data form  (F4)")
+        tb.AddTool(wx.ID_MORE,    "", bmp7, shortHelp="Open row cell in column form  (Ctrl-F2)")
         tb.AddSeparator()
-        tb.AddTool(wx.ID_SAVE,    "", bmp7, shortHelp="Commit changes to database  (F10)")
-        tb.AddTool(wx.ID_UNDO,    "", bmp8, shortHelp="Rollback changes and restore original values  (F9)")
+        tb.AddTool(wx.ID_SAVE,    "", bmp8, shortHelp="Commit changes to database  (F10)")
+        tb.AddTool(wx.ID_UNDO,    "", bmp9, shortHelp="Rollback changes and restore original values  (F9)")
         tb.EnableTool(wx.ID_INDEX, False)
         tb.EnableTool(wx.ID_EDIT,  False)
+        tb.EnableTool(wx.ID_MORE,  False)
         tb.EnableTool(wx.ID_UNDO,  False)
         tb.EnableTool(wx.ID_SAVE,  False)
         if "view" == self._category:
@@ -2277,7 +2285,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self.Bind(wx.EVT_TOOL,       self._OnDelete,         id=wx.ID_DELETE)
         self.Bind(wx.EVT_TOOL,       self._OnGotoRow,        id=wx.ID_INDEX)
         self.Bind(wx.EVT_TOOL,       self._OnOpenForm,       id=wx.ID_EDIT)
-        self.Bind(wx.EVT_TOOL,       self._OnOpenColumnForm, id=wx.ID_PROPERTIES)
+        self.Bind(wx.EVT_TOOL,       self._OnOpenColumnForm, id=wx.ID_MORE)
         self.Bind(wx.EVT_TOOL,       self._OnRefresh,        id=wx.ID_REFRESH)
         self.Bind(wx.EVT_TOOL,       self._OnResetView,      id=wx.ID_RESET)
         self.Bind(wx.EVT_TOOL,       self._OnCommit,         id=wx.ID_SAVE)
@@ -2312,7 +2320,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
                         (wx.ACCEL_NORMAL, wx.WXK_F5,  wx.ID_REFRESH),
                         (wx.ACCEL_NORMAL, wx.WXK_F10, wx.ID_SAVE),
                         (wx.ACCEL_NORMAL, wx.WXK_F9,  wx.ID_UNDO),
-                        (wx.ACCEL_CMD,    wx.WXK_F2,  wx.ID_PROPERTIES),
+                        (wx.ACCEL_CMD,    wx.WXK_F2,  wx.ID_MORE),
                         (wx.ACCEL_CMD,    ord('G'),   wx.ID_INDEX)]
         wx_accel.accelerate(self, accelerators=accelerators)
         self._grid.SetFocus()
@@ -2488,6 +2496,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         """Populates row count in self._label_rows."""
         super(DataObjectPage, self)._PopulateCount(reload=reload)
         self._tb.EnableTool(wx.ID_EDIT,  bool(self._grid.NumberRows))
+        self._tb.EnableTool(wx.ID_MORE,  bool(self._grid.NumberRows))
         self._tb.EnableTool(wx.ID_INDEX, bool(self._grid.NumberRows))
 
 
@@ -2504,6 +2513,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._tb.EnableTool(wx.ID_SAVE, changed)
         self._tb.EnableTool(wx.ID_UNDO, changed)
         self._tb.EnableTool(wx.ID_EDIT,  bool(self._grid.NumberRows))
+        self._tb.EnableTool(wx.ID_MORE,  bool(self._grid.NumberRows))
         self._tb.EnableTool(wx.ID_INDEX, bool(self._grid.NumberRows))
         if not changed: self._db.unlock(self._category, self.Name, self)
         else: self._db.lock(self._category, self.Name, self, label="data grid")
@@ -2709,6 +2719,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         event.Skip()
         enable = event.Row >= 0 and event.Col >= 0 if self._grid.NumberRows else False
         self._tb.EnableTool(wx.ID_EDIT, enable)
+        self._tb.EnableTool(wx.ID_MORE, enable)
         self._tb.EnableTool(wx.ID_INDEX, bool(self._grid.NumberRows))
 
 
@@ -7205,7 +7216,7 @@ class DataDialog(wx.Dialog):
         bmp2  = wx.ArtProvider.GetBitmap(wx.ART_COPY,        wx.ART_TOOLBAR, (16, 16))
         bmp3  = images.ToolbarRefresh.Bitmap
         bmp4  = wx.ArtProvider.GetBitmap(wx.ART_FULL_SCREEN, wx.ART_TOOLBAR, (16, 16))
-        bmp5  = images.ToolbarForm.Bitmap
+        bmp5  = images.ToolbarColumnForm.Bitmap
         bmp6  = images.ToolbarCommit.Bitmap
         bmp7  = images.ToolbarRollback.Bitmap
         bmp8  = wx.ArtProvider.GetBitmap(wx.ART_NEW,         wx.ART_TOOLBAR, (16, 16))

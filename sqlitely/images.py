@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.11.2020
+@modified    18.11.2020
 ------------------------------------------------------------------------------
 """
 try:
@@ -1833,6 +1833,21 @@ ToolbarClear = PyEmbeddedImage(
     "1BHEa2SRTRAX3kbwBCLZZZGD5AZ9G8dNR5r2g+AiUzBMU10z1NQ0rI1NqAdJ/cKZWewhqXhZ"
     "zGwAjiTBHTgDra+Mhb+4FoAmuZmB6YPbKZx5utv+m0HlF0gqIf23aL4181fWmUF8QgH2gRuT"
     "tvN959qXUb5JOvw4ylfgRBV4AH70JI5OrydaAAAAAElFTkSuQmCC"
+)
+
+
+"""Toolbar icon for column form button in data grids."""
+ToolbarColumnForm = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9i"
+    "ZSBJbWFnZVJlYWR5ccllPAAAAaBJREFUeNqUU7uKwlAQPdEgiIIrihr2A7SzEAQR7Sy3t9hS"
+    "sqWVnYV/ILZ+h72FiIKdiD8gbEBQFh/4iJq9M0suiVFwD4R7z525J2cmE6XVan0A0PACbreb"
+    "i1uWZaDZbH5ZL2I8Hrt4o9HQ1ev1Skr82BgMBjAMQ3JN01Aul2GaJud1u13ouo7tdgtVHCpk"
+    "rd/vIxqNIpvNIhAIoFqtSoHRaMT2z+czC9RqNV43mw3Uy+XCAqVSiZPJUTKZxHw+lwLEKWe3"
+    "26HX68nzxWLBDjhIF22kUqmHDTydTq7Yer2GKmwp9wKTyQTL5VLyRCKBQqEgHTrBPaDD6XSK"
+    "4/GIXC6HYDDo6YF90SNgO8hkMjIhHo+7ekDcngGPgKjLU0IkEnk6RE8dOAOz2Qyr1UryWCzG"
+    "pRHEV/M6oMvD4ZDnIJ1OIxwOo1KpPOxBsVjkvd/v/xPY7/cKDUU+n5dWScjZA+KUQzFyUK/X"
+    "0el0SEhRxciqPp+Pp8+Gc2+Dcg6HA6/tdptXMYmqEgqFPgV5f/FvNO/4t0IvFM8blYP/gbr5"
+    "8yvAAD5+QV5m/7EtAAAAAElFTkSuQmCC"
 )
 
 
