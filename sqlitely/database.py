@@ -8,12 +8,13 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.11.2020
+@modified    18.11.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
 import copy
 import datetime
+import itertools
 import logging
 import math
 import os
@@ -481,8 +482,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
             fh, self.filename = tempfile.mkstemp(".db")
             os.close(fh)
             self.name = "New database"
-            if self.temp_counter > 1: self.name += " (%s)" % self.temp_counter
+            if Database.temp_counter.get() > 1: self.name += " (%s)" % Database.temp_counter
             Database.temp_counter += 1
+        self.id_counter = itertools.count(1)
         self.filesize = None
         self.date_created = None
         self.last_modified = None
@@ -867,6 +869,16 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
+    def notify_rename(self, category, oldname, newname):
+        """
+        Repopulates schema, retaining category item ID over rename.
+        """
+        self.schema[category][newname] = self.schema[category].pop(oldname)
+        self.schema[category][newname].update(name=newname, tbl_name=newname)
+        self.schema[category][newname]["meta"].update(name=newname)
+        self.populate_schema(count=True, parse=True)
+
+
     def populate_schema(self, count=False, parse=False, category=None, name=None):
         """
         Retrieves metadata on all database tables, triggers etc.
@@ -913,8 +925,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if category and name and not util.lceq(myname, name): continue # for myname
 
                 opts0 = schema0.get(mycategory, {}).get(myname, {})
+                opts["__id__"] = opts0["__id__"] if opts0 else next(self.id_counter)
 
-                # Retrieve metainfo from PRAGMA
+                # Retrieve metainfo from PRAGMA, or use previous if unchanged
                 if mycategory in ("table", "view") and opts0 and opts["sql0"] == opts0["sql0"]:
                     opts["columns"] = opts0.get("columns") or []
                 elif mycategory in ("table", "index", "view"):
@@ -937,7 +950,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                             if row.get("pk"):      col["pk"]      = {}
                             opts["columns"].append(col)
 
-                # Parse metainfo from SQL
+                # Parse metainfo from SQL, or use previous if unchanged
                 meta, sql = None, None
                 if opts0 and opts0.get("meta") and opts["sql0"] == opts0["sql0"]:
                     meta, sql = opts0["meta"], opts0["sql"]
@@ -950,7 +963,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if meta and "table" == mycategory and meta.get("columns"):
                     opts["columns"] = meta["columns"]
 
-                # Retrieve table row counts
+                # Retrieve table row counts if commanded, or use previous if available
                 if "table" == mycategory and count:
                     opts.update(self.get_count(myname))
                 elif "table" == mycategory and opts0 and "count" in opts0:
