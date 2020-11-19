@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.11.2020
+@modified    19.11.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2779,10 +2779,10 @@ class DatabasePage(wx.Panel):
         bmp5 = images.ToolbarLayoutGrid.Bitmap
         bmp6 = images.ToolbarLayoutGraph.Bitmap
         tb.SetToolBitmapSize(bmp1.Size)
-        tb.AddTool(wx.ID_ZOOM_IN,  "", bmp1, shortHelp="Zoom in one step")
-        tb.AddTool(wx.ID_ZOOM_OUT, "", bmp2, shortHelp="Zoom out one step")
+        tb.AddTool(wx.ID_ZOOM_IN,  "", bmp1, shortHelp="Zoom in one step  (+)")
+        tb.AddTool(wx.ID_ZOOM_OUT, "", bmp2, shortHelp="Zoom out one step  (-)")
         tb.AddSeparator()
-        tb.AddTool(wx.ID_ZOOM_100, "", bmp3, shortHelp="Reset zoom")
+        tb.AddTool(wx.ID_ZOOM_100, "", bmp3, shortHelp="Reset zoom  (*)")
         tb.AddTool(wx.ID_ZOOM_FIT, "", bmp4, shortHelp="Zoom to fit")
         tb.AddControl(combo_zoom)
         tb.AddSeparator()
@@ -2821,9 +2821,10 @@ class DatabasePage(wx.Panel):
 
         self.Bind(wx.EVT_COMBOBOX, self.on_diagram_zoom_combo, combo_zoom)
         self.Bind(wx.EVT_TEXT,     self.on_diagram_zoom_combo, combo_zoom)
-        self.Bind(wx.EVT_CHECKBOX, self.on_diagram_relations, cb_rels)
-        self.Bind(wx.EVT_CHECKBOX, self.on_diagram_labels,    cb_lbls)
-        self.Bind(wx.EVT_BUTTON, self.on_diagram_export, button_export)
+        self.Bind(wx.EVT_CHECKBOX, self.on_diagram_relations,  cb_rels)
+        self.Bind(wx.EVT_CHECKBOX, self.on_diagram_labels,     cb_lbls)
+        self.Bind(wx.EVT_BUTTON,   self.on_diagram_export,     button_export)
+        self.Bind(components.EVT_DIAGRAM, self.on_diagram_event, self.diagram)
 
 
     def create_page_sql(self, notebook):
@@ -3618,6 +3619,20 @@ class DatabasePage(wx.Panel):
         bmp = images.ToolbarStop.Bitmap if self.worker_analyzer.is_working() \
               else images.ToolbarStopped.Bitmap
         self.tb_stats.SetToolNormalBitmap(wx.ID_STOP, bmp)
+
+
+    def on_diagram_event(self, event):
+        """Handler for SchemaDiagramEvent, updates toolbar state and saves conf."""
+        zoom, layout = (getattr(event, k, None) for k in ("zoom", "layout"))
+        if zoom is not None:
+            self.tb_diagram.EnableTool(wx.ID_ZOOM_IN,  self.diagram.Zoom < self.diagram.ZOOM_MAX)
+            self.tb_diagram.EnableTool(wx.ID_ZOOM_OUT, self.diagram.Zoom > self.diagram.ZOOM_MIN)
+            self.tb_diagram.EnableTool(wx.ID_ZOOM_100, self.diagram.Zoom != self.diagram.ZOOM_DEFAULT)
+            self.combo_zoom.Value = "%s%%" % util.round_float(100 * self.diagram.Zoom, 2)
+        if layout is not None:
+            self.tb_diagram.ToggleTool(wx.ID_STATIC,  layout and self.diagram.LAYOUT_GRID  == self.diagram.Layout)
+            self.tb_diagram.ToggleTool(wx.ID_NETWORK, layout and self.diagram.LAYOUT_GRAPH == self.diagram.Layout)
+        # @todo save diagram layout
 
 
     def on_diagram_relations(self, event):

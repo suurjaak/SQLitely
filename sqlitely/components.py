@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.11.2020
+@modified    19.11.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -62,12 +62,13 @@ from . import workers
 logger = logging.getLogger(__name__)
 
 
-DataPageEvent,     EVT_DATA_PAGE     = wx.lib.newevent.NewCommandEvent()
-SchemaPageEvent,   EVT_SCHEMA_PAGE   = wx.lib.newevent.NewCommandEvent()
-ImportEvent,       EVT_IMPORT        = wx.lib.newevent.NewCommandEvent()
-ProgressEvent,     EVT_PROGRESS      = wx.lib.newevent.NewCommandEvent()
-GridBaseEvent,     EVT_GRID_BASE     = wx.lib.newevent.NewCommandEvent()
-ColumnDialogEvent, EVT_COLUMN_DIALOG = wx.lib.newevent.NewCommandEvent()
+DataPageEvent,      EVT_DATA_PAGE     = wx.lib.newevent.NewCommandEvent()
+SchemaPageEvent,    EVT_SCHEMA_PAGE   = wx.lib.newevent.NewCommandEvent()
+ImportEvent,        EVT_IMPORT        = wx.lib.newevent.NewCommandEvent()
+ProgressEvent,      EVT_PROGRESS      = wx.lib.newevent.NewCommandEvent()
+GridBaseEvent,      EVT_GRID_BASE     = wx.lib.newevent.NewCommandEvent()
+ColumnDialogEvent,  EVT_COLUMN_DIALOG = wx.lib.newevent.NewCommandEvent()
+SchemaDiagramEvent, EVT_DIAGRAM       = wx.lib.newevent.NewCommandEvent()
 
 
 
@@ -9548,6 +9549,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             self._dc.SetIdBounds(o["id"], wx.Rect(wx.Point(pt), bmp.Size))
 
         self.Redraw()
+        self._PostEvent(zoom=zoom)
     Zoom = property(GetZoom, SetZoom)
 
 
@@ -9567,7 +9569,8 @@ class SchemaDiagram(wx.ScrolledWindow):
             bounds = sum(map(self._dc.GetIdBounds, oids), wx.Rect())
         delta = self.GetScrollPixelsPerUnit()
         self.Scroll([(v + 10) / d for v, d in zip(bounds.TopLeft, delta)])
-        
+        self._PostEvent(zoom=zoom)
+
 
     def ShowLines(self, show=True):
         """Sets showing foreign relation lines on or off."""
@@ -9979,6 +9982,9 @@ class SchemaDiagram(wx.ScrolledWindow):
             self._dc.SetId(-1)
 
 
+    def GetLayout(self, active=True):
+        """Returns current layout, by default active only."""
+        return self._layout["layout"] if active and self._layout["active"] else None
     def SetLayout(self, layout, options=None):
         """
         Sets diagram layout style.
@@ -9995,6 +10001,8 @@ class SchemaDiagram(wx.ScrolledWindow):
             if options: self._layout[layout].update(options)
             self._PositionItemsGrid()
         else: self._PositionItemsGraph()
+        self._PostEvent(layout=True)
+    Layout = property(GetLayout, SetLayout)
 
 
     def GetLayoutOptions(self, layout):
@@ -10331,6 +10339,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 if self._dragrect:
                     self._dc.RemoveId(self._dragrectid)
                     self._dragrectid = self._dragrect = self._dragrectabs = None
+                self._PostEvent(layout=False)
 
             if self._show_lines: self.Redraw()
             else:
@@ -10415,6 +10424,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             # Second pass: move items
             for o in items: self._dc.TranslateId(o["id"], dx, dy)
             self.Redraw()
+            self._PostEvent(layout=False)
 
         else: event.Skip() # Allow to propagate to other handlers
 
@@ -10464,3 +10474,10 @@ class SchemaDiagram(wx.ScrolledWindow):
         """Handler for scroll, queues refresh."""
         event.Skip()
         wx.CallAfter(lambda: self and self.Refresh())
+
+
+    def _PostEvent(self, **kwargs):
+        """Posts EVT_DIAGRAM event to parent."""
+        evt = SchemaDiagramEvent(self.Id, **kwargs)
+        wx.PostEvent(self.Parent, evt)
+        if kwargs.get("layout") == False: self._layout["active"] = False
