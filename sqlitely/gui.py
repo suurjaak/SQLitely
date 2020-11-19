@@ -1512,6 +1512,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 conf.LastSearchResults.pop(f, None)
                 for lst in conf.DBFiles, conf.RecentFiles:
                     if f in lst: lst.remove(f)
+                for dct in conf.DBDiagrams, conf.LastActivePage, \
+                           conf.LastSearchResults, conf.SQLWindowTexts:
+                    dct.pop(f, None)
             self.list_db.Freeze()
             try:
                 for i in range(self.list_db.GetItemCount())[::-1]:
@@ -1614,7 +1617,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         for filename in self.dbs_selected:
             for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
                 if filename in lst: lst.remove(filename)
-            for dct in conf.LastSearchResults, self.dbs:
+            for dct in conf.DBDiagrams, conf.LastSearchResults, self.dbs:
                 dct.pop(filename, None)
             self.db_datas.get(filename, {}).pop("name", None)
         self.list_db.Freeze()
@@ -1645,7 +1648,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             selected = selecteds[i] - i
             filename = self.list_db.GetItemText(selected)
             for lst in (conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles,
-                        self.dbs_selected):
+                        conf.DBDiagrams, self.dbs_selected):
                 if filename in lst: lst.remove(filename)
             conf.LastSearchResults.pop(filename, None)
             self.db_datas.get(filename, {}).pop("name", None)
@@ -1711,7 +1714,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
                 for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
                     if filename in lst: lst.remove(filename)
-                for dct in conf.LastSearchResults, conf.SQLWindowTexts, self.dbs:
+                for dct in conf.LastSearchResults, conf.SQLWindowTexts, conf.DBDiagrams, self.dbs:
                     dct.pop(filename, None)
                 self.db_datas.get(filename, {}).pop("name", None)
 
@@ -3621,29 +3624,35 @@ class DatabasePage(wx.Panel):
         self.tb_stats.SetToolNormalBitmap(wx.ID_STOP, bmp)
 
 
+    def update_diagram_controls(self):
+        """Updates diagram toolbar and other controls with diagram state."""
+        self.tb_diagram.EnableTool(wx.ID_ZOOM_IN,  self.diagram.Zoom < self.diagram.ZOOM_MAX)
+        self.tb_diagram.EnableTool(wx.ID_ZOOM_OUT, self.diagram.Zoom > self.diagram.ZOOM_MIN)
+        self.tb_diagram.EnableTool(wx.ID_ZOOM_100, self.diagram.Zoom != self.diagram.ZOOM_DEFAULT)
+        self.combo_zoom.Value = "%s%%" % util.round_float(100 * self.diagram.Zoom, 2)
+        self.tb_diagram.ToggleTool(wx.ID_STATIC,  self.diagram.LAYOUT_GRID  == self.diagram.Layout)
+        self.tb_diagram.ToggleTool(wx.ID_NETWORK, self.diagram.LAYOUT_GRAPH == self.diagram.Layout)
+        self.cb_diagram_rels.Value   = self.diagram.ShowLines
+        self.cb_diagram_labels.Value = self.diagram.ShowLineLabels
+
+
     def on_diagram_event(self, event):
         """Handler for SchemaDiagramEvent, updates toolbar state and saves conf."""
-        zoom, layout = (getattr(event, k, None) for k in ("zoom", "layout"))
-        if zoom is not None:
-            self.tb_diagram.EnableTool(wx.ID_ZOOM_IN,  self.diagram.Zoom < self.diagram.ZOOM_MAX)
-            self.tb_diagram.EnableTool(wx.ID_ZOOM_OUT, self.diagram.Zoom > self.diagram.ZOOM_MIN)
-            self.tb_diagram.EnableTool(wx.ID_ZOOM_100, self.diagram.Zoom != self.diagram.ZOOM_DEFAULT)
-            self.combo_zoom.Value = "%s%%" % util.round_float(100 * self.diagram.Zoom, 2)
-        if layout is not None:
-            self.tb_diagram.ToggleTool(wx.ID_STATIC,  layout and self.diagram.LAYOUT_GRID  == self.diagram.Layout)
-            self.tb_diagram.ToggleTool(wx.ID_NETWORK, layout and self.diagram.LAYOUT_GRAPH == self.diagram.Layout)
-        # @todo save diagram layout
+        self.update_diagram_controls()
+        if not self.db.temporary:
+            conf.DBDiagrams[self.db.filename] = self.diagram.GetOptions()
+            conf.save()
 
 
     def on_diagram_relations(self, event):
         """Handler for toggling foreign relations checkbox, shows or hides diagram lines."""
-        self.diagram.ShowLines(self.cb_diagram_rels.Value)
+        self.diagram.ShowLines = self.cb_diagram_rels.Value
         self.cb_diagram_labels.Enable(self.cb_diagram_rels.Value)
 
 
     def on_diagram_labels(self, event):
         """Handler for toggling foreign labels checkbox, shows or hides diagram line labels."""
-        self.diagram.ShowLineLabels(self.cb_diagram_labels.Value)
+        self.diagram.ShowLineLabel = self.cb_diagram_labels.Value
 
 
     def on_diagram_export(self, event):
@@ -3655,28 +3664,16 @@ class DatabasePage(wx.Panel):
         """Handler for zooming diagram in or out or to 100%."""
         if direction: self.diagram.Zoom += self.diagram.ZOOM_STEP * direction
         else: self.diagram.Zoom = self.diagram.ZOOM_DEFAULT
-        self.tb_diagram.EnableTool(wx.ID_ZOOM_IN,  self.diagram.Zoom < self.diagram.ZOOM_MAX)
-        self.tb_diagram.EnableTool(wx.ID_ZOOM_OUT, self.diagram.Zoom > self.diagram.ZOOM_MIN)
-        self.tb_diagram.EnableTool(wx.ID_ZOOM_100, self.diagram.Zoom != self.diagram.ZOOM_DEFAULT)
-        self.combo_zoom.Value = "%s%%" % util.round_float(100 * self.diagram.Zoom, 2)
 
 
     def on_diagram_zoom_combo(self, event):
         """Handler for zoom step change in combobox."""
-        if not event.ClientData: return
-        self.diagram.Zoom = event.ClientData
-        self.tb_diagram.EnableTool(wx.ID_ZOOM_IN,  self.diagram.Zoom < self.diagram.ZOOM_MAX)
-        self.tb_diagram.EnableTool(wx.ID_ZOOM_OUT, self.diagram.Zoom > self.diagram.ZOOM_MIN)
-        self.tb_diagram.EnableTool(wx.ID_ZOOM_100, self.diagram.Zoom != self.diagram.ZOOM_DEFAULT)
+        if event.ClientData: self.diagram.Zoom = event.ClientData
 
 
     def on_diagram_zoom_fit(self, event=None):
         """Handler for zooming diagram to fit."""
         self.diagram.ZoomToFit()
-        self.tb_diagram.EnableTool(wx.ID_ZOOM_IN,  self.diagram.Zoom < self.diagram.ZOOM_MAX)
-        self.tb_diagram.EnableTool(wx.ID_ZOOM_OUT, self.diagram.Zoom > self.diagram.ZOOM_MIN)
-        self.tb_diagram.EnableTool(wx.ID_ZOOM_100, self.diagram.Zoom != self.diagram.ZOOM_DEFAULT)
-        self.combo_zoom.Value = "%s%%" % util.round_float(100 * self.diagram.Zoom, 2)
 
 
     def on_diagram_grid(self, event=None):
@@ -3735,7 +3732,6 @@ class DatabasePage(wx.Panel):
 
         rect = controls.get_tool_rect(self.tb_diagram, wx.ID_STATIC)
         self.diagram.PopupMenu(menu, rect.Right + 2, -rect.Height - 2)
-        self.tb_diagram.ToggleTool(wx.ID_STATIC,  True)
 
 
     def on_diagram_graph(self, event):
@@ -4151,6 +4147,10 @@ class DatabasePage(wx.Panel):
         if sqls != conf.SQLWindowTexts.get(self.db.filename):
             if sqls: conf.SQLWindowTexts[self.db.filename] = sqls
             else: conf.SQLWindowTexts.pop(self.db.filename, None)
+
+        # Save schema diagram state
+        if not self.db.temporary:
+            conf.DBDiagrams[self.db.filename] = self.diagram.GetOptions()
 
 
     def split_panels(self):
@@ -5794,6 +5794,8 @@ class DatabasePage(wx.Panel):
         self.load_tree_data()
         self.update_info_panel()
         self.diagram.Populate()
+        self.diagram.SetOptions(conf.DBDiagrams.get(self.db.filename))
+        self.update_diagram_controls()
         wx.CallLater(100, self.reload_schema, parse=True)
         if conf.RunStatistics: self.on_update_statistics()
 

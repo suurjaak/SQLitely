@@ -27,7 +27,7 @@ import wx
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.2.dev31"
+Version = "1.2.dev32"
 VersionDate = "19.11.2020"
 
 if getattr(sys, "frozen", False):
@@ -48,12 +48,12 @@ else:
 ConfigFile = "%s.ini" % os.path.join(EtcDirectory, Title.lower())
 
 """List of attribute names that can be saved to and loaded from ConfigFile."""
-FileDirectives = ["AllowMultipleInstances", "ConsoleHistoryCommands", "DBFiles",
-    "DBSort", "LastActivePage", "LastExportType", "LastSearchResults",
-    "LastSelectedFiles", "LastUpdateCheck", "RecentFiles", "SearchHistory",
-    "SearchInMeta", "SearchInData", "SearchUseNewTab", "SearchCaseSensitive",
-    "SQLWindowTexts", "TrayIconEnabled", "UpdateCheckAutomatic",
-    "WindowIconized", "WindowPosition", "WindowSize",
+FileDirectives = ["AllowMultipleInstances", "ConsoleHistoryCommands",
+    "DBDiagrams", "DBFiles", "DBSort", "LastActivePage", "LastExportType",
+    "LastSearchResults", "LastSelectedFiles", "LastUpdateCheck", "RecentFiles",
+    "SearchHistory", "SearchInMeta", "SearchInData", "SearchUseNewTab",
+    "SearchCaseSensitive", "SQLWindowTexts", "TrayIconEnabled",
+    "UpdateCheckAutomatic", "WindowIconized", "WindowPosition", "WindowSize",
 ]
 """List of user-modifiable attributes, saved if changed from default."""
 OptionalFileDirectives = [
@@ -76,6 +76,9 @@ DBExtensions = [".db", ".sqlite", ".sqlite3"]
 
 """Database list sort state, [col, ascending]."""
 DBSort = []
+
+"""Database schema diagram settings, as {path: {..}}."""
+DBDiagrams = {}
 
 """Whether program can have multiple instances running, or reuses one instance."""
 AllowMultipleInstances = False

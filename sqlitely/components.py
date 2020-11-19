@@ -9520,17 +9520,17 @@ class SchemaDiagram(wx.ScrolledWindow):
 
     """Returns current zoom level, 1 being 100% and .5 being 50%."""
     def GetZoom(self): return self._zoom
-    def SetZoom(self, zoom):
+    def SetZoom(self, zoom, refresh=True):
         zoom = float(zoom) - zoom % self.ZOOM_STEP # Even out to allowed step
         zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
         if self._zoom == zoom: return
 
+        zoom0 = self._zoom
+        self._zoom = zoom
+
         font = self.Font
         font.PointSize = self.FONT_SIZE * zoom
         self.Font = font
-
-        zoom0 = self._zoom
-        self._zoom = zoom
         self.SetVirtualSize(*[int(x * self._zoom) for x in self.VIRTUALSZ])
 
         for k in ("MINW", "LINEH", "HEADERP", "HEADERH", "FOOTERH", "BRADIUS",
@@ -9548,8 +9548,9 @@ class SchemaDiagram(wx.ScrolledWindow):
             pt = [v * self._zoom / zoom0 for v in r.TopLeft]
             self._dc.SetIdBounds(o["id"], wx.Rect(wx.Point(pt), bmp.Size))
 
-        self.Redraw()
-        self._PostEvent(zoom=zoom)
+        if refresh:
+            self.Redraw()
+            self._PostEvent(zoom=zoom)
     Zoom = property(GetZoom, SetZoom)
 
 
@@ -9572,7 +9573,10 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._PostEvent(zoom=zoom)
 
 
-    def ShowLines(self, show=True):
+    def GetShowLines(self):
+        """Returns whether foreign relation lines are shown."""
+        return self._show_lines
+    def SetShowLines(self, show=True):
         """Sets showing foreign relation lines on or off."""
         show = bool(show)
         if show == self._show_lines: return
@@ -9581,14 +9585,63 @@ class SchemaDiagram(wx.ScrolledWindow):
         else:
             for opts in self._lines.values(): self._dc.ClearId(opts["id"])
         self.Refresh()
+        self._PostEvent()
+    ShowLines = property(GetShowLines, SetShowLines)
 
 
-    def ShowLineLabels(self, show=True):
+    def GetShowLineLabels(self):
+        """Returns whether foreign relation line labels are shown."""
+        return self._show_labels
+    def SetShowLineLabels(self, show=True):
         """Sets showing foreign relation line labels on or off."""
         show = bool(show)
         if show == self._show_labels: return
         self._show_labels = show
         self.Redraw()
+        self._PostEvent()
+    ShowLineLabels = property(GetShowLineLabels, SetShowLineLabels)
+
+
+    def GetOptions(self):
+        """
+        Returns all current diagram options,
+        as {zoom: float, fks: bool, fklabels: bool, layout: {},
+            scroll: [x, y], items: {name: [x, y]}}.
+        """
+        pp = {o["name"]: list(self._dc.GetIdBounds(o["id"]).TopLeft) for o in self._order}
+        return {
+            "zoom":     self._zoom, "fks": self._show_lines, "items": pp,
+            "fklabels": self._show_labels,
+            "layout":   copy.deepcopy(self._layout),
+            "scroll":   [self.GetScrollPos(x) for x in (wx.HORIZONTAL, wx.VERTICAL)],
+        }
+    def SetOptions(self, opts):
+        """Sets all diagram options."""
+        if not opts: return
+
+        if "zoom"     in opts: self.SetZoom(opts["zoom"], refresh=False)
+        if "fks"      in opts: self._show_lines  = opts["fks"]
+        if "fklabels" in opts: self._show_labels = opts["fklabels"]
+
+        if "layout" in opts:
+            lopts = opts["layout"]
+            if "layout" in lopts and lopts["layout"] in (self.LAYOUT_GRID, self.LAYOUT_GRAPH):
+                self._layout["layout"] = lopts["layout"]
+            if "active" in lopts: self._layout["active"] = bool(lopts["active"])
+            for k, v in lopts.items():
+                if isinstance(v, dict): self._layout.setdefault(k, {}).update(v)
+        for name, (x, y) in (opts.get("items") or {}).items():
+            o = self._objs.get(name)
+            if not o:
+                self.Layout = self._layout["layout"]
+                break # for
+            r = self._dc.GetIdBounds(o["id"])
+            self._dc.TranslateId(o["id"], x - r.Left, x - r.Top)
+            self._dc.SetIdBounds(o["id"], wx.Rect(x, y, *r.Size))
+        self.Redraw()
+        if "scroll" in opts: self.Scroll(*opts["scroll"])
+        self._PostEvent()
+    Options = property(GetOptions, SetOptions)
 
 
     def SaveFile(self):
@@ -10005,9 +10058,12 @@ class SchemaDiagram(wx.ScrolledWindow):
     Layout = property(GetLayout, SetLayout)
 
 
-    def GetLayoutOptions(self, layout):
-        """Returns current options for layout, if any"""
-        return copy.copy(self._layout.get(layout))
+    def GetLayoutOptions(self, layout=None):
+        """
+        Returns current options for specified layout, e.g. {"order": "name"} for grid,
+        or global layout options as {"layout": "grid", "active": True, "grid": {..}}.
+        """
+        return copy.deepcopy(self._layout if layout is None else self._layout.get(layout))
 
 
     def _PositionItemsGrid(self):
@@ -10339,7 +10395,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 if self._dragrect:
                     self._dc.RemoveId(self._dragrectid)
                     self._dragrectid = self._dragrect = self._dragrectabs = None
-                self._PostEvent(layout=False)
+                if self._sels: self._PostEvent(layout=False)
 
             if self._show_lines: self.Redraw()
             else:
@@ -10447,6 +10503,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self._dc.SetIdBounds(o["id"], bounds)
             self.Redraw()
             self.Thaw()
+            self._PostEvent()
 
         wx.CallAfter(after)
 
