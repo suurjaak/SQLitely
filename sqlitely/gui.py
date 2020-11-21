@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.11.2020
+@modified    21.11.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -103,6 +103,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         # show when closing one.
         self.pages_visited = []
         self.ipc_listener = None # workers.IPCListener instance
+        self.is_started = False
+        self.is_minimizing = False
+        self.is_dragging_page = False
 
         icons = images.get_appicons()
         self.SetIcons(icons)
@@ -111,10 +114,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if self.trayicon.IsAvailable():
             if conf.TrayIconEnabled:
                 self.trayicon.SetIcon(self.TRAY_ICON.Icon, conf.Title)
-            self.trayicon.Bind(wx.adv.EVT_TASKBAR_LEFT_DCLICK, self.on_toggle_iconize)
+            self.trayicon.Bind(wx.adv.EVT_TASKBAR_LEFT_DCLICK, self.on_toggle_to_tray)
             self.trayicon.Bind(wx.adv.EVT_TASKBAR_RIGHT_DOWN,  self.on_open_tray_menu)
         else:
-            conf.WindowIconized = False
+            conf.WindowMinimizedToTray = False
 
         panel = self.panel_main = wx.Panel(self)
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -230,13 +233,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.notebook.DropTarget = FileDrop(self)
 
         self.MinSize = conf.MinWindowSize
-        if conf.WindowPosition and conf.WindowSize:
-            if [-1, -1] != conf.WindowSize:
-                self.Size = conf.WindowSize
-                if not conf.WindowIconized:
-                    self.Position = conf.WindowPosition
-            else:
-                self.Maximize()
+        if conf.WindowMaximized:
+            self.Maximize()
+        elif conf.WindowPosition and conf.WindowSize:
+            self.Size = conf.WindowSize
+            if not conf.WindowMinimizedToTray:
+                self.Position = conf.WindowPosition
         else:
             self.Center(wx.HORIZONTAL)
             self.Position.top = 50
@@ -247,14 +249,15 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.ipc_listener = workers.IPCListener(*args)
             self.ipc_listener.start()
 
-        if conf.WindowIconized:
-            conf.WindowIconized = False
-            wx.CallAfter(self.on_toggle_iconize)
+        if conf.WindowMinimizedToTray:
+            conf.WindowMinimizedToTray = False
+            wx.CallAfter(self.on_toggle_to_tray)
         else:
             self.Show(True)
         wx.CallLater(20000, self.update_check)
         wx.CallLater(1, self.populate_database_list)
         logger.info("Started application.")
+        wx.CallAfter(setattr, self, "is_started", True)
 
 
     def create_page_main(self, notebook):
@@ -442,7 +445,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_options = self.menu_options = menu_file.Append(wx.ID_ANY,
             "Advanced opt&ions", "Edit advanced program options")
         if self.trayicon.IsAvailable():
-            menu_iconize = self.menu_iconize = menu_file.Append(wx.ID_ANY,
+            menu_to_tray = self.menu_to_tray = menu_file.Append(wx.ID_ANY,
                 "Minimize to &tray", "Minimize %s window to notification area" % conf.Title)
         menu_exit = self.menu_exit = \
             menu_file.Append(wx.ID_ANY, "E&xit\tAlt-X", "Exit")
@@ -606,7 +609,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_toggle_console,          menu_console)
         self.Bind(wx.EVT_MENU, self.on_toggle_columneditor,     menu_editor)
         if self.trayicon.IsAvailable():
-            self.Bind(wx.EVT_MENU, self.on_toggle_iconize,      menu_iconize)
+            self.Bind(wx.EVT_MENU, self.on_toggle_to_tray,      menu_to_tray)
             self.Bind(wx.EVT_MENU, self.on_toggle_trayicon,     menu_tray)
         self.Bind(wx.EVT_MENU, self.on_toggle_autoupdate_check,
                   menu_autoupdate_check)
@@ -741,7 +744,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if not self or not conf.UpdateCheckAutomatic: return
         interval = datetime.timedelta(days=conf.UpdateCheckInterval)
         due_date = datetime.datetime.now() - interval
-        if not (conf.WindowIconized or support.update_window) \
+        if not (conf.WindowMinimizedToTray or support.update_window) \
         and conf.LastUpdateCheck < due_date.strftime("%Y%m%d"):
             callback = lambda resp: self.on_check_update_callback(resp, False)
             support.check_newest_version(callback)
@@ -772,24 +775,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.ipc_listener.start()
 
 
-    def on_toggle_iconize(self, event=None):
-        """Handler for toggling main window to tray and back."""
-        if not self: return
-        conf.WindowIconized = not conf.WindowIconized
-        if conf.WindowIconized:
-            self.Iconize(), self.Hide()
-            if not conf.TrayIconEnabled:
-                conf.TrayIconEnabled = True
-                self.trayicon.SetIcon(self.TRAY_ICON.Icon, conf.Title)
-                self.menu_tray.Check(True)
-            if self.menu_console.IsChecked(): self.frame_console.Hide()
-        else:
-            self.Iconize(False), self.Show(), self.Restore()
-            conf.WindowPosition = self.Position[:]
-            if self.menu_console.IsChecked():
-                self.frame_console.Show(), self.frame_console.Iconize(False)
-
-
     def on_toggle_trayicon(self, event=None):
         """
         Handler for toggling tray icon, removes or adds it to the tray area.
@@ -802,8 +787,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.trayicon.SetIcon(self.TRAY_ICON.Icon, conf.Title)
         else:
             self.trayicon.RemoveIcon()
-        if conf.WindowIconized:
-            self.on_toggle_iconize()
+        if conf.WindowMinimizedToTray:
+            self.on_toggle_to_tray()
 
 
     def on_open_tray_menu(self, event):
@@ -813,11 +798,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_all = wx.Menu()
 
         def on_recent_file(event):
-            if conf.WindowIconized: self.on_toggle_iconize()
+            if conf.WindowMinimizedToTray: self.on_toggle_to_tray()
             filename = history_file.GetHistoryFile(event.Id - wx.ID_FILE1)
             self.load_database_page(filename, clearselection=True)
         def open_item(filename, *_, **__):
-            if conf.WindowIconized: self.on_toggle_iconize()
+            if conf.WindowMinimizedToTray: self.on_toggle_to_tray()
             self.load_database_page(filename, clearselection=True)
 
         history_file = wx.FileHistory(conf.MaxRecentFiles)
@@ -826,7 +811,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         [history_file.AddFileToHistory(f) for f in conf.RecentFiles[::-1]]
         history_file.UseMenu(menu_recent)
 
-        label = ["Minimize to", "Restore from"][conf.WindowIconized] + " &tray"
+        label = ["Minimize to", "Restore from"][conf.WindowMinimizedToTray] + " &tray"
         item_new = wx.MenuItem(menu, -1, "&New database")
         item_toggle = wx.MenuItem(menu, -1, label)
         item_icon = wx.MenuItem(menu, -1, kind=wx.ITEM_CHECK,
@@ -886,7 +871,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu.Bind(wx.EVT_MENU_RANGE, on_recent_file, id=wx.ID_FILE1,
                   id2=wx.ID_FILE1 + conf.MaxRecentFiles)
         menu.Bind(wx.EVT_MENU, self.on_new_database,        item_new)
-        menu.Bind(wx.EVT_MENU, self.on_toggle_iconize,      item_toggle)
+        menu.Bind(wx.EVT_MENU, self.on_toggle_to_tray,      item_toggle)
         menu.Bind(wx.EVT_MENU, self.on_toggle_trayicon,     item_icon)
         menu.Bind(wx.EVT_MENU, self.on_toggle_console,      item_console)
         menu.Bind(wx.EVT_MENU, self.on_toggle_columneditor, item_editor)
@@ -898,7 +883,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         Handler for changing a page in the main Notebook, remembers the visit.
         """
-        if getattr(self, "_ignore_paging", False): return
+        if self.is_dragging_page: return
         if event: event.Skip() # Pass event along to next handler
         p = self.notebook.GetCurrentPage()
         if not self.pages_visited or self.pages_visited[-1] != p:
@@ -918,7 +903,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for dragging notebook tabs, keeps main-tab first and log-tab last.
         """
         self.notebook.Freeze()
-        self._ignore_paging = True
+        self.is_dragging_page = True
         try:
             cur_page = self.notebook.GetCurrentPage()
             idx_main = self.notebook.GetPageIndex(self.page_main)
@@ -934,14 +919,39 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if self.notebook.GetCurrentPage() != cur_page:
                 self.notebook.SetSelection(self.notebook.GetPageIndex(cur_page))
         finally:
-            delattr(self, "_ignore_paging")
+            self.is_dragging_page = False
             self.notebook.Thaw()
+
+
+    def on_toggle_to_tray(self, event=None):
+        """Handler for toggling main window to tray and back."""
+        if not self: return
+        conf.WindowMinimizedToTray = not conf.WindowMinimizedToTray
+        self.is_minimizing = True
+        if conf.WindowMinimizedToTray:
+            self.Hide()
+            if not conf.TrayIconEnabled:
+                conf.TrayIconEnabled = True
+                self.trayicon.SetIcon(self.TRAY_ICON.Icon, conf.Title)
+                self.menu_tray.Check(True)
+            if self.menu_console.IsChecked(): self.frame_console.Hide()
+        else:
+            if conf.WindowPosition and not conf.WindowMaximized:
+                self.Position = conf.WindowPosition
+            self.Show()
+            if self.menu_console.IsChecked():
+                self.frame_console.Show(), self.frame_console.Iconize(False)
+        wx.CallAfter(setattr, self, "is_minimizing", False)
 
 
     def on_size(self, event):
         """Handler for window size event, tweaks controls and saves size."""
         event.Skip()
-        conf.WindowSize = [-1, -1] if self.IsMaximized() else self.Size[:]
+        if self.is_minimizing: return
+        if conf.WindowMaximized and not self.IsMaximized() and conf.WindowPosition:
+            self.Position = conf.WindowPosition
+        conf.WindowMaximized = self.IsMaximized()
+        if not self.IsMaximized(): conf.WindowSize = self.Size[:]
         conf.save()
         # Right panel scroll
         wx.CallAfter(lambda: self and (self.list_db.RefreshRows(),
@@ -951,8 +961,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def on_move(self, event):
         """Handler for window move event, saves position."""
         event.Skip()
-        if not self.IsIconized():
-            conf.WindowPosition = event.Position[:]
+        if self.is_minimizing: return
+        if not self.IsIconized() and not self.IsMaximized() and not conf.WindowMaximized \
+        and self.is_started and not self.is_minimizing:
+            conf.WindowPosition = self.Position[:]
             conf.save()
 
 
@@ -966,7 +978,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         def after(data):
             if not self: return
 
-            if conf.WindowIconized: self.on_toggle_iconize()
+            if conf.WindowMinimizedToTray: self.on_toggle_to_tray()
             else: self.Restore()
             self.Raise()
             data = data if isinstance(data, (list, set, tuple)) else filter(bool, [data])
@@ -1877,7 +1889,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """
         Handler for new database menu or button, opens a temporary file database.
         """
-        if conf.WindowIconized: self.on_toggle_iconize()
+        if conf.WindowMinimizedToTray: self.on_toggle_to_tray()
         self.load_database_page(None)
 
 
@@ -2104,8 +2116,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         # Save last selected files in db lists, to reselect them on rerun
         conf.LastSelectedFiles[:] = self.dbs_selected[:]
-        if not conf.WindowIconized: conf.WindowPosition = self.Position[:]
-        conf.WindowSize = [-1, -1] if self.IsMaximized() else self.Size[:]
+        conf.WindowMaximized = self.IsMaximized()
+        if not conf.WindowMinimizedToTray and not conf.WindowMaximized:
+            conf.WindowPosition = self.Position[:]
+        if not self.IsMaximized(): conf.WindowSize = self.Size[:]
         conf.save()
         self.trayicon.Destroy()
         wx.CallAfter(sys.exit) # Immediate exit fails if exiting from tray
@@ -2116,7 +2130,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for closing a page, asks the user about saving unsaved data,
         if any, removes page from main notebook.
         """
-        if getattr(self, "_ignore_paging", False): return
+        if self.is_dragging_page: return
         if event.EventObject == self.notebook:
             page = self.notebook.GetPage(event.GetSelection())
         else:

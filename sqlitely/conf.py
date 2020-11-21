@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.11.2020
+@modified    21.11.2020
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -27,8 +27,8 @@ import wx
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.2.dev32"
-VersionDate = "19.11.2020"
+Version = "1.2.dev33"
+VersionDate = "21.11.2020"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -53,7 +53,8 @@ FileDirectives = ["AllowMultipleInstances", "ConsoleHistoryCommands",
     "LastSearchResults", "LastSelectedFiles", "LastUpdateCheck", "RecentFiles",
     "SearchHistory", "SearchInMeta", "SearchInData", "SearchUseNewTab",
     "SearchCaseSensitive", "SQLWindowTexts", "TrayIconEnabled",
-    "UpdateCheckAutomatic", "WindowIconized", "WindowPosition", "WindowSize",
+    "UpdateCheckAutomatic", "WindowMaximized", "WindowMinimizedToTray",
+    "WindowPosition", "WindowSize",
 ]
 """List of user-modifiable attributes, saved if changed from default."""
 OptionalFileDirectives = [
@@ -155,13 +156,16 @@ TrayIconEnabled = True
 """Whether the program checks for updates every UpdateCheckInterval."""
 UpdateCheckAutomatic = True
 
-"""Whether the program has been minimized and hidden."""
-WindowIconized = False
+"""Whether the program has been minimized and hidden to tray."""
+WindowMinimizedToTray = False
+
+"""Whether the program window has been maximized."""
+WindowMaximized = False
 
 """Main window position, (x, y)."""
 WindowPosition = None
 
-"""Main window size in pixels, [w, h] or [-1, -1] for maximized."""
+"""Main window size in pixels, as [w, h]."""
 WindowSize = (1080, 720)
 
 """---------------------------- /FileDirectives ----------------------------"""
