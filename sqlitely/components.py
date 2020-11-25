@@ -1236,7 +1236,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         elif idx in self.idx_new:
             col_map = dict((c["name"], c) for c in self.columns)
             row0 = {c["name"]: row[c["name"]] for c in self.columns
-                    if "pk" not in c and row[c["name"]] is not None}
+                    if row[c["name"]] is not None}
             has_defaults = any("default" in x and x["name"] not in row0
                                for x in self.columns)
             insert_id = self.db.insert_row(self.name, row0)
