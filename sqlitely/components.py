@@ -10289,8 +10289,7 @@ class SchemaDiagram(wx.ScrolledWindow):
 
             w1 = next(d[0] + d[3] for d in [dc.GetFullTextExtent(text1)]) if text1 else 0
             w2 = next(d[0] + d[3] for d in [dc.GetFullTextExtent(text2)]) if text2 else 0
-            logger.info("%s: w1 %s w2 %s w %s. %s", title, w1, w2, w, [text1, text2])
-            if dx + w1 + w2 + self.BRADIUS > w and opts.get("count"):
+            if w1 + w2 + 2 * self.BRADIUS > w and opts.get("count"):
                 text1 = util.plural("row", opts["count"], max_units=True)
 
             dy += 1
@@ -10339,6 +10338,10 @@ class SchemaDiagram(wx.ScrolledWindow):
 
     def _OnMouse(self, event):
         """Handler for mouse events: focus, drag, menu."""
+        cursor = wx.CURSOR_DEFAULT
+        if any(self._dc.GetIdBounds(o["id"]).Contains(event.Position)
+               for o in self._objs.values()): cursor = wx.CURSOR_HAND
+        self.Cursor = wx.Cursor(cursor)
 
         if event.LeftDown() or event.RightDown() or event.LeftDClick():
             event.Skip()
@@ -10413,6 +10416,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self._dragrectabs = wx.Rect(self._dragrect)
 
             if self._dragrect:
+                self.Cursor = wx.Cursor(wx.CURSOR_CROSS)
                 if not self._dragrectid: self._dragrectid = max(self._ids) + 1
                 r, r0 = self._dragrect, wx.Rect(self._dragrect)
                 if r.Left + dx < 0 or r.Right  + dx > self.VirtualSize.Width:  dx = 0
