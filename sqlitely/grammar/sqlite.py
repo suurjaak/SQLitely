@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    26.06.2020
+@modified    25.11.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -1149,6 +1149,7 @@ def test():
             /* multiline
             comment */
             -- last line comment
+            UNIQUE NOT NULL
         ) -- comment
         WITHOUT ROWID -- comment
         -- comment

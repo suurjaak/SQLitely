@@ -33,7 +33,9 @@
  *                fixed multi-word column type; dropped keywords in table_alias;
  *                more use of with_clause; dropped Java-specific exception;
  *                double quotes allowed in string_literal; fixed module arguments;
- *                only ROWID allowed after WITHOUT; no name on column constraint.
+ *                only ROWID allowed after WITHOUT; disallow keywords in column types
+ *                and constraint names.
+ *                
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019
  */
@@ -282,7 +284,8 @@ type_name
  ;
 
 column_constraint
- : ( K_PRIMARY K_KEY ( K_ASC | K_DESC )? conflict_clause K_AUTOINCREMENT?
+ : ( K_CONSTRAINT name )?
+   ( K_PRIMARY K_KEY ( K_ASC | K_DESC )? conflict_clause K_AUTOINCREMENT?
    | K_NOT? K_NULL conflict_clause
    | K_UNIQUE conflict_clause
    | K_CHECK '(' expr ')'
@@ -611,7 +614,9 @@ keyword
 // TODO check all names below
 
 name
- : any_name
+ : IDENTIFIER 
+ | STRING_LITERAL
+ | '(' any_name ')'
  ;
 
 function_name
