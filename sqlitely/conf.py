@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.11.2020
+@modified    25.11.2020
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -27,8 +27,8 @@ import wx
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.2.dev33"
-VersionDate = "21.11.2020"
+Version = "1.2.dev34"
+VersionDate = "25.11.2020"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -314,8 +314,9 @@ def load():
     if not Defaults:
         # Instantiate OS- and user-specific path
         try:
-            p = appdirs.user_config_dir(Title, False)
-            configpaths.append(os.path.join(p, "%s.ini" % Title.lower()))
+            p = appdirs.user_config_dir(Title, appauthor=False)
+            # Try user-specific path first, then path under application folder
+            configpaths.insert(0, os.path.join(p, "%s.ini" % Title.lower()))
         except Exception: pass
 
     section = "*"
@@ -327,9 +328,8 @@ def load():
     parser = RawConfigParser()
     parser.optionxform = str # Force case-sensitivity on names
     try:
-        # Try user-specific path first, then path under application folder
         for path in configpaths[::-1]:
-            if os.path.isfile(path) and parser.read(ConfigFile):
+            if os.path.isfile(path) and parser.read(path):
                 break # for path
 
         def parse_value(name):
@@ -353,8 +353,11 @@ def save():
     """Saves FileDirectives into ConfigFile."""
     configpaths = [ConfigFile]
     try:
-        p = appdirs.user_config_dir(Title, False)
-        configpaths.append(os.path.join(p, "%s.ini" % Title.lower()))
+        p = appdirs.user_config_dir(Title, appauthor=False)
+        userpath = os.path.join(p, "%s.ini" % Title.lower())
+        # Pick only userpath if exists, else try application folder first
+        if os.path.isfile(userpath): configpaths = [userpath]
+        else: configpaths.append(userpath)
     except Exception: pass
 
     section = "*"
@@ -364,7 +367,6 @@ def save():
     parser.add_section(section)
     try:
         for path in configpaths:
-            # Try path under application folder first, then user-specific path
             try: os.makedirs(os.path.split(path)[0])
             except Exception: pass
             try: f = open(path, "wb")
