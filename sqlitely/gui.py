@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.11.2020
+@modified    25.11.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2840,6 +2840,7 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_TEXT,     self.on_diagram_zoom_combo, combo_zoom)
         self.Bind(wx.EVT_CHECKBOX, self.on_diagram_relations,  cb_rels)
         self.Bind(wx.EVT_CHECKBOX, self.on_diagram_labels,     cb_lbls)
+        self.Bind(wx.EVT_CHECKBOX, self.on_diagram_stats,      cb_stats)
         self.Bind(wx.EVT_BUTTON,   self.on_diagram_export,     button_export)
         self.Bind(components.EVT_DIAGRAM, self.on_diagram_event, self.diagram)
 
@@ -3523,7 +3524,6 @@ class DatabasePage(wx.Panel):
         self.statistics = {}
         self.worker_analyzer.work(self.db.filename)
         self.db.lock(None, None, self.db, label="statistics analysis")
-        self.cb_diagram_stats.Disable()
         wx.CallAfter(self.populate_statistics)
 
 
@@ -3591,7 +3591,7 @@ class DatabasePage(wx.Panel):
             if result:
                 if "error" not in result:
                     guibase.status("Statistics analysis complete.")
-                self.cb_diagram_stats.Enable()
+                if self.diagram.ShowStatistics: self.diagram.Redraw(remake=True)
                 self.populate_statistics()
                 self.update_page_header(updated="error" not in result)
         wx.CallAfter(after)
@@ -3646,8 +3646,10 @@ class DatabasePage(wx.Panel):
         self.combo_zoom.Value = "%s%%" % util.round_float(100 * self.diagram.Zoom, 2)
         self.tb_diagram.ToggleTool(wx.ID_STATIC,  self.diagram.LAYOUT_GRID  == self.diagram.Layout)
         self.tb_diagram.ToggleTool(wx.ID_NETWORK, self.diagram.LAYOUT_GRAPH == self.diagram.Layout)
-        self.cb_diagram_rels.Value   = self.diagram.ShowLines
+        self.cb_diagram_rels  .Value = self.diagram.ShowLines
         self.cb_diagram_labels.Value = self.diagram.ShowLineLabels
+        self.cb_diagram_stats .Value = self.diagram.ShowStatistics
+        self.cb_diagram_stats.Enable()
 
 
     def on_diagram_event(self, event):
@@ -3656,6 +3658,11 @@ class DatabasePage(wx.Panel):
         if not self.db.temporary:
             conf.DBDiagrams[self.db.filename] = self.diagram.GetOptions()
             conf.save()
+
+
+    def on_diagram_stats(self, event):
+        """Handler for toggling statistics checkbox, shows or hides stats on diagram."""
+        self.diagram.ShowStatistics = self.cb_diagram_stats.Value
 
 
     def on_diagram_relations(self, event):
@@ -3711,7 +3718,7 @@ class DatabasePage(wx.Panel):
         item_columns = wx.MenuItem(submenu, -1, "&column count",  kind=wx.ITEM_CHECK)
         item_rows    = wx.MenuItem(submenu, -1, "&row count",     kind=wx.ITEM_CHECK)
         item_bytes   = wx.MenuItem(submenu, -1, "&byte count",    kind=wx.ITEM_CHECK)
-        item_reverse = wx.MenuItem(submenu, -1, "Re&verse order", kind=wx.ITEM_CHECK)
+        item_reverse = wx.MenuItem(submenu, -1, "&Descending order", kind=wx.ITEM_CHECK)
 
 
         menu.Append(item_vertical)
@@ -3732,7 +3739,7 @@ class DatabasePage(wx.Panel):
         item_columns.Check(opts.get("order") == "columns")
         item_rows.Check   (opts.get("order") == "rows")
         item_bytes.Check  (opts.get("order") == "bytes")
-        item_rows.Enable  (bool(self.statistics.get("data")))
+        item_rows.Enable  (any(x.get("count") for x in self.db.get_category("table").values()))
         item_bytes.Enable (bool(self.statistics.get("data")))
         item_reverse.Check(bool(opts.get("reverse")))
 

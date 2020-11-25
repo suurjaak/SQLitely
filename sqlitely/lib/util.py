@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.11.2020
+@modified    25.11.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -336,18 +336,20 @@ def format_exc(e):
     return result
 
 
-def plural(word, items=None, numbers=True, single="1", sep="", pref="", suf=""):
+def plural(word, items=None, numbers=True, single="1", sep="", pref="", suf="", max_units=False):
     """
     Returns the word as 'count words', or '1 word' if count is 1,
     or 'words' if count omitted.
 
     @param   items      item collection or count,
                         or None to get just the plural of the word
-             numbers    if False, count is omitted from final result
-             single     prefix to use for word if count is 1, e.g. "a"
-             sep        thousand-separator to use for count
-             pref       prefix to prepend to count, e.g. "~150"
-             suf        suffix to append to count, e.g. "150+"
+    @param   numbers    if False, count is omitted from final result
+    @param   single     prefix to use for word if count is 1, e.g. "a"
+    @param   sep        thousand-separator to use for count
+    @param   pref       prefix to prepend to count, e.g. "~150"
+    @param   suf        suffix to append to count, e.g. "150+"
+    @param   max_units  whether to convert count to corresponding maximum
+                        unit (K, M, G..), or leave as is and add thousand separators
     """
     count   = len(items) if hasattr(items, "__len__") else items or 0
     isupper = word[-1:].isupper()
@@ -359,10 +361,17 @@ def plural(word, items=None, numbers=True, single="1", sep="", pref="", suf=""):
         word = word[:-1] + ("I" if isupper else "i")
     result = word + ("" if 1 == count else suffix)
     if numbers and items is not None:
-        fmtcount = single if 1 == count else "".join([
-            x + ("," if i and not i % 3 else "")
-            for i, x in enumerate(str(count)[::-1])][::-1
-        ]) if sep else str(count)
+        if 1 == count: fmtcount = single
+        elif max_units:
+            UNITS = ["", "K", "M", "G", "T", "P", "E", "Z", "Y"]
+            log = min(len(UNITS) - 1, math.floor(math.log(count, 1000)))
+            formatted = "%.*f" % (2, count / math.pow(1000, log))
+            fmtcount = formatted.rstrip("0").rstrip(".") + UNITS[int(log)]
+        elif sep: fmtcount = "".join([
+            x + ("," if i and not i % 3 else "") for i, x in enumerate(str(count)[::-1])
+        ][::-1])
+        else: fmtcount = str(count)
+
         fmtcount = pref + fmtcount + suf
         result = "%s %s" % (single if 1 == count else fmtcount, result)
     return result.strip()
@@ -547,7 +556,8 @@ def get(collection, *path, **kwargs):
     """
     Returns the value at specified collection path. If path not available,
     returns the first keyword argument if any given, or None.
-    Collection can be a nested structure of dicts, lists, tuples or strings.
+    Collection can be a nested structure of dicts, lists, tuples or strings,
+    or objects with named attributes.
     E.g. util.get({"root": {"first": [{"k": "v"}]}}, "root", "first", 0, "k").
     """
     default = (list(kwargs.values()) + [None])[0]
@@ -561,6 +571,8 @@ def get(collection, *path, **kwargs):
                 result = default
         elif isinstance(result, collections.Mapping): # Container with lookup
             result = result.get(p, default)
+        elif isinstance(p, basestring) and hasattr(result, p): # Object attribute
+            result = getattr(result, p)
         else:
             result = default
         if result == default: break  # for p

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.11.2020
+@modified    25.11.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -9416,6 +9416,8 @@ class SchemaDiagram(wx.ScrolledWindow):
     FONT_SIZE =   8 # Default font size
     FONT_FACE = "Verdana"
     FONT_SPAN = (1, 16) # Minimum and maximum font size for zoom
+    STATS_H   =  15 # Stats footer height
+    FONT_STEP_STATS = -1 # Stats footer font size step from base font
 
     LAYOUT_GRID  = "grid"
     LAYOUT_GRAPH = "graph"
@@ -9431,7 +9433,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         super(SchemaDiagram, self).__init__(parent, *args, **kwargs)
         self._db    = db
         self._ids   = {} # {DC ops ID: name or (name1, name2, (cols)) or None}
-        self._objs  = util.CaselessDict() # {name: {id, category, name, bmp, bmpsel, bmpseldrag, sql0, __id__}}
+        self._objs  = util.CaselessDict() # {name: {id, category, name, bmp, bmpsel, bmpseldrag, stats, sql0, __id__}}
         self._lines = util.CaselessDict() # {(name1, name2, (cols)): {id, pts}}
         self._sels  = util.CaselessDict(insertorder=True) # {name selected: DC ops ID}
         self._order = []   # [{obj dict}, ] selected items at end
@@ -9534,16 +9536,17 @@ class SchemaDiagram(wx.ScrolledWindow):
         self.SetVirtualSize(*[int(x * self._zoom) for x in self.VIRTUALSZ])
 
         for k in ("MINW", "LINEH", "HEADERP", "HEADERH", "FOOTERH", "BRADIUS",
-        "FMARGIN", "CARDINALW", "CARDINALH", "LPAD", "HPAD", "GPAD", "MOVE_STEP"):
+        "FMARGIN", "CARDINALW", "CARDINALH", "LPAD", "HPAD", "GPAD", "MOVE_STEP", "STATS_H"):
             v = getattr(self.__class__, k)
             setattr(self, k, int(math.ceil(v * self._zoom)))
 
         for o in self._objs.values():
             opts = self._db.get_category(o["category"], o["name"])            
-            bmp = self._MakeItemBitmap(o["category"], opts)
+            stats = stats=self._GetItemStats(opts)
+            bmp = self._MakeItemBitmap(o["category"], opts, stats)
             bmpsel = self._MakeFocusedBitmap(bmp)
-            bmpseldrag = self._MakeFocusedBitmap(self._MakeItemBitmap(o["category"], opts, dragrect=True))
-            o.update(bmp=bmp, bmpsel=bmpsel, bmpseldrag=bmpseldrag)
+            bmpseldrag = self._MakeFocusedBitmap(self._MakeItemBitmap(o["category"], opts, stats, dragrect=True))
+            o.update(bmp=bmp, bmpsel=bmpsel, bmpseldrag=bmpseldrag, stats=stats)
             r = self._dc.GetIdBounds(o["id"])
             pt = [v * self._zoom / zoom0 for v in r.TopLeft]
             self._dc.SetIdBounds(o["id"], wx.Rect(wx.Point(pt), bmp.Size))
@@ -9602,6 +9605,19 @@ class SchemaDiagram(wx.ScrolledWindow):
     ShowLineLabels = property(GetShowLineLabels, SetShowLineLabels)
 
 
+    def GetShowStatistics(self):
+        """Returns whether table statistics are shown."""
+        return self._show_stats
+    def SetShowStatistics(self, show=True):
+        """Sets showing table statistics on or off."""
+        show = bool(show)
+        if show == self._show_stats: return
+        self._show_stats = show
+        self.Redraw(remake=True)
+        self._PostEvent()
+    ShowStatistics = property(GetShowStatistics, SetShowStatistics)
+
+
     def GetOptions(self):
         """
         Returns all current diagram options,
@@ -9611,7 +9627,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         pp = {o["name"]: list(self._dc.GetIdBounds(o["id"]).TopLeft) for o in self._order}
         return {
             "zoom":     self._zoom, "fks": self._show_lines, "items": pp,
-            "fklabels": self._show_labels,
+            "fklabels": self._show_labels, "stats": self._show_stats,
             "layout":   copy.deepcopy(self._layout),
             "scroll":   [self.GetScrollPos(x) for x in (wx.HORIZONTAL, wx.VERTICAL)],
         }
@@ -9620,8 +9636,9 @@ class SchemaDiagram(wx.ScrolledWindow):
         if not opts: return
 
         if "zoom"     in opts: self.SetZoom(opts["zoom"], refresh=False)
-        if "fks"      in opts: self._show_lines  = opts["fks"]
-        if "fklabels" in opts: self._show_labels = opts["fklabels"]
+        if "fks"      in opts: self._show_lines  = bool(opts["fks"])
+        if "fklabels" in opts: self._show_labels = bool(opts["fklabels"])
+        if "stats"    in opts: self._show_stats  = bool(opts["stats"])
 
         if "layout" in opts:
             lopts = opts["layout"]
@@ -9638,7 +9655,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             r = self._dc.GetIdBounds(o["id"])
             self._dc.TranslateId(o["id"], x - r.Left, x - r.Top)
             self._dc.SetIdBounds(o["id"], wx.Rect(x, y, *r.Size))
-        self.Redraw()
+        self.Redraw(remake=True)
         if "scroll" in opts: self.Scroll(*opts["scroll"])
         self._PostEvent()
     Options = property(GetOptions, SetOptions)
@@ -9696,6 +9713,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 keys.append(key)
                 it = wx.MenuItem(submenu, -1, "New " + category.replace(key, "&" + key, 1))
                 submenu.Append(it)
+                menu.Bind(wx.EVT_MENU, cmd("create", category), it)
 
         else:
             items = map(self._objs.get, self._sels)
@@ -9773,7 +9791,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._lines.clear()
         del self._order[:]
 
-        has_new = False
+        reset = any(o["__id__"] not in (x["__id__"] for x in self._db.get_category(o["category"]).values())
+                    for o in objs0)
         for name1 in self._db.get_category("table"):
             for fk in self._db.get_keys(name1, pks_only=True)[1]:
                 name2, rname = list(fk["table"])[0], ", ".join(fk["name"])
@@ -9786,20 +9805,21 @@ class SchemaDiagram(wx.ScrolledWindow):
                 o0 = next((o for o in objs0 if o["__id__"] == opts["__id__"]), None)
                 if o0: oid = o0["id"]
                 else: oid, maxid = (maxid + 1, ) * 2
-                if o0 and o0["sql0"] == opts["sql0"]:
+                stats, stats0 = self._GetItemStats(opts), (o0 or {}).get("stats")
+                if o0 and o0["sql0"] == opts["sql0"] and stats == stats0:
                     bmp, bmpsel, bmpseldrag = map(o0.get, ("bmp", "bmpsel", "bmpseldrag"))
                 else:
-                    bmp = self._MakeItemBitmap(category, opts)
+                    bmp = self._MakeItemBitmap(category, opts, stats)
                     bmpsel = self._MakeFocusedBitmap(bmp)
-                    bmpseldrag = self._MakeFocusedBitmap(self._MakeItemBitmap(category, opts, dragrect=True))
+                    bmpseldrag = self._MakeFocusedBitmap(self._MakeItemBitmap(category, opts, stats, dragrect=True))
                 self._ids[oid] = name
-                self._objs[name] = {"id": oid, "category": category, "name": name,
+                self._objs[name] = {"id": oid, "category": category, "name": name, "stats": stats,
                                     "__id__": opts["__id__"], "sql0": opts["sql0"],
                                     "bmp": bmp, "bmpsel": bmpsel, "bmpseldrag": bmpseldrag}
                 self._order.append(self._objs[name])
-                has_new |= not o0
+                reset |= not o0
 
-        if has_new:
+        if reset:
             self._dc.RemoveAll()
             self.SetLayout(self._layout["layout"])
         else:
@@ -9816,9 +9836,12 @@ class SchemaDiagram(wx.ScrolledWindow):
             opts = self._db.get_category(o["category"], o["name"])
             if not opts: self._objs.pop(o["name"])
             if not opts: continue # for o
-            o["bmp"] = self._MakeItemBitmap(o["category"], opts)
+            stats = o["stats"] = self._GetItemStats(opts)
+            o["bmp"] = self._MakeItemBitmap(o["category"], opts, stats)
             o["bmpsel"] = self._MakeFocusedBitmap(o["bmp"])
-            o["bmpseldrag"] = self._MakeFocusedBitmap(self._MakeItemBitmap(o["category"], opts, dragrect=True))
+            o["bmpseldrag"] = self._MakeFocusedBitmap(self._MakeItemBitmap(o["category"], opts, stats, dragrect=True))
+            r = self._dc.GetIdBounds(o["id"])
+            self._dc.SetIdBounds(o["id"], wx.Rect(r.TopLeft, o["bmp"].Size))
         self.RecordSelectionRect()
         self.RecordLines()
         self.RecordItems()
@@ -10164,7 +10187,18 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._worker_graph.work((nodes, links, bounds, viewport))
 
 
-    def _MakeItemBitmap(self, category, opts, dragrect=False):
+    def _GetItemStats(self, opts):
+        """Returns {?size, ?rows} for schema item if stats enabled and information available."""
+        stats = {}
+        if not self._show_stats: return stats
+        size = next((x["size_total"] for x in util.get(self._page, "statistics", "data", "table", default=[])
+                     if util.lceq(x["name"], opts["name"])), None)
+        if size is not None: stats["size"] = size
+        if opts.get("count") is not None: stats["rows"] = util.count(opts, unit="row")
+        return stats
+
+
+    def _MakeItemBitmap(self, category, opts, stats=None, dragrect=False):
         """Returns wx.Bitmap representing a schema item like table."""
         w, h = self.MINW, self.HEADERH + self.HEADERP + self.FOOTERH
         font, boldfont = self.Font, self.Font.Bold()
@@ -10184,6 +10218,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 if v: colmax[k] = max(colmax[k], extent[0] + extent[3])
         w = max(w, self.LPAD + 2 * self.HPAD + sum(colmax.values()))
         h += self.LINEH * len(opts.get("columns") or [])
+        if stats: h += self.STATS_H - self.FOOTERH
 
         # Make transparency mask for excluding content outside rounded corners
         bmp = wx.Bitmap(w, h)
@@ -10198,7 +10233,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         dc = wx.MemoryDC(bmp)
         dc.TextForeground = self.ForegroundColour
 
-        # Fill header and footer gradient, make blank middle
+        # Fill header and footer gradient, draw separators, make blank middle
         bg, gradfrom = self.BackgroundColour, self.GradientColourFrom
         if dragrect:
             bg = gradfrom = self._colour_dragbg
@@ -10207,7 +10242,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         dc.DrawRoundedRectangle(0, 0, w, h, self.BRADIUS)
         dc.Pen   = controls.PEN(bg)
         dc.Brush = controls.BRUSH(bg)
-        dc.DrawRectangle(1, self.HEADERH, w - 2, h - self.HEADERH - self.FOOTERH)
+        dc.DrawRectangle(1, self.HEADERH, w - 2, self.HEADERP + self.LINEH * len(opts.get("columns") or []))
         dc.Pen = controls.PEN(self.BorderColour)
         dc.DrawLine(0, self.HEADERH, w, self.HEADERH)
 
@@ -10237,6 +10272,33 @@ class SchemaDiagram(wx.ScrolledWindow):
             if col["name"] in fks:
                 b, bw = fkbmp, fkbmp.Width
                 dc.DrawBitmap(b, w - bw - 6, dy + 1, useMask=True)
+
+        # Draw statistics texts
+        if stats:
+            font = self.Font
+            font.PointSize += self.FONT_STEP_STATS
+            dc.SetFont(font)
+
+            dx, dy = self.BRADIUS, h - self.STATS_H
+
+            dc.Pen = controls.PEN(self.BorderColour)
+            dc.DrawLine(0, dy, w, dy)
+
+            text1 = stats.get("rows")
+            text2 = util.format_bytes(stats["size"]) if "size" in stats else None
+
+            w1 = next(d[0] + d[3] for d in [dc.GetFullTextExtent(text1)]) if text1 else 0
+            w2 = next(d[0] + d[3] for d in [dc.GetFullTextExtent(text2)]) if text2 else 0
+            logger.info("%s: w1 %s w2 %s w %s. %s", title, w1, w2, w, [text1, text2])
+            if dx + w1 + w2 + self.BRADIUS > w and opts.get("count"):
+                text1 = util.plural("row", opts["count"], max_units=True)
+
+            dy += 1
+            if text1: dc.DrawText(text1, dx, dy)
+            if text2:
+                dc.TextForeground = self.BackgroundColour
+                dx = w - w2 - self.BRADIUS
+                dc.DrawText(text2, dx, dy)
 
         del dc
         bmp.SetMask(mask)
