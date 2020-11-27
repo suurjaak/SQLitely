@@ -1574,23 +1574,30 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         new_filenames = []
         for filename in filenames:
             _, basename = os.path.split(filename)
-            newpath = os.path.join(path, basename) if len(filenames) > 1 else path
-            if filename == newpath:
+            filename2 = os.path.join(path, basename) if len(filenames) > 1 else path
+            if filename == filename2:
                 logger.error("Attempted to save %s as itself.", filename)
                 wx.MessageBox("Cannot overwrite %s with itself." % filename,
                               conf.Title, wx.OK | wx.ICON_ERROR)
                 continue # for filename
-            try: shutil.copyfile(filename, newpath)
+            try: shutil.copyfile(filename, filename2)
             except Exception as e:
                 logger.exception("%r when trying to copy %s to %s.",
-                                 e, basename, newpath)
+                                 e, basename, filename2)
                 wx.MessageBox('Failed to copy "%s" to "%s":\n\n%s' %
-                              (basename, newpath, util.format_exc(e)),
+                              (basename, filename2, util.format_exc(e)),
                               conf.Title, wx.OK | wx.ICON_ERROR)
             else:
-                guibase.status("Saved a copy of %s as %s.", filename, newpath, log=True)
-                self.update_database_list(newpath)
-                new_filenames.append(newpath)
+                guibase.status("Saved a copy of %s as %s.", filename, filename2, log=True)
+                self.update_database_list(filename2)
+                new_filenames.append(filename2)
+
+                for dct in conf.LastActivePages, conf.LastSearchResults, \
+                           conf.SchemaDiagrams,  conf.SQLWindowTexts:
+                    if filename in dct: dct[filename2] = copy.deepcopy(dct[filename])
+                if filename in self.db_datas:
+                    self.db_datas[filename2] = copy.deepcopy(self.db_datas[filename])
+                    self.db_datas[filename2]["name"] = filename2
 
         if not new_filenames: return
         for i in range(1, self.list_db.GetItemCount()):
