@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.11.2020
+@modified    27.11.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -482,7 +482,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             fh, self.filename = tempfile.mkstemp(".db")
             os.close(fh)
             self.name = "New database"
-            if Database.temp_counter.get() > 1: self.name += " (%s)" % Database.temp_counter
+            if Database.temp_counter > 1: self.name += " (%s)" % Database.temp_counter
             Database.temp_counter += 1
         self.id_counter = itertools.count(1)
         self.filesize = None
