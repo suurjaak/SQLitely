@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.11.2020
+@modified    26.11.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -869,16 +869,6 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
-    def notify_rename(self, category, oldname, newname):
-        """
-        Repopulates schema, retaining category item ID over rename.
-        """
-        self.schema[category][newname] = self.schema[category].pop(oldname)
-        self.schema[category][newname].update(name=newname, tbl_name=newname)
-        self.schema[category][newname]["meta"].update(name=newname)
-        self.populate_schema(count=True, parse=True)
-
-
     def populate_schema(self, count=False, parse=False, category=None, name=None):
         """
         Retrieves metadata on all database tables, triggers etc.
@@ -1553,6 +1543,82 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 result[name] = value
 
         return result
+
+
+    def notify_rename(self, category, oldname, newname):
+        """
+        Repopulates schema, retaining category item ID over rename.
+        """
+        category, reloads = category.lower(), defaultdict(list) # {category: [name, ]}
+        reloads[category].append(newname)
+        for subcategory, submap in self.get_related(category, oldname).items():
+            for subname, subitem in submap.items():
+                reloads[subcategory].append(subname)
+
+        opts = self.schema[category].pop(oldname)
+        tbl_name = newname if category in ("table", "view") else opts["tbl_name"]
+        opts.update(name=newname, tbl_name=tbl_name)
+        opts["meta"].update(name=newname)
+        self.schema[category][newname] = opts
+        for mycategory, names in reloads.items():
+            for myname in names:
+                self.populate_schema(category=mycategory, name=myname, parse=True)
+
+
+    def rename_item(self, category, name, name2):
+        """
+        Carries out item renaming, using "ALTER TABLE" if table else dropping
+        and re-creating the schema item under the new name. Retains item ID.
+        """
+        if util.lceq(name, name2): return
+        category, item = category.lower(), self.get_category(category, name)
+        altersql, err = grammar.generate(dict(name=name, name2=name2),
+                                         category="ALTER %s" % category.upper())
+        if err: raise Exception(err)
+
+        try: self.executescript(altersql, name="ALTER")
+        except Exception as e:
+            logger.exception("Error executing SQL.")
+            try: self.execute("ROLLBACK")
+            except Exception: pass
+            raise e
+        else:
+            resets  = defaultdict(dict) # {category: {name: SQL}}
+            renames = {"table": {name: name2}}
+            if "table" == category and name2 == grammar.quote(name2):
+                # Modify sqlite_master directly, as "ALTER TABLE x RENAME TO y"
+                # sets a quoted name "y" to CREATE statements, including related objects,
+                # regardless of whether the name required quoting.
+                renames = {"table": {name: name2}}
+                sql, _ = grammar.transform(item["sql"], renames=renames)
+                if sql: resets["table"][name2] = sql
+                for subcategory, submap in self.get_related(category, name).items():
+                    for subitem in submap.values():
+                        sql, _ = grammar.transform(subitem["sql"], renames=renames)
+                        if sql: resets[subcategory][subitem["name"]] = sql
+
+            if resets: self.update_sqlite_master(resets)
+            self.notify_rename(category, name, name2)
+                
+
+    def update_sqlite_master(self, schema):
+        """
+        Updates CREATE-statements in sqlite_master directly.
+
+        @param   schema  {category: {name: CREATE SQL}}
+        """
+        try:
+            v = self.execute("PRAGMA schema_version", log=False).fetchone().values()[0]
+            schema = dict(schema, version=v)
+            sql, err = grammar.generate(schema, category="ALTER MASTER")
+            if err: logger.warn("Error syncing sqlite_master contents: %s.", err)
+            else: self.executescript(sql, name="ALTER")
+        except Exception:
+            logger.warn("Error syncing sqlite_master contents.", exc_info=True)
+            try: self.execute("ROLLBACK")
+            except Exception: pass
+
+
 
 
 

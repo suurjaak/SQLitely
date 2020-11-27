@@ -66,7 +66,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    17.11.2020
+@modified    27.11.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -5025,11 +5025,26 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
     def _OnKey(self, event):
         """Fires EVT_TREE_ITEM_ACTIVATED event on pressing enter."""
         event.Skip()
-        if event.KeyCode not in KEYS.ENTER: return
+        if event.KeyCode not in KEYS.ENTER or self.GetEditControl() is not None: return
         item = self.GetSelection()
         if item and item.IsOk():
             evt = self.DummyEvent(item)
             for f in self._handlers.get(wx.EVT_TREE_ITEM_ACTIVATED): f(evt)
+
+
+    def CreateEditCtrl(self, item, column):
+        """
+        Creates an edit control for editing a label of an item.
+
+        @param   item    an instance of TreeListItem
+        @param   column  an integer specifying the column index
+        """
+        ctrl = super(TreeListCtrl, self).CreateEditCtrl(item, column)
+        def on_kill_focus(event):
+            event.Skip()
+            if ctrl: wx.CallAfter(ctrl.StopEditing)
+        ctrl.Bind(wx.EVT_KILL_FOCUS, on_kill_focus)
+        return ctrl       
 
 
 

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.11.2020
+@modified    27.11.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1100,7 +1100,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if rename or modified is not None:
             suffix = "*" if modified else ""
             title1 = self.db_datas[event.source.db.filename].get("title") \
-                     or self.get_unique_tab_title(event.source.db.name)
+                     or make_unique_page_title(event.source.db.name, self.notebook, front=True)
             self.db_datas[event.source.db.filename]["title"] = title1
             title2 = title1 + suffix
             if self.notebook.GetPageText(idx) != title2:
@@ -2310,7 +2310,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if not db: db = self.load_database(filename)
             if db:
                 guibase.status("Opening database %s." % db)
-                tab_title = self.get_unique_tab_title(db.name)
+                tab_title = make_unique_page_title(db.name, self.notebook, front=True)
                 self.db_datas.setdefault(db.filename, defaultdict(lambda: None, name=db.filename))
                 self.db_datas[db.filename]["title"] = tab_title
                 page = DatabasePage(self.notebook, tab_title, db, self.memoryfs)
@@ -2372,19 +2372,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if len(notdb_filenames) == 1: t = "a " + t[:-1]
             wx.MessageBox("Not %s:\n\n%s" % (t, "\n".join(notdb_filenames)),
                           conf.Title, wx.OK | wx.ICON_ERROR)
-
-
-    def get_unique_tab_title(self, title):
-        """
-        Returns a title that is unique for the current notebook - if the
-        specified title already exists, appends a counter to the end,
-        e.g. "..longpath\myname.db (2)". Title is shortened from the left
-        if longer than allowed.
-        """
-        title = util.ellipsize(title, conf.MaxTabTitleLength, front=True)
-        all_titles = [self.notebook.GetPageText(i)
-                      for i in range(self.notebook.GetPageCount())]
-        return util.make_unique(title, all_titles, suffix=" (%s)", case=True)
 
 
 
@@ -2492,19 +2479,20 @@ class DatabasePage(wx.Panel):
 
         self.Layout()
         # Hack to get diagram-page diagram lay itself out
-        self.notebook.SetSelection(self.pageorder[self.page_diagram])
+        notebook.SetSelection(self.pageorder[self.page_diagram])
         # Hack to get info-page multiline TextCtrls to layout without quirks.
-        self.notebook.SetSelection(self.pageorder[self.page_info])
+        notebook.SetSelection(self.pageorder[self.page_info])
         # Hack to get SQL window size to layout without quirks.
-        self.notebook.SetSelection(self.pageorder[self.page_sql])
+        notebook.SetSelection(self.pageorder[self.page_sql])
         for i in range(1, self.notebook_sql.GetPageCount() - 1):
             self.notebook_sql.SetSelection(i)
         self.notebook_sql.SetSelection(0)
-        self.notebook.SetSelection(self.pageorder[self.page_search])
+        notebook.SetSelection(self.pageorder[self.page_search])
+        notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_page, notebook)
         # Restore last active page
         if db.filename in conf.LastActivePage \
-        and conf.LastActivePage[db.filename] != self.notebook.Selection:
-            self.notebook.SetSelection(conf.LastActivePage[db.filename])
+        and conf.LastActivePage[db.filename] != notebook.Selection:
+            notebook.SetSelection(conf.LastActivePage[db.filename])
 
         try:
             self.load_data()
@@ -2630,11 +2618,16 @@ class DatabasePage(wx.Panel):
         tree.AddRoot("Loading data..")
         tree.SetMainColumn(0)
         tree.SetColumnAlignment(1, wx.ALIGN_RIGHT)
-        self.Bind(wx.EVT_BUTTON, self.on_refresh_data, button_refresh)
+        tree.SetColumnEditable(0, True)
+
+        self.Bind(wx.EVT_BUTTON, self.on_refresh_tree_data, button_refresh)
         tree.Bind(wx.EVT_TREE_ITEM_ACTIVATED,   self.on_change_tree_data)
         tree.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_data)
+        tree.Bind(wx.EVT_TREE_BEGIN_LABEL_EDIT, self.on_editstart_tree)
+        tree.Bind(wx.EVT_TREE_END_LABEL_EDIT,   self.on_editend_tree)
         tree.Bind(wx.EVT_CONTEXT_MENU,          self.on_rclick_tree_data)
         tree.Bind(wx.EVT_SIZE,                  self.on_size_tree)
+        tree.Bind(wx.EVT_CHAR_HOOK,             self.on_key_tree)
 
         sizer1.Add(sizer_topleft, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
         sizer1.Add(tree, proportion=1,
@@ -2714,6 +2707,7 @@ class DatabasePage(wx.Panel):
         tree.AddRoot("Loading schema..")
         tree.SetMainColumn(0)
         tree.SetColumnAlignment(1, wx.ALIGN_RIGHT)
+        tree.SetColumnEditable(0, True)
 
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_topleft = wx.BoxSizer(wx.HORIZONTAL)
@@ -2747,12 +2741,15 @@ class DatabasePage(wx.Panel):
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
         splitter.SplitVertically(panel1, panel2, 400)
 
-        self.Bind(wx.EVT_BUTTON, self.on_refresh_schema, button_refresh)
+        self.Bind(wx.EVT_BUTTON, self.on_refresh_tree_schema, button_refresh)
         self.Bind(wx.EVT_BUTTON, self.on_schema_create,  button_new)
         tree.Bind(wx.EVT_TREE_ITEM_ACTIVATED,   self.on_change_tree_schema)
         tree.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_schema)
+        tree.Bind(wx.EVT_TREE_BEGIN_LABEL_EDIT, self.on_editstart_tree)
+        tree.Bind(wx.EVT_TREE_END_LABEL_EDIT,   self.on_editend_tree)
         tree.Bind(wx.EVT_CONTEXT_MENU,          self.on_rclick_tree_schema)
         tree.Bind(wx.EVT_SIZE,                  self.on_size_tree)
+        tree.Bind(wx.EVT_CHAR_HOOK,             self.on_key_tree)
         self.Bind(components.EVT_SCHEMA_PAGE,   self.on_schema_page_event)
         self.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CLOSING,
                   self.on_close_schema_page, nb)
@@ -3351,6 +3348,79 @@ class DatabasePage(wx.Panel):
                 wx.MessageBox("Re-created %s." % util.plural("index", indexes),
                               conf.Title, wx.ICON_INFORMATION)
             finally: busy.Close()
+        elif "rename" == cmd:
+            category, name, name2 = (list(args) + [None])[:3]
+            item = self.db.get_category(category, name)
+            if not item: return
+            if not name2:
+                dlg = wx.TextEntryDialog(self, 
+                    'Rename %s %s to:' % (category, grammar.quote(name, force=True)),
+                    conf.Title, value=name, style=wx.OK | wx.CANCEL
+                )
+                dlg.CenterOnParent()
+                if wx.ID_OK != dlg.ShowModal(): return
+
+                name2 = dlg.GetValue().strip()
+                if not name2 or name2 == name: return
+
+            duplicate = next((v for vv in self.db.schema.values() for v in vv.values()
+                              if util.lceq(name2, v["name"])), None)
+            if duplicate:
+                wx.MessageBox(
+                    "Cannot rename %s: there already exists a %s named %s." %
+                    (category, duplicate["type"], grammar.quote(duplicate["name"], force=True)),
+                    conf.Title, wx.ICON_WARNING | wx.OK
+                )
+                return
+
+            pages = [pp.get(category, {}).get(name)
+                     for pp in (self.data_pages, self.schema_pages)]
+            for page in pages:
+                if isinstance(page, components.DataObjectPage):
+                    if page.IsChanged():
+                        res = wx.MessageBox(
+                            "There are unsaved changes to table %s data.\n\n"
+                            "Commit changes before rename?" % grammar.quote(name, force=True),
+                            conf.Title, wx.ICON_WARNING | wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT
+                        )
+                        if res == wx.CANCEL: return
+                        elif res == wx.YES:
+                            if not page.Save(): return
+                        else: page.Rollback(force=True)
+                    page.CloseCursor()
+                if isinstance(page, components.SchemaObjectPage):
+                    if page.IsChanged():
+                        if wx.CANCEL == wx.MessageBox(
+                            "There are unsaved changes to table %s schema.\n\n"
+                            "Discard changes before rename?" % grammar.quote(name, force=True),
+                            conf.Title, wx.ICON_WARNING | wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT
+                        ): return
+                    page.SetReadOnly()
+            self.toggle_cursors(category, name, close=True)
+
+            self.db.rename_item(category, name, name2)
+
+            self.load_tree_data()
+            self.load_tree_schema()
+            self.diagram.Populate()
+            self.on_pragma_refresh(reload=True)
+            for page, pagemap, nb in zip(pages, [self.data_pages, self.schema_pages],
+                                         [self.notebook_data, self.notebook_schema]):
+                for myitem in self.pages_closed.get(nb, []):
+                    if myitem["name"] == name: myitem["name"] = name2
+                    break # for myitem
+                if not page: continue # for page, pagemap, nb
+
+                pagemap[category].pop(name)
+                title = "%s %s" % (category.capitalize(), util.unprint(grammar.quote(name2)))
+                title = make_unique_page_title(title, nb, skip=nb.GetPageIndex(page))
+                nb.SetPageText(nb.GetPageIndex(page), title)
+                pagemap[category][name2] = page
+                if isinstance(page, components.SchemaObjectPage):
+                    page.Reload(item=self.db.get_category(category, name2))
+            self.toggle_cursors(category, name2)
+            return True
+
         elif "refresh" == cmd:
             self.reload_schema(count=True, parse=True)
             self.update_info_panel()
@@ -3494,6 +3564,14 @@ class DatabasePage(wx.Panel):
         notebook.Bind(wx.EVT_MENU, on_close_hotkey,  id=id_close)
         notebook.Bind(wx.EVT_MENU, on_reopen_hotkey, id=id_reopen)
         notebook.SetAcceleratorTable(wx.AcceleratorTable(accelerators))
+
+
+    def on_change_page(self, event):
+        """
+        Handler for changing a page in the main Notebook, focuses content.
+        """
+        event.Skip()
+        self.notebook.GetCurrentPage().SetFocus()
 
 
     def on_update_stc_schema(self, event=None):
@@ -4241,7 +4319,7 @@ class DatabasePage(wx.Panel):
         self.on_checksum_result({"sha1": "Cancelled", "md5": "Cancelled"})
 
 
-    def on_refresh_data(self, event):
+    def on_refresh_tree_data(self, event):
         """Refreshes the data tree."""
         self.load_tree_data(refresh=True)
 
@@ -4966,12 +5044,8 @@ class DatabasePage(wx.Panel):
 
     def add_data_page(self, data):
         """Opens and returns a data object page for specified object data."""
-        title = "%s %s" % (data["type"].capitalize(),
-                           util.ellipsize(util.unprint(grammar.quote(data["name"])),
-                                          conf.MaxTabTitleLength))
-        all_titles = [self.notebook_data.GetPageText(i).rstrip("*")
-                      for i in range(self.notebook_data.GetPageCount())]
-        title = util.make_unique(title, all_titles, suffix=" (%s)", case=True)
+        title = "%s %s" % (data["type"].capitalize(), util.unprint(grammar.quote(data["name"])))
+        title = make_unique_page_title(title, self.notebook_data)
         self.notebook_data.Freeze()
         try:
             p = components.DataObjectPage(self.notebook_data, self.db, data)
@@ -5004,7 +5078,7 @@ class DatabasePage(wx.Panel):
         return p
 
 
-    def on_refresh_schema(self, event=None):
+    def on_refresh_tree_schema(self, event=None):
         """Refreshes database schema tree and panel."""
         self.load_tree_schema(refresh=True)
 
@@ -5017,9 +5091,10 @@ class DatabasePage(wx.Panel):
             if c in ("table", "view") and not ("table" == category == c):
                 relateds.setdefault(c, set()).update(m)
 
-        for page in (p for c, nn in relateds.items()
+        for c, n, page in ((c, n, p) for c, nn in relateds.items()
                      for n, p in self.data_pages.get(c, {}).items() if n in nn):
-            page.CloseCursor() if close else page.Reload(force=True)
+            if close: page.CloseCursor()
+            else: page.Reload(force=True, item=self.db.get_category(c, n))
 
 
     def on_schema_create(self, event):
@@ -5043,19 +5118,15 @@ class DatabasePage(wx.Panel):
     def add_schema_page(self, data):
         """Opens and returns schema object page for specified object data."""
         if "name" in data:
-            title = "%s %s" % (data["type"].capitalize(),
-                               util.ellipsize(util.unprint(grammar.quote(data["name"])),
-                                              conf.MaxTabTitleLength))
+            title = "%s %s" % (data["type"].capitalize(), util.unprint(grammar.quote(data["name"])))
             busy = controls.BusyPanel(self.notebook_schema, "Opening %s %s." %
                                       (data["type"], grammar.quote(data["name"], force=True)))
         else:
             title, busy = "* New %s *" % data["type"], None
-        all_titles = [self.notebook_schema.GetPageText(i).rstrip("*")
-                      for i in range(self.notebook_schema.GetPageCount())]
-        title = util.make_unique(title, all_titles, suffix=" (%s)", case=True)
+        title = make_unique_page_title(title, self.notebook_schema)
         self.notebook_schema.Freeze()
         try:
-            p = components.SchemaObjectPage(self.notebook_schema, self.db, data, self.toggle_cursors)
+            p = components.SchemaObjectPage(self.notebook_schema, self.db, data)
             self.schema_pages[data["type"]][data.get("name") or str(id(p))] = p
             self.notebook_schema.InsertPage(0, page=p, text=title, select=True)
             for i, item in enumerate(self.pages_closed.get(self.notebook_schema, [])):
@@ -5109,12 +5180,8 @@ class DatabasePage(wx.Panel):
             self.toggle_cursors(category, name)
         if (modified is not None or updated is not None) and event.source:
             if name:
-                title = "%s %s" % (category.capitalize(),
-                                   util.ellipsize(util.unprint(grammar.quote(name)),
-                                                  conf.MaxTabTitleLength))
-                all_titles = [self.notebook_schema.GetPageText(i).rstrip("*")
-                              for i in range(self.notebook_schema.GetPageCount()) if i != idx]
-                title = util.make_unique(title, all_titles, suffix=" (%s)", case=True)
+                title = "%s %s" % (category.capitalize(), util.unprint(grammar.quote(name)))
+                title = make_unique_page_title(title, self.notebook_schema, skip=idx)
                 if event.source.IsChanged(): title += "*"
                 if self.notebook_schema.GetPageText(idx) != title:
                     self.notebook_schema.SetPageText(idx, title)
@@ -5243,12 +5310,8 @@ class DatabasePage(wx.Panel):
             self.handle_command("reindex", category, name)
         if (modified is not None or updated is not None) and event.source:
             if name:
-                title = "%s %s" % (category.capitalize(),
-                                   util.ellipsize(util.unprint(grammar.quote(name)),
-                                                  conf.MaxTabTitleLength))
-                all_titles = [self.notebook_data.GetPageText(i).rstrip("*")
-                              for i in range(self.notebook_data.GetPageCount()) if i != idx]
-                title = util.make_unique(title, all_titles, suffix=" (%s)", case=True)
+                title = "%s %s" % (category.capitalize(), util.unprint(grammar.quote(name)))
+                title = make_unique_page_title(title, self.notebook_data, skip=idx)
                 if event.source.IsChanged(): title += "*"
                 if self.notebook_data.GetPageText(idx) != title:
                     self.notebook_data.SetPageText(idx, title)
@@ -6133,6 +6196,38 @@ class DatabasePage(wx.Panel):
         tree.SetColumnWidth(1, tree.Size.width - tree.GetColumnWidth(0) - 30)
 
 
+    def on_key_tree(self, event):
+        """Handler for pressing keys in data/schema trees, opens rename dialog."""
+        tree = event.EventObject
+        tree = tree if isinstance(tree, controls.TreeListCtrl) else \
+               tree.Parent if isinstance(tree, wx.lib.agw.hypertreelist.TreeListMainWindow) else None
+        if not tree or event.KeyCode not in (wx.WXK_F2, wx.WXK_NUMPAD_F2):
+            return event.Skip()
+        item = tree.GetSelection()
+        data = tree.GetItemPyData(item)
+        if data and isinstance(data, dict) and data.get("type") in self.db.CATEGORIES:
+            tree.EditLabel(item)
+
+
+    def on_editstart_tree(self, event):
+        """Handler for clicking to edit tree item, allows if schema item node."""
+        tree = event.EventObject
+        data = tree.GetItemPyData(event.GetItem())
+        if not data or data.get("type") not in self.db.CATEGORIES \
+        or tree is self.tree_schema and "category" != data.get("parent", {}).get("level"):
+            event.Veto()
+
+
+    def on_editend_tree(self, event):
+        """Handler for clicking to edit tree item, allows if schema item node."""
+        if not event.IsEditCancelled():
+            data = event.EventObject.GetItemPyData(event.GetItem())
+            name2 = event.GetLabel().strip()
+            if not name2 or not self.handle_command("rename", data["type"], data["name"], name2):
+                event.Veto()
+                event.EventObject.SetFocus()
+
+
     def on_rclick_tree_data(self, event):
         """
         Handler for right-clicking an item in the tables list,
@@ -6178,7 +6273,7 @@ class DatabasePage(wx.Panel):
         menu = wx.Menu()
         item_file = item_file_single = item_database = item_import = None
         item_reindex = item_reindex_all = item_truncate = None
-        item_drop = item_drop_all = item_create = None
+        item_rename = item_drop = item_drop_all = item_create = None
         if data.get("type") in ("table", "view"): # Single table/view
             item_name = wx.MenuItem(menu, -1, "%s %s" % (
                         data["type"].capitalize(),
@@ -6216,27 +6311,31 @@ class DatabasePage(wx.Panel):
                 item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
                 item_truncate = wx.MenuItem(menu, -1, "Truncate table")
                 item_reindex  = wx.MenuItem(menu, -1, "Reindex table")
-            item_drop = wx.MenuItem(menu, -1, "Drop %s" % data["type"])
+            item_rename = wx.MenuItem(menu, -1, "Rena&me %s\t(F2)" % data["type"])
+            item_drop   = wx.MenuItem(menu, -1, "Drop %s" % data["type"])
 
         elif "column" == data.get("type"): # Column
             item_name = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
                         util.unprint(grammar.quote(data["parent"]["name"])),
                         util.unprint(grammar.quote(data["name"]))))
-            item_open     = wx.MenuItem(menu, -1, "&Open %s data" % data["parent"]["type"])
-            item_copy     = wx.MenuItem(menu, -1, "&Copy name")
-            item_copy_sql = wx.MenuItem(menu, -1, "Copy column S&QL")
+            item_open      = wx.MenuItem(menu, -1, "&Open %s data" % data["parent"]["type"])
+            item_open_meta = wx.MenuItem(menu, -1, "Open %s &schema" % data["parent"]["type"])
+            item_copy      = wx.MenuItem(menu, -1, "&Copy name")
+            item_copy_sql  = wx.MenuItem(menu, -1, "Copy column S&QL")
 
             item_name.Font = boldfont
 
             menu.Append(item_name)
             menu.AppendSeparator()
             menu.Append(item_open)
+            menu.Append(item_open_meta)
             menu.Append(item_copy)
             menu.Append(item_copy_sql)
 
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
                       item_name)
             menu.Bind(wx.EVT_MENU, functools.partial(open_data, data["parent"]), item_open)
+            menu.Bind(wx.EVT_MENU, functools.partial(open_meta, data["parent"]), item_open_meta)
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"], "column name"), item_copy)
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
                     functools.partial(self.db.get_sql, data["parent"]["type"], data["parent"]["name"], data["name"]),
@@ -6289,6 +6388,8 @@ class DatabasePage(wx.Panel):
                 menu.AppendSeparator()
                 menu.Append(item_drop_all)
                 menu.Append(item_create)
+            if item_rename:
+                menu.Append(item_rename)
             if item_reindex_all:
                 menu.Append(item_reindex_all)
             if item_drop:
@@ -6315,6 +6416,8 @@ class DatabasePage(wx.Panel):
                 if not self.db.schema["table"][data["name"]].get("count"):
                     item_truncate.Enable(False)
                 menu.Bind(wx.EVT_MENU, functools.partial(self.on_truncate, data["name"]), item_truncate)
+            if item_rename:
+                menu.Bind(wx.EVT_MENU, lambda e: tree.EditLabel(item), item_rename)
             if item_drop:
                 menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["type"], [data["name"]]), item_drop)
 
@@ -6374,10 +6477,12 @@ class DatabasePage(wx.Panel):
             tree.FindAndActivateItem(type=data["type"], name=data["name"],
                                      level=data["level"])
         def create_object(category, *_, **__):
-            sourcecat, sourcename = data["type"], data["name"]
-            if data.get("parent"):
-                sourcecat, sourcename = data["parent"]["type"], data["parent"]["name"]
-            self.handle_command("create", category, sourcecat, sourcename)
+            args = []
+            if data.get("type") in self.db.CATEGORIES:
+                args = data["type"], data["name"]
+            elif data.get("parent"):
+                args = data["parent"]["type"], data["parent"]["name"]
+            self.handle_command("create", category, *args)
         def copy_related(*_, **__):
             self.handle_command("copy", "related", data["type"], data["name"])
 
@@ -6513,6 +6618,8 @@ class DatabasePage(wx.Panel):
             item_copy      = wx.MenuItem(menu, -1, "&Copy name")
             item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s S&QL" % data["type"])
             item_copy_rel  = wx.MenuItem(menu, -1, "Copy all &related SQL")
+            item_rename    = wx.MenuItem(menu, -1, "Rena&me %s\t(F2)" % data["type"]) \
+                             if "category" == data.get("parent", {}).get("type") else None
             item_drop      = wx.MenuItem(menu, -1, "Drop %s" % data["type"])
             item_reindex   = wx.MenuItem(menu, -1, "Reindex") \
                              if data["type"] in ("table", "index") else None
@@ -6538,6 +6645,8 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
                       functools.partial(self.db.get_sql, **sqlkws), "%s SQL" % data["type"]), item_copy_sql)
             menu.Bind(wx.EVT_MENU, copy_related, item_copy_rel)
+            if item_rename:
+                menu.Bind(wx.EVT_MENU, lambda e: tree.EditLabel(item), item_rename)
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["type"], [data["name"]]),
                       item_drop)
 
@@ -6560,6 +6669,8 @@ class DatabasePage(wx.Panel):
                     submenu.Append(it)
                     menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), it)
 
+            if item_rename:
+                menu.Append(item_rename)
             menu.Append(item_drop)
             if item_reindex:
                 menu.Append(item_reindex)
@@ -6639,3 +6750,21 @@ class AboutDialog(wx.Dialog):
             self.html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
             self.html.ForegroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
         wx.CallAfter(dorefresh) # Postpone to allow conf to update
+
+
+def make_unique_page_title(title, notebook, maxlen=None, front=False, skip=-1):
+    """
+    Returns a title that is unique for the given notebook - if the specified
+    title already exists, appends a counter to the end, e.g. "name (2)".
+
+    @param   notebook  notebook with GetPageCount() and GetPageText()
+    @param   maxlen    defaults to conf.MaxTabTitleLength, ignored if <= 0
+    @param   front     whether to ellipsize title from the front or the back
+                       if longer than maxlen
+    @param   skip      index of notebook page to skip, if any
+    """
+    if maxlen is None: maxlen = conf.MaxTabTitleLength
+    if maxlen > 0: title = util.ellipsize(title, maxlen, front=front)
+    all_titles = [notebook.GetPageText(i).rstrip("*")
+                  for i in range(notebook.GetPageCount()) if i != skip]
+    return util.make_unique(title, all_titles, suffix=" (%s)", case=True)

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.11.2020
+@modified    26.11.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -2861,7 +2861,7 @@ class SchemaObjectPage(wx.Panel):
 
     def __init__(self, parent, db, item, id=wx.ID_ANY, pos=wx.DefaultPosition,
                  size=wx.DefaultSize):
-        wx.Panel.__init__(self, parent, pos=pos, size=size)
+        wx.Panel.__init__(self, parent, pos=pos, size=size, id=id)
         ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
         ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
 
@@ -3070,7 +3070,7 @@ class SchemaObjectPage(wx.Panel):
         return result
 
 
-    def Reload(self, force=False):
+    def Reload(self, force=False, item=None):
         """Refreshes content if not changed."""
         if not force and self.IsChanged(): return
 
@@ -3079,7 +3079,7 @@ class SchemaObjectPage(wx.Panel):
         self._types = self._GetColumnTypes()
         self._tables = [x["name"] for x in self._db.get_category("table").values()]
         self._views  = [x["name"] for x in self._db.get_category("view").values()]
-        item = self._db.get_category(self._category, self._item["name"])
+        item = item or self._db.get_category(self._category, self._item["name"])
         if not item: return
         item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
         self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
@@ -3112,7 +3112,12 @@ class SchemaObjectPage(wx.Panel):
     def IsReadOnly(self):
         """Returns whether page is read-only or in edit mode."""
         return not self._editmode
-    ReadOnly = property(IsReadOnly)
+    def SetReadOnly(self, editmode=False):
+        """Sets page into read-only or edit mode, discarding any changes."""
+        editmode = bool(editmode)
+        if editmode != self._editmode:
+            self._OnToggleEdit(force=True)
+    ReadOnly = property(IsReadOnly, SetReadOnly)
 
 
     def _AssignColumnIDs(self, meta):
@@ -4788,24 +4793,6 @@ class SchemaObjectPage(wx.Panel):
         panel.Parent.ContainingSizer.Layout()
 
 
-    def _UpdateSqliteMaster(self, schema):
-        """
-        Updates CREATE-statements in sqlite_master directly.
-
-        @param   schema  {category: {name: CREATE SQL}}
-        """
-        try:
-            v = self._db.execute("PRAGMA schema_version", log=False).fetchone().values()[0]
-            schema = dict(schema, version=v)
-            sql, err = grammar.generate(schema, category="ALTER MASTER")
-            if err: logger.warn("Error syncing sqlite_master contents: %s.", err)
-            else: self._db.executescript(sql, name="ALTER")
-        except Exception:
-            logger.warn("Error syncing sqlite_master contents.", exc_info=True)
-            try: self._db.execute("ROLLBACK")
-            except Exception: pass
-
-
     def _OnAddConstraint(self, event):
         """Opens popup for choosing constraint type."""
         menu = wx.Menu()
@@ -5318,7 +5305,7 @@ class SchemaObjectPage(wx.Panel):
     def _OnRefresh(self, event=None, parse=False, name0=None):
         """Handler for clicking refresh, updates database data in controls."""
         if name0: self._db.notify_rename(self._category, name0, self.Name)
-        else: self._db.populate_schema(count=parse, parse=parse)
+        else: self._db.populate_schema(parse=parse)
         prevs = {"_types": self._types, "_tables": self._tables,
                  "_views": self._views, "_item": self._item}
         self._types = self._GetColumnTypes()
@@ -5358,10 +5345,10 @@ class SchemaObjectPage(wx.Panel):
         self._OnSave() if self._editmode else self._OnToggleEdit()
 
 
-    def _OnToggleEdit(self, event=None, parse=False, name0=None):
+    def _OnToggleEdit(self, event=None, parse=False, name0=None, force=False):
         """Handler for toggling edit mode."""
         is_changed = self.IsChanged()
-        if is_changed and wx.YES != controls.YesNoMessageBox(
+        if is_changed and not force and wx.YES != controls.YesNoMessageBox(
             "There are unsaved changes, "
             "are you sure you want to discard them?",
             conf.Title, wx.ICON_INFORMATION, defaultno=True
@@ -5532,7 +5519,7 @@ class SchemaObjectPage(wx.Panel):
             self._has_alter = True
             self._newmode = False
             self._OnToggleEdit(parse=True, name0=name0 if name0 and name0 != meta2["name"] else None)
-            if post: self._PostEvent(updated=True)
+            if post: self._PostEvent(updated=True, reload_grids=True)
             return True
 
 
@@ -5540,7 +5527,7 @@ class SchemaObjectPage(wx.Panel):
         if not self._newmode and self._sql0_applies \
         and self._item["sql"]  == self._original["sql"] \
         and self._item["sql0"] != self._original["sql0"]: # A formatting change, e.g. comment
-            self._UpdateSqliteMaster({self._category: {self.Name: sql1}})
+            self._db.update_sqlite_master({self._category: {self.Name: sql1}})
             return finalize(post=False)
 
 
@@ -5578,13 +5565,9 @@ class SchemaObjectPage(wx.Panel):
                         for subitem in alterargs.get(category) or ():
                             data[category][subitem["name"]] = subitem["sql"]
                 for reltable in alterargs.get("table") or ():
-                    if reltable["name"] != grammar.quote(reltable["name"]):
-                        continue # for reltable
-                    data["table"][reltable["name"]] = reltable["sql0"]
-                    for category in ("index", "view", "trigger"):
-                        for subitem in reltable.get(category) or ():
-                            data[category][subitem["name"]] = subitem["sql"]
-            if data: self._UpdateSqliteMaster(data)
+                    if reltable["name"] == grammar.quote(reltable["name"]):
+                        data["table"][reltable["name"]] = reltable["sql0"]
+            if data: self._db.update_sqlite_master(data)
         finally:
             busy.Close()
 
@@ -9735,7 +9718,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             menu.Append(item_name)
             menu.AppendSeparator()
 
-            item_reidx  = item_trunc = None
+            item_reidx  = item_trunc = item_rename = None
             item_data   = menu.Append(wx.ID_ANY, "Open %s &data"   % catlabel)
             item_schema = menu.Append(wx.ID_ANY, "Open %s &schema\t(Enter)" % catlabel)
             item_copy   = menu.Append(wx.ID_ANY, "&Copy %s" % util.plural("name", items, numbers=False))
@@ -9749,6 +9732,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                     it = wx.MenuItem(submenu, -1, "New &%s" % subcategory)
                     submenu.Append(it)
                     menu.Bind(wx.EVT_MENU, cmd("create", subcategory, next(iter(categories)), items[0]["name"]), it)
+                item_rename = menu.Append(wx.ID_ANY, "Rena&me %s\t(F2)" % next(iter(categories)))
             if "table" in categories:
                 label = util.plural("table", categories["table"], numbers=False)
                 item_reidx = menu.Append(wx.ID_ANY, "Reindex %s"  % label)
@@ -9773,6 +9757,8 @@ class SchemaDiagram(wx.ScrolledWindow):
                 menu.Bind(wx.EVT_MENU, cmd("reindex",  "table", *[o["name"] for o in categories["table"]]), item_reidx)
             if item_trunc:
                 menu.Bind(wx.EVT_MENU, cmd("truncate", *[o["name"] for o in categories["table"]]), item_trunc)
+            if item_rename:
+                menu.Bind(wx.EVT_MENU, cmd("rename", next(iter(categories)), items[0]["name"]), item_rename)
 
         self.PopupMenu(menu)
 
@@ -10520,6 +10506,8 @@ class SchemaDiagram(wx.ScrolledWindow):
             self._page.handle_command("drop", None, *[o["name"] for o in items])
         elif event.KeyCode in controls.KEYS.INSERT:
             self.OpenContextMenu()
+        elif event.KeyCode in (wx.WXK_F2, wx.WXK_NUMPAD_F2) and items:
+            self._page.handle_command("rename", items[0]["category"], items[0]["name"])
         elif event.KeyCode in controls.KEYS.ENTER and items:
             for o in items: self._page.handle_command("schema", o["category"], o["name"])
         elif event.KeyCode in controls.KEYS.ARROW + controls.KEYS.NUMPAD_ARROW and items:
