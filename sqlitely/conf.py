@@ -27,7 +27,7 @@ import wx
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.2.dev40"
+Version = "1.2.dev41"
 VersionDate = "27.11.2020"
 
 if getattr(sys, "frozen", False):
@@ -48,9 +48,9 @@ else:
 ConfigFile = "%s.ini" % os.path.join(EtcDirectory, Title.lower())
 
 """List of attribute names that can be saved to and loaded from ConfigFile."""
-FileDirectives = ["AllowMultipleInstances", "ConsoleHistoryCommands",
-    "DBDiagrams", "DBFiles", "DBSort", "LastActivePage", "LastExportType",
-    "LastSearchResults", "LastSelectedFiles", "LastUpdateCheck", "RecentFiles",
+FileDirectives = ["AllowMultipleInstances", "ConsoleHistoryCommands", "DBFiles",
+    "DBSort", "LastActivePages", "LastExportType", "LastSearchResults",
+    "LastSelectedFiles", "LastUpdateCheck", "RecentFiles", "SchemaDiagrams",
     "SearchHistory", "SearchInMeta", "SearchInData", "SearchUseNewTab",
     "SearchCaseSensitive", "SQLWindowTexts", "TrayIconEnabled",
     "UpdateCheckAutomatic", "WindowMaximized", "WindowMinimizedToTray",
@@ -78,9 +78,6 @@ DBExtensions = [".db", ".sqlite", ".sqlite3"]
 """Database list sort state, [col, ascending]."""
 DBSort = []
 
-"""Database schema diagram settings, as {path: {..}}."""
-DBDiagrams = {}
-
 """Whether program can have multiple instances running, or reuses one instance."""
 AllowMultipleInstances = False
 
@@ -97,7 +94,7 @@ IPCName = urllib.quote_plus("%s-%s" % (wx.GetUserId(), ApplicationFile))
 ConsoleHistoryCommands = []
 
 """Index of last active page in database tab, {db path: index}."""
-LastActivePage = {}
+LastActivePages = {}
 
 """Last export format, for uniform setting across components."""
 LastExportType = "html"
@@ -128,6 +125,9 @@ RunChecksums = True
 
 """Run statistics analysis automatically (may take a while for large databases)."""
 RunStatistics = True
+
+"""Database schema diagram settings, as {path: {..}}."""
+SchemaDiagrams = {}
 
 """
 Texts entered in global search, used for drop down auto-complete.

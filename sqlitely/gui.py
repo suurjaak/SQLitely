@@ -1525,12 +1525,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                      for i in range(1, self.list_db.GetItemCount())]
             for f in files:
                 self.db_datas.get(f, {}).pop("name", None)
-                conf.LastSearchResults.pop(f, None)
-                for lst in conf.DBFiles, conf.RecentFiles:
-                    if f in lst: lst.remove(f)
-                for dct in conf.DBDiagrams, conf.LastActivePage, \
-                           conf.LastSearchResults, conf.SQLWindowTexts:
-                    dct.pop(f, None)
+                self.clear_database_data(f)
             self.list_db.Freeze()
             try:
                 for i in range(self.list_db.GetItemCount())[::-1]:
@@ -1631,10 +1626,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         ): return
 
         for filename in self.dbs_selected:
-            for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
-                if filename in lst: lst.remove(filename)
-            for dct in conf.DBDiagrams, conf.LastSearchResults, self.dbs:
-                dct.pop(filename, None)
+            self.clear_database_data(filename)
+            self.dbs.pop(filename, None)
             self.db_datas.get(filename, {}).pop("name", None)
         self.list_db.Freeze()
         try:
@@ -1663,10 +1656,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             # - i, as item count is getting smaller one by one
             selected = selecteds[i] - i
             filename = self.list_db.GetItemText(selected)
-            for lst in (conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles,
-                        conf.DBDiagrams, self.dbs_selected):
-                if filename in lst: lst.remove(filename)
-            conf.LastSearchResults.pop(filename, None)
+            self.clear_database_data(filename)
             self.db_datas.get(filename, {}).pop("name", None)
             self.list_db.DeleteItem(selected)
         self.update_database_list()
@@ -1728,10 +1718,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     self.notebook.DeletePage(self.notebook.GetPageIndex(page))
                 os.unlink(filename)
 
-                for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
-                    if filename in lst: lst.remove(filename)
-                for dct in conf.LastSearchResults, conf.SQLWindowTexts, conf.DBDiagrams, self.dbs:
-                    dct.pop(filename, None)
+                self.clear_database_data(filename)
+                self.dbs.pop(filename, None)
                 self.db_datas.get(filename, {}).pop("name", None)
 
                 for i in range(self.list_db.GetItemCount())[::-1]:
@@ -2110,9 +2098,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if not page: continue # for page, db
             active_idx = page.notebook.Selection
             if active_idx and not db.temporary:
-                conf.LastActivePage[db.filename] = active_idx
-            elif page.db.filename in conf.LastActivePage:
-                del conf.LastActivePage[page.db.filename]
+                conf.LastActivePages[db.filename] = active_idx
+            elif page.db.filename in conf.LastActivePages:
+                del conf.LastActivePages[page.db.filename]
             page.on_close()
             db.close()
         self.worker_detection.stop()
@@ -2197,9 +2185,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         # Remove page from MainWindow data structures
         if page.notebook.Selection and not page.db.temporary:
-            conf.LastActivePage[page.db.filename] = page.notebook.Selection
-        elif page.db.filename in conf.LastActivePage:
-            del conf.LastActivePage[page.db.filename]
+            conf.LastActivePages[page.db.filename] = page.notebook.Selection
+        elif page.db.filename in conf.LastActivePages:
+            del conf.LastActivePages[page.db.filename]
 
         page.on_close()
 
@@ -2378,6 +2366,15 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                           conf.Title, wx.OK | wx.ICON_ERROR)
 
 
+    def clear_database_data(self, filename):
+        """Clears database data from configuration."""
+        for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
+            if filename in lst: lst.remove(filename)
+        for dct in conf.LastActivePages, conf.LastSearchResults, \
+                   conf.SchemaDiagrams,  conf.SQLWindowTexts, self.dbs:
+            dct.pop(filename, None)
+
+
 
 class DatabasePage(wx.Panel):
     """
@@ -2494,9 +2491,9 @@ class DatabasePage(wx.Panel):
         notebook.SetSelection(self.pageorder[self.page_search])
         notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_page, notebook)
         # Restore last active page
-        if db.filename in conf.LastActivePage \
-        and conf.LastActivePage[db.filename] != notebook.Selection:
-            notebook.SetSelection(conf.LastActivePage[db.filename])
+        if db.filename in conf.LastActivePages \
+        and conf.LastActivePages[db.filename] != notebook.Selection:
+            notebook.SetSelection(conf.LastActivePages[db.filename])
 
         try:
             self.load_data()
@@ -3741,7 +3738,7 @@ class DatabasePage(wx.Panel):
         """Handler for SchemaDiagramEvent, updates toolbar state and saves conf."""
         self.update_diagram_controls()
         if not self.db.temporary:
-            conf.DBDiagrams[self.db.filename] = self.diagram.GetOptions()
+            conf.SchemaDiagrams[self.db.filename] = self.diagram.GetOptions()
             conf.save()
 
 
@@ -4256,7 +4253,7 @@ class DatabasePage(wx.Panel):
 
         # Save schema diagram state
         if not self.db.temporary:
-            conf.DBDiagrams[self.db.filename] = self.diagram.GetOptions()
+            conf.SchemaDiagrams[self.db.filename] = self.diagram.GetOptions()
 
 
     def split_panels(self):
@@ -5885,7 +5882,7 @@ class DatabasePage(wx.Panel):
         self.load_tree_data()
         self.update_info_panel()
         self.diagram.Populate()
-        self.diagram.SetOptions(conf.DBDiagrams.get(self.db.filename))
+        self.diagram.SetOptions(conf.SchemaDiagrams.get(self.db.filename))
         self.update_diagram_controls()
         wx.CallLater(100, self.reload_schema, parse=True)
         if conf.RunStatistics: self.on_update_statistics()
