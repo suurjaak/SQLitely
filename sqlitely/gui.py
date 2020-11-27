@@ -442,8 +442,24 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_recent = wx.Menu()
         menu_file.AppendSubMenu(menu_recent, "&Recent files", "Recently opened databases")
         menu_file.AppendSeparator()
-        menu_options = self.menu_options = menu_file.Append(wx.ID_ANY,
-            "Advanced opt&ions", "Edit advanced program options")
+
+        menu_options = wx.Menu()
+        menu_file.AppendSubMenu(menu_options, "Opt&ions")
+        if self.trayicon.IsAvailable():
+            menu_tray = self.menu_tray = menu_options.Append(wx.ID_ANY,
+                "Display &icon in notification area",
+                "Show/hide %s icon in system tray" % conf.Title, kind=wx.ITEM_CHECK)
+        menu_autoupdate_check = self.menu_autoupdate_check = menu_options.Append(
+            wx.ID_ANY, "Automatic &update check",
+            "Automatically check for program updates periodically", kind=wx.ITEM_CHECK)
+        menu_allow_multi = self.menu_allow_multi = menu_options.Append(
+            wx.ID_ANY, "Allow &multiple instances",
+            "Allow multiple %s instances to run at the same time" % conf.Title,
+            kind=wx.ITEM_CHECK)
+        menu_options.AppendSeparator()
+        menu_advanced = self.menu_advanced = menu_options.Append(wx.ID_ANY,
+            "&Advanced options", "Edit advanced program options")
+
         if self.trayicon.IsAvailable():
             menu_to_tray = self.menu_to_tray = menu_file.Append(wx.ID_ANY,
                 "Minimize to &tray", "Minimize %s window to notification area" % conf.Title)
@@ -568,18 +584,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             "Show value &editor",
             "Show/hide a dummy column value editor", kind=wx.ITEM_CHECK)
         menu_help.AppendSeparator()
-        if self.trayicon.IsAvailable():
-            menu_tray = self.menu_tray = menu_help.Append(wx.ID_ANY,
-                "Display &icon in notification area",
-                "Show/hide %s icon in system tray" % conf.Title, kind=wx.ITEM_CHECK)
-        menu_autoupdate_check = self.menu_autoupdate_check = menu_help.Append(
-            wx.ID_ANY, "Automatic up&date check",
-            "Automatically check for program updates periodically", kind=wx.ITEM_CHECK)
-        menu_allow_multi = self.menu_allow_multi = menu_help.Append(
-            wx.ID_ANY, "Allow &multiple instances",
-            "Allow multiple %s instances to run at the same time" % conf.Title,
-            kind=wx.ITEM_CHECK)
-        menu_help.AppendSeparator()
         menu_about = self.menu_about = menu_help.Append(
             wx.ID_ANY, "&About %s" % conf.Title,
             "Show program information and copyright")
@@ -601,7 +605,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_open_database,           menu_open_database)
         self.Bind(wx.EVT_MENU, self.on_save_active_database,    menu_save_database)
         self.Bind(wx.EVT_MENU, self.on_save_active_database_as, menu_save_database_as)
-        self.Bind(wx.EVT_MENU, self.on_open_options,            menu_options)
+        self.Bind(wx.EVT_MENU, self.on_open_options,            menu_advanced)
         self.Bind(wx.EVT_MENU, self.on_exit,                    menu_exit)
         self.Bind(wx.EVT_MENU, self.on_check_update,            menu_update)
         self.Bind(wx.EVT_MENU, self.on_menu_homepage,           menu_homepage)
@@ -770,7 +774,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.ipc_listener.stop()
             self.ipc_listener = None
         else:
-            args = conf.IPCName, conf.IPCPort, self.ipc_callback
+            args = conf.IPCName, conf.IPCPort, self.on_ipc
             self.ipc_listener = workers.IPCListener(*args)
             self.ipc_listener.start()
 
