@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.11.2020
+@modified    27.11.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -16,6 +16,7 @@ import contextlib
 import ctypes
 import datetime
 import htmlentitydefs
+import io
 import locale
 import math
 import os
@@ -30,6 +31,7 @@ import warnings
 
 from PIL import Image
 import pytz
+import wx
 
 
 class CaselessDict(dict):
@@ -243,6 +245,16 @@ def wx_image_to_pil(image):
         chans[-1].frombytes(str(image.GetAlpha()))
 
     return Image.merge("RGBA"[:len(chans)], chans)
+
+
+def img_wx_to_raw(img, format="PNG"):
+    """Returns the wx.Image or wx.Bitmap as raw data of specified type."""
+    stream = io.BytesIO()
+    img = img if isinstance(img, wx.Image) else img.ConvertToImage()
+    fmttype = getattr(wx, "BITMAP_TYPE_" + format.upper(), wx.BITMAP_TYPE_PNG)
+    img.SaveFile(stream, fmttype)
+    result = stream.getvalue()
+    return result
 
 
 def ctx(enter, exit, *a, **kw):

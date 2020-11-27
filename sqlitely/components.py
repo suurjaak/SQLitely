@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.11.2020
+@modified    27.11.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -9338,35 +9338,6 @@ class ColumnDialog(wx.Dialog):
 
 
 
-def get_grid_selection(grid, cursor=True):
-    """
-    Returns grid's currently selected rows and cols,
-    falling back to cursor row and col, as ([row, ], [col, ]).
-    """
-    rows, cols = [], []
-    if grid.GetSelectedCols():
-        cols += sorted(grid.GetSelectedCols())
-        rows += range(grid.GetNumberRows())
-    if grid.GetSelectedRows():
-        rows += sorted(grid.GetSelectedRows())
-        cols += range(grid.GetNumberCols())
-    if grid.GetSelectionBlockTopLeft():
-        end = grid.GetSelectionBlockBottomRight()
-        for i, (r, c) in enumerate(grid.GetSelectionBlockTopLeft()):
-            r2, c2 = end[i]
-            rows += range(r, r2 + 1)
-            cols += range(c, c2 + 1)
-    if grid.GetSelectedCells():
-        rows += [r for r, c in grid.GetSelectedCells()]
-        cols += [c for r, c in grid.GetSelectedCells()]
-    if not rows and not cols and cursor:
-        if grid.GridCursorRow >= 0 and grid.GridCursorCol >= 0:
-            rows, cols = [grid.GridCursorRow], [grid.GridCursorCol]
-    rows, cols = (sorted(set(y for y in x if y >= 0)) for x in (rows, cols))
-    return rows, cols
-
-
-
 class SchemaDiagram(wx.ScrolledWindow):
     """
     Panel that shows a visual diagram of database schema.
@@ -9375,6 +9346,13 @@ class SchemaDiagram(wx.ScrolledWindow):
     EXPORT_FORMATS = {
         wx.BITMAP_TYPE_BMP:  "BMP",
         wx.BITMAP_TYPE_PNG:  "PNG",
+    }
+    DEFAULT_COLOURS = {
+        wx.SYS_COLOUR_WINDOW:      wx.WHITE,
+        wx.SYS_COLOUR_WINDOWTEXT:  wx.BLACK,
+        wx.SYS_COLOUR_BTNTEXT:     wx.BLACK,
+        wx.SYS_COLOUR_HOTLIGHT:    wx.Colour(0,   0,   128),
+        wx.SYS_COLOUR_GRAYTEXT:    wx.Colour(128, 128, 128),
     }
 
     # Default gradient end on white background
@@ -9451,11 +9429,6 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         self._worker_graph = workers.GraphWorker(self._OnWorkerGraph)
 
-        ColourManager.Manage(self, "BackgroundColour",   wx.SYS_COLOUR_WINDOW)
-        ColourManager.Manage(self, "ForegroundColour",   wx.SYS_COLOUR_WINDOWTEXT)
-        ColourManager.Manage(self, "BorderColour",       wx.SYS_COLOUR_GRAYTEXT)
-        ColourManager.Manage(self, "LineColour",         wx.SYS_COLOUR_BTNTEXT)
-        ColourManager.Manage(self, "GradientColourFrom", wx.SYS_COLOUR_WINDOW)
         self._UpdateColours()
         self.SetVirtualSize(self.VIRTUALSZ)
         self.SetScrollRate(20, 20)
@@ -9548,12 +9521,13 @@ class SchemaDiagram(wx.ScrolledWindow):
         self.SetZoom(self.ZOOM_DEFAULT)
         zoom = zoom0 = self._zoom
         oids = [o["id"] for o in self._objs.values()]
-        bounds = sum(map(self._dc.GetIdBounds, oids), wx.Rect())
+        bounds, bounder = wx.Rect(), self._dc.GetIdBounds
+        if oids: bounds = sum(map(bounder, oids[1:]), bounder(oids[0]))
         while zoom > self.ZOOM_MIN and (bounds.Width > self.ClientSize.Width
         or bounds.Height > self.ClientSize.Height):
             zoom0, zoom = zoom, zoom - self.ZOOM_STEP
             self.SetZoom(zoom)
-            bounds = sum(map(self._dc.GetIdBounds, oids), wx.Rect())
+            bounds = sum(map(bounder, oids[1:]), bounder(oids[0])) if oids else bounds
         delta = self.GetScrollPixelsPerUnit()
         self.Scroll([(v + 10) / d for v, d in zip(bounds.TopLeft, delta)])
         self._PostEvent(zoom=zoom)
@@ -9654,25 +9628,63 @@ class SchemaDiagram(wx.ScrolledWindow):
         filetype = os.path.splitext(filename)[-1].lstrip(".").upper()
         wxtype   = next(k for k, v in self.EXPORT_FORMATS.items() if v == filetype)
 
-        bounds = sum((map(self._dc.GetIdBounds, self._ids)), wx.Rect())
-        bounds.Inflate(10, 10)
-
-        bmp = wx.Bitmap(self.VirtualSize)
-        dc = wx.MemoryDC(bmp)
-        dc.Background = controls.BRUSH(self.BackgroundColour)
-        dc.Clear()
-        dc.Font = self.Font
-        self._dc.DrawToDCClipped(dc, bounds)
-
-        bmp2 = wx.Bitmap(bounds.Width, bounds.Height)
-        dc2 = wx.MemoryDC(bmp2)
-        dc2.Background = controls.BRUSH(self.BackgroundColour)
-        dc2.Clear()
-        dc2.Blit(0, 0, bounds.Width, bounds.Height, dc, bounds.Left, bounds.Top)
-        del dc
-        bmp2.SaveFile(filename, wxtype)
+        self.MakeBitmap().SaveFile(filename, wxtype)
         guibase.status("Exported schema diagram to %s.", filename, log=True)
         util.start_file(filename)
+
+
+    def MakeBitmap(self, zoom=None, defaultcolours=False, statistics=None):
+        """
+        Returns diagram as wx.Bitmap.
+
+        @param   zoom            zoom level to use if not current
+        @param   defaultcolours  whether bitmap should use default colours instead of system theme
+        @param   statistics      whether bitmap should include statistics,
+                                 overrides current statistics setting
+        """
+        self.Freeze()
+        try:
+            zoom0, stats0 = self._zoom, self._show_stats
+
+            change_colours = defaultcolours and not self._IsDefaultColours()
+            if change_colours: self._UpdateColours(defaults=True)
+            remake = change_colours
+            if statistics is not None and bool(statistics) != self._show_stats:
+                self._show_stats, remake = bool(statistics), True
+
+            if zoom is not None:
+                zoom = float(zoom) - zoom % self.ZOOM_STEP # Even out to allowed step
+                zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
+                if self._zoom == zoom: zoom = None
+
+            if zoom is not None: self.Zoom = zoom
+            elif remake: self.Redraw(remake=True)
+
+            bounds, ids, bounder = wx.Rect(), list(self._ids), self._dc.GetIdBounds
+            if ids: bounds = sum(map(bounder, ids[1:]), bounder(ids[0]))
+            bounds.Inflate(10, 10)
+
+            bmp = wx.Bitmap(self.VirtualSize)
+            dc = wx.MemoryDC(bmp)
+            dc.Background = controls.BRUSH(self.BackgroundColour)
+            dc.Clear()
+            dc.Font = self.Font
+            self._dc.DrawToDCClipped(dc, bounds)
+
+            bmp2 = wx.Bitmap(bounds.Width, bounds.Height)
+            dc2 = wx.MemoryDC(bmp2)
+            dc2.Background = controls.BRUSH(self.BackgroundColour)
+            dc2.Clear()
+            dc2.Blit(0, 0, bounds.Width, bounds.Height, dc, bounds.Left, bounds.Top)
+            del dc
+
+            if change_colours: self._UpdateColours()
+            if self._show_stats != stats0: self._show_stats = stats0
+
+            if zoom is not None: self.Zoom = zoom0
+            elif remake: self.Redraw(remake=True)
+        finally: self.Thaw()
+        return bmp2
 
 
     def OpenContextMenu(self):
@@ -9767,7 +9779,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         """Resets all and draws the database schema, using the current layout style."""
         if not self: return
 
-        objs0 = self._objs.values()
+        objs0  = self._objs.values()
+        lines0 = self._lines.keys()
         rects0 = {o["name"]: self._dc.GetIdBounds(o["id"]) for o in objs0}
         maxid = max(o["id"] for o in objs0) if objs0 else 0
 
@@ -9805,6 +9818,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self._order.append(self._objs[name])
                 reset |= not o0
 
+        reset |= bool(lines0) != bool(self._lines)
         if reset:
             self._dc.RemoveAll()
             self.SetLayout(self._layout["layout"])
@@ -10311,15 +10325,44 @@ class SchemaDiagram(wx.ScrolledWindow):
         return bmp2
 
 
-    def _UpdateColours(self):
-        """Adjusts shadow and drag and gradient colours according to system theme."""
-        self._colour_dragfg = controls.ColourManager.GetColour(wx.SYS_COLOUR_HOTLIGHT)
+    def _UpdateColours(self, defaults=False):
+        """
+        Adjusts shadow and drag and gradient colours according to system theme.
+
+        @param   defaults  uses default colours instead of system theme colours
+        """
+        wincolour   = controls.ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
+        wtextcolour = controls.ColourManager.GetColour(wx.SYS_COLOUR_WINDOWTEXT)
+        gtextcolour = controls.ColourManager.GetColour(wx.SYS_COLOUR_GRAYTEXT)
+        btextcolour = controls.ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
+        hotcolour   = controls.ColourManager.GetColour(wx.SYS_COLOUR_HOTLIGHT)
+
+        if defaults:
+            wincolour   = self.DEFAULT_COLOURS[wx.SYS_COLOUR_WINDOW]
+            wtextcolour = self.DEFAULT_COLOURS[wx.SYS_COLOUR_WINDOWTEXT]
+            gtextcolour = self.DEFAULT_COLOURS[wx.SYS_COLOUR_GRAYTEXT]
+            btextcolour = self.DEFAULT_COLOURS[wx.SYS_COLOUR_BTNTEXT]
+            hotcolour   = self.DEFAULT_COLOURS[wx.SYS_COLOUR_HOTLIGHT]
+
+        self.BackgroundColour   = wincolour
+        self.ForegroundColour   = wtextcolour
+        self.BorderColour       = gtextcolour
+        self.LineColour         = btextcolour
+        self.GradientColourFrom = wincolour
+
+        self._colour_dragfg = hotcolour
         self._colour_dragbg = controls.ColourManager.Adjust(self._colour_dragfg, self.BackgroundColour, 0.6)
         self.ShadowColour = controls.ColourManager.Adjust(self.BorderColour, self.BackgroundColour, 0.6)
-        if wx.WHITE == controls.ColourManager.GetColour(wx.SYS_COLOUR_WINDOW):
-            self.GradientColourTo = self.COLOUR_GRAD_TO
-        else:
-            self.GradientColourTo = controls.ColourManager.GetColour(wx.SYS_COLOUR_HOTLIGHT)
+        self.GradientColourTo = self.COLOUR_GRAD_TO if wx.WHITE == wincolour else hotcolour
+
+
+    def _IsDefaultColours(self):
+        """Returns whether current colours are default colours, not themed."""
+        return self.BackgroundColour   == self.DEFAULT_COLOURS[wx.SYS_COLOUR_WINDOW]     and \
+               self.ForegroundColour   == self.DEFAULT_COLOURS[wx.SYS_COLOUR_WINDOWTEXT] and \
+               self.BorderColour       == self.DEFAULT_COLOURS[wx.SYS_COLOUR_GRAYTEXT]   and \
+               self.LineColour         == self.DEFAULT_COLOURS[wx.SYS_COLOUR_BTNTEXT]    and \
+               self.GradientColourFrom == self.DEFAULT_COLOURS[wx.SYS_COLOUR_HOTLIGHT]
 
 
     def _OnMouse(self, event):
@@ -10592,3 +10635,32 @@ class SchemaDiagram(wx.ScrolledWindow):
         evt = SchemaDiagramEvent(self.Id, **kwargs)
         wx.PostEvent(self.Parent, evt)
         if kwargs.get("layout") == False: self._layout["active"] = False
+
+
+
+def get_grid_selection(grid, cursor=True):
+    """
+    Returns grid's currently selected rows and cols,
+    falling back to cursor row and col, as ([row, ], [col, ]).
+    """
+    rows, cols = [], []
+    if grid.GetSelectedCols():
+        cols += sorted(grid.GetSelectedCols())
+        rows += range(grid.GetNumberRows())
+    if grid.GetSelectedRows():
+        rows += sorted(grid.GetSelectedRows())
+        cols += range(grid.GetNumberCols())
+    if grid.GetSelectionBlockTopLeft():
+        end = grid.GetSelectionBlockBottomRight()
+        for i, (r, c) in enumerate(grid.GetSelectionBlockTopLeft()):
+            r2, c2 = end[i]
+            rows += range(r, r2 + 1)
+            cols += range(c, c2 + 1)
+    if grid.GetSelectedCells():
+        rows += [r for r, c in grid.GetSelectedCells()]
+        cols += [c for r, c in grid.GetSelectedCells()]
+    if not rows and not cols and cursor:
+        if grid.GridCursorRow >= 0 and grid.GridCursorCol >= 0:
+            rows, cols = [grid.GridCursorRow], [grid.GridCursorCol]
+    rows, cols = (sorted(set(y for y in x if y >= 0)) for x in (rows, cols))
+    return rows, cols

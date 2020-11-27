@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.11.2020
+@modified    27.11.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -293,7 +293,7 @@ def export_sql(filename, db, sql, title=None):
     return True
 
 
-def export_stats(filename, db, data):
+def export_stats(filename, db, data, diagram=None):
     """Exports statistics to HTML or SQL file."""
     filetype  = os.path.splitext(filename)[1][1:].lower()
     TPLARGS = {"html": (templates.DATA_STATISTICS_HTML, dict(escape=True, strip=False)),
@@ -305,8 +305,9 @@ def export_stats(filename, db, data):
         "db":     db,
         "pragma": db.get_pragma_values(stats=True),
         "sql":    db.get_sql(),
-        "stats":  data.get("data", {}),
+        "stats":  data,
     }
+    if diagram: ns["diagram"] = diagram
     with open(filename, "wb") as f: template.stream(f, ns)
     return True
 

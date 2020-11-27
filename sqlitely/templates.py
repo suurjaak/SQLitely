@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.09.2020
+@modified    27.11.2020
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -17,7 +17,7 @@ import re
 from . import conf
 
 # Modules imported inside templates:
-#import collections, itertools, json, logging, math, os, pyparsing, sys, urllib, wx
+#import base64, collections, itertools, json, logging, math, os, pyparsing, sys, urllib, wx
 #from sqlitely import conf, grammar, images, searchparser, templates
 #from sqlitely.lib import util
 
@@ -1250,11 +1250,12 @@ HTML statistics export template.
 @param   db           database.Database instance
 @param   pragma       pragma settings to export, as {name: value},
 @param   sql          database schema SQL,
-@param   stats        {"table": [{name, size, size_total, ?size_index, ?index: []}],
-                       "index": [{name, size, table}]}
+@param   diagram      schema diagram as wx.Bitmap
+@param   stats        {"table":   [{name, size, size_total, ?size_index, ?index: []}],
+                       "index":   [{name, size, table}],
 """
 DATA_STATISTICS_HTML = """<%
-import math, urllib
+import base64, math, urllib
 from sqlitely.lib.vendor.step import Template
 from sqlitely.lib import util
 from sqlitely import conf, grammar, images, templates
@@ -1309,6 +1310,10 @@ COLS = {"table":   ["Name", "Columns", "Related tables", "Other relations", "Row
     }
     div.section > h2:first-child {
       margin-top: 0;
+    }
+    #diagram img {
+      max-width: 100%;
+      padding-top: 10px;
     }
     table.stats > tbody > tr > th { text-align: left; white-space: nowrap; }
     table.stats > tbody > tr > td { text-align: left; white-space: nowrap; }
@@ -1514,6 +1519,18 @@ has_rows = any(x.get("count") or 0 for x in db.schema.get("table", {}).values())
 </div>
 
 <div id="content_wrapper">
+
+
+%if isdef("diagram") and diagram:
+<div class="section">
+
+  <h2><a class="toggle" title="Toggle diagram" onclick="onToggle(this, 'diagram')">Schema diagram</a></h2>
+  <div class="hidden diagram" id="diagram">
+    <img title="Schema diagram" alt="Schema diagram" src="data:image/png;base64,{{! base64.b64encode(util.img_wx_to_raw(diagram)) }}" />
+  </div>
+</div>
+%endif
+
 
 %if stats:
 

@@ -3639,7 +3639,10 @@ class DatabasePage(wx.Panel):
         extname = os.path.splitext(filename)[-1].lstrip(".")
 
         try:
-            importexport.export_stats(filename, self.db, self.statistics)
+            data, diagram = self.statistics.get("data") or {}, None
+            if "HTML" == extname.upper():
+                diagram = self.diagram.MakeBitmap(zoom=1, defaultcolours=True, statistics=True)
+            importexport.export_stats(filename, self.db, data, diagram)
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving statistics %s to %s." % (extname.upper(), filename)
