@@ -1678,7 +1678,7 @@ def detect_databases(progress=None):
     if progress and not progress(): return
 
     # Then search current working directory for database files.
-    search_path = util.to_unicode(os.getcwd())
+    search_path = os.getcwdu()
     logger.info("Looking for SQLite databases under %s.", search_path)
     for root, _, files in os.walk(search_path):
         if progress and not progress(): return

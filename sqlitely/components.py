@@ -1634,7 +1634,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self._worker = workers.WorkerThread(self._OnWorker)
         self._busy = None # Current BusyPanel
 
-        self._dialog_export = wx.FileDialog(self, defaultDir=os.getcwd(),
+        self._dialog_export = wx.FileDialog(self, defaultDir=os.getcwdu(),
             message="Save query as", wildcard=importexport.EXPORT_WILDCARD,
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT |
                   wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
@@ -2223,7 +2223,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._ignore_change = False
         self._hovered_cell  = None # (row, col)
 
-        self._dialog_export = wx.FileDialog(self, defaultDir=os.getcwd(),
+        self._dialog_export = wx.FileDialog(self, defaultDir=os.getcwdu(),
             message="Save %s as" % self._category,
             wildcard=importexport.EXPORT_WILDCARD,
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT |

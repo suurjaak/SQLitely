@@ -155,9 +155,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         self.dialog_selectfolder = wx.DirDialog(
             self, message="Choose a directory where to search for databases",
-            defaultPath=os.getcwd(),
+            defaultPath=os.getcwdu(),
             style=wx.DD_DIR_MUST_EXIST | wx.RESIZE_BORDER)
-        self.dialog_savefile = wx.FileDialog(self, defaultDir=os.getcwd(),
+        self.dialog_savefile = wx.FileDialog(self, defaultDir=os.getcwdu(),
             style=wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
 
@@ -1557,7 +1557,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
         dialog = wx.DirDialog(self,
             message="Choose directory where to save databases",
-            defaultPath=os.getcwd(),
+            defaultPath=os.getcwdu(),
             style=wx.DD_DIR_MUST_EXIST | wx.RESIZE_BORDER
         ) if len(filenames) > 1 else wx.FileDialog(self,
             message="Save a copy..", wildcard=wildcard,
@@ -2482,7 +2482,7 @@ class DatabasePage(wx.Panel):
         sizer.Add(notebook, proportion=1, border=5, flag=wx.GROW | wx.ALL)
 
         self.dialog_savefile = wx.FileDialog(
-            self, defaultDir=os.getcwd(), wildcard=importexport.EXPORT_WILDCARD,
+            self, defaultDir=os.getcwdu(), wildcard=importexport.EXPORT_WILDCARD,
             style=wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
 
         self.Layout()
