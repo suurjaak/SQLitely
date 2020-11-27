@@ -1549,11 +1549,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         Repopulates schema, retaining category item ID over rename.
         """
-        category, reloads = category.lower(), defaultdict(list) # {category: [name, ]}
-        reloads[category].append(newname)
+        category, reloads = category.lower(), defaultdict(set) # {category: [name, ]}
+        reloads[category].add(newname)
         for subcategory, submap in self.get_related(category, oldname).items():
             for subname, subitem in submap.items():
-                reloads[subcategory].append(subname)
+                reloads[subcategory].add(subname)
 
         opts = self.schema[category].pop(oldname)
         tbl_name = newname if category in ("table", "view") else opts["tbl_name"]
@@ -1567,8 +1567,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def rename_item(self, category, name, name2):
         """
-        Carries out item renaming, using "ALTER TABLE" if table else dropping
-        and re-creating the schema item under the new name. Retains item ID.
+        Carries out renaming schema item, using "ALTER TABLE" if table else
+        dropping and re-creating the item under the new name. Retains item ID.
         """
         if util.lceq(name, name2): return
         category, item = category.lower(), self.get_category(category, name)
@@ -1576,7 +1576,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                                          category="ALTER %s" % category.upper())
         if err: raise Exception(err)
 
-        try: self.executescript(altersql, name="ALTER")
+        try: self.executescript(altersql, name="RENAME")
         except Exception as e:
             logger.exception("Error executing SQL.")
             try: self.execute("ROLLBACK")
@@ -1599,7 +1599,26 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
             if resets: self.update_sqlite_master(resets)
             self.notify_rename(category, name, name2)
-                
+
+
+    def rename_column(self, table, name, name2):
+        """Carries out renaming table column."""
+        if util.lceq(name, name2): return
+        item = self.get_category("table", name)
+        altersql, err = grammar.generate(dict(
+            name=table, name2=table, columns=[(name, name2)]
+        ), category="ALTER TABLE")
+        if err: raise Exception(err)
+
+        try: self.executescript(altersql, name="RENAME")
+        except Exception as e:
+            logger.exception("Error executing SQL.")
+            try: self.execute("ROLLBACK")
+            except Exception: pass
+            raise e
+        else:
+            self.notify_rename("table", table, table)
+
 
     def update_sqlite_master(self, schema):
         """

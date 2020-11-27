@@ -3399,8 +3399,8 @@ class DatabasePage(wx.Panel):
                 if isinstance(page, components.SchemaObjectPage):
                     if page.IsChanged():
                         if wx.CANCEL == wx.MessageBox(
-                            "There are unsaved changes to table %s schema.\n\n"
-                            "Discard changes before rename?" % grammar.quote(name, force=True),
+                            "There are unsaved changes to %s %s schema.\n\n"
+                            "Discard changes before rename?" % (category, grammar.quote(name, force=True)),
                             conf.Title, wx.ICON_WARNING | wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT
                         ): return
                     page.SetReadOnly()
@@ -3427,6 +3427,67 @@ class DatabasePage(wx.Panel):
                 if isinstance(page, components.SchemaObjectPage):
                     page.Reload(item=self.db.get_category(category, name2))
             self.toggle_cursors(category, name2)
+            return True
+
+        elif "rename column" == cmd:
+            table, name, name2 = (list(args) + [None])[:3]
+            item = self.db.get_category("table", table)
+            if not item: return
+            if not name2:
+                dlg = wx.TextEntryDialog(self, 
+                    'Rename column %s.%s %s to:' % (grammar.quote(table), grammar.quote(name)),
+                    conf.Title, value=name, style=wx.OK | wx.CANCEL
+                )
+                dlg.CenterOnParent()
+                if wx.ID_OK != dlg.ShowModal(): return
+
+                name2 = dlg.GetValue().strip()
+                if not name2 or name2 == name: return
+
+            duplicate = next((v for v in item["columns"] if util.lceq(name2, v["name"])), None)
+            if duplicate:
+                wx.MessageBox(
+                    "Cannot rename column: table %s already has a column named %s." %
+                    (grammar.quote(table, force=True), grammar.quote(duplicate["name"], force=True)),
+                    conf.Title, wx.ICON_WARNING | wx.OK
+                )
+                return
+
+            pages = [pp.get("table", {}).get(table)
+                     for pp in (self.data_pages, self.schema_pages)]
+            for page in pages:
+                if isinstance(page, components.DataObjectPage):
+                    if page.IsChanged():
+                        res = wx.MessageBox(
+                            "There are unsaved changes to table %s data.\n\n"
+                            "Commit changes before column rename?" % grammar.quote(table, force=True),
+                            conf.Title, wx.ICON_WARNING | wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT
+                        )
+                        if res == wx.CANCEL: return
+                        elif res == wx.YES:
+                            if not page.Save(): return
+                        else: page.Rollback(force=True)
+                    page.CloseCursor()
+                if isinstance(page, components.SchemaObjectPage):
+                    if page.IsChanged():
+                        if wx.CANCEL == wx.MessageBox(
+                            "There are unsaved changes to table %s schema.\n\n"
+                            "Discard changes before column rename?" % grammar.quote(table, force=True),
+                            conf.Title, wx.ICON_WARNING | wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT
+                        ): return
+                    page.SetReadOnly()
+            self.toggle_cursors("table", name, close=True)
+
+            self.db.rename_column(table, name, name2)
+
+            self.load_tree_data()
+            self.load_tree_schema()
+            self.diagram.Populate()
+            self.on_pragma_refresh(reload=True)
+            for page in pages:
+                if isinstance(page, components.SchemaObjectPage):
+                    page.Reload(item=self.db.get_category("table", table))
+            self.toggle_cursors("table", table)
             return True
 
         elif "refresh" == cmd:
@@ -6216,7 +6277,8 @@ class DatabasePage(wx.Panel):
             return event.Skip()
         item = tree.GetSelection()
         data = tree.GetItemPyData(item)
-        if data and isinstance(data, dict) and data.get("type") in self.db.CATEGORIES:
+        if data and isinstance(data, dict) \
+        and data.get("type") in self.db.CATEGORIES + ["column"]:
             tree.EditLabel(item)
 
 
@@ -6224,8 +6286,9 @@ class DatabasePage(wx.Panel):
         """Handler for clicking to edit tree item, allows if schema item node."""
         tree = event.EventObject
         data = tree.GetItemPyData(event.GetItem())
-        if not data or data.get("type") not in self.db.CATEGORIES \
-        or tree is self.tree_schema and "category" != data.get("parent", {}).get("level"):
+        if not data or data.get("type") not in self.db.CATEGORIES + ["column"] \
+        or tree is self.tree_schema \
+        and data.get("parent", {}).get("level") not in ("category", "table"):
             event.Veto()
 
 
@@ -6233,8 +6296,15 @@ class DatabasePage(wx.Panel):
         """Handler for clicking to edit tree item, allows if schema item node."""
         if not event.IsEditCancelled():
             data = event.EventObject.GetItemPyData(event.GetItem())
-            name2 = event.GetLabel().strip()
-            if not name2 or not self.handle_command("rename", data["type"], data["name"], name2):
+            name2, do_veto = event.GetLabel().strip(), True
+            if name2:
+                cmd, args = "rename", (data["type"], data["name"], name2)
+                if "column" == data["type"]:
+                    cmd = "rename column"
+                    args = data["parent"]["name"], data["name"], name2
+                do_veto = not self.handle_command(cmd, *args)
+
+            if do_veto:
                 event.Veto()
                 event.EventObject.SetFocus()
 
@@ -6333,6 +6403,8 @@ class DatabasePage(wx.Panel):
             item_open_meta = wx.MenuItem(menu, -1, "Open %s &schema" % data["parent"]["type"])
             item_copy      = wx.MenuItem(menu, -1, "&Copy name")
             item_copy_sql  = wx.MenuItem(menu, -1, "Copy column S&QL")
+            item_renamecol = wx.MenuItem(menu, -1, "Rena&me column\t(F2)") \
+                             if "table" == data["parent"]["type"] else None
 
             item_name.Font = boldfont
 
@@ -6342,6 +6414,9 @@ class DatabasePage(wx.Panel):
             menu.Append(item_open_meta)
             menu.Append(item_copy)
             menu.Append(item_copy_sql)
+            if item_renamecol:
+                menu.AppendSeparator()
+                menu.Append(item_renamecol)
 
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
                       item_name)
@@ -6351,6 +6426,8 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
                     functools.partial(self.db.get_sql, data["parent"]["type"], data["parent"]["name"], data["name"]),
                 "column SQL"), item_copy_sql)
+            if item_renamecol:
+                menu.Bind(wx.EVT_MENU, lambda e: tree.EditLabel(item), item_renamecol)
 
         elif "category" == data.get("type"): # Category list
             item_copy = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
@@ -6568,7 +6645,7 @@ class DatabasePage(wx.Panel):
             menu.Append(item_create)
             menu.Bind(wx.EVT_MENU, functools.partial(create_object, data["category"]), item_create)
         elif "column" == data["type"]:
-            has_name, has_sql, table = True, True, {}
+            has_name, has_sql, table, item_renamecol = True, True, {}, None
             if "view" == data["parent"]["type"]:
                 has_sql = False
             elif "index" == data["parent"]["type"]:
@@ -6583,6 +6660,8 @@ class DatabasePage(wx.Panel):
                 table = self.db.get_category("table", data["parent"]["name"])
                 sqlkws = {"category": "table", "name": table["name"], "column": data["name"]}
                 sqltext = functools.partial(self.db.get_sql, **sqlkws)
+                item_renamecol = wx.MenuItem(menu, -1, "Rena&me column\t(F2)")
+                menu.Bind(wx.EVT_MENU, lambda e: tree.EditLabel(item), item_renamecol)
 
             if has_name:
                 item_name = wx.MenuItem(menu, -1, 'Column "%s"' % ".".join(
@@ -6609,6 +6688,9 @@ class DatabasePage(wx.Panel):
                 menu.Append(item_copy)
             if has_sql:
                 menu.Append(item_copy_sql)
+            if item_renamecol:
+                menu.AppendSeparator()
+                menu.Append(item_renamecol)
         elif "columns" == data["type"]:
             cols = data["parent"].get("columns") or data["parent"].get("meta", {}).get("columns", [])
             names = [x["name"] for x in cols]

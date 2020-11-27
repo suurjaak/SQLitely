@@ -6,7 +6,7 @@ CHANGELOG
 - added schema diagram;
 - added option to have only single instance running;
 - added support for single-user install;
-- added easy rename options to data/schema trees;
+- added easy rename options to data & schema tree;
 - minor fixes and UI tweaks.
 
 
