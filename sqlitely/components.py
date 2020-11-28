@@ -41,6 +41,7 @@ import wx.lib
 import wx.lib.mixins.listctrl
 import wx.lib.newevent
 import wx.lib.resizewidget
+import wx.lib.wordwrap
 import wx.stc
 import wx.svg
 
@@ -9383,6 +9384,8 @@ class SchemaDiagram(wx.ScrolledWindow):
     LAYOUT_GRID  = "grid"
     LAYOUT_GRAPH = "graph"
 
+    TOOLTIP_DELAY = 500 # Milliseconds before showing hover tooltip
+
     ZOOM_STEP = 1. / FONT_SIZE
     ZOOM_MIN  = FONT_SPAN[0] / float(FONT_SIZE)
     ZOOM_MAX  = FONT_SPAN[1] / float(FONT_SIZE)
@@ -9409,6 +9412,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._show_lines  = True
         self._show_labels = True
         self._show_stats  = False
+        self._tooltip_timer = None # wx.Timer for setting delayed tooltip on hover
         self._layout = {"layout": "grid", "active": True,
                         "grid": {"order": "name", "reverse": False, "vertical": True}}
 
@@ -10365,12 +10369,26 @@ class SchemaDiagram(wx.ScrolledWindow):
                self.GradientColourFrom == self.DEFAULT_COLOURS[wx.SYS_COLOUR_HOTLIGHT]
 
 
+    def _SetToolTip(self, tip):
+        """Sets tooltip if not already set."""
+        if self and (not self.ToolTip or self.ToolTip.Tip != tip):
+            self.ToolTip = tip
+
+
     def _OnMouse(self, event):
         """Handler for mouse events: focus, drag, menu."""
         cursor = wx.CURSOR_DEFAULT
-        if any(self._dc.GetIdBounds(o["id"]).Contains(event.Position)
-               for o in self._objs.values()): cursor = wx.CURSOR_HAND
-        self.Cursor = wx.Cursor(cursor)
+        item = next((o for o in self._objs.values()
+                     if self._dc.GetIdBounds(o["id"]).Contains(event.Position)), None)
+        self.Cursor = wx.Cursor(wx.CURSOR_HAND if item else wx.CURSOR_DEFAULT)
+
+        tip = wx.lib.wordwrap.wordwrap("%s %s" % (
+            item["category"], grammar.quote(item["name"], force=True)
+        ), 400, wx.MemoryDC()) if item else ""
+        if not self.ToolTip or self.ToolTip.Tip != tip:
+            if self._tooltip_timer: self._tooltip_timer.Stop()
+            if not tip: self.ToolTip = tip
+            else: self._tooltip_timer = wx.CallLater(self.TOOLTIP_DELAY, self._SetToolTip, tip)
 
         if event.LeftDown() or event.RightDown() or event.LeftDClick():
             event.Skip()
