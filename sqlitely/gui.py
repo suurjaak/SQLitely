@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.11.2020
+@modified    28.11.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1514,11 +1514,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         if count == total:
             self.list_db.Populate([])
-            del conf.DBFiles[:]
-            del conf.RecentFiles[:]
-            conf.LastSearchResults.clear()
-            while self.history_file.Count:
-                self.history_file.RemoveFileFromHistory(0)
+            for lst in conf.DBFiles, conf.LastSelectedFiles: del lst[:]
+            for dct in conf.LastActivePages, conf.LastSearchResults, \
+                       conf.SchemaDiagrams,  conf.SQLWindowTexts: dct.clear()
             for k, v in (self.db_datas.items()): v.pop("name", None)
         else:
             files = [self.list_db.GetItemMappedData(i)["name"]
@@ -1532,11 +1530,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     if self.list_db.GetItemText(i) in files:
                         self.list_db.DeleteItem(i)
             finally: self.list_db.Thaw()
-            # Remove from recent file history
-            historyfiles = [(i, self.history_file.GetHistoryFile(i))
-                            for i in range(self.history_file.Count)]
-            for i in [i for i, f in historyfiles if f in files][::-1]:
-                self.history_file.RemoveFileFromHistory(i)
 
         del conf.LastSelectedFiles[:]
         del self.dbs_selected[:]
@@ -1634,7 +1627,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         for filename in self.dbs_selected:
             self.clear_database_data(filename)
-            self.dbs.pop(filename, None)
             self.db_datas.get(filename, {}).pop("name", None)
         self.list_db.Freeze()
         try:
@@ -1642,11 +1634,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 if self.list_db.GetItemText(i) in self.dbs_selected:
                     self.list_db.DeleteItem(i)
         finally: self.list_db.Thaw()
-        # Remove from recent file history
-        historyfiles = [(i, self.history_file.GetHistoryFile(i))
-                        for i in range(self.history_file.Count)]
-        for i in [i for i, f in historyfiles if f in self.dbs_selected][::-1]:
-            self.history_file.RemoveFileFromHistory(i)
         del self.dbs_selected[:]
         self.list_db.Select(0)
         self.update_database_list()
@@ -1663,20 +1650,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             # - i, as item count is getting smaller one by one
             selected = selecteds[i] - i
             filename = self.list_db.GetItemText(selected)
-            self.clear_database_data(filename)
+            self.clear_database_data(filename, recent=True)
             self.db_datas.get(filename, {}).pop("name", None)
             self.list_db.DeleteItem(selected)
         self.update_database_list()
         if self.dbs_selected: self.update_database_detail()
         else: self.list_db.Select(0)
 
-        if not selecteds: return
-        # Remove from recent file history
-        historyfiles = [(i, self.history_file.GetHistoryFile(i))
-                        for i in range(self.history_file.Count)]
-        for i, f in historyfiles[::-1]: # Work upwards to have unchanged index
-            if f in filenames: self.history_file.RemoveFileFromHistory(i)
-        conf.save()
+        if selecteds: conf.save()
 
 
     def on_delete_database(self, event=None):
@@ -1725,19 +1706,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     self.notebook.DeletePage(self.notebook.GetPageIndex(page))
                 os.unlink(filename)
 
-                self.clear_database_data(filename)
+                self.clear_database_data(filename, recent=True)
                 self.dbs.pop(filename, None)
                 self.db_datas.get(filename, {}).pop("name", None)
 
                 for i in range(self.list_db.GetItemCount())[::-1]:
                     if self.list_db.GetItemText(i) == filename:
                         self.list_db.DeleteItem(i)
-
-                # Remove from recent file history
-                historyfiles = [(i, self.history_file.GetHistoryFile(i))
-                                for i in range(self.history_file.Count)]
-                for i in [i for i, f in historyfiles if f == filename][::-1]:
-                    self.history_file.RemoveFileFromHistory(i)
                 self.dbs_selected.remove(filename)
             except Exception as e:
                 logger.exception("Error deleting %s.", filename)
@@ -2373,13 +2348,21 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                           conf.Title, wx.OK | wx.ICON_ERROR)
 
 
-    def clear_database_data(self, filename):
+    def clear_database_data(self, filename, recent=False):
         """Clears database data from configuration."""
-        for lst in conf.DBFiles, conf.RecentFiles, conf.LastSelectedFiles:
+        lists = [conf.DBFiles, conf.LastSelectedFiles]
+        if recent: lists.append(conf.RecentFiles)
+        for lst in lists:
             if filename in lst: lst.remove(filename)
         for dct in conf.LastActivePages, conf.LastSearchResults, \
                    conf.SchemaDiagrams,  conf.SQLWindowTexts, self.dbs:
             dct.pop(filename, None)
+        if not recent: return
+        # Remove from recent file history
+        idx = next((i for i in range(self.history_file.Count)
+                    if self.history_file.GetHistoryFile(i) == filename), None)
+        if idx is not None:
+            self.history_file.RemoveFileFromHistory(self.history_file.Count - idx)
 
 
 
