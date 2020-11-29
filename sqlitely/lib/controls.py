@@ -9,6 +9,9 @@ Stand-alone GUI components for wx:
 - ColourManager(object):
   Updates managed component colours on Windows system colour change.
 
+- FileDrop(wx.FileDropTarget):
+  A simple file drag-and-drop handler.
+
 - FormDialog(wx.Dialog):
   Dialog for displaying a complex editable form.
 
@@ -66,7 +69,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    27.11.2020
+@modified    29.11.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -427,6 +430,34 @@ class ColourManager(object):
 
         stc.CallTipSetBackground(faces['calltipbg'])
         stc.CallTipSetForeground(faces['calltipfg'])
+
+
+
+class FileDrop(wx.FileDropTarget):
+    """
+    A simple file drag-and-drop handler.
+
+    @param   on_files    callback(path) for file drop
+    @param   on_folders  callback(path) for folder drop
+    """
+    def __init__(self, on_files=None, on_folders=None):
+        super(FileDrop, self).__init__()
+        self.on_files   = on_files
+        self.on_folders = on_folders
+
+
+    def OnDropFiles(self, x, y, filenames):
+        # CallAfter to allow UI to clear up the dragged icons
+        wx.CallAfter(self.ProcessFiles, filenames)
+        return True
+
+
+    def ProcessFiles(self, paths):
+        if not self: return
+        folders   = filter(os.path.isdir,  paths)
+        filenames = filter(os.path.isfile, paths)
+        if folders   and self.on_folders: self.on_folders(folders)
+        if filenames and self.on_files:   self.on_files(filenames)
 
 
 

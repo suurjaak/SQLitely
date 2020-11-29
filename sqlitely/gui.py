@@ -206,31 +206,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         notebook.Bind(wx.EVT_MENU, on_close_hotkey, id=id_close)
         notebook.SetAcceleratorTable(wx.AcceleratorTable(accelerators))
 
-
-        class FileDrop(wx.FileDropTarget):
-            """A simple file drag-and-drop handler for application window."""
-            def __init__(self, window):
-                super(self.__class__, self).__init__()
-                self.window = window
-
-            def OnDropFiles(self, x, y, filenames):
-                # CallAfter to allow UI to clear up the dragged icons
-                wx.CallAfter(self.ProcessFiles, filenames)
-                return True
-
-            def ProcessFiles(self, filenames):
-                if not self: return
-                folders   = filter(os.path.isdir,  filenames)
-                filenames = filter(os.path.isfile, filenames)
-                if folders:
-                    t = util.plural("folder", folders) if len(folders) > 1 else folders[0]
-                    guibase.status("Detecting databases under %s.", t, log=True)
-                    self.window.button_folder.Label = "Stop &import from folder"
-                    for f in folders: self.window.worker_folder.work(f)
-                if filenames: self.window.load_database_pages(filenames, clearselection=True)
-
-        self.DropTarget = FileDrop(self)
-        self.notebook.DropTarget = FileDrop(self)
+        drop = controls.FileDrop(on_files=self.on_drop_files, on_folders=self.on_drop_folders)
+        self.DropTarget = self.notebook.DropTarget = drop
 
         self.MinSize = conf.MinWindowSize
         if conf.WindowMaximized:
@@ -881,6 +858,22 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu.Bind(wx.EVT_MENU, self.on_toggle_columneditor, item_editor)
         menu.Bind(wx.EVT_MENU, self.on_exit,                item_exit)
         self.trayicon.PopupMenu(menu)
+
+
+    def on_drop_files(self, filenames):
+        """Handler for dropping files onto main program window, opens database pages."""
+        self.load_database_pages(filenames, clearselection=True)
+
+
+    def on_drop_folders(self, folders):
+        """
+        Handler for dropping folders onto main program window,
+        starts importing databases.
+        """
+        t = util.plural("folder", folders) if len(folders) > 1 else folders[0]
+        guibase.status("Detecting databases under %s.", t, log=True)
+        self.button_folder.Label = "Stop &import from folder"
+        for f in folders: self.worker_folder.work(f)
 
 
     def on_change_page(self, event=None):

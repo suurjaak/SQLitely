@@ -5973,7 +5973,7 @@ class ImportDialog(wx.Dialog):
     DISCARD_SEP = -2 # ListCtrl item data value for discard-section header
 
 
-    class DropTarget(wx.DropTarget):
+    class ListDropTarget(wx.DropTarget):
         """Custom drop target for column listboxes."""
 
         def __init__(self, side, ctrl, on_drop):
@@ -6144,6 +6144,8 @@ class ImportDialog(wx.Dialog):
                   wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
 
+        self.DropTarget = controls.FileDrop(on_files=self._OnDropFiles)
+
         splitter = wx.SplitterWindow(self, style=wx.BORDER_NONE)
         p1, p2   = wx.Panel(splitter), wx.Panel(splitter)
         sizer_p1 = p1.Sizer = wx.FlexGridSizer(rows=5, cols=2, gap=(0, 0))
@@ -6312,8 +6314,8 @@ class ImportDialog(wx.Dialog):
         l2.AppendColumn("")
         l2.AppendColumn("Table column")
         l2.AppendColumn("Index",  wx.LIST_FORMAT_RIGHT)
-        l1.SetDropTarget(self.DropTarget("source", l1, self._OnDropItems))
-        l2.SetDropTarget(self.DropTarget("target", l2, self._OnDropItems))
+        l1.DropTarget = self.ListDropTarget("source", l1, self._OnDropItems)
+        l2.DropTarget = self.ListDropTarget("target", l2, self._OnDropItems)
         l2.Disable()
 
         check_pk.ToolTip = "Add an additional INTEGER PRIMARY KEY AUTOINCREMENT " \
@@ -7095,12 +7097,18 @@ class ImportDialog(wx.Dialog):
         self._Populate()
 
 
-    def _OnFile(self, event=None):
-        """Handler for clicking to choose source file, opens file dialog."""
-        if wx.ID_OK != self._dialog_file.ShowModal(): return
+    def _OnDropFiles(self, filenames):
+        """Handler for dropping files onto dialog, selects first as source."""
+        self._OnFile(filename=filenames[0])
 
-        filename = self._dialog_file.GetPath()
-        if self._data and filename == self._data["name"]: return
+
+    def _OnFile(self, event=None, filename=None):
+        """Handler for clicking to choose source file, opens file dialog."""
+        if filename is None:
+            if wx.ID_OK != self._dialog_file.ShowModal(): return
+
+            filename = self._dialog_file.GetPath()
+            if self._data and filename == self._data["name"]: return
 
         busy = controls.BusyPanel(self, "Reading file..")
         try: data = importexport.get_import_file_data(filename)

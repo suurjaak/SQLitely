@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.11.2020
+@modified    29.11.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -606,6 +606,8 @@ def get_import_file_data(filename):
                     while columns and columns[-1] is None: columns.pop(-1)
                     sheets.append({"rows": rows, "columns": columns, "name": sheet.title})
         finally: wb and wb.close()
+    else:
+        raise ValueError("File not recognized as spreadsheet.")
 
     return {"name": filename, "size": size, "format": extname, "sheets": sheets}
 
