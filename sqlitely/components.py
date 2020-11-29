@@ -9532,20 +9532,22 @@ class SchemaDiagram(wx.ScrolledWindow):
         """
         self.Freeze()
         try:
-            self.SetZoom(self.ZOOM_DEFAULT)
-            zoom = zoom0 = self._zoom
+            self.Zoom = zoom0 = self.ZOOM_DEFAULT
             oids = [o["id"] for o in self._objs.values()]
+            if self._show_lines:
+                oids += [x["id"] for x in self._lines.values()]
             bounds, bounder = wx.Rect(), self._dc.GetIdBounds
-            if oids: bounds = sum(map(bounder, oids[1:]), bounder(oids[0]))
-            while zoom > self.ZOOM_MIN and (bounds.Width > self.ClientSize.Width
+            if oids: bounds = sum(map(bounder, oids[1:]), bounder(oids[0])).Inflate(5, 5)
+            while self._zoom > self.ZOOM_MIN and (bounds.Width > self.ClientSize.Width
             or bounds.Height > self.ClientSize.Height):
-                zoom0, zoom = zoom, zoom - self.ZOOM_STEP
-                self.SetZoom(zoom)
-                bounds = sum(map(bounder, oids[1:]), bounder(oids[0])) if oids else bounds
+                self.Zoom, zoom0 = self._zoom - self.ZOOM_STEP, self._zoom
+                if oids: bounds = sum(map(bounder, oids[1:]), bounder(oids[0])).Inflate(5, 5)
+            self.Scroll(0, 0)
+            if not wx.Rect(self.ClientSize).Contains(bounds):
+                delta = self.GetScrollPixelsPerUnit()
+                self.Scroll([(v + d/2) / d for v, d in zip(bounds.TopLeft, delta)])
         finally: self.Thaw()
-        delta = self.GetScrollPixelsPerUnit()
-        self.Scroll([(v + 10) / d for v, d in zip(bounds.TopLeft, delta)])
-        self._PostEvent(zoom=zoom)
+        self._PostEvent(zoom=self._zoom)
 
 
     def GetShowLines(self):
@@ -10425,9 +10427,12 @@ class SchemaDiagram(wx.ScrolledWindow):
 
     def _OnMouse(self, event):
         """Handler for mouse events: focus, drag, menu."""
+        start, delta = self.GetViewStart(), self.GetScrollPixelsPerUnit()
+        x, y = (x + p * d for x, p, d in zip(event.Position, start, delta))
+
         cursor = wx.CURSOR_DEFAULT
         item = next((o for o in self._objs.values()
-                     if self._dc.GetIdBounds(o["id"]).Contains(event.Position)), None)
+                     if self._dc.GetIdBounds(o["id"]).Contains(x, y)), None)
         self.Cursor = wx.Cursor(wx.CURSOR_HAND if item else wx.CURSOR_DEFAULT)
 
         tip = wx.lib.wordwrap.wordwrap("%s %s" % (
@@ -10440,9 +10445,7 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         if event.LeftDown() or event.RightDown() or event.LeftDClick():
             event.Skip()
-            self._dragpos = event.X, event.Y
-            start, delta = self.GetViewStart(), self.GetScrollPixelsPerUnit()
-            x, y = (x + p * d for x, p, d in zip(event.Position, start, delta))
+            self._dragpos = x, y
             oid = next((a for a in self._dc.FindObjects(x, y, radius=5)
                         if isinstance(self._ids.get(a), basestring)), None)
             if oid and event.LeftDown() and 1 == len(self._sels) \
@@ -10503,7 +10506,7 @@ class SchemaDiagram(wx.ScrolledWindow):
 
             if event.Dragging() and not self.HasCapture(): self.CaptureMouse()
 
-            dx, dy = (a - b for a, b in zip(event.Position, self._dragpos))
+            dx, dy = (a - b for a, b in zip((x, y), self._dragpos))
             refrect, refnames = wx.Rect(), []
 
             if event.Dragging() and not self._sels and not self._dragrect:
@@ -10566,7 +10569,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 refrect.Offset(*[-p * d for p, d in zip(start, delta)])
                 self.RefreshRect(refrect, eraseBackground=False)
 
-            self._dragpos = event.X, event.Y
+            self._dragpos = x, y
         elif event.WheelRotation:
             if event.CmdDown():
                 # @todo tsentreeri hiire ümber kui hiir viewpordis
