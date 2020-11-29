@@ -10124,14 +10124,15 @@ class SchemaDiagram(wx.ScrolledWindow):
         direction, do_reverse = (-1 if self._layout["grid"]["reverse"] else 1), False
         if "columns" == self._layout["grid"]["order"]:
             sortkey = lambda o: (len(self._db.get_category(o["category"], o["name"])["columns"]) * direction,
-                                 o["name"].lower())
+                                 o["category"].lower(), o["name"].lower())
         elif "rows" == self._layout["grid"]["order"]:
             sortkey = lambda o: (self._db.get_category(o["category"], o["name"]).get("count", 0) * direction,
-                                 o["name"].lower())
+                                 o["category"].lower(), o["name"].lower())
         elif "bytes" == self._layout["grid"]["order"]:
-            sortkey = lambda o: (statmap.get(o["name"], 0) * direction, o["name"].lower())
+            sortkey = lambda o: (statmap.get(o["name"], 0) * direction,
+                                 o["category"].lower(), o["name"].lower())
         else:
-            sortkey = lambda o: o["name"].lower()
+            sortkey = lambda o: (o["category"].lower(), o["name"].lower())
             do_reverse = bool(self._layout["grid"]["reverse"])
         items = sorted(self._order, key=sortkey, reverse=do_reverse)
 
