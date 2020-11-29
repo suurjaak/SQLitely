@@ -3845,8 +3845,8 @@ class DatabasePage(wx.Panel):
             self.diagram.SetLayout(self.diagram.LAYOUT_GRID, kws)
 
         menu = wx.Menu()
-        item_vertical   = wx.MenuItem(menu, -1, "&Vertical grid",   kind=wx.ITEM_CHECK)
-        item_horizontal = wx.MenuItem(menu, -1, "&Horizontal grid", kind=wx.ITEM_CHECK)
+        item_vertical   = wx.MenuItem(menu, -1, "Items in &columns",   kind=wx.ITEM_CHECK)
+        item_horizontal = wx.MenuItem(menu, -1, "Items in &rows", kind=wx.ITEM_CHECK)
 
         submenu = wx.Menu()
         item_name    = wx.MenuItem(submenu, -1, "&name",          kind=wx.ITEM_CHECK)

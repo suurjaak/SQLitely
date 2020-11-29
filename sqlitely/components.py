@@ -9385,7 +9385,7 @@ class SchemaDiagram(wx.ScrolledWindow):
     MOVE_STEP =  10 # Pixels to move item on arrow key
     FONT_SIZE =   8 # Default font size
     FONT_FACE = "Verdana"
-    FONT_SPAN = (1, 16) # Minimum and maximum font size for zoom
+    FONT_SPAN = (1, 24) # Minimum and maximum font size for zoom
     STATS_H   =  15 # Stats footer height
     FONT_STEP_STATS = -1 # Stats footer font size step from base font
 
