@@ -9830,6 +9830,16 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self._order.append(self._objs[name])
                 reset |= not o0
 
+        # Increase diagram virtual size if total item area is bigger
+        area, vsize = self.GPAD * self.GPAD, self.VIRTUALSZ
+        for o in self._objs.values():
+            area += (o["bmp"].Width + self.GPAD) * (o["bmp"].Height + self.GPAD)
+        while area / self._zoom > vsize[0] * vsize[1]:
+            vsize = vsize[0], vsize[1] + 100
+        if vsize != self.VIRTUALSZ:
+            self.VIRTUALSZ = vsize
+            self.SetVirtualSize(*[int(x * self._zoom) for x in self.VIRTUALSZ])
+
         reset |= bool(lines0) != bool(self._lines)
         if reset:
             self._dc.RemoveAll()
