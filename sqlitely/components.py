@@ -9520,7 +9520,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             self._dc.SetIdBounds(o["id"], wx.Rect(wx.Point(pt), bmp.Size))
 
         if refresh:
-            self.Redraw()
+            self.Redraw(remakelines=True)
             self._PostEvent(zoom=zoom)
     Zoom = property(GetZoom, SetZoom)
 
@@ -9556,7 +9556,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         show = bool(show)
         if show == self._show_lines: return
         self._show_lines = show
-        if show: self.RecordLines(); self.RecordItems()
+        if show: self.RecordLines(remake=True); self.RecordItems()
         else:
             for opts in self._lines.values(): self._dc.ClearId(opts["id"])
         self.Refresh()
@@ -9848,15 +9848,19 @@ class SchemaDiagram(wx.ScrolledWindow):
             self._dc.RemoveAll()
             self.SetLayout(self._layout["layout"])
         else:
-            self.RecordLines()
+            self.RecordLines(remake=True)
             for o in self._order:
                 o0 = next((x for x in objs0 if x["__id__"] == o["__id__"]), {})
                 self.RecordItem(o["name"], rects0.get(o0.get("name")))
             self.Refresh()
 
 
-    def Redraw(self, remake=False):
-        """Redraws all, remaking item bitmaps if specified."""
+    def Redraw(self, remake=False, remakelines=False, recalculate=False):
+        """
+        Redraws all, remaking item bitmaps and relation lines if specified,
+        or recalculating all relation lines if specified,
+        or recalculating only those relation lines connected to selected items if specified.
+        """
         for o in self._objs.values() if remake else ():
             opts = self._db.get_category(o["category"], o["name"])
             if not opts: self._objs.pop(o["name"])
@@ -9868,7 +9872,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             r = self._dc.GetIdBounds(o["id"])
             self._dc.SetIdBounds(o["id"], wx.Rect(r.TopLeft, o["bmp"].Size))
         self.RecordSelectionRect()
-        self.RecordLines()
+        self.RecordLines(remake=remake or remakelines, recalculate=recalculate)
         self.RecordItems()
         self.Refresh()
 
@@ -9910,100 +9914,11 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._dc.SetId(-1)
 
 
-    def RecordLines(self):
+    def RecordLines(self, remake=False, recalculate=False):
         """Records foreign relation lines to DC if showing lines is enabled."""
         if not self._show_lines: return
+        if remake or recalculate: self._CalculateLines(remake)
 
-        # {name2: {False: [(name1, cols) at top], True: [(name1, cols) at bottom]}}
-        vertslots = defaultdict(lambda: defaultdict(list))
-
-        # First pass: determine starting X-Y and ending Y
-        for (name1, name2, cols), opts in self._lines.items():
-            b1, b2 = (self._dc.GetIdBounds(o["id"])
-                      for o in map(self._objs.get, (name1, name2)))
-            idx = next((i  for i, c in enumerate(self._db.schema["table"][name1]["columns"])
-                        if c["name"].lower() in cols), 0) # Column index in table
-
-            b1_more_left = b1.Left + b1.Width / 2 > b2.Left + b2.Width / 2
-            use_left = True
-            if   b2.Left  < b1.Left < b2.Right: use_left = b1_more_left
-            elif b1.Left  < b2.Left < b1.Right: use_left = b1_more_left
-            elif b1.Right < b2.Left:            use_left = False
-            x1 = (b1.Left - 1) if use_left else (b1.Right + 1)
-            if not (2 * self.CARDINALW < x1 < self.VirtualSize.Width - 2 * self.CARDINALW):
-                # Choose other side if too close to edge
-                x1 = (b1.Left - 1) if not use_left else (b1.Right + 1)
-
-            y1 = b1.Top + self.HEADERH + self.HEADERP + (idx + 0.5) * self.LINEH
-            y2 = b2.Top if y1 < b2.Top else b2.Bottom
-
-            if b1.Contains(b2.Left + b2.Width / 2, y2):
-                # Choose other side if within b1
-                y2 = b2.Top if y1 >= b2.Top else b2.Bottom
-
-            opts["pts"] = [[x1, y1], [-1, y2]]
-            vertslots[name2][y2 == b2.Bottom].append((name1, cols))
-
-        # Second pass: determine ending X
-        get_opts = lambda name2, name1, cols: self._lines[(name1, name2, cols)]
-        for name2 in vertslots:
-            for slots in vertslots[name2].values():
-                slots.sort(key=lambda x: -get_opts(name2, *x)["pts"][0][0])
-                for i, (name1, cols) in enumerate(slots):
-                    b2 = self._dc.GetIdBounds(self._objs[name2]["id"])
-                    step = 2 * self.BRADIUS
-                    while step > 1 and len(slots) * step > b2.Width - 2 * self.BRADIUS:
-                        step -= 1
-                    opts = get_opts(name2, name1, cols)
-                    opts["pts"][1][0] = b2.Left + b2.Width / 2 + (len(slots) / 2 - i) * step
-
-        # Third pass: insert waypoints between starting and ending X-Y
-        for (name1, name2, cols), opts in sorted(self._lines.items(),
-                key=lambda x: any(n in self._sels for n in x[0][:2])):
-            b1, b2 = (self._dc.GetIdBounds(o["id"])
-                      for o in map(self._objs.get, (name1, name2)))
-
-            pt1, pt2 = opts["pts"]
-            slots = vertslots[name2][pt2[1] == b2.Bottom]
-            idx = slots.index((name1, cols))
-
-            # Make 1..3 waypoints between start and end points
-            wpts = []
-            if b1.Left - 2 * self.CARDINALW <= pt2[0] <= b1.Right + 2 * self.CARDINALW:
-                # End point straight above or below start item
-                b1_side = b1.Top if pt1[1] > pt2[1] else b1.Bottom
-                ptm1 = pt1[0] + 2 * self.CARDINALW * (-1 if pt1[0] < pt2[0] else 1), pt1[1]
-                ptm2 = ptm1[0], pt2[1] + (b1_side - pt2[1]) / 2
-
-                if b2.Left < pt2[0] < b2.Right \
-                and b2.Top - 2 * self.BRADIUS < ptm2[1] < b2.Bottom + 2 * self.BRADIUS:
-                    ptm2 = ptm2[0], (b2.Top if pt1[1] > b2.Top else b2.Bottom) + 2 * self.BRADIUS * (-1 if pt1[1] > b2.Top else 1)
-
-                ptm3 = pt2[0], ptm2[1]
-                # (pt1.x +- cardinal step, pt1.y), (pt1.x +- cardinal step, halfway to pt2.y), (pt2x, halfway to pt2.y)
-                wpts += [ptm1, ptm2, ptm3]
-            else:
-                ptm = pt2[0], pt1[1]
-                if not  b2.Contains(ptm[0], ptm[1] - self.CARDINALW) \
-                and not b2.Contains(ptm[0], ptm[1] + self.CARDINALW):
-                    # Middle point not within end item: single waypoint (pt2.x, pt1.y)
-                    wpts.append(ptm)
-                else: # Middle point within end item
-                    pt2_in_b2 = b2.Contains(pt2[0], pt2[1] + self.CARDINALW * (idx + 1))
-                    b2_side   = b2.Left if pt1[0] < pt2[0] else b2.Right
-                    ptm3 = pt2[0], pt2[1] + self.CARDINALW * (idx + 1) * (-1 if pt2_in_b2 else 1)
-
-                    if b2.Contains(ptm3):
-                        ptm3 = ptm3[0], pt2[1] + self.CARDINALW * (idx + 1) * (+1 if pt2_in_b2 else -1)
-
-                    ptm2 = pt1[0] + (b2_side - pt1[0]) / 2, ptm3[1]
-                    ptm1 = ptm2[0], pt1[1]
-                    # (halfway to pt2.x, pt1.y), (halfway to pt2.x, pt2.y +- vertical step), (pt2.x, pt2.y +- vertical step)
-                    wpts += [ptm1, ptm2, ptm3]
-            opts["pts"][1:-1] = wpts
-
-
-        # Final pass: draw lines and labels
         for (name1, name2, cols), opts in sorted(self._lines.items(),
                 key=lambda x: any(n in self._sels for n in x[0][:2])):
             b1, b2 = (self._dc.GetIdBounds(o["id"])
@@ -10195,7 +10110,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self._dc.SetIdBounds(o["id"], rect)
                 rowrects[-1].append(rect)
 
-        self.Redraw()
+        self.Redraw(remakelines=True)
 
 
     def _PositionItemsGraph(self):
@@ -10211,6 +10126,117 @@ class SchemaDiagram(wx.ScrolledWindow):
         bounds = [0, 0] + list(self.VirtualSize)
         viewport = [p * d for p, d in zip(start, delta)] + list(self.ClientSize)
         self._worker_graph.work((nodes, links, bounds, viewport))
+
+
+    def _CalculateLines(self, remake=False):
+        """
+        Records foreign relation lines to DC if showing lines is enabled.
+        """
+        if not self._show_lines: return
+
+        lines = self._lines
+        if self._sels and not remake:
+            # Recalculate only lines from/to selected items, and lines to related items
+            pairs, rels = set(), set() # {(name1, name2)}, {related item name}
+            for name in self._sels:
+                for (name1, name2, _) in self._lines:
+                    if name in (name1, name2):
+                        pairs.add((name1, name2))
+                        if name2 not in self._sels: rels.add(name2)
+
+            lines = util.CaselessDict()
+            for (name1, name2, cols), opts in self._lines.items():
+                if (name1, name2) in pairs or name2 in rels:
+                    lines[(name1, name2, cols)] = opts
+
+
+        # {name2: {False: [(name1, cols) at top], True: [(name1, cols) at bottom]}}
+        vertslots = defaultdict(lambda: defaultdict(list))
+
+        # First pass: determine starting X-Y and ending Y
+        for (name1, name2, cols), opts in lines.items():
+            b1, b2 = (self._dc.GetIdBounds(o["id"])
+                      for o in map(self._objs.get, (name1, name2)))
+            idx = next((i  for i, c in enumerate(self._db.schema["table"][name1]["columns"])
+                        if c["name"].lower() in cols), 0) # Column index in table
+
+            b1_more_left = b1.Left + b1.Width / 2 > b2.Left + b2.Width / 2
+            use_left = True
+            if   b2.Left  < b1.Left < b2.Right: use_left = b1_more_left
+            elif b1.Left  < b2.Left < b1.Right: use_left = b1_more_left
+            elif b1.Right < b2.Left:            use_left = False
+            x1 = (b1.Left - 1) if use_left else (b1.Right + 1)
+            if not (2 * self.CARDINALW < x1 < self.VirtualSize.Width - 2 * self.CARDINALW):
+                # Choose other side if too close to edge
+                x1 = (b1.Left - 1) if not use_left else (b1.Right + 1)
+
+            y1 = b1.Top + self.HEADERH + self.HEADERP + (idx + 0.5) * self.LINEH
+            y2 = b2.Top if y1 < b2.Top else b2.Bottom
+
+            if b1.Contains(b2.Left + b2.Width / 2, y2):
+                # Choose other side if within b1
+                y2 = b2.Top if y1 >= b2.Top else b2.Bottom
+
+            opts["pts"] = [[x1, y1], [-1, y2]]
+            vertslots[name2][y2 == b2.Bottom].append((name1, cols))
+
+        # Second pass: determine ending X
+        get_opts = lambda name2, name1, cols: lines[(name1, name2, cols)]
+        for name2 in vertslots:
+            for slots in vertslots[name2].values():
+                slots.sort(key=lambda x: -get_opts(name2, *x)["pts"][0][0])
+                for i, (name1, cols) in enumerate(slots):
+                    b2 = self._dc.GetIdBounds(self._objs[name2]["id"])
+                    step = 2 * self.BRADIUS
+                    while step > 1 and len(slots) * step > b2.Width - 2 * self.BRADIUS:
+                        step -= 1
+                    opts = get_opts(name2, name1, cols)
+                    opts["pts"][1][0] = b2.Left + b2.Width / 2 + (len(slots) / 2 - i) * step
+
+        # Third pass: insert waypoints between starting and ending X-Y
+        for (name1, name2, cols), opts in sorted(lines.items(),
+                key=lambda x: any(n in self._sels for n in x[0][:2])):
+            b1, b2 = (self._dc.GetIdBounds(o["id"])
+                      for o in map(self._objs.get, (name1, name2)))
+
+            pt1, pt2 = opts["pts"]
+            slots = vertslots[name2][pt2[1] == b2.Bottom]
+            idx = slots.index((name1, cols))
+
+            # Make 1..3 waypoints between start and end points
+            wpts = []
+            if b1.Left - 2 * self.CARDINALW <= pt2[0] <= b1.Right + 2 * self.CARDINALW:
+                # End point straight above or below start item
+                b1_side = b1.Top if pt1[1] > pt2[1] else b1.Bottom
+                ptm1 = pt1[0] + 2 * self.CARDINALW * (-1 if pt1[0] < pt2[0] else 1), pt1[1]
+                ptm2 = ptm1[0], pt2[1] + (b1_side - pt2[1]) / 2
+
+                if b2.Left < pt2[0] < b2.Right \
+                and b2.Top - 2 * self.BRADIUS < ptm2[1] < b2.Bottom + 2 * self.BRADIUS:
+                    ptm2 = ptm2[0], (b2.Top if pt1[1] > b2.Top else b2.Bottom) + 2 * self.BRADIUS * (-1 if pt1[1] > b2.Top else 1)
+
+                ptm3 = pt2[0], ptm2[1]
+                # (pt1.x +- cardinal step, pt1.y), (pt1.x +- cardinal step, halfway to pt2.y), (pt2x, halfway to pt2.y)
+                wpts += [ptm1, ptm2, ptm3]
+            else:
+                ptm = pt2[0], pt1[1]
+                if not  b2.Contains(ptm[0], ptm[1] - self.CARDINALW) \
+                and not b2.Contains(ptm[0], ptm[1] + self.CARDINALW):
+                    # Middle point not within end item: single waypoint (pt2.x, pt1.y)
+                    wpts.append(ptm)
+                else: # Middle point within end item
+                    pt2_in_b2 = b2.Contains(pt2[0], pt2[1] + self.CARDINALW * (idx + 1))
+                    b2_side   = b2.Left if pt1[0] < pt2[0] else b2.Right
+                    ptm3 = pt2[0], pt2[1] + self.CARDINALW * (idx + 1) * (-1 if pt2_in_b2 else 1)
+
+                    if b2.Contains(ptm3):
+                        ptm3 = ptm3[0], pt2[1] + self.CARDINALW * (idx + 1) * (+1 if pt2_in_b2 else -1)
+
+                    ptm2 = pt1[0] + (b2_side - pt1[0]) / 2, ptm3[1]
+                    ptm1 = ptm2[0], pt1[1]
+                    # (halfway to pt2.x, pt1.y), (halfway to pt2.x, pt2.y +- vertical step), (pt2.x, pt2.y +- vertical step)
+                    wpts += [ptm1, ptm2, ptm3]
+            opts["pts"][1:-1] = wpts
 
 
     def _GetItemStats(self, opts):
@@ -10532,7 +10558,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                     self._dragrectid = self._dragrect = self._dragrectabs = None
                 if self._sels: self._PostEvent(layout=False)
 
-            if self._show_lines: self.Redraw()
+            if self._show_lines: self.Redraw(recalculate=event.Dragging() and self._sels)
             else:
                 for name in refnames: self.RecordItem(name)
                 if self._dragrectid:  self.RecordSelectionRect()
@@ -10616,7 +10642,7 @@ class SchemaDiagram(wx.ScrolledWindow):
 
             # Second pass: move items
             for o in items: self._dc.TranslateId(o["id"], dx, dy)
-            self.Redraw()
+            self.Redraw(recalculate=True)
             self._PostEvent(layout=False)
 
         else: event.Skip() # Allow to propagate to other handlers
@@ -10638,7 +10664,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 bounds.Offset(dx, dy)
                 self._dc.TranslateId(o["id"], dx, dy)
                 self._dc.SetIdBounds(o["id"], bounds)
-            self.Redraw()
+            self.Redraw(remakelines=True)
             self.Thaw()
             self._PostEvent()
 
