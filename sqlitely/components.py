@@ -9797,7 +9797,6 @@ class SchemaDiagram(wx.ScrolledWindow):
         if not self: return
 
         objs0  = self._objs.values()
-        lines0 = self._lines.keys()
         rects0 = {o["name"]: self._dc.GetIdBounds(o["id"]) for o in objs0}
         maxid = max(o["id"] for o in objs0) if objs0 else 0
 
@@ -9845,7 +9844,6 @@ class SchemaDiagram(wx.ScrolledWindow):
             self.VIRTUALSZ = vsize
             self.SetVirtualSize(*[int(x * self._zoom) for x in self.VIRTUALSZ])
 
-        reset |= bool(lines0) != bool(self._lines)
         if reset:
             self._dc.RemoveAll()
             self.SetLayout(self._layout["layout"])
@@ -10511,7 +10509,9 @@ class SchemaDiagram(wx.ScrolledWindow):
             if event.LeftUp() and self.HasCapture(): self.ReleaseMouse()
 
             if not self._dragpos \
-            or self._sels and not event.Dragging() and self._dragrect is None: return
+            or self._sels and not event.Dragging() and self._dragrect is None:
+                if self._sels: self._PostEvent(layout=False)
+                return
 
             if event.Dragging() and not self.HasCapture(): self.CaptureMouse()
 
@@ -10710,9 +10710,9 @@ class SchemaDiagram(wx.ScrolledWindow):
 
     def _PostEvent(self, **kwargs):
         """Posts EVT_DIAGRAM event to parent."""
+        if kwargs.get("layout") == False: self._layout["active"] = False
         evt = SchemaDiagramEvent(self.Id, **kwargs)
         wx.PostEvent(self.Parent, evt)
-        if kwargs.get("layout") == False: self._layout["active"] = False
 
 
 
