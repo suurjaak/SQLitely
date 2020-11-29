@@ -10121,6 +10121,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self._dc.SetIdBounds(o["id"], rect)
                 rowrects[-1].append(rect)
 
+        self.Scroll(0, 0)
         self.Redraw(remakelines=True)
 
 
