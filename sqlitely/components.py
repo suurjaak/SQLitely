@@ -9545,7 +9545,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             self.Scroll(0, 0)
             if not wx.Rect(self.ClientSize).Contains(bounds):
                 delta = self.GetScrollPixelsPerUnit()
-                self.Scroll([(v + d/2) / d for v, d in zip(bounds.TopLeft, delta)])
+                self.Scroll([v / d for v, d in zip(bounds.TopLeft, delta)])
         finally: self.Thaw()
         self._PostEvent(zoom=self._zoom)
 
@@ -9921,6 +9921,16 @@ class SchemaDiagram(wx.ScrolledWindow):
         if not self._show_lines: return
         if remake or recalculate: self._CalculateLines(remake)
 
+        fadedcolour  = controls.ColourManager.Adjust(self.LineColour, self.BackgroundColour, 0.7)
+        linepen      = controls.PEN(self.LineColour)
+        linefadedpen = controls.PEN(fadedcolour)
+        textbrush, textpen = controls.BRUSH(self.BackgroundColour), controls.PEN(self.BackgroundColour)
+        textdragbrush = controls.BRUSH(self._colour_dragbg)
+        textdragpen   = controls.PEN(self._colour_dragbg)
+        cornerpen = controls.PEN(controls.ColourManager.Adjust(self.LineColour,  self.BackgroundColour))
+        cornerfadedpen = controls.PEN(controls.ColourManager.Adjust(fadedcolour, self.BackgroundColour))
+        textextents = {} # {text: (w, h, descent, leading)}
+
         for (name1, name2, cols), opts in sorted(self._lines.items(),
                 key=lambda x: any(n in self._sels for n in x[0][:2])):
             b1, b2 = (self._dc.GetIdBounds(o["id"])
@@ -9929,12 +9939,11 @@ class SchemaDiagram(wx.ScrolledWindow):
             self._dc.RemoveId(opts["id"])
             self._dc.SetId(opts["id"])
 
-            lcolour = self.LineColour
+            lpen = linepen
             if self._dragrect and not any(self._dragrectabs.Contains(b) for b in (b1, b2)) \
             or self._sels and name1 not in self._sels and name2 not in self._sels:
-                # Draw lines of not-focused items more faintly
-                lcolour = controls.ColourManager.Adjust(lcolour, self.BackgroundColour, 0.7)
-            self._dc.SetPen(controls.PEN(lcolour))
+                lpen = linefadedpen # Draw lines of not-focused items more faintly
+            self._dc.SetPen(lpen)
 
             pts = opts["pts"]
             cpts, bounds = [], wx.Rect()
@@ -9975,25 +9984,25 @@ class SchemaDiagram(wx.ScrolledWindow):
             # Draw foreign key label
             if self._show_labels:
                 tname = util.ellipsize(util.unprint(opts["name"]), self.MAX_TEXT)
-                textent = self.GetFullTextExtent(tname)
+                textent = textextents.get(tname) or self.GetFullTextExtent(tname)
+                textextents[tname] = textent
                 tw, th = textent[0] + textent[3], textent[1] + textent[2]
                 tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
                                   if pts[i][0] == pts[i+1][0])
                 tx = tpt1[0] - tw / 2
                 ty = min(tpt1[1], tpt2[1]) - th / 2 + abs(tpt1[1] - tpt2[1]) / 2
-                tbg = self.BackgroundColour
+                tbrush, tpen = textbrush, textpen
                 if self._dragrect and self._dragrectabs.Contains((tx, ty, tw, th)):
-                    tbg = self._colour_dragbg
-                self._dc.SetBrush(controls.BRUSH(tbg))
-                self._dc.SetPen(controls.PEN(tbg))
+                    tbrush, tpen = textdragbrush, textdragpen
+                self._dc.SetBrush(tbrush)
+                self._dc.SetPen(tpen)
                 self._dc.DrawRectangle(tx, ty, tw, th)
-                self._dc.SetTextForeground(lcolour)
+                self._dc.SetTextForeground(lpen.Colour)
                 self._dc.DrawText(tname, tx, ty)
                 bounds.Union((tx, ty, tw, th))
 
             # Draw inner rounded corners
-            ccolour = controls.ColourManager.Adjust(lcolour, self.BackgroundColour)
-            self._dc.SetPen(controls.PEN(ccolour))
+            self._dc.SetPen(cornerfadedpen if lpen == linefadedpen else cornerpen)
             for cpt in cpts: self._dc.DrawPoint(cpt)
 
             self._dc.SetIdBounds(opts["id"], bounds)
@@ -10431,7 +10440,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         x, y = (x + p * d for x, p, d in zip(event.Position, start, delta))
 
         cursor = wx.CURSOR_DEFAULT
-        item = next((o for o in self._objs.values()
+        item = next((o for o in self._order[::-1]
                      if self._dc.GetIdBounds(o["id"]).Contains(x, y)), None)
         self.Cursor = wx.Cursor(wx.CURSOR_HAND if item else wx.CURSOR_DEFAULT)
 
@@ -10446,8 +10455,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         if event.LeftDown() or event.RightDown() or event.LeftDClick():
             event.Skip()
             self._dragpos = x, y
-            oid = next((a for a in self._dc.FindObjects(x, y, radius=5)
-                        if isinstance(self._ids.get(a), basestring)), None)
+            oid = item["id"] if item else None
             if oid and event.LeftDown() and 1 == len(self._sels) \
             and self._ids[oid] in self._sels \
             and not (wx.GetKeyState(wx.WXK_SHIFT) or wx.GetKeyState(wx.WXK_COMMAND)): return
