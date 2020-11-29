@@ -2764,12 +2764,12 @@ class DatabasePage(wx.Panel):
         cb_lbls  = self.cb_diagram_labels = wx.CheckBox(page, label="Foreign &labels")
         cb_stats = self.cb_diagram_stats  = wx.CheckBox(page, label="&Statistics")
 
-        i, level = 0, diagram.ZOOM_MIN
-        while level <= diagram.ZOOM_MAX:
-            if not i or not (100 * level) % 1:
+        level = diagram.ZOOM_MAX
+        while level >= diagram.ZOOM_MIN:
+            if level == diagram.ZOOM_MIN or not (100 * level) % 1:
                 combo_zoom.Append("%s%%" % util.round_float(100 * level, 2))
                 combo_zoom.SetClientData(combo_zoom.Count - 1, level)
-            i, level = i + 1, level + diagram.ZOOM_STEP
+            level -= diagram.ZOOM_STEP
         combo_zoom.SetValue("%s%%" % util.round_float(100 * diagram.ZOOM_DEFAULT, 2))
         combo_zoom.ToolTip = "Zoom"
         bmp1 = images.ToolbarZoomIn.Bitmap
