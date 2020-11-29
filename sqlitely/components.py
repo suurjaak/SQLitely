@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.11.2020
+@modified    29.11.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -5485,7 +5485,7 @@ class SchemaObjectPage(wx.Panel):
                 busy.Close()
                 self._PostEvent(reload_grids=True)
 
-        if errors: wx.MessageBox("Errors:\n\n%s" % "\n\n".join(errors),
+        if errors: wx.MessageBox("Errors:\n\n%s" % "\n\n".join(map(util.to_unicode, errors)),
                                  conf.Title, wx.OK | wx.ICON_WARNING)
         else: wx.MessageBox("No errors detected. SQL:\n\n%s" % sql,
                             conf.Title, wx.OK | wx.ICON_INFORMATION)
@@ -5499,7 +5499,7 @@ class SchemaObjectPage(wx.Panel):
 
         errors, meta2 = self._Validate()
         if errors:
-            wx.MessageBox("Errors:\n\n%s" % "\n\n".join(errors),
+            wx.MessageBox("Errors:\n\n%s" % "\n\n".join(map(util.to_unicode, errors)),
                           conf.Title, wx.OK | wx.ICON_WARNING)
             return
 
