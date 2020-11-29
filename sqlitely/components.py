@@ -9530,16 +9530,19 @@ class SchemaDiagram(wx.ScrolledWindow):
         Centers and zooms to level where all items are visible in viewport,
         defaulting to 100% zoom level if possible.
         """
-        self.SetZoom(self.ZOOM_DEFAULT)
-        zoom = zoom0 = self._zoom
-        oids = [o["id"] for o in self._objs.values()]
-        bounds, bounder = wx.Rect(), self._dc.GetIdBounds
-        if oids: bounds = sum(map(bounder, oids[1:]), bounder(oids[0]))
-        while zoom > self.ZOOM_MIN and (bounds.Width > self.ClientSize.Width
-        or bounds.Height > self.ClientSize.Height):
-            zoom0, zoom = zoom, zoom - self.ZOOM_STEP
-            self.SetZoom(zoom)
-            bounds = sum(map(bounder, oids[1:]), bounder(oids[0])) if oids else bounds
+        self.Freeze()
+        try:
+            self.SetZoom(self.ZOOM_DEFAULT)
+            zoom = zoom0 = self._zoom
+            oids = [o["id"] for o in self._objs.values()]
+            bounds, bounder = wx.Rect(), self._dc.GetIdBounds
+            if oids: bounds = sum(map(bounder, oids[1:]), bounder(oids[0]))
+            while zoom > self.ZOOM_MIN and (bounds.Width > self.ClientSize.Width
+            or bounds.Height > self.ClientSize.Height):
+                zoom0, zoom = zoom, zoom - self.ZOOM_STEP
+                self.SetZoom(zoom)
+                bounds = sum(map(bounder, oids[1:]), bounder(oids[0])) if oids else bounds
+        finally: self.Thaw()
         delta = self.GetScrollPixelsPerUnit()
         self.Scroll([(v + 10) / d for v, d in zip(bounds.TopLeft, delta)])
         self._PostEvent(zoom=zoom)
