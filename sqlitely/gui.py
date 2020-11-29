@@ -2390,6 +2390,8 @@ class DatabasePage(wx.Panel):
         ColourManager.Manage(self, "BackgroundColour", "WidgetColour")
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.on_sys_colour_change)
 
+        self.DropTarget = controls.FileDrop(on_files=self.on_drop_files)
+
         # Create search structures and threads
         self.Bind(EVT_SEARCH, self.on_searchall_result)
         self.workers_search = {} # {search ID: workers.SearchThread, }
@@ -3589,6 +3591,13 @@ class DatabasePage(wx.Panel):
             self.load_tree_data()
             self.load_tree_schema()
         wx.CallAfter(dorefresh) # Postpone to allow conf update
+
+
+    def on_drop_files(self, filenames):
+        """Handler for dropping files onto database page, opens import dialog."""
+        dlg = components.ImportDialog(self, self.db)
+        wx.CallAfter(lambda: dlg and dlg._OnFile(filename=filenames[0]))
+        dlg.ShowModal()
 
 
     def register_notebook_hotkeys(self, notebook):

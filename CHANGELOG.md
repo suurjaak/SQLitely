@@ -1,12 +1,13 @@
 CHANGELOG
 =========
 
-1.2, 2020-11-27
+1.2, 2020-11-29
 ---------------
 - added schema diagram;
 - added option to have only single instance running;
 - added support for single-user install;
 - added easy rename options to data & schema tree;
+- added spreadsheet file drop support to database page;
 - minor fixes and UI tweaks.
 
 
