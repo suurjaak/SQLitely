@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.11.2020
+@modified    29.11.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -769,7 +769,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         IPC server.
         """
         allow = conf.AllowMultipleInstances = event.IsChecked()
-        conf.save()
+        util.run_once(conf.save)
         if allow:
             self.ipc_listener.stop()
             self.ipc_listener = None
@@ -956,7 +956,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.Position = conf.WindowPosition
         conf.WindowMaximized = self.IsMaximized()
         if not self.IsMaximized(): conf.WindowSize = self.Size[:]
-        conf.save()
+        util.run_once(conf.save)
         # Right panel scroll
         wx.CallAfter(lambda: self and (self.list_db.RefreshRows(),
                                        self.panel_db_main.Parent.Layout()))
@@ -969,7 +969,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if not self.IsIconized() and not self.IsMaximized() and not conf.WindowMaximized \
         and self.is_started and not self.is_minimizing:
             conf.WindowPosition = self.Position[:]
-            conf.save()
+            util.run_once(conf.save)
 
 
     def on_ipc(self, data):
@@ -1065,7 +1065,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def on_toggle_autoupdate_check(self, event):
         """Handler for toggling automatic update checking, changes conf."""
         conf.UpdateCheckAutomatic = event.IsChecked()
-        conf.save()
+        util.run_once(conf.save)
 
 
     def on_database_page_event(self, event):
@@ -1091,7 +1091,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.history_file.AddFileToHistory(event.filename2)
             util.add_unique(conf.RecentFiles, event.filename2, -1,
                             conf.MaxRecentFiles)
-            conf.save()
+            util.run_once(conf.save)
             if event.source == self.notebook.GetCurrentPage():
                 self.on_change_page() # Update program title
 
@@ -1162,7 +1162,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         def save_sort_state():
             if not self: return
             conf.DBSort = self.list_db.GetSortState()
-            conf.save()
+            util.run_once(conf.save)
         wx.CallAfter(save_sort_state) # Allow list to update sort state
 
 
@@ -1268,7 +1268,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         def save_list_order():
             conf.DBFiles = [self.list_db.GetItemText(i)
                             for i in range(1, self.list_db.GetItemCountFull())]
-            conf.save()
+            util.run_once(conf.save)
         wx.CallAfter(save_list_order) # Allow list to update items
 
 
@@ -1349,7 +1349,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                           "Update information", wx.OK | wx.ICON_WARNING)
         if check_result is not None:
             conf.LastUpdateCheck = datetime.date.today().strftime("%Y%m%d")
-            conf.save()
+            util.run_once(conf.save)
         support.update_window = None
 
 
@@ -1411,7 +1411,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             filename = util.to_unicode(filename)
             if filename not in conf.DBFiles:
                 conf.DBFiles.append(filename)
-                conf.save()
+                util.run_once(conf.save)
             data = defaultdict(lambda: None, name=filename)
             if os.path.exists(filename):
                 if filename in self.dbs:
@@ -1533,7 +1533,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         del conf.LastSelectedFiles[:]
         del self.dbs_selected[:]
-        conf.save()
+        util.run_once(conf.save)
         self.update_database_list()
 
 
@@ -1637,7 +1637,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         del self.dbs_selected[:]
         self.list_db.Select(0)
         self.update_database_list()
-        conf.save()
+        util.run_once(conf.save)
 
 
     def on_remove_missing(self, event, selecteds=None):
@@ -1657,7 +1657,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if self.dbs_selected: self.update_database_detail()
         else: self.list_db.Select(0)
 
-        if selecteds: conf.save()
+        if selecteds: util.run_once(conf.save)
 
 
     def on_delete_database(self, event=None):
@@ -1720,7 +1720,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         self.list_db.Select(0)
         self.update_database_list()
-        conf.save()
+        util.run_once(conf.save)
         if errors:
             wx.MessageBox("Error removing %s:\n\n%s" % (
                           util.plural("file", errors, numbers=False),
@@ -1840,7 +1840,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 # Keep numbers in sane regions
                 if type(v) in [int, long]: v = max(1, min(sys.maxint, v))
                 setattr(conf, k, v)
-            conf.save()
+            util.run_once(conf.save)
             self.MinSize = conf.MinWindowSize
 
 
@@ -2176,7 +2176,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if page in self.db_pages:
             del self.db_pages[page]
         logger.info("Closed database tab for %s.", page.db)
-        conf.save()
+        util.run_once(conf.save)
 
         # Close databases, if not used in any other page
         page.db.unregister_consumer(page)
@@ -2217,7 +2217,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             page.edit_searchall.SetChoices(conf.SearchHistory)
             page.edit_searchall.ShowDropDown(False)
             page.edit_searchall.Value = ""
-        conf.save()
+        util.run_once(conf.save)
 
 
     def load_database(self, filename, silent=False):
@@ -2262,7 +2262,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                         self.history_file.AddFileToHistory(filename)
                         util.add_unique(conf.RecentFiles, filename, -1,
                                         conf.MaxRecentFiles)
-                        conf.save()
+                        util.run_once(conf.save)
             elif not silent:
                 wx.MessageBox("Nonexistent file: %s." % filename,
                               conf.Title, wx.OK | wx.ICON_ERROR)
@@ -2290,7 +2290,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 page = DatabasePage(self.notebook, tab_title, db, self.memoryfs)
                 conf.DBsOpen[db.filename] = db
                 self.db_pages[page] = db
-                conf.save()
+                util.run_once(conf.save)
                 self.Bind(wx.EVT_LIST_DELETE_ALL_ITEMS,
                           self.on_clear_searchall, page.edit_searchall)
         else:
@@ -3790,7 +3790,7 @@ class DatabasePage(wx.Panel):
         self.update_diagram_controls()
         if not self.db.temporary:
             conf.SchemaDiagrams[self.db.filename] = self.diagram.GetOptions()
-            conf.save()
+            util.run_once(conf.save)
 
 
     def on_diagram_stats(self, event):
@@ -4668,7 +4668,7 @@ class DatabasePage(wx.Panel):
             util.add_unique(conf.SearchHistory, text, 1, conf.MaxSearchHistory)
             self.edit_searchall.SetChoices(conf.SearchHistory)
             if has_focus: self.edit_searchall.SetFocus()
-            conf.save()
+            util.run_once(conf.save)
 
 
     def on_close_search_page(self, event):

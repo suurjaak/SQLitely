@@ -13,7 +13,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.09.2020
+@modified    29.11.2020
 """
 import datetime
 import logging
@@ -221,7 +221,7 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
         history = h[:conf.MaxConsoleHistory][::-1]
         if history != conf.ConsoleHistoryCommands:
             conf.ConsoleHistoryCommands[:] = history
-            conf.save()
+            util.run_once(conf.save)
 
 
     def set_status(self, text, timeout=False):

@@ -8,9 +8,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.11.2020
+@modified    29.11.2020
 ------------------------------------------------------------------------------
 """
+import __builtin__
 import collections
 import contextlib
 import ctypes
@@ -504,6 +505,22 @@ def is_os_64bit():
 def is_python_64bit():
     """Returns whether Python is 64-bit."""
     return (struct.calcsize("P") * 8) == 64
+
+
+def run_once(function):
+    """Runs the function in a later thread at most once."""
+    myqueue = getattr(run_once, "queue", __builtin__.set())
+    setattr(run_once, "queue", myqueue)
+
+    def later():
+        functions = list(myqueue)
+        myqueue.clear()
+        for f in functions: f()
+
+    if function not in myqueue:
+        myqueue.add(function)
+        if wx: wx.CallLater(100, later)
+        else: threading.Thread(target=later).start()
 
 
 def round_float(value, precision=1):
