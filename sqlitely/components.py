@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.11.2020
+@modified    30.11.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -4441,19 +4441,23 @@ class SchemaObjectPage(wx.Panel):
                 "sql": self._item["sql0" if self._sql0_applies else "sql"],
                 "__type__": "ALTER VIEW"}
 
-        for category, itemmap in self._db.get_related("view", old["name"], own=not renames).items():
+        used = util.CaselessDict()
+        for category, itemmap in self._db.get_related("view", old["name"]).items():
             for item in itemmap.values():
                 is_view_trigger = "trigger" == category and util.lceq(item["meta"]["table"], old["name"])
                 sql, _ = grammar.transform(item["sql"], renames=renames)
                 if sql == item["sql"] and not is_view_trigger: continue # for item
 
                 args.setdefault(category, []).append(dict(item, sql=sql))
-                if "view" != category: continue
+                used[item["name"]] = True
+                if "view" != category: continue # for item
 
                 # Re-create view triggers
                 for subitem in self._db.get_related("view", item["name"], own=True).get("trigger", {}).values():
+                    if subitem["name"] in used: continue # for subitem
                     sql, _ = grammar.transform(subitem["sql"], renames=renames)
                     args.setdefault(subitem["type"], []).append(dict(subitem, sql=sql))
+                    used[subitem["name"]] = True
 
         short, _ = grammar.generate(dict(args, no_tx=True))
         full,  _ = grammar.generate(args)

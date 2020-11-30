@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.11.2020
+@modified    30.11.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1572,8 +1572,31 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         if util.lceq(name, name2): return
         category, item = category.lower(), self.get_category(category, name)
-        altersql, err = grammar.generate(dict(name=name, name2=name2),
-                                         category="ALTER %s" % category.upper())
+        data, renames = dict(name=name, name2=name2), {category: {name: name2}}
+        if "table" != category:
+            sql, _ = grammar.generate(dict(item["meta"], name=name2))
+            if sql: data["sql"] = sql
+
+        if "view" == category:
+            used = util.CaselessDict()
+            for mycategory, itemmap in self.get_related(category, name).items():
+                for myitem in itemmap.values():
+                    is_view_trigger = "trigger" == mycategory and util.lceq(myitem["meta"]["table"], name)
+                    sql, _ = grammar.transform(myitem["sql"], renames=renames)
+                    if sql == myitem["sql"] and not is_view_trigger: continue # for myitem
+
+                    data.setdefault(mycategory, []).append(dict(myitem, sql=sql))
+                    used[item["name"]] = True
+                    if "view" != mycategory: continue # for myitem
+
+                    # Re-create view triggers
+                    for subitem in self.get_related("view", myitem["name"], own=True).get("trigger", {}).values():
+                        if subitem["name"] in used: continue # for subitem
+                        sql, _ = grammar.transform(subitem["sql"], renames=renames)
+                        data.setdefault(subitem["type"], []).append(dict(subitem, sql=sql))
+                        used[subitem["name"]] = True
+
+        altersql, err = grammar.generate(data, category="ALTER %s" % category.upper())
         if err: raise Exception(err)
 
         try: self.executescript(altersql, name="RENAME")
@@ -1584,12 +1607,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
             raise e
         else:
             resets  = defaultdict(dict) # {category: {name: SQL}}
-            renames = {"table": {name: name2}}
             if "table" == category and name2 == grammar.quote(name2):
                 # Modify sqlite_master directly, as "ALTER TABLE x RENAME TO y"
                 # sets a quoted name "y" to CREATE statements, including related objects,
                 # regardless of whether the name required quoting.
-                renames = {"table": {name: name2}}
                 sql, _ = grammar.transform(item["sql"], renames=renames)
                 if sql: resets["table"][name2] = sql
                 for subcategory, submap in self.get_related(category, name).items():
