@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.11.2020
+@modified    30.11.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -6736,10 +6736,10 @@ class DatabasePage(wx.Panel):
 
             menu.AppendSeparator()
 
-            if "table" == data["type"]:
+            if data["type"] in ("table", "view"):
                 submenu, keys = wx.Menu(), []
                 menu.AppendSubMenu(submenu, text="Create &new ..")
-                for category in database.Database.CATEGORIES:
+                for category in database.Database.CATEGORIES if "table" == data["type"] else ["trigger"]:
                     key = next((x for x in category if x not in keys), category[0])
                     keys.append(key)
                     if category == data["type"]: continue # for category
