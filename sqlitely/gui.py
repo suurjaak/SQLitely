@@ -6272,6 +6272,7 @@ class DatabasePage(wx.Panel):
         tree = event.EventObject
         data = tree.GetItemPyData(event.GetItem())
         if not data or data.get("type") not in self.db.CATEGORIES + ["column"] \
+        or tree.GetEditControl() \
         or tree is self.tree_schema \
         and data.get("parent", {}).get("level") not in ("category", "table"):
             event.Veto()
