@@ -9515,9 +9515,9 @@ class SchemaDiagram(wx.ScrolledWindow):
         for o in self._objs.values():
             opts = self._db.get_category(o["category"], o["name"])            
             stats = stats=self._GetItemStats(opts)
-            bmp = self._MakeItemBitmap(o["category"], opts, stats)
-            bmpsel = self._MakeFocusedBitmap(bmp)
-            bmpseldrag = self._MakeFocusedBitmap(self._MakeItemBitmap(o["category"], opts, stats, dragrect=True))
+            bmp = self._MakeItemBitmap(opts, stats)
+            bmpsel = self._MakeFocusedBitmap(opts, bmp)
+            bmpseldrag = self._MakeFocusedBitmap(opts, self._MakeItemBitmap(opts, stats, dragrect=True))
             o.update(bmp=bmp, bmpsel=bmpsel, bmpseldrag=bmpseldrag, stats=stats)
             r = self._dc.GetIdBounds(o["id"])
             pt = [v * self._zoom / zoom0 for v in r.TopLeft]
@@ -9828,9 +9828,9 @@ class SchemaDiagram(wx.ScrolledWindow):
                 if o0 and o0["sql0"] == opts["sql0"] and stats == stats0:
                     bmp, bmpsel, bmpseldrag = map(o0.get, ("bmp", "bmpsel", "bmpseldrag"))
                 else:
-                    bmp = self._MakeItemBitmap(category, opts, stats)
-                    bmpsel = self._MakeFocusedBitmap(bmp)
-                    bmpseldrag = self._MakeFocusedBitmap(self._MakeItemBitmap(category, opts, stats, dragrect=True))
+                    bmp = self._MakeItemBitmap(opts, stats)
+                    bmpsel = self._MakeFocusedBitmap(opts, bmp)
+                    bmpseldrag = self._MakeFocusedBitmap(opts, self._MakeItemBitmap(opts, stats, dragrect=True))
                 self._ids[oid] = name
                 self._objs[name] = {"id": oid, "category": category, "name": name, "stats": stats,
                                     "__id__": opts["__id__"], "sql0": opts["sql0"],
@@ -9870,9 +9870,9 @@ class SchemaDiagram(wx.ScrolledWindow):
             if not opts: self._objs.pop(o["name"])
             if not opts: continue # for o
             stats = o["stats"] = self._GetItemStats(opts)
-            o["bmp"] = self._MakeItemBitmap(o["category"], opts, stats)
-            o["bmpsel"] = self._MakeFocusedBitmap(o["bmp"])
-            o["bmpseldrag"] = self._MakeFocusedBitmap(self._MakeItemBitmap(o["category"], opts, stats, dragrect=True))
+            o["bmp"] = self._MakeItemBitmap(opts, stats)
+            o["bmpsel"] = self._MakeFocusedBitmap(opts, o["bmp"])
+            o["bmpseldrag"] = self._MakeFocusedBitmap(opts, self._MakeItemBitmap(opts, stats, dragrect=True))
             r = self._dc.GetIdBounds(o["id"])
             self._dc.SetIdBounds(o["id"], wx.Rect(r.TopLeft, o["bmp"].Size))
         self.RecordSelectionRect()
@@ -10264,10 +10264,11 @@ class SchemaDiagram(wx.ScrolledWindow):
         return stats
 
 
-    def _MakeItemBitmap(self, category, opts, stats=None, dragrect=False):
+    def _MakeItemBitmap(self, opts, stats=None, dragrect=False):
         """Returns wx.Bitmap representing a schema item like table."""
+        CRADIUS = self.BRADIUS if "table" == opts["type"] else 0
         w, h = self.MINW, self.HEADERH + self.HEADERP + self.FOOTERH
-        font, boldfont = self.Font, self.Font.Bold()
+        boldfont = self.Font.Bold()
 
         # Measure title width
         title = util.ellipsize(util.unprint(opts["name"]), self.MAX_TITLE)
@@ -10280,7 +10281,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             for k in ["name", "type"]:
                 v = c.get(k)
                 if not v: continue # for k
-                extent = self.GetFullTextExtent(util.ellipsize(util.unprint(v), self.MAX_TEXT), font)
+                extent = self.GetFullTextExtent(util.ellipsize(util.unprint(v), self.MAX_TEXT))
                 if v: colmax[k] = max(colmax[k], extent[0] + extent[3])
         w = max(w, self.LPAD + 2 * self.HPAD + sum(colmax.values()))
         h += self.LINEH * len(opts.get("columns") or [])
@@ -10292,7 +10293,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         mdc.Background = wx.TRANSPARENT_BRUSH
         mdc.Clear()
         mdc.Pen, mdc.Brush = wx.RED_PEN, wx.RED_BRUSH
-        mdc.DrawRoundedRectangle(0, 0, bmp.Width, bmp.Height, self.BRADIUS)
+        mdc.DrawRoundedRectangle(0, 0, bmp.Width, bmp.Height, CRADIUS)
         del mdc
         mask = wx.Mask(bmp, wx.TRANSPARENT_BRUSH.Colour)
 
@@ -10305,7 +10306,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             bg = gradfrom = self._colour_dragbg
         dc.GradientFillLinear((0, 0, w, h), bg, self.GradientColourTo)
         dc.Pen, dc.Brush = controls.PEN(self.BorderColour), wx.TRANSPARENT_BRUSH
-        dc.DrawRoundedRectangle(0, 0, w, h, self.BRADIUS)
+        dc.DrawRoundedRectangle(0, 0, w, h, CRADIUS)
         dc.Pen   = controls.PEN(bg)
         dc.Brush = controls.BRUSH(bg)
         dc.DrawRectangle(1, self.HEADERH, w - 2, self.HEADERP + self.LINEH * len(opts.get("columns") or []))
@@ -10317,7 +10318,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         dc.DrawLabel(title, (0, 1, w, self.HEADERH), wx.ALIGN_CENTER)
 
         # Draw columns: name and type, and primary/foreign key icons
-        dc.SetFont(font)
+        dc.SetFont(self.Font)
 
         pkbmp, fkbmp = images.DiagramPK.Bitmap, images.DiagramFK.Bitmap
         if self._zoom != self.ZOOM_DEFAULT:
@@ -10370,8 +10371,9 @@ class SchemaDiagram(wx.ScrolledWindow):
         return bmp
 
 
-    def _MakeFocusedBitmap(self, bmp):
+    def _MakeFocusedBitmap(self, opts, bmp):
         """Returns a bitmap highlighted for focus."""
+        CRADIUS = self.BRADIUS if "table" == opts["type"] else 0
 
         # Make transparency mask for excluding content outside rounded corners
         bmp2 = wx.Bitmap(*[a + 2 * self.FMARGIN for a in bmp.Size])
@@ -10380,7 +10382,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         mdc.Clear()
         mdc.Pen   = controls.PEN  (self.ShadowColour)
         mdc.Brush = controls.BRUSH(self.ShadowColour)
-        mdc.DrawRoundedRectangle(0, 0, bmp2.Width, bmp2.Height, self.BRADIUS)
+        mdc.DrawRoundedRectangle(0, 0, bmp2.Width, bmp2.Height, CRADIUS)
         del mdc
         mask = wx.Mask(bmp2, wx.TRANSPARENT_BRUSH.Colour)
 
