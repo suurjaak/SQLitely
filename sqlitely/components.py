@@ -12,6 +12,7 @@ Released under the MIT License.
 ------------------------------------------------------------------------------
 """
 import calendar
+import collections
 from collections import defaultdict, Counter, OrderedDict
 import copy
 import datetime
@@ -9389,12 +9390,14 @@ class SchemaDiagram(wx.ScrolledWindow):
     MOVE_STEP =  10 # Pixels to move item on arrow key
     FONT_SIZE =   8 # Default font size
     FONT_FACE = "Verdana"
-    FONT_SPAN = (1, 24) # Minimum and maximum font size for zoom
-    STATS_H   =  15 # Stats footer height
+    FONT_SPAN = (1, 24)  # Minimum and maximum font size for zoom
+    STATS_H   =  15      # Stats footer height
     FONT_STEP_STATS = -1 # Stats footer font size step from base font
 
     LAYOUT_GRID  = "grid"
     LAYOUT_GRAPH = "graph"
+
+    SCROLL_STEP = 20 # Effective scroll rate for mouse and keyboard
 
     TOOLTIP_DELAY = 500 # Milliseconds before showing hover tooltip
 
@@ -9447,7 +9450,7 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         self._UpdateColours()
         self.SetVirtualSize(self.VIRTUALSZ)
-        self.SetScrollRate(20, 20)
+        self.SetScrollRate(1, 1)
         self.SetFont(wx.Font(self.FONT_SIZE, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
                              wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE))
 
@@ -9494,12 +9497,20 @@ class SchemaDiagram(wx.ScrolledWindow):
 
     """Returns current zoom level, 1 being 100% and .5 being 50%."""
     def GetZoom(self): return self._zoom
-    def SetZoom(self, zoom, refresh=True):
+    def SetZoom(self, zoom, refresh=True, focus=None):
+        """
+        Sets current zoom scale
+
+        @param   zoom     scale factor, will be constrained to valid min-max range
+        @param   refresh  update display immediately
+        @param   focus    point to retain at the same position in viewport,
+                          defaults to current viewport top left
+        """
         zoom = float(zoom) - zoom % self.ZOOM_STEP # Even out to allowed step
         zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
         if self._zoom == zoom: return
 
-        zoom0 = self._zoom
+        zoom0, viewport0 = self._zoom, self.GetViewPort()
         self._zoom = zoom
 
         font = self.Font
@@ -9510,7 +9521,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         for k in ("MINW", "LINEH", "HEADERP", "HEADERH", "FOOTERH", "BRADIUS",
         "FMARGIN", "CARDINALW", "CARDINALH", "LPAD", "HPAD", "GPAD", "MOVE_STEP", "STATS_H"):
             v = getattr(self.__class__, k)
-            setattr(self, k, int(math.ceil(v * self._zoom)))
+            setattr(self, k, int(math.ceil(v * zoom)))
 
         for o in self._objs.values():
             opts = self._db.get_category(o["category"], o["name"])            
@@ -9520,12 +9531,20 @@ class SchemaDiagram(wx.ScrolledWindow):
             bmpseldrag = self._MakeFocusedBitmap(opts, self._MakeItemBitmap(opts, stats, dragrect=True))
             o.update(bmp=bmp, bmpsel=bmpsel, bmpseldrag=bmpseldrag, stats=stats)
             r = self._dc.GetIdBounds(o["id"])
-            pt = [v * self._zoom / zoom0 for v in r.TopLeft]
+            pt = [v * zoom / zoom0 for v in r.TopLeft]
             self._dc.SetIdBounds(o["id"], wx.Rect(wx.Point(pt), bmp.Size))
 
-        if refresh:
-            self.Redraw(remakelines=True)
-            self._PostEvent(zoom=zoom)
+        if refresh: self.Freeze()
+        try:
+            xy = (p * zoom / zoom0 - (p - v) for v, p in zip(viewport0.TopLeft, focus)) \
+                 if focus else (v * zoom / zoom0 for v in viewport0.TopLeft)
+            self.ScrollXY(xy)
+
+            if refresh:
+                self.Redraw(remakelines=True)
+                self._PostEvent(zoom=zoom)
+        finally:
+            if refresh: self.Thaw()
     Zoom = property(GetZoom, SetZoom)
 
 
@@ -9547,9 +9566,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self.Zoom, zoom0 = self._zoom - self.ZOOM_STEP, self._zoom
                 if oids: bounds = sum(map(bounder, oids[1:]), bounder(oids[0])).Inflate(5, 5)
             self.Scroll(0, 0)
-            if not wx.Rect(self.ClientSize).Contains(bounds):
-                delta = self.GetScrollPixelsPerUnit()
-                self.Scroll([v / d for v, d in zip(bounds.TopLeft, delta)])
+            if not wx.Rect(self.ClientSize).Contains(bounds): self.ScrollXY(bounds.TopLeft)
         finally: self.Thaw()
         self._PostEvent(zoom=self._zoom)
 
@@ -9718,16 +9735,27 @@ class SchemaDiagram(wx.ScrolledWindow):
         if not self.GetViewPort().Contains(titlept):
             self.Scroll(0, 0)
             if not self.GetViewPort().Contains(titlept):
-                delta = self.GetScrollPixelsPerUnit()
-                self.Scroll(0, bounds.Top / delta[1])
+                self.ScrollXY(0, bounds.Top)
             if not self.GetViewPort().Contains(titlept):
-                self.Scroll([max(0, v - 10) / d for v, d in zip(bounds.TopLeft, delta)])
+                self.ScrollXY(v - 10 for v in bounds.TopLeft)
 
 
     def GetViewPort(self):
         """Returns current viewpoint as wx.Rect()."""
         start, delta = self.GetViewStart(), self.GetScrollPixelsPerUnit()
         return wx.Rect(wx.Point(*[p * d for p, d in zip(start, delta)]), self.ClientSize)
+
+
+    def ScrollXY(self, *args):
+        """
+        Sets scroll position as (X, Y) coordinates.
+
+        @param      x, y; or an iterable yielding (x, y)
+        """
+        PTYPES = collections.Iterable, wx.Point, wx.Position, wx.Size
+        pt = args[0] if isinstance(args[0], PTYPES) else args
+        delta = self.GetScrollPixelsPerUnit()
+        self.Scroll([v / d for v, d in zip(pt, delta)])
 
 
     def OpenContextMenu(self):
@@ -10460,8 +10488,8 @@ class SchemaDiagram(wx.ScrolledWindow):
 
     def _OnMouse(self, event):
         """Handler for mouse events: focus, drag, menu."""
-        start, delta = self.GetViewStart(), self.GetScrollPixelsPerUnit()
-        x, y = (x + p * d for x, p, d in zip(event.Position, start, delta))
+        viewport = self.GetViewPort()
+        x, y = (v + p for v, p in zip(event.Position, viewport.TopLeft))
 
         cursor = wx.CURSOR_DEFAULT
         item = next((o for o in self._order[::-1]
@@ -10605,8 +10633,10 @@ class SchemaDiagram(wx.ScrolledWindow):
             self._dragpos = x, y
         elif event.WheelRotation:
             if event.CmdDown():
-                # @todo tsentreeri hiire ümber kui hiir viewpordis
-                self.Zoom += self.ZOOM_STEP * (1 if event.WheelRotation > 0 else -1)
+                step = self.ZOOM_STEP * (1 if event.WheelRotation > 0 else -1)
+                focus = (x, y) if self.ClientRect.Contains(event.Position) else None
+                self.SetZoom(self.Zoom + step, focus=focus)
+                return
             else: event.Skip()
         else:
             event.Skip()
@@ -10657,16 +10687,17 @@ class SchemaDiagram(wx.ScrolledWindow):
             self._page.handle_command("rename", items[0]["category"], items[0]["name"])
         elif event.KeyCode in controls.KEYS.ENTER and items:
             for o in items: self._page.handle_command("schema", o["category"], o["name"])
-        elif event.KeyCode in controls.KEYS.ARROW + controls.KEYS.NUMPAD_ARROW and items:
+        elif event.KeyCode in controls.KEYS.ARROW + controls.KEYS.NUMPAD_ARROW:
             dx, dy = 0, 0
-            if event.KeyCode in controls.KEYS.UP:    dy = -self.MOVE_STEP
-            if event.KeyCode in controls.KEYS.DOWN:  dy = +self.MOVE_STEP
-            if event.KeyCode in controls.KEYS.LEFT:  dx = -self.MOVE_STEP
-            if event.KeyCode in controls.KEYS.RIGHT: dx = +self.MOVE_STEP
-            if event.KeyCode == wx.WXK_NUMPAD_END:      dx, dy = -self.MOVE_STEP, +self.MOVE_STEP
-            if event.KeyCode == wx.WXK_NUMPAD_PAGEDOWN: dx, dy = +self.MOVE_STEP, +self.MOVE_STEP
-            if event.KeyCode == wx.WXK_NUMPAD_HOME:     dx, dy = -self.MOVE_STEP, -self.MOVE_STEP
-            if event.KeyCode == wx.WXK_NUMPAD_PAGEUP:   dx, dy = +self.MOVE_STEP, -self.MOVE_STEP
+            STEP = self.MOVE_STEP if items else self.SCROLL_STEP
+            if event.KeyCode in controls.KEYS.UP:    dy = -STEP
+            if event.KeyCode in controls.KEYS.DOWN:  dy = +STEP
+            if event.KeyCode in controls.KEYS.LEFT:  dx = -STEP
+            if event.KeyCode in controls.KEYS.RIGHT: dx = +STEP
+            if event.KeyCode == wx.WXK_NUMPAD_END:      dx, dy = -STEP, +STEP
+            if event.KeyCode == wx.WXK_NUMPAD_PAGEDOWN: dx, dy = +STEP, +STEP
+            if event.KeyCode == wx.WXK_NUMPAD_HOME:     dx, dy = -STEP, -STEP
+            if event.KeyCode == wx.WXK_NUMPAD_PAGEUP:   dx, dy = +STEP, -STEP
 
             # First pass: constrain dx-dy so that all items remain within diagram bounds
             for o in items:
@@ -10680,9 +10711,11 @@ class SchemaDiagram(wx.ScrolledWindow):
 
             # Second pass: move items
             for o in items: self._dc.TranslateId(o["id"], dx, dy)
-            self.Redraw(recalculate=True)
-            self._PostEvent(layout=False)
-
+            if items:
+                self.Redraw(recalculate=True)
+                self._PostEvent(layout=False)
+            else:
+                self.ScrollXY(v + d for v, d in zip(self.GetViewPort().TopLeft, (dx, dy)))
         else: event.Skip() # Allow to propagate to other handlers
 
 
@@ -10728,9 +10761,14 @@ class SchemaDiagram(wx.ScrolledWindow):
 
 
     def _OnScroll(self, event):
-        """Handler for scroll, queues refresh."""
-        event.Skip()
-        wx.CallAfter(lambda: self and self.Refresh())
+        """Handler for scroll, scrolls by SCROLL_STEP if single line scroll."""
+        if event.EventType in (wx.wxEVT_SCROLLWIN_LINEUP, wx.wxEVT_SCROLLWIN_LINEDOWN):
+            delta = (0, self.SCROLL_STEP) if wx.VERTICAL == event.Orientation else \
+                    (self.SCROLL_STEP, 0)
+            if wx.wxEVT_SCROLLWIN_LINEUP == event.EventType:
+                delta = [-v for v in delta]
+            self.ScrollXY(v + d for v, d in zip(self.GetViewPort().TopLeft, delta))
+        else: event.Skip()
 
 
     def _PostEvent(self, **kwargs):
