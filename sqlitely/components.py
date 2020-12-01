@@ -9801,6 +9801,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         if not self: return
 
         objs0  = self._objs.values()
+        sels0  = self._sels.copy()
         rects0 = {o["name"]: self._dc.GetIdBounds(o["id"]) for o in objs0}
         maxid = max(o["id"] for o in objs0) if objs0 else 0
 
@@ -9831,6 +9832,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                     bmp = self._MakeItemBitmap(opts, stats)
                     bmpsel = self._MakeFocusedBitmap(opts, bmp)
                     bmpseldrag = self._MakeFocusedBitmap(opts, self._MakeItemBitmap(opts, stats, dragrect=True))
+                if o0 and o0["name"] in sels0: self._sels[name] = oid
                 self._ids[oid] = name
                 self._objs[name] = {"id": oid, "category": category, "name": name, "stats": stats,
                                     "__id__": opts["__id__"], "sql0": opts["sql0"],
