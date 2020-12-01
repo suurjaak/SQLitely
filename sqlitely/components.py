@@ -9708,6 +9708,28 @@ class SchemaDiagram(wx.ScrolledWindow):
         return bmp2
 
 
+    def EnsureVisible(self, name):
+        """Scrolls viewport if specified item is not currently visible."""
+        o = self._objs.get(name)
+        if not o: return
+
+        bounds = self._dc.GetIdBounds(o["id"])
+        titlept = bounds.Left + bounds.Width / 2, bounds.Top + self.HEADERH / 2
+        if not self.GetViewPort().Contains(titlept):
+            self.Scroll(0, 0)
+            if not self.GetViewPort().Contains(titlept):
+                delta = self.GetScrollPixelsPerUnit()
+                self.Scroll(0, bounds.Top / delta[1])
+            if not self.GetViewPort().Contains(titlept):
+                self.Scroll([max(0, v - 10) / d for v, d in zip(bounds.TopLeft, delta)])
+
+
+    def GetViewPort(self):
+        """Returns current viewpoint as wx.Rect()."""
+        start, delta = self.GetViewStart(), self.GetScrollPixelsPerUnit()
+        return wx.Rect(wx.Point(*[p * d for p, d in zip(start, delta)]), self.ClientSize)
+
+
     def OpenContextMenu(self):
         """Opens context menu, for focused schema item if any."""
         if not self._page: return
@@ -10131,15 +10153,12 @@ class SchemaDiagram(wx.ScrolledWindow):
         """Calculates item positions using a force-directed graph."""
         if self._worker_graph.is_working(): return
 
-        start, delta = self.GetViewStart(), self.GetScrollPixelsPerUnit()
-
         nodes = [{"name": o["name"], "x": b.Left, "y": b.Top, "size": tuple(b.Size)}
                  for o in self._objs.values() for b in [self._dc.GetIdBounds(o["id"])]]
         links = [(n1, n2) for n1, n2, opts in self._lines]
 
         bounds = [0, 0] + list(self.VirtualSize)
-        viewport = [p * d for p, d in zip(start, delta)] + list(self.ClientSize)
-        self._worker_graph.work((nodes, links, bounds, viewport))
+        self._worker_graph.work((nodes, links, bounds, self.GetViewPort()))
 
 
     def _CalculateLines(self, remake=False):
@@ -10580,8 +10599,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             else:
                 for name in refnames: self.RecordItem(name)
                 if self._dragrectid:  self.RecordSelectionRect()
-                start, delta = self.GetViewStart(), self.GetScrollPixelsPerUnit()
-                refrect.Offset(*[-p * d for p, d in zip(start, delta)])
+                refrect.Offset(*[-p for p in self.GetViewPort().TopLeft])
                 self.RefreshRect(refrect, eraseBackground=False)
 
             self._dragpos = x, y
@@ -10623,7 +10641,9 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self._sels.clear()
                 o = self._objs[names[idx2]] if idx2 < len(names) else None
             else: o = None if event.ShiftDown() else self._objs[names[0]] if names else None
-            if o: self._sels[o["name"]] = o["id"]
+            if o:
+                self._sels[o["name"]] = o["id"]
+                self.EnsureVisible(o["name"])
             else: event.Skip() # Propagate tab to next component
             self.Redraw()
         elif event.KeyCode in controls.KEYS.ESCAPE and items:
@@ -10695,9 +10715,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         dc.Background = wx.Brush(self.BackgroundColour)
         dc.Clear()
         self.DoPrepareDC(dc) # For proper scroll position
-        start, delta = self.GetViewStart(), self.GetScrollPixelsPerUnit()
         rgn = self.GetUpdateRegion()
-        rgn.Offset(*[p * d for p, d in zip(start, delta)])
+        rgn.Offset(self.GetViewPort().TopLeft)
         self._dc.DrawToDCClipped(dc, rgn.GetBox())
 
 
