@@ -10616,13 +10616,13 @@ class SchemaDiagram(wx.ScrolledWindow):
         elif event.KeyCode in controls.KEYS.MULTIPLY:
             self.Zoom = 1
         elif event.KeyCode in controls.KEYS.TAB and self._objs:
-            # @todo siin veel tööd loogikaga, ühte ja teistpidi tulles ei saa alati minema
+            names = sorted(self._objs, key=lambda x: self._dc.GetIdBounds(self._objs[x]["id"]).TopLeft[::-1])
             if self._sels:
                 name1 = next(iter(self._sels))
-                idx2  = self._objs.keys().index(name1) + (-1 if event.ShiftDown() else 1)
+                idx2  = names.index(name1) + (-1 if event.ShiftDown() else 1)
                 self._sels.clear()
-                o = self._objs[self._objs.keys()[idx2]] if idx2 < len(self._objs) else None
-            else: o = None if event.ShiftDown() else next(iter(self._objs.values()))  
+                o = self._objs[names[idx2]] if idx2 < len(names) else None
+            else: o = None if event.ShiftDown() else self._objs[names[0]] if names else None
             if o: self._sels[o["name"]] = o["id"]
             else: event.Skip() # Propagate tab to next component
             self.Redraw()
