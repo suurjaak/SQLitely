@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.11.2020
+@modified    01.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -10069,20 +10069,18 @@ class SchemaDiagram(wx.ScrolledWindow):
             return self.GPAD + result
 
         tablestats = self._page.statistics.get("data", {}).get("table", [])
-        statmap = util.CaselessDict({x["name"]: x["size_total"] for x in tablestats})
-        direction, do_reverse = (-1 if self._layout["grid"]["reverse"] else 1), False
+        do_reverse = bool(self._layout["grid"]["reverse"])
+        numval = lambda o: 0
+        # Sort views always to the end
+        catval = lambda c: c.upper() if do_reverse and util.lceq(c, "view") else c.lower()
         if "columns" == self._layout["grid"]["order"]:
-            sortkey = lambda o: (len(self._db.get_category(o["category"], o["name"])["columns"]) * direction,
-                                 o["category"].lower(), o["name"].lower())
+            numval = lambda o: len(self._db.get_category(o["category"], o["name"])["columns"])
         elif "rows" == self._layout["grid"]["order"]:
-            sortkey = lambda o: (self._db.get_category(o["category"], o["name"]).get("count", 0) * direction,
-                                 o["category"].lower(), o["name"].lower())
+            numval = lambda o: self._db.get_category(o["category"], o["name"]).get("count", 0)
         elif "bytes" == self._layout["grid"]["order"]:
-            sortkey = lambda o: (statmap.get(o["name"], 0) * direction,
-                                 o["category"].lower(), o["name"].lower())
-        else:
-            sortkey = lambda o: (o["category"].lower(), o["name"].lower())
-            do_reverse = bool(self._layout["grid"]["reverse"])
+            statmap = util.CaselessDict({x["name"]: x["size_total"] for x in tablestats})
+            numval = lambda o: statmap.get(o["name"], 0)
+        sortkey = lambda o: (catval(o["category"]), numval(o), o["name"].lower())
         items = sorted(self._order, key=sortkey, reverse=do_reverse)
 
         if self._layout["grid"]["vertical"]:
