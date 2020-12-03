@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.12.2020
+@modified    03.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -9360,6 +9360,7 @@ class SchemaDiagram(wx.ScrolledWindow):
     EXPORT_FORMATS = {
         wx.BITMAP_TYPE_BMP:  "BMP",
         wx.BITMAP_TYPE_PNG:  "PNG",
+        0xFFFF:              "SVG",
     }
     DEFAULT_COLOURS = {
         wx.SYS_COLOUR_WINDOW:      wx.WHITE,
@@ -9391,7 +9392,7 @@ class SchemaDiagram(wx.ScrolledWindow):
     FONT_SIZE =   8 # Default font size
     FONT_FACE = "Verdana"
     FONT_SPAN = (1, 24)  # Minimum and maximum font size for zoom
-    STATS_H   =  15      # Stats footer height
+    STATSH    =  15      # Stats footer height
     FONT_STEP_STATS = -1 # Stats footer font size step from base font
 
     LAYOUT_GRID  = "grid"
@@ -9519,13 +9520,13 @@ class SchemaDiagram(wx.ScrolledWindow):
         self.SetVirtualSize(*[int(x * self._zoom) for x in self.VIRTUALSZ])
 
         for k in ("MINW", "LINEH", "HEADERP", "HEADERH", "FOOTERH", "BRADIUS",
-        "FMARGIN", "CARDINALW", "CARDINALH", "LPAD", "HPAD", "GPAD", "MOVE_STEP", "STATS_H"):
+        "FMARGIN", "CARDINALW", "CARDINALH", "LPAD", "HPAD", "GPAD", "MOVE_STEP", "STATSH"):
             v = getattr(self.__class__, k)
             setattr(self, k, int(math.ceil(v * zoom)))
 
         for o in self._objs.values():
             opts = self._db.get_category(o["category"], o["name"])            
-            stats = stats=self._GetItemStats(opts)
+            stats = self._GetItemStats(opts)
             bmp = self._MakeItemBitmap(opts, stats)
             bmpsel = self._MakeFocusedBitmap(opts, bmp)
             bmpseldrag = self._MakeFocusedBitmap(opts, self._MakeItemBitmap(opts, stats, dragrect=True))
@@ -9666,9 +9667,13 @@ class SchemaDiagram(wx.ScrolledWindow):
         filetype = os.path.splitext(filename)[-1].lstrip(".").upper()
         wxtype   = next(k for k, v in self.EXPORT_FORMATS.items() if v == filetype)
 
-        self.MakeBitmap().SaveFile(filename, wxtype)
+        if "SVG" == filetype:
+            content = self.MakeTemplate(filetype, zoom=1)
+            with open(filename, "wb") as f: f.write(content)
+        else:
+            self.MakeBitmap().SaveFile(filename, wxtype)
+            util.start_file(filename)
         guibase.status("Exported schema diagram to %s.", filename, log=True)
-        util.start_file(filename)
 
 
     def MakeBitmap(self, zoom=None, defaultcolours=False, statistics=None):
@@ -9723,6 +9728,55 @@ class SchemaDiagram(wx.ScrolledWindow):
             elif remake: self.Redraw(remake=True)
         finally: self.Thaw()
         return bmp2
+
+
+    def MakeTemplate(self, filetype, zoom=None, statistics=None):
+        """
+        Returns diagram as template content.
+
+        @param   filetype        template type like "SVG"
+        @param   zoom            zoom level to use if not current
+        @param   statistics      whether bitmap should include statistics,
+                                 overrides current statistics setting
+        """
+        if "SVG" != filetype: return
+        self.Freeze()
+        try:
+            zoom0, showlines0 = self._zoom, self._show_lines
+
+            if zoom is not None:
+                zoom = float(zoom) - zoom % self.ZOOM_STEP # Even out to allowed step
+                zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
+                if self._zoom == zoom: zoom = None
+
+            if not self._show_lines:
+                self._show_lines = True
+            if zoom is not None: self.SetZoom(zoom)
+            else: self._CalculateLines(remake=True)
+
+            stats = statistics is not False and statistics or self._show_stats
+            bounds, ids, bounder = wx.Rect(), list(self._ids), self._dc.GetIdBounds
+            if ids: bounds = sum(map(bounder, ids[1:]), bounder(ids[0]))
+            bounds.Union(wx.Rect(bounds.bottomRight, wx.Size(*[2 * self.GPAD + 1]*2)))
+            if stats and not self._show_stats:
+                bounds.Union(wx.Rect(bounds.bottomRight, (1, self.STATSH)))
+
+            tpl = step.Template(templates.DIAGRAM_SVG, strip=False)
+            title = os.path.splitext(os.path.basename(self._db.name))[0] + " schema"
+            ns = {"title": title, "db": self._db, "items": [], "lines": self._lines,
+                  "bounds": bounds, "stats": util.CaselessDict(), "dc": wx.ClientDC(self)}
+            for o in self._objs.values():
+                opts = self._db.get_category(o["category"], o["name"])
+                if opts and stats: ns["stats"][o["name"]] = self._GetItemStats(opts)
+                item = dict(opts or {}, **o)
+                item["bounds"] = self._dc.GetIdBounds(o["id"])
+                ns["items"].append(item)
+            result = tpl.expand(ns)
+
+            self._show_lines = showlines0
+            if zoom is not None: self.SetZoom(zoom0)
+        finally: self.Thaw()
+        return result
 
 
     def EnsureVisible(self, name):
@@ -9789,7 +9843,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             title = "%s %s" % (
                         items[0]["category"].capitalize(),
                         util.ellipsize(util.unprint(grammar.quote(items[0]["name"], force=True)),
-                                       conf.MaxTabTitleLength)
+                                       self.MAX_TEXT)
                     ) if len(items) == 1 else \
                     util.plural(next(iter(categories)), items) if len(categories) == 1 else \
                     util.plural("item", items)
@@ -10028,12 +10082,11 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self._dc.DrawLine(mywpt1, mywpt2)
 
             # Draw cardinality crowfoot
-            pt1, pt2 = pts[0], pts[-1]
-            ptc0 = pt1[0] + self.CARDINALW * (-1 if pt1[0] > pts[1][0] else 1), pt1[1]
-            ptc1 = pt1[0], ptc0[1] - self.CARDINALH
-            ptc2 = pt1[0], ptc0[1] + self.CARDINALH
-            self._dc.DrawLines([ptc1, ptc0])
-            self._dc.DrawLines([ptc2, ptc0])
+            ptc0 = pts[0][0] + self.CARDINALW * (-1 if pts[0][0] > pts[1][0] else 1), pts[0][1]
+            ptc1 = pts[0][0], ptc0[1] - self.CARDINALH
+            ptc2 = pts[0][0], ptc0[1] + self.CARDINALH
+            self._dc.DrawLine(ptc1, ptc0)
+            self._dc.DrawLine(ptc2, ptc0)
 
             # Draw foreign key label
             if self._show_labels:
@@ -10324,15 +10377,18 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         # Measure column text widths
         colmax = {"name": 0, "type": 0}
-        for c in opts.get("columns") or []:
+        coltexts = [] # [[name, type]]
+        for i, c in enumerate(opts.get("columns") or []):
+            coltexts.append([])
             for k in ["name", "type"]:
                 v = c.get(k)
-                if not v: continue # for k
-                extent = self.GetFullTextExtent(util.ellipsize(util.unprint(v), self.MAX_TEXT))
-                if v: colmax[k] = max(colmax[k], extent[0] + extent[3])
+                t = util.ellipsize(util.unprint(c.get(k, "")), self.MAX_TEXT)
+                coltexts[-1].append(t)
+                if t: extent = self.GetFullTextExtent(t)
+                if t: colmax[k] = max(colmax[k], extent[0] + extent[3])
         w = max(w, self.LPAD + 2 * self.HPAD + sum(colmax.values()))
         h += self.LINEH * len(opts.get("columns") or [])
-        if stats: h += self.STATS_H - self.FOOTERH
+        if stats: h += self.STATSH - self.FOOTERH
 
         # Make transparency mask for excluding content outside rounded corners
         bmp = wx.Bitmap(w, h)
@@ -10376,15 +10432,17 @@ class SchemaDiagram(wx.ScrolledWindow):
                     for x in self._db.get_keys(opts["name"]))
         for i, col in enumerate(opts.get("columns") or []):
             for j, k in enumerate(["name", "type"]):
-                text = col.get(k)
+                text = coltexts[i][j]
                 if not text: continue # for j, k
                 dx = self.LPAD + j * (colmax["name"] + self.HPAD)
                 dy = self.HEADERH + self.HEADERP + i * self.LINEH
-                dc.DrawText(util.ellipsize(util.unprint(text), self.MAX_TEXT), dx, dy)
+                dc.DrawText(text, dx, dy)
             if col["name"] in pks:
+                # @todo kas 3 ei peaks zoomist sõltuma?
                 dc.DrawBitmap(pkbmp, 3, dy + 1, useMask=True)
             if col["name"] in fks:
                 b, bw = fkbmp, fkbmp.Width
+                # @todo kas 6 ei peaks zoomist sõltuma?
                 dc.DrawBitmap(b, w - bw - 6, dy + 1, useMask=True)
 
         # Draw statistics texts
@@ -10393,7 +10451,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             font.PointSize += self.FONT_STEP_STATS
             dc.SetFont(font)
 
-            dx, dy = self.BRADIUS, h - self.STATS_H
+            dx, dy = self.BRADIUS, h - self.STATSH
 
             dc.Pen = controls.PEN(self.BorderColour)
             dc.DrawLine(0, dy, w, dy)

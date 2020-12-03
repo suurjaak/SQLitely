@@ -1,9 +1,9 @@
 CHANGELOG
 =========
 
-1.2, 2020-11-29
+1.2, 2020-12-03
 ---------------
-- added schema diagram;
+- added schema diagram, exportable as bitmap or vector;
 - added option to have only single instance running;
 - added support for single-user install;
 - added easy rename options to data & schema tree;
