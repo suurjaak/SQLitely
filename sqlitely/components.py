@@ -9517,13 +9517,14 @@ class SchemaDiagram(wx.ScrolledWindow):
         font = self.Font
         font.PointSize = self.FONT_SIZE * zoom
         self.Font = font
-        self.SetVirtualSize(*[int(x * self._zoom) for x in self.VIRTUALSZ])
+        self.SetVirtualSize([int(x * self._zoom) for x in self.VIRTUALSZ])
 
         for k in ("MINW", "LINEH", "HEADERP", "HEADERH", "FOOTERH", "BRADIUS",
         "FMARGIN", "CARDINALW", "CARDINALH", "LPAD", "HPAD", "GPAD", "MOVE_STEP", "STATSH"):
             v = getattr(self.__class__, k)
             setattr(self, k, int(math.ceil(v * zoom)))
 
+        fullbounds = None
         for o in self._objs.values():
             opts = self._db.get_category(o["category"], o["name"])            
             stats = self._GetItemStats(opts)
@@ -9534,6 +9535,11 @@ class SchemaDiagram(wx.ScrolledWindow):
             r = self._dc.GetIdBounds(o["id"])
             pt = [v * zoom / zoom0 for v in r.TopLeft]
             self._dc.SetIdBounds(o["id"], wx.Rect(wx.Point(pt), bmp.Size))
+            if fullbounds: fullbounds.Union(self._dc.GetIdBounds(o["id"]))
+            else: fullbounds = self._dc.GetIdBounds(o["id"])
+        if fullbounds and not wx.Rect(self.VirtualSize).Contains(fullbounds):
+            self.SetVirtualSize([max(a, b + self.MOVE_STEP)
+                                 for a, b in zip(self.VirtualSize, fullbounds.BottomRight)])
 
         if refresh: self.Freeze()
         try:
@@ -9643,6 +9649,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             if "active" in lopts: self._layout["active"] = bool(lopts["active"])
             for k, v in lopts.items():
                 if isinstance(v, dict): self._layout.setdefault(k, {}).update(v)
+        fullbounds = None
         for name, (x, y) in (opts.get("items") or {}).items():
             o = self._objs.get(name)
             if not o:
@@ -9651,6 +9658,12 @@ class SchemaDiagram(wx.ScrolledWindow):
             r = self._dc.GetIdBounds(o["id"])
             self._dc.TranslateId(o["id"], x - r.Left, x - r.Top)
             self._dc.SetIdBounds(o["id"], wx.Rect(x, y, *r.Size))
+            if fullbounds: fullbounds.Union(self._dc.GetIdBounds(o["id"]))
+            else: fullbounds = self._dc.GetIdBounds(o["id"])
+        if fullbounds and not wx.Rect(self.VirtualSize).Contains(fullbounds):
+            self.SetVirtualSize([max(a, b + self.MOVE_STEP)
+                                 for a, b in zip(self.VirtualSize, fullbounds.BottomRight)])
+
         self.Redraw(remake=True)
         if "scroll" in opts: self.Scroll(*opts["scroll"])
         self._PostEvent()
@@ -10741,7 +10754,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         items = map(self._objs.get, self._sels)
 
         if event.CmdDown() and event.UnicodeKey == ord('A'):
-            self._sels.update({o["name"]: o["id"] for o in self._objs}) # Select all
+            self._sels.update({o["name"]: o["id"] for o in self._objs.values()}) # Select all
             self._order.sort(key=lambda o: (o["category"], o["name"].lower()))
             self.Redraw()
         elif event.CmdDown() and event.UnicodeKey == ord('C'):
