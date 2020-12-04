@@ -9416,7 +9416,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._objs  = util.CaselessDict() # {name: {id, category, name, bmp, bmpsel, bmpseldrag, stats, sql0, columns, __id__}}
         self._lines = util.CaselessDict() # {(name1, name2, (cols)): {id, pts}}
         self._sels  = util.CaselessDict(insertorder=True) # {name selected: DC ops ID}
-        self._order = []   # [{obj dict}, ] selected items at end
+        self._order = []   # Draw order [{obj dict}, ] selected items at end
         self._zoom  = 1.   # Zoom scale, 1 == 100%
         self._page  = None # DatabasePage instance
         self._dc    = wx.adv.PseudoDC()
@@ -9657,6 +9657,22 @@ class SchemaDiagram(wx.ScrolledWindow):
     Options = property(GetOptions, SetOptions)
 
 
+    def GetSelection(self):
+        """Returns names of currently selected items."""
+        return list(self._sels)
+    def SetSelection(self, *names):
+        """Sets current selection to specified names."""
+        if len(names) == len(self._sels) and all(x in self._sels for x in names):
+            return
+        self._sels.clear()
+        self._sels.update({self._objs[n]["name"]: self._objs[n]["id"] for n in names
+                           if n in self._objs})
+        for name in self._sels:
+            self._order.remove(self._objs[name]); self._order.append(self._objs[name])
+        self.Redraw()
+    Selection = property(GetSelection, SetSelection)
+
+
     def SaveFile(self):
         """Opens file dialog and exports diagram in selected format."""
         title = os.path.splitext(os.path.basename(self._db.name))[0]
@@ -9779,19 +9795,34 @@ class SchemaDiagram(wx.ScrolledWindow):
         return result
 
 
-    def EnsureVisible(self, name):
-        """Scrolls viewport if specified item is not currently visible."""
+    def EnsureVisible(self, name, force=False):
+        """
+        Scrolls viewport if specified item is not currently visible.
+
+        @param   force  scroll viewport to item start even if already visible
+        """
         o = self._objs.get(name)
         if not o: return
 
         bounds = self._dc.GetIdBounds(o["id"])
         titlept = bounds.Left + bounds.Width / 2, bounds.Top + self.HEADERH / 2
-        if not self.GetViewPort().Contains(titlept):
+        if force: self.ScrollXY(v - 10 for v in bounds.TopLeft)
+        elif not self.GetViewPort().Contains(titlept):
             self.Scroll(0, 0)
             if not self.GetViewPort().Contains(titlept):
                 self.ScrollXY(0, bounds.Top)
             if not self.GetViewPort().Contains(titlept):
                 self.ScrollXY(v - 10 for v in bounds.TopLeft)
+
+
+    def IsVisible(self, name):
+        """Returns whether item with specified name is currently visible."""
+        o = self._objs.get(name)
+        if not o: return False
+
+        bounds = self._dc.GetIdBounds(o["id"])
+        titlept = bounds.Left + bounds.Width / 2, bounds.Top + self.HEADERH / 2
+        return self.GetViewPort().Contains(titlept)
 
 
     def GetViewPort(self):
@@ -9972,7 +10003,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         or recalculating all relation lines if specified,
         or recalculating only those relation lines connected to selected items if specified.
         """
-        for o in self._objs.values() if remake else ():
+        for o in self._order if remake else ():
             opts = self._db.get_category(o["category"], o["name"])
             if not opts: self._objs.pop(o["name"])
             if not opts: continue # for o
@@ -10706,7 +10737,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         items = map(self._objs.get, self._sels)
 
         if event.CmdDown() and event.UnicodeKey == ord('A'):
-            self._sels.update(self._objs) # Select all
+            self._sels.update({o["name"]: o["id"] for o in self._objs}) # Select all
+            self._order.sort(key=lambda o: (o["category"], o["name"].lower()))
             self.Redraw()
         elif event.CmdDown() and event.UnicodeKey == ord('C'):
             items = map(self._objs.get, self._sels)
@@ -10732,11 +10764,13 @@ class SchemaDiagram(wx.ScrolledWindow):
             else: o = None if event.ShiftDown() else self._objs[names[0]] if names else None
             if o:
                 self._sels[o["name"]] = o["id"]
+                self._order.remove(o); self._order.append(o)
                 self.EnsureVisible(o["name"])
             else: event.Skip() # Propagate tab to next component
             self.Redraw()
         elif event.KeyCode in controls.KEYS.ESCAPE and items:
             self._sels.clear() # Select none
+            self._order.sort(key=lambda o: (o["category"], o["name"].lower()))
             self.Redraw()
         elif event.KeyCode in controls.KEYS.DELETE and items:
             self._page.handle_command("drop", None, *[o["name"] for o in items])

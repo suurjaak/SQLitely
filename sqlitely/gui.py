@@ -2756,13 +2756,15 @@ class DatabasePage(wx.Panel):
         sizer_bottom = wx.BoxSizer(wx.HORIZONTAL)
 
         tb = self.tb_diagram = wx.ToolBar(page, style=wx.TB_FLAT | wx.TB_NODIVIDER)
-        combo_zoom = self.combo_zoom = wx.ComboBox(tb, size=(60, -1), style=wx.CB_DROPDOWN)
+        combo_zoom = self.combo_diagram_zoom = wx.ComboBox(tb, size=(60, -1), style=wx.CB_DROPDOWN)
         button_export = self.button_diagram_export = wx.Button(page, label="Export &diagram")
         diagram = self.diagram = components.SchemaDiagram(page, self.db)
         panel = wx.Panel(page)
         cb_rels  = self.cb_diagram_rels   = wx.CheckBox(page, label="Foreign &relations")
         cb_lbls  = self.cb_diagram_labels = wx.CheckBox(page, label="Foreign &labels")
         cb_stats = self.cb_diagram_stats  = wx.CheckBox(page, label="&Statistics")
+        label_find = wx.StaticText(page, label="&Quickfind:")
+        combo_find = self.combo_diagram_find = wx.ComboBox(page, size=(100, -1), style=wx.CB_DROPDOWN)
 
         level = diagram.ZOOM_MAX
         while level >= diagram.ZOOM_MIN:
@@ -2798,6 +2800,7 @@ class DatabasePage(wx.Panel):
         cb_rels.ToolTip  = "Show foreign relations between tables"
         cb_lbls.ToolTip  = "Show labels on foreign relations between tables"
         cb_stats.ToolTip = "Show table size information"
+        label_find.ToolTip = combo_find.ToolTip = "Select schema items as you type (* is wildcard)"
 
         sizer_top.Add(tb, flag=wx.ALIGN_BOTTOM)
         sizer_top.AddStretchSpacer()
@@ -2807,6 +2810,9 @@ class DatabasePage(wx.Panel):
         sizer_bottom.Add(cb_rels,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
         sizer_bottom.Add(cb_lbls,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
         sizer_bottom.Add(cb_stats,    border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
+        sizer_bottom.AddStretchSpacer()
+        sizer_bottom.Add(label_find,  border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
+        sizer_bottom.Add(combo_find,  border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
 
         sizer.Add(sizer_top,    border=5, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
         sizer.Add(sizer_middle, border=5, flag=wx.LEFT | wx.RIGHT | wx.GROW, proportion=1)
@@ -2819,12 +2825,15 @@ class DatabasePage(wx.Panel):
         tb.Bind(wx.EVT_TOOL, self.on_diagram_grid,     id=wx.ID_STATIC)
         tb.Bind(wx.EVT_TOOL, self.on_diagram_graph,    id=wx.ID_NETWORK)
 
-        self.Bind(wx.EVT_COMBOBOX, self.on_diagram_zoom_combo, combo_zoom)
-        self.Bind(wx.EVT_TEXT,     self.on_diagram_zoom_combo, combo_zoom)
-        self.Bind(wx.EVT_CHECKBOX, self.on_diagram_relations,  cb_rels)
-        self.Bind(wx.EVT_CHECKBOX, self.on_diagram_labels,     cb_lbls)
-        self.Bind(wx.EVT_CHECKBOX, self.on_diagram_stats,      cb_stats)
-        self.Bind(wx.EVT_BUTTON,   self.on_diagram_export,     button_export)
+        self.Bind(wx.EVT_COMBOBOX,  self.on_diagram_zoom_combo, combo_zoom)
+        self.Bind(wx.EVT_TEXT,      self.on_diagram_zoom_combo, combo_zoom)
+        self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_relations,  cb_rels)
+        self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_labels,     cb_lbls)
+        self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_stats,      cb_stats)
+        self.Bind(wx.EVT_BUTTON,    self.on_diagram_export,     button_export)
+        self.Bind(wx.EVT_COMBOBOX,  self.on_diagram_find,       combo_find)
+        self.Bind(wx.EVT_TEXT,      self.on_diagram_find,       combo_find)
+        self.Bind(wx.EVT_CHAR_HOOK, self.on_diagram_find_char,  combo_find)
         self.Bind(components.EVT_DIAGRAM, self.on_diagram_event, self.diagram)
 
 
@@ -3389,6 +3398,7 @@ class DatabasePage(wx.Panel):
             self.load_tree_data()
             self.load_tree_schema()
             self.diagram.Populate()
+            self.populate_diagram_finder()
             self.on_pragma_refresh(reload=True)
             for page, pagemap, nb in zip(pages, [self.data_pages, self.schema_pages],
                                          [self.notebook_data, self.notebook_schema]):
@@ -3778,7 +3788,7 @@ class DatabasePage(wx.Panel):
         self.tb_diagram.EnableTool(wx.ID_ZOOM_IN,  self.diagram.Zoom < self.diagram.ZOOM_MAX)
         self.tb_diagram.EnableTool(wx.ID_ZOOM_OUT, self.diagram.Zoom > self.diagram.ZOOM_MIN)
         self.tb_diagram.EnableTool(wx.ID_ZOOM_100, self.diagram.Zoom != self.diagram.ZOOM_DEFAULT)
-        self.combo_zoom.Value = "%s%%" % util.round_float(100 * self.diagram.Zoom, 2)
+        self.combo_diagram_zoom.Value = "%s%%" % util.round_float(100 * self.diagram.Zoom, 2)
         self.tb_diagram.ToggleTool(wx.ID_STATIC,  self.diagram.LAYOUT_GRID  == self.diagram.Layout)
         self.tb_diagram.ToggleTool(wx.ID_NETWORK, self.diagram.LAYOUT_GRAPH == self.diagram.Layout)
         self.cb_diagram_rels  .Value = self.diagram.ShowLines
@@ -3825,6 +3835,39 @@ class DatabasePage(wx.Panel):
     def on_diagram_zoom_combo(self, event):
         """Handler for zoom step change in combobox."""
         if event.ClientData: self.diagram.Zoom = event.ClientData
+
+
+    def on_diagram_find(self, event):
+        """Handler for change in diagram quickfind, selects schema items."""
+        names, text = [], self.combo_diagram_find.Value.strip().lower()
+        if event.ClientData: names.append(event.ClientData)
+        elif text:
+            pattern = "".join((".*" if i or not x else "") + re.escape(x)
+                              for i, x in enumerate(text.split("*")))
+            rgx = re.compile("^" + pattern, re.I | re.U)
+            combo = self.combo_diagram_find
+            for name in map(combo.GetClientData, range(combo.Count)):
+                if rgx.match(name): names.append(name)
+        self.diagram.SetSelection(*names)
+        if self.diagram.Selection \
+        and not any(self.diagram.IsVisible(x) for x in self.diagram.Selection):
+            self.diagram.EnsureVisible(self.diagram.Selection[0])
+
+
+    def on_diagram_find_char(self, event):
+        """
+        Handler for keypress in diagram quickfind, clears diagram if Escape,
+        scrolls viewport to selected item start if Enter.
+        """
+        event.Skip()
+        if event.KeyCode in controls.KEYS.ESCAPE:
+            text = event.EventObject.Value
+            event.EventObject.Value = ""
+            self.diagram.SetSelection()
+            if not text: self.diagram.Scroll(0, 0)
+        if event.KeyCode in controls.KEYS.ENTER:
+            if self.diagram.Selection:
+                self.diagram.EnsureVisible(self.diagram.Selection[0], force=True)
 
 
     def on_diagram_zoom_fit(self, event=None):
@@ -5246,6 +5289,7 @@ class DatabasePage(wx.Panel):
         if updated:
             self.load_tree_schema()
             self.diagram.Populate()
+            self.populate_diagram_finder()
             for k, p in self.schema_pages[category].items():
                 if p is event.source and name != k:
                     name0 = k
@@ -5935,6 +5979,7 @@ class DatabasePage(wx.Panel):
         self.load_tree_data()
         self.update_info_panel()
         self.diagram.Populate()
+        self.populate_diagram_finder()
         self.diagram.SetOptions(conf.SchemaDiagrams.get(self.db.filename))
         self.update_diagram_controls()
         wx.CallLater(100, self.reload_schema, parse=True)
@@ -5949,9 +5994,19 @@ class DatabasePage(wx.Panel):
         self.load_tree_schema()
         self.on_update_stc_schema()
         self.diagram.Populate()
+        self.populate_diagram_finder()
         self.cb_diagram_rels.Enable()
         self.cb_diagram_labels.Enable(self.cb_diagram_rels.Value)
         self.update_autocomp()
+
+
+    def populate_diagram_finder(self):
+        """Refreshes schema items diagram quickfind dropdown."""
+        combo = self.combo_diagram_find
+        combo.Clear()
+        for name in (x for c in ("table", "view") for x in self.db.schema[c]):
+            combo.Append(util.unprint(name))
+            combo.SetClientData(combo.Count - 1, name)
 
 
     def get_tree_state(self, tree, root):
