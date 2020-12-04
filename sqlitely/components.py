@@ -10690,18 +10690,22 @@ class SchemaDiagram(wx.ScrolledWindow):
                 r.Inflate(2 * self.BRADIUS, 2 * self.BRADIUS)
                 refrect.Union(r)
 
-            for name in self._sels if not self._dragrect else ():
-                # First pass: check if any item goes overboard
-                r = self._dc.GetIdBounds(self._objs[name]["id"])
-                if r.Left + dx < 0 or r.Right  + dx > self.VirtualSize.Width:  dx = 0
-                if r.Top  + dy < 0 or r.Bottom + dy > self.VirtualSize.Height: dy = 0
-
-            for name in self._sels if not self._dragrect else ():
-                # Second pass: reposition item
-                r = self._dc.GetIdBounds(self._objs[name]["id"])
+            # First pass: constrain dx-dy so that all items remain within diagram bounds
+            for name, oid in self._sels.items() if not self._dragrect else ():
+                r = self._dc.GetIdBounds(oid)
                 r0 = wx.Rect(r)
                 r.Offset(dx, dy)
-                self._dc.TranslateId(self._objs[name]["id"], dx, dy)
+                if r.Left < 0: dx = -r0.Left
+                if r.Top  < 0: dy = -r0.Top
+                if r.Right  > self.VirtualSize.Width:  dx = self.VirtualSize.Width  - r0.Right
+                if r.Bottom > self.VirtualSize.Height: dy = self.VirtualSize.Height - r0.Bottom
+
+            for name, oid in self._sels.items() if not self._dragrect else ():
+                # Second pass: reposition item
+                r = self._dc.GetIdBounds(oid)
+                r0 = wx.Rect(r)
+                r.Offset(dx, dy)
+                self._dc.TranslateId(oid, dx, dy)
 
                 r.Union(r0)
                 r.Inflate(2 * self.BRADIUS, 2 * self.BRADIUS)
