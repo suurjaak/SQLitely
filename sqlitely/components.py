@@ -10746,6 +10746,13 @@ class SchemaDiagram(wx.ScrolledWindow):
             self._page.handle_command("rename", items[0]["category"], items[0]["name"])
         elif event.KeyCode in controls.KEYS.ENTER and items:
             for o in items: self._page.handle_command("schema", o["category"], o["name"])
+        elif event.KeyCode in controls.KEYS.ARROW + controls.KEYS.NUMPAD_ARROW and event.CmdDown():
+            x, y = self.GetViewStart()
+            if event.KeyCode in controls.KEYS.UP:    y = 0
+            if event.KeyCode in controls.KEYS.DOWN:  y = self.VirtualSize.Height
+            if event.KeyCode in controls.KEYS.LEFT:  x = 0
+            if event.KeyCode in controls.KEYS.RIGHT: x = self.VirtualSize.Width
+            self.ScrollXY(x, y)
         elif event.KeyCode in controls.KEYS.ARROW + controls.KEYS.NUMPAD_ARROW:
             dx, dy = 0, 0
             STEP = self.MOVE_STEP if items else self.SCROLL_STEP
