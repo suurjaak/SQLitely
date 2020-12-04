@@ -5982,6 +5982,9 @@ class DatabasePage(wx.Panel):
         self.populate_diagram_finder()
         self.diagram.SetOptions(conf.SchemaDiagrams.get(self.db.filename))
         self.update_diagram_controls()
+        if not any(self.diagram.IsVisible(n) for c in ("table", "view")
+                   for n in self.db.schema[c]):
+            self.diagram.Scroll(0, 0)
         wx.CallLater(100, self.reload_schema, parse=True)
         if conf.RunStatistics: self.on_update_statistics()
 
