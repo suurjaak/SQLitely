@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.11.2020
+@modified    04.12.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3808,7 +3808,7 @@ class DatabasePage(wx.Panel):
 
     def on_diagram_labels(self, event):
         """Handler for toggling foreign labels checkbox, shows or hides diagram line labels."""
-        self.diagram.ShowLineLabel = self.cb_diagram_labels.Value
+        self.diagram.ShowLineLabels = self.cb_diagram_labels.Value
 
 
     def on_diagram_export(self, event):

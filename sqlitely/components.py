@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.12.2020
+@modified    04.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -9413,7 +9413,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         super(SchemaDiagram, self).__init__(parent, *args, **kwargs)
         self._db    = db
         self._ids   = {} # {DC ops ID: name or (name1, name2, (cols)) or None}
-        self._objs  = util.CaselessDict() # {name: {id, category, name, bmp, bmpsel, bmpseldrag, stats, sql0, __id__}}
+        self._objs  = util.CaselessDict() # {name: {id, category, name, bmp, bmpsel, bmpseldrag, stats, sql0, columns, __id__}}
         self._lines = util.CaselessDict() # {(name1, name2, (cols)): {id, pts}}
         self._sels  = util.CaselessDict(insertorder=True) # {name selected: DC ops ID}
         self._order = []   # [{obj dict}, ] selected items at end
@@ -9930,7 +9930,8 @@ class SchemaDiagram(wx.ScrolledWindow):
                 if o0: oid = o0["id"]
                 else: oid, maxid = (maxid + 1, ) * 2
                 stats, stats0 = self._GetItemStats(opts), (o0 or {}).get("stats")
-                if o0 and o0["sql0"] == opts["sql0"] and stats == stats0:
+                if o0 and o0["sql0"] == opts["sql0"] \
+                and o0["columns"] == opts["columns"] and stats == stats0:
                     bmp, bmpsel, bmpseldrag = map(o0.get, ("bmp", "bmpsel", "bmpseldrag"))
                 else:
                     bmp = self._MakeItemBitmap(opts, stats)
@@ -9939,7 +9940,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 if o0 and o0["name"] in sels0: self._sels[name] = oid
                 self._ids[oid] = name
                 self._objs[name] = {"id": oid, "category": category, "name": name, "stats": stats,
-                                    "__id__": opts["__id__"], "sql0": opts["sql0"],
+                                    "__id__": opts["__id__"], "sql0": opts["sql0"], "columns": opts["columns"],
                                     "bmp": bmp, "bmpsel": bmpsel, "bmpseldrag": bmpseldrag}
                 self._order.append(self._objs[name])
                 reset |= not o0
