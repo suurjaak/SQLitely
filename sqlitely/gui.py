@@ -2486,10 +2486,7 @@ class DatabasePage(wx.Panel):
         finally:
             busy.Close()
         wx_accel.accelerate(self)
-        self.edit_searchall.SetFocus()
-        wx.CallAfter(lambda: self and self.edit_searchall.SelectAll())
-        if "linux2" == sys.platform and wx.version().startswith("2.8"):
-            wx.CallAfter(self.split_panels)
+        wx.CallAfter(lambda: self and (edit_search.SetFocus(), edit_search.SelectAll()))
 
 
     def create_page_search(self, notebook):
