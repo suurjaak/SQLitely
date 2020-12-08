@@ -420,6 +420,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_open_database = self.menu_open_database = menu_file.Append(
             wx.ID_ANY, "&Open database...\t%s-O" % controls.KEYS.NAME_CTRL, "Choose a database file to open"
         )
+        menu_file.AppendSeparator()
+        menu_close_database = self.menu_close_database = menu_file.Append(
+            wx.ID_ANY, "&Close", "Close active database"
+        )
         menu_save_database = self.menu_save_database = menu_file.Append(
             wx.ID_ANY, "&Save", "Save changes to the active database"
         )
@@ -591,6 +595,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_new_database,            menu_new_database)
         self.Bind(wx.EVT_MENU, self.on_import_data,             menu_import_data)
         self.Bind(wx.EVT_MENU, self.on_open_database,           menu_open_database)
+        self.Bind(wx.EVT_MENU, self.on_close_active_database,   menu_close_database)
         self.Bind(wx.EVT_MENU, self.on_save_active_database,    menu_save_database)
         self.Bind(wx.EVT_MENU, self.on_save_active_database_as, menu_save_database_as)
         self.Bind(wx.EVT_MENU, self.on_open_options,            menu_advanced)
@@ -643,6 +648,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         for x in self.menu_view.MenuItems:  x.Enable(bool(db))
         for x in self.menu_edit.MenuItems:  x.Enable(bool(db))
         for x in self.menu_tools.MenuItems: x.Enable(bool(db))
+        self.menu_close_database.Enable(bool(page))
         self.menu_save_database.Enable(bool(page and (db.temporary or changes)))
         self.menu_save_database_as.Enable(bool(page))
         if not db: return
@@ -1601,12 +1607,19 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.list_db.Select(i, on=self.list_db.GetItemText(i) in new_filenames)
 
 
+    def on_close_active_database(self, event=None):
+        """Handler for clicking to close the active database."""
+        page = self.notebook.GetSelection() and self.page_db_latest
+        if isinstance(page, DatabasePage):
+            self.notebook.DeletePage(self.notebook.GetPageIndex(page))
+
+
     def on_save_active_database(self, event=None):
         """
         Handler for clicking to save changes to the active database,
         commits unsaved changes.
         """
-        page = self.notebook.GetCurrentPage()
+        page = self.notebook.GetSelection() and self.page_db_latest
         if isinstance(page, DatabasePage): page.save_database()
 
 
@@ -1615,7 +1628,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         Handler for clicking to save the active database under a new name,
         opens a save as dialog, copies file and commits unsaved changes.
         """
-        page = self.notebook.GetCurrentPage()
+        page = self.notebook.GetSelection() and self.page_db_latest
         if isinstance(page, DatabasePage): page.save_database(rename=True)
 
 
