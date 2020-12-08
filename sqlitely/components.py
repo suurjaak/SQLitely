@@ -11231,6 +11231,7 @@ class ImportWizard(wx.adv.Wizard):
 
     def OnDrop(self, files):
         """Handler for drag-dropping files onto wizard, loads file in current page."""
+        files = [files] if isinstance(files, basestring) else files
         if files and self.index < 0: self.CurrentPage.OnFile(filename=files[0])
 
 

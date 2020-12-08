@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.12.2020
+@modified    08.12.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -58,6 +58,7 @@ IMPORT_WILDCARD = "All supported formats (%s)|%s|%s%s"\
     "Excel workbook ({0})|{0}|".format(";".join("*." + x for x in EXCEL_EXTS))
     if EXCEL_EXTS else ""
 )
+IMPORT_EXTS = EXCEL_EXTS + ["csv", "json"]
 
 """FileDialog wildcard strings, matching extensions lists and default names."""
 XLSX_WILDCARD = "Excel workbook (*.xlsx)|*.xlsx|" if xlsxwriter else ""

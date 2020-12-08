@@ -106,12 +106,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.is_started = False
         self.is_minimizing = False
         self.is_dragging_page = False
-        self.wizard_import = components.ImportWizard(self, title="Data import wizard",
-                                                     bitmap=images.WizardImport.Bitmap)
+        self.wizard_import = None # components.ImportWizard
 
         icons = images.get_appicons()
         self.SetIcons(icons)
-        self.wizard_import.SetIcons(icons)
 
         self.trayicon = wx.adv.TaskBarIcon()
         if self.trayicon.IsAvailable():
@@ -878,8 +876,14 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
 
     def on_drop_files(self, filenames):
-        """Handler for dropping files onto main program window, opens database pages."""
-        self.load_database_pages(filenames, clearselection=True)
+        """
+        Handler for dropping files onto main program window, opens database pages
+        if database files, opens import wizard if import files.
+        ."""
+        importfiles = [x for x in filenames
+                       if os.path.splitext(x)[-1][1:].lower() in importexport.IMPORT_EXTS]
+        if importfiles: self.on_import_data(filename=importfiles[0])
+        else: self.load_database_pages(filenames, clearselection=True)
 
 
     def on_drop_folders(self, folders):
@@ -1876,9 +1880,18 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.load_database_pages(dialog.GetPaths(), clearselection=True)
 
 
-    def on_import_data(self, event):
+    def on_import_data(self, event=None, filename=None):
         """Handler for import data menu or button, opens import wizard."""
-        self.wizard_import.RunWizard()
+        if not self.wizard_import:
+            wizard = components.ImportWizard(self, title="Data import wizard",
+                                             bitmap=images.WizardImport.Bitmap)
+            wizard.SetIcons(self.GetIcons())
+            self.wizard_import = wizard
+            if filename: wx.CallAfter(lambda: self and wizard and wizard.OnDrop(filename))
+            wizard.RunWizard()
+            wizard.Destroy()
+            self.wizard_import = None
+        else: self.wizard_import.OnDrop(filename)
 
 
     def on_new_database(self, event):
