@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.12.2020
+@modified    08.12.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -106,9 +106,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.is_started = False
         self.is_minimizing = False
         self.is_dragging_page = False
+        self.wizard_import = components.ImportWizard(self, title="Data import wizard",
+                                                     bitmap=images.WizardImport.Bitmap)
 
         icons = images.get_appicons()
         self.SetIcons(icons)
+        self.wizard_import.SetIcons(icons)
 
         self.trayicon = wx.adv.TaskBarIcon()
         if self.trayicon.IsAvailable():
@@ -289,7 +292,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
         BUTTONS_MAIN = [
             ("button_new", "&New database", images.ButtonNew,
-             "Create a new SQLite database."),
+             "Create a blank SQLite database."),
+            ("button_import", "Import from &data file", images.ButtonImport,
+             "Import spreadsheet or JSON to a new or existing database."),
             ("button_opena", "&Open a database..", images.ButtonOpenA,
              "Choose a database from your computer to open."),
             ("button_folder", "&Import from folder", images.ButtonFolder,
@@ -359,6 +364,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         edit_filter.Bind(wx.EVT_TEXT_ENTER,       self.on_filter_list_db)
         self.button_new.Bind(wx.EVT_BUTTON,       self.on_new_database)
+        self.button_import.Bind(wx.EVT_BUTTON,    self.on_import_data)
         self.button_opena.Bind(wx.EVT_BUTTON,     self.on_open_database)
         self.button_detect.Bind(wx.EVT_BUTTON,    self.on_detect_databases)
         self.button_folder.Bind(wx.EVT_BUTTON,    self.on_add_from_folder)
@@ -372,6 +378,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         panel_main.Sizer.Add(label_main, border=10, flag=wx.ALL)
         panel_main.Sizer.Add((0, 10))
         panel_main.Sizer.Add(self.button_new,    flag=wx.GROW)
+        panel_main.Sizer.Add(self.button_import, flag=wx.GROW)
         panel_main.Sizer.Add(self.button_opena,  flag=wx.GROW)
         panel_main.Sizer.Add(self.button_folder, flag=wx.GROW)
         panel_main.Sizer.Add(self.button_detect, flag=wx.GROW)
@@ -405,7 +412,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu.Append(menu_file, "&File")
 
         menu_new_database = self.menu_new_database = menu_file.Append(
-            wx.ID_ANY, "&New database\t%s-N" % controls.KEYS.NAME_CTRL, "Create a new SQLite database"
+            wx.ID_ANY, "&New database\t%s-N" % controls.KEYS.NAME_CTRL, "Create a blank SQLite database"
+        )
+        menu_import_data = self.menu_import_data = menu_file.Append(
+            wx.ID_ANY, "Import from &data file", "Import spreadsheet or JSON to a new or existing database"
         )
         menu_open_database = self.menu_open_database = menu_file.Append(
             wx.ID_ANY, "&Open database...\t%s-O" % controls.KEYS.NAME_CTRL, "Choose a database file to open"
@@ -510,7 +520,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_tools.AppendSeparator()
         menu_tools_import = self.menu_tools_import = menu_tools.Append(
             wx.ID_ANY, "&Import data",
-            "Import data into table from file")
+            "Import data into table from spreadsheet or JSON file")
         menu_tools_export = wx.Menu()
         self.menu_tools_export = menu_tools.AppendSubMenu(menu_tools_export, "&Export")
         menu_tools_export_tables = self.menu_tools_export_tables = menu_tools_export.Append(
@@ -579,6 +589,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         menu.Bind(wx.EVT_MENU_OPEN, self.on_menu_open)
         self.Bind(wx.EVT_MENU, self.on_new_database,            menu_new_database)
+        self.Bind(wx.EVT_MENU, self.on_import_data,             menu_import_data)
         self.Bind(wx.EVT_MENU, self.on_open_database,           menu_open_database)
         self.Bind(wx.EVT_MENU, self.on_save_active_database,    menu_save_database)
         self.Bind(wx.EVT_MENU, self.on_save_active_database_as, menu_save_database_as)
@@ -1852,6 +1863,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.load_database_pages(dialog.GetPaths(), clearselection=True)
 
 
+    def on_import_data(self, event):
+        """Handler for import data menu or button, opens import wizard."""
+        self.wizard_import.RunWizard()
+
+
     def on_new_database(self, event):
         """
         Handler for new database menu or button, opens a temporary file database.
@@ -2354,8 +2370,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         # Remove from recent file history
         idx = next((i for i in range(self.history_file.Count)
                     if self.history_file.GetHistoryFile(i) == filename), None)
-        if idx is not None:
-            self.history_file.RemoveFileFromHistory(self.history_file.Count - idx)
+        if idx is not None: self.history_file.RemoveFileFromHistory(idx)
 
 
 

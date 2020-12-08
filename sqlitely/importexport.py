@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.11.2020
+@modified    07.12.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -533,7 +533,7 @@ def get_import_file_data(filename):
         "size":        file size in bytes,
         "format":      "xlsx", "xlsx", "csv" or "json",
         "sheets":      [
-            "name":    sheet name or None if CSV or JSON,
+            "name":    sheet name,
             "rows":    count or -1 if file too large,
             "columns": [first row cell value, ],
     ]}.
@@ -559,7 +559,8 @@ def get_import_file_data(filename):
             iterable = itertools.chain([firstline], f)
             csvfile = csv.reader(iterable, csv.Sniffer().sniff(firstline, ",;\t"))
             rows, columns = -1, next(csvfile)
-            if 0 < size <= MAX_IMPORT_FILESIZE_FOR_COUNT:
+            if not columns: rows = 0
+            elif 0 < size <= MAX_IMPORT_FILESIZE_FOR_COUNT:
                 rows = sum((1 for _ in csvfile), 1 if firstline else 0)
         sheets.append({"rows": rows, "columns": columns, "name": "<no name>"})
     elif is_json:
@@ -588,9 +589,12 @@ def get_import_file_data(filename):
     elif is_xls:
         with xlrd.open_workbook(filename, on_demand=True) as wb:
             for sheet in wb.sheets():
-                rows = -1 if size > MAX_IMPORT_FILESIZE_FOR_COUNT else sheet.nrows
                 columns = [x.value for x in next(sheet.get_rows(), [])]
                 while columns and columns[-1] is None: columns.pop(-1)
+                columns = [x.strip() if isinstance(x, basestring)
+                           else "" if x is None else str(x) for x in columns]
+                if not columns: rows = 0
+                else: rows = -1 if size > MAX_IMPORT_FILESIZE_FOR_COUNT else sheet.nrows
                 sheets.append({"rows": rows, "columns": columns, "name": sheet.name})
     elif is_xlsx:
         wb = None
@@ -600,123 +604,139 @@ def get_import_file_data(filename):
 
                 wb = openpyxl.load_workbook(filename, data_only=True, read_only=True)
                 for sheet in wb.worksheets:
-                    rows = -1 if size > MAX_IMPORT_FILESIZE_FOR_COUNT \
-                           else sum(1 for _ in sheet.iter_rows())
                     columns = list(next(sheet.values, []))
                     while columns and columns[-1] is None: columns.pop(-1)
+                    columns = [x.strip() if isinstance(x, basestring)
+                               else "" if x is None else str(x) for x in columns]
+                    rows = 0 if not columns else -1 if size > MAX_IMPORT_FILESIZE_FOR_COUNT \
+                           else sum(1 for _ in sheet.iter_rows())
                     sheets.append({"rows": rows, "columns": columns, "name": sheet.title})
         finally: wb and wb.close()
     else:
-        raise ValueError("File not recognized as spreadsheet.")
+        raise ValueError("File type not recognized.")
 
     return {"name": filename, "size": size, "format": extname, "sheets": sheets}
 
 
 
-def import_data(filename, db, table, columns,
-                sheet=None, has_header=True, pk=None, progress=None):
+def import_data(filename, db, tables, tablecolumns, pks=None,
+                has_header=True, progress=None):
     """
-    Imports data from file to database table. Will create table if not exists.
+    Imports data from spreadsheet or JSON data file to database table.
+    Will create tables if not existing yet.
 
-    @param   filename    file path to import from
-    @param   db          database.Database instance
-    @param   table       table name to import to
-    @param   columns     mapping of file columns to table columns,
-                         as OrderedDict(file column index: table columm name)
-    @param   sheet       sheet name to import from, if applicable
-    @param   has_header  whether the spreadsheet file has a header row
-    @param   pk          name of auto-increment primary key to add
-                         for new table, if any
-    @param   progress    callback(?count, ?done, ?error, ?errorcount, ?index) to report
-                         progress, returning false if import should cancel,
-                         and None if import should rollback
-    @return              success
+    @param   filename       file path to import from
+    @param   db             database.Database instance
+    @param   tables         tables to import to and sheets to import from, as [(table, sheet)]
+                            (sheet is None if file is CSV/JSON)
+    @param   tablecolumns   mapping of file columns to table columns,
+                            as {table: OrderedDict(file column index: table columm name)}
+    @param   pks            names of auto-increment primary key to add
+                            for new tables, if any, as {table: pk}
+    @param   has_header     whether spreadsheet file has a header row
+    @param   progress       callback(?table, ?count, ?done, ?error, ?errorcount, ?index) to report
+                            progress, returning False if import should cancel,
+                            and None if import should rollback.
+                            Returning True on error will ignore further errors.
+    @return                 success
     """
     result = True
     create_sql = None
 
-    if not db.get_category("table", table):
-        cols = [{"name": x} for x in columns.values()]
-        if pk: cols.insert(0, {"name": pk, "type": "INTEGER", "pk": {"autoincrement": True}})
-        meta = {"name": table, "__type__": grammar.SQL.CREATE_TABLE,
-                "columns": cols}
-        create_sql, err = grammar.generate(meta)
-        if err:
-            if progress: progress(error=err, done=True)
-            return
-
-    sql = "INSERT INTO %s (%s) VALUES (%s)" % (grammar.quote(table),
-        ", ".join(grammar.quote(x) for x in columns.values()),
-        ", ".join("?" * len(columns))
-    )
-
-    continue_on_error, cursor = None, None
+    extname = os.path.splitext(filename)[-1][1:].lower()
+    table, sheet, cursor, isolevel = None, None, None, None
     try:
-        isolevel = db.connection.isolation_level
-        db.connection.isolation_level = None # Disable autocommit
-        with db.connection:
-            cursor = db.connection.cursor()
-            cursor.execute("BEGIN TRANSACTION")
-            if create_sql:
-                logger.info("Creating new table %s.",
+        for table, sheet in tables:
+            sheet = sheet if extname not in ("csv", "json") else None
+            columns = tablecolumns[table]
+            if not db.get_category("table", table):
+                cols = [{"name": x} for x in columns.values()]
+                if pks.get(table):
+                    cols.insert(0, {"name": pks[table], "type": "INTEGER",
+                                    "pk": {"autoincrement": True}})
+                meta = {"name": table, "__type__": grammar.SQL.CREATE_TABLE,
+                        "columns": cols}
+                create_sql, err = grammar.generate(meta)
+                if err: raise Exception(err)
+
+            sql = "INSERT INTO %s (%s) VALUES (%s)" % (grammar.quote(table),
+                ", ".join(grammar.quote(x) for x in columns.values()),
+                ", ".join("?" * len(columns))
+            )
+
+            continue_on_error = None
+            isolevel = db.connection.isolation_level
+            db.connection.isolation_level = None # Disable autocommit
+            with db.connection:
+                cursor = db.connection.cursor()
+                cursor.execute("BEGIN TRANSACTION")
+                if create_sql:
+                    logger.info("Creating new table %s.",
+                                grammar.quote(table, force=True))
+                    cursor.execute(create_sql)
+                db.lock("table", table, filename, label="import")
+                logger.info("Running import from %s%s to table %s.",
+                            filename, (" sheet '%s'" % sheet) if sheet else "",
                             grammar.quote(table, force=True))
-                cursor.execute(create_sql)
-            db.lock("table", table, filename, label="import")
-            logger.info("Running import from %s%s to table %s.",
-                        filename, (" sheet '%s'" % sheet) if sheet else "",
-                        grammar.quote(table, force=True))
-            index, count, errorcount = -1, 0, 0
-            for row in iter_file_rows(filename, list(columns), sheet):
-                index += 1
-                if has_header and not index: continue # for row
-                lastcount, lasterrorcount = count, errorcount
+                index, count, errorcount = -1, 0, 0
+                for row in iter_file_rows(filename, list(columns), sheet):
+                    index += 1
+                    if has_header and not index: continue # for row
+                    lastcount, lasterrorcount = count, errorcount
 
-                try:
-                    cursor.execute(sql, row)
-                    count += 1
-                except Exception as e:
-                    errorcount += 1
-                    if not progress: raise
+                    try:
+                        cursor.execute(sql, row)
+                        count += 1
+                    except Exception as e:
+                        errorcount += 1
+                        if not progress: raise
 
-                    logger.exception("Error executing '%s' with %s.", sql, row)
-                    if continue_on_error is None:
-                        result = progress(error=util.format_exc(e), index=index,
-                                          count=count, errorcount=errorcount)
-                        if result:
-                            continue_on_error = True
-                            continue # for row
-                        logger.info("Cancelling%s import on user request.",
-                                    " and rolling back" if result is None else "")
-                        if result is None: cursor.execute("ROLLBACK")
-                        break # for row
-                if progress and (count != lastcount and not count % 100 or
-                                 errorcount != lasterrorcount and not errorcount % 100):
-                    result = progress(count=count, errorcount=errorcount)
-                    if not result:
-                        logger.info("Cancelling%s import on user request.",
-                                    " and rolling back" if result is None else "")
-                        if result is None: cursor.execute("ROLLBACK")
-                        break # for row
-            if result:
-                cursor.execute("COMMIT")
-                db.log_query("IMPORT", [create_sql, sql] if create_sql else [sql],
-                             [filename, util.plural("row", count)])
-            logger.info("Finished importing %s from %s%s to table %s.",
-                        util.plural("row", count),
-                        filename, (" sheet '%s'" % sheet) if sheet else "",
-                        grammar.quote(table, force=True))
-            if progress: progress(count=count, errorcount=errorcount, done=True)
+                        logger.exception("Error executing '%s' with %s.", sql, row)
+                        if continue_on_error is None:
+                            result = progress(error=util.format_exc(e), index=index,
+                                              count=count, errorcount=errorcount,
+                                              table=table)
+                            if result:
+                                continue_on_error = True
+                                continue # for row
+                            logger.info("Cancelling%s import on user request.",
+                                        " and rolling back" if result is None else "")
+                            if result is None: cursor.execute("ROLLBACK")
+                            break # for row
+                    if progress and (count != lastcount and not count % 100 or
+                                     errorcount != lasterrorcount and not errorcount % 100):
+                        result = progress(table=table, count=count, errorcount=errorcount)
+                        if not result:
+                            logger.info("Cancelling%s import on user request.",
+                                        " and rolling back" if result is None else "")
+                            if result is None: cursor.execute("ROLLBACK")
+                            break # for row
+                if result:
+                    cursor.execute("COMMIT")
+                    db.log_query("IMPORT", [create_sql, sql] if create_sql else [sql],
+                                 [filename, util.plural("row", count)])
+                logger.info("Finished importing %s from %s%s to table %s.",
+                            util.plural("row", count),
+                            filename, (" sheet '%s'" % sheet) if sheet else "",
+                            grammar.quote(table, force=True))
+                if progress: progress(table=table, count=count, errorcount=errorcount, done=True)
     except Exception as e:
-        logger.exception("Error running import from %s%s to table %s.",
+        logger.exception("Error running import from %s%s%s in %s.",
                          filename, (" sheet '%s'" % sheet) if sheet else "",
-                         grammar.quote(table, force=True))
-        if progress: progress(error=util.format_exc(e), done=True)
+                         (" to table %s " % grammar.quote(table, force=True) if table else ""),
+                         db.filename)
+        if cursor: util.try_until(lambda: cursor.execute("ROLLBACK"))
+        if progress:
+            kwargs = dict(error=util.format_exc(e), done=True)
+            if table: kwargs.update(table=table)
+            progress(**kwargs)
         result = False
     finally:
-        db.connection.isolation_level = isolevel
+        if isolevel is not None: db.connection.isolation_level = isolevel
         util.try_until(lambda: cursor.close())
         db.unlock("table", table, filename)
 
+    # @todo selle võiks siit ära hiivata
     if result is not None and create_sql:
         db.populate_schema(category="table", name=table, parse=True)
     elif result:

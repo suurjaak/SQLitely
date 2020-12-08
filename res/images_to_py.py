@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  18.11.2020
+@modified  05.12.2020
 ------------------------------------------------------------------------------
 """
 import base64
@@ -37,6 +37,8 @@ IMAGES = {
         "Small icon for export button on start page.",
     "ButtonHome.png":
         "Large icon for home on start page.",
+    "ButtonImport.png":
+        "Large icon for import button on start page.",
     "ButtonListDatabase.png":
         "Button for databases in database list.",
     "ButtonNew.png":
@@ -129,6 +131,8 @@ IMAGES = {
         "Transparent 1x1 GIF.",
     "TreeTrigger.png":
         "TreeListCtrl icon for triggers.",
+    "WizardImport.png":
+        "Bitmap for data import wizard.",
 }
 HEADER = """%s
 Contains embedded image and icon resources for SQLitely. Auto-generated.

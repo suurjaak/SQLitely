@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.12.2020
+@modified    08.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -39,6 +39,7 @@ import wx
 import wx.adv
 import wx.grid
 import wx.lib
+import wx.lib.filebrowsebutton
 import wx.lib.mixins.listctrl
 import wx.lib.newevent
 import wx.lib.resizewidget
@@ -5971,7 +5972,7 @@ class ExportProgressPanel(wx.Panel):
 
 class ImportDialog(wx.Dialog):
     """
-    Dialog for importing table data from a spreadsheet file.
+    Dialog for importing table data from a spreadsheet or JSON file.
     """
 
     ACTIVE_SEP  = -1 # ListCtrl item data value for active-section separator
@@ -6758,10 +6759,10 @@ class ImportDialog(wx.Dialog):
         sheet, table = self._sheet.get("name"), self._table["name"]
         columns = OrderedDict((a["index"], b["name"])
                               for a, b in zip(self._cols1, self._cols2))
-        pk = self._table.get("pk")
         callable = functools.partial(importexport.import_data, self._data["name"],
-                                     self._db, table, columns, sheet,
-                                     self._has_header, pk, self._OnProgressCallback)
+                                     self._db, [(table, sheet)], {table: columns},
+                                     {table: self._table.get("pk")}, self._has_header,
+                                     self._OnProgressCallback)
         self._worker.work(callable)
 
 
@@ -6943,7 +6944,7 @@ class ImportDialog(wx.Dialog):
 
         dlg = self._dlg_cancel = controls.MessageDialog(self,
             "Keep changes?\n\n%s" % changes.strip().capitalize(),
-            conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.CANCEL_DEFAULT
+            conf.Title, wx.ICON_INFORMATION | wx.YES | wx.NO | wx.CANCEL | wx.CANCEL_DEFAULT
         ) if changes else None
         keep = dlg.ShowModal() if changes else wx.ID_NO
         self._dlg_cancel = None
@@ -10922,3 +10923,575 @@ def get_grid_selection(grid, cursor=True):
             rows, cols = [grid.GridCursorRow], [grid.GridCursorCol]
     rows, cols = (sorted(set(y for y in x if y >= 0)) for x in (rows, cols))
     return rows, cols
+
+
+
+class ImportWizard(wx.adv.Wizard):
+    """
+    Wizard dialog for creating a database from a spreadsheet or JSON file.
+    """
+
+
+    class InputPage(wx.adv.WizardPageSimple):
+        """Page for choosing spreadsheet file and sheets to import."""
+
+        def __init__(self, parent, prev=None, next=None, bitmap=wx.NullBitmap):
+            super(ImportWizard.InputPage, self).__init__(parent, prev, next, bitmap)
+
+            self.filename   = None
+            self.filedata   = {} # {name, size, format, sheets: [{name, rows, columns}]}
+            self.use_header = True
+
+            filebutton = self.button_file = wx.lib.filebrowsebutton.FileBrowseButton(
+                            self, labelText="Source file:",
+                            buttonText="B&rowse", size=(500, -1),
+                            changeCallback=self.OnFile, fileMask=importexport.IMPORT_WILDCARD,
+                            fileMode=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST |
+                                     wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
+            label_info = self.label_info = wx.StaticText(self)
+
+            panel     = self.panel     = wx.Panel(self)
+            cb_all    = self.cb_all    = wx.CheckBox(panel, label="Import &all")
+            listbox   = self.listbox   = wx.CheckListBox(panel)
+            cb_header = self.cb_header = wx.CheckBox(panel, label="Use first row as column name &header")
+
+            filebutton.textControl.SetEditable(False)
+            cb_all.Value = cb_header.Value = True
+            listbox.Disable()
+
+            sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
+            panel.Sizer = wx.BoxSizer(wx.VERTICAL)
+            panel.Sizer.Add(cb_all,  border=5,     flag=wx.BOTTOM)
+            panel.Sizer.Add(listbox, proportion=1, flag=wx.GROW)
+            panel.Sizer.Add(cb_header)
+
+            sizer.Add(filebutton, flag=wx.GROW)
+            sizer.Add(label_info, border=4, flag=wx.GROW | wx.LEFT)
+            sizer.AddSpacer(15)
+            sizer.Add(panel, proportion=1, border=4, flag=wx.GROW | wx.LEFT)
+
+            self.Bind(wx.EVT_CHECKBOX,     self.OnCheckAll,    cb_all)
+            self.Bind(wx.EVT_CHECKBOX,     self.OnCheckHeader, cb_header)
+            self.Bind(wx.EVT_CHECKLISTBOX, lambda e: self.UpdateButtons(), listbox)
+
+
+        def Reset(self):
+            """Sets page to clean state."""
+            self.filename = ""
+            self.filedata.clear()
+            self.use_header = True
+
+            self.button_file.SetValue("", callBack=False)
+            self.label_info.Label = ""
+            self.cb_all.Value = self.cb_header.Value = True
+            self.listbox.Clear()
+            self.panel.Hide()
+            self.UpdateButtons()
+
+
+        def UpdateButtons(self):
+            """Enables Next-button if ready."""
+            enabled = bool(self.filename) and (self.cb_all.Value or
+                       any(self.listbox.IsChecked(i) for i in range(self.listbox.Count))) and \
+                      any(x["columns"] and x["rows"] for x in self.filedata.get("sheets", []))
+            self.FindWindowById(wx.ID_FORWARD).Enable(enabled)
+
+
+        def OnFile(self, event=None, filename=None):
+            """Handler for choosing spreadsheet, loads file data."""
+            filename = filename or event.String
+            filename = filename and os.path.abspath(filename)
+            if not filename or filename == self.filename: return
+            self.Reset()
+
+            try: data = importexport.get_import_file_data(filename)
+            except Exception as e:
+                logger.exception("Error reading import file %s.", filename)
+                # Using wx.MessageBox can open the popup on main window,
+                # depending on event source
+                wx.MessageDialog(self.Parent, "Error reading file:\n\n%s" % util.format_exc(e),
+                                 conf.Title, wx.OK | wx.ICON_ERROR).ShowModal()
+                return
+
+            self.filename = filename
+            self.filedata = data
+            self.listbox.Clear()
+            self.listbox.Disable()
+
+            has_sheets = not data["name"].lower().endswith(".json")
+            info = "Size: %s (%s).%s" % (
+                util.format_bytes(data["size"]),
+                util.format_bytes(data["size"], max_units=False),
+                (" Worksheets: %s." % len(data["sheets"])) if has_sheets else "",
+            )
+
+            self.button_file.SetValue(filename, callBack=False)
+            self.label_info.Label = info
+            for i, sheet in enumerate(data["sheets"]):
+                label = "%s (%s, %s)" % (sheet["name"],
+                    util.plural("column", sheet["columns"]),
+                    "rows: file too large to count" if sheet["rows"] < 0
+                    else util.plural("row", sheet["rows"]))
+                self.listbox.Append(label, i)
+                self.listbox.Check(i)
+            self.cb_all.Enable(has_sheets and len(data["sheets"]) > 1)
+            self.cb_all.Value = True
+            self.cb_header.Enabled = self.cb_header.Value = has_sheets
+            self.panel.Show()
+            self.Layout()
+            self.UpdateButtons()
+
+
+        def OnCheckAll(self, event):
+            """Handler for toggling checkbox, enables or disables listbox."""
+            self.listbox.Enable(not event.IsChecked())
+            self.UpdateButtons()
+
+
+        def OnCheckHeader(self, event):
+            """Handler for toggling header checkbox."""
+            self.use_header = event.IsChecked()
+
+
+    class OutputPage(wx.adv.WizardPageSimple):
+        """Page for choosing database to create."""
+        def __init__(self, parent, prev=None, next=None, bitmap=wx.NullBitmap):
+            super(ImportWizard.OutputPage, self).__init__(parent, prev, next, bitmap)
+
+            self.filename  = None
+            self.importing = False
+            self.add_pk    = True
+            self.progress  = {} # {sheet index: {count, errorcount, error, index, done}}
+            self.file_existed = False # Whether database file existed
+
+
+            exts = ";".join("*" + x for x in conf.DBExtensions)
+            wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
+            filebutton = self.button_file = wx.lib.filebrowsebutton.FileBrowseButton(
+                            self, labelText="Target file:",
+                            buttonText="B&rowse", size=(500, -1),
+                            changeCallback=self.OnFile, fileMask=wildcard,
+                            fileMode=wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
+            label_info = self.label_info = wx.StaticText(self)
+            cb_pk = self.cb_pk = wx.CheckBox(self, label="Add auto-increment &primary key to the new tables")
+
+            panel = self.panel = wx.Panel(self)
+            gauge = self.gauge = wx.Gauge(panel, range=100, size=(300,-1),
+                                          style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
+            label_gauge = self.label_gauge = wx.StaticText(panel)
+            log = self.log = wx.TextCtrl(panel, style=wx.TE_MULTILINE)
+
+            filebutton.textControl.SetEditable(False)
+            cb_pk.Value, cb_pk.Enabled, cb_pk.Shown = True, False, False
+            cb_pk.ToolTip = "A primary key column will be added to the new tables " \
+                            "in addition to imported columns"
+            log.SetEditable(False)
+            log.Disable()
+
+            sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
+            panel.Sizer = wx.BoxSizer(wx.VERTICAL)
+
+            panel.Sizer.Add(gauge,       flag=wx.ALIGN_CENTER)
+            panel.Sizer.Add(label_gauge, flag=wx.ALIGN_CENTER)
+            panel.Sizer.Add(log, border=5, proportion=1, flag=wx.GROW | wx.TOP)
+
+            sizer.Add(filebutton, flag=wx.GROW)
+            sizer.Add(label_info, border=4, flag=wx.GROW | wx.LEFT | wx.BOTTOM)
+            sizer.Add(cb_pk,      border=4, flag=wx.LEFT)
+            sizer.AddSpacer(15)
+            sizer.Add(panel, proportion=1, border=4, flag=wx.GROW | wx.LEFT)
+
+            self.Bind(wx.EVT_CHECKBOX, self.OnCheckPK, cb_pk)
+
+
+        def Reset(self):
+            """Sets page to clean state."""
+            self.filename     = ""
+            self.importing    = False
+            self.add_pk       = True
+            self.file_existed = False
+            self.progress.clear()
+
+            self.label_info.Label = ""
+            self.button_file.SetValue("", callBack=False)
+            self.button_file.Enable()
+            self.cb_pk.Value, self.cb_pk.Enabled, self.cb_pk.Shown = True, False, False
+            self.gauge.Value = 0
+            self.label_gauge.Label = ""
+            self.log.Disable()
+            self.log.Clear()
+            self.panel.Hide()
+            self.UpdateButtons()
+
+
+        def UpdateButtons(self):
+            """Enables Next-button if ready, disables Back-button if importing."""
+            self.FindWindowById(wx.ID_CANCEL).Label  = "&Cancel"
+            self.FindWindowById(wx.ID_FORWARD).Label = "&Import"
+            self.FindWindowById(wx.ID_FORWARD).Enable(False if self.importing else bool(self.filename))
+            self.FindWindowById(wx.ID_BACKWARD).Enable(not self.importing)
+
+
+        def OnCheckPK(self, event):
+            """Handler for toggling pk checkbox."""
+            self.add_pk = event.IsChecked()
+
+
+        def OnFile(self, event=None, filename=None):
+            """Handler for choosing database, loads file data."""
+            filename = filename or event.String
+            filename = filename and os.path.abspath(filename)
+            if not filename or filename == self.filename: return
+            self.Reset()
+
+            filename = os.path.abspath(filename)
+            try:
+                if filename in self.Parent.Parent.dbs:
+                    wx.MessageDialog(self.Parent, "%s is currently open in %s." % (filename, conf.Title),
+                                     conf.Title, wx.OK | wx.ICON_WARNING).ShowModal()
+                    return
+            except Exception: pass
+
+            try:
+                self.file_existed = os.path.exists(filename)
+                db = database.Database(filename)
+            except Exception as e:
+                self.button_file.SetValue("", callBack=False)
+                logger.exception("Error reading target file %s.", filename)
+                wx.MessageDialog(self.Parent, "Error reading file:\n\n%s" % util.format_exc(e),
+                                 conf.Title, wx.OK | wx.ICON_ERROR).ShowModal()
+                return
+
+            self.filename = db.filename
+
+            self.button_file.SetValue(filename, callBack=False)
+            info = "Size: %s (%s), %s." % (
+                util.format_bytes(db.filesize),
+                util.format_bytes(db.filesize, max_units=False),
+                util.plural("table", db.schema["table"]),
+            ) if self.file_existed else "<new database>"
+            self.label_info.Label = info
+            self.cb_pk.Shown = self.cb_pk.Enabled = True
+
+            db.close()
+            try: not self.file_existed and os.unlink(db.filename)
+            except Exception: pass
+
+            self.Layout()
+            self.UpdateButtons()
+
+
+
+    def __init__(self, parent, id=wx.ID_ANY, title=wx.EmptyString, bitmap=wx.NullBitmap,
+                 pos=wx.DefaultPosition, style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER):
+        super(ImportWizard, self).__init__(parent, id, title, bitmap, pos, style)
+
+        self.items  = {} # [sheet index: {name, columns, rows, tname, tcolumns, ?pk}]
+        self.index  = -1 # Current sheet being imported
+        self.db     = None
+        self.worker = workers.WorkerThread()
+        self.filesize   = 0    # Database initial size
+        self.dlg_cancel = None # controls.MessageDialog if any
+
+        page1 = self.page1 = self.InputPage(self)
+        page2 = self.page2 = self.OutputPage(self)
+
+        page1.Chain(page2)
+        self.GetPageAreaSizer().Add(page1, proportion=1, flag=wx.GROW)
+
+        self.DropTarget = controls.FileDrop(on_files=self.OnDrop)
+
+        self.Bind(wx.adv.EVT_WIZARD_CANCEL,        self.OnCancel)
+        self.Bind(wx.adv.EVT_WIZARD_PAGE_CHANGING, self.OnPageChanging)
+        self.Bind(wx.adv.EVT_WIZARD_PAGE_SHOWN,    self.OnPage)
+        self.Bind(wx.adv.EVT_WIZARD_FINISHED,      self.OnOpenData)
+
+        wx_accel.accelerate(self)
+
+
+    def RunWizard(self):
+        """Runs the wizard from the first page."""
+        self.items.clear()
+        self.index      = -1
+        self.filesize   = 0
+        self.dlg_cancel = None
+        self.page1.Reset()
+        self.page2.Reset()
+        return super(ImportWizard, self).RunWizard(self.page1)
+
+
+    def Cleanup(self):
+        """Removes database file if it did not exist before import."""
+        if not self: return
+        try: not self.page2.file_existed and os.unlink(self.page2.filename)
+        except Exception: logger.exception("Failed to delete %s.", self.page2.filename)
+
+
+    def OnDrop(self, files):
+        """Handler for drag-dropping files onto wizard, loads file in current page."""
+        if files and self.index < 0: self.CurrentPage.OnFile(filename=files[0])
+
+
+    def OnOpenData(self, event):
+        """Handler for finishing wizard by clicking "Open data", opens database."""
+        from sqlitely import gui
+        wx.PostEvent(self.Parent, gui.OpenDatabaseEvent(-1, file=self.page2.filename))
+
+
+    def OnCancel(self, event):
+        """Handler for canceling import, confirms with user popup."""
+        if self.CurrentPage == self.page1 and not self.page1.filename:
+            return # Nothing set yet, close wizard
+        if self.index >= 0 and not self.page2.importing:
+            return # Import finished
+        if self.index < 0:
+            if wx.OK != wx.MessageBox(
+                "Are you sure you want to cancel data import?",
+                conf.Title, wx.OK | wx.CANCEL
+            ): event.Veto()
+            return # Import not started yet
+
+        event.Veto() # Keep wizard open
+        dlg = self.dlg_cancel = controls.MessageDialog(self,
+            "Import is currently underway, are you sure you want to cancel it?",
+            conf.Title, wx.ICON_WARNING | wx.YES | wx.NO | wx.NO_DEFAULT)
+        res = dlg.ShowModal()
+        self.dlg_cancel = None
+        if wx.ID_YES != res or not self.page2.importing: return
+
+        changes = "\n- ".join(
+            "%snew table %s." % (
+                ("%s in " % util.plural("row", self.page2.progress[i]["count"], sep=","))
+                 if self.page2.progress[i].get("count") else "",
+                grammar.quote(item["tname"], force=True)
+            ) for i, item in self.items.items() if i in self.page2.progress
+        )
+        dlg = self.dlg_cancel = controls.MessageDialog(self,
+            "Keep changes?\n\n%s" % changes.capitalize(),
+            conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.CANCEL_DEFAULT
+        ) if changes else None
+        keep = dlg.ShowModal() if changes else wx.ID_NO
+        self.dlg_cancel = None
+
+        if wx.ID_CANCEL == keep or not self.page2.importing: return
+
+        self.page2.importing = None if wx.ID_NO == keep else False
+        self.worker.stop_work()
+        self.page2.gauge.Value = self.page2.gauge.Value # Stop pulse, if any
+        self.page2.FindWindowById(wx.ID_BACKWARD).Disable()
+        self.page2.FindWindowById(wx.ID_CANCEL ).Label = "&Close"
+        if wx.ID_YES == keep:
+            self.page2.FindWindowById(wx.ID_FORWARD).Label = "&Open data"
+            self.page2.FindWindowById(wx.ID_FORWARD).Enable()
+
+
+    def OnPage(self, event):
+        """Handler for page display, tweaks page controls state."""
+        if event.Page in (self.page1, self.page2):
+            event.Page.UpdateButtons()
+
+
+    def OnPageChanging(self, event):
+        """
+        Handler for changing page, starts import if going forward on last page,
+        .
+        """
+        if event.Page is self.page2 and event.Direction and self.page2.filename:
+            if self.page2.progress: return
+
+            event.Veto() # Cancel event as next-button acts as "finish" on last page
+
+            self.db = database.Database(self.page2.filename)
+
+            self.page2.importing = True
+            self.page2.panel.Show()
+            self.page2.UpdateButtons()
+            self.page2.button_file.Disable()
+            self.page2.cb_pk.Disable()
+            self.page2.log.Enable()
+            self.page2.gauge.Pulse()
+            self.page2.Layout()
+
+            self.StartImport()
+
+
+    def StartImport(self):
+        """Starts import."""
+
+        def make_sheet_column(i):
+            """Returns spreadsheet-like column name for index, e.g. "AA" for 26."""
+            LETTERS = string.ascii_uppercase
+            result = ""
+            while i >= len(LETTERS):
+                i, i0 = divmod(i, len(LETTERS))
+                result = LETTERS[i0 % len(LETTERS)] + result
+            return LETTERS[i % len(LETTERS)] + result
+
+
+        itemnames = sum((list(x) for x in self.db.schema.values()), [])
+        for i, sheet in enumerate(self.page1.filedata["sheets"]):
+            if not sheet["rows"] or not sheet["columns"] \
+            or not self.page1.listbox.IsChecked(i) and not self.page1.cb_all.Value:
+                continue # for sheet
+            item = sheet.copy()
+            table = sheet["name"].strip()
+            if self.page1.filedata["format"] in ("csv", "json"):
+                table = os.path.split(os.path.basename(self.page1.filename))[0].strip()
+                if not table: table = "import_data"
+            if not self.db.is_valid_name(table=table):
+                table = "import_data_" + table
+            item["tname"] = util.make_unique(table, itemnames)
+            itemnames.append(item["tname"])
+
+            colnames = item["tcolumns"] = []
+            for j, col in enumerate(sheet["columns"]):
+                if not col or not self.page1.use_header: col = make_sheet_column(j)
+                col = util.make_unique(col, colnames)
+                colnames.append(col)
+            if self.page2.add_pk:
+                item["pk"] = util.make_unique("id", colnames)
+
+            self.items[i] = item
+
+        self.filesize = self.db.filesize
+        self.index = 1
+
+        tables  = [(x["tname"], x["name"]) for _, x in sorted(self.items.items())]
+        pks     = {x["tname"]:  x["pk"]    for x in self.items.values()}
+        columns = {x["tname"]:  OrderedDict(enumerate(item["tcolumns"]))
+                   for x in self.items.values()}
+        callable = functools.partial(importexport.import_data, self.page1.filename,
+                                     self.db, tables, columns, pks, 
+                                     self.page1.use_header, self.OnProgressCallback)
+        self.worker.work(callable)
+
+
+    def OnProgressCallback(self, **kwargs):
+        """
+        Handler for worker callback, returns whether importing should continue,
+        True/False/None (yes/no/no+rollback). Blocks on error until user choice.
+        """
+        if not self: return
+        q = None
+        if self.page2.importing and kwargs.get("error") and not kwargs.get("done"):
+            q = Queue.Queue()
+        wx.CallAfter(self.OnProgress, callback=q.put if q else None, **kwargs)
+        # Suspend continuation until user response
+        return q.get() if q else self.page2.importing
+
+
+    def OnProgress(self, **kwargs):
+        """
+        Handler for import progress report, updates progress bar and log window.
+        Shows abort-dialog on error, invokes "callback" from arguments if present.
+        """
+        if not self: return
+
+        VARS = "count", "errorcount", "error", "index", "done", "table"
+        count, errorcount, error, index, done, table = (kwargs.get(x) for x in VARS)
+        callback = kwargs.pop("callback", None)
+
+        itemindex = next((i for i, x in self.items.items() if x["tname"] == table), None)
+        item = self.items[itemindex] if itemindex is not None else None
+        if itemindex is not None:
+            self.page2.progress.setdefault(itemindex, {}).update(kwargs)
+
+        finished = False
+
+        if count is not None:
+            text = "Table %s: " % grammar.quote(item["tname"], force=True)
+            total = item["rows"]
+            if total < 0:
+                text += util.plural("row", count)
+                self.page2.gauge.Pulse()
+            else:
+                if self.page1.use_header: total -= 1
+                percent = int(100 * util.safedivf(count + (errorcount or 0), total))
+                text += "%s%% (%s of %s)" % (percent, util.plural("row", count), total)
+                self.page2.gauge.Value = percent
+            if errorcount:
+                text += ", %s" % util.plural("error", errorcount)
+            self.page2.label_gauge.Label = text
+            self.page2.gauge.ContainingSizer.Layout()
+            wx.YieldIfNeeded()
+
+        if (error or done) and self.dlg_cancel:
+            self.dlg_cancel.EndModal(wx.ID_CANCEL)
+            self.dlg_cancel = None
+
+        if error and done:
+            finished = True
+
+        if error and not done and self.page2.importing:
+            dlg = wx.MessageDialog(self, "Error inserting row #%s.\n\n%s" % (
+                index + (not self.page1.use_header), error), conf.Title,
+                wx.YES | wx.NO | wx.CANCEL | wx.CANCEL_DEFAULT | wx.ICON_WARNING
+            )
+            dlg.SetYesNoCancelLabels("&Abort", "Abort and &rollback", "&Ignore errors")
+            res = dlg.ShowModal()
+            if wx.ID_CANCEL != res:
+                finished = True
+                self.page2.importing = False if wx.ID_YES == res else None
+
+        if done and not finished and itemindex is not None:
+            finished = not (itemindex < max(self.items))
+
+        if done and item:
+            itemprogress = self.page2.progress.get(itemindex) or {}
+            info = "Inserted %s into new table %s.%s" % (
+                util.plural("row", count),
+                grammar.quote(item["tname"], force=True),
+                ("\nFailed to insert %s." % util.plural("row", itemprogress["errorcount"]))
+                if itemprogress.get("errorcount") else "",
+            )
+            self.page2.log.AppendText(("\n\n" if self.page2.log.Value else "\n") + info)
+
+
+        if finished:
+            self.db.close()
+            success = self.page2.importing # True: ok, False: aborted, None: rolled back
+            if success: self.page2.importing = False
+            self.page2.gauge.Value = 100 if success else self.page2.gauge.Value # Stop pulse, if any
+            self.page2.FindWindowById(wx.ID_FORWARD).Enable()
+            self.page2.FindWindowById(wx.ID_FORWARD).Label = "&Open data"
+            self.page2.FindWindowById(wx.ID_CANCEL ).Label = "&Close"
+            if success is None:
+                self.page2.FindWindowById(wx.ID_FORWARD).Disable()
+                if not self.page2.file_existed:
+                    wx.CallAfter(self.Cleanup)
+            else:
+                wx.CallAfter(self.Parent.update_database_list, self.page2.filename)
+
+            wx.Bell()
+            if error:
+                wx.MessageBox("Error on data import:\n\n%s" % error,
+                              conf.Title, wx.OK | wx.ICON_ERROR)
+            else: 
+                info = "\n\n\nData import %s." % (
+                    "complete" if success else "stopped" if success is False
+                    else "aborted and rolled back"
+                )
+                filesize2 = 0
+                try: filesize2 = os.path.getsize(self.page2.filename)
+                except Exception: pass
+                rows_total   = sum(x.get("count", 0) for x in self.page2.progress.values())
+                tables_total = sum(1 for x in self.page2.progress.values() if x.get("count"))
+                errors_total = sum(x.get("errorcount", 0) for x in self.page2.progress.values())
+
+                if success is not None: info += "\nInserted %s%s into %s." % (
+                    util.plural("row", rows_total, sep=","),
+                    " and %s (%s)" % (
+                        util.format_bytes(filesize2 - self.filesize),
+                        util.format_bytes(filesize2 - self.filesize, max_units=False)
+                    ) if filesize2 else "",
+                    util.plural("new table", tables_total)
+                )
+                if success and errors_total: info += "\nFailed to insert %s (%s %s)." % (
+                    util.plural("row", errors_total),
+                    util.plural("table", len([1 for x in self.page2.progress.values() if x.get("errorcount")])),
+                    ", ".join(grammar.quote(x["tname"], force=True)
+                              for x in self.page2.progress.values() if x.get("errorcount"))
+                )
+                self.page2.log.AppendText(info)
+
+        if callable(callback): callback(self.page2.importing)
