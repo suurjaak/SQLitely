@@ -3259,11 +3259,12 @@ class SchemaObjectPage(wx.Panel):
         panel = wx.Panel(parent)
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_table = wx.BoxSizer(wx.HORIZONTAL)
+
         sizer_flags = wx.BoxSizer(wx.HORIZONTAL)
 
         label_table = self._ctrls["label_table"] = wx.StaticText(panel, label="T&able:")
         list_table = self._ctrls["table"] = wx.ComboBox(panel,
-            style=wx.CB_DROPDOWN | wx.CB_READONLY)
+            size=(200, -1), style=wx.CB_DROPDOWN | wx.CB_READONLY)
         label_upon = wx.StaticText(panel, label="&Upon:")
         list_upon = self._ctrls["upon"] = wx.ComboBox(panel,
             style=wx.CB_DROPDOWN | wx.CB_READONLY, choices=self.UPON)
@@ -3275,8 +3276,8 @@ class SchemaObjectPage(wx.Panel):
                              "INSTEAD OF triggers apply to views, enabling to execute " \
                              "INSERT, DELETE or UPDATE statements on the view."
 
-        check_for    = self._ctrls["for"]       = wx.CheckBox(panel, label="FOR EACH &ROW")
-        check_for.ToolTip    = "Not enforced by SQLite, all triggers are FOR EACH ROW by default"
+        check_for = self._ctrls["for"] = wx.CheckBox(panel, label="FOR EACH &ROW")
+        check_for.ToolTip = "Not enforced by SQLite, all triggers are FOR EACH ROW by default"
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
         panel1, panel2 = self._MakeColumnsGrid(splitter), wx.Panel(splitter)
@@ -3297,13 +3298,14 @@ class SchemaObjectPage(wx.Panel):
                              "and NEW row reference on INSERT and UPDATE."
 
         sizer_table.Add(label_table, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
-        sizer_table.Add(list_table, flag=wx.GROW)
+        sizer_table.Add(list_table)
         sizer_table.Add(20, 0)
+        sizer_table.AddStretchSpacer()
         sizer_table.Add(label_upon, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
-        sizer_table.Add(list_upon, flag=wx.GROW)
+        sizer_table.Add(list_upon)
         sizer_table.Add(20, 0)
         sizer_table.Add(label_action, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
-        sizer_table.Add(list_action, flag=wx.GROW)
+        sizer_table.Add(list_action)
 
         sizer_flags.Add(check_for)
 
