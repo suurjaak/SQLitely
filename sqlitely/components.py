@@ -5171,6 +5171,8 @@ class SchemaObjectPage(wx.Panel):
         self.Freeze()
         try:
             self._EmptyControl(self._panel_constraints)
+            if self._grid_constraints.NumberRows:
+                self._grid_constraints.DeleteRows(0, self._grid_constraints.NumberRows)
             for i, cnstr in enumerate(constraints):
                 self._AddRowTableConstraint(["constraints"], i, cnstr)
             self._panel_constraints.ContainingSizer.Layout()
