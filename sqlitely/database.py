@@ -1678,10 +1678,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
         name  = item["name"]
         name2 = renames["table"][name2] if name in renames.get("table", {}) else name
 
-        allnames = sum((list(x) for x in self.schema.values()), [])
+        allnames = set(sum((list(x) for x in self.schema.values()), []))
         renames = copy.deepcopy(renames)
         tempname = util.make_unique(name2, allnames)
-        allnames.append(tempname)
+        allnames.add(tempname)
         renames.setdefault("table", {}).update({name: tempname})
         if "column" in renames and name2 in renames["column"]:
             renames["column"][tempname] = renames["column"].pop(name2)
