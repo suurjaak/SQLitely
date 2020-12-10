@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.12.2020
+@modified    10.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -4758,6 +4758,7 @@ class SchemaObjectPage(wx.Panel):
             constraint = copy.deepcopy(self.TABLECONSTRAINT_DEFAULTS[ctype])
             constraints = self._item["meta"].setdefault("constraints", [])
             constraints.append(constraint)
+
             self.Freeze()
             try:
                 self._AddRow(["constraints"], len(constraints) - 1, constraint)
@@ -4790,6 +4791,7 @@ class SchemaObjectPage(wx.Panel):
         if self._category in ("table", "view") and ["columns"] == path:
             value = dict(value, __id__=wx.NewIdRef().Id)
         ptr.append(copy.deepcopy(value))
+
         self.Freeze()
         try:
             self._AddRow(path, len(ptr) - 1, value)
@@ -4938,6 +4940,7 @@ class SchemaObjectPage(wx.Panel):
             elif "columns" == path[0] and "name" == path[-1]:
                 col = util.get(meta, path[:-1])
                 if value0 and not value: col["name_last"] = value0
+
                 myid = col["__id__"]
                 if myid in self._col_updates:
                     self._col_updates[myid].update(rename=value)
@@ -5069,11 +5072,14 @@ class SchemaObjectPage(wx.Panel):
 
 
     def _OnCascadeColumnUpdates(self):
-        """Handler for column updates, rebuilds table constraints on rename/remove."""
+        """
+        Handler for column updates, rebuilds table & column constraints on rename/remove.
+        """
         if not self: return
         self._col_updater = None
         constraints = self._item["meta"].get("constraints") or []
-        changed, renames = False, {} # {old column name: new name}
+        columns     = self._item["meta"].get("columns")     or []
+        changed, renamed, colchanged = False, False, False
 
         for opts in self._col_updates.values():
             name = opts["col"].get("name") or opts["col"].get("name_last")
@@ -5101,11 +5107,27 @@ class SchemaObjectPage(wx.Panel):
                             cnstr["key"] = [x for x in cnstr["key"] if x != name]
                             changed = True
                         if keychanged and not cnstr["columns"]: del constraints[i]
+
+                    elif cnstr["type"] in (grammar.SQL.CHECK, ):
+                        if name.lower() not in cnstr.get("check", "").lower():
+                            continue # for opts
+                        # Transform CHECK body via grammar and a dummy CREATE-statement
+                        dummysql = "CREATE TABLE t (x, CHECK (%s))" % cnstr["check"]
+                        dummymeta, err = grammar.parse(dummysql, renames={"column": {"t": {name: ""}}})
+                        if dummymeta and dummymeta.get("constraints"):
+                            changed = True
+                            cnstr["check"] = dummymeta["constraints"][0]["check"].strip()
+                            if not cnstr["check"]: del constraints[i]
+                        elif err:
+                            logger.warn("Error cascading column update %s to constraint %s: %s.",
+                                        opts, cnstr, err)
+
+
                 continue # for opts
 
             changed = changed or bool(opts.get("rename"))
             if name and opts.get("rename"):
-                renames[name] = opts["rename"]
+                renamed = True
 
                 for i, cnstr in list(enumerate(constraints))[::-1]:
                     if cnstr["type"] in (grammar.SQL.PRIMARY_KEY, grammar.SQL.UNIQUE):
@@ -5118,8 +5140,71 @@ class SchemaObjectPage(wx.Panel):
                             cnstr["columns"] = [x if x != name else opts["rename"]
                                                 for x in cnstr["columns"]]
 
+                    elif cnstr["type"] in (grammar.SQL.CHECK, ):
+                        if name.lower() not in cnstr.get("check", "").lower():
+                            continue # for opts
+                        # Transform CHECK body via grammar and a dummy CREATE-statement
+                        dummysql = "CREATE TABLE t (x, CHECK (%s))" % cnstr["check"]
+                        dummymeta, err = grammar.parse(dummysql, renames={"column": {"t": {name: opts["rename"]}}})
+                        if dummymeta and dummymeta.get("constraints"):
+                            changed = True
+                            cnstr["check"] = dummymeta["constraints"][0]["check"]
+                        elif err:
+                            logger.warn("Error cascading column update %s to constraint %s: %s.",
+                                        opts, cnstr, err)
+
+
+        for opts in self._col_updates.values():
+            name = opts["col"].get("name") or opts["col"].get("name_last")
+            if not name: continue # for opts
+
+            if opts.get("remove"):
+
+                for col in columns:
+                    if col.get("fk") and util.lceq(self.Name, col["fk"].get("table")) \
+                    and util.lceq(name, col["fk"].get("key")):
+                        col.pop("fk")
+                        colchanged = True
+
+                    elif col.get("check"):
+                        if name.lower() not in col["check"].lower():
+                            continue # for opts
+                        # Transform CHECK body via grammar and a dummy CREATE-statement
+                        dummysql = "CREATE TABLE t (x CHECK (%s))" % col["check"]
+                        dummymeta, err = grammar.parse(dummysql, renames={"column": {"t": {name: ""}}})
+                        if dummymeta and dummymeta.get("columns"):
+                            col["check"] = dummymeta["columns"][0]["check"].strip()
+                            if not col["check"]: col.pop("check")
+                            colchanged = True
+                        elif err:
+                            logger.warn("Error cascading column update %s to column %s: %s.",
+                                        opts, col, err)
+
+            if opts.get("rename"):
+
+                for col in columns:
+                    if col.get("fk") and util.lceq(self.Name, col["fk"].get("table")) \
+                    and util.lceq(name, col["fk"].get("key")):
+                        col["fk"]["key"] = opts["rename"]
+                        colchanged = True
+
+                    elif col.get("check"):
+                        if name.lower() not in col["check"].lower():
+                            continue # for opts
+                        # Transform CHECK body via grammar and a dummy CREATE-statement
+                        dummysql = "CREATE TABLE t (x CHECK (%s))" % col["check"]
+                        dummymeta, err = grammar.parse(dummysql, renames={"column": {"t": {name: opts["rename"]}}})
+                        if dummymeta and dummymeta.get("columns"):
+                            col["check"] = dummymeta["columns"][0]["check"].strip()
+                            if not col["check"]: col.pop("check")
+                            colchanged = True
+                        elif err:
+                            logger.warn("Error cascading column update %s to column %s: %s.",
+                                        opts, col, err)
+
         self._col_updates = {}
-        if not changed and not renames: return
+        if colchanged: self._PopulateSQL()
+        if not changed and not renamed: return
 
         self.Freeze()
         try:
