@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.11.2020
+@modified    10.12.2020
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -21,6 +21,7 @@ import Queue
 import re
 import sqlite3
 import subprocess
+import sys
 import threading
 import traceback
 
@@ -435,13 +436,14 @@ class AnalyzerThread(WorkerThread):
                         if mypath == paths[-1]: raise
                     else:
                         try: output, error = self._process.communicate()
-                        except Exception as e:
+                        except Exception:
+                            _, e, tb = sys.exc_info()
                             if not self._process: break # for mypath
                             try:
                                 self._process.kill()
                                 output, error = self._process.communicate()
                             except Exception: pass
-                            if mypath == paths[-1]: raise e
+                            if mypath == paths[-1]: raise e, None, tb
                         else:
                             if not self._process \
                             or output and output.strip().startswith("/**"): break # for mypath
@@ -655,26 +657,6 @@ class GraphWorker(WorkerThread):
         DO_OUTBOUND_ATTRACTION  = True    # whether attraction is distributed along outbound links (pushes hubs to center)
 
 
-        nodes = util.CaselessDict() # {name: {id, size, dx, dy, freeze, fixed, cardinality}, }
-
-        for o in items:
-            node = {"x": o["x"], "y": o["y"], "size": o["size"], "name": o["name"],
-                    "dx": 0, "dy": 0, "freeze": 0, "cardinality": 0, "fixed": False}
-            node["span"] = math.sqrt(o["size"][0] ** 2 + o["size"][1] ** 2) / 2.5
-            nodes[o["name"]] = node
-
-        for name1, name2 in links:
-            if name1 != name2:
-                for n in name1, name2: nodes[n]["cardinality"] += 1
-
-        # Start with all items in center
-        center = viewport[0] + viewport[2] / 2, viewport[1] + viewport[3] / 2
-        for i, n in enumerate(nodes.values()):
-            x, y = (c - s/2 for c, s in zip(center, o["size"]))
-            if not n["cardinality"]: x += 200 # Push solitary nodes out
-            n["x"], n["y"] = x, y
-
-
         def intersects(n1, n2):
             (w1, h1), (w2, h2) = n1["size"], n2["size"]
             x1, y1 = max(n1["x"], n2["x"]), max(n1["y"], n2["y"])
@@ -711,7 +693,7 @@ class GraphWorker(WorkerThread):
                 n2["dy"] -= ydist / dist * f
 
 
-        def step():
+        def step(nodes, links):
             result = 0
 
             for n, o in nodes.items():
@@ -761,6 +743,7 @@ class GraphWorker(WorkerThread):
                 n["dx"], n["dy"] = n["dx"] * ratio / COOLING, n["dy"] * ratio / COOLING
                 x, y = n["x"] + n["dx"], n["y"] + n["dy"]
 
+                # Bounce back from edges
                 if x < bounds[0]: n["dx"] = bounds[0] - n["x"]
                 elif x + n["size"][0] > bounds[0] + bounds[2]:
                     n["dx"] = bounds[2] - n["size"][0] - n["x"]
@@ -774,9 +757,29 @@ class GraphWorker(WorkerThread):
             return result
 
 
+        nodes = util.CaselessDict() # {name: {id, size, dx, dy, freeze, fixed, cardinality}, }
+
+        for o in items:
+            node = {"x": o["x"], "y": o["y"], "size": o["size"], "name": o["name"],
+                    "dx": 0, "dy": 0, "freeze": 0, "cardinality": 0, "fixed": False}
+            node["span"] = math.sqrt(o["size"][0] ** 2 + o["size"][1] ** 2) / 2.5
+            nodes[o["name"]] = node
+
+        for name1, name2 in links:
+            if name1 != name2:
+                for n in name1, name2: nodes[n]["cardinality"] += 1
+
+        # Start with all items in center
+        center = viewport[0] + viewport[2] / 2, viewport[1] + viewport[3] / 2
+        for i, n in enumerate(nodes.values()):
+            x, y = (c - s/2 for c, s in zip(center, o["size"]))
+            if not n["cardinality"]: x += 200 # Push solitary nodes out
+            n["x"], n["y"] = x, y
+
+
         steps = 0
         while self.is_working:
-            dist, steps = step(), steps + 1
+            dist, steps = step(nodes, links), steps + 1
             if dist < MIN_COMPLETION_DISTANCE or steps >= MAX_ITERATIONS:
                 break # while
         return {n: {"x": o["x"], "y": o["y"]} for n, o in nodes.items()}

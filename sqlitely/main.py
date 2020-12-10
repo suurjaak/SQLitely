@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.09.2020
+@modified    10.12.2020
 ------------------------------------------------------------------------------
 """
 import argparse
@@ -138,7 +138,7 @@ def run_gui(filenames):
         try:
             sys.stdout.write = functools.partial(swallow, sys.stdout.write)
             sys.stderr.write = functools.partial(swallow, sys.stderr.write)
-        except Exception: raise
+        except Exception: pass
 
     # Some debugging support
     window.run_console("import datetime, os, re, time, sys, wx")

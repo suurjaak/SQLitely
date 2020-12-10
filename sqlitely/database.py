@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.12.2020
+@modified    10.12.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -20,6 +20,7 @@ import math
 import os
 import re
 import sqlite3
+import sys
 import tempfile
 
 from . lib.util import CaselessDict
@@ -519,11 +520,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
             self.populate_schema(parse=parse)
             self.update_fileinfo()
         except Exception:
+            _, e, tb = sys.exc_info()
             if log_error: logger.exception("Error opening database %s.", self.filename)
             try: self.connection.close()
             except Exception: pass
             self.connection = None
-            raise
+            raise e, None, tb
 
 
     def close(self):
@@ -1601,11 +1603,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if err: raise Exception(err)
 
         try: self.executescript(altersql, name="RENAME")
-        except Exception as e:
+        except Exception:
+            _, e, tb = sys.exc_info()
             logger.exception("Error executing SQL.")
             try: self.execute("ROLLBACK")
             except Exception: pass
-            raise e
+            raise e, None, tb
         else:
             resets  = defaultdict(dict) # {category: {name: SQL}}
             if "table" == category and (name2 == grammar.quote(name2) or not self.has_full_rename_table()):
@@ -1643,11 +1646,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if err: raise Exception(err)
 
         try: self.executescript(altersql, name="RENAME")
-        except Exception as e:
+        except Exception:
+            _, e, tb = sys.exc_info()
             logger.exception("Error executing SQL.")
             try: self.execute("ROLLBACK")
             except Exception: pass
-            raise e
+            raise e, None, tb
         else:
             self.notify_rename("table", table, table)
 

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.12.2020
+@modified    10.12.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+import sys
 import warnings
 
 # ImageFont for calculating column widths in Excel export, not required.
@@ -688,7 +689,7 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
                     try:
                         cursor.execute(sql, row)
                         count += 1
-                    except Exception as e:
+                    except Exception:
                         errorcount += 1
                         if not progress: raise
 
