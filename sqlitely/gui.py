@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.12.2020
+@modified    10.12.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -6376,16 +6376,19 @@ class DatabasePage(wx.Panel):
 
     def on_editend_tree(self, event):
         """Handler for clicking to edit tree item, allows if schema item node."""
-        if not event.IsEditCancelled():
+        if event.IsEditCancelled(): return
+
+        do_veto = True
+        try:
             data = event.EventObject.GetItemPyData(event.GetItem())
-            name2, do_veto = event.GetLabel().strip(), True
+            name2 = event.GetLabel().strip()
             if name2:
                 cmd, args = "rename", (data["type"], data["name"], name2)
                 if "column" == data["type"]:
                     cmd = "rename column"
                     args = data["parent"]["name"], data["name"], name2
                 do_veto = not self.handle_command(cmd, *args)
-
+        finally:
             if do_veto:
                 event.Veto()
                 event.EventObject.SetFocus()
