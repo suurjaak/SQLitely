@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.12.2020
+@modified    09.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -4334,65 +4334,13 @@ class SchemaObjectPage(wx.Panel):
 
         else:
             # Need to re-create table, first under temporary name to copy data.
-            names_existing = set(sum((list(self._db.schema[x])
-                                      for x in database.Database.CATEGORIES), []))
-            names_existing.add(new["name"])
-            tempname = util.make_unique(new["name"], names_existing)
-            names_existing.add(tempname)
-            meta = copy.deepcopy(self._item["meta"])
-            util.walk(meta, (lambda x, *_: isinstance(x, dict)
-                             and util.lceq(x.get("table"), old["name"])
-                             and x.update(table=tempname))) # Rename in constraints
-            meta["name"] = tempname
+            args = self._db.get_complex_alter_args(self._item, renames)
+            args.update(fks=self._fks_on)
 
-            sql, _ = grammar.transform(sql, renames={"table": {new["name"]: tempname}})
-            args = {"name": old["name"], "name2": new["name"], "tempname": tempname,
-                    "sql": sql, "fks": self._fks_on, "__type__": "COMPLEX ALTER TABLE",
-                    "columns": [(colmap1[c2["__id__"]]["name"], c2["name"])
-                                for c2 in cols2 if c2["__id__"] in colmap1]}
-
-            for category, itemmap in self._db.get_related("table", old["name"]).items():
-                for item in itemmap.values():
-                    is_our_item = util.lceq(item["meta"].get("table"), old["name"])
-                    sql, _ = grammar.transform(item["sql"], renames=renames)
-                    if sql == item["sql"] and not is_our_item and "view" != category:
-                        # Views need recreating, as SQLite can raise "no such table" error
-                        # otherwise when dropping the old table.
-                        continue # for item
-
-                    if "table" == category:
-                        mytempname = util.make_unique(item["name"], names_existing)
-                        names_existing.add(mytempname)
-                        myrenames = copy.deepcopy(renames)
-                        myrenames.setdefault("table", {})[item["name"]] = mytempname
-                        myitem = dict(item, tempname=mytempname)
-                    else:
-                        myitem, myrenames = dict(item), renames
-                    sql, _ = grammar.transform(item["sql"], renames=myrenames)
-                    myitem.update(sql=sql)
-                    if "table" == category:
-                        sql0, _ = grammar.transform(item["sql"], renames=renames)
-                        myitem.update(sql0=sql0)
-                    args.setdefault(category, []).append(myitem)
-                    if category not in ("table", "view"): continue # for item
-
-                    subrelateds = self._db.get_related(category, item["name"], own=True)
-                    if "table" == category:
-                        # Views need recreating, as SQLite can raise "no such table" error
-                        # otherwise when dropping the old table.
-                        others = self._db.get_related(category, item["name"], own=False)
-                        if "view" in others: subrelateds["view"] = others["view"]
-                    for subcategory, subitemmap in subrelateds.items():
-                        for subitem in subitemmap.values():
-                            if any(x["name"] == subitem["name"] for x in args.get(subcategory, [])):
-                                continue # for subitem
-                            # Re-create table indexes and views and triggers, and view triggers
-                            sql, _ = grammar.transform(subitem["sql"], renames=renames) \
-                                     if renames else (subitem["sql"], None)
-                            args.setdefault(subcategory, []).append(dict(subitem, sql=sql))
-
-        short, _ = grammar.generate(dict(args, no_tx=True))
-        full,  _ = grammar.generate(args)
+        short, err = grammar.generate(dict(args, no_tx=True))
+        if err: raise Exception(err)
+        full,  err = grammar.generate(args)
+        if err: raise Exception(err)
         return short, full, args
 
 
@@ -4997,6 +4945,11 @@ class SchemaObjectPage(wx.Panel):
                     col = copy.deepcopy(dict(col, name=value0))
                     self._col_updates[myid] = {"col": col, "rename": value}
 
+                for col2 in meta["columns"]: # Rename column in self-referencing foreign keys
+                    if col2.get("fk") and util.lceq(col2["fk"].get("table"), self.Name) \
+                    and util.lceq(col2["fk"].get("key"), value0):
+                        col2["fk"]["key"] = value
+
                 if self._col_updater: self._col_updater.Stop()
                 self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
         elif ["table"] == path:
@@ -5116,7 +5069,7 @@ class SchemaObjectPage(wx.Panel):
 
 
     def _OnCascadeColumnUpdates(self):
-        """Handler for column updates, rebuilds constraints on rename/remove."""
+        """Handler for column updates, rebuilds table constraints on rename/remove."""
         if not self: return
         self._col_updater = None
         constraints = self._item["meta"].get("constraints") or []

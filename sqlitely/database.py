@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.11.2020
+@modified    09.12.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1581,6 +1581,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             used = util.CaselessDict()
             for mycategory, itemmap in self.get_related(category, name).items():
                 for myitem in itemmap.values():
+                    # Re-create triggers and views that use this view
                     is_view_trigger = "trigger" == mycategory and util.lceq(myitem["meta"]["table"], name)
                     sql, _ = grammar.transform(myitem["sql"], renames=renames)
                     if sql == myitem["sql"] and not is_view_trigger: continue # for myitem
@@ -1607,7 +1608,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             raise e
         else:
             resets  = defaultdict(dict) # {category: {name: SQL}}
-            if "table" == category and name2 == grammar.quote(name2):
+            if "table" == category and (name2 == grammar.quote(name2) or not self.has_full_rename_table()):
                 # Modify sqlite_master directly, as "ALTER TABLE x RENAME TO y"
                 # sets a quoted name "y" to CREATE statements, including related objects,
                 # regardless of whether the name required quoting.
@@ -1625,10 +1626,20 @@ WARNING: misuse can easily result in a corrupt database file.""",
     def rename_column(self, table, name, name2):
         """Carries out renaming table column."""
         if util.lceq(name, name2): return
-        item = self.get_category("table", name)
-        altersql, err = grammar.generate(dict(
-            name=table, name2=table, columns=[(name, name2)]
-        ), category="ALTER TABLE")
+
+        item = self.get_category("table", table)
+        if not item \
+        or not any(util.lceq(c["name"], name) for c in item["columns"]):
+            return
+        table = item["name"]
+        if self.has_rename_column():
+            altersql, err = grammar.generate(dict(
+                name=table, name2=table, columns=[(name, name2)]
+            ), category="ALTER TABLE")
+        else:
+            fks_on = self.execute("PRAGMA foreign_keys", log=False).fetchone().values()[0]
+            args = self.get_complex_alter_args(item, {"column": {table: {name: name2}}})
+            altersql, err = grammar.generate(dict(args, fks=fks_on))
         if err: raise Exception(err)
 
         try: self.executescript(altersql, name="RENAME")
@@ -1639,6 +1650,90 @@ WARNING: misuse can easily result in a corrupt database file.""",
             raise e
         else:
             self.notify_rename("table", table, table)
+
+
+    def get_complex_alter_args(self, item, renames):
+        """
+        Returns arguments for a complex ALTER TABLE operation, as {
+            __type__:  "COMPLEX ALTER TABLE"
+            name:      table old name
+            name2:     table new name if renamed else old name
+            tempname:  table temporary name
+            sql:       table CREATE statement with tempname
+            columns:   [(column name in old, column name in new)]
+            ?table:    [{related table {name, tempname, sql, ?index, ?trigger}, using new names}, ]
+            ?index:    [{related index {name, sql}, using new names}, ]
+            ?trigger:  [{related trigger {name, sql}, using new names}, ]
+            ?view:     [{related view {name, sql}, using new names}, ]
+        }.
+
+        @param   item     table item as {name, sql, columns, ..}
+        @param   renames  {?table: {old: new}, ?column: {table: {oldcol: newcol}}}
+        """
+
+        name  = item["name"]
+        name2 = renames["table"][name2] if name in renames.get("table", {}) else name
+
+        allnames = sum((list(x) for x in self.schema.values()), [])
+        renames = copy.deepcopy(renames)
+        tempname = util.make_unique(name2, allnames)
+        allnames.append(tempname)
+        renames.setdefault("table", {}).update({name: tempname})
+        if "column" in renames and name2 in renames["column"]:
+            renames["column"][tempname] = renames["column"].pop(name2)
+        sql, err = grammar.transform(item["sql"], renames=renames)
+        if err: raise Exception(err)
+
+        args = {"name": name, "name2": name2, "tempname": tempname,
+                "sql": sql, "__type__": "COMPLEX ALTER TABLE",
+                "columns": [(c["name"],
+                             util.get(renames, "column", tempname, c["name"]) or c["name"])
+                            for c in item["columns"]]}
+
+
+        items_processed = set([name])
+        for category, itemmap in self.get_related("table", name).items():
+            for item2 in itemmap.values():
+                if item2["name"] in items_processed: continue # for item2
+                items_processed.add(item2["name"])
+
+                is_our_item = util.lceq(item["meta"].get("table"), name)
+                sql0, _ = grammar.transform(item2["sql"], renames=renames)
+                if sql0 == item2["sql"] and not is_our_item and "view" != category:
+                    # Views need recreating, as SQLite can raise "no such table" error
+                    # otherwise when dropping the old table. Triggers that simply
+                    # use this table but otherwise need no changes, can remain as is.
+                    continue # for item2
+
+                myitem = dict(item2, sql=sql0, sql0=sql0)
+                if "table" == category:
+                    mytempname = util.make_unique(item2["name"], allnames)
+                    allnames.add(mytempname)
+                    myrenames = copy.deepcopy(renames)
+                    myrenames.setdefault("table", {})[item2["name"]] = mytempname
+                    myitem = dict(item2, tempname=mytempname)
+                    sql, _ = grammar.transform(item2["sql"], renames=myrenames)
+                    myitem.update(sql=sql)
+
+                args.setdefault(category, []).append(myitem)
+                if category not in ("table", "view"): continue # for item2
+
+                subrelateds = self.get_related(category, item2["name"], own=True)
+                if "table" == category:
+                    # Views need recreating, as SQLite can raise "no such table" error
+                    # otherwise when dropping the old table.
+                    others = self.get_related(category, item2["name"], own=False)
+                    if "view" in others: subrelateds["view"] = others["view"]
+                for subcategory, subitemmap in subrelateds.items():
+                    for subitem in subitemmap.values():
+                        if subitem["name"] in items_processed: continue # for item2
+                        # Re-create table indexes and views and triggers, and view triggers
+                        sql, _ = grammar.transform(subitem["sql"], renames=renames) \
+                                 if renames else (subitem["sql"], None)
+                        args.setdefault(subcategory, []).append(dict(subitem, sql=sql))
+                        items_processed.add(subitem["name"])
+
+        return args
 
 
     def update_sqlite_master(self, schema):
@@ -1657,8 +1752,6 @@ WARNING: misuse can easily result in a corrupt database file.""",
             logger.warn("Error syncing sqlite_master contents.", exc_info=True)
             try: self.execute("ROLLBACK")
             except Exception: pass
-
-
 
 
 
