@@ -655,7 +655,7 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
                 cols = [{"name": x} for x in columns.values()]
                 if pks.get(table):
                     cols.insert(0, {"name": pks[table], "type": "INTEGER",
-                                    "pk": {"autoincrement": True}})
+                                    "pk": {"autoincrement": True}, "notnull": {}})
                 meta = {"name": table, "__type__": grammar.SQL.CREATE_TABLE,
                         "columns": cols}
                 create_sql, err = grammar.generate(meta)
