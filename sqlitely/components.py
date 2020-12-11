@@ -1513,8 +1513,8 @@ class SQLiteGridBaseMixin(object):
         if row >= 0 and col >= 0:
             value = self._grid.Table.GetValue(row, col)
             col_name = self._grid.Table.GetColLabelValue(col).lower()
-            if type(value) is int and value > 100000000 \
-            and ("time" in col_name or "date" in col_name):
+            if isinstance(value, (float, int, long)) and value > 100000000 \
+            and ("time" in col_name or "date" in col_name or "stamp" in col_name):
                 try:
                     tip = datetime.datetime.fromtimestamp(value).strftime(
                           "%Y-%m-%d %H:%M:%S")
