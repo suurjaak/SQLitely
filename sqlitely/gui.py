@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.12.2020
+@modified    11.12.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -6068,27 +6068,36 @@ class DatabasePage(wx.Panel):
         return state, sel
 
 
-    def set_tree_state(self, tree, root, state):
+    def set_tree_state(self, tree, root, state, have_selected=False):
         """Sets tree expanded state."""
         state, sel = state
-        if not state and not sel: return
+        if not state and not sel: return have_selected
 
         key_match = lambda x, y, k: x.get(k) and x[k] == y.get(k)
+        parent_match = lambda x, y: x.get("parent") and y.get("parent") \
+                                    and key_match(x["parent"], y["parent"], "type") \
+                                    and key_match(x["parent"], y["parent"], "category") \
+                                    and (key_match(x["parent"], y["parent"], "name") or 
+                                         key_match(x["parent"], y["parent"], "__id__"))
         has_match = lambda x, y: x == y or (
             key_match(y, x, "category") if "category" == y.get("type")
-            else key_match(y, x, "type") and key_match(y, x, "name")
+            else key_match(y, x, "type") and (
+                key_match(y, x, "name") or key_match(y, x, "__id__") or parent_match(y, x)
+            )
         )
 
         if state: tree.Expand(root)
         item = tree.GetNext(root)
         while item and item.IsOk():
             mydata = tree.GetItemPyData(item)
-            if sel and has_match(sel, mydata):
+            if not have_selected and sel and has_match(sel, mydata):
                 tree.SelectItem(item)
+                have_selected = True
             mystate = next((x for x in state["children"] if has_match(x["data"], mydata)), None) \
                       if state and "children" in state else None
-            if mystate: self.set_tree_state(tree, item, (mystate, sel))
+            if mystate: have_selected = self.set_tree_state(tree, item, (mystate, sel), have_selected)
             item = tree.GetNextSibling(item)
+        return have_selected
 
 
     def load_tree_data(self, refresh=False):
@@ -6267,7 +6276,10 @@ class DatabasePage(wx.Panel):
 
                         for subitem in subitems:
                             subchild = tree.AppendItem(categchild, util.unprint(subitem["name"]))
-                            tree.SetItemPyData(subchild, dict(subitem, parent=itemdata, level=item["name"]))
+                            subdata = dict(subitem, parent=itemdata, level=item["name"])
+                            if "__id__" in subdata:
+                                subdata["__id__"] = "%s-%s-%s" % (category, subcategory, subdata["__id__"])
+                            tree.SetItemPyData(subchild, subdata)
                             t = ""
                             if "index" == subcategory:
                                 t = ", ".join(util.unprint(x.get("name", x.get("expr")))
