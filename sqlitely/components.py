@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.12.2020
+@modified    11.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -3455,7 +3455,7 @@ class SchemaObjectPage(wx.Panel):
             button_add_column.ToolTip = "Add new column to table"
         elif "index" == self._category:
             button_add_column._toggle = button_add_expr._toggle = lambda: (
-                "disable" if self._hasmeta and not self._item["meta"].get("table") else "show"
+                "show disable" if self._hasmeta and not self._item["meta"].get("table") else "show"
             )
             button_add_column.ToolTip = "Add column to index"
         elif "trigger" == self._category:
@@ -4829,6 +4829,7 @@ class SchemaObjectPage(wx.Panel):
             self._RemoveRow(path, index)
             self._sql0_applies = False
             self._PopulateSQL()
+            self._ToggleControls(self._editmode)
             self.Layout()
         finally: self.Thaw()
         self._PostEvent(modified=True)
@@ -4925,7 +4926,9 @@ class SchemaObjectPage(wx.Panel):
                 if ["upon"] == path: meta.pop("table", None)
             elif ["table"] == path: self._PopulateAutoComp()
         elif "index" == self._category:
-            if ["table"] == path: self._PopulateAutoComp()
+            if ["table"] == path:
+                self._PopulateAutoComp()
+                self._ToggleControls(self._editmode)
         elif "table" == self._category:
             if "constraints" == path[0] and "table" == path[-1]:
                 # Foreign table changed, clear foreign cols
