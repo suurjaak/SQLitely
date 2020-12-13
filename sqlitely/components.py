@@ -4212,6 +4212,9 @@ class SchemaObjectPage(wx.Panel):
             self._alter_sqler = None
             sql, _, _ = self._GetAlterSQL()
             set_sql(sql)
+            if not self._col_updater:
+                # Enable action buttons now that changes have cascaded
+                for n in "edit", "import", "test": self._buttons[n].Enable()
 
         if self._editmode:
             sql, _ = grammar.generate(self._item["meta"])
@@ -4830,6 +4833,8 @@ class SchemaObjectPage(wx.Panel):
                 self._col_updates[myid] = {"col": copy.deepcopy(mydata), "remove": True}
             if self._col_updater: self._col_updater.Stop()
             self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
+            # Disable action buttons until changes cascaded
+            for n in "edit", "import", "test": self._buttons[n].Disable()
 
         self.Freeze()
         try:
@@ -4965,6 +4970,8 @@ class SchemaObjectPage(wx.Panel):
 
                 if self._col_updater: self._col_updater.Stop()
                 self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
+                # Disable action buttons until changes cascaded
+                for n in "edit", "import", "test": self._buttons[n].Disable()
         elif ["table"] == path:
             rebuild = meta.get("columns") or "index" == self._category
             if not rebuild: self._PopulateAutoComp()
@@ -5083,7 +5090,7 @@ class SchemaObjectPage(wx.Panel):
 
     def _OnCascadeColumnUpdates(self):
         """
-        Handler for column updates, rebuilds table & column constraints on rename/remove.
+        Handler for table column updates, rebuilds table & column constraints on rename/remove.
         """
         if not self: return
         self._col_updater = None
@@ -5229,7 +5236,8 @@ class SchemaObjectPage(wx.Panel):
             self._sql0_applies = False
             self._PopulateSQL()
             self._PostEvent(modified=True)
-        finally: self.Thaw()
+        finally:
+            self.Thaw()
         wx.CallAfter(self._SizeConstraintsGrid)
 
 
