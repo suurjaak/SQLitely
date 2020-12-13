@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.12.2020
+@modified    13.12.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1110,7 +1110,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.on_change_page() # Update program title
 
         if modified is not None or updated:
-            self.db_menustate[event.source.db.filename] = {}
+            self.db_menustate.setdefault(event.source.db.filename, {})
             if updated: self.db_menustate[event.source.db.filename]["full"] = True
 
         if ready or rename: self.update_notebook_header()
@@ -2344,7 +2344,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     self.notebook.SetSelection(i)
                     self.update_notebook_header()
                     break # for i
-            self.db_menustate[filename] = {"full": True}
+            self.db_menustate[db.filename] = {"full": True}
         return page
 
 
