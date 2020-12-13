@@ -4207,14 +4207,14 @@ class SchemaObjectPage(wx.Panel):
             self._ctrls["sql"].SetText(sql.rstrip() + "\n")
             self._ctrls["sql"].SetReadOnly(True)
             self._ctrls["sql"].ScrollToLine(scrollpos)
+            if not self._col_updater:
+                # Enable action buttons now that changes have cascaded
+                for n in "edit", "import", "test": self._buttons[n].Enable()
 
         def set_alter_sql():
             self._alter_sqler = None
             sql, _, _ = self._GetAlterSQL()
             set_sql(sql)
-            if not self._col_updater:
-                # Enable action buttons now that changes have cascaded
-                for n in "edit", "import", "test": self._buttons[n].Enable()
 
         if self._editmode:
             sql, _ = grammar.generate(self._item["meta"])
