@@ -2956,9 +2956,12 @@ class SchemaObjectPage(wx.Panel):
         button_cancel  = self._buttons["cancel"]  = wx.Button(panel2, label="&Cancel")
         button_actions = self._buttons["actions"] = wx.Button(panel2, label="Actions ..")
         button_close   = self._buttons["close"]   = wx.Button(panel2, label="Close")
-        button_edit._toggle   = button_refresh._toggle = "skip"
-        button_actions._toggle = button_close._toggle  = "hide skip"
-        button_import._toggle = button_cancel._toggle  = button_test._toggle  = "show skip"
+        button_refresh._toggle = "skip"
+        button_edit._toggle    = lambda: ("disable" if self._col_updater else "enable")
+        button_actions._toggle = button_close._toggle = "hide skip"
+        button_cancel._toggle  = "show skip"
+        button_import._toggle  = button_test._toggle = lambda: "show " + ("disable" if self._col_updater else "enable")
+
         button_refresh.ToolTip = "Reload statement, and database tables"
         button_test.ToolTip    = "Test saving schema object, checking SQL validity"
         button_import.ToolTip  = "Edit SQL statement directly"
@@ -3759,8 +3762,10 @@ class SchemaObjectPage(wx.Panel):
         text_name.MinSize    = (150, -1)
         list_type.MinSize    = (100, -1)
         text_default.MinSize = (100, list_type.Size[1])
-        button_open._toggle = lambda: "skip" if self._hasmeta else ""
+        button_open._toggle = lambda: ("disable" if self._col_updater or not self._hasmeta else "enable")
+        button_open.Enable("enable" in button_open._toggle())
         button_open.ToolTip = "Open advanced options"
+            
 
         text_name.Value     = col.get("name") or ""
         list_type.Value     = col.get("type") or ""
@@ -3920,7 +3925,8 @@ class SchemaObjectPage(wx.Panel):
             ctrls = [stc_check]
 
         button_open = wx.Button(panel, label="Open", size=(50, -1))
-        button_open._toggle = "skip"
+        button_open._toggle = lambda: ("disable" if self._col_updater or not self._hasmeta else "enable")
+        button_open.Enable("enable" in button_open._toggle())
         button_open.ToolTip = "Open advanced options"
 
         if insert:
@@ -4131,9 +4137,11 @@ class SchemaObjectPage(wx.Panel):
             action = getattr(b, "_toggle", None) or []
             if callable(action): action = action() or []
             if "disable" in action: b.Enable(not edit)
+            if "enable"  in action: b.Enable(True)
             if "show"    in action: b.Show(edit)
             if "hide"    in action: b.Show(not edit)
-            if not ("disable" in action or "skip" in action): b.Enable(edit)
+            if not ("disable" in action or "enable" in action or "skip" in action):
+                b.Enable(edit)
 
         self._buttons["edit"].Label = "&Save" if edit else "Edit"
         tooltip = "Validate and confirm SQL, and save to database schema"
@@ -4143,7 +4151,7 @@ class SchemaObjectPage(wx.Panel):
         for c in self._ctrls.values():
             action = getattr(c, "_toggle", None) or []
             if callable(action): action = action() or []
-            if   "skip"    in action: continue # for c
+            if "skip"    in action: continue # for c
             if "disable" in action: c.Enable(not edit)
             if "disable" not in action:
                 if isinstance(c, (wx.ComboBox, wx.stc.StyledTextCtrl)): c.Enable(edit)
@@ -4207,9 +4215,7 @@ class SchemaObjectPage(wx.Panel):
             self._ctrls["sql"].SetText(sql.rstrip() + "\n")
             self._ctrls["sql"].SetReadOnly(True)
             self._ctrls["sql"].ScrollToLine(scrollpos)
-            if not self._col_updater:
-                # Enable action buttons now that changes have cascaded
-                for n in "edit", "import", "test": self._buttons[n].Enable()
+            if not self._col_updater: self._ToggleControls(self._editmode)
 
         def set_alter_sql():
             self._alter_sqler = None
@@ -4833,8 +4839,6 @@ class SchemaObjectPage(wx.Panel):
                 self._col_updates[myid] = {"col": copy.deepcopy(mydata), "remove": True}
             if self._col_updater: self._col_updater.Stop()
             self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
-            # Disable action buttons until changes cascaded
-            for n in "edit", "import", "test": self._buttons[n].Disable()
 
         self.Freeze()
         try:
@@ -4971,7 +4975,7 @@ class SchemaObjectPage(wx.Panel):
                 if self._col_updater: self._col_updater.Stop()
                 self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
                 # Disable action buttons until changes cascaded
-                for n in "edit", "import", "test": self._buttons[n].Disable()
+                self._ToggleControls(self._editmode)
         elif ["table"] == path:
             rebuild = meta.get("columns") or "index" == self._category
             if not rebuild: self._PopulateAutoComp()
