@@ -3642,10 +3642,20 @@ class DatabasePage(wx.Panel):
 
 
     def on_drop_files(self, filenames):
-        """Handler for dropping files onto database page, opens import dialog."""
-        dlg = components.ImportDialog(self, self.db)
-        wx.CallAfter(lambda: dlg and dlg._OnFile(filename=filenames[0]))
-        dlg.ShowModal()
+        """
+        Handler for dropping files onto database page, opens import dialog
+        for spreadsheets, forwards database files to parent to open.
+        """
+        dbfiles = [x for x in filenames
+                   if os.path.splitext(x)[-1].lower() in conf.DBExtensions]
+        importfiles = [x for x in filenames
+                       if os.path.splitext(x)[-1][1:].lower() in importexport.IMPORT_EXTS]
+        for dbfile in dbfiles:
+            wx.PostEvent(self, OpenDatabaseEvent(self.Id, file=dbfile))
+        if importfiles:
+            dlg = components.ImportDialog(self, self.db)
+            wx.CallAfter(lambda: dlg and dlg._OnFile(filename=importfiles[0]))
+            dlg.ShowModal()
 
 
     def register_notebook_hotkeys(self, notebook):
