@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.12.2020
+@modified    13.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -4253,12 +4253,8 @@ class SchemaObjectPage(wx.Panel):
             if bool(new.get(k)) != bool(old.get(k)):
                 can_simple = False # Top-level flag or constraints existence changed
         if can_simple:
-            cnstr1_sqls = [grammar.generate(dict(c, __type__="constraint"))[0]
-                          for c in old.get("constraints") or []]
-            cnstr2_sqls = [grammar.generate(dict(c, __type__="constraint"))[0]
-                          for c in new.get("constraints") or []]
-            # Table constraints changed
-            can_simple = (cnstr1_sqls == cnstr2_sqls)
+            if len(old.get("constraints") or []) != len(new.get("constraints") or []):
+                can_simple = False # New or removed constraints
         if can_simple and any(x not in colmap2 for x in colmap1):
             can_simple = False # There are deleted columns
         if can_simple and any(colmap2[x]["name"] != colmap1[x]["name"] for x in colmap1):
@@ -4273,21 +4269,22 @@ class SchemaObjectPage(wx.Panel):
                     can_simple = False # Column order changed
                     break # for i, c1
         if can_simple:
-            cols1_sqls = [grammar.generate(dict(c, name="", __type__="column"))[0]
-                          for c in cols1]
-            cols2_sqls = [grammar.generate(dict(c, name="", __type__="column"))[0]
-                          for c in cols2 if c["__id__"] in colmap1]
-            can_simple = (cols1_sqls == cols2_sqls) # Column definition changed
-        if can_simple:
+            self._fks_on = self._db.execute("PRAGMA foreign_keys", log=False).fetchone().values()[0]
             FORBIDDEN_DEFAULTS = ("CURRENT_TIME", "CURRENT_DATE", "CURRENT_TIMESTAMP")
             for c2 in cols2:
-                if c2["__id__"] in colmap1: continue # for c
-                # Simple column addition has specific requirements
+                if c2["__id__"] in colmap1: continue # for c2
+                # Simple column addition has specific requirements:
+                # - may not be PK or UNIQUE
+                # - may not have certain defaults, or (expression) in default
+                # - if NOT NULL, may not default to NULL
+                # - if FK and foreign key constraints on, must default to NULL
+                default = c2.get("default", "").upper().strip() or "NULL"
                 can_simple = "pk" not in c2 and "unique" not in c2 \
-                             and c2.get("default", "").upper() not in FORBIDDEN_DEFAULTS \
-                             and ("notnull" not in c2 or c2.get("default", "").upper() != "NULL")
-                if not can_simple: break # for c
-
+                             and default not in FORBIDDEN_DEFAULTS \
+                             and not default.startswith("(") \
+                             and ("notnull" not in c2 or default != "NULL") \
+                             and not ("fk" in c2 and self._fks_on and default != "NULL")
+                if not can_simple: break # for c2
         if can_simple and old["name"] != new["name"] and not self._db.has_full_rename_table():
             if util.lceq(old["name"], new["name"]): # Case changed
                 can_simple = False
@@ -4299,6 +4296,16 @@ class SchemaObjectPage(wx.Panel):
                     and old["name"].lower() in x.get("meta", {}).get("__tables__", ())
                     for c in ("table", "trigger") for x in rels.get(c, {}).values()
                 ))
+        if can_simple and not any(x not in colmap1 for x in colmap2):
+            # If no new columns, and CREATE statements are identical 
+            # when replacing all column names with their IDs,
+            # must have been a simple RENAME COLUMN.
+            sql1,  sql2  = self._original["sql"], self._item["sql"]
+            rens1, rens2 = ({"column": {n: {c["name"]: str(cid) for cid, c in m.items()}}}
+                            for n, m in ((old["name"], colmap1), (new["name"], colmap2)))
+            (sql1t, e1), (sql2t, e2) = (grammar.transform(s, renames=r, indent=None)
+                                        for s, r in ((sql1, rens1), (sql2, rens2)))
+            can_simple = sql1t and sql2t and sql1t == sql2t
 
         sql = self._item["sql0" if self._sql0_applies else "sql"]
         renames = {"table":  {old["name"]: new["name"]}
@@ -4334,7 +4341,7 @@ class SchemaObjectPage(wx.Panel):
 
         else:
             # Need to re-create table, first under temporary name to copy data.
-            args = self._db.get_complex_alter_args(self._item, renames)
+            args = self._db.get_complex_alter_args(self._original, self._item, renames)
             args.update(fks=self._fks_on)
 
         short, err = grammar.generate(dict(args, no_tx=True))

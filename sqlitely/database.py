@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.12.2020
+@modified    13.12.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1641,7 +1641,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             ), category="ALTER TABLE")
         else:
             fks_on = self.execute("PRAGMA foreign_keys", log=False).fetchone().values()[0]
-            args = self.get_complex_alter_args(item, {"column": {table: {name: name2}}})
+            args = self.get_complex_alter_args(item, item, {"column": {table: {name: name2}}})
             altersql, err = grammar.generate(dict(args, fks=fks_on))
         if err: raise Exception(err)
 
@@ -1656,7 +1656,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             self.notify_rename("table", table, table)
 
 
-    def get_complex_alter_args(self, item, renames):
+    def get_complex_alter_args(self, item1, item2, renames):
         """
         Returns arguments for a complex ALTER TABLE operation, as {
             __type__:  "COMPLEX ALTER TABLE"
@@ -1671,37 +1671,38 @@ WARNING: misuse can easily result in a corrupt database file.""",
             ?view:     [{related view {name, sql}, using new names}, ]
         }.
 
-        @param   item     table item as {name, sql, columns, ..}
+        @param   item1    original table item as {name, sql, meta, ..}
+        @param   item2    new table item as {name, sql, meta, ..}
         @param   renames  {?table: {old: new}, ?column: {table: {oldcol: newcol}}}
         """
-
-        name  = item["name"]
-        name2 = renames["table"][name2] if name in renames.get("table", {}) else name
+        name1, name2 = item1["name"], item2["name"]
 
         allnames = set(sum((list(x) for x in self.schema.values()), []))
         renames = copy.deepcopy(renames)
         tempname = util.make_unique(name2, allnames)
         allnames.add(tempname)
-        renames.setdefault("table", {}).update({name: tempname})
+        renames.setdefault("table", {}).update({name1: tempname})
         if "column" in renames and name2 in renames["column"]:
             renames["column"][tempname] = renames["column"].pop(name2)
-        sql, err = grammar.transform(item["sql"], renames=renames)
+        sql, err = grammar.transform(item1["sql"], renames=renames)
         if err: raise Exception(err)
 
-        args = {"name": name, "name2": name2, "tempname": tempname,
+        args = {"name": name1, "name2": name2, "tempname": tempname,
                 "sql": sql, "__type__": "COMPLEX ALTER TABLE",
-                "columns": [(c["name"],
-                             util.get(renames, "column", tempname, c["name"]) or c["name"])
-                            for c in item["columns"]]}
+                "columns": [(c1["name"],
+                             util.get(renames, "column", tempname, c1["name"]) or c1["name"])
+                            for c1 in item1["meta"]["columns"] 
+                            if util.get(renames, "column", tempname, c1["name"])
+                            or any(util.lceq(c1["name"], c2["name"]) for c2 in item2["meta"]["columns"])]}
 
 
-        items_processed = set([name])
-        for category, itemmap in self.get_related("table", name).items():
+        items_processed = set([name1])
+        for category, itemmap in self.get_related("table", name1).items():
             for item2 in itemmap.values():
                 if item2["name"] in items_processed: continue # for item2
                 items_processed.add(item2["name"])
 
-                is_our_item = util.lceq(item["meta"].get("table"), name)
+                is_our_item = util.lceq(item1["meta"].get("table"), name1)
                 sql0, _ = grammar.transform(item2["sql"], renames=renames)
                 if sql0 == item2["sql"] and not is_our_item and "view" != category:
                     # Views need recreating, as SQLite can raise "no such table" error
