@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    25.11.2020
+@modified    11.12.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -34,16 +34,24 @@ logger = logging.getLogger(__name__)
 
 
 
-def parse(sql, category=None):
+def parse(sql, category=None, renames=None):
     """
     Returns data structure for SQL statement.
 
     @param   category  expected statement category if any, like "table"
+    @param   renames   renames to perform in SQL statement body,
+                       supported types "schema" (top-level rename only),
+                       "table", "index", "trigger", "view", "column".
+                       Schema renames as {"schema": s2} or {"schema": {s1: s2}},
+                       category renames as {category: {v1: v2}},
+                       column renames as {"column": {table or view: {c1: c2}}},
+                       where category value should be the renamed value if
+                       the same transform is renaming the category as well.
     @return            ({..}, None), or (None, error)
     """
     result, err = None, None
     try:
-        result, err = Parser().parse(sql, category)
+        result, err = Parser().parse(sql, category, renames=renames)
     except Exception as e:
         logger.exception("Error parsing SQL %s.", sql)
         err = util.format_exc(e)
