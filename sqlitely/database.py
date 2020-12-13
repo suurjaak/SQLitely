@@ -1684,7 +1684,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         renames.setdefault("table", {}).update({name1: tempname})
         if "column" in renames and name2 in renames["column"]:
             renames["column"][tempname] = renames["column"].pop(name2)
-        sql, err = grammar.transform(item1["sql"], renames=renames)
+        sql, err = grammar.transform(item2["sql"], renames=renames)
         if err: raise Exception(err)
 
         args = {"name": name1, "name2": name2, "tempname": tempname,
