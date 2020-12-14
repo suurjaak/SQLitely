@@ -11593,7 +11593,7 @@ class ImportWizard(wx.adv.Wizard):
         finished = False
 
         if count is not None:
-            text = "Table %s: " % grammar.quote(item["tname"], force=True)
+            text = "Table %s: " % util.ellipsize(util.unprint(grammar.quote(item["tname"], force=True)))
             total = item["rows"]
             if total < 0:
                 text += util.plural("row", count)
