@@ -1320,7 +1320,9 @@ class SQLiteGridBaseMixin(object):
 
 
     def __init__(self):
-        self._grid_widths = [] # [col width, ]
+        self._last_row_size = None # (row, timestamp)
+        self._last_col_size = None # (col, timestamp)
+
         grid = self._grid
         grid.SetDefaultEditor(wx.grid.GridCellAutoWrapStringEditor())
         grid.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
@@ -1339,6 +1341,7 @@ class SQLiteGridBaseMixin(object):
         grid.Bind(wx.EVT_SCROLL_CHANGED,              self._OnGridScroll)
         grid.Bind(wx.EVT_KEY_DOWN,                    self._OnGridScroll)
         grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK,  self._OnGridMenu)
+        grid.Bind(wx.grid.EVT_GRID_ROW_SIZE,          self._OnGridSizeRow)
         grid.Bind(wx.grid.EVT_GRID_COL_SIZE,          self._OnGridSizeCol)
         grid.GridWindow.Bind(wx.EVT_RIGHT_UP,         self._OnGridMenu)
         grid.GridWindow.Bind(wx.EVT_MOTION,           self._OnGridMouse)
@@ -1547,16 +1550,34 @@ class SQLiteGridBaseMixin(object):
             event.EventObject.SetGridCursor(row, col)
 
 
+    def _OnGridSizeRow(self, event):
+        """
+        Handler for grid row size event, auto-sizes row to fit content on double-click.
+        """
+        stamp = time.time()
+        if self._last_row_size and event.RowOrCol == self._last_row_size[0] \
+        and stamp - self._last_row_size[1] < .15:
+            # Two size events on the same row within a few hundred ms:
+            # assume a double-click (workaround for no specific auto-size event).
+            self._grid.AutoSizeRow(event.RowOrCol, setAsMin=False)
+        self._last_row_size = event.RowOrCol, stamp
+
+
     def _OnGridSizeCol(self, event):
         """
-        Handler for dragging or double-clicking column border,
-        autosizes column 
+        Handler for grid col size event, auto-sizes col to fit content on double-click.
         """
-        col, width = event.RowOrCol, self._grid.GetColSize(event.RowOrCol)
-        if width == self._grid.GetColMinimalWidth(col) and width >= self._grid_widths[col] \
-        and (isinstance(self, SQLPage) or self._grid.Table.IsComplete()):
-            self._grid.AutoSizeColumn(col, setAsMin=False)
-        self._grid_widths[col] = self._grid.GetColSize(col)
+
+        # Skip auto-size on incomplete table grids: may be millions of unretrieved rows
+        if not isinstance(self, SQLPage) and not self._grid.Table.IsComplete(): return
+
+        stamp = time.time()
+        if self._last_col_size and event.RowOrCol == self._last_col_size[0] \
+        and stamp - self._last_col_size[1] < .15:
+            # Two size events on the same column within a few hundred ms:
+            # assume a double-click (workaround for no specific auto-size event).
+            self._grid.AutoSizeColumn(event.RowOrCol, setAsMin=False)
+        self._last_col_size = event.RowOrCol, stamp
 
 
     def _OnSysColourChange(self, event):
@@ -1612,7 +1633,6 @@ class SQLiteGridBaseMixin(object):
                 w2 = self._grid.GetColSize(i)
                 if w1 < 50: self._grid.SetColMinimalWidth(i, w1)
                 if w2 > w1: self._grid.SetColSize(i, w1)
-        self._grid_widths = map(self._grid.GetColSize, range(self._grid.NumberCols))
 
 
 
@@ -7899,8 +7919,10 @@ class HistoryDialog(wx.Dialog):
         super(self.__class__, self).__init__(parent, id, title, pos, size, style, name)
         self._log = [{k: self._Convert(v) for k, v in x.items()} for x in db.log]
         self._filter = "" # Current filter
-        self._filter_timer = None # Filter callback timer
-        self._hovered_cell = None # (row, col)
+        self._filter_timer  = None # Filter callback timer
+        self._hovered_cell  = None # (row, col)
+        self._last_row_size = None # (row, timestamp)
+        self._last_col_size = None # (col, timestamp)
 
         sizer  = self.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_top = wx.BoxSizer(wx.HORIZONTAL)
@@ -7942,6 +7964,8 @@ class HistoryDialog(wx.Dialog):
         self.Bind(wx.EVT_BUTTON,       self._OnClose, button)
         self.Bind(wx.EVT_CLOSE,        self._OnClose)
         grid.Bind(wx.grid.EVT_GRID_CELL_CHANGED, lambda e: e.Veto())
+        grid.Bind(wx.grid.EVT_GRID_ROW_SIZE,     self._OnGridSizeRow)
+        grid.Bind(wx.grid.EVT_GRID_COL_SIZE,     self._OnGridSizeCol)
         grid.GridWindow.Bind(wx.EVT_MOTION,      self._OnGridHover)
         grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,   self._OnGridKey)
 
@@ -8013,6 +8037,32 @@ class HistoryDialog(wx.Dialog):
             text = "\n".join("\t".join(c for c in r) for r in data)
             d = wx.TextDataObject(text)
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+
+
+    def _OnGridSizeRow(self, event):
+        """
+        Handler for grid row size event, auto-sizes row to fit content on double-click.
+        """
+        stamp = time.time()
+        if self._last_row_size and event.RowOrCol == self._last_row_size[0] \
+        and stamp - self._last_row_size[1] < .15:
+            # Two size events on the same row within a few hundred ms:
+            # assume a double-click (workaround for no specific auto-size event).
+            self._grid.AutoSizeRow(event.RowOrCol, setAsMin=False)
+        self._last_row_size = event.RowOrCol, stamp
+
+
+    def _OnGridSizeCol(self, event):
+        """
+        Handler for grid col size event, auto-sizes col to fit content on double-click.
+        """
+        stamp = time.time()
+        if self._last_col_size and event.RowOrCol == self._last_col_size[0] \
+        and stamp - self._last_col_size[1] < .15:
+            # Two size events on the same column within a few hundred ms:
+            # assume a double-click (workaround for no specific auto-size event).
+            self._grid.AutoSizeColumn(event.RowOrCol, setAsMin=False)
+        self._last_col_size = event.RowOrCol, stamp
 
 
     def _OnKey(self, event):
