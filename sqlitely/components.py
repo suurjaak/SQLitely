@@ -2860,6 +2860,8 @@ class SchemaObjectPage(wx.Panel):
         "trigger": {"name": "new_trigger"},
         "view":    {"name": "new_view"},
     }
+    CASCADE_INTERVAL = 1000 # Interval in millis after which to cascade name/column updates
+    ALTER_INTERVAL   =  500 # Interval in millis after which to re-create ALTER statement
 
 
     def __init__(self, parent, db, item, id=wx.ID_ANY, pos=wx.DefaultPosition,
@@ -2894,10 +2896,10 @@ class SchemaObjectPage(wx.Panel):
         self._ctrls    = {}  # {}
         self._buttons  = {}  # {name: wx.Button}
         self._sizers   = {}  # {child sizer: parent sizer}
-        self._col_updater = None # Column update cascade callback timer
+        self._cascader    = None # Table name and column update cascade callback timer
         self._alter_sqler = None # ALTER SQL populate callback timer
         # Pending column updates as {__id__: {col: {}, ?rename: newname, ?remove: bool}}
-        self._col_updates = {}
+        self._cascades    = {}   # Pending updates: table and column renames and drops
         self._ignore_change = False
         self._has_alter     = False
         self._show_alter    = False
@@ -2957,10 +2959,10 @@ class SchemaObjectPage(wx.Panel):
         button_actions = self._buttons["actions"] = wx.Button(panel2, label="Actions ..")
         button_close   = self._buttons["close"]   = wx.Button(panel2, label="Close")
         button_refresh._toggle = "skip"
-        button_edit._toggle    = lambda: ("disable" if self._col_updater else "enable")
+        button_edit._toggle    = lambda: ("disable" if self._cascader else "enable")
         button_actions._toggle = button_close._toggle = "hide skip"
         button_cancel._toggle  = "show skip"
-        button_import._toggle  = button_test._toggle = lambda: "show " + ("disable" if self._col_updater else "enable")
+        button_import._toggle  = button_test._toggle = lambda: "show " + ("disable" if self._cascader else "enable")
 
         button_refresh.ToolTip = "Reload statement, and database tables"
         button_test.ToolTip    = "Test saving schema object, checking SQL validity"
@@ -3105,9 +3107,7 @@ class SchemaObjectPage(wx.Panel):
 
     def GetName(self):
         """Returns schema item name."""
-        if self._newmode:
-            return self._item.get("name", self._item["meta"].get("name")) or ""
-        else: return self._original["name"]
+        return self._original.get("meta", {}).get("name") or ""
     Name = property(GetName)
 
 
@@ -3764,7 +3764,7 @@ class SchemaObjectPage(wx.Panel):
         text_name.MinSize    = (150, -1)
         list_type.MinSize    = (100, -1)
         text_default.MinSize = (100, list_type.Size[1])
-        button_open._toggle = lambda: ("disable" if self._col_updater or not self._hasmeta else "enable")
+        button_open._toggle = lambda: ("disable" if self._cascader or not self._hasmeta else "enable")
         button_open.Enable("enable" in button_open._toggle())
         button_open.ToolTip = "Open advanced options"
             
@@ -3856,9 +3856,13 @@ class SchemaObjectPage(wx.Panel):
             ctrls = [ctrl_cols]
 
         elif grammar.SQL.FOREIGN_KEY == cnstr["type"]:
-            ftable = {}
+            ftables, ftable = self._tables, {}
+            if self._editmode and self._item["meta"]["name"].strip() \
+            and self._item["meta"]["name"] not in ftables:
+                ftables = [x if x != self.Name else self._item["meta"]["name"] for x in ftables]
             if cnstr.get("table"):
-                if util.lceq(cnstr["table"], self.Name):
+                if util.lceq(cnstr["table"], self.Name) \
+                or util.lceq(cnstr["table"], self._item.get("meta", {}).get("name")):
                     ftable = self._item.get("meta", self._item)
                 else: ftable = self._db.get_category("table", cnstr["table"])
             fcolumns = [x["name"] for x in ftable.get("columns") or ()]
@@ -3876,9 +3880,9 @@ class SchemaObjectPage(wx.Panel):
                                         style=wx.CB_DROPDOWN | wx.CB_READONLY)
                 for j, x in enumerate(mycolumns): ctrl_cols.SetClientData(j, x)
             label_table = wx.StaticText(panel, label="Foreign table:")
-            list_table  = wx.ComboBox(panel, choices=map(util.unprint, self._tables),
+            list_table  = wx.ComboBox(panel, choices=map(util.unprint, ftables),
                                       style=wx.CB_DROPDOWN | wx.CB_READONLY)
-            for j, x in enumerate(self._tables): list_table.SetClientData(j, x)
+            for j, x in enumerate(ftables): list_table.SetClientData(j, x)
             label_keys  = wx.StaticText(panel, label="Foreign column:")
             if len(fkcols) > 1:
                 ctrl_keys  = wx.TextCtrl(panel)
@@ -3931,7 +3935,7 @@ class SchemaObjectPage(wx.Panel):
             ctrls = [stc_check]
 
         button_open = wx.Button(panel, label="Open", size=(50, -1))
-        button_open._toggle = lambda: ("disable" if self._col_updater or not self._hasmeta else "enable")
+        button_open._toggle = lambda: ("disable" if self._cascader or not self._hasmeta else "enable")
         button_open.Enable("enable" in button_open._toggle())
         button_open.ToolTip = "Open advanced options"
 
@@ -4215,7 +4219,7 @@ class SchemaObjectPage(wx.Panel):
         """Populates CREATE SQL window."""
 
         def set_sql(sql):
-            if not self._col_updater: self._ToggleControls(self._editmode)
+            if not self._cascader: self._ToggleControls(self._editmode)
             if sql is None: return
             scrollpos = self._ctrls["sql"].GetScrollPos(wx.VERTICAL)
             self._ctrls["sql"].SetReadOnly(False)
@@ -4235,8 +4239,9 @@ class SchemaObjectPage(wx.Panel):
 
         if self._show_alter:
             if "table" == self._category:
-                if self._alter_sqler: self._alter_sqler.Stop()
-                self._alter_sqler = wx.CallLater(500, set_alter_sql)
+                if not self._cascader:
+                    if self._alter_sqler: self._alter_sqler.Stop()
+                    self._alter_sqler = wx.CallLater(self.ALTER_INTERVAL, set_alter_sql)
             else: set_alter_sql()
         else:
             set_sql(sql)
@@ -4316,8 +4321,13 @@ class SchemaObjectPage(wx.Panel):
             # If no new columns, and CREATE statements are identical 
             # when replacing all column names with their IDs,
             # must have been a simple RENAME COLUMN.
+            allnames = sum(map(list, self._db.schema.values()), [])
+            allnames.append(new["name"])
+            dummyname = util.make_unique(new["name"], allnames)
             sql1,  sql2  = self._original["sql"], self._item["sql"]
-            rens1, rens2 = ({"column": {n: {c["name"]: str(cid) for cid, c in m.items()}}}
+            rens1, rens2 = ({"table": {n: dummyname},
+                             "column": {dummyname: {c["name"]: str(cid)
+                                                    for cid, c in m.items()}}}
                             for n, m in ((old["name"], colmap1), (new["name"], colmap2)))
             (sql1t, e1), (sql2t, e2) = (grammar.transform(s, renames=r, indent=None)
                                         for s, r in ((sql1, rens1), (sql2, rens2)))
@@ -4680,6 +4690,7 @@ class SchemaObjectPage(wx.Panel):
 
         @param   sync   whether to process event immediately or asynchonously
         """
+        if not self: return
         evt = SchemaPageEvent(self.Id, source=self, item=self._item, **kwargs)
         self.ProcessEvent(evt) if sync else wx.PostEvent(self.Parent, evt)
 
@@ -4840,12 +4851,12 @@ class SchemaObjectPage(wx.Panel):
         if "table" == self._category and "columns" == path[0]:
             # Queue removing column from constraints
             myid = mydata["__id__"]
-            if myid in self._col_updates:
-                self._col_updates[myid]["remove"] = True
+            if myid in self._cascades:
+                self._cascades[myid]["remove"] = True
             else:
-                self._col_updates[myid] = {"col": copy.deepcopy(mydata), "remove": True}
-            if self._col_updater: self._col_updater.Stop()
-            self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
+                self._cascades[myid] = {"col": copy.deepcopy(mydata), "remove": True}
+            if self._cascader: self._cascader.Stop()
+            self._cascader = wx.CallLater(self.CASCADE_INTERVAL, self._OnCascadeUpdates)
 
         self.Freeze()
         try:
@@ -4938,6 +4949,7 @@ class SchemaObjectPage(wx.Panel):
         if value == value0: return
         util.set(meta, value, path)
 
+        do_cascade = False
         if "trigger" == self._category:
             # Trigger special: INSTEAD OF UPDATE triggers on a view
             if ["action"] == path and grammar.SQL.UPDATE in (value0, value) \
@@ -4953,7 +4965,12 @@ class SchemaObjectPage(wx.Panel):
                 self._PopulateAutoComp()
                 self._ToggleControls(self._editmode)
         elif "table" == self._category:
-            if "constraints" == path[0] and "table" == path[-1]:
+            if ["name"] == path:
+                if "table" not in self._cascades:
+                    self._cascades["table"] = {"name": value0}
+                self._cascades["table"].update(rename=value)
+                do_cascade = True
+            elif "constraints" == path[0] and "table" == path[-1]:
                 # Foreign table changed, clear foreign cols
                 path2, fkpath, index = path[:-2], path[:-1], path[-2]
                 data2 = util.get(meta, fkpath)
@@ -4968,25 +4985,25 @@ class SchemaObjectPage(wx.Panel):
                 if value0 and not value: col["name_last"] = value0
 
                 myid = col["__id__"]
-                if myid in self._col_updates:
-                    self._col_updates[myid].update(rename=value)
-                else:
-                    col = copy.deepcopy(dict(col, name=value0))
-                    self._col_updates[myid] = {"col": col, "rename": value}
+                if myid not in self._cascades:
+                    self._cascades[myid] = {"col": copy.deepcopy(dict(col, name=value0))}
+                self._cascades[myid].update(rename=value)
+                do_cascade = True
 
                 for col2 in meta["columns"]: # Rename column in self-referencing foreign keys
                     if col2.get("fk") and util.lceq(col2["fk"].get("table"), self.Name) \
                     and util.lceq(col2["fk"].get("key"), value0):
                         col2["fk"]["key"] = value
-
-                if self._col_updater: self._col_updater.Stop()
-                self._col_updater = wx.CallLater(1000, self._OnCascadeColumnUpdates)
-                # Disable action buttons until changes cascaded
-                self._ToggleControls(self._editmode)
         elif ["table"] == path:
             rebuild = meta.get("columns") or "index" == self._category
             if not rebuild: self._PopulateAutoComp()
             meta.pop("columns", None)
+
+        if do_cascade:
+            if self._cascader: self._cascader.Stop()
+            self._cascader = wx.CallLater(self.CASCADE_INTERVAL, self._OnCascadeUpdates)
+            # Disable action buttons until changes cascaded
+            self._ToggleControls(self._editmode)
 
         self._sql0_applies = False
         self._Populate() if rebuild else self._PopulateSQL()
@@ -5099,18 +5116,20 @@ class SchemaObjectPage(wx.Panel):
         self._grid_constraints.SetGridCursor(*path)
 
 
-    def _OnCascadeColumnUpdates(self):
+    def _OnCascadeUpdates(self):
         """
-        Handler for table column updates, rebuilds table & column constraints on rename/remove.
+        Handler for table name and column updates,
+        rebuilds table & column constraints on rename/remove.
         """
         if not self: return
-        self._col_updater = None
+        self._cascader = None
         constraints = self._item["meta"].get("constraints") or []
         columns     = self._item["meta"].get("columns")     or []
         changed, renamed = False, False
 
-        for opts in self._col_updates.values():
-            # Process table constraints
+        for opts in self._cascades.values():
+            # Process table constraints for column update
+            if "col" not in opts: continue # for opts
             name = opts["col"].get("name") or opts["col"].get("name_last")
 
             if opts.get("remove"):
@@ -5148,9 +5167,9 @@ class SchemaObjectPage(wx.Panel):
                         dummysql = "CREATE TABLE t (x, CHECK (%s))" % cnstr["check"]
                         dummymeta, err = grammar.parse(dummysql, renames={"column": {"t": {name: ""}}})
                         if dummymeta and dummymeta.get("constraints"):
-                            changed = True
                             cnstr["check"] = dummymeta["constraints"][0]["check"].strip()
                             if not cnstr["check"]: del constraints[i]
+                            changed = True
                         elif err:
                             logger.warn("Error cascading column update %s to constraint %s: %s.",
                                         opts, cnstr, err)
@@ -5184,15 +5203,16 @@ class SchemaObjectPage(wx.Panel):
                         dummysql = "CREATE TABLE t (x, CHECK (%s))" % cnstr["check"]
                         dummymeta, err = grammar.parse(dummysql, renames={"column": {"t": {name: opts["rename"]}}})
                         if dummymeta and dummymeta.get("constraints"):
-                            changed = True
                             cnstr["check"] = dummymeta["constraints"][0]["check"]
+                            changed = True
                         elif err:
                             logger.warn("Error cascading column update %s to constraint %s: %s.",
                                         opts, cnstr, err)
 
 
-        for opts in self._col_updates.values():
-            # Process column constraints
+        for opts in self._cascades.values():
+            # Process column constraints for column update
+            if "col" not in opts: continue # for opts
             name = opts["col"].get("name") or opts["col"].get("name_last")
             if not name: continue # for opts
 
@@ -5240,7 +5260,50 @@ class SchemaObjectPage(wx.Panel):
                             logger.warn("Error cascading column update %s to column %s: %s.",
                                         opts, col, err)
 
-        self._col_updates = {}
+
+        for myid, opts in self._cascades.items():
+            # Process table and column constraints for table rename
+            if "table" != myid or not opts["rename"].strip(): continue # for opts
+            name1 = opts["name"] if opts["name"].strip() else self._original["meta"]["name"]
+
+            for cnstr in constraints:
+                if cnstr["type"] in (grammar.SQL.FOREIGN_KEY, ):
+                    if util.lceq(name1, cnstr.get("table")):
+                        cnstr["table"] = opts["rename"]
+                        changed = True
+
+                elif cnstr["type"] in (grammar.SQL.CHECK, ):
+                    if opts["rename"].lower() not in cnstr.get("check", "").lower():
+                        continue # for opts
+                    # Transform CHECK body via grammar and a dummy CREATE-statement
+                    dummysql = "CREATE TABLE t (x, CHECK (%s))" % cnstr["check"]
+                    dummymeta, err = grammar.parse(dummysql, renames={"table": {name1: opts["rename"]}})
+                    if dummymeta and dummymeta.get("constraints"):
+                        cnstr["check"] = dummymeta["constraints"][0]["check"]
+                        changed = True
+                    elif err:
+                        logger.warn("Error cascading name update %s to constraint %s: %s.",
+                                    opts, cnstr, err)
+
+            for col in columns:
+                if col.get("fk") and util.lceq(name1, col["fk"].get("table")):
+                    col["fk"]["table"] = opts["rename"]
+                    changed = True
+
+                elif col.get("check"):
+                    if opts["rename"].lower() not in col["check"].lower():
+                        continue # for opts
+                    # Transform CHECK body via grammar and a dummy CREATE-statement
+                    dummysql = "CREATE TABLE t (x CHECK (%s))" % col["check"]
+                    dummymeta, err = grammar.parse(dummysql, renames={"table": {name1: opts["rename"]}})
+                    if dummymeta and dummymeta.get("columns"):
+                        col["check"] = dummymeta["columns"][0]["check"].strip()
+                        changed = True
+                    elif err:
+                        logger.warn("Error cascading name update %s to column %s: %s.",
+                                    opts, col, err)
+
+        self._cascades = {}
         if changed or self._show_alter: self._PopulateSQL()
         if not changed and not renamed: return
 
