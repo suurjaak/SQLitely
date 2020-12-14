@@ -5544,7 +5544,7 @@ class SchemaObjectPage(wx.Panel):
         if not errors and self.IsChanged():
             if not self._newmode: sql, _, _ = self._GetAlterSQL()
             sql2 = "PRAGMA foreign_keys = off;\n\nSAVEPOINT test;\n\n" \
-                   "%s;\n\nROLLBACK TO SAVEPOINT test;" % sql
+                   "%s\n\nROLLBACK TO SAVEPOINT test;" % sql.strip()
             if ("table" == self._category and not self._newmode
                 or "index" == self._category) \
             and wx.YES != controls.YesNoMessageBox(
