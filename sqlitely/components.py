@@ -4209,13 +4209,13 @@ class SchemaObjectPage(wx.Panel):
         """Populates CREATE SQL window."""
 
         def set_sql(sql):
+            if not self._col_updater: self._ToggleControls(self._editmode)
             if sql is None: return
             scrollpos = self._ctrls["sql"].GetScrollPos(wx.VERTICAL)
             self._ctrls["sql"].SetReadOnly(False)
             self._ctrls["sql"].SetText(sql.rstrip() + "\n")
             self._ctrls["sql"].SetReadOnly(True)
             self._ctrls["sql"].ScrollToLine(scrollpos)
-            if not self._col_updater: self._ToggleControls(self._editmode)
 
         def set_alter_sql():
             self._alter_sqler = None
@@ -4257,6 +4257,7 @@ class SchemaObjectPage(wx.Panel):
         cols1, cols2 = (x.get("columns", []) for x in (old, new))
         colmap1 = {c["__id__"]: c for c in cols1}
         colmap2 = {c["__id__"]: c for c in cols2}
+        droppedcols = [colmap1[x]["name"] for x in colmap1 if x not in colmap2]
 
         for k in "without", "constraints":
             if bool(new.get(k)) != bool(old.get(k)):
@@ -4264,7 +4265,7 @@ class SchemaObjectPage(wx.Panel):
         if can_simple:
             if len(old.get("constraints") or []) != len(new.get("constraints") or []):
                 can_simple = False # New or removed constraints
-        if can_simple and any(x not in colmap2 for x in colmap1):
+        if can_simple and droppedcols:
             can_simple = False # There are deleted columns
         if can_simple and any(colmap2[x]["name"] != colmap1[x]["name"] for x in colmap1):
             can_simple = self._db.has_rename_column() # There are renamed columns
@@ -4350,7 +4351,7 @@ class SchemaObjectPage(wx.Panel):
 
         else:
             # Need to re-create table, first under temporary name to copy data.
-            args = self._db.get_complex_alter_args(self._original, self._item, renames)
+            args = self._db.get_complex_alter_args(self._original, self._item, renames, droppedcols)
             args.update(fks=self._fks_on)
 
         short, err = grammar.generate(dict(args, no_tx=True))
@@ -5100,7 +5101,7 @@ class SchemaObjectPage(wx.Panel):
         self._col_updater = None
         constraints = self._item["meta"].get("constraints") or []
         columns     = self._item["meta"].get("columns")     or []
-        changed, renamed, colchanged = False, False, False
+        changed, renamed = False, False
 
         for opts in self._col_updates.values():
             # Process table constraints
@@ -5121,13 +5122,17 @@ class SchemaObjectPage(wx.Panel):
 
                     elif cnstr["type"] in (grammar.SQL.FOREIGN_KEY, ):
                         keychanged = False
-                        if name in cnstr.get("columns", []):
-                            cnstr["columns"] = [x for x in cnstr["columns"] if x != name]
-                            changed = keychanged = True
-                        if util.lceq(cnstr.get("table"), self._item["meta"].get("name")) \
-                        and name in cnstr.get("key", []):
-                            cnstr["key"] = [x for x in cnstr["key"] if x != name]
-                            changed = True
+                        for j, mycol in list(enumerate(cnstr["columns"]))[::-1]:
+                            if util.lceq(mycol, name):
+                                cnstr["key"    ][j:j+1] = []
+                                cnstr["columns"][j:j+1] = []
+                                changed = keychanged = True
+                        if util.lceq(cnstr.get("table"), self._item["meta"].get("name")):
+                            for j, keycol in list(enumerate(cnstr["key"]))[::-1]:
+                                if util.lceq(keycol, name):
+                                    cnstr["key"    ][j:j+1] = []
+                                    cnstr["columns"][j:j+1] = []
+                                    changed = keychanged = True
                         if keychanged and not cnstr["columns"]: del constraints[i]
 
                     elif cnstr["type"] in (grammar.SQL.CHECK, ):
@@ -5187,7 +5192,7 @@ class SchemaObjectPage(wx.Panel):
                     if col.get("fk") and util.lceq(self.Name, col["fk"].get("table")) \
                     and util.lceq(name, col["fk"].get("key")):
                         col.pop("fk")
-                        colchanged = True
+                        changed = True
 
                     elif col.get("check"):
                         if name.lower() not in col["check"].lower():
@@ -5198,7 +5203,7 @@ class SchemaObjectPage(wx.Panel):
                         if dummymeta and dummymeta.get("columns"):
                             col["check"] = dummymeta["columns"][0]["check"].strip()
                             if not col["check"]: col.pop("check")
-                            colchanged = True
+                            changed = True
                         elif err:
                             logger.warn("Error cascading column update %s to column %s: %s.",
                                         opts, col, err)
@@ -5209,7 +5214,7 @@ class SchemaObjectPage(wx.Panel):
                     if col.get("fk") and util.lceq(self.Name, col["fk"].get("table")) \
                     and util.lceq(name, col["fk"].get("key")):
                         col["fk"]["key"] = opts["rename"]
-                        colchanged = True
+                        changed = True
 
                     elif col.get("check"):
                         if name.lower() not in col["check"].lower():
@@ -5220,13 +5225,13 @@ class SchemaObjectPage(wx.Panel):
                         if dummymeta and dummymeta.get("columns"):
                             col["check"] = dummymeta["columns"][0]["check"].strip()
                             if not col["check"]: col.pop("check")
-                            colchanged = True
+                            changed = True
                         elif err:
                             logger.warn("Error cascading column update %s to column %s: %s.",
                                         opts, col, err)
 
         self._col_updates = {}
-        if colchanged: self._PopulateSQL()
+        if changed or self._show_alter: self._PopulateSQL()
         if not changed and not renamed: return
 
         self.Freeze()

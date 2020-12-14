@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.12.2020
+@modified    14.12.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1656,7 +1656,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             self.notify_rename("table", table, table)
 
 
-    def get_complex_alter_args(self, item1, item2, renames):
+    def get_complex_alter_args(self, item1, item2, renames, drops=None):
         """
         Returns arguments for a complex ALTER TABLE operation, as {
             __type__:  "COMPLEX ALTER TABLE"
@@ -1665,7 +1665,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             tempname:  table temporary name
             sql:       table CREATE statement with tempname
             columns:   [(column name in old, column name in new)]
-            ?table:    [{related table {name, tempname, sql, ?index, ?trigger}, using new names}, ]
+            ?table:    [{related table {name, tempname, sql, sql0, ?index, ?trigger}, using new names}, ]
             ?index:    [{related index {name, sql}, using new names}, ]
             ?trigger:  [{related trigger {name, sql}, using new names}, ]
             ?view:     [{related view {name, sql}, using new names}, ]
@@ -1674,69 +1674,96 @@ WARNING: misuse can easily result in a corrupt database file.""",
         @param   item1    original table item as {name, sql, meta, ..}
         @param   item2    new table item as {name, sql, meta, ..}
         @param   renames  {?table: {old: new}, ?column: {table: {oldcol: newcol}}}
+        @param   drops    dropped columns as [name, ], if any
         """
         name1, name2 = item1["name"], item2["name"]
 
         allnames = set(sum((list(x) for x in self.schema.values()), []))
-        renames = copy.deepcopy(renames)
         tempname = util.make_unique(name2, allnames)
         allnames.add(tempname)
-        renames.setdefault("table", {}).update({name1: tempname})
-        if "column" in renames and name2 in renames["column"]:
-            renames["column"][tempname] = renames["column"].pop(name2)
-        sql, err = grammar.transform(item2["sql"], renames=renames)
+        myrenames = copy.deepcopy(renames)
+        myrenames.setdefault("table", {}).update({name1: tempname})
+        if "column" in myrenames and name2 in myrenames["column"]:
+            myrenames["column"][tempname] = myrenames["column"].pop(name2)
+        sql, err = grammar.transform(item2["sql"], renames=myrenames)
         if err: raise Exception(err)
 
         args = {"name": name1, "name2": name2, "tempname": tempname,
                 "sql": sql, "__type__": "COMPLEX ALTER TABLE",
                 "columns": [(c1["name"],
-                             util.get(renames, "column", tempname, c1["name"]) or c1["name"])
+                             util.get(myrenames, "column", tempname, c1["name"]) or c1["name"])
                             for c1 in item1["meta"]["columns"] 
-                            if util.get(renames, "column", tempname, c1["name"])
-                            or any(util.lceq(c1["name"], c2["name"]) for c2 in item2["meta"]["columns"])]}
+                            if util.get(myrenames, "column", tempname, c1["name"])
+                            or any(util.lceq(c1["name"], c2["name"])
+                                   for c2 in item2["meta"]["columns"])]}
 
 
         items_processed = set([name1])
         for category, itemmap in self.get_related("table", name1).items():
-            for item2 in itemmap.values():
-                if item2["name"] in items_processed: continue # for item2
-                items_processed.add(item2["name"])
+            for relitem in itemmap.values():
+                if relitem["name"] in items_processed: continue # for relitem
+                items_processed.add(relitem["name"])
+
+                rel_sql = relitem["sql"]
+                if drops and "table" == category:
+                    drops = [x.lower() for x in drops]
+                    dropped = False
+                    for col in relitem.get("meta", {}).get("columns", []):
+                        if "fk" in col and util.lceq(name1, col["fk"]["table"]) \
+                        and col["fk"]["key"].lower() in drops:
+                            col.pop("fk")
+                            dropped = True
+                    for i, cnstr in list(enumerate(relitem.get("meta", {}).get("constraints", [])))[::-1]:
+                        if grammar.SQL.FOREIGN_KEY == cnstr["type"] \
+                        and util.lceq(name1, cnstr["table"]):
+                            for j, keycol in list(enumerate(cnstr["key"]))[::-1]:
+                                if keycol.lower() in drops:
+                                    del cnstr["key"][j]; del cnstr["columns"][j]
+                                    dropped = True
+                            if not cnstr["key"]:
+                                del relitem["meta"]["constraints"][i]
+                    if dropped:
+                        rel_sql, err = grammar.generate(relitem["meta"])
+                        if err: raise Exception(err)
 
                 is_our_item = util.lceq(item1["meta"].get("table"), name1)
-                sql0, _ = grammar.transform(item2["sql"], renames=renames)
-                if sql0 == item2["sql"] and not is_our_item and "view" != category:
+                sql0, _ = grammar.transform(rel_sql, renames=renames)
+                if sql0 == relitem["sql"] and not is_our_item and "view" != category:
                     # Views need recreating, as SQLite can raise "no such table" error
                     # otherwise when dropping the old table. Triggers that simply
                     # use this table but otherwise need no changes, can remain as is.
-                    continue # for item2
+                    continue # for relitem
 
-                myitem = dict(item2, sql=sql0, sql0=sql0)
+                myitem = dict(relitem, sql=sql0, sql0=sql0)
                 if "table" == category:
-                    mytempname = util.make_unique(item2["name"], allnames)
+                    # Need to re-create tabel, first under temporary name, and copy data over
+                    mytempname = util.make_unique(relitem["name"], allnames)
                     allnames.add(mytempname)
                     myrenames = copy.deepcopy(renames)
-                    myrenames.setdefault("table", {})[item2["name"]] = mytempname
-                    myitem = dict(item2, tempname=mytempname)
-                    sql, _ = grammar.transform(item2["sql"], renames=myrenames)
+                    myrenames.setdefault("table", {})[relitem["name"]] = mytempname
+                    myitem = dict(relitem, tempname=mytempname)
+                    sql, err = grammar.transform(rel_sql, renames=myrenames)
+                    if err: raise Exception(err)
                     myitem.update(sql=sql)
 
                 args.setdefault(category, []).append(myitem)
-                if category not in ("table", "view"): continue # for item2
+                if category not in ("table", "view"): continue # for relitem
 
-                subrelateds = self.get_related(category, item2["name"], own=True)
+                subrelateds = self.get_related(category, relitem["name"], own=True)
                 if "table" == category:
                     # Views need recreating, as SQLite can raise "no such table" error
                     # otherwise when dropping the old table.
-                    others = self.get_related(category, item2["name"], own=False)
+                    others = self.get_related(category, relitem["name"], own=False)
                     if "view" in others: subrelateds["view"] = others["view"]
                 for subcategory, subitemmap in subrelateds.items():
                     for subitem in subitemmap.values():
-                        if subitem["name"] in items_processed: continue # for item2
-                        # Re-create table indexes and views and triggers, and view triggers
-                        sql, _ = grammar.transform(subitem["sql"], renames=renames) \
-                                 if renames else (subitem["sql"], None)
-                        args.setdefault(subcategory, []).append(dict(subitem, sql=sql))
+                        if subitem["name"] in items_processed: continue # for subitem
                         items_processed.add(subitem["name"])
+                        # Re-create table indexes and views and triggers, and view triggers
+                        sql, err = grammar.transform(subitem["sql"], renames=renames) \
+                                   if renames else (subitem["sql"], None)
+                        if err: raise Exception(err)
+                        args.setdefault(subcategory, []).append(dict(subitem, sql=sql))
 
         return args
 
