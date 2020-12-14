@@ -10566,12 +10566,10 @@ class SchemaDiagram(wx.ScrolledWindow):
                 dy = self.HEADERH + self.HEADERP + i * self.LINEH
                 dc.DrawText(text, dx, dy)
             if col["name"] in pks:
-                # @todo kas 3 ei peaks zoomist sõltuma?
-                dc.DrawBitmap(pkbmp, 3, dy + 1, useMask=True)
+                dc.DrawBitmap(pkbmp, 3 * max(self._zoom, 1), dy + 1, useMask=True)
             if col["name"] in fks:
                 b, bw = fkbmp, fkbmp.Width
-                # @todo kas 6 ei peaks zoomist sõltuma?
-                dc.DrawBitmap(b, w - bw - 6, dy + 1, useMask=True)
+                dc.DrawBitmap(b, w - bw - 6 * self._zoom, dy + 1, useMask=True)
 
         # Draw statistics texts
         if stats:
