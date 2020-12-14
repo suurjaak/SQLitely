@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.12.2020
+@modified    14.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -5103,6 +5103,7 @@ class SchemaObjectPage(wx.Panel):
         changed, renamed, colchanged = False, False, False
 
         for opts in self._col_updates.values():
+            # Process table constraints
             name = opts["col"].get("name") or opts["col"].get("name_last")
 
             if opts.get("remove"):
@@ -5176,6 +5177,7 @@ class SchemaObjectPage(wx.Panel):
 
 
         for opts in self._col_updates.values():
+            # Process column constraints
             name = opts["col"].get("name") or opts["col"].get("name_last")
             if not name: continue # for opts
 
@@ -5233,6 +5235,7 @@ class SchemaObjectPage(wx.Panel):
             if self._grid_constraints.NumberRows:
                 self._grid_constraints.DeleteRows(0, self._grid_constraints.NumberRows)
             for i, cnstr in enumerate(constraints):
+                self._grid_constraints.AppendRows(1)
                 self._AddRowTableConstraint(["constraints"], i, cnstr)
             self._panel_constraints.ContainingSizer.Layout()
             t = "Constraints" + ("(%s)" % len(constraints) if constraints else "")
