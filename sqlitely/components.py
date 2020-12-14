@@ -3105,7 +3105,9 @@ class SchemaObjectPage(wx.Panel):
 
     def GetName(self):
         """Returns schema item name."""
-        return self._item.get("name", self._item["meta"].get("name")) or ""
+        if self._newmode:
+            return self._item.get("name", self._item["meta"].get("name")) or ""
+        else: return self._original["name"]
     Name = property(GetName)
 
 
@@ -3854,7 +3856,11 @@ class SchemaObjectPage(wx.Panel):
             ctrls = [ctrl_cols]
 
         elif grammar.SQL.FOREIGN_KEY == cnstr["type"]:
-            ftable = self._db.get_category("table", cnstr["table"]) if cnstr.get("table") else {}
+            ftable = {}
+            if cnstr.get("table"):
+                if util.lceq(cnstr["table"], self.Name):
+                    ftable = self._item.get("meta", self._item)
+                else: ftable = self._db.get_category("table", cnstr["table"])
             fcolumns = [x["name"] for x in ftable.get("columns") or ()]
             kcols  = cnstr.get("columns") or ()
             fkcols = cnstr.get("key")     or ()
@@ -5163,9 +5169,13 @@ class SchemaObjectPage(wx.Panel):
                                 col["name"] = opts["rename"]
 
                     elif cnstr["type"] in (grammar.SQL.FOREIGN_KEY, ):
-                        if name in cnstr.get("columns", []):
-                            cnstr["columns"] = [x if x != name else opts["rename"]
-                                                for x in cnstr["columns"]]
+                        for j, mycol in list(enumerate(cnstr["columns"])):
+                            if util.lceq(mycol, name):
+                                cnstr["columns"][j] = opts["rename"]
+                        if util.lceq(cnstr.get("table"), self.Name):
+                            for j, keycol in list(enumerate(cnstr["key"])):
+                                if util.lceq(keycol, name):
+                                    cnstr["key"][j] = opts["rename"]
 
                     elif cnstr["type"] in (grammar.SQL.CHECK, ):
                         if name.lower() not in cnstr.get("check", "").lower():
