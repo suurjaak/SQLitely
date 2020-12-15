@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.12.2020
+@modified    15.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -6987,7 +6987,7 @@ class ImportDialog(wx.Dialog):
         if done:
             success = self._importing
             if success: self._importing = False
-            if success is not None: self._PostEvent()
+            if success is not None: self._PostEvent(count=True, parse=self._has_new)
             SHOW = (self._button_restart, )
             HIDE = (self._button_ok, self._button_reset)
             if not isinstance(self.Parent, DataObjectPage): SHOW += (self._button_open, )

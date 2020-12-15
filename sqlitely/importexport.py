@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.12.2020
+@modified    15.12.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -643,35 +643,35 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
     @return                 success
     """
     result = True
-    create_sql = None
 
     extname = os.path.splitext(filename)[-1][1:].lower()
     table, sheet, cursor, isolevel = None, None, None, None
     try:
-        for table, sheet in tables:
-            sheet = sheet if extname not in ("csv", "json") else None
-            columns = tablecolumns[table]
-            if not db.get_category("table", table):
-                cols = [{"name": x} for x in columns.values()]
-                if pks.get(table):
-                    cols.insert(0, {"name": pks[table], "type": "INTEGER",
-                                    "pk": {"autoincrement": True}, "notnull": {}})
-                meta = {"name": table, "__type__": grammar.SQL.CREATE_TABLE,
-                        "columns": cols}
-                create_sql, err = grammar.generate(meta)
-                if err: raise Exception(err)
+        continue_on_error, create_sql = None, None
+        isolevel = db.connection.isolation_level
+        db.connection.isolation_level = None # Disable autocommit
+        with db.connection:
+            cursor = db.connection.cursor()
+            cursor.execute("BEGIN TRANSACTION")
 
-            sql = "INSERT INTO %s (%s) VALUES (%s)" % (grammar.quote(table),
-                ", ".join(grammar.quote(x) for x in columns.values()),
-                ", ".join("?" * len(columns))
-            )
+            for i, (table, sheet) in enumerate(tables):
+                sheet = sheet if extname not in ("csv", "json") else None
+                columns = tablecolumns[table]
+                if not db.get_category("table", table):
+                    cols = [{"name": x} for x in columns.values()]
+                    if pks.get(table):
+                        cols.insert(0, {"name": pks[table], "type": "INTEGER",
+                                        "pk": {"autoincrement": True}, "notnull": {}})
+                    meta = {"name": table, "__type__": grammar.SQL.CREATE_TABLE,
+                            "columns": cols}
+                    create_sql, err = grammar.generate(meta)
+                    if err: raise Exception(err)
 
-            continue_on_error = None
-            isolevel = db.connection.isolation_level
-            db.connection.isolation_level = None # Disable autocommit
-            with db.connection:
-                cursor = db.connection.cursor()
-                cursor.execute("BEGIN TRANSACTION")
+                sql = "INSERT INTO %s (%s) VALUES (%s)" % (grammar.quote(table),
+                    ", ".join(grammar.quote(x) for x in columns.values()),
+                    ", ".join("?" * len(columns))
+                )
+
                 if create_sql:
                     logger.info("Creating new table %s.",
                                 grammar.quote(table, force=True))
@@ -705,23 +705,32 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
                                         " and rolling back" if result is None else "")
                             if result is None: cursor.execute("ROLLBACK")
                             break # for row
-                    if progress and (count != lastcount and not count % 100 or
-                                     errorcount != lasterrorcount and not errorcount % 100):
+                    if result and progress \
+                    and (count != lastcount and not count % 100 or errorcount != lasterrorcount and not errorcount % 100):
                         result = progress(table=table, count=count, errorcount=errorcount)
                         if not result:
                             logger.info("Cancelling%s import on user request.",
                                         " and rolling back" if result is None else "")
                             if result is None: cursor.execute("ROLLBACK")
                             break # for row
+
                 if result:
-                    cursor.execute("COMMIT")
                     db.log_query("IMPORT", [create_sql, sql] if create_sql else [sql],
                                  [filename, util.plural("row", count)])
+                db.unlock("table", table, filename)
                 logger.info("Finished importing %s from %s%s to table %s.",
                             util.plural("row", count),
                             filename, (" sheet '%s'" % sheet) if sheet else "",
                             grammar.quote(table, force=True))
-                if progress: progress(table=table, count=count, errorcount=errorcount, done=True)
+                mytable = table
+                if i == len(tables) - 1:
+                    if result: cursor.execute("COMMIT")
+                    util.try_until(cursor.close)
+                    cursor = table = sheet = None
+                if progress: progress(table=mytable, count=count, errorcount=errorcount, done=True)
+
+            logger.info("Finished importing from %s to %s.", filename, db)
+
     except Exception as e:
         logger.exception("Error running import from %s%s%s in %s.",
                          filename, (" sheet '%s'" % sheet) if sheet else "",
@@ -734,15 +743,10 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
             progress(**kwargs)
         result = False
     finally:
-        if isolevel is not None: db.connection.isolation_level = isolevel
-        util.try_until(lambda: cursor.close())
-        db.unlock("table", table, filename)
-
-    # @todo selle võiks siit ära hiivata
-    if result is not None and create_sql:
-        db.populate_schema(category="table", name=table, parse=True)
-    elif result:
-        db.populate_schema(category="table", name=table)
+        if db.is_open():
+            if isolevel is not None: db.connection.isolation_level = isolevel
+            if cursor: util.try_until(cursor.close)
+            if table: db.unlock("table", table, filename)
 
     return result
 
