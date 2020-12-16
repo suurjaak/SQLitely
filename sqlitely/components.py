@@ -11143,29 +11143,34 @@ class ImportWizard(wx.adv.Wizard):
                                      wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
             label_info = self.label_info = wx.StaticText(self)
 
-            panel     = self.panel     = wx.Panel(self)
-            cb_all    = self.cb_all    = wx.CheckBox(panel, label="Import &all")
-            listbox   = self.listbox   = wx.CheckListBox(panel)
-            cb_header = self.cb_header = wx.CheckBox(panel, label="Use first row as column name &header")
+            panel       = self.panel       = wx.Panel(self)
+            cb_all      = self.cb_all      = wx.CheckBox(panel, label="Select &all")
+            label_count = self.label_count = wx.StaticText(panel)
+            listbox     = self.listbox     = wx.CheckListBox(panel)
+            cb_header   = self.cb_header   = wx.CheckBox(panel, label="Use first row as column name &header")
 
             filebutton.textControl.SetEditable(False)
             cb_all.Value = cb_header.Value = True
-            listbox.Disable()
 
             sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
+            top_sizer = wx.BoxSizer(wx.HORIZONTAL)
             panel.Sizer = wx.BoxSizer(wx.VERTICAL)
-            panel.Sizer.Add(cb_all,  border=5,     flag=wx.BOTTOM)
-            panel.Sizer.Add(listbox, proportion=1, flag=wx.GROW)
-            panel.Sizer.Add(cb_header)
+            top_sizer.Add(cb_all)
+            top_sizer.AddStretchSpacer()
+            top_sizer.Add(label_count)
+            panel.Sizer.Add(top_sizer, border=5,     flag=wx.BOTTOM | wx.GROW)
+            panel.Sizer.Add(listbox,   proportion=1, flag=wx.GROW)
+            panel.Sizer.Add(cb_header, border=5,     flag=wx.TOP)
 
             sizer.Add(filebutton, flag=wx.GROW)
             sizer.Add(label_info, border=4, flag=wx.GROW | wx.LEFT)
             sizer.AddSpacer(15)
             sizer.Add(panel, proportion=1, border=4, flag=wx.GROW | wx.LEFT)
 
-            self.Bind(wx.EVT_CHECKBOX,     self.OnCheckAll,    cb_all)
-            self.Bind(wx.EVT_CHECKBOX,     self.OnCheckHeader, cb_header)
-            self.Bind(wx.EVT_CHECKLISTBOX, lambda e: self.UpdateButtons(), listbox)
+            self.Bind(wx.EVT_CHECKBOX,           self.OnCheckAll,    cb_all)
+            self.Bind(wx.EVT_CHECKBOX,           self.OnCheckHeader, cb_header)
+            self.Bind(wx.EVT_CHECKLISTBOX,       self.OnCheckList,   listbox)
+            self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
 
 
         def Reset(self):
@@ -11175,7 +11180,8 @@ class ImportWizard(wx.adv.Wizard):
             self.use_header = True
 
             self.button_file.SetValue("", callBack=False)
-            self.label_info.Label = ""
+            self.label_info.Label  = ""
+            self.label_count.Label = ""
             self.cb_all.Value = self.cb_header.Value = True
             self.listbox.Clear()
             self.panel.Hide()
@@ -11209,7 +11215,7 @@ class ImportWizard(wx.adv.Wizard):
             self.filename = filename
             self.filedata = data
             self.listbox.Clear()
-            self.listbox.Disable()
+            self.listbox.Enable()
 
             has_sheets = not data["name"].lower().endswith(".json")
             info = "Size: %s (%s).%s" % (
@@ -11229,21 +11235,42 @@ class ImportWizard(wx.adv.Wizard):
                 self.listbox.Check(i)
             self.cb_all.Enable(has_sheets and len(data["sheets"]) > 1)
             self.cb_all.Value = True
+            self.label_count.Label = ("%s selected" % len(data["sheets"])) if has_sheets else ""
             self.cb_header.Enabled = self.cb_header.Value = has_sheets
+            self.listbox.Enable(has_sheets and len(data["sheets"]) > 1)
             self.panel.Show()
             self.Layout()
             self.UpdateButtons()
+            self.FindWindowById(wx.ID_FORWARD).SetFocus()
 
 
         def OnCheckAll(self, event):
             """Handler for toggling checkbox, enables or disables listbox."""
-            self.listbox.Enable(not event.IsChecked())
+            for i in range(self.listbox.Count):
+                self.listbox.Check(i, event.IsChecked()) 
+            self.label_count.Label = "%s selected" % len(self.listbox.CheckedItems)
             self.UpdateButtons()
 
 
         def OnCheckHeader(self, event):
             """Handler for toggling header checkbox."""
             self.use_header = event.IsChecked()
+
+
+        def OnCheckList(self, event):
+            """Handler for toggling item in checklistbox."""
+            if not event.EventObject.IsChecked(event.Selection): self.cb_all.Value = False
+            self.label_count.Label = "%s selected" % len(self.listbox.CheckedItems)
+            self.UpdateButtons()
+
+
+        def OnSysColourChange(self, event):
+            """Handler for system colour change, refreshes listbox colours."""
+            event.Skip()
+            items, checkeds = self.listbox.Items, self.listbox.CheckedItems
+            self.listbox.Clear()
+            for i, item in enumerate(items): self.listbox.Append(item, i)
+            for i in checkeds: self.listbox.Check(i)
 
 
     class OutputPage(wx.adv.WizardPageSimple):
@@ -11265,8 +11292,9 @@ class ImportWizard(wx.adv.Wizard):
                             buttonText="B&rowse", size=(500, -1),
                             changeCallback=self.OnFile, fileMask=wildcard,
                             fileMode=wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
-            label_info = self.label_info = wx.StaticText(self)
-            cb_pk = self.cb_pk = wx.CheckBox(self, label="Add auto-increment &primary key to the new tables")
+            label_finfo = self.label_finfo = wx.StaticText(self)
+            label_info  = self.label_info  = wx.StaticText(self)
+            cb_pk = self.cb_pk = wx.CheckBox(self, label="Add auto-increment &primary key to created tables")
 
             panel = self.panel = wx.Panel(self)
             gauge = self.gauge = wx.Gauge(panel, range=100, size=(300,-1),
@@ -11288,9 +11316,10 @@ class ImportWizard(wx.adv.Wizard):
             panel.Sizer.Add(label_gauge, flag=wx.ALIGN_CENTER)
             panel.Sizer.Add(log, border=5, proportion=1, flag=wx.GROW | wx.TOP)
 
-            sizer.Add(filebutton, flag=wx.GROW)
-            sizer.Add(label_info, border=4, flag=wx.GROW | wx.LEFT | wx.BOTTOM)
-            sizer.Add(cb_pk,      border=4, flag=wx.LEFT)
+            sizer.Add(filebutton,  flag=wx.GROW)
+            sizer.Add(label_finfo, border=4, flag=wx.GROW | wx.LEFT | wx.BOTTOM)
+            sizer.Add(label_info,  border=4, flag=wx.GROW | wx.LEFT | wx.BOTTOM)
+            sizer.Add(cb_pk,       border=4, flag=wx.LEFT)
             sizer.AddSpacer(15)
             sizer.Add(panel, proportion=1, border=4, flag=wx.GROW | wx.LEFT)
 
@@ -11305,7 +11334,7 @@ class ImportWizard(wx.adv.Wizard):
             self.file_existed = False
             self.progress.clear()
 
-            self.label_info.Label = ""
+            self.label_finfo.Label = ""
             self.button_file.SetValue("", callBack=False)
             self.button_file.Enable()
             self.cb_pk.Value, self.cb_pk.Enabled, self.cb_pk.Shown = True, False, False
@@ -11358,12 +11387,12 @@ class ImportWizard(wx.adv.Wizard):
             self.filename = db.filename
 
             self.button_file.SetValue(filename, callBack=False)
-            info = "Size: %s (%s), %s." % (
+            finfo = "Size: %s (%s), %s." % (
                 util.format_bytes(db.filesize),
                 util.format_bytes(db.filesize, max_units=False),
                 util.plural("table", db.schema["table"]),
             ) if self.file_existed else "<new database>"
-            self.label_info.Label = info
+            self.label_finfo.Label = finfo
             self.cb_pk.Shown = self.cb_pk.Enabled = True
 
             db.close()
@@ -11372,6 +11401,7 @@ class ImportWizard(wx.adv.Wizard):
 
             self.Layout()
             self.UpdateButtons()
+            self.FindWindowById(wx.ID_FORWARD).SetFocus()
 
 
 
@@ -11490,7 +11520,13 @@ class ImportWizard(wx.adv.Wizard):
         Handler for changing page, starts import if going forward on last page,
         .
         """
-        if event.Page is self.page2 and event.Direction and self.page2.filename:
+        if event.Page is self.page1 and event.Direction:
+            info, pkinfo = "source file content", "the created table"
+            if len(self.page1.filedata["sheets"]) > 1:
+                info, pkinfo = "each source worksheet", "the created tables"
+            self.page2.label_info.Label = "A new table will be created for %s." % info
+            self.page2.cb_pk.Label = "Add auto-increment &primary key to %s" % pkinfo
+        elif event.Page is self.page2 and event.Direction and self.page2.filename:
             if self.page2.progress: return
 
             event.Veto() # Cancel event as next-button acts as "finish" on last page
@@ -11503,8 +11539,8 @@ class ImportWizard(wx.adv.Wizard):
             self.page2.button_file.Disable()
             self.page2.cb_pk.Disable()
             self.page2.log.Enable()
-            self.page2.gauge.Pulse()
             self.page2.Layout()
+            self.page2.gauge.Pulse()
 
             self.StartImport()
 
@@ -11525,7 +11561,7 @@ class ImportWizard(wx.adv.Wizard):
         itemnames = sum((list(x) for x in self.db.schema.values()), [])
         for i, sheet in enumerate(self.page1.filedata["sheets"]):
             if not sheet["rows"] or not sheet["columns"] \
-            or not self.page1.listbox.IsChecked(i) and not self.page1.cb_all.Value:
+            or not self.page1.listbox.IsChecked(i):
                 continue # for sheet
             item = sheet.copy()
             table = sheet["name"].strip()
