@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.12.2020
+@modified    17.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -11200,7 +11200,12 @@ class ImportWizard(wx.adv.Wizard):
             """Handler for choosing spreadsheet, loads file data."""
             filename = filename or event.String
             filename = filename and os.path.abspath(filename)
-            if not filename or filename == self.filename: return
+            if not filename or not os.path.exists(filename): return
+            if filename == self.filename:
+                size = os.path.getsize(filename)
+                modified = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
+                if size == self.filedata["size"] and modified == self.filedata["modified"]:
+                    return
             self.Reset()
 
             try: data = importexport.get_import_file_data(filename)
@@ -11227,10 +11232,10 @@ class ImportWizard(wx.adv.Wizard):
             self.button_file.SetValue(filename, callBack=False)
             self.label_info.Label = info
             for i, sheet in enumerate(data["sheets"]):
-                label = "%s (%s, %s)" % (sheet["name"],
+                label = "%s (%s%s)" % (sheet["name"],
                     util.plural("column", sheet["columns"]),
-                    "rows: file too large to count" if sheet["rows"] < 0
-                    else util.plural("row", sheet["rows"]))
+                    (", file too large to count rows" if not i else "")
+                    if sheet["rows"] < 0 else ", " + util.plural("row", sheet["rows"]))
                 self.listbox.Append(label, i)
                 self.listbox.Check(i)
             self.cb_all.Enable(has_sheets and len(data["sheets"]) > 1)
@@ -11242,6 +11247,48 @@ class ImportWizard(wx.adv.Wizard):
             self.Layout()
             self.UpdateButtons()
             self.FindWindowById(wx.ID_FORWARD).SetFocus()
+
+
+        def UpdateFile(self):
+            """Refreshes file data if file size or modification time changed."""
+            if not self.filename: return
+            if os.path.exists(self.filename):
+                size, modified = None, None
+                try:
+                    size = os.path.getsize(self.filename)
+                    modified = datetime.datetime.fromtimestamp(os.path.getmtime(self.filename))
+                except Exception: pass
+                if size == self.filedata.get("size") and modified == self.filedata.get("modified"):
+                    return
+
+            data = {}
+            try: data = importexport.get_import_file_data(filename)
+            except Exception: pass
+
+            self.filedata = data
+            self.listbox.Clear()
+            self.listbox.Enable()
+
+            has_sheets = not data["name"].lower().endswith(".json") if data else False
+            info = "Size: %s (%s).%s" % (
+                util.format_bytes(data["size"]),
+                util.format_bytes(data["size"], max_units=False),
+                (" Worksheets: %s." % len(data["sheets"])) if has_sheets else "",
+            ) if data else ""
+
+            self.label_info.Label = info
+            for i, sheet in enumerate(data["sheets"]) if data else ():
+                label = "%s (%s%s)" % (sheet["name"],
+                    util.plural("column", sheet["columns"]),
+                    (", rows: file too large to count" if not i else "")
+                    if sheet["rows"] < 0 else ", " + util.plural("row", sheet["rows"]))
+                self.listbox.Append(label, i)
+                self.listbox.Check(i)
+            self.cb_all.Enable(has_sheets and len(data["sheets"]) > 1)
+            self.cb_all.Value = True
+            self.label_count.Label = ("%s selected" % len(data["sheets"])) if has_sheets else ""
+            self.cb_header.Enabled = self.cb_header.Value = has_sheets
+            self.listbox.Enable(has_sheets and len(data["sheets"]) > 1)
 
 
         def OnCheckAll(self, event):
@@ -11281,6 +11328,7 @@ class ImportWizard(wx.adv.Wizard):
             self.filename  = None
             self.importing = False
             self.add_pk    = True
+            self.filedata  = {} # {size, modified}
             self.progress  = {} # {sheet index: {count, errorcount, error, index, done}}
             self.file_existed = False # Whether database file existed
 
@@ -11288,18 +11336,19 @@ class ImportWizard(wx.adv.Wizard):
             exts = ";".join("*" + x for x in conf.DBExtensions)
             wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
             filebutton = self.button_file = wx.lib.filebrowsebutton.FileBrowseButton(
-                            self, labelText="Target file:",
-                            buttonText="B&rowse", size=(500, -1),
-                            changeCallback=self.OnFile, fileMask=wildcard,
+                            self, labelText="Target file:", buttonText="B&rowse",
+                            dialogTitle="Choose existing or create new database",
+                            size=(500, -1), changeCallback=self.OnFile, fileMask=wildcard,
                             fileMode=wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
             label_finfo = self.label_finfo = wx.StaticText(self)
             label_info  = self.label_info  = wx.StaticText(self)
             cb_pk = self.cb_pk = wx.CheckBox(self, label="Add auto-increment &primary key to created tables")
 
             panel = self.panel = wx.Panel(self)
+            label_gauge1 = self.label_gauge1 = wx.StaticText(panel)
             gauge = self.gauge = wx.Gauge(panel, range=100, size=(300,-1),
                                           style=wx.GA_HORIZONTAL | wx.PD_SMOOTH)
-            label_gauge = self.label_gauge = wx.StaticText(panel)
+            label_gauge2 = self.label_gauge2 = wx.StaticText(panel)
             log = self.log = wx.TextCtrl(panel, style=wx.TE_MULTILINE)
 
             filebutton.textControl.SetEditable(False)
@@ -11312,8 +11361,9 @@ class ImportWizard(wx.adv.Wizard):
             sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
             panel.Sizer = wx.BoxSizer(wx.VERTICAL)
 
-            panel.Sizer.Add(gauge,       flag=wx.ALIGN_CENTER)
-            panel.Sizer.Add(label_gauge, flag=wx.ALIGN_CENTER)
+            panel.Sizer.Add(label_gauge1, flag=wx.ALIGN_CENTER)
+            panel.Sizer.Add(gauge,        flag=wx.ALIGN_CENTER)
+            panel.Sizer.Add(label_gauge2, flag=wx.ALIGN_CENTER)
             panel.Sizer.Add(log, border=5, proportion=1, flag=wx.GROW | wx.TOP)
 
             sizer.Add(filebutton,  flag=wx.GROW)
@@ -11326,21 +11376,26 @@ class ImportWizard(wx.adv.Wizard):
             self.Bind(wx.EVT_CHECKBOX, self.OnCheckPK, cb_pk)
 
 
-        def Reset(self):
+        def Reset(self, keepfile=False):
             """Sets page to clean state."""
-            self.filename     = ""
-            self.importing    = False
-            self.add_pk       = True
-            self.file_existed = False
             self.progress.clear()
+            self.importing = False
+            if not keepfile:
+                self.filename     = ""
+                self.add_pk       = True
+                self.file_existed = False
+                self.filedata.clear()
 
-            self.label_finfo.Label = ""
-            self.button_file.SetValue("", callBack=False)
+            if not keepfile:
+                self.label_finfo.Label = ""
+                self.button_file.SetValue("", callBack=False)
             self.button_file.Enable()
-            self.cb_pk.Value, self.cb_pk.Enabled, self.cb_pk.Shown = True, False, False
+            self.cb_pk.Value, self.cb_pk.Enabled, self.cb_pk.Shown = self.add_pk, False, False
             self.gauge.Value = 0
-            self.label_gauge.Label = ""
-            self.log.Disable()
+            self.label_gauge1.Label = ""
+            self.label_gauge2.Label = ""
+            self.label_gauge1.Enable()
+            self.label_gauge2.Enable()
             self.log.Clear()
             self.panel.Hide()
             self.UpdateButtons()
@@ -11348,10 +11403,11 @@ class ImportWizard(wx.adv.Wizard):
 
         def UpdateButtons(self):
             """Enables Next-button if ready, disables Back-button if importing."""
-            self.FindWindowById(wx.ID_CANCEL).Label  = "&Cancel"
-            self.FindWindowById(wx.ID_FORWARD).Label = "&Import"
+            self.FindWindowById(wx.ID_FORWARD).Label = "Import"
+            self.FindWindowById(wx.ID_CANCEL).Label = "&Cancel"
             self.FindWindowById(wx.ID_FORWARD).Enable(False if self.importing else bool(self.filename))
             self.FindWindowById(wx.ID_BACKWARD).Enable(not self.importing)
+            self.FindWindowById(wx.ID_CANCEL).ContainingSizer.Layout()
 
 
         def OnCheckPK(self, event):
@@ -11363,7 +11419,12 @@ class ImportWizard(wx.adv.Wizard):
             """Handler for choosing database, loads file data."""
             filename = filename or event.String
             filename = filename and os.path.abspath(filename)
-            if not filename or filename == self.filename: return
+            if not filename: return
+            if filename == self.filename and os.path.exists(filename):
+                size = os.path.getsize(filename)
+                modified = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
+                if size == self.filedata.get("size") and modified == self.filedata.get("modified"):
+                    return
             self.Reset()
 
             filename = os.path.abspath(filename)
@@ -11374,8 +11435,8 @@ class ImportWizard(wx.adv.Wizard):
                     return
             except Exception: pass
 
+            self.file_existed = os.path.exists(filename)
             try:
-                self.file_existed = os.path.exists(filename)
                 db = database.Database(filename)
             except Exception as e:
                 self.button_file.SetValue("", callBack=False)
@@ -11385,6 +11446,7 @@ class ImportWizard(wx.adv.Wizard):
                 return
 
             self.filename = db.filename
+            self.filedata.update(size=db.filesize, modified=db.last_modified)
 
             self.button_file.SetValue(filename, callBack=False)
             finfo = "Size: %s (%s), %s." % (
@@ -11404,6 +11466,39 @@ class ImportWizard(wx.adv.Wizard):
             self.FindWindowById(wx.ID_FORWARD).SetFocus()
 
 
+        def UpdateFile(self):
+            """Refreshes file data if file size or modification time changed."""
+            if not self.filename: return
+            self.file_existed = os.path.exists(self.filename)
+            if self.file_existed:
+                size, modified = None, None
+                try:
+                    size = os.path.getsize(self.filename)
+                    modified = datetime.datetime.fromtimestamp(os.path.getmtime(self.filename))
+                except Exception: pass
+                if size == self.filedata.get("size") and modified == self.filedata.get("modified"):
+                    return
+                self.filedata.clear()
+                if size     is not None: self.filedata.update(size=size)
+                if modified is not None: self.filedata.update(modified=modified)
+            else: self.filedata.clear()
+
+            db = None
+            try: db = database.Database(self.filename) if self.file_existed else None
+            except Exception: pass
+
+            finfo = "Size: %s (%s), %s." % (
+                util.format_bytes(db.filesize) ,
+                util.format_bytes(db.filesize, max_units=False),
+                util.plural("table", db.schema["table"]),
+            ) if self.file_existed and db else "<new database>" if not self.file_existed else ""
+            self.label_finfo.Label = finfo
+
+            if db: db.close()
+            try: not self.file_existed and os.unlink(self.filename)
+            except Exception: pass
+
+
 
     def __init__(self, parent, id=wx.ID_ANY, title=wx.EmptyString, bitmap=wx.NullBitmap,
                  pos=wx.DefaultPosition, style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER):
@@ -11413,7 +11508,6 @@ class ImportWizard(wx.adv.Wizard):
         self.index  = -1 # Current sheet being imported
         self.db     = None
         self.worker = workers.WorkerThread()
-        self.filesize   = 0    # Database initial size
         self.dlg_cancel = None # controls.MessageDialog if any
 
         page1 = self.page1 = self.InputPage(self)
@@ -11421,6 +11515,7 @@ class ImportWizard(wx.adv.Wizard):
 
         page1.Chain(page2)
         self.GetPageAreaSizer().Add(page1, proportion=1, flag=wx.GROW)
+        self.GetPageAreaSizer().Add(page2, proportion=1, flag=wx.GROW)
 
         self.DropTarget = controls.FileDrop(on_files=self.OnDrop)
 
@@ -11436,7 +11531,6 @@ class ImportWizard(wx.adv.Wizard):
         """Runs the wizard from the first page."""
         self.items.clear()
         self.index      = -1
-        self.filesize   = 0
         self.dlg_cancel = None
         self.page1.Reset()
         self.page2.Reset()
@@ -11464,7 +11558,7 @@ class ImportWizard(wx.adv.Wizard):
 
     def OnCancel(self, event):
         """Handler for canceling import, confirms with user popup."""
-        if self.CurrentPage == self.page1 and not self.page1.filename:
+        if self.CurrentPage is self.page1 and not self.page1.filename:
             return # Nothing set yet, close wizard
         if self.index >= 0 and not self.page2.importing:
             return # Import finished
@@ -11503,7 +11597,7 @@ class ImportWizard(wx.adv.Wizard):
         self.worker.stop_work()
         self.page2.gauge.Value = self.page2.gauge.Value # Stop pulse, if any
         self.page2.FindWindowById(wx.ID_BACKWARD).Disable()
-        self.page2.FindWindowById(wx.ID_CANCEL ).Label = "&Close"
+        self.page2.FindWindowById(wx.ID_CANCEL).Label = "&Close"
         if wx.ID_YES == keep:
             self.page2.FindWindowById(wx.ID_FORWARD).Label = "&Open data"
             self.page2.FindWindowById(wx.ID_FORWARD).Enable()
@@ -11526,6 +11620,13 @@ class ImportWizard(wx.adv.Wizard):
                 info, pkinfo = "each source worksheet", "the created tables"
             self.page2.label_info.Label = "A new table will be created for %s." % info
             self.page2.cb_pk.Label = "Add auto-increment &primary key to %s" % pkinfo
+            self.page2.UpdateFile()
+        elif event.Page is self.page2 and not event.Direction:
+            self.page1.UpdateFile()
+            if self.items:
+                self.items.clear()
+                self.index = -1
+                self.page2.Reset(keepfile=True)
         elif event.Page is self.page2 and event.Direction and self.page2.filename:
             if self.page2.progress: return
 
@@ -11539,8 +11640,6 @@ class ImportWizard(wx.adv.Wizard):
             self.page2.button_file.Disable()
             self.page2.cb_pk.Disable()
             self.page2.log.Enable()
-            self.page2.Layout()
-            self.page2.gauge.Pulse()
 
             self.StartImport()
 
@@ -11583,7 +11682,6 @@ class ImportWizard(wx.adv.Wizard):
 
             self.items[i] = item
 
-        self.filesize = self.db.filesize
         self.index = 1
 
         tables  = [(x["tname"], x["name"]) for _, x in sorted(self.items.items())]
@@ -11594,6 +11692,13 @@ class ImportWizard(wx.adv.Wizard):
                                      self.db, tables, columns, pks, 
                                      self.page1.use_header, self.OnProgressCallback)
         self.worker.work(callable)
+
+        if len(self.items) > 1:
+            self.page2.label_gauge1.Label = "Processing sheet 1 of %s (0%% done)" % len(self.items)
+            self.page2.Layout()
+        else:
+            self.page2.Layout()
+            self.page2.gauge.Pulse()
 
 
     def OnProgressCallback(self, **kwargs):
@@ -11613,9 +11718,10 @@ class ImportWizard(wx.adv.Wizard):
     def OnProgress(self, **kwargs):
         """
         Handler for import progress report, updates progress bar and log window.
-        Shows abort-dialog on error, invokes "callback" from arguments if present.
+        Shows abort-dialog on error, invokes "callback" from arguments if present,
+        with importing status (True: continue, False: stop, None: rollback).
         """
-        if not self: return
+        if not self or self.CurrentPage is not self.page2: return
 
         VARS = "count", "errorcount", "error", "index", "done", "table"
         count, errorcount, error, index, done, table = (kwargs.get(x) for x in VARS)
@@ -11626,31 +11732,45 @@ class ImportWizard(wx.adv.Wizard):
         if itemindex is not None:
             self.page2.progress.setdefault(itemindex, {}).update(kwargs)
 
-        finished = False
+        finished = not self.page2.importing
+        tablefmt = util.unprint(grammar.quote(item["tname"], force=True)) \
+                   if item else ""
 
         if count is not None:
-            text = "Table %s: " % util.ellipsize(util.unprint(grammar.quote(item["tname"], force=True)))
-            total = item["rows"]
-            if total < 0:
-                text += util.plural("row", count)
-                self.page2.gauge.Pulse()
+            tfraction = 0
+            total = item["rows"] - self.page1.use_header if item else -1
+            text2 = "Table %s: " % util.ellipsize(tablefmt)
+            if total < 0 or count + (errorcount or 0) > total:
+                text2 += util.plural("row", count)
             else:
-                if self.page1.use_header: total -= 1
-                percent = int(100 * util.safedivf(count + (errorcount or 0), total))
-                text += "%s%% (%s of %s)" % (percent, util.plural("row", count), total)
-                self.page2.gauge.Value = percent
+                tfraction = count + (errorcount or 0) / float(total)
+                percent = int(100 * tfraction)
+                text2 += "%s%% (%s of %s)" % (percent, util.plural("row", count), total)
             if errorcount:
-                text += ", %s" % util.plural("error", errorcount)
-            self.page2.label_gauge.Label = text
+                text2 += ", %s" % util.plural("error", errorcount)
+
+            if len(self.items) > 1:
+                percent = int(100 * util.safedivf(itemindex + 1 + tfraction, len(self.items)))
+                text1 = "Processing sheet %s of %s (%s%% done)" % \
+                        (itemindex + 1, len(self.items), percent)
+                self.page2.label_gauge1.Label = text1
+                self.page2.gauge.Value = percent
+
+            self.page2.label_gauge2.Label = text2
+
             self.page2.gauge.ContainingSizer.Layout()
             wx.YieldIfNeeded()
 
-        if (error or done) and self.dlg_cancel:
+        if error and done: # Top-level error in import, nothing to cancel, all rolled back
+            finished = True
+
+        if done and not finished and itemindex is not None:
+            finished = not (itemindex < max(self.items))
+
+        if (error or finished) and self.dlg_cancel:
+            # Clear pending user cancel if already done or some error to report
             self.dlg_cancel.EndModal(wx.ID_CANCEL)
             self.dlg_cancel = None
-
-        if error and done:
-            finished = True
 
         if error and not done and self.page2.importing:
             dlg = wx.MessageDialog(self, "Error inserting row #%s.\n\n%s" % (
@@ -11659,18 +11779,15 @@ class ImportWizard(wx.adv.Wizard):
             )
             dlg.SetYesNoCancelLabels("&Abort", "Abort and &rollback", "&Ignore errors")
             res = dlg.ShowModal()
+            error = None
             if wx.ID_CANCEL != res:
                 finished = True
                 self.page2.importing = False if wx.ID_YES == res else None
 
-        if done and not finished and itemindex is not None:
-            finished = not (itemindex < max(self.items))
-
         if done and item:
             itemprogress = self.page2.progress.get(itemindex) or {}
             info = "Inserted %s into new table %s.%s" % (
-                util.plural("row", count),
-                grammar.quote(item["tname"], force=True),
+                util.plural("row", count), tablefmt,
                 ("\nFailed to insert %s." % util.plural("row", itemprogress["errorcount"]))
                 if itemprogress.get("errorcount") else "",
             )
@@ -11682,18 +11799,19 @@ class ImportWizard(wx.adv.Wizard):
             success = self.page2.importing # True: ok, False: aborted, None: rolled back
             if success: self.page2.importing = False
             self.page2.gauge.Value = 100 if success else self.page2.gauge.Value # Stop pulse, if any
-            self.page2.FindWindowById(wx.ID_FORWARD).Enable()
-            self.page2.FindWindowById(wx.ID_FORWARD).Label = "&Open data"
-            self.page2.FindWindowById(wx.ID_CANCEL ).Label = "&Close"
+            self.page2.FindWindowById(wx.ID_BACKWARD).Enable()
+            self.page2.FindWindowById(wx.ID_FORWARD ).Enable()
+            self.page2.FindWindowById(wx.ID_FORWARD ).Label = "Open database"
+            self.page2.FindWindowById(wx.ID_CANCEL  ).Label = "&Close"
+            self.page2.FindWindowById(wx.ID_CANCEL  ).ContainingSizer.Layout()
             if success is None:
                 self.page2.FindWindowById(wx.ID_FORWARD).Disable()
-                if not self.page2.file_existed:
-                    wx.CallAfter(self.Cleanup)
+                self.Cleanup()
             else:
                 wx.CallAfter(self.Parent.update_database_list, self.page2.filename)
 
             wx.Bell()
-            if error:
+            if error: # Top-level error in import
                 wx.MessageBox("Error on data import:\n\n%s" % error,
                               conf.Title, wx.OK | wx.ICON_ERROR)
             else: 
@@ -11708,13 +11826,16 @@ class ImportWizard(wx.adv.Wizard):
                 tables_total = sum(1 for x in self.page2.progress.values() if x.get("count"))
                 errors_total = sum(x.get("errorcount", 0) for x in self.page2.progress.values())
 
-                if success is not None: info += "\nInserted %s%s into %s." % (
+                if success is not None: info += "\nInserted %s into %s%s." % (
                     util.plural("row", rows_total, sep=","),
-                    " and %s (%s)" % (
-                        util.format_bytes(filesize2 - self.filesize),
-                        util.format_bytes(filesize2 - self.filesize, max_units=False)
+                    util.plural("new table", tables_total),
+                    (
+                       ", database grew by %s (%s)" if self.page2.file_existed else
+                       ", new database of %s (%s)"
+                    ) % (
+                        util.format_bytes(filesize2 - self.db.filesize),
+                        util.format_bytes(filesize2 - self.db.filesize, max_units=False)
                     ) if filesize2 else "",
-                    util.plural("new table", tables_total)
                 )
                 if success and errors_total: info += "\nFailed to insert %s (%s %s)." % (
                     util.plural("row", errors_total),
@@ -11722,6 +11843,9 @@ class ImportWizard(wx.adv.Wizard):
                     ", ".join(grammar.quote(x["tname"], force=True)
                               for x in self.page2.progress.values() if x.get("errorcount"))
                 )
+                if not success:
+                    self.page2.label_gauge1.Disable()
+                    self.page2.label_gauge2.Disable()
                 self.page2.log.AppendText(info)
 
         if callable(callback): callback(self.page2.importing)
