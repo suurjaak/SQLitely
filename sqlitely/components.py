@@ -2146,7 +2146,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
     def _OnCopySQL(self, event=None):
         """Handler for copying SQL to clipboard."""
         if wx.TheClipboard.Open():
-            d = wx.TextDataObject()
+            d = wx.TextDataObject(self._stc.Text)
             wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
             guibase.status("Copied SQL to clipboard.")
 
