@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 
+@util.memoize(__nohash__=True)
 def parse(sql, category=None, renames=None):
     """
     Returns data structure for SQL statement.
@@ -78,6 +79,7 @@ def generate(data, indent="  ", category=None):
     return result, err
 
 
+@util.memoize(__nohash__=True)
 def transform(sql, flags=None, renames=None, indent="  "):
     """
     Returns transformed SQL.
@@ -108,6 +110,7 @@ def transform(sql, flags=None, renames=None, indent="  "):
     return result, err
 
 
+@util.memoize
 def quote(val, force=False):
     """
     Returns value in quotes and proper-escaped for queries,
@@ -120,6 +123,7 @@ def quote(val, force=False):
     return result
 
 
+@util.memoize
 def unquote(val):
     """
     Returns unquoted string, if string within '' or "" or `` or [].
