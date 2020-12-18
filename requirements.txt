@@ -1,4 +1,4 @@
-antlr4-python2-runtime==4.8
+antlr4-python2-runtime==4.9
 appdirs
 openpyxl<=3.0.0
 Pillow<=6.2.2

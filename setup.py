@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.08.2020
+@modified    18.12.2020
 ------------------------------------------------------------------------------
 """
 import atexit
@@ -77,7 +77,7 @@ setuptools.setup(
     platforms=["any"],
     keywords="sqlite database",
 
-    install_requires=["antlr4-python2-runtime==4.8", "appdirs", "openpyxl<=3.0.0",
+    install_requires=["antlr4-python2-runtime==4.9", "appdirs", "openpyxl<=3.0.0",
                       "Pillow<=6.2.2", "pyparsing", "pytz", "wxPython>=4.0",
                       "xlrd", "XlsxWriter"],
     entry_points={"gui_scripts": ["sqlitely = sqlitely.main:run"]},

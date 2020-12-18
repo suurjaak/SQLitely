@@ -114,7 +114,7 @@ Includes a modified version of step, Simple Template Engine for Python,
 Includes a modified version of SQLite.g4 from sqlite-parser,
 (c) 2013, Bart Kiers, https://github.com/bkiers/sqlite-parser.
 
-SQL lexer and parser generated with ANTLR v4.8,
+SQL lexer and parser generated with ANTLR v4.9,
 (c) 2012 The ANTLR Project, https://github.com/antlr/antlr4.
 
 Includes several icons from Fugue Icons,
