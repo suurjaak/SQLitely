@@ -533,6 +533,7 @@ def get_import_file_data(filename):
     Returns import file metadata, as {
         "name":        file name and path}.
         "size":        file size in bytes,
+        "modified":    file modification timestamp
         "format":      "xlsx", "xlsx", "csv" or "json",
         "sheets":      [
             "name":    sheet name,
@@ -543,6 +544,7 @@ def get_import_file_data(filename):
     logger.info("Getting import data from %s.", filename)
     sheets, size = [], os.path.getsize(filename)
     if not size: raise ValueError("File is empty.")
+    modified = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
 
     extname = os.path.splitext(filename)[-1][1:].lower()
     is_csv, is_json, is_xls, is_xlsx = \
@@ -617,7 +619,7 @@ def get_import_file_data(filename):
     else:
         raise ValueError("File type not recognized.")
 
-    return {"name": filename, "size": size, "format": extname, "sheets": sheets}
+    return {"name": filename, "size": size, "modified": modified, "format": extname, "sheets": sheets}
 
 
 
@@ -718,16 +720,20 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
                     db.log_query("IMPORT", [create_sql, sql] if create_sql else [sql],
                                  [filename, util.plural("row", count)])
                 db.unlock("table", table, filename)
-                logger.info("Finished importing %s from %s%s to table %s.",
+                logger.info("Finished importing %s from %s%s to table %s%s.",
                             util.plural("row", count),
                             filename, (" sheet '%s'" % sheet) if sheet else "",
-                            grammar.quote(table, force=True))
+                            grammar.quote(table, force=True),
+                            ", all rolled back" if result is None and count else "")
                 mytable = table
                 if i == len(tables) - 1:
                     if result: cursor.execute("COMMIT")
                     util.try_until(cursor.close)
                     cursor = table = sheet = None
-                if progress: progress(table=mytable, count=count, errorcount=errorcount, done=True)
+                if result and progress:
+                    result = progress(table=mytable, count=count, errorcount=errorcount, done=True)
+                if not result:
+                    break # for i, (table, sheet)
 
             logger.info("Finished importing from %s to %s.", filename, db)
 
@@ -736,12 +742,12 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
                          filename, (" sheet '%s'" % sheet) if sheet else "",
                          (" to table %s " % grammar.quote(table, force=True) if table else ""),
                          db.filename)
+        result = False
         if cursor: util.try_until(lambda: cursor.execute("ROLLBACK"))
         if progress:
             kwargs = dict(error=util.format_exc(e), done=True)
             if table: kwargs.update(table=table)
             progress(**kwargs)
-        result = False
     finally:
         if db.is_open():
             if isolevel is not None: db.connection.isolation_level = isolevel
