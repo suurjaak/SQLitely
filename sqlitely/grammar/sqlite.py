@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    11.12.2020
+@modified    18.12.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -677,28 +677,12 @@ class Parser(object):
         result = {}
         result["name"] = self.u(ctx.column_name().any_name)
         if ctx.type_name():
-            result["type"] = " ".join(self.u(x).upper() for x in ctx.type_name().name())
-
-            type_raw = self.r(ctx.type_name()).upper()
-            if '"' in type_raw and "DEFAULT" in type_raw:
-                # Workaround for SQLite allowing double-quotes for literals,
-                # resulting in DEFAULT and everything preceding being parsed
-                # as type if DEFAULT value is double-quoted.
-                start, end = ctx.type_name().getSourceInterval()
-                inter = self._stream.getText(start, end)
-                cstart = len(self._stream.getText(0, start - 1))
-                cend   = cstart + len(inter)
-                xstart = type_raw.find("DEFAULT") + 7
-                repl, in_quotes, i = inter[:xstart], False, xstart
-                while i < len(inter):
-                    c, nxt = inter[i], (inter[i + 1] if i < len(inter) - 1 else "")
-                    if '"' == c:
-                        if not in_quotes: c, in_quotes = "'", True # Start single quote
-                        elif '"' == nxt: i += 1 # "-escaped ", insert single "
-                        else: c, in_quotes = "'", False # End quote
-                    repl, i = repl + c, i + 1
-                self._repls.append((cstart, cend, repl))
-                return result
+            if ctx.type_name().type_name_text().ENCLOSED_IDENTIFIER():
+                result["type"] = self.u(ctx.type_name().type_name_text().ENCLOSED_IDENTIFIER).upper()
+            else:
+                result["type"] = " ".join(self.t(x).upper() for x in ctx.type_name().type_name_text().type_or_constraint_name_word())
+            if ctx.type_name().signed_number():
+                result["type"] += " (%s)" % ".".join(self.t(x).upper() for x in ctx.type_name().signed_number())
 
         for c in ctx.column_constraint():
             conflict = self.get_conflict(c)
@@ -769,7 +753,7 @@ class Parser(object):
         }.
         """
         result = {}
-        if ctx.name(): result["name"] = self.u(ctx.name().any_name)
+        if ctx.constraint_name(): result["name"] = self.u(ctx.constraint_name)
 
         conflict = self.get_conflict(ctx)
 

@@ -33,11 +33,11 @@
  *                fixed multi-word column type; dropped keywords in table_alias;
  *                more use of with_clause; dropped Java-specific exception;
  *                double quotes allowed in string_literal; fixed module arguments;
- *                only ROWID allowed after WITHOUT; disallow keywords in column types
- *                and constraint names.
+ *                only ROWID allowed after WITHOUT; disallowed certain keywords in
+ *                column types and constraint names; added TRUE/FALSE literals.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
- * Updated by   : Erki Suurjaak, 2019
+ * Updated by   : Erki Suurjaak, 2019-2020
  */
 grammar SQLite;
 
@@ -280,19 +280,34 @@ column_def
  ;
 
 type_name
- : name+? ( '(' signed_number ')' | '(' signed_number ',' signed_number ')' )?
+ : type_name_text
+   ( '(' signed_number ')' | '(' signed_number ',' signed_number ')' )?
+ ;
+
+type_name_text
+ : ENCLOSED_IDENTIFIER
+ | type_or_constraint_name_word+
+ ;
+
+type_or_constraint_name_word
+ : ~('(' | ',' | K_CONSTRAINT | K_PRIMARY | K_FOREIGN | K_NOT | K_NULL | K_UNIQUE | K_CHECK | K_DEFAULT | K_COLLATE | K_REFERENCES)
  ;
 
 column_constraint
- : ( K_CONSTRAINT name )?
-   ( K_PRIMARY K_KEY ( K_ASC | K_DESC )? conflict_clause K_AUTOINCREMENT?
-   | K_NOT? K_NULL conflict_clause
-   | K_UNIQUE conflict_clause
-   | K_CHECK '(' expr ')'
-   | K_DEFAULT (signed_number | literal_value | '(' expr ')')
-   | K_COLLATE collation_name
-   | foreign_key_clause
+ : ( K_CONSTRAINT constraint_name )?
+   (   K_PRIMARY K_KEY ( K_ASC | K_DESC )? conflict_clause K_AUTOINCREMENT?
+     | K_NOT? K_NULL conflict_clause
+     | K_UNIQUE conflict_clause
+     | K_CHECK '(' expr ')'
+     | K_DEFAULT (signed_number | literal_value | '(' expr ')')
+     | K_COLLATE collation_name
+     | foreign_key_clause
    )
+ ;
+
+constraint_name
+ : ENCLOSED_IDENTIFIER
+ | type_or_constraint_name_word
  ;
 
 conflict_clause
@@ -373,7 +388,7 @@ indexed_column
  ;
 
 table_constraint
- : ( K_CONSTRAINT name )?
+ : ( K_CONSTRAINT constraint_name )?
    ( ( K_PRIMARY K_KEY | K_UNIQUE ) '(' indexed_column ( ',' indexed_column )* ')' conflict_clause
    | K_CHECK '(' expr ')'
    | K_FOREIGN K_KEY '(' column_name ( ',' column_name )* ')' foreign_key_clause
@@ -458,6 +473,8 @@ literal_value
  | STRING_LITERAL
  | BLOB_LITERAL
  | K_NULL
+ | K_TRUE
+ | K_FALSE
  | K_CURRENT_TIME
  | K_CURRENT_DATE
  | K_CURRENT_TIMESTAMP
@@ -614,9 +631,7 @@ keyword
 // TODO check all names below
 
 name
- : IDENTIFIER 
- | STRING_LITERAL
- | '(' any_name ')'
+ : any_name
  ;
 
 function_name
@@ -770,6 +785,7 @@ K_EXCLUSIVE : E X C L U S I V E;
 K_EXISTS : E X I S T S;
 K_EXPLAIN : E X P L A I N;
 K_FAIL : F A I L;
+K_FALSE : F A L S E;
 K_FOR : F O R;
 K_FOREIGN : F O R E I G N;
 K_FROM : F R O M;
@@ -838,6 +854,7 @@ K_UNION : U N I O N;
 K_UNIQUE : U N I Q U E;
 K_UPDATE : U P D A T E;
 K_USING : U S I N G;
+K_TRUE : T R U E;
 K_VACUUM : V A C U U M;
 K_VALUES : V A L U E S;
 K_VIEW : V I E W;
@@ -848,6 +865,17 @@ K_WITH : W I T H;
 K_WITHOUT : W I T H O U T;
 
 C_ROWID : R O W I D;
+
+ENCLOSED_IDENTIFIER
+ : STRING_LITERAL
+ | '`' (~'`' | '``')* '`'
+ | '[' ~']'* ']'
+ ;
+
+STRING_LITERAL
+ : '\'' (~'\'' | '\'\'')* '\''
+ | '"'  (~'"'  | '""'  )* '"'
+ ;
 
 IDENTIFIER
  : '"' (~'"' | '""')* '"'
@@ -864,11 +892,6 @@ NUMERIC_LITERAL
 BIND_PARAMETER
  : '?' DIGIT*
  | [:@$] IDENTIFIER
- ;
-
-STRING_LITERAL
- : '\'' (~'\'' | '\'\'')* '\''
- | '"'  (~'"'  | '""'  )* '"'
  ;
 
 BLOB_LITERAL
