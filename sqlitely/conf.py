@@ -27,7 +27,7 @@ import wx
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.2.dev96"
+Version = "1.2.dev97"
 VersionDate = "18.12.2020"
 
 if getattr(sys, "frozen", False):
@@ -60,10 +60,10 @@ FileDirectives = ["AllowMultipleInstances", "ConsoleHistoryCommands", "DBFiles",
 OptionalFileDirectives = [
     "DBExtensions", "ExportDbTemplate", "LogSQL", "MinWindowSize",
     "MaxConsoleHistory", "MaxDBSizeForFullCount", "MaxTableRowIDForFullCount",
-    "MaxHistoryInitialMessages", "MaxRecentFiles", "MaxSearchHistory",
-    "MaxSearchResults", "PopupUnexpectedErrors", "RunChecksums", "RunStatistics",
-    "SearchResultsChunk", "SeekLength", "SeekLeapLength", "StatisticsPlotWidth",
-    "StatusFlashLength", "UpdateCheckInterval",
+    "MaxHistoryInitialMessages", "MaxImportFilesizeForCount", "MaxRecentFiles",
+    "MaxSearchHistory", "MaxSearchResults", "PopupUnexpectedErrors", "RunChecksums",
+    "RunStatistics", "SearchResultsChunk", "SeekLength", "SeekLeapLength",
+    "StatisticsPlotWidth", "StatusFlashLength", "UpdateCheckInterval",
 ]
 Defaults = {}
 
@@ -110,6 +110,9 @@ MaxDBSizeForFullCount = 500000000
 
 """Maximum table ROWID for doing full COUNT(*) if database size over MaxDBSizeForFullCount."""
 MaxTableRowIDForFullCount = 1000
+
+"""Maximum import file size to do full row count for."""
+MaxImportFilesizeForCount = 10 * 1e6
 
 """Number of rows to seek ahead on data grids, when scrolling to end of retrieved rows."""
 SeekLength = 100

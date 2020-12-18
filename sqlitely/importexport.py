@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.12.2020
+@modified    18.12.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -72,9 +72,6 @@ EXPORT_WILDCARD = ("CSV spreadsheet (*.csv)|*.csv|%s"
                    "Text document (*.txt)|*.txt" % XLSX_WILDCARD)
 EXPORT_EXTS = ["csv", "xlsx", "html", "json", "sql", "txt"] if xlsxwriter \
                else ["csv", "html", "json", "sql", "txt"]
-
-"""Maximum file size to do full row count for."""
-MAX_IMPORT_FILESIZE_FOR_COUNT = 10 * 1e6
 
 logger = logging.getLogger(__name__)
 
@@ -564,7 +561,7 @@ def get_import_file_data(filename):
             csvfile = csv.reader(iterable, csv.Sniffer().sniff(firstline, ",;\t"))
             rows, columns = -1, next(csvfile)
             if not columns: rows = 0
-            elif 0 < size <= MAX_IMPORT_FILESIZE_FOR_COUNT:
+            elif 0 < size <= conf.MaxImportFilesizeForCount:
                 rows = sum((1 for _ in csvfile), 1 if firstline else 0)
         sheets.append({"rows": rows, "columns": columns, "name": "<no name>"})
     elif is_json:
@@ -586,7 +583,7 @@ def get_import_file_data(filename):
                             columns, rows = columns or data, rows + 1
                     except ValueError: # Not enough data to decode, read more
                         break # while started and buffer
-                if columns and any(x > MAX_IMPORT_FILESIZE_FOR_COUNT for x in (size, f.tell())):
+                if columns and any(x > conf.MaxImportFilesizeForCount for x in (size, f.tell())):
                     break # for chunk
             if rows and f.tell() < size: rows = -1
         sheets.append({"rows": rows, "columns": columns, "name": "<JSON data>"})
@@ -598,7 +595,7 @@ def get_import_file_data(filename):
                 columns = [x.strip() if isinstance(x, basestring)
                            else "" if x is None else str(x) for x in columns]
                 if not columns: rows = 0
-                else: rows = -1 if size > MAX_IMPORT_FILESIZE_FOR_COUNT else sheet.nrows
+                else: rows = -1 if size > conf.MaxImportFilesizeForCount else sheet.nrows
                 sheets.append({"rows": rows, "columns": columns, "name": sheet.name})
     elif is_xlsx:
         wb = None
@@ -612,7 +609,7 @@ def get_import_file_data(filename):
                     while columns and columns[-1] is None: columns.pop(-1)
                     columns = [x.strip() if isinstance(x, basestring)
                                else "" if x is None else str(x) for x in columns]
-                    rows = 0 if not columns else -1 if size > MAX_IMPORT_FILESIZE_FOR_COUNT \
+                    rows = 0 if not columns else -1 if size > conf.MaxImportFilesizeForCount \
                            else sum(1 for _ in sheet.iter_rows())
                     sheets.append({"rows": rows, "columns": columns, "name": sheet.title})
         finally: wb and wb.close()
