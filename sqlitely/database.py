@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.12.2020
+@modified    18.12.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -883,7 +883,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if not self.is_open(): return
         category, name = (x.lower() if x else x for x in (category, name))
 
-        schema0 = copy.deepcopy(self.schema)
+        schema0 = copy.copy(self.schema)
         if category:
             if name: self.schema[category].pop(name, None)
             else: self.schema[category].clear()
@@ -917,7 +917,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if category and name and not util.lceq(myname, name): continue # for myname
 
                 opts0 = schema0.get(mycategory, {}).get(myname, {})
-                opts["__id__"] = opts0["__id__"] if opts0 else next(self.id_counter)
+                opts["__id__"] = opts0.get("__id__") or next(self.id_counter)
 
                 # Retrieve metainfo from PRAGMA, or use previous if unchanged
                 if mycategory in ("table", "view") and opts0 and opts["sql0"] == opts0["sql0"]:
@@ -1013,8 +1013,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         result = CaselessDict()
         for myname, opts in self.schema.get(category, {}).items():
             if name and myname not in name: continue # for myname
-            result[myname] = opts
-        return copy.deepcopy(result)
+            result[myname] = copy.deepcopy(opts)
+        return result
 
 
     def get_related(self, category, name, own=None, data=False, skip=None):
@@ -1046,7 +1046,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                          "view":    ["table", "view", "trigger"]}
         if data: SUBCATEGORIES = {"view": ["table", "view"]}
             
-        item = self.get_category(category, name)
+        item = self.schema.get(category, {}).get(name)
         if not item or category not in SUBCATEGORIES or "meta" not in item:
             return result
 
@@ -1072,10 +1072,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
             skip.update({v: True for v in vv})
         for mycategory, items in result.items() if data else ():
             if mycategory not in SUBCATEGORIES: continue # for mycategory, items
-            for item in items:
-                if item["name"] in visited: continue # for item
-                visited[item["name"]] = True
-                subresult = self.get_related(mycategory, item["name"], own, data, skip)
+            for myitem in items:
+                if myitem["name"] in visited: continue # for myitem
+                visited[myitem["name"]] = True
+                subresult = self.get_related(mycategory, myitem["name"], own, data, skip)
                 for subcategory, subitemmap in subresult.items():
                     if subcategory not in result: result[subcategory] = CaselessDict()
                     result[subcategory].update(subitemmap)
