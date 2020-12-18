@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.12.2020
+@modified    18.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -9634,6 +9634,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._colour_grad1  = wx.NullColour
         self._colour_grad2  = wx.NullColour
         self._colour_dragbg = wx.NullColour
+        self._font_bold     = wx.NullFont
 
         FMTS = sorted(self.EXPORT_FORMATS.values())
         wildcard = "|".join("%s image (*.%s)|*.%s" % (x, x.lower(), x.lower())
@@ -9648,8 +9649,10 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._UpdateColours()
         self.SetVirtualSize(self.VIRTUALSZ)
         self.SetScrollRate(1, 1)
-        self.SetFont(wx.Font(self.FONT_SIZE, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
-                             wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE))
+        self.SetFont(util.memoize(wx.Font, self.FONT_SIZE, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
+                                  wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE))
+        self._font_bold = util.memoize(wx.Font, self.FONT_SIZE, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
+                                       wx.FONTWEIGHT_BOLD, faceName=self.FONT_FACE)
 
         self.Bind(wx.EVT_ERASE_BACKGROUND,    lambda x: None) # Reduces flicker
         self.Bind(wx.EVT_MOUSE_EVENTS,        self._OnMouse)
@@ -9710,10 +9713,10 @@ class SchemaDiagram(wx.ScrolledWindow):
         zoom0, viewport0 = self._zoom, self.GetViewPort()
         self._zoom = zoom
 
-        font = self.Font
-        font.PointSize = self.FONT_SIZE * zoom
-        self.Font = font
-        self.SetVirtualSize([int(x * self._zoom) for x in self.VIRTUALSZ])
+        self.SetFont(util.memoize(wx.Font, self.FONT_SIZE * zoom, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
+                                  wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE))
+        self._font_bold = util.memoize(wx.Font, self.FONT_SIZE * zoom, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
+                                       wx.FONTWEIGHT_BOLD, faceName=self.FONT_FACE)
 
         for k in ("MINW", "LINEH", "HEADERP", "HEADERH", "FOOTERH", "BRADIUS",
         "FMARGIN", "CARDINALW", "CARDINALH", "LPAD", "HPAD", "GPAD", "MOVE_STEP", "STATSH"):
@@ -10155,9 +10158,9 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._lines.clear()
         del self._order[:]
 
-        reset = any(o["__id__"] not in (x["__id__"] for x in self._db.get_category(o["category"]).values())
+        reset = any(o["__id__"] not in (x["__id__"] for x in self._db.schema.get(o["category"], {}).values())
                     for o in objs0)
-        for name1 in self._db.get_category("table"):
+        for name1 in self._db.schema.get("table", {}):
             for fk in self._db.get_keys(name1, pks_only=True)[1]:
                 name2, rname = list(fk["table"])[0], ", ".join(fk["name"])
                 key = name1, name2, tuple(n.lower() for n in fk["name"])
@@ -10165,7 +10168,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self._ids[lid] = key
                 self._lines[key] = {"id": lid, "pts": [], "name": rname}
         for category in "table", "view":
-            for name, opts in self._db.get_category(category).items():
+            for name, opts in self._db.schema.get(category, {}).items():
                 o0 = next((o for o in objs0 if o["__id__"] == opts["__id__"]), None)
                 if o0: oid = o0["id"]
                 else: oid, maxid = (maxid + 1, ) * 2
@@ -10180,7 +10183,8 @@ class SchemaDiagram(wx.ScrolledWindow):
                 if o0 and o0["name"] in sels0: self._sels[name] = oid
                 self._ids[oid] = name
                 self._objs[name] = {"id": oid, "category": category, "name": name, "stats": stats,
-                                    "__id__": opts["__id__"], "sql0": opts["sql0"], "columns": opts["columns"],
+                                    "__id__": opts["__id__"], "sql0": opts["sql0"],
+                                    "columns": copy.deepcopy(opts["columns"]),
                                     "bmp": bmp, "bmpsel": bmpsel, "bmpseldrag": bmpseldrag}
                 self._order.append(self._objs[name])
                 reset |= not o0
@@ -10609,11 +10613,14 @@ class SchemaDiagram(wx.ScrolledWindow):
         """Returns wx.Bitmap representing a schema item like table."""
         CRADIUS = self.BRADIUS if "table" == opts["type"] else 0
         w, h = self.MINW, self.HEADERH + self.HEADERP + self.FOOTERH
-        boldfont = self.Font.Bold()
+
+        memoroot = "GetFullTextExtent", self.Font.FaceName, self.Font.PointSize
+        get_extent = lambda t, f=None: util.memoize(self.GetFullTextExtent, t, f,
+                                                    __root__=memoroot)
 
         # Measure title width
         title = util.ellipsize(util.unprint(opts["name"]), self.MAX_TITLE)
-        extent = self.GetFullTextExtent(title, boldfont) # (w, h, descent, lead)
+        extent = get_extent(title, self._font_bold) # (w, h, descent, lead)
         w = max(w, extent[0] + extent[3] + 2 * self.HPAD)
 
         # Measure column text widths
@@ -10625,7 +10632,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 v = c.get(k)
                 t = util.ellipsize(util.unprint(c.get(k, "")), self.MAX_TEXT)
                 coltexts[-1].append(t)
-                if t: extent = self.GetFullTextExtent(t)
+                if t: extent = get_extent(t)
                 if t: colmax[k] = max(colmax[k], extent[0] + extent[3])
         w = max(w, self.LPAD + 2 * self.HPAD + sum(colmax.values()))
         h += self.LINEH * len(opts.get("columns") or [])
@@ -10648,7 +10655,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         bg, gradfrom = self.BackgroundColour, self.GradientColourFrom
         if dragrect:
             bg = gradfrom = self._colour_dragbg
-        dc.GradientFillLinear((0, 0, w, h), bg, self.GradientColourTo)
+        dc.GradientFillLinear((0, 0, w, h), gradfrom, self.GradientColourTo)
         dc.Pen, dc.Brush = controls.PEN(self.BorderColour), wx.TRANSPARENT_BRUSH
         dc.DrawRoundedRectangle(0, 0, w, h, CRADIUS)
         dc.Pen   = controls.PEN(bg)
@@ -10658,7 +10665,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         dc.DrawLine(0, self.HEADERH, w, self.HEADERH)
 
         # Draw title
-        dc.SetFont(boldfont)
+        dc.SetFont(self._font_bold)
         dc.DrawLabel(title, (0, 1, w, self.HEADERH), wx.ALIGN_CENTER)
 
         # Draw columns: name and type, and primary/foreign key icons
@@ -10686,10 +10693,8 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         # Draw statistics texts
         if stats:
-            font = self.Font
-            font.PointSize += self.FONT_STEP_STATS
-            dc.SetFont(font)
-
+            dc.SetFont(util.memoize(wx.Font, self.Font.PointSize + self.FONT_STEP_STATS, wx.FONTFAMILY_MODERN,
+                                    wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE))
             dx, dy = self.BRADIUS, h - self.STATSH
 
             dc.Pen = controls.PEN(self.BorderColour)
@@ -10796,6 +10801,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         tip = wx.lib.wordwrap.wordwrap("%s %s" % (
             item["category"], grammar.quote(item["name"], force=True)
         ), 400, wx.MemoryDC()) if item else ""
+        # @todo itemit saaks ka meelde jätta et mis eelmine oli, ei peaks tippi iga
+        # kord uuesti tekitama.
         if not self.ToolTip or self.ToolTip.Tip != tip:
             if self._tooltip_timer: self._tooltip_timer.Stop()
             if not tip: self.ToolTip = tip
