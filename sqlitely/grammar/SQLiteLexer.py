@@ -118,12 +118,12 @@ def serializedATN():
         buf.write(u"\3\u0095\3\u0096\3\u0096\3\u0096\3\u0096\3\u0096\3\u0097")
         buf.write(u"\3\u0097\3\u0097\3\u0097\3\u0097\3\u0097\3\u0097\3\u0097")
         buf.write(u"\3\u0098\3\u0098\3\u0098\3\u0098\3\u0098\3\u0098\3\u0099")
-        buf.write(u"\3\u0099\3\u0099\3\u0099\3\u0099\7\u0099\u050c\n\u0099")
-        buf.write(u"\f\u0099\16\u0099\u050f\13\u0099\3\u0099\3\u0099\3\u0099")
-        buf.write(u"\7\u0099\u0514\n\u0099\f\u0099\16\u0099\u0517\13\u0099")
-        buf.write(u"\3\u0099\5\u0099\u051a\n\u0099\3\u009a\3\u009a\3\u009a")
-        buf.write(u"\3\u009a\7\u009a\u0520\n\u009a\f\u009a\16\u009a\u0523")
-        buf.write(u"\13\u009a\3\u009a\3\u009a\3\u009a\3\u009a\3\u009a\7\u009a")
+        buf.write(u"\3\u0099\3\u0099\3\u0099\7\u0099\u050b\n\u0099\f\u0099")
+        buf.write(u"\16\u0099\u050e\13\u0099\3\u0099\3\u0099\3\u0099\3\u0099")
+        buf.write(u"\3\u0099\7\u0099\u0515\n\u0099\f\u0099\16\u0099\u0518")
+        buf.write(u"\13\u0099\3\u0099\5\u0099\u051b\n\u0099\3\u009a\3\u009a")
+        buf.write(u"\3\u009a\3\u009a\3\u009a\7\u009a\u0522\n\u009a\f\u009a")
+        buf.write(u"\16\u009a\u0525\13\u009a\3\u009a\3\u009a\3\u009a\7\u009a")
         buf.write(u"\u052a\n\u009a\f\u009a\16\u009a\u052d\13\u009a\3\u009a")
         buf.write(u"\5\u009a\u0530\n\u009a\3\u009b\3\u009b\3\u009b\3\u009b")
         buf.write(u"\7\u009b\u0536\n\u009b\f\u009b\16\u009b\u0539\13\u009b")
@@ -180,8 +180,8 @@ def serializedATN():
         buf.write(u"\2\u014b\2\u014d\2\u014f\2\u0151\2\u0153\2\u0155\2\u0157")
         buf.write(u"\2\u0159\2\u015b\2\u015d\2\u015f\2\u0161\2\u0163\2\u0165")
         buf.write(u"\2\u0167\2\u0169\2\u016b\2\u016d\2\u016f\2\u0171\2\u0173")
-        buf.write(u"\2\u0175\2\u0177\2\u0179\2\3\2%\3\2bb\3\2__\3\2))\3\2")
-        buf.write(u"$$\4\2--//\5\2&&<<BB\4\2\f\f\17\17\5\2\13\r\17\17\"\"")
+        buf.write(u"\2\u0175\2\u0177\2\u0179\2\3\2%\3\2))\3\2$$\3\2bb\3\2")
+        buf.write(u"__\4\2--//\5\2&&<<BB\4\2\f\f\17\17\5\2\13\r\17\17\"\"")
         buf.write(u"\3\2\62;\4\2CCcc\4\2DDdd\4\2EEee\4\2FFff\4\2GGgg\4\2")
         buf.write(u"HHhh\4\2IIii\4\2JJjj\4\2KKkk\4\2LLll\4\2MMmm\4\2NNnn")
         buf.write(u"\4\2OOoo\4\2PPpp\4\2QQqq\4\2RRrr\4\2SSss\4\2TTtt\4\2")
@@ -666,7 +666,7 @@ def serializedATN():
         buf.write(u"\2\u011f\u04cd\3\2\2\2\u0121\u04d4\3\2\2\2\u0123\u04db")
         buf.write(u"\3\2\2\2\u0125\u04e0\3\2\2\2\u0127\u04e8\3\2\2\2\u0129")
         buf.write(u"\u04ed\3\2\2\2\u012b\u04f3\3\2\2\2\u012d\u04f8\3\2\2")
-        buf.write(u"\2\u012f\u0500\3\2\2\2\u0131\u0519\3\2\2\2\u0133\u052f")
+        buf.write(u"\2\u012f\u0500\3\2\2\2\u0131\u051a\3\2\2\2\u0133\u052f")
         buf.write(u"\3\2\2\2\u0135\u0554\3\2\2\2\u0137\u0580\3\2\2\2\u0139")
         buf.write(u"\u058b\3\2\2\2\u013b\u058d\3\2\2\2\u013d\u0590\3\2\2")
         buf.write(u"\2\u013f\u059b\3\2\2\2\u0141\u05ab\3\2\2\2\u0143\u05af")
@@ -1105,37 +1105,37 @@ def serializedATN():
         buf.write(u"\5\u016d\u00b7\2\u04ff\u012e\3\2\2\2\u0500\u0501\5\u0169")
         buf.write(u"\u00b5\2\u0501\u0502\5\u0163\u00b2\2\u0502\u0503\5\u0173")
         buf.write(u"\u00ba\2\u0503\u0504\5\u0157\u00ac\2\u0504\u0505\5\u014d")
-        buf.write(u"\u00a7\2\u0505\u0130\3\2\2\2\u0506\u051a\5\u0133\u009a")
-        buf.write(u"\2\u0507\u050d\7b\2\2\u0508\u050c\n\2\2\2\u0509\u050a")
-        buf.write(u"\7b\2\2\u050a\u050c\7b\2\2\u050b\u0508\3\2\2\2\u050b")
-        buf.write(u"\u0509\3\2\2\2\u050c\u050f\3\2\2\2\u050d\u050b\3\2\2")
-        buf.write(u"\2\u050d\u050e\3\2\2\2\u050e\u0510\3\2\2\2\u050f\u050d")
-        buf.write(u"\3\2\2\2\u0510\u051a\7b\2\2\u0511\u0515\7]\2\2\u0512")
-        buf.write(u"\u0514\n\3\2\2\u0513\u0512\3\2\2\2\u0514\u0517\3\2\2")
-        buf.write(u"\2\u0515\u0513\3\2\2\2\u0515\u0516\3\2\2\2\u0516\u0518")
-        buf.write(u"\3\2\2\2\u0517\u0515\3\2\2\2\u0518\u051a\7_\2\2\u0519")
-        buf.write(u"\u0506\3\2\2\2\u0519\u0507\3\2\2\2\u0519\u0511\3\2\2")
-        buf.write(u"\2\u051a\u0132\3\2\2\2\u051b\u0521\7)\2\2\u051c\u0520")
-        buf.write(u"\n\4\2\2\u051d\u051e\7)\2\2\u051e\u0520\7)\2\2\u051f")
-        buf.write(u"\u051c\3\2\2\2\u051f\u051d\3\2\2\2\u0520\u0523\3\2\2")
-        buf.write(u"\2\u0521\u051f\3\2\2\2\u0521\u0522\3\2\2\2\u0522\u0524")
-        buf.write(u"\3\2\2\2\u0523\u0521\3\2\2\2\u0524\u0530\7)\2\2\u0525")
-        buf.write(u"\u052b\7$\2\2\u0526\u052a\n\5\2\2\u0527\u0528\7$\2\2")
-        buf.write(u"\u0528\u052a\7$\2\2\u0529\u0526\3\2\2\2\u0529\u0527\3")
-        buf.write(u"\2\2\2\u052a\u052d\3\2\2\2\u052b\u0529\3\2\2\2\u052b")
-        buf.write(u"\u052c\3\2\2\2\u052c\u052e\3\2\2\2\u052d\u052b\3\2\2")
-        buf.write(u"\2\u052e\u0530\7$\2\2\u052f\u051b\3\2\2\2\u052f\u0525")
-        buf.write(u"\3\2\2\2\u0530\u0134\3\2\2\2\u0531\u0537\7$\2\2\u0532")
-        buf.write(u"\u0536\n\5\2\2\u0533\u0534\7$\2\2\u0534\u0536\7$\2\2")
-        buf.write(u"\u0535\u0532\3\2\2\2\u0535\u0533\3\2\2\2\u0536\u0539")
-        buf.write(u"\3\2\2\2\u0537\u0535\3\2\2\2\u0537\u0538\3\2\2\2\u0538")
-        buf.write(u"\u053a\3\2\2\2\u0539\u0537\3\2\2\2\u053a\u0555\7$\2\2")
-        buf.write(u"\u053b\u0541\7b\2\2\u053c\u0540\n\2\2\2\u053d\u053e\7")
-        buf.write(u"b\2\2\u053e\u0540\7b\2\2\u053f\u053c\3\2\2\2\u053f\u053d")
-        buf.write(u"\3\2\2\2\u0540\u0543\3\2\2\2\u0541\u053f\3\2\2\2\u0541")
+        buf.write(u"\u00a7\2\u0505\u0130\3\2\2\2\u0506\u050c\7)\2\2\u0507")
+        buf.write(u"\u050b\n\2\2\2\u0508\u0509\7)\2\2\u0509\u050b\7)\2\2")
+        buf.write(u"\u050a\u0507\3\2\2\2\u050a\u0508\3\2\2\2\u050b\u050e")
+        buf.write(u"\3\2\2\2\u050c\u050a\3\2\2\2\u050c\u050d\3\2\2\2\u050d")
+        buf.write(u"\u050f\3\2\2\2\u050e\u050c\3\2\2\2\u050f\u051b\7)\2\2")
+        buf.write(u"\u0510\u0516\7$\2\2\u0511\u0515\n\3\2\2\u0512\u0513\7")
+        buf.write(u"$\2\2\u0513\u0515\7$\2\2\u0514\u0511\3\2\2\2\u0514\u0512")
+        buf.write(u"\3\2\2\2\u0515\u0518\3\2\2\2\u0516\u0514\3\2\2\2\u0516")
+        buf.write(u"\u0517\3\2\2\2\u0517\u0519\3\2\2\2\u0518\u0516\3\2\2")
+        buf.write(u"\2\u0519\u051b\7$\2\2\u051a\u0506\3\2\2\2\u051a\u0510")
+        buf.write(u"\3\2\2\2\u051b\u0132\3\2\2\2\u051c\u0530\5\u0131\u0099")
+        buf.write(u"\2\u051d\u0523\7b\2\2\u051e\u0522\n\4\2\2\u051f\u0520")
+        buf.write(u"\7b\2\2\u0520\u0522\7b\2\2\u0521\u051e\3\2\2\2\u0521")
+        buf.write(u"\u051f\3\2\2\2\u0522\u0525\3\2\2\2\u0523\u0521\3\2\2")
+        buf.write(u"\2\u0523\u0524\3\2\2\2\u0524\u0526\3\2\2\2\u0525\u0523")
+        buf.write(u"\3\2\2\2\u0526\u0530\7b\2\2\u0527\u052b\7]\2\2\u0528")
+        buf.write(u"\u052a\n\5\2\2\u0529\u0528\3\2\2\2\u052a\u052d\3\2\2")
+        buf.write(u"\2\u052b\u0529\3\2\2\2\u052b\u052c\3\2\2\2\u052c\u052e")
+        buf.write(u"\3\2\2\2\u052d\u052b\3\2\2\2\u052e\u0530\7_\2\2\u052f")
+        buf.write(u"\u051c\3\2\2\2\u052f\u051d\3\2\2\2\u052f\u0527\3\2\2")
+        buf.write(u"\2\u0530\u0134\3\2\2\2\u0531\u0537\7$\2\2\u0532\u0536")
+        buf.write(u"\n\3\2\2\u0533\u0534\7$\2\2\u0534\u0536\7$\2\2\u0535")
+        buf.write(u"\u0532\3\2\2\2\u0535\u0533\3\2\2\2\u0536\u0539\3\2\2")
+        buf.write(u"\2\u0537\u0535\3\2\2\2\u0537\u0538\3\2\2\2\u0538\u053a")
+        buf.write(u"\3\2\2\2\u0539\u0537\3\2\2\2\u053a\u0555\7$\2\2\u053b")
+        buf.write(u"\u0541\7b\2\2\u053c\u0540\n\4\2\2\u053d\u053e\7b\2\2")
+        buf.write(u"\u053e\u0540\7b\2\2\u053f\u053c\3\2\2\2\u053f\u053d\3")
+        buf.write(u"\2\2\2\u0540\u0543\3\2\2\2\u0541\u053f\3\2\2\2\u0541")
         buf.write(u"\u0542\3\2\2\2\u0542\u0544\3\2\2\2\u0543\u0541\3\2\2")
         buf.write(u"\2\u0544\u0555\7b\2\2\u0545\u0549\7]\2\2\u0546\u0548")
-        buf.write(u"\n\3\2\2\u0547\u0546\3\2\2\2\u0548\u054b\3\2\2\2\u0549")
+        buf.write(u"\n\5\2\2\u0547\u0546\3\2\2\2\u0548\u054b\3\2\2\2\u0549")
         buf.write(u"\u0547\3\2\2\2\u0549\u054a\3\2\2\2\u054a\u054c\3\2\2")
         buf.write(u"\2\u054b\u0549\3\2\2\2\u054c\u0555\7_\2\2\u054d\u0551")
         buf.write(u"\t%\2\2\u054e\u0550\t&\2\2\u054f\u054e\3\2\2\2\u0550")
@@ -1170,7 +1170,7 @@ def serializedATN():
         buf.write(u"\u0586\3\2\2\2\u0589\u058a\t\7\2\2\u058a\u058c\5\u0135")
         buf.write(u"\u009b\2\u058b\u0582\3\2\2\2\u058b\u0589\3\2\2\2\u058c")
         buf.write(u"\u013a\3\2\2\2\u058d\u058e\5\u0175\u00bb\2\u058e\u058f")
-        buf.write(u"\5\u0133\u009a\2\u058f\u013c\3\2\2\2\u0590\u0591\7/\2")
+        buf.write(u"\5\u0131\u0099\2\u058f\u013c\3\2\2\2\u0590\u0591\7/\2")
         buf.write(u"\2\u0591\u0592\7/\2\2\u0592\u0596\3\2\2\2\u0593\u0595")
         buf.write(u"\n\b\2\2\u0594\u0593\3\2\2\2\u0595\u0598\3\2\2\2\u0596")
         buf.write(u"\u0594\3\2\2\2\u0596\u0597\3\2\2\2\u0597\u0599\3\2\2")
@@ -1204,8 +1204,8 @@ def serializedATN():
         buf.write(u"\2\u05dd\u05de\t \2\2\u05de\u0172\3\2\2\2\u05df\u05e0")
         buf.write(u"\t!\2\2\u05e0\u0174\3\2\2\2\u05e1\u05e2\t\"\2\2\u05e2")
         buf.write(u"\u0176\3\2\2\2\u05e3\u05e4\t#\2\2\u05e4\u0178\3\2\2\2")
-        buf.write(u"\u05e5\u05e6\t$\2\2\u05e6\u017a\3\2\2\2#\2\u050b\u050d")
-        buf.write(u"\u0515\u0519\u051f\u0521\u0529\u052b\u052f\u0535\u0537")
+        buf.write(u"\u05e5\u05e6\t$\2\2\u05e6\u017a\3\2\2\2#\2\u050a\u050c")
+        buf.write(u"\u0514\u0516\u051a\u0521\u0523\u052b\u052f\u0535\u0537")
         buf.write(u"\u053f\u0541\u0549\u0551\u0554\u0559\u055f\u0562\u0566")
         buf.write(u"\u056b\u056d\u0573\u0577\u057c\u057e\u0580\u0586\u058b")
         buf.write(u"\u0596\u05a1\u05a7\4\2\4\2\2\3\2")
@@ -1369,8 +1369,8 @@ class SQLiteLexer(Lexer):
     K_WITH = 149
     K_WITHOUT = 150
     C_ROWID = 151
-    ENCLOSED_IDENTIFIER = 152
-    STRING_LITERAL = 153
+    STRING_LITERAL = 152
+    ENCLOSED_IDENTIFIER = 153
     IDENTIFIER = 154
     NUMERIC_LITERAL = 155
     BIND_PARAMETER = 156
@@ -1418,8 +1418,8 @@ class SQLiteLexer(Lexer):
             u"K_TEMPORARY", u"K_THEN", u"K_TO", u"K_TRANSACTION", u"K_TRIGGER", 
             u"K_UNION", u"K_UNIQUE", u"K_UPDATE", u"K_USING", u"K_TRUE", 
             u"K_VACUUM", u"K_VALUES", u"K_VIEW", u"K_VIRTUAL", u"K_WHEN", 
-            u"K_WHERE", u"K_WITH", u"K_WITHOUT", u"C_ROWID", u"ENCLOSED_IDENTIFIER", 
-            u"STRING_LITERAL", u"IDENTIFIER", u"NUMERIC_LITERAL", u"BIND_PARAMETER", 
+            u"K_WHERE", u"K_WITH", u"K_WITHOUT", u"C_ROWID", u"STRING_LITERAL", 
+            u"ENCLOSED_IDENTIFIER", u"IDENTIFIER", u"NUMERIC_LITERAL", u"BIND_PARAMETER", 
             u"BLOB_LITERAL", u"SINGLE_LINE_COMMENT", u"MULTILINE_COMMENT", 
             u"SPACES", u"UNEXPECTED_CHAR" ]
 
@@ -1454,7 +1454,7 @@ class SQLiteLexer(Lexer):
                   u"K_TO", u"K_TRANSACTION", u"K_TRIGGER", u"K_UNION", u"K_UNIQUE", 
                   u"K_UPDATE", u"K_USING", u"K_TRUE", u"K_VACUUM", u"K_VALUES", 
                   u"K_VIEW", u"K_VIRTUAL", u"K_WHEN", u"K_WHERE", u"K_WITH", 
-                  u"K_WITHOUT", u"C_ROWID", u"ENCLOSED_IDENTIFIER", u"STRING_LITERAL", 
+                  u"K_WITHOUT", u"C_ROWID", u"STRING_LITERAL", u"ENCLOSED_IDENTIFIER", 
                   u"IDENTIFIER", u"NUMERIC_LITERAL", u"BIND_PARAMETER", 
                   u"BLOB_LITERAL", u"SINGLE_LINE_COMMENT", u"MULTILINE_COMMENT", 
                   u"SPACES", u"UNEXPECTED_CHAR", u"DIGIT", u"A", u"B", u"C", 

@@ -866,15 +866,15 @@ K_WITHOUT : W I T H O U T;
 
 C_ROWID : R O W I D;
 
+STRING_LITERAL
+ : '\'' (~'\'' | '\'\'')* '\''
+ | '"'  (~'"'  | '""'  )* '"'
+ ;
+
 ENCLOSED_IDENTIFIER
  : STRING_LITERAL
  | '`' (~'`' | '``')* '`'
  | '[' ~']'* ']'
- ;
-
-STRING_LITERAL
- : '\'' (~'\'' | '\'\'')* '\''
- | '"'  (~'"'  | '""'  )* '"'
  ;
 
 IDENTIFIER
