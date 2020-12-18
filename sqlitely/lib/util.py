@@ -8,12 +8,13 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.11.2020
+@modified    18.12.2020
 ------------------------------------------------------------------------------
 """
 import __builtin__
 import collections
 import contextlib
+import copy
 import ctypes
 import datetime
 import htmlentitydefs
@@ -26,6 +27,7 @@ import re
 import struct
 import subprocess
 import sys
+import threading
 import time
 import urllib
 import warnings
@@ -162,6 +164,107 @@ class tzinfo_utc(datetime.tzinfo):
 UTC = tzinfo_utc() # UTC timezone singleton
 
 
+
+def hashable(x):
+    """Returns whether object is hashable."""
+    KNOWN = basestring, int, long, float, bool, type(None), datetime.date, datetime.time
+    if isinstance(x, KNOWN): return True
+    if isinstance(x, tuple): return all(hashable(y) for y in x)
+    try: hash(x)
+    except TypeError: return False
+    return True
+
+
+def memoize(*args, **kwargs):
+    """
+    Returns function result, cached if available, caches result otherwise.
+
+    If invoked with no arguments or only recognized arguments,
+    acts as function decorator, returning cache wrapper function;
+    if with recognized arguments, returns outer decorator which returns wrapper.
+
+    @param   args        (function, ?arg1, ..) or () if argumented decorator
+    @param   __root__    cache root to use if not function,
+                         must be a hashable scalar or a list/tuple of hashables
+    @param   __nohash__  whether arguments can be unhashable,
+                         checks unhashable arguments by equality instead
+    """
+    func, root, nohash, ns = None, [], False, locals()
+    # {root: {(args): value or [((unhashable args), value)]}}
+    cache = getattr(memoize, "cache", None)
+    if cache is None:
+        cache = collections.defaultdict(dict)
+        setattr(memoize, "cache", cache)
+
+
+    def decorate(func):
+        ns.update(func=func)
+        result = nohashget if nohash else hashget
+        result.__module__ = func.__module__
+        result.__name__ = func.__name__
+        result.__doc__  = func.__doc__ or ""
+        result.__doc__  += "\n\nDecorated with %s.memoize()." % __name__
+        return result
+
+    def outer(func):
+        """Outer decorator, returns function wrapper."""
+        root.append(func)
+        return decorate(func)
+
+    def nohashget(*args, **kwargs):
+        """
+        Looks up by hashable args as far as possible,
+        finishes with checking unhashables by equality.
+        """
+        key1, key2 = [], []
+        for arg in args + tuple(kwargs.items()):
+            (key1 if hashable(arg) else key2).append(arg)
+        tuples = cache[tuple(root)].setdefault(tuple(key1), [])
+        for mykey, value in tuples:
+            if not key2 and not mykey:
+                return copy.deepcopy(value)
+            for k1, k2 in zip(key2, mykey):
+                if type(k1) is type(k2) and k1 == k2:
+                    return copy.deepcopy(value)
+        value = ns["func"](*args, **kwargs)
+        tuples.append((key2, value))
+        return value
+
+    def hashget(*args, **kwargs):
+        key = args + tuple(kwargs.items())
+        mycache = cache[tuple(root)]
+        if key in mycache:
+            return copy.deepcopy(mycache[key])
+        mycache[key] = ns["func"](*args, **kwargs)
+        return mycache[key]
+
+
+    as_outer = not args and ("__nohash__" in kwargs or "__root__" in kwargs)
+    if "__nohash__" in kwargs: nohash = kwargs.pop("__nohash__")
+    if "__root__"   in kwargs: root   = kwargs.pop("__root__")
+    if as_outer and kwargs:
+        raise TypeError("memoize() got an unexpected keyword argument '%s'" % 
+                        next(iter(kwargs)))
+
+    if root not in (None, []):
+        if isinstance(root, tuple): root = list(root)
+        elif not isinstance(root, list): root = [root]
+
+    if not as_outer:
+        func, args = args[0], args[1:]
+        if root == []: root = [func]
+
+    if as_outer: return outer # Argumented decorator
+    elif not args and not kwargs: return decorate(func) # Plain decorator
+    else: # Straight invocation
+        if nohash: return nohashget(*args, **kwargs)
+        else:
+            key = tuple(root) + args + tuple(kwargs.items())
+            if key not in cache: cache[key] = func(*args, **kwargs)
+            return cache[key]
+
+
+@memoize
 def parse_datetime(s):
     """
     Tries to parse string as ISO8601 datetime, returns input on error.
@@ -187,6 +290,7 @@ def parse_datetime(s):
     return result
 
 
+@memoize
 def parse_date(s):
     """
     Tries to parse string as date, returns input on error.
@@ -210,6 +314,7 @@ def parse_date(s):
     return s
 
 
+@memoize
 def parse_time(s):
     """
     Tries to parse string as time, returns input on error.
@@ -296,6 +401,7 @@ def safe_filename(filename):
     return re.sub(r"[\/\\\:\*\?\"\<\>\|\x00-\x1f]", "", filename)
 
 
+@memoize
 def unprint(s, escape=True):
     """Returns string with unprintable characters escaped or stripped."""
     enc = "unicode_escape" if isinstance(s, unicode) else "string_escape"
@@ -313,6 +419,7 @@ def html_escape(v):
     return re.sub("[%s]" % "".join(patterns), subst, v)
 
 
+@memoize
 def format_bytes(size, precision=2, max_units=True, with_units=True):
     """
     Returns a formatted byte size (e.g. "421.45 MB" or "421,451,273 bytes").
@@ -411,22 +518,22 @@ def count(items, unit=None, key="count", suf=""):
     return result
 
 
-def try_until(func, count=1, sleep=0.5):
+def try_until(func, limit=1, sleep=0.5):
     """
     Tries to execute the specified function a number of times.
 
     @param    func   callable to execute
-    @param    count  number of times to try (default 1)
+    @param    limit  number of times to try (default 1)
     @param    sleep  seconds to sleep after failed attempts, if any
                      (default 0.5)
     @return          (True, func_result) if success else (False, None)
     """
     result, func_result, tries = False, None, 0
-    while tries < count:
+    while tries < limit:
         tries += 1
         try: result, func_result = True, func()
         except Exception:
-            time.sleep(sleep) if tries < count and sleep else None
+            time.sleep(sleep) if tries < limit and sleep else None
     return result, func_result
 
 
@@ -648,6 +755,7 @@ def tuplefy(value):
            else tuple(value) if isinstance(value, list) else (value, )
 
 
+@memoize
 def lceq(a, b):
     """Returns whether x and y are caselessly equal."""
     a, b = (x if isinstance(x, basestring) else "" if x is None else str(x)
@@ -749,6 +857,7 @@ def to_unicode(value, encoding=None):
     return result
 
 
+@memoize
 def ellipsize(text, limit=50, front=False, ellipsis=".."):
     """
     Returns text ellipsized if beyond limit.
@@ -760,8 +869,9 @@ def ellipsize(text, limit=50, front=False, ellipsis=".."):
     @param   ellipsis  the ellipsis string to use
     """
     if type(text) not in (str, unicode): text = to_unicode(text)
-    if front: return (ellipsis + text[-limit + len(ellipsis):]) if len(text) > limit else text
-    return (text[:limit - len(ellipsis)] + ellipsis) if len(text) > limit else text
+    if len(text) <= limit: return text
+    if front: return (ellipsis + text[-limit + len(ellipsis):])
+    else:     return (text[:limit - len(ellipsis)] + ellipsis)
 
 
 def longpath(path):
