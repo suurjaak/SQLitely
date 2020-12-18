@@ -2523,7 +2523,6 @@ class DatabasePage(wx.Panel):
 
         try:
             self.load_data()
-            guibase.status("Opened database %s." % db)
         finally:
             busy.Close()
         wx_accel.accelerate(self)
@@ -6028,12 +6027,26 @@ class DatabasePage(wx.Panel):
 
         self.db.populate_schema(count=True)
         self.update_tabheader()
+        wx.YieldIfNeeded()
+        if not self: return
         self.load_tree_data()
+        wx.YieldIfNeeded()
+        if not self: return
         self.update_info_panel()
+        wx.YieldIfNeeded()
+        if not self: return
         self.diagram.Populate()
+        wx.YieldIfNeeded()
+        if not self: return
         self.populate_diagram_finder()
+        wx.YieldIfNeeded()
+        if not self: return
         self.diagram.SetOptions(conf.SchemaDiagrams.get(self.db.filename))
+        wx.YieldIfNeeded()
+        if not self: return
         self.update_diagram_controls()
+        wx.YieldIfNeeded()
+        if not self: return
         if not any(self.diagram.IsVisible(n) for c in ("table", "view")
                    for n in self.db.schema[c]):
             self.diagram.Scroll(0, 0)
@@ -6045,10 +6058,22 @@ class DatabasePage(wx.Panel):
         """Reloads database schema and refreshes relevant controls"""
         if not self: return
         self.db.populate_schema(count=count, parse=parse)
-        self.load_tree_data()
+        wx.YieldIfNeeded()
+        if not self: return
+        self.load_tree_data() # @todo esimesel loadil pole vist vaja?
+        wx.YieldIfNeeded()
+        if not self: return
         self.load_tree_schema()
+        wx.YieldIfNeeded()
+        if not self: return
         self.on_update_stc_schema()
+        wx.YieldIfNeeded()
+        if not self: return
+        import cProfile
+        self.prof = cProfile.Profile()
+        self.prof.enable()
         self.diagram.Populate()
+        self.prof.disable()
         self.populate_diagram_finder()
         self.cb_diagram_rels.Enable()
         self.cb_diagram_labels.Enable(self.cb_diagram_rels.Value)
