@@ -27,8 +27,8 @@ import wx
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.2.dev97"
-VersionDate = "18.12.2020"
+Version = "1.2.dev98"
+VersionDate = "19.12.2020"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable

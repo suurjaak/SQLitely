@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.12.2020
+@modified    19.12.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -669,7 +669,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         self.locks[category][name].add(key)
         self.locklabels[key] = label
         if category and name:
-            relateds = self.get_related(category, name, data=True)
+            relateds = self.get_related(category, name, data=True, clone=False)
             if not relateds: return
             subkey = (hash(key), category, name)
             for subcategory, itemmap in relateds.items():
@@ -686,7 +686,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         self.locklabels.pop(key, None)
         if category and name:
             subkey = (hash(key), category, name)
-            relateds = self.get_related(category, name, data=True)
+            relateds = self.get_related(category, name, data=True, clone=False)
             for subcategory, itemmap in relateds.items():
                 for subname in (x.lower() for x in itemmap):
                     self.locks[subcategory][subname].discard(subkey)
@@ -1017,26 +1017,27 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
-    def get_related(self, category, name, own=None, data=False, skip=None):
+    def get_related(self, category, name, own=None, data=False, skip=None, clone=True):
         """
         Returns database objects related to specified object in any way,
         like triggers selecting from a view,
         as {category: CaselessDict({name: item, })}.
 
-        @param   own   if true, returns only direct ownership relations,
-                       like table's own indexes and triggers for table,
-                       view's own triggers for views,
-                       index's own table for index,
-                       and trigger's own table or view for triggers;
-                       if False, returns only indirectly associated items,
-                       like tables and views and triggers for tables and views
-                       that query them in view or trigger body,
-                       also foreign tables for tables;
-                       if None, returns all relations
-        @param   data  whether to return cascading data dependency
-                       relations: for views, the tables and views they query,
-                       recursively
-        @param   skip  CaselessDict{name: True} to skip (internal recursion helper)
+        @param   own    if true, returns only direct ownership relations,
+                        like table's own indexes and triggers for table,
+                        view's own triggers for views,
+                        index's own table for index,
+                        and trigger's own table or view for triggers;
+                        if False, returns only indirectly associated items,
+                        like tables and views and triggers for tables and views
+                        that query them in view or trigger body,
+                        also foreign tables for tables;
+                        if None, returns all relations
+        @param   data   whether to return cascading data dependency
+                        relations: for views, the tables and views they query,
+                        recursively
+        @param   skip   CaselessDict{name: True} to skip (internal recursion helper)
+        @param   clone  whether to return copies of data
         """
         category, name = category.lower(), name.lower()
         result, skip = CaselessDict(), (skip or CaselessDict({name: True}))
@@ -1065,7 +1066,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     continue # for subname, subitem
 
                 if subcategory not in result: result[subcategory] = CaselessDict()
-                result[subcategory][subname] = copy.deepcopy(subitem)
+                result[subcategory][subname] = copy.deepcopy(subitem) if clone else subitem
 
         visited = CaselessDict()
         for vv in result.values() if data else ():
@@ -1075,7 +1076,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             for myitem in items:
                 if myitem["name"] in visited: continue # for myitem
                 visited[myitem["name"]] = True
-                subresult = self.get_related(mycategory, myitem["name"], own, data, skip)
+                subresult = self.get_related(mycategory, myitem["name"], own, data, skip, clone)
                 for subcategory, subitemmap in subresult.items():
                     if subcategory not in result: result[subcategory] = CaselessDict()
                     result[subcategory].update(subitemmap)
@@ -1116,7 +1117,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             if grammar.SQL.PRIMARY_KEY == c["type"]:
                 names = tuple(x["name"] for x in c["key"])
                 mykeys[names] = {"name": names, "pk": {}}
-        relateds = {} if pks_only else self.get_related("table", table, False)
+        relateds = {} if pks_only else self.get_related("table", table, own=False, clone=False)
         for name2, item2 in relateds.get("table", {}).items():
             for fk in [x for x in get_fks(item2) if table in x["table"]]:
                 keys = fk["table"][table]
@@ -1553,7 +1554,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         category, reloads = category.lower(), defaultdict(set) # {category: [name, ]}
         reloads[category].add(newname)
-        for subcategory, submap in self.get_related(category, oldname).items():
+        for subcategory, submap in self.get_related(category, oldname, clone=False).items():
             for subname, subitem in submap.items():
                 reloads[subcategory].add(subname)
 
@@ -1581,7 +1582,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         if "view" == category:
             used = util.CaselessDict()
-            for mycategory, itemmap in self.get_related(category, name).items():
+            for mycategory, itemmap in self.get_related(category, name, clone=False).items():
                 for myitem in itemmap.values():
                     # Re-create triggers and views that use this view
                     is_view_trigger = "trigger" == mycategory and util.lceq(myitem["meta"]["table"], name)
@@ -1593,7 +1594,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     if "view" != mycategory: continue # for myitem
 
                     # Re-create view triggers
-                    for subitem in self.get_related("view", myitem["name"], own=True).get("trigger", {}).values():
+                    for subitem in self.get_related("view", myitem["name"], own=True, clone=False).get("trigger", {}).values():
                         if subitem["name"] in used: continue # for subitem
                         sql, _ = grammar.transform(subitem["sql"], renames=renames)
                         data.setdefault(subitem["type"], []).append(dict(subitem, sql=sql))
@@ -1641,7 +1642,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             ), category="ALTER TABLE")
         else:
             fks_on = self.execute("PRAGMA foreign_keys", log=False).fetchone().values()[0]
-            args = self.get_complex_alter_args(item, item, {"column": {table: {name: name2}}})
+            args = self.get_complex_alter_args(item, item, {"column": {table: {name: name2}}}, clone=False)
             altersql, err = grammar.generate(dict(args, fks=fks_on))
         if err: raise Exception(err)
 
@@ -1656,7 +1657,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             self.notify_rename("table", table, table)
 
 
-    def get_complex_alter_args(self, item1, item2, renames, drops=None):
+    def get_complex_alter_args(self, item1, item2, renames, drops=None, clone=True):
         """
         Returns arguments for a complex ALTER TABLE operation, as {
             __type__:  "COMPLEX ALTER TABLE"
@@ -1675,6 +1676,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         @param   item2    new table item as {name, sql, meta, ..}
         @param   renames  {?table: {old: new}, ?column: {table: {oldcol: newcol}}}
         @param   drops    dropped columns as [name, ], if any
+        @param   clone    whether to make copies of data
         """
         name1, name2 = item1["name"], item2["name"]
 
@@ -1699,7 +1701,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
 
         items_processed = set([name1])
-        for category, itemmap in self.get_related("table", name1).items():
+        for category, itemmap in self.get_related("table", name1, clone=clone).items():
             for relitem in itemmap.values():
                 if relitem["name"] in items_processed: continue # for relitem
                 items_processed.add(relitem["name"])
@@ -1749,11 +1751,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 args.setdefault(category, []).append(myitem)
                 if category not in ("table", "view"): continue # for relitem
 
-                subrelateds = self.get_related(category, relitem["name"], own=True)
+                subrelateds = self.get_related(category, relitem["name"], own=True, clone=clone)
                 if "table" == category:
                     # Views need recreating, as SQLite can raise "no such table" error
                     # otherwise when dropping the old table.
-                    others = self.get_related(category, relitem["name"], own=False)
+                    others = self.get_related(category, relitem["name"], own=False, clone=clone)
                     if "view" in others: subrelateds["view"] = others["view"]
                 for subcategory, subitemmap in subrelateds.items():
                     for subitem in subitemmap.values():
