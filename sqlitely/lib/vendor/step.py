@@ -30,6 +30,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ------------------------------------------------------------------------------
 
 Supplemented with escape and collapse and newline and unbuffered options,
+and caching compiled code objects,
 by Erki Suurjaak.
 """
 
@@ -38,7 +39,8 @@ import re
 
 class Template(object):
 
-    COMPILED_TEMPLATES = {} # {(template string, compile options): code object}
+    TRANSPILED_TEMPLATES = {} # {(template string, compile options): compilable code string}
+    COMPILED_TEMPLATES   = {} # {compilable code string: code object}
     # Regex for stripping all leading, trailing and interleaving whitespace (line-based).
     RE_STRIP = re.compile("(^[ \t]+|[ \t]+$|(?<=[ \t])[ \t]+|\A[\r\n]+|[ \t\r\n]+\Z)", re.M)
 
@@ -50,11 +52,16 @@ class Template(object):
         self.builtins = {"escape": escape_html,
                          "setopt": lambda k, v: self.options.update({k: v}), }
         cache_key = (template, bool(escape))
-        if cache_key in Template.COMPILED_TEMPLATES:
-            self.code = Template.COMPILED_TEMPLATES[cache_key]
+        if cache_key in Template.TRANSPILED_TEMPLATES:
+            source = Template.TRANSPILED_TEMPLATES[cache_key]
         else:
-            self.code = self._process(self._preprocess(self.template))
-            Template.COMPILED_TEMPLATES[cache_key] = self.code
+            source = self._process(self._preprocess(self.template))
+            Template.TRANSPILED_TEMPLATES[cache_key] = source
+        if source in Template.COMPILED_TEMPLATES:
+            self.code = Template.COMPILED_TEMPLATES[source]
+        else:
+            self.code = compile(source, "<string>", "exec")
+            Template.COMPILED_TEMPLATES[source] = self.code
 
     def expand(self, namespace={}, **kw):
         """Return the expanded template string"""
@@ -63,7 +70,7 @@ class Template(object):
         namespace["echo"]  = lambda s: output.append(s)
         namespace["isdef"] = lambda v: v in namespace
 
-        eval(compile(self.code, "<string>", "exec"), namespace)
+        eval(self.code, namespace)
         return self._postprocess("".join(map(to_unicode, output)))
 
     def stream(self, buffer, namespace={}, encoding="utf-8", newline="\r\n",
@@ -89,7 +96,7 @@ class Template(object):
         namespace["echo"]  = write_buffer
         namespace["isdef"] = lambda v: v in namespace
 
-        eval(compile(self.code, "<string>", "exec"), namespace)
+        eval(self.code, namespace)
         write_buffer("", flush=True) # Flush any last cached bytes
 
     def _preprocess(self, template):
