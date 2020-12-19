@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.12.2020
+@modified    19.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -722,7 +722,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         result = False
         refresh_idxs, reload_idxs = [], []
         pks = [y for x in self.db.get_keys(self.name, True)[0] for y in x["name"]]
-        rels = self.db.get_related("table", self.name, own=True)
+        rels = self.db.get_related("table", self.name, own=True, clone=False)
         actions = {x["meta"].get("action"): True for x in rels.get("trigger", {}).values()}
 
         try:
@@ -790,7 +790,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         @return            refreshed row data
         """
         pks = [y for x in self.db.get_keys(self.name, True)[0] for y in x["name"]]
-        rels = self.db.get_related("table", self.name, own=True)
+        rels = self.db.get_related("table", self.name, own=True, clone=False)
         actions = {x["meta"].get("action"): True for x in rels.get("trigger", {}).values()}
         refresh = False
 
@@ -2613,7 +2613,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         menu.Append(item_drop)
 
         if "table" == self._category:
-            if "index" not in self._db.get_related("table", self._item["name"], own=True):
+            if "index" not in self._db.get_related("table", self._item["name"], own=True, clone=False):
                 item_reindex.Enable(False)
             if not self._grid.Table.GetNumberRows(total=True):
                 item_truncate.Enable(False)
@@ -4330,7 +4330,7 @@ class SchemaObjectPage(wx.Panel):
             if util.lceq(old["name"], new["name"]): # Case changed
                 can_simple = False
             else:
-                rels = self._db.get_related("table", old["name"])
+                rels = self._db.get_related("table", old["name"], clone=False)
                 # No indirect relations from other tables or views or triggers
                 can_simple = not ("view" in rels or any(
                     not util.lceq(old["name"], x["name"])
@@ -5761,7 +5761,7 @@ class SchemaObjectPage(wx.Panel):
             item_reindex = wx.MenuItem(menu, -1, "Reindex")
             menu.Append(item_reindex)
             item_reindex.Enable("index" == self._category or "index" in self._db.get_related(
-                self._category, self._item["name"], own=True))
+                self._category, self._item["name"], own=True, clone=False))
             menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(reindex=True), item_reindex)
         if self._category in ("table", ):
             item_truncate = wx.MenuItem(menu, -1, "Truncate")
@@ -9609,7 +9609,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         super(SchemaDiagram, self).__init__(parent, *args, **kwargs)
         self._db    = db
         self._ids   = {} # {DC ops ID: name or (name1, name2, (cols)) or None}
-        self._objs  = util.CaselessDict() # {name: {id, category, name, bmp, bmpsel, bmpseldrag, stats, sql0, columns, __id__}}
+        self._objs  = util.CaselessDict() # {name: {id, category, name, bmp, bmpsel, bmparea, stats, sql0, columns, __id__}}
         self._lines = util.CaselessDict() # {(name1, name2, (cols)): {id, pts}}
         self._sels  = util.CaselessDict(insertorder=True) # {name selected: DC ops ID}
         self._order = []   # Draw order [{obj dict}, ] selected items at end
@@ -9727,10 +9727,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         for o in self._objs.values():
             opts = self._db.get_category(o["category"], o["name"])            
             stats = self._GetItemStats(opts)
-            bmp = self._MakeItemBitmap(opts, stats)
-            bmpsel = self._MakeFocusedBitmap(opts, bmp)
-            bmpseldrag = self._MakeFocusedBitmap(opts, self._MakeItemBitmap(opts, stats, dragrect=True))
-            o.update(bmp=bmp, bmpsel=bmpsel, bmpseldrag=bmpseldrag, stats=stats)
+            bmp, bmpsel, bmparea = self._MakeItemBitmaps(opts, stats)
+            o.update(bmp=bmp, bmpsel=bmpsel, bmparea=bmparea, stats=stats)
             r = self._dc.GetIdBounds(o["id"])
             pt = [v * zoom / zoom0 for v in r.TopLeft]
             self._dc.SetIdBounds(o["id"], wx.Rect(wx.Point(pt), bmp.Size))
@@ -10175,17 +10173,15 @@ class SchemaDiagram(wx.ScrolledWindow):
                 stats, stats0 = self._GetItemStats(opts), (o0 or {}).get("stats")
                 if o0 and o0["sql0"] == opts["sql0"] \
                 and o0["columns"] == opts["columns"] and stats == stats0:
-                    bmp, bmpsel, bmpseldrag = map(o0.get, ("bmp", "bmpsel", "bmpseldrag"))
+                    bmp, bmpsel, bmparea = map(o0.get, ("bmp", "bmpsel", "bmparea"))
                 else:
-                    bmp = self._MakeItemBitmap(opts, stats)
-                    bmpsel = self._MakeFocusedBitmap(opts, bmp)
-                    bmpseldrag = self._MakeFocusedBitmap(opts, self._MakeItemBitmap(opts, stats, dragrect=True))
+                    bmp, bmpsel, bmparea = self._MakeItemBitmaps(opts, stats)
                 if o0 and o0["name"] in sels0: self._sels[name] = oid
                 self._ids[oid] = name
                 self._objs[name] = {"id": oid, "category": category, "name": name, "stats": stats,
                                     "__id__": opts["__id__"], "sql0": opts["sql0"],
                                     "columns": copy.deepcopy(opts["columns"]),
-                                    "bmp": bmp, "bmpsel": bmpsel, "bmpseldrag": bmpseldrag}
+                                    "bmp": bmp, "bmpsel": bmpsel, "bmparea": bmparea}
                 self._order.append(self._objs[name])
                 reset |= not o0
 
@@ -10221,9 +10217,8 @@ class SchemaDiagram(wx.ScrolledWindow):
             if not opts: self._objs.pop(o["name"])
             if not opts: continue # for o
             stats = o["stats"] = self._GetItemStats(opts)
-            o["bmp"] = self._MakeItemBitmap(opts, stats)
-            o["bmpsel"] = self._MakeFocusedBitmap(opts, o["bmp"])
-            o["bmpseldrag"] = self._MakeFocusedBitmap(opts, self._MakeItemBitmap(opts, stats, dragrect=True))
+            bmp, bmpsel, bmparea = self._MakeItemBitmaps(opts, stats)
+            o.update(bmp=bmp, bmpsel=bmpsel, bmparea=bmparea)
             r = self._dc.GetIdBounds(o["id"])
             self._dc.SetIdBounds(o["id"], wx.Rect(r.TopLeft, o["bmp"].Size))
         self.RecordSelectionRect()
@@ -10247,7 +10242,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         bounds = bounds or self._dc.GetIdBounds(o["id"])
         self._dc.RemoveId(o["id"])
         self._dc.SetId(o["id"])
-        bmp = o[("bmpseldrag" if self._dragrect else "bmpsel") if o["name"] in self._sels else "bmp"]
+        bmp = o[("bmparea" if self._dragrect else "bmpsel") if o["name"] in self._sels else "bmp"]
         pos = [a - (o["name"] in self._sels) * 2 * self._zoom for a in bounds[:2]]
         self._dc.DrawBitmap(bmp, pos, useMask=True)
         self._dc.SetIdBounds(o["id"], wx.Rect(bounds.TopLeft, o["bmp"].Size))
@@ -10609,8 +10604,12 @@ class SchemaDiagram(wx.ScrolledWindow):
         return stats
 
 
-    def _MakeItemBitmap(self, opts, stats=None, dragrect=False):
-        """Returns wx.Bitmap representing a schema item like table."""
+    def _MakeItemBitmaps(self, opts, stats=None):
+        """
+        Returns three wx.Bitmaps representing a schema item like table.
+
+        @return   (default bitmap, focused bitmap, bitmap inside drag rectangle)
+        """
         CRADIUS = self.BRADIUS if "table" == opts["type"] else 0
         w, h = self.MINW, self.HEADERH + self.HEADERP + self.FOOTERH
 
@@ -10638,108 +10637,130 @@ class SchemaDiagram(wx.ScrolledWindow):
         h += self.LINEH * len(opts.get("columns") or [])
         if stats: h += self.STATSH - self.FOOTERH
 
-        # Make transparency mask for excluding content outside rounded corners
-        bmp = wx.Bitmap(w, h)
-        mdc = wx.MemoryDC(bmp)
-        mdc.Background = wx.TRANSPARENT_BRUSH
-        mdc.Clear()
-        mdc.Pen, mdc.Brush = wx.RED_PEN, wx.RED_BRUSH
-        mdc.DrawRoundedRectangle(0, 0, bmp.Width, bmp.Height, CRADIUS)
-        del mdc
-        mask = wx.Mask(bmp, wx.TRANSPARENT_BRUSH.Colour)
-
-        dc = wx.MemoryDC(bmp)
-        dc.TextForeground = self.ForegroundColour
-
-        # Fill header and footer gradient, draw separators, make blank middle
-        bg, gradfrom = self.BackgroundColour, self.GradientColourFrom
-        if dragrect:
-            bg = gradfrom = self._colour_dragbg
-        dc.GradientFillLinear((0, 0, w, h), gradfrom, self.GradientColourTo)
-        dc.Pen, dc.Brush = controls.PEN(self.BorderColour), wx.TRANSPARENT_BRUSH
-        dc.DrawRoundedRectangle(0, 0, w, h, CRADIUS)
-        dc.Pen   = controls.PEN(bg)
-        dc.Brush = controls.BRUSH(bg)
-        dc.DrawRectangle(1, self.HEADERH, w - 2, self.HEADERP + self.LINEH * len(opts.get("columns") or []))
-        dc.Pen = controls.PEN(self.BorderColour)
-        dc.DrawLine(0, self.HEADERH, w, self.HEADERH)
-
-        # Draw title
-        dc.SetFont(self._font_bold)
-        dc.DrawLabel(title, (0, 1, w, self.HEADERH), wx.ALIGN_CENTER)
-
-        # Draw columns: name and type, and primary/foreign key icons
-        dc.SetFont(self.Font)
-
-        pkbmp, fkbmp = images.DiagramPK.Bitmap, images.DiagramFK.Bitmap
-        if self._zoom != self.ZOOM_DEFAULT:
-            pkbmp = wx.Bitmap(images.DiagramPK.Image.Scale(*[int(math.ceil(x * self._zoom)) for x in pkbmp.Size]))
-            fkbmp = wx.Bitmap(images.DiagramFK.Image.Scale(*[int(math.ceil(x * self._zoom)) for x in fkbmp.Size]))
-
+        collists, statslists = [[], []], [[], [], [], []] # [[text, ], [(x, y), ]]
         pks, fks = (sum((list(c["name"]) for c in x), [])
                     for x in self._db.get_keys(opts["name"]))
+
+        # Populate column texts and coordinates
         for i, col in enumerate(opts.get("columns") or []):
             for j, k in enumerate(["name", "type"]):
                 text = coltexts[i][j]
                 if not text: continue # for j, k
                 dx = self.LPAD + j * (colmax["name"] + self.HPAD)
                 dy = self.HEADERH + self.HEADERP + i * self.LINEH
-                dc.DrawText(text, dx, dy)
-            if col["name"] in pks:
-                dc.DrawBitmap(pkbmp, 3 * max(self._zoom, 1), dy + 1, useMask=True)
-            if col["name"] in fks:
-                b, bw = fkbmp, fkbmp.Width
-                dc.DrawBitmap(b, w - bw - 6 * self._zoom, dy + 1, useMask=True)
+                collists[0].append(text); collists[1].append((dx, dy))
 
-        # Draw statistics texts
+        # Populate statistics texts
         if stats:
-            dc.SetFont(util.memoize(wx.Font, self.Font.PointSize + self.FONT_STEP_STATS, wx.FONTFAMILY_MODERN,
-                                    wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE))
-            dx, dy = self.BRADIUS, h - self.STATSH
-
-            dc.Pen = controls.PEN(self.BorderColour)
-            dc.DrawLine(0, dy, w, dy)
+            stats_font = util.memoize(wx.Font, self.Font.PointSize + self.FONT_STEP_STATS, wx.FONTFAMILY_MODERN,
+                                     wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE)
+            memoroot = "GetFullTextExtent", stats_font.FaceName, stats_font.PointSize
+            dx, dy = self.BRADIUS, h - self.STATSH + 1
 
             text1 = stats.get("rows")
             text2 = util.format_bytes(stats["size"]) if "size" in stats else None
 
-            w1 = next(d[0] + d[3] for d in [dc.GetFullTextExtent(text1)]) if text1 else 0
-            w2 = next(d[0] + d[3] for d in [dc.GetFullTextExtent(text2)]) if text2 else 0
+            w1 = next(d[0] + d[3] for d in [get_extent(text1, stats_font)]) if text1 else 0
+            w2 = next(d[0] + d[3] for d in [get_extent(text2, stats_font)]) if text2 else 0
             if w1 + w2 + 2 * self.BRADIUS > w and opts.get("count"):
                 text1 = util.plural("row", opts["count"], max_units=True)
 
-            dy += 1
-            if text1: dc.DrawText(text1, dx, dy)
+            if text1:
+                statslists[0].append(text1); statslists[1].append((dx, dy))
             if text2:
-                dc.TextForeground = self.BackgroundColour
                 dx = w - w2 - self.BRADIUS
-                dc.DrawText(text2, dx, dy)
+                statslists[2].append(text2); statslists[3].append((dx, dy))
 
-        del dc
-        bmp.SetMask(mask)
-        return bmp
+        pkbmp, fkbmp = images.DiagramPK.Bitmap, images.DiagramFK.Bitmap
+        if pks and self._zoom != self.ZOOM_DEFAULT:
+            pkbmp = wx.Bitmap(images.DiagramPK.Image.Scale(*[int(math.ceil(x * self._zoom)) for x in pkbmp.Size]))
+        if fks and self._zoom != self.ZOOM_DEFAULT:
+            fkbmp = wx.Bitmap(images.DiagramFK.Image.Scale(*[int(math.ceil(x * self._zoom)) for x in fkbmp.Size]))
 
+        bmp, bmparea = (wx.Bitmap(w, h, depth=24) for _ in (0, 1))
+        for b in bmp, bmparea:
+            dc = wx.MemoryDC(b)
+            dc.Background = wx.TRANSPARENT_BRUSH
+            dc.Clear()
+            bg, gradfrom = self.BackgroundColour, self.GradientColourFrom
+            if b is bmparea:
+                bg = gradfrom = self._colour_dragbg
 
-    def _MakeFocusedBitmap(self, opts, bmp):
-        """Returns a bitmap highlighted for focus."""
-        CRADIUS = self.BRADIUS if "table" == opts["type"] else 0
+            # Fill with gradient, draw border
+            dc.GradientFillLinear((0, 0, w, h), gradfrom, self.GradientColourTo)
+            dc.Pen, dc.Brush = controls.PEN(self.BorderColour), wx.TRANSPARENT_BRUSH
+            dc.DrawRoundedRectangle(0, 0, w, h, CRADIUS)
 
-        # Make transparency mask for excluding content outside rounded corners
-        bmp2 = wx.Bitmap(*[a + 2 * self.FMARGIN for a in bmp.Size])
-        mdc = wx.MemoryDC(bmp2)
-        mdc.Background = wx.TRANSPARENT_BRUSH
-        mdc.Clear()
-        mdc.Pen   = controls.PEN  (self.ShadowColour)
-        mdc.Brush = controls.BRUSH(self.ShadowColour)
-        mdc.DrawRoundedRectangle(0, 0, bmp2.Width, bmp2.Height, CRADIUS)
-        del mdc
-        mask = wx.Mask(bmp2, wx.TRANSPARENT_BRUSH.Colour)
+            # Empty out columns middle, draw header separator
+            dc.Pen   = controls.PEN(bg)
+            dc.Brush = controls.BRUSH(bg)
+            dc.DrawRectangle(1, self.HEADERH, w - 2, self.HEADERP + self.LINEH * len(opts.get("columns") or []))
+            dc.Pen, dc.Brush = controls.PEN(self.BorderColour), wx.TRANSPARENT_BRUSH
+            dc.DrawLine(0, self.HEADERH, w, self.HEADERH)
 
-        dc = wx.MemoryDC(bmp2)
-        dc.DrawBitmap(bmp, self.FMARGIN, self.FMARGIN, useMask=True)
-        del dc
-        bmp2.SetMask(mask)
-        return bmp2
+            # Draw title
+            dc.SetFont(self._font_bold)
+            dc.TextForeground = self.ForegroundColour
+            dc.DrawLabel(title, (0, 1, w, self.HEADERH), wx.ALIGN_CENTER)
+
+            # Draw columns: name and type, and primary/foreign key icons
+            dc.SetFont(self.Font)
+            dc.DrawTextList(collists[0], collists[1])
+            for i, col in enumerate(opts.get("columns") or []):
+                dy = self.HEADERH + self.HEADERP + i * self.LINEH
+                if col["name"] in pks:
+                    dc.DrawBitmap(pkbmp, 3 * max(self._zoom, 1), dy + 1, useMask=True)
+                if col["name"] in fks:
+                    b, bw = fkbmp, fkbmp.Width
+                    dc.DrawBitmap(b, w - bw - 6 * self._zoom, dy + 1, useMask=True)
+
+            # Draw statistics texts and separator
+            if stats:
+                dc.DrawLine(0, h - self.STATSH, w, h - self.STATSH)
+                dc.SetFont(stats_font)
+            if statslists[0]:
+                dc.DrawTextList(statslists[0], statslists[1])
+            if statslists[2]:
+                dc.TextForeground = self.BackgroundColour
+                dc.DrawTextList(statslists[2], statslists[3])
+
+            dc.SelectObject(wx.NullBitmap)
+            del dc
+
+        if CRADIUS:
+            # Make transparency mask for excluding content outside rounded corners
+            mbmp = wx.Bitmap(bmp.Size)
+            dc = wx.MemoryDC(mbmp)
+            dc.Background = wx.TRANSPARENT_BRUSH
+            dc.Clear()
+            dc.Pen, dc.Brush = wx.WHITE_PEN, wx.WHITE_BRUSH
+            dc.DrawRoundedRectangle(0, 0, mbmp.Width, mbmp.Height, CRADIUS)
+            dc.SelectObject(wx.NullBitmap)
+            del dc
+            bmp.SetMask    (wx.Mask(mbmp, wx.TRANSPARENT_BRUSH.Colour))
+            bmparea.SetMask(wx.Mask(mbmp, wx.TRANSPARENT_BRUSH.Colour))
+
+            # Make transparency mask for excluding content outside rounded shadow corners
+            sbmp = wx.Bitmap(w + 2 * self.FMARGIN, h + 2 * self.FMARGIN)
+            dc = wx.MemoryDC(sbmp)
+            dc.Background = wx.TRANSPARENT_BRUSH
+            dc.Clear()
+            dc.Pen, dc.Brush = wx.WHITE_PEN, wx.WHITE_BRUSH
+            dc.DrawRoundedRectangle(0, 0, sbmp.Width, sbmp.Height, CRADIUS)
+            del dc
+
+        # Make "selected" bitmaps, with a surrounding shadow
+        bmpsel, bmpareasel = (wx.Bitmap(w + 2 * m, h + 2 * m) for m in (self.FMARGIN, )*2)
+        for b1, b2 in (bmp, bmpsel), (bmparea, bmpareasel):
+            dc = wx.MemoryDC(b2)
+            dc.Background = controls.BRUSH(self.ShadowColour)
+            dc.Clear()
+            dc.DrawBitmap(b1, self.FMARGIN, self.FMARGIN, useMask=True)
+            dc.SelectObject(wx.NullBitmap)
+            del dc
+            if CRADIUS: b2.SetMask(wx.Mask(sbmp, wx.TRANSPARENT_BRUSH.Colour))
+
+        return bmp, bmpsel, bmpareasel
 
 
     def _UpdateColours(self, defaults=False):
