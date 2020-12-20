@@ -10762,6 +10762,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         fdc = wx.MemoryDC(bmpsel)
         fdc.Background = controls.BRUSH(self.ShadowColour)
         fdc.Clear()
+        fdc.DrawBitmap(bmp, self.FMARGIN, self.FMARGIN, useMask=True)
         fdc.SelectObject(wx.NullBitmap)
         del fdc
         if CRADIUS: bmpsel.SetMask(wx.Mask(sbmp, wx.TRANSPARENT_BRUSH.Colour))
