@@ -679,7 +679,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 if menu.SubMenu.MenuItemCount and not menu.SubMenu.MenuItemCount % PAGESIZE:
                     menu.SubMenu.Break()
                 help = "Open schema editor for %s %s" % (category, util.unprint(grammar.quote(name)))
-                menuitem = menu.SubMenu.Append(wx.ID_ANY, util.unprint(name), help)
+                menuitem = menu.SubMenu.Append(wx.ID_ANY, util.ellipsize(util.unprint(name)), help)
                 args = ["schema", category, name]
                 self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
 
@@ -695,7 +695,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     if menu.SubMenu.MenuItemCount and not menu.SubMenu.MenuItemCount % PAGESIZE:
                         menu.SubMenu.Break()
                     help = "Drop %s %s" % (category, util.unprint(grammar.quote(name)))
-                    menuitem = menu.SubMenu.Append(wx.ID_ANY, util.unprint(name), help)
+                    menuitem = menu.SubMenu.Append(wx.ID_ANY, util.ellipsize(util.unprint(name)), help)
                     args = ["drop", category, name]
                     self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
 
@@ -711,7 +711,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     if menu.SubMenu.MenuItemCount and not menu.SubMenu.MenuItemCount % PAGESIZE:
                         menu.SubMenu.Break()
                     help = "Delete all rows from %s %s" % (category, util.unprint(grammar.quote(name)))
-                    menuitem = menu.SubMenu.Append(wx.ID_ANY, util.unprint(name), help)
+                    menuitem = menu.SubMenu.Append(wx.ID_ANY, util.ellipsize(util.unprint(name)), help)
                     menuitem.Enable(bool(item.get("count")))
                     args = ["truncate", name]
                     self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
@@ -724,7 +724,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 if menu.SubMenu.MenuItemCount and not menu.SubMenu.MenuItemCount % PAGESIZE:
                     menu.SubMenu.Break()
                 help = "Open data grid for %s %s" % (category, util.unprint(grammar.quote(name)))
-                menuitem = menu.SubMenu.Append(wx.ID_ANY, util.unprint(name), help)
+                menuitem = menu.SubMenu.Append(wx.ID_ANY, util.ellipsize(util.unprint(name)), help)
                 args = ["data", category, name]
                 self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
         self.MenuBar.Thaw()
