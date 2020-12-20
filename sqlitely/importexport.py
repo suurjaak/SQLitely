@@ -656,7 +656,7 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
             for i, (table, sheet) in enumerate(tables):
                 sheet = sheet if extname not in ("csv", "json") else None
                 columns = tablecolumns[table]
-                if not db.get_category("table", table):
+                if table not in db.schema.get("table", {}):
                     cols = [{"name": x} for x in columns.values()]
                     if pks.get(table):
                         cols.insert(0, {"name": pks[table], "type": "INTEGER",

@@ -2926,8 +2926,8 @@ class SchemaObjectPage(wx.Panel):
         self._fks_on        = db.execute("PRAGMA foreign_keys", log=False).fetchone().values()[0]
         self._backup        = None # State variables copy for RestoreBackup
         self._types    = self._GetColumnTypes()
-        self._tables   = [x["name"] for x in db.get_category("table").values()]
-        self._views    = [x["name"] for x in db.get_category("view").values()]
+        self._tables   = [x["name"] for x in db.schema.get("table", {}).values()]
+        self._views    = [x["name"] for x in db.schema.get("view",  {}).values()]
 
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -3096,8 +3096,8 @@ class SchemaObjectPage(wx.Panel):
         prevs = {"_types": self._types, "_tables": self._tables,
                  "_views": self._views, "_item": self._item}
         self._types = self._GetColumnTypes()
-        self._tables = [x["name"] for x in self._db.get_category("table").values()]
-        self._views  = [x["name"] for x in self._db.get_category("view").values()]
+        self._tables = [x["name"] for x in self._db.schema.get("table", {}).values()]
+        self._views  = [x["name"] for x in self._db.schema.get("view",  {}).values()]
         item = item or self._db.get_category(self._category, self._item["name"])
         if not item: return
         item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
@@ -3907,7 +3907,7 @@ class SchemaObjectPage(wx.Panel):
                 if util.lceq(cnstr["table"], self.Name) \
                 or util.lceq(cnstr["table"], self._item.get("meta", {}).get("name")):
                     ftable = self._item.get("meta", self._item)
-                else: ftable = self._db.get_category("table", cnstr["table"])
+                else: ftable = self._db.schema.get("table", {}).get(cnstr["table"]) or {}
             fcolumns = [x["name"] for x in ftable.get("columns") or ()]
             kcols  = cnstr.get("columns") or ()
             fkcols = cnstr.get("key")     or ()
@@ -4006,7 +4006,7 @@ class SchemaObjectPage(wx.Panel):
     def _AddRowIndex(self, path, i, col, insert=False, focus=False):
         """Adds a new row of controls for index columns."""
         meta, rowkey = self._item.get("meta") or {}, wx.NewIdRef().Id
-        table = self._db.get_category("table", meta["table"]) \
+        table = self._db.schema.get("table", {}).get(meta["table"]) or {} \
                 if meta.get("table") else {}
         tablecols = [x["name"] for x in table.get("columns") or ()]
         panel = self._panel_columns
@@ -4069,7 +4069,7 @@ class SchemaObjectPage(wx.Panel):
         """Adds a new row of controls for trigger columns."""
         meta, rowkey = self._item.get("meta") or {}, wx.NewIdRef().Id
         category = "view" if grammar.SQL.INSTEAD_OF == meta.get("upon") else "table"
-        table = self._db.get_category(category, meta["table"]) \
+        table = self._db.schema.get(category, {}).get(meta["table"]) or {} \
                 if meta.get("table") else {}
         choicecols = [x["name"] for x in table.get("columns") or ()]
         panel = self._panel_columns
@@ -4234,7 +4234,7 @@ class SchemaObjectPage(wx.Panel):
         words, subwords, singlewords = [], {}, []
 
         for category in ("table", "view"):
-            for item in self._db.get_category(category).values():
+            for item in self._db.schema.get(category, {}).values():
                 if self._category in ("trigger", "view"):
                     myname = grammar.quote(item["name"])
                     words.append(myname)
@@ -4499,7 +4499,7 @@ class SchemaObjectPage(wx.Panel):
         """
         result = set([""] + list(database.Database.AFFINITY))
         uppers = set(x.upper() for x in result)
-        tt = self._db.get_category("table").values()
+        tt = self._db.schema.get("table", {}).values()
         if "table" == self._category: tt.append(self._item)
         for table in tt:
             for c in table.get("columns") or ():
@@ -4524,7 +4524,7 @@ class SchemaObjectPage(wx.Panel):
         def get_foreign_cols(data):
             result = []
             if data and data.get("table"):
-                ftable = self._db.get_category("table", data["table"]) or {}
+                ftable = self._db.schema.get("table", {}).get(data["table"]) or {}
                 result = [x["name"] for x in ftable.get("columns") or ()]
             return result
 
@@ -4941,7 +4941,7 @@ class SchemaObjectPage(wx.Panel):
 
         words = []
         for category in ("table", "view") if self._editmode else ():
-            for item in self._db.get_category(category).values():
+            for item in self._db.schema.get(category, {}).values():
                 if not item.get("columns"): continue # for item
                 if "table" == self._category and util.lceq(item["name"], self._original.get("name")) \
                 or "index" == self._category and util.lceq(item["name"], self._item["meta"].get("table")):
@@ -5445,7 +5445,7 @@ class SchemaObjectPage(wx.Panel):
                          {"type": "open",  "help": "Load from file"}, ]}]
         data, words = {"sql": self._item["sql0" if self._sql0_applies else "sql"]}, {}
         for category in ("table", "view"):
-            for item in self._db.get_category(category).values():
+            for item in self._db.schema.get(category, {}).values():
                 if self._category in ("index", "trigger", "view"):
                     myname = grammar.quote(item["name"])
                     words[myname] = []
@@ -5504,8 +5504,8 @@ class SchemaObjectPage(wx.Panel):
         prevs = {"_types": self._types, "_tables": self._tables,
                  "_views": self._views, "_item": self._item}
         self._types = self._GetColumnTypes()
-        self._tables = [x["name"] for x in self._db.get_category("table").values()]
-        self._views  = [x["name"] for x in self._db.get_category("view").values()]
+        self._tables = [x["name"] for x in self._db.schema.get("table", {}).values()]
+        self._views  = [x["name"] for x in self._db.schema.get("view",  {}).values()]
         if not self._editmode and self._item.get("name"):
             item = self._db.get_category(self._category, self._item["name"])
             if event and not item: return wx.MessageBox(
@@ -5632,7 +5632,7 @@ class SchemaObjectPage(wx.Panel):
             errors += ["Columns are required."]
 
         if (self._newmode or not util.lceq(name, self._item["name"])) \
-        and self._db.get_category(self._category, name):
+        and name in self._db.schema.get(self._category, {}):
             errors += ["%s named %s already exists." % (self._category.capitalize(),
                        grammar.quote(name, force=True))]
         if not errors:
@@ -5790,7 +5790,7 @@ class SchemaObjectPage(wx.Panel):
         if self._category in ("table", ):
             item_truncate = wx.MenuItem(menu, -1, "Truncate")
             menu.Append(item_truncate)
-            item_truncate.Enable(bool((self._db.get_category(self._category, self.Name) or {}).get("count")))
+            item_truncate.Enable(bool((self._db.schema.get(self._category, {}).get(self.Name) or {}).get("count")))
             menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(truncate=True), item_truncate)
         item_drop = wx.MenuItem(menu, -1, "Drop")
         menu.Append(item_drop)
@@ -7051,7 +7051,7 @@ class ImportDialog(wx.Dialog):
         self._l1.ReadOnly = self._l2.ReadOnly = False
 
         if self._table.get("new") \
-        and self._db.get_category("table", self._table["name"]):
+        and self._table["name"] in self._db.schema.get("table", {}):
             self._has_new = False
             self._has_pk = self._check_pk.Value = False
             self._tables = self._db.get_category("table").values()
@@ -7173,7 +7173,7 @@ class ImportDialog(wx.Dialog):
                 msg = "Invalid table name."
                 continue # while not valid
             category = next((c for c in self._db.CATEGORIES
-                             for n in self._db.get_category(c)
+                             for n in self._db.schema.get(c, {})
                              if util.lceq(n, name)), None)
             if category:
                 msg = "A %s by this name already exists." % category

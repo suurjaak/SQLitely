@@ -673,7 +673,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             item_add = menu.SubMenu.Append(wx.ID_ANY, "Create &new %s" % category)
             args = ["create", category]
             self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), item_add)
-            items = db.get_category(category)
+            items = db.schema.get(category) or {}
             if items: menu.SubMenu.AppendSeparator()
             for name in items:
                 if menu.SubMenu.MenuItemCount and not menu.SubMenu.MenuItemCount % PAGESIZE:
@@ -2035,7 +2035,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             logger.exception("Error opening %s.", filename)
             return
         try:
-            tables = db.get_category("table").values()
+            tables = db.schema.get("table", {}).values()
             self.label_tables.Value = str(len(tables))
             if tables:
                 s = ""
@@ -3395,8 +3395,7 @@ class DatabasePage(wx.Panel):
             finally: busy.Close()
         elif "rename" == cmd:
             category, name, name2 = (list(args) + [None])[:3]
-            item = self.db.get_category(category, name)
-            if not item: return
+            if name not in self.db.schema.get(category) or {}: return
             if not name2:
                 dlg = wx.TextEntryDialog(self, 
                     'Rename %s %s to:' % (category, grammar.quote(name, force=True)),
@@ -3977,7 +3976,7 @@ class DatabasePage(wx.Panel):
         item_columns.Check(opts.get("order") == "columns")
         item_rows.Check   (opts.get("order") == "rows")
         item_bytes.Check  (opts.get("order") == "bytes")
-        item_rows.Enable  (any(x.get("count") for x in self.db.get_category("table").values()))
+        item_rows.Enable  (any(x.get("count") for x in self.db.schema.get("table", {}).values()))
         item_bytes.Enable (bool(self.statistics.get("data")))
         item_reverse.Check(bool(opts.get("reverse")))
 
@@ -4583,7 +4582,7 @@ class DatabasePage(wx.Panel):
         elif link_data:
             # Go to specific data/schema page object
             category, row = link_data.get("category"), link_data.get("row")
-            item = self.db.get_category(category, link_data["name"])
+            item = self.db.schema.get(category, {}).get(link_data["name"])
             if not item: return
 
             tree, page = self.tree_data, self.page_data
@@ -6268,8 +6267,8 @@ class DatabasePage(wx.Panel):
                         childtext = "ON " + grammar.quote(item["tbl_name"])
                         columns = copy.deepcopy(item.get("meta", {}).get("columns")
                                                 or item.get("columns") or [])
-                        table = self.db.get_category("table", item["tbl_name"])
-                        for col in columns:
+                        table = self.db.schema.get("table", {}).get(item["tbl_name"])
+                        for col in columns if table else ():
                             if table.get("columns") and col.get("name"):
                                 tcol = next((x for x in table["columns"]
                                              if x["name"] == col["name"]), None)
@@ -6795,14 +6794,14 @@ class DatabasePage(wx.Panel):
                 has_sql = False
             elif "index" == data["parent"]["type"]:
                 has_name = "name" in data
-                table = self.db.get_category("table", data["parent"]["tbl_name"])
+                table = self.db.schema.get("table", {}).get(data["parent"]["tbl_name"])
                 sqltext = " ".join(filter(bool, (
                     grammar.quote(data["name"]) if has_name else data.get("expr"),
                     "COLLATE %s" % data["collate"] if data.get("collate") else "",
                     data.get("order"),
                 )))
             else:
-                table = self.db.get_category("table", data["parent"]["name"])
+                table = self.db.schema.get("table", {}).get(data["parent"]["name"])
                 sqlkws = {"category": "table", "name": table["name"], "column": data["name"]}
                 sqltext = functools.partial(self.db.get_sql, **sqlkws)
                 item_renamecol = wx.MenuItem(menu, -1, "Rena&me column\t(F2)")
@@ -6934,7 +6933,7 @@ class DatabasePage(wx.Panel):
         subwords = {}
 
         for category in ("table", "view"):
-            for item in self.db.get_category(category).values():
+            for item in self.db.schema.get(category, {}).values():
                 myname = grammar.quote(item["name"])
                 words.append(myname)
                 if not item.get("columns"): continue # for item
