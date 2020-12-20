@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.12.2020
+@modified    20.12.2020
 ------------------------------------------------------------------------------
 """
 import __builtin__
@@ -24,6 +24,7 @@ import math
 import os
 import platform
 import re
+import string
 import struct
 import subprocess
 import sys
@@ -699,6 +700,14 @@ def make_unique(value, existing, suffix="_%s", counter=2, case=False):
         is_present = lambda: result.lower() in existing
     while is_present(): result, counter = value + suffix % counter, counter + 1
     return result
+
+
+def make_spreadsheet_column(index):
+    """Returns spreadsheet-like column name for index, e.g. "AA" for 26."""
+    digits, base = string.ascii_uppercase, len(string.ascii_uppercase)
+    t, n = "", index + 1 # Convert to 1-based alphabetic label
+    while n: t, n = digits[(n % base or base) - 1] + t, (n - 1) / base
+    return t
 
 
 def getval(collection, *path, **kwargs):

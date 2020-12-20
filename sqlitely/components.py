@@ -6660,10 +6660,7 @@ class ImportDialog(wx.Dialog):
             op = "%%0%dd" % math.ceil(math.log(len(self._cols1), 10))
             return "col_%s" % op % (coldata["index"] + 1) # Zero-pad to max
         else:
-            digits, base = string.ascii_uppercase, len(string.ascii_uppercase)
-            t, n = "", coldata["index"] + 1 # Convert to 1-based alphabetic label
-            while n: t, n = digits[(n % base or base) - 1] + t, (n - 1) / base
-            return t
+            return util.make_spreadsheet_column(coldata["index"])
 
 
     def _MoveItems(self, side, indexes, skip=None, index2=None, direction=None, swap=False):
@@ -10742,32 +10739,31 @@ class SchemaDiagram(wx.ScrolledWindow):
         if CRADIUS:
             # Make transparency mask for excluding content outside rounded corners
             mbmp = wx.Bitmap(bmp.Size)
-            dc = wx.MemoryDC(mbmp)
-            dc.Background = wx.TRANSPARENT_BRUSH
-            dc.Clear()
-            dc.Pen, dc.Brush = wx.WHITE_PEN, wx.WHITE_BRUSH
-            dc.DrawRoundedRectangle(0, 0, mbmp.Width, mbmp.Height, CRADIUS)
-            dc.SelectObject(wx.NullBitmap)
-            del dc
+            mdc = wx.MemoryDC(mbmp)
+            mdc.Background = wx.TRANSPARENT_BRUSH
+            mdc.Clear()
+            mdc.Pen, mdc.Brush = wx.WHITE_PEN, wx.WHITE_BRUSH
+            mdc.DrawRoundedRectangle(0, 0, mbmp.Width, mbmp.Height, CRADIUS)
+            mdc.SelectObject(wx.NullBitmap)
+            del mdc
             bmp.SetMask(wx.Mask(mbmp, wx.TRANSPARENT_BRUSH.Colour))
 
             # Make transparency mask for excluding content outside rounded shadow corners
             sbmp = wx.Bitmap(w + 2 * self.FMARGIN, h + 2 * self.FMARGIN)
-            dc = wx.MemoryDC(sbmp)
-            dc.Background = wx.TRANSPARENT_BRUSH
-            dc.Clear()
-            dc.Pen, dc.Brush = wx.WHITE_PEN, wx.WHITE_BRUSH
-            dc.DrawRoundedRectangle(0, 0, sbmp.Width, sbmp.Height, CRADIUS)
-            del dc
+            sdc = wx.MemoryDC(sbmp)
+            sdc.Background = wx.TRANSPARENT_BRUSH
+            sdc.Clear()
+            sdc.Pen, sdc.Brush = wx.WHITE_PEN, wx.WHITE_BRUSH
+            sdc.DrawRoundedRectangle(0, 0, sbmp.Width, sbmp.Height, CRADIUS)
+            del sdc
 
         # Make "selected" bitmap, with a surrounding shadow
         bmpsel = wx.Bitmap(w + 2 * self.FMARGIN, h + 2 * self.FMARGIN)
-        dc = wx.MemoryDC(bmpsel)
-        dc.Background = controls.BRUSH(self.ShadowColour)
-        dc.Clear()
-        dc.DrawBitmap(bmp, self.FMARGIN, self.FMARGIN, useMask=True)
-        dc.SelectObject(wx.NullBitmap)
-        del dc
+        fdc = wx.MemoryDC(bmpsel)
+        fdc.Background = controls.BRUSH(self.ShadowColour)
+        fdc.Clear()
+        fdc.SelectObject(wx.NullBitmap)
+        del fdc
         if CRADIUS: bmpsel.SetMask(wx.Mask(sbmp, wx.TRANSPARENT_BRUSH.Colour))
 
         return bmpsel if dragrect else (bmp, bmpsel)
@@ -11656,16 +11652,6 @@ class ImportWizard(wx.adv.Wizard):
     def StartImport(self):
         """Starts import."""
 
-        def make_sheet_column(i):
-            """Returns spreadsheet-like column name for index, e.g. "AA" for 26."""
-            LETTERS = string.ascii_uppercase
-            result = ""
-            while i >= len(LETTERS):
-                i, i0 = divmod(i, len(LETTERS))
-                result = LETTERS[i0 % len(LETTERS)] + result
-            return LETTERS[i % len(LETTERS)] + result
-
-
         itemnames = sum((list(x) for x in self.db.schema.values()), [])
         for i, sheet in enumerate(self.page1.filedata["sheets"]):
             if not sheet["rows"] or not sheet["columns"] \
@@ -11683,7 +11669,7 @@ class ImportWizard(wx.adv.Wizard):
 
             colnames = item["tcolumns"] = []
             for j, col in enumerate(sheet["columns"]):
-                if not col or not self.page1.use_header: col = make_sheet_column(j)
+                if not col or not self.page1.use_header: col = util.make_spreadsheet_column(j)
                 col = util.make_unique(col, colnames)
                 colnames.append(col)
             if self.page2.add_pk:
