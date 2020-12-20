@@ -9839,7 +9839,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         }
     def SetOptions(self, opts):
         """Sets all diagram options."""
-        if not opts: return
+        if not opts or opts == self.Options: return
 
         if "zoom"     in opts: self.SetZoom(opts["zoom"], refresh=False)
         if "fks"      in opts: self._show_lines  = bool(opts["fks"])
