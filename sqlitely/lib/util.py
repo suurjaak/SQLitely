@@ -196,7 +196,7 @@ def memoize(*args, **kwargs):
     @param   __nohash__  whether arguments can be unhashable,
                          checks unhashable arguments by equality instead
     """
-    func, root, nohash, ns = None, None, False, locals()
+    func, root, nohash, ns = None, None, False, {}
     cache = getattr(memoize, "cache", None)
     nohashcache = getattr(memoize, "nohashcache", None)
     if cache is None:       # {root: {(args): value}}
@@ -214,7 +214,8 @@ def memoize(*args, **kwargs):
         return copy.deepcopy(v) if isinstance(v, (dict, list, set, tuple)) else v
 
     def decorate(func):
-        ns.update(func=func)
+        ns["func"] = func
+        if ns.get("root") is None: ns["root"] = func
         result = nohashget if nohash else hashget
         result.__module__ = func.__module__
         result.__name__ = func.__name__
@@ -222,10 +223,7 @@ def memoize(*args, **kwargs):
         result.__doc__  += "\n\nDecorated with %s.memoize()." % __name__
         return result
 
-    def outer(func):
-        """Outer decorator, returns function wrapper."""
-        ns["root"] = func
-        return decorate(func)
+    def outer(func): return decorate(func)
 
     def nohashget(*args, **kwargs):
         """
@@ -237,7 +235,7 @@ def memoize(*args, **kwargs):
             (key1 if hashable(arg) else key2).append(arg)
         if not key2: return hashget(*args, **kwargs)
 
-        tuples = nohashcache[root][tuple(key1)]
+        tuples = nohashcache[ns["root"]][tuple(key1)]
         for mykey, value in tuples:
             for k1, k2 in zip(key2, mykey) if len(key2) == len(mykey) else ():
                 if type(k1) is type(k2) and k1 == k2:
@@ -248,7 +246,7 @@ def memoize(*args, **kwargs):
 
     def hashget(*args, **kwargs):
         key = args + sum(kwargs.items(), ())
-        mycache = cache[root]
+        mycache = cache[ns["root"]]
         if key not in mycache:
             mycache[key] = ns["func"](*args, **kwargs)
         return returner(mycache[key])
@@ -264,6 +262,8 @@ def memoize(*args, **kwargs):
     if not as_outer:
         func, args = args[0], args[1:]
         if root is None: root = func
+    if func is not None: ns["func"] = func
+    if root is not None: ns["root"] = root
 
     if as_outer: return outer # Argumented decorator
     elif not args and not kwargs: return decorate(func) # Plain decorator
