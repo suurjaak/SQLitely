@@ -651,6 +651,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.menu_save_database_as.Enable(bool(page))
         if not db: return
 
+        self.MenuBar.Freeze()
         do_full = self.db_menustate.get(db.filename, {}).get("full")
         self.db_menustate.pop(db.filename, None)
         changes.pop("temporary", None)
@@ -660,11 +661,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.menu_edit_drop.Enabled = any(db.schema.values())
 
         EDITMENUS  = {"table":   self.menu_edit_table,   "index": self.menu_edit_index,
-                      "trigger": self.menu_edit_trigger, "view": self.menu_edit_view}
+                      "trigger": self.menu_edit_trigger, "view":  self.menu_edit_view}
         DROPMENUS  = {"table":   self.menu_edit_drop_table,   "index": self.menu_edit_drop_index,
-                      "trigger": self.menu_edit_drop_trigger, "view": self.menu_edit_drop_view}
+                      "trigger": self.menu_edit_drop_trigger, "view":  self.menu_edit_drop_view}
         TRUNCMENUS = {"table":   self.menu_edit_truncate}
-        VIEWMENUS  = {"table":   self.menu_view_data_table,   "view": self.menu_view_data_view}
+        VIEWMENUS  = {"table":   self.menu_view_data_table,   "view":  self.menu_view_data_view}
+        PAGESIZE   = 40
         for category in db.CATEGORIES if do_full else ():
             menu = EDITMENUS[category]
             for x in menu.SubMenu.MenuItems: menu.SubMenu.Delete(x)
@@ -674,6 +676,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             items = db.get_category(category)
             if items: menu.SubMenu.AppendSeparator()
             for name in items:
+                if menu.SubMenu.MenuItemCount and not menu.SubMenu.MenuItemCount % PAGESIZE:
+                    menu.SubMenu.Break()
                 help = "Open schema editor for %s %s" % (category, util.unprint(grammar.quote(name)))
                 menuitem = menu.SubMenu.Append(wx.ID_ANY, util.unprint(name), help)
                 args = ["schema", category, name]
@@ -688,6 +692,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), item_all)
                 if items: menu.SubMenu.AppendSeparator()
                 for name in items:
+                    if menu.SubMenu.MenuItemCount and not menu.SubMenu.MenuItemCount % PAGESIZE:
+                        menu.SubMenu.Break()
                     help = "Drop %s %s" % (category, util.unprint(grammar.quote(name)))
                     menuitem = menu.SubMenu.Append(wx.ID_ANY, util.unprint(name), help)
                     args = ["drop", category, name]
@@ -702,6 +708,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["truncate"]), item_all)
                 if items: menu.SubMenu.AppendSeparator()
                 for name, item in items.items():
+                    if menu.SubMenu.MenuItemCount and not menu.SubMenu.MenuItemCount % PAGESIZE:
+                        menu.SubMenu.Break()
                     help = "Delete all rows from %s %s" % (category, util.unprint(grammar.quote(name)))
                     menuitem = menu.SubMenu.Append(wx.ID_ANY, util.unprint(name), help)
                     menuitem.Enable(bool(item.get("count")))
@@ -713,10 +721,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             for x in menu.SubMenu.MenuItems: menu.SubMenu.Delete(x)
             menu.Enable(bool(items))
             for name in items:
+                if menu.SubMenu.MenuItemCount and not menu.SubMenu.MenuItemCount % PAGESIZE:
+                    menu.SubMenu.Break()
                 help = "Open data grid for %s %s" % (category, util.unprint(grammar.quote(name)))
                 menuitem = menu.SubMenu.Append(wx.ID_ANY, util.unprint(name), help)
                 args = ["data", category, name]
                 self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
+        self.MenuBar.Thaw()
 
 
     def on_menu_open(self, event):
@@ -2523,6 +2534,7 @@ class DatabasePage(wx.Panel):
 
         try:
             self.load_data()
+            guibase.status("Opened database %s." % db)
         finally:
             busy.Close()
         if not self: return
