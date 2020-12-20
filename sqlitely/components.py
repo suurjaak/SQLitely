@@ -9609,7 +9609,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         super(SchemaDiagram, self).__init__(parent, *args, **kwargs)
         self._db    = db
         self._ids   = {} # {DC ops ID: name or (name1, name2, (cols)) or None}
-        self._objs  = util.CaselessDict() # {name: {id, category, name, bmp, bmpsel, bmparea, stats, sql0, columns, __id__}}
+        self._objs  = util.CaselessDict() # {name: {id, type, name, bmp, bmpsel, bmparea, stats, sql0, columns, __id__}}
         self._lines = util.CaselessDict() # {(name1, name2, (cols)): {id, pts}}
         self._sels  = util.CaselessDict(insertorder=True) # {name selected: DC ops ID}
         self._order = []   # Draw order [{obj dict}, ] selected items at end
@@ -9724,17 +9724,23 @@ class SchemaDiagram(wx.ScrolledWindow):
             v = getattr(self.__class__, k)
             setattr(self, k, int(math.ceil(v * zoom)))
 
-        fullbounds = None
+        fullbounds, drops = None, []
         for o in self._objs.values():
-            opts = self._db.get_category(o["category"], o["name"])            
+            opts = self._db.schema[o["type"]].get(o["name"])
+            if not opts:
+                self._objs.pop(o["name"])
+                self._dc.RemoveId(o["id"])
+                drops.append(o)
+                continue # for o
             stats = self._GetItemStats(opts)
-            bmp, bmpsel, bmparea = self._MakeItemBitmaps(opts, stats)
-            o.update(bmp=bmp, bmpsel=bmpsel, bmparea=bmparea, stats=stats)
+            bmp, bmpsel = self._MakeItemBitmaps(opts, stats)
+            o.update(bmp=bmp, bmpsel=bmpsel, bmparea=None, stats=stats)
             r = self._dc.GetIdBounds(o["id"])
             pt = [v * zoom / zoom0 for v in r.TopLeft]
             self._dc.SetIdBounds(o["id"], wx.Rect(wx.Point(pt), bmp.Size))
             if fullbounds: fullbounds.Union(self._dc.GetIdBounds(o["id"]))
             else: fullbounds = self._dc.GetIdBounds(o["id"])
+        for o in drops: self._order.remove(o)
         if fullbounds and not wx.Rect(self.VirtualSize).Contains(fullbounds):
             self.SetVirtualSize([max(a, b + self.MOVE_STEP)
                                  for a, b in zip(self.VirtualSize, fullbounds.BottomRight)])
@@ -9993,7 +9999,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             ns = {"title": title, "db": self._db, "items": [], "lines": self._lines,
                   "bounds": bounds, "stats": util.CaselessDict(), "dc": wx.ClientDC(self)}
             for o in self._objs.values():
-                opts = self._db.get_category(o["category"], o["name"])
+                opts = self._db.schema[o["type"]].get(o["name"])
                 if opts and stats: ns["stats"][o["name"]] = self._GetItemStats(opts)
                 item = dict(opts or {}, **o)
                 item["bounds"] = self._dc.GetIdBounds(o["id"])
@@ -10081,9 +10087,9 @@ class SchemaDiagram(wx.ScrolledWindow):
             items = map(self._objs.get, self._sels)
             items.sort(key=lambda o: o["name"].lower())
             categories = {}
-            for o in items: categories.setdefault(o["category"], []).append(o)
+            for o in items: categories.setdefault(o["type"], []).append(o)
             title = "%s %s" % (
-                        items[0]["category"].capitalize(),
+                        items[0]["type"].capitalize(),
                         util.ellipsize(util.unprint(grammar.quote(items[0]["name"], force=True)),
                                        self.MAX_TEXT)
                     ) if len(items) == 1 else \
@@ -10157,7 +10163,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._lines.clear()
         del self._order[:]
 
-        reset = any(o["__id__"] not in (x["__id__"] for x in self._db.schema.get(o["category"], {}).values())
+        reset = any(o["__id__"] not in (x["__id__"] for x in self._db.schema.get(o["type"], {}).values())
                     for o in objs0)
         for name1 in self._db.schema.get("table", {}):
             for fk in self._db.get_keys(name1, pks_only=True)[1]:
@@ -10176,10 +10182,10 @@ class SchemaDiagram(wx.ScrolledWindow):
                 and o0["columns"] == opts["columns"] and stats == stats0:
                     bmp, bmpsel, bmparea = map(o0.get, ("bmp", "bmpsel", "bmparea"))
                 else:
-                    bmp, bmpsel, bmparea = self._MakeItemBitmaps(opts, stats)
+                    (bmp, bmpsel), bmparea = self._MakeItemBitmaps(opts, stats), None
                 if o0 and o0["name"] in sels0: self._sels[name] = oid
                 self._ids[oid] = name
-                self._objs[name] = {"id": oid, "category": category, "name": name, "stats": stats,
+                self._objs[name] = {"id": oid, "type": category, "name": name, "stats": stats,
                                     "__id__": opts["__id__"], "sql0": opts["sql0"],
                                     "columns": [dict(c)  for c in opts["columns"]],
                                     "bmp": bmp, "bmpsel": bmpsel, "bmparea": bmparea}
@@ -10213,15 +10219,20 @@ class SchemaDiagram(wx.ScrolledWindow):
         or recalculating all relation lines if specified,
         or recalculating only those relation lines connected to selected items if specified.
         """
+        drops = []
         for o in self._order if remake else ():
-            opts = self._db.get_category(o["category"], o["name"])
-            if not opts: self._objs.pop(o["name"])
-            if not opts: continue # for o
+            opts = self._db.schema[o["type"]].get(o["name"])
+            if not opts:
+                self._objs.pop(o["name"])
+                self._dc.RemoveId(o["id"])
+                drops.append(o)
+                continue # for o
             stats = o["stats"] = self._GetItemStats(opts)
-            bmp, bmpsel, bmparea = self._MakeItemBitmaps(opts, stats)
+            (bmp, bmpsel), bmparea = self._MakeItemBitmaps(opts, stats), None
             o.update(bmp=bmp, bmpsel=bmpsel, bmparea=bmparea)
             r = self._dc.GetIdBounds(o["id"])
             self._dc.SetIdBounds(o["id"], wx.Rect(r.TopLeft, o["bmp"].Size))
+        for o in drops: self._order.remove(o)
         self.RecordSelectionRect()
         self.RecordLines(remake=remake or remakelines, recalculate=recalculate)
         self.RecordItems()
@@ -10244,6 +10255,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._dc.RemoveId(o["id"])
         self._dc.SetId(o["id"])
         bmp = o[("bmparea" if self._dragrect else "bmpsel") if o["name"] in self._sels else "bmp"]
+        if bmp is None: bmp = o["bmparea"] = self._MakeItemBitmaps(o, o["stats"], dragrect=True)
         pos = [a - (o["name"] in self._sels) * 2 * self._zoom for a in bounds[:2]]
         self._dc.DrawBitmap(bmp, pos, useMask=True)
         self._dc.SetIdBounds(o["id"], wx.Rect(bounds.TopLeft, o["bmp"].Size))
@@ -10420,13 +10432,13 @@ class SchemaDiagram(wx.ScrolledWindow):
         # Sort views always to the end
         catval = lambda c: c.upper() if do_reverse and util.lceq(c, "view") else c.lower()
         if "columns" == self._layout["grid"]["order"]:
-            numval = lambda o: len(self._db.get_category(o["category"], o["name"])["columns"])
+            numval = lambda o: len(self._db.schema[o["type"]].get(o["name"], {}).get("columns", []))
         elif "rows" == self._layout["grid"]["order"]:
-            numval = lambda o: self._db.get_category(o["category"], o["name"]).get("count", 0)
+            numval = lambda o: self._db.schema[o["type"]].get(o["name"], {}).get("count", 0)
         elif "bytes" == self._layout["grid"]["order"]:
             statmap = util.CaselessDict({x["name"]: x["size_total"] for x in tablestats})
             numval = lambda o: statmap.get(o["name"], 0)
-        sortkey = lambda o: (catval(o["category"]), numval(o), o["name"].lower())
+        sortkey = lambda o: (catval(o["type"]), numval(o), o["name"].lower())
         items = sorted(self._order, key=sortkey, reverse=do_reverse)
 
         if self._layout["grid"]["vertical"]:
@@ -10605,11 +10617,13 @@ class SchemaDiagram(wx.ScrolledWindow):
         return stats
 
 
-    def _MakeItemBitmaps(self, opts, stats=None):
+    def _MakeItemBitmaps(self, opts, stats=None, dragrect=False):
         """
-        Returns three wx.Bitmaps representing a schema item like table.
+        Returns wx.Bitmaps representing a schema item like table.
 
-        @return   (default bitmap, focused bitmap, bitmap inside drag rectangle)
+        @param    dragrect  if True, returns a single bitmap 
+                            for item inside drag rectangle
+        @return   (default bitmap, focused bitmap) or bitmap inside drag rectangle
         """
         CRADIUS = self.BRADIUS if "table" == opts["type"] else 0
         w, h = self.MINW, self.HEADERH + self.HEADERP + self.FOOTERH
@@ -10676,55 +10690,54 @@ class SchemaDiagram(wx.ScrolledWindow):
         if fks and self._zoom != self.ZOOM_DEFAULT:
             fkbmp = wx.Bitmap(images.DiagramFK.Image.Scale(*[int(math.ceil(x * self._zoom)) for x in fkbmp.Size]))
 
-        bmp, bmparea = (wx.Bitmap(w, h, depth=24) for _ in (0, 1))
-        for b in bmp, bmparea:
-            dc = wx.MemoryDC(b)
-            dc.Background = wx.TRANSPARENT_BRUSH
-            dc.Clear()
-            bg, gradfrom = self.BackgroundColour, self.GradientColourFrom
-            if b is bmparea:
-                bg = gradfrom = self._colour_dragbg
+        bmp = wx.Bitmap(w, h, depth=24)
+        dc = wx.MemoryDC(bmp)
+        dc.Background = wx.TRANSPARENT_BRUSH
+        dc.Clear()
+        bg, gradfrom = self.BackgroundColour, self.GradientColourFrom
+        if dragrect:
+            bg = gradfrom = self._colour_dragbg
 
-            # Fill with gradient, draw border
-            dc.GradientFillLinear((0, 0, w, h), gradfrom, self.GradientColourTo)
-            dc.Pen, dc.Brush = controls.PEN(self.BorderColour), wx.TRANSPARENT_BRUSH
-            dc.DrawRoundedRectangle(0, 0, w, h, CRADIUS)
+        # Fill with gradient, draw border
+        dc.GradientFillLinear((0, 0, w, h), gradfrom, self.GradientColourTo)
+        dc.Pen, dc.Brush = controls.PEN(self.BorderColour), wx.TRANSPARENT_BRUSH
+        dc.DrawRoundedRectangle(0, 0, w, h, CRADIUS)
 
-            # Empty out columns middle, draw header separator
-            dc.Pen   = controls.PEN(bg)
-            dc.Brush = controls.BRUSH(bg)
-            dc.DrawRectangle(1, self.HEADERH, w - 2, self.HEADERP + self.LINEH * len(opts.get("columns") or []))
-            dc.Pen, dc.Brush = controls.PEN(self.BorderColour), wx.TRANSPARENT_BRUSH
-            dc.DrawLine(0, self.HEADERH, w, self.HEADERH)
+        # Empty out columns middle, draw header separator
+        dc.Pen   = controls.PEN(bg)
+        dc.Brush = controls.BRUSH(bg)
+        dc.DrawRectangle(1, self.HEADERH, w - 2, self.HEADERP + self.LINEH * len(opts.get("columns") or []))
+        dc.Pen, dc.Brush = controls.PEN(self.BorderColour), wx.TRANSPARENT_BRUSH
+        dc.DrawLine(0, self.HEADERH, w, self.HEADERH)
 
-            # Draw title
-            dc.SetFont(self._font_bold)
-            dc.TextForeground = self.ForegroundColour
-            dc.DrawLabel(title, (0, 1, w, self.HEADERH), wx.ALIGN_CENTER)
+        # Draw title
+        dc.SetFont(self._font_bold)
+        dc.TextForeground = self.ForegroundColour
+        dc.DrawLabel(title, (0, 1, w, self.HEADERH), wx.ALIGN_CENTER)
 
-            # Draw columns: name and type, and primary/foreign key icons
-            dc.SetFont(self.Font)
-            dc.DrawTextList(collists[0], collists[1])
-            for i, col in enumerate(opts.get("columns") or []):
-                dy = self.HEADERH + self.HEADERP + i * self.LINEH
-                if col["name"] in pks:
-                    dc.DrawBitmap(pkbmp, 3 * max(self._zoom, 1), dy + 1, useMask=True)
-                if col["name"] in fks:
-                    b, bw = fkbmp, fkbmp.Width
-                    dc.DrawBitmap(b, w - bw - 6 * self._zoom, dy + 1, useMask=True)
+        # Draw columns: name and type, and primary/foreign key icons
+        dc.SetFont(self._font)
+        dc.DrawTextList(collists[0], collists[1])
+        for i, col in enumerate(opts.get("columns") or []):
+            dy = self.HEADERH + self.HEADERP + i * self.LINEH
+            if col["name"] in pks:
+                dc.DrawBitmap(pkbmp, 3 * max(self._zoom, 1), dy + 1, useMask=True)
+            if col["name"] in fks:
+                b, bw = fkbmp, fkbmp.Width
+                dc.DrawBitmap(b, w - bw - 6 * self._zoom, dy + 1, useMask=True)
 
-            # Draw statistics texts and separator
-            if stats:
-                dc.DrawLine(0, h - self.STATSH, w, h - self.STATSH)
-                dc.SetFont(stats_font)
-            if statslists[0]:
-                dc.DrawTextList(statslists[0], statslists[1])
-            if statslists[2]:
-                dc.TextForeground = self.BackgroundColour
-                dc.DrawTextList(statslists[2], statslists[3])
+        # Draw statistics texts and separator
+        if stats:
+            dc.DrawLine(0, h - self.STATSH, w, h - self.STATSH)
+            dc.SetFont(stats_font)
+        if statslists[0]:
+            dc.DrawTextList(statslists[0], statslists[1])
+        if statslists[2]:
+            dc.TextForeground = self.BackgroundColour
+            dc.DrawTextList(statslists[2], statslists[3])
 
-            dc.SelectObject(wx.NullBitmap)
-            del dc
+        dc.SelectObject(wx.NullBitmap)
+        del dc
 
         if CRADIUS:
             # Make transparency mask for excluding content outside rounded corners
@@ -10736,8 +10749,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             dc.DrawRoundedRectangle(0, 0, mbmp.Width, mbmp.Height, CRADIUS)
             dc.SelectObject(wx.NullBitmap)
             del dc
-            bmp.SetMask    (wx.Mask(mbmp, wx.TRANSPARENT_BRUSH.Colour))
-            bmparea.SetMask(wx.Mask(mbmp, wx.TRANSPARENT_BRUSH.Colour))
+            bmp.SetMask(wx.Mask(mbmp, wx.TRANSPARENT_BRUSH.Colour))
 
             # Make transparency mask for excluding content outside rounded shadow corners
             sbmp = wx.Bitmap(w + 2 * self.FMARGIN, h + 2 * self.FMARGIN)
@@ -10748,18 +10760,17 @@ class SchemaDiagram(wx.ScrolledWindow):
             dc.DrawRoundedRectangle(0, 0, sbmp.Width, sbmp.Height, CRADIUS)
             del dc
 
-        # Make "selected" bitmaps, with a surrounding shadow
-        bmpsel, bmpareasel = (wx.Bitmap(w + 2 * m, h + 2 * m) for m in (self.FMARGIN, )*2)
-        for b1, b2 in (bmp, bmpsel), (bmparea, bmpareasel):
-            dc = wx.MemoryDC(b2)
-            dc.Background = controls.BRUSH(self.ShadowColour)
-            dc.Clear()
-            dc.DrawBitmap(b1, self.FMARGIN, self.FMARGIN, useMask=True)
-            dc.SelectObject(wx.NullBitmap)
-            del dc
-            if CRADIUS: b2.SetMask(wx.Mask(sbmp, wx.TRANSPARENT_BRUSH.Colour))
+        # Make "selected" bitmap, with a surrounding shadow
+        bmpsel = wx.Bitmap(w + 2 * self.FMARGIN, h + 2 * self.FMARGIN)
+        dc = wx.MemoryDC(bmpsel)
+        dc.Background = controls.BRUSH(self.ShadowColour)
+        dc.Clear()
+        dc.DrawBitmap(bmp, self.FMARGIN, self.FMARGIN, useMask=True)
+        dc.SelectObject(wx.NullBitmap)
+        del dc
+        if CRADIUS: bmpsel.SetMask(wx.Mask(sbmp, wx.TRANSPARENT_BRUSH.Colour))
 
-        return bmp, bmpsel, bmpareasel
+        return bmpsel if dragrect else (bmp, bmpsel)
 
 
     def _UpdateColours(self, defaults=False):
@@ -10819,7 +10830,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         self.Cursor = wx.Cursor(wx.CURSOR_HAND if item else wx.CURSOR_DEFAULT)
 
         tip = wx.lib.wordwrap.wordwrap("%s %s" % (
-            item["category"], grammar.quote(item["name"], force=True)
+            item["type"], grammar.quote(item["name"], force=True)
         ), 400, wx.MemoryDC()) if item else ""
         # @todo itemit saaks ka meelde jätta et mis eelmine oli, ei peaks tippi iga
         # kord uuesti tekitama.
@@ -10878,7 +10889,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             if   event.RightDown():  self.OpenContextMenu()
             elif event.LeftDClick():
                 if oid and self._page:
-                    self._page.handle_command("schema", o["category"], o["name"])
+                    self._page.handle_command("schema", o["type"], o["name"])
 
 
         elif event.Dragging() or event.LeftUp():
@@ -10924,7 +10935,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 r.Inflate(2 * self.BRADIUS, 2 * self.BRADIUS)
                 refrect.Union(r)
 
-            # First pass: constrain dx-dy so that all items remain within diagram bounds
+            # First pass: constrain dx-dy so that all dragged items remain within diagram bounds
             for name, oid in self._sels.items() if not self._dragrect else ():
                 r = self._dc.GetIdBounds(oid)
                 r0 = wx.Rect(r)
@@ -10935,7 +10946,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 if r.Bottom > self.VirtualSize.Height: dy = self.VirtualSize.Height - r0.Bottom
 
             for name, oid in self._sels.items() if not self._dragrect else ():
-                # Second pass: reposition item
+                # Second pass: reposition dragged item
                 r = self._dc.GetIdBounds(oid)
                 r0 = wx.Rect(r)
                 r.Offset(dx, dy)
@@ -10976,13 +10987,13 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         if event.CmdDown() and event.UnicodeKey == ord('A'):
             self._sels.update({o["name"]: o["id"] for o in self._objs.values()}) # Select all
-            self._order.sort(key=lambda o: (o["category"], o["name"].lower()))
+            self._order.sort(key=lambda o: (o["type"], o["name"].lower()))
             self.Redraw()
         elif event.CmdDown() and event.UnicodeKey == ord('C'):
             items = map(self._objs.get, self._sels)
             items.sort(key=lambda o: o["name"].lower())
             categories = {}
-            for o in items: categories.setdefault(o["category"], []).append(o)
+            for o in items: categories.setdefault(o["type"], []).append(o)
             text = "\n\n".join(self._db.get_sql(c, o["name"])
                                for c, oo in categories.items() for o in oo)
             if wx.TheClipboard.Open():
@@ -11008,16 +11019,16 @@ class SchemaDiagram(wx.ScrolledWindow):
             self.Redraw()
         elif event.KeyCode in controls.KEYS.ESCAPE and items:
             self._sels.clear() # Select none
-            self._order.sort(key=lambda o: (o["category"], o["name"].lower()))
+            self._order.sort(key=lambda o: (o["type"], o["name"].lower()))
             self.Redraw()
         elif event.KeyCode in controls.KEYS.DELETE and items:
             self._page.handle_command("drop", None, *[o["name"] for o in items])
         elif event.KeyCode in controls.KEYS.INSERT:
             self.OpenContextMenu()
         elif event.KeyCode in (wx.WXK_F2, wx.WXK_NUMPAD_F2) and items:
-            self._page.handle_command("rename", items[0]["category"], items[0]["name"])
+            self._page.handle_command("rename", items[0]["type"], items[0]["name"])
         elif event.KeyCode in controls.KEYS.ENTER and items:
-            for o in items: self._page.handle_command("schema", o["category"], o["name"])
+            for o in items: self._page.handle_command("schema", o["type"], o["name"])
         elif event.KeyCode in controls.KEYS.ARROW + controls.KEYS.NUMPAD_ARROW and event.CmdDown():
             x, y = self.GetViewStart()
             if event.KeyCode in controls.KEYS.UP:    y = 0
