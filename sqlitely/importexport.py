@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.12.2020
+@modified    20.12.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -383,7 +383,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, p
         for item in items:
             # Foreign tables and tables/views used in triggers for table,
             # tables/views used in view body and view triggers for view.
-            for name2 in util.get(item, "meta", "__tables__"):
+            for name2 in util.getval(item, "meta", "__tables__"):
                 if util.lceq(name, name2): continue # for name2
                 requireds.setdefault(name, []).append(name2)
 

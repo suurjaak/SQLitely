@@ -167,9 +167,11 @@ UTC = tzinfo_utc() # UTC timezone singleton
 
 def hashable(x):
     """Returns whether object is hashable."""
-    KNOWN = basestring, int, long, float, bool, type(None), datetime.date, datetime.time
-    if isinstance(x, KNOWN): return True
-    if isinstance(x, tuple): return all(hashable(y) for y in x)
+    KNOWN = str, unicode, int, long, float, bool, type(None), \
+            datetime.date, datetime.datetime, datetime.time
+    if type(x) in KNOWN: return True
+    if type(x) is tuple: return all(hashable(y) for y in x)
+    if isinstance(x, (dict, list, set)): return False
     try: hash(x)
     except TypeError: return False
     return True
@@ -178,24 +180,38 @@ def hashable(x):
 def memoize(*args, **kwargs):
     """
     Returns function result, cached if available, caches result otherwise.
+    Returns deep copies if result is dict, list, set, or tuple.
 
-    If invoked with no arguments or only recognized arguments,
-    acts as function decorator, returning cache wrapper function;
-    if with recognized arguments, returns outer decorator which returns wrapper.
+    Acts as decorator if invoked with a single function argument or with 
+    recognized keyword arguments; returning an outer decorator for the latter:
+
+    @memoize
+    def somefunction(a, b): ..
+
+    @memoize(__nohash__=True)
+    def otherfunction(a, b, unhashable): ..
 
     @param   args        (function, ?arg1, ..) or () if argumented decorator
-    @param   __root__    cache root to use if not function,
-                         must be a hashable scalar or a list/tuple of hashables
+    @param   __key__     cache root key to use if not function, must be hashable
     @param   __nohash__  whether arguments can be unhashable,
                          checks unhashable arguments by equality instead
     """
-    func, root, nohash, ns = None, [], False, locals()
-    # {root: {(args): value or [((unhashable args), value)]}}
+    func, root, nohash, ns = None, None, False, locals()
     cache = getattr(memoize, "cache", None)
-    if cache is None:
+    nohashcache = getattr(memoize, "nohashcache", None)
+    if cache is None:       # {root: {(args): value}}
         cache = collections.defaultdict(dict)
         setattr(memoize, "cache", cache)
+    if nohashcache is None: # {root: {(args): [((unhashable args), value)]}}
+        nohashcache = collections.defaultdict(lambda: collections.defaultdict(list))
+        setattr(memoize, "nohashcache", nohashcache)
 
+
+    NOCOPY = str, unicode, int, long, float, bool, type(None), \
+             datetime.date, datetime.datetime, datetime.time
+    def returner(v):
+        if type(v) is tuple and all(type(x) in NOCOPY for x in v): return v
+        return copy.deepcopy(v) if isinstance(v, (dict, list, set, tuple)) else v
 
     def decorate(func):
         ns.update(func=func)
@@ -208,7 +224,7 @@ def memoize(*args, **kwargs):
 
     def outer(func):
         """Outer decorator, returns function wrapper."""
-        root.append(func)
+        ns["root"] = func
         return decorate(func)
 
     def nohashget(*args, **kwargs):
@@ -217,51 +233,48 @@ def memoize(*args, **kwargs):
         finishes with checking unhashables by equality.
         """
         key1, key2 = [], []
-        for arg in args + tuple(kwargs.items()):
+        for arg in args + sum(kwargs.items(), ()):
             (key1 if hashable(arg) else key2).append(arg)
-        tuples = cache[tuple(root)].setdefault(tuple(key1), [])
+        if not key2: return hashget(*args, **kwargs)
+
+        tuples = nohashcache[root][tuple(key1)]
         for mykey, value in tuples:
-            if not key2 and not mykey:
-                return copy.deepcopy(value)
-            for k1, k2 in zip(key2, mykey):
+            for k1, k2 in zip(key2, mykey) if len(key2) == len(mykey) else ():
                 if type(k1) is type(k2) and k1 == k2:
-                    return copy.deepcopy(value)
+                    return returner(value)
         value = ns["func"](*args, **kwargs)
         tuples.append((key2, value))
-        return value
+        return returner(value)
 
     def hashget(*args, **kwargs):
-        key = args + tuple(kwargs.items())
-        mycache = cache[tuple(root)]
-        if key in mycache:
-            return copy.deepcopy(mycache[key])
-        mycache[key] = ns["func"](*args, **kwargs)
-        return mycache[key]
+        key = args + sum(kwargs.items(), ())
+        mycache = cache[root]
+        if key not in mycache:
+            mycache[key] = ns["func"](*args, **kwargs)
+        return returner(mycache[key])
 
 
-    as_outer = not args and ("__nohash__" in kwargs or "__root__" in kwargs)
+    as_outer = not args and ("__nohash__" in kwargs or "__key__" in kwargs)
     if "__nohash__" in kwargs: nohash = kwargs.pop("__nohash__")
-    if "__root__"   in kwargs: root   = kwargs.pop("__root__")
+    if "__key__"    in kwargs: root   = kwargs.pop("__key__")
     if as_outer and kwargs:
         raise TypeError("memoize() got an unexpected keyword argument '%s'" % 
                         next(iter(kwargs)))
 
-    if root not in (None, []):
-        if isinstance(root, tuple): root = list(root)
-        elif not isinstance(root, list): root = [root]
-
     if not as_outer:
         func, args = args[0], args[1:]
-        if root == []: root = [func]
+        if root is None: root = func
 
     if as_outer: return outer # Argumented decorator
     elif not args and not kwargs: return decorate(func) # Plain decorator
     else: # Straight invocation
         if nohash: return nohashget(*args, **kwargs)
         else:
-            key = tuple(root) + args + tuple(kwargs.items())
-            if key not in cache: cache[key] = func(*args, **kwargs)
-            return cache[key]
+            key = args + sum(kwargs.items(), ())
+            mycache = cache[root]
+            if key not in mycache:
+                mycache[key] = func(*args, **kwargs)
+            return returner(mycache[key])
 
 
 @memoize
@@ -688,13 +701,13 @@ def make_unique(value, existing, suffix="_%s", counter=2, case=False):
     return result
 
 
-def get(collection, *path, **kwargs):
+def getval(collection, *path, **kwargs):
     """
     Returns the value at specified collection path. If path not available,
     returns the first keyword argument if any given, or None.
     Collection can be a nested structure of dicts, lists, tuples or strings,
     or objects with named attributes.
-    E.g. util.get({"root": {"first": [{"k": "v"}]}}, "root", "first", 0, "k").
+    E.g. getval({"root": {"first": [{"k": "v"}]}}, "root", "first", 0, "k").
     """
     default = (list(kwargs.values()) + [None])[0]
     result = collection if path else default
@@ -715,7 +728,7 @@ def get(collection, *path, **kwargs):
     return result
 
 
-def set(collection, value, *path):
+def setval(collection, value, *path):
     """
     Sets the value at specified collection path. If a path step does not exist,
     it is created as dict. Collection can be a nested structure of dicts and lists.

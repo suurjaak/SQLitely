@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.12.2020
+@modified    20.12.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2525,6 +2525,7 @@ class DatabasePage(wx.Panel):
             self.load_data()
         finally:
             busy.Close()
+        if not self: return
         wx_accel.accelerate(self)
         wx.CallAfter(lambda: self and (edit_search.SetFocus(), edit_search.SelectAll()))
 
@@ -5651,7 +5652,7 @@ class DatabasePage(wx.Panel):
             for item in items:
                 # Foreign tables and tables/views used in triggers for table,
                 # tables/views used in view body and view triggers for view.
-                for name2 in util.get(item, "meta", "__tables__"):
+                for name2 in util.getval(item, "meta", "__tables__"):
                     if util.lceq(name, name2): continue # for name2
                     category2 = "table" if name2 in self.db.schema.get("table", ()) else "view"
                     requireds[name][name2] = category2
@@ -5738,7 +5739,7 @@ class DatabasePage(wx.Panel):
         deps, reqs = {}, {} # {category: set(name, )}
         for c, name in ((c, n) for c, nn in eschema.items() for n in nn):
             for name0, kv in requireds.items():
-                if name in kv and not util.get(eschema, kv[name], name):
+                if name in kv and not util.getval(eschema, kv[name], name):
                     deps.setdefault(c, set()).add(name0)
                     reqs.setdefault(kv[name], set()).add(name)
         if deps:
@@ -6069,11 +6070,7 @@ class DatabasePage(wx.Panel):
         self.on_update_stc_schema()
         wx.YieldIfNeeded()
         if not self: return
-        import cProfile
-        self.prof = cProfile.Profile()
-        self.prof.enable()
         self.diagram.Populate()
-        self.prof.disable()
         self.populate_diagram_finder()
         self.cb_diagram_rels.Enable()
         self.cb_diagram_labels.Enable(self.cb_diagram_rels.Value)

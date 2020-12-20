@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.12.2020
+@modified    20.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -3053,7 +3053,7 @@ class SchemaObjectPage(wx.Panel):
         splitter.SashInvisible = not has_cols
         wx_accel.accelerate(self)
         button_edit.Enabled = self._hasmeta
-        if grammar.SQL.CREATE_VIRTUAL_TABLE == util.get(self._item, "meta", "__type__"):
+        if grammar.SQL.CREATE_VIRTUAL_TABLE == util.getval(self._item, "meta", "__type__"):
             button_edit.Enabled = False
             self._panel_category.Hide()
             splitter.SetMinimumPaneSize(0)
@@ -4913,7 +4913,7 @@ class SchemaObjectPage(wx.Panel):
 
     def _OnOpenItem(self, path, event=None):
         """Opens a FormDialog for row item."""
-        data  = util.get(self._item["meta"], path)
+        data  = util.getval(self._item["meta"], path)
         props = self._GetFormDialogProps(path, data)
 
         words = []
@@ -4936,7 +4936,7 @@ class SchemaObjectPage(wx.Panel):
         dlg.Destroy()
         if data == data2: return
 
-        util.set(self._item["meta"], data2, path)
+        util.setval(self._item["meta"], data2, path)
         path2, index = path[:-1], path[-1]
         self.Freeze()
         try:
@@ -4955,7 +4955,7 @@ class SchemaObjectPage(wx.Panel):
 
         path = [path] if isinstance(path, basestring) else path
         rebuild, meta = False, self._item["meta"]
-        value0, src = util.get(meta, path), event.EventObject
+        value0, src = util.getval(meta, path), event.EventObject
 
         value = src.Value
         if isinstance(value, basestring) \
@@ -4967,7 +4967,7 @@ class SchemaObjectPage(wx.Panel):
             value = [value]
 
         if value == value0: return
-        util.set(meta, value, path)
+        util.setval(meta, value, path)
 
         do_cascade = False
         if "trigger" == self._category:
@@ -4993,7 +4993,7 @@ class SchemaObjectPage(wx.Panel):
             elif "constraints" == path[0] and "table" == path[-1]:
                 # Foreign table changed, clear foreign cols
                 path2, fkpath, index = path[:-2], path[:-1], path[-2]
-                data2 = util.get(meta, fkpath)
+                data2 = util.getval(meta, fkpath)
                 if data2.get("key"): data2["key"][:] = []
                 self.Freeze()
                 try:
@@ -5001,7 +5001,7 @@ class SchemaObjectPage(wx.Panel):
                     self._AddRow(path2, index, data2, insert=True)
                 finally: self.Thaw()
             elif "columns" == path[0] and "name" == path[-1]:
-                col = util.get(meta, path[:-1])
+                col = util.getval(meta, path[:-1])
                 if value0 and not value: col["name_last"] = value0
 
                 myid = col["__id__"]
@@ -5349,9 +5349,9 @@ class SchemaObjectPage(wx.Panel):
     def _OnToggleColumnFlag(self, path, event):
         """Toggles PRIMARY KEY / NOT NULL / UNIQUE flag."""
         path, flag = path[:-1], path[-1]
-        coldata = util.get(self._item["meta"], path[:2])
-        data, value = util.get(self._item["meta"], path), event.EventObject.Value
-        if data is None: data = util.set(self._item["meta"], {}, path)
+        coldata = util.getval(self._item["meta"], path[:2])
+        data, value = util.getval(self._item["meta"], path), event.EventObject.Value
+        if data is None: data = util.setval(self._item["meta"], {}, path)
 
         if value: data[flag] = value if "autoincrement" == flag else {}
         else: data.pop(flag, None)
@@ -9634,6 +9634,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._colour_grad1  = wx.NullColour
         self._colour_grad2  = wx.NullColour
         self._colour_dragbg = wx.NullColour
+        self._font          = wx.NullFont
         self._font_bold     = wx.NullFont
 
         FMTS = sorted(self.EXPORT_FORMATS.values())
@@ -9649,8 +9650,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._UpdateColours()
         self.SetVirtualSize(self.VIRTUALSZ)
         self.SetScrollRate(1, 1)
-        self.SetFont(util.memoize(wx.Font, self.FONT_SIZE, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
-                                  wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE))
+        self._font = util.memoize(wx.Font, self.FONT_SIZE, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
+                                  wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE)
         self._font_bold = util.memoize(wx.Font, self.FONT_SIZE, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
                                        wx.FONTWEIGHT_BOLD, faceName=self.FONT_FACE)
 
@@ -9713,8 +9714,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         zoom0, viewport0 = self._zoom, self.GetViewPort()
         self._zoom = zoom
 
-        self.SetFont(util.memoize(wx.Font, self.FONT_SIZE * zoom, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
-                                  wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE))
+        self._font = util.memoize(wx.Font, self.FONT_SIZE * zoom, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
+                                  wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE)
         self._font_bold = util.memoize(wx.Font, self.FONT_SIZE * zoom, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
                                        wx.FONTWEIGHT_BOLD, faceName=self.FONT_FACE)
 
@@ -9937,7 +9938,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             dc = wx.MemoryDC(bmp)
             dc.Background = controls.BRUSH(self.BackgroundColour)
             dc.Clear()
-            dc.Font = self.Font
+            dc.Font = self._font
             self._dc.DrawToDCClipped(dc, bounds)
 
             bmp2 = wx.Bitmap(bounds.Width, bounds.Height)
@@ -10180,7 +10181,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self._ids[oid] = name
                 self._objs[name] = {"id": oid, "category": category, "name": name, "stats": stats,
                                     "__id__": opts["__id__"], "sql0": opts["sql0"],
-                                    "columns": copy.deepcopy(opts["columns"]),
+                                    "columns": [dict(c)  for c in opts["columns"]],
                                     "bmp": bmp, "bmpsel": bmpsel, "bmparea": bmparea}
                 self._order.append(self._objs[name])
                 reset |= not o0
@@ -10597,7 +10598,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         """Returns {?size, ?rows} for schema item if stats enabled and information available."""
         stats = {}
         if not self._show_stats: return stats
-        size = next((x["size_total"] for x in util.get(self._page, "statistics", "data", "table", default=[])
+        size = next((x["size_total"] for x in util.getval(self._page, "statistics", "data", "table", default=[])
                      if util.lceq(x["name"], opts["name"])), None)
         if size is not None: stats["size"] = size
         if opts.get("count") is not None: stats["rows"] = util.count(opts, unit="row")
@@ -10613,9 +10614,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         CRADIUS = self.BRADIUS if "table" == opts["type"] else 0
         w, h = self.MINW, self.HEADERH + self.HEADERP + self.FOOTERH
 
-        memoroot = "GetFullTextExtent", self.Font.FaceName, self.Font.PointSize
-        get_extent = lambda t, f=None: util.memoize(self.GetFullTextExtent, t, f,
-                                                    __root__=memoroot)
+        get_extent = lambda t, f=self._font: util.memoize(self.GetFullTextExtent, t, f,
+                                                          __key__="GetFullTextExtent")
 
         # Measure title width
         title = util.ellipsize(util.unprint(opts["name"]), self.MAX_TITLE)
@@ -10654,7 +10654,6 @@ class SchemaDiagram(wx.ScrolledWindow):
         if stats:
             stats_font = util.memoize(wx.Font, self.Font.PointSize + self.FONT_STEP_STATS, wx.FONTFAMILY_MODERN,
                                      wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE)
-            memoroot = "GetFullTextExtent", stats_font.FaceName, stats_font.PointSize
             dx, dy = self.BRADIUS, h - self.STATSH + 1
 
             text1 = stats.get("rows")
@@ -11115,35 +11114,6 @@ class SchemaDiagram(wx.ScrolledWindow):
         if kwargs.get("layout") == False: self._layout["active"] = False
         evt = SchemaDiagramEvent(self.Id, **kwargs)
         wx.PostEvent(self.Parent, evt)
-
-
-
-def get_grid_selection(grid, cursor=True):
-    """
-    Returns grid's currently selected rows and cols,
-    falling back to cursor row and col, as ([row, ], [col, ]).
-    """
-    rows, cols = [], []
-    if grid.GetSelectedCols():
-        cols += sorted(grid.GetSelectedCols())
-        rows += range(grid.GetNumberRows())
-    if grid.GetSelectedRows():
-        rows += sorted(grid.GetSelectedRows())
-        cols += range(grid.GetNumberCols())
-    if grid.GetSelectionBlockTopLeft():
-        end = grid.GetSelectionBlockBottomRight()
-        for i, (r, c) in enumerate(grid.GetSelectionBlockTopLeft()):
-            r2, c2 = end[i]
-            rows += range(r, r2 + 1)
-            cols += range(c, c2 + 1)
-    if grid.GetSelectedCells():
-        rows += [r for r, c in grid.GetSelectedCells()]
-        cols += [c for r, c in grid.GetSelectedCells()]
-    if not rows and not cols and cursor:
-        if grid.GridCursorRow >= 0 and grid.GridCursorCol >= 0:
-            rows, cols = [grid.GridCursorRow], [grid.GridCursorCol]
-    rows, cols = (sorted(set(y for y in x if y >= 0)) for x in (rows, cols))
-    return rows, cols
 
 
 
@@ -11877,3 +11847,31 @@ class ImportWizard(wx.adv.Wizard):
                 self.page2.log.AppendText(info)
 
         if callable(callback): callback(self.page2.importing)
+
+
+def get_grid_selection(grid, cursor=True):
+    """
+    Returns grid's currently selected rows and cols,
+    falling back to cursor row and col, as ([row, ], [col, ]).
+    """
+    rows, cols = [], []
+    if grid.GetSelectedCols():
+        cols += sorted(grid.GetSelectedCols())
+        rows += range(grid.GetNumberRows())
+    if grid.GetSelectedRows():
+        rows += sorted(grid.GetSelectedRows())
+        cols += range(grid.GetNumberCols())
+    if grid.GetSelectionBlockTopLeft():
+        end = grid.GetSelectionBlockBottomRight()
+        for i, (r, c) in enumerate(grid.GetSelectionBlockTopLeft()):
+            r2, c2 = end[i]
+            rows += range(r, r2 + 1)
+            cols += range(c, c2 + 1)
+    if grid.GetSelectedCells():
+        rows += [r for r, c in grid.GetSelectedCells()]
+        cols += [c for r, c in grid.GetSelectedCells()]
+    if not rows and not cols and cursor:
+        if grid.GridCursorRow >= 0 and grid.GridCursorCol >= 0:
+            rows, cols = [grid.GridCursorRow], [grid.GridCursorCol]
+    rows, cols = (sorted(set(y for y in x if y >= 0)) for x in (rows, cols))
+    return rows, cols

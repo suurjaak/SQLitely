@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.12.2020
+@modified    20.12.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -774,7 +774,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Returns ROWID name for table, or None if table is WITHOUT ROWID
         or has columns shadowing all ROWID aliases (ROWID, _ROWID_, OID).
         """
-        if util.get(self.schema["table"], table, "meta", "without"): return
+        if util.getval(self.schema["table"], table, "meta", "without"): return
         sql = self.schema["table"].get(table, {}).get("sql")
         if re.search("WITHOUT\s+ROWID[\s;]*$", sql, re.I): return
         ALIASES = ("_rowid_", "rowid", "oid")
@@ -948,7 +948,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     meta, sql = opts0["meta"], opts0["sql"]
                 elif parse:
                     meta, _ = grammar.parse(opts["sql0"])
-                    if meta: sql, _ = grammar.generate(meta)
+                    if meta: sql, _ = grammar.generate(meta) # @todo use or lose
                 if meta: opts.update(meta=meta)
                 if sql and (not meta or not meta.get("__comments__")):
                     opts.update(sql=sql)
@@ -1693,9 +1693,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
         args = {"name": name1, "name2": name2, "tempname": tempname,
                 "sql": sql, "__type__": "COMPLEX ALTER TABLE",
                 "columns": [(c1["name"],
-                             util.get(myrenames, "column", tempname, c1["name"]) or c1["name"])
+                             util.getval(myrenames, "column", tempname, c1["name"]) or c1["name"])
                             for c1 in item1["meta"]["columns"] 
-                            if util.get(myrenames, "column", tempname, c1["name"])
+                            if util.getval(myrenames, "column", tempname, c1["name"])
                             or any(util.lceq(c1["name"], c2["name"])
                                    for c2 in item2["meta"]["columns"])]}
 

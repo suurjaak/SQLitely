@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    18.12.2020
+@modified    19.12.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -465,9 +465,11 @@ class Parser(object):
         else: interval = ctx.getSourceInterval()
         result = self._stream.getText(*interval)
 
-        for c, r in ((ctx, "^%s"), (ctx2, "%s$")) if ctx and ctx2 else ():
-            if not isinstance(c, TerminalNode): continue # for c, r
-            result = re.sub(r % re.escape(self.t(c)), "", result, flags=re.I)
+        for c in (ctx, ctx2) if ctx and ctx2 else ():
+            if not isinstance(c, TerminalNode): continue # for c
+            upper = self.t(c)
+            a, b = (None, len(upper)) if c is ctx else (-len(upper), None)
+            if result[a:b].upper() == upper: result = result[b:a]
         return result
 
 
@@ -592,7 +594,9 @@ class Parser(object):
             result["when"] = self.r(ctx.expr())
 
         body = self.r(ctx.K_BEGIN(), ctx.K_END()).rstrip(" \t")
-        result["body"] = re.sub("^\n?(.+?)\n?$", r"\1", body, flags=re.DOTALL)
+        if body[:1]  == "\n": body = body[1:]
+        if body[-1:] == "\n": body = body[:-1]
+        result["body"] = body
 
         return result
 
@@ -1014,11 +1018,6 @@ class Generator(object):
             self._tokens.clear(); self._tokendata.clear(); self._data = data
             result = tpl.expand(ns)
 
-            for token in self._tokens.values():
-                # Redo if data happened to contain a generated token
-                if result.count(token) > self._tokendata[token]["count"]:
-                    continue # for token
-
             # Calculate max length for paddings
             widths = defaultdict(int)
             for (tokentype, _), token in self._tokens.items():
@@ -1029,17 +1028,22 @@ class Generator(object):
             for (tokentype, val), token in sorted(
                 self._tokens.items(), key=lambda x: REPLACE_ORDER.index(x[0][0])
             ):
+                count = self._tokendata[token]["count"]
                 if tokentype in ("GLUE", "LF"):  # Strip surrounding whitespace
-                    result = re.sub(r"\s*%s\s*" % re.escape(token), val, result)
+                    result = re.sub(r"\s*%s\s*" % re.escape(token), val, result, count=count)
                 elif "PAD" == tokentype: # Insert spaces per padding type/value
                     data = self._tokendata[token]
                     ws = " " * (widths[data["key"]] - len(data["value"]))
-                    result = result.replace(token, ws)
+                    result = result.replace(token, ws, count)
                 elif "CM" == tokentype:
                     # Strip leading whitespace and multiple trailing spaces from commas
                     r = r"\s*" + re.escape(token) + ("" if self._indent else " *")
-                    result = re.sub(r, val, result, flags=re.U)
-                else: result = result.replace(token, val)
+                    result = re.sub(r, val, result, count=count, flags=re.U)
+                else: result = result.replace(token, val, count)
+                if token in result:
+                    result = None # Redo if data happened to contain a generated token
+                    break # for (tokentype, val)
+            if result is None: continue # while True
             break # while True
 
         self._tokens.clear(); self._tokendata.clear(); self._data = None
