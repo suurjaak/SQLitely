@@ -2979,7 +2979,7 @@ class SchemaObjectPage(wx.Panel):
         button_actions = self._buttons["actions"] = wx.Button(panel2, label="Actions ..")
         button_close   = self._buttons["close"]   = wx.Button(panel2, label="Close")
         button_refresh._toggle = "skip"
-        button_edit._toggle    = lambda: ("disable" if self._cascader else "enable")
+        button_edit._toggle    = lambda: ("" if not self._hasmeta else "disable" if self._cascader else "enable")
         button_actions._toggle = button_close._toggle = "hide skip"
         button_cancel._toggle  = "show skip"
         button_import._toggle  = button_test._toggle = lambda: "show " + ("disable" if self._cascader else "enable")
@@ -3038,21 +3038,12 @@ class SchemaObjectPage(wx.Panel):
                         wx.Notebook       if "table" == self._category else False
             for y in x.Children:
                 y.Shown = showntype and isinstance(y, showntype)
-        if not self._hasmeta:
-            label_error.Label = "Error parsing SQL"
-            if "trigger" != self._category:
-                self._panel_columnswrapper.Parent.Shown = True
-                self._panel_columnswrapper.Shown = True
-            if "view" == self._category:
-                for x in self._ctrls["select"].Parent.Children: x.Shown = False
-        else:
-            label_error.Hide()
 
+        self._UpdateHasMeta(force=True)
         splitter.SetMinimumPaneSize(size)
         splitter.SplitHorizontally(panel1, panel2, pos)
         splitter.SashInvisible = not has_cols
         wx_accel.accelerate(self)
-        button_edit.Enabled = self._hasmeta
         if grammar.SQL.CREATE_VIRTUAL_TABLE == util.getval(self._item, "meta", "__type__"):
             button_edit.Enabled = False
             self._panel_category.Hide()
@@ -3111,6 +3102,7 @@ class SchemaObjectPage(wx.Panel):
         if not item: return
         item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
         self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
+        self._UpdateHasMeta()
         if any(prevs[x] != getattr(self, x) for x in prevs): self._Populate()
         self._PostEvent(modified=True)
 
@@ -3201,6 +3193,36 @@ class SchemaObjectPage(wx.Panel):
         wx.CallAfter(after)
 
 
+    def _UpdateHasMeta(self, force=False):
+        """
+        Updates relevant controls depending on whether schema item is fully parsed.
+
+        @param   force  if true, refreshes controls even if flag state does not change
+        """
+        if bool(self._item.get("meta")) == self._hasmeta and not force: return
+        self._hasmeta  = bool(self._item.get("meta"))
+
+        self._label_error.Show(not self._hasmeta)
+        self._label_error.Label = "" if self._hasmeta else "Error parsing SQL"
+        if not self._hasmeta and "trigger" != self._category:
+            self._panel_columnswrapper.Parent.Shown = True
+            self._panel_columnswrapper.Shown = True
+        if "table" == self._category:
+            panel_constraintwrapper = self._panel_constraintsgrid.Parent
+            if self._hasmeta and self._notebook_table.PageCount < 2:
+                self._notebook_table.AddPage(panel_constraintwrapper, "Constraints")
+                panel_constraintwrapper.Show()
+                self._notebook_table.SetSelection(1)
+                self._notebook_table.SetSelection(0)
+            elif not self._hasmeta and self._notebook_table.PageCount > 1:
+                self._notebook_table.RemovePage(1)
+                panel_constraintwrapper.Hide()
+        if "view" == self._category:
+            for x in self._ctrls["select"].Parent.Children: x.Shown = self._hasmeta
+        self._label_error.ContainingSizer.Layout()
+        self._buttons["edit"].Enable(self._hasmeta)
+
+
     def _CreateTable(self, parent):
         """Returns control panel for CREATE TABLE page."""
         panel = wx.Panel(parent)
@@ -3222,6 +3244,7 @@ class SchemaObjectPage(wx.Panel):
         sizer_flags.Add(check_rowid)
 
         nb.AddPage(panel_columnwrapper, "Columns")
+
         if self._hasmeta: nb.AddPage(panel_constraintwrapper, "Constraints")
         else: panel_constraintwrapper.Shown = False
 
@@ -5500,6 +5523,7 @@ class SchemaObjectPage(wx.Panel):
                     item = dict(item, sql0=item["sql"])
                 self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
                 self._sql0_applies = True
+                self._UpdateHasMeta()
 
         if not event or any(prevs[x] != getattr(self, x) for x in prevs):
             self._Populate()
