@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    04.07.2020
+@modified    21.12.2020
 ------------------------------------------------------------------------------
 """
 
@@ -378,7 +378,8 @@ COLUMN_DEFINITION = """
     %endif
 
     %if data.get("type"):
-  {{ data["type"] }}{{ PAD("type", data) }}
+  {{ WS(" ") }}
+  {{ Q(data["type"]) }}{{ PAD("type", data, quoted=True) }}
     %endif
 
     %if data.get("pk") is not None:

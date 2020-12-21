@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    19.12.2020
+@modified    21.12.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -118,7 +118,8 @@ def quote(val, force=False):
     or if force set. Always returns unicode.
     """
     result = uni(val)
-    if force or re.search(r"(^[\W\d])|(?=\W)", result, re.U):
+    if force or result.upper() in RESERVED_KEYWORDS \
+    or re.search(r"(^[\W\d])|(?=\W)", result, re.U):
         result = u'"%s"' % result.replace('"', '""')
     return result
 
@@ -232,6 +233,23 @@ class CTX(object):
     FOREIGN_KEY          = SQLiteParser.Foreign_key_clauseContext
     SELECT_OR_VALUES     = SQLiteParser.Select_or_valuesContext
 
+
+"""Words that need quoting if in name context, e.g. table name."""
+RESERVED_KEYWORDS = ["ACTION", "ADD", "AFTER", "ALL", "ALTER", "ALWAYS", "ANALYZE",
+    "AND", "AS", "ASC", "ATTACH", "AUTOINCREMENT", "BEFORE", "BEGIN", "BETWEEN",
+    "BY", "CASE", "CAST", "CHECK", "COLLATE", "COMMIT", "CONSTRAINT", "CREATE",
+    "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "DEFAULT", "DEFERRABLE",
+    "DEFERRED", "DELETE", "DESC", "DETACH", "DISTINCT", "DO", "DROP", "EACH",
+    "ELSE", "END", "ESCAPE", "EXCEPT", "EXISTS", "EXPLAIN", "FOR", "FOREIGN",
+    "FROM", "GENERATED", "GROUP", "HAVING", "IF", "IMMEDIATE", "IN", "INDEX",
+    "INITIALLY", "INSERT", "INSTEAD", "INTERSECT", "INTO", "IS", "ISNULL",
+    "JOIN", "KEY", "LIKE", "LIMIT", "MATCH", "NO", "NOT", "NOTHING", "NOTNULL",
+    "NULL", "OF", "ON", "OR", "ORDER", "OVER", "PRAGMA", "PRECEDING", "PRIMARY",
+    "RAISE", "RECURSIVE", "REFERENCES", "REGEXP", "REINDEX", "RELEASE", "RENAME",
+    "REPLACE", "RESTRICT", "ROLLBACK", "SAVEPOINT", "SELECT", "SET", "TABLE",
+    "TEMPORARY", "THEN", "TIES", "TO", "TRANSACTION", "TRIGGER", "UNBOUNDED",
+    "UNION", "UNIQUE", "UPDATE", "USING", "VACUUM", "VALUES", "VIEW", "WHEN",
+    "WHERE", "WITHOUT"]
 
 
 class ParseError(Exception, basestring):
@@ -688,7 +706,8 @@ class Parser(object):
             if ctx.type_name().type_name_text().ENCLOSED_IDENTIFIER():
                 result["type"] = self.u(ctx.type_name().type_name_text().ENCLOSED_IDENTIFIER).upper()
             else:
-                result["type"] = " ".join(self.t(x).upper() for x in ctx.type_name().type_name_text().type_or_constraint_name_word())
+                ww = ctx.type_name().type_name_text().type_or_constraint_name_word()
+                result["type"] = unquote(" ".join(self.t(x).upper() for x in ww))
             if ctx.type_name().signed_number():
                 result["type"] += " (%s)" % ".".join(self.t(x).upper() for x in ctx.type_name().signed_number())
 
