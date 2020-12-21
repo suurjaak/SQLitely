@@ -127,6 +127,7 @@ class Template(object):
             blk = re.sub(r"\\(%|{|})", "\g<1>", blk)
 
             if not (n % 2):
+                if not blk: continue # for n, blk
                 # Escape double-quote characters
                 blk = re.sub(r"\"", "\\\"", blk)
                 blk = (" " * (indent*4)) + 'echo("""{0}""")'.format(blk)
