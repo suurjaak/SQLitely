@@ -69,7 +69,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    29.11.2020
+@modified    21.12.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -482,7 +482,8 @@ class FormDialog(wx.Dialog):
        ?link:         "name" of linked field, cleared and repopulated on change,
                       or callable(data) doing required change and returning field name
        ?tb:           [{type, ?help}] for SQLiteTextCtrl component, adds toolbar,
-                      supported toolbar buttons "open" and "paste"
+                      supported toolbar buttons "copy", "paste", "open" and "save",
+                      plus "sep" for separator
     }]
     @param   autocomp  list of words to add to SQLiteTextCtrl autocomplete,
                        or a dict for words and subwords
@@ -779,8 +780,13 @@ class FormDialog(wx.Dialog):
             ctrl = field["component"](parent, traversable=True)
 
             OPTS = {"open":  {"id": wx.ID_OPEN,  "bmp": wx.ART_FILE_OPEN, "handler": self._OnOpenFile},
+                    "save":  {"id": wx.ID_SAVE,  "bmp": wx.ART_FILE_SAVE, "handler": self._OnSaveFile},
+                    "copy":  {"id": wx.ID_COPY,  "bmp": wx.ART_COPY,      "handler": self._OnCopy},
                     "paste": {"id": wx.ID_PASTE, "bmp": wx.ART_PASTE,     "handler": self._OnPaste}, }
             for prop in field["tb"]:
+                if "sep" == prop["type"]:
+                    tb.AddSeparator()
+                    continue # for prop
                 opts = OPTS[prop["type"]]
                 bmp = wx.ArtProvider.GetBitmap(opts["bmp"], wx.ART_TOOLBAR, (16, 16))
                 tb.SetToolBitmapSize(bmp.Size)
@@ -994,6 +1000,29 @@ class FormDialog(wx.Dialog):
         filename = dialog.GetPath()
         ctrl.LoadFile(filename)
         self._SetValue(field, ctrl.GetText(), path)
+
+
+    def _OnSaveFile(self, field, path, event=None):
+        """Handler for opening file dialog and saving STC field contents to file."""
+        dialog = wx.FileDialog(
+            self, message="Save file", defaultFile=field["name"],
+            wildcard="SQL file (*.sql)|*.sql|All files|*.*",
+            style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE |
+                  wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
+        )
+        if wx.ID_OK != dialog.ShowModal(): return
+        fpath = path + (field["name"], )
+        ctrl = self._comps[fpath][0]
+        filename = dialog.GetPath()
+        ctrl.SaveFile(filename)
+
+
+    def _OnCopy(self, field, path, event=None):
+        """Handler for copying STC field contents to clipboard."""
+        if wx.TheClipboard.Open():
+            d = wx.TextDataObject(self._GetValue(field, path))
+            wx.TheClipboard.SetData(d)
+            wx.TheClipboard.Close()
 
 
     def _OnPaste(self, field, path, event=None):

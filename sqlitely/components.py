@@ -5441,8 +5441,11 @@ class SchemaObjectPage(wx.Panel):
     def _OnImportSQL(self, event=None):
         """Handler for editing SQL directly, opens dialog."""
         props = [{"name": "sql", "label": "SQL:", "component": controls.SQLiteTextCtrl,
-                  "tb": [{"type": "paste", "help": "Paste from clipboard"},
-                         {"type": "open",  "help": "Load from file"}, ]}]
+                  "tb": [{"type": "copy",  "help": "Copy to clipboard"},
+                         {"type": "paste", "help": "Paste from clipboard"},
+                         {"type": "sep"},
+                         {"type": "open",  "help": "Load from file"},
+                         {"type": "save",  "help": "Save to file"}, ]}]
         data, words = {"sql": self._item["sql0" if self._sql0_applies else "sql"]}, {}
         for category in ("table", "view"):
             for item in self._db.schema.get(category, {}).values():
