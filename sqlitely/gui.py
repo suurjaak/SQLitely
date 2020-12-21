@@ -2884,7 +2884,6 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_COMBOBOX,  self.on_diagram_find,       combo_find)
         self.Bind(wx.EVT_TEXT,      self.on_diagram_find,       combo_find)
         self.Bind(wx.EVT_CHAR_HOOK, self.on_diagram_find_char,  combo_find)
-        self.Bind(components.EVT_DIAGRAM, self.on_diagram_event, self.diagram)
 
 
     def create_page_sql(self, notebook):
@@ -3856,7 +3855,7 @@ class DatabasePage(wx.Panel):
         self.cb_diagram_stats.Enable()
 
 
-    def on_diagram_event(self, event):
+    def on_diagram_event(self, event=None):
         """Handler for SchemaDiagramEvent, updates toolbar state and saves conf."""
         self.update_diagram_controls()
         if not self.db.temporary:
@@ -6047,21 +6046,21 @@ class DatabasePage(wx.Panel):
         self.update_info_panel()
         wx.YieldIfNeeded()
         if not self: return
-        self.diagram.Populate()
+        self.diagram.Populate(conf.SchemaDiagrams.get(self.db.filename))
         wx.YieldIfNeeded()
         if not self: return
         self.populate_diagram_finder()
         wx.YieldIfNeeded()
         if not self: return
-        self.diagram.SetOptions(conf.SchemaDiagrams.get(self.db.filename))
-        wx.YieldIfNeeded()
-        if not self: return
-        self.update_diagram_controls()
+        self.Bind(components.EVT_DIAGRAM, self.on_diagram_event, self.diagram)
+        if not self.db.temporary: self.on_diagram_event()
+        else:  self.update_diagram_controls()
         wx.YieldIfNeeded()
         if not self: return
         if not any(self.diagram.IsVisible(n) for c in ("table", "view")
                    for n in self.db.schema[c]):
             self.diagram.Scroll(0, 0)
+
         wx.CallLater(100, self.reload_schema, parse=True)
         if conf.RunStatistics: self.on_update_statistics()
 

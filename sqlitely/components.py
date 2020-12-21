@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.12.2020
+@modified    21.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -9727,10 +9727,11 @@ class SchemaDiagram(wx.ScrolledWindow):
         @param   refresh  update display immediately
         @param   focus    point to retain at the same position in viewport,
                           defaults to current viewport top left
+        @return           whether zoom was changed
         """
         zoom = float(zoom) - zoom % self.ZOOM_STEP # Even out to allowed step
         zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
-        if self._zoom == zoom: return
+        if self._zoom == zoom: return False
 
         zoom0, viewport0 = self._zoom, self.GetViewPort()
         self._zoom = zoom
@@ -9777,6 +9778,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self._PostEvent(zoom=zoom)
         finally:
             if refresh: self.Thaw()
+        return True
     Zoom = property(GetZoom, SetZoom)
 
 
@@ -9858,14 +9860,22 @@ class SchemaDiagram(wx.ScrolledWindow):
             "layout":   copy.deepcopy(self._layout),
             "scroll":   [self.GetScrollPos(x) for x in (wx.HORIZONTAL, wx.VERTICAL)],
         }
-    def SetOptions(self, opts):
-        """Sets all diagram options."""
+    def SetOptions(self, opts, refresh=True):
+        """
+        Sets all diagram options.
+
+        @param   refresh  update display immediately
+        """
         if not opts or opts == self.Options: return
 
-        if "zoom"     in opts: self.SetZoom(opts["zoom"], refresh=False)
+        remake, remakelines = False, False
+        if "zoom"     in opts:
+            remake = self.SetZoom(opts["zoom"], refresh=False)
         if "fks"      in opts: self._show_lines  = bool(opts["fks"])
         if "fklabels" in opts: self._show_labels = bool(opts["fklabels"])
-        if "stats"    in opts: self._show_stats  = bool(opts["stats"])
+        if "stats"    in opts and bool(opts["stats"]) != self._show_stats:
+            self._show_stats = not self._show_stats
+            remake = True
 
         if "layout" in opts:
             lopts = opts["layout"]
@@ -9875,22 +9885,25 @@ class SchemaDiagram(wx.ScrolledWindow):
             for k, v in lopts.items():
                 if isinstance(v, dict): self._layout.setdefault(k, {}).update(v)
         fullbounds = None
-        for name, (x, y) in (opts.get("items") or {}).items():
+        for name, (x, y) in (opts.get("items") or {}).items() if self._objs else ():
             o = self._objs.get(name)
             if not o:
                 self.Layout = self._layout["layout"]
-                break # for
+                break # for name, (x, y)
             r = self._dc.GetIdBounds(o["id"])
-            self._dc.TranslateId(o["id"], x - r.Left, x - r.Top)
+            if x == r.Left and y == r.Top: continue # for name, (x, y)
+            self._dc.TranslateId(o["id"], x - r.Left, y - r.Top)
             self._dc.SetIdBounds(o["id"], wx.Rect(x, y, *r.Size))
             if fullbounds: fullbounds.Union(self._dc.GetIdBounds(o["id"]))
             else: fullbounds = self._dc.GetIdBounds(o["id"])
+            remakelines = True
         if fullbounds and not wx.Rect(self.VirtualSize).Contains(fullbounds):
             self.SetVirtualSize([max(a, b + self.MOVE_STEP)
                                  for a, b in zip(self.VirtualSize, fullbounds.BottomRight)])
 
-        self.Redraw(remake=True)
-        if "scroll" in opts: self.Scroll(*opts["scroll"])
+        if refresh:
+            self.Redraw(remake=remake, remakelines=remakelines)
+            if "scroll" in opts: self.Scroll(*opts["scroll"])
         self._PostEvent()
     Options = property(GetOptions, SetOptions)
 
@@ -10169,8 +10182,12 @@ class SchemaDiagram(wx.ScrolledWindow):
         self.PopupMenu(menu)
 
 
-    def Populate(self):
-        """Resets all and draws the database schema, using the current layout style."""
+    def Populate(self, opts=None):
+        """
+        Resets all and draws the database schema, using the current layout style.
+
+        @param   opts  diagram display options as returned from GetOptions()
+        """
         if not self: return
 
         objs0  = self._objs.values()
@@ -10183,6 +10200,10 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._sels .clear()
         self._lines.clear()
         del self._order[:]
+
+        opts, rects, fullbounds = opts or {}, {}, None
+        self.SetOptions(opts, refresh=False)
+        itemposes = util.CaselessDict(opts.get("items") or {})
 
         reset = any(o["__id__"] not in (x["__id__"] for x in self._db.schema.get(o["type"], {}).values())
                     for o in objs0)
@@ -10205,32 +10226,38 @@ class SchemaDiagram(wx.ScrolledWindow):
                 else:
                     (bmp, bmpsel), bmparea = self._MakeItemBitmaps(opts, stats), None
                 if o0 and o0["name"] in sels0: self._sels[name] = oid
+                if name in itemposes: rects[name] = wx.Rect(wx.Point(itemposes[name]), bmp.Size)
+                elif o0: rects[name] = rects0[o0["name"]]
                 self._ids[oid] = name
                 self._objs[name] = {"id": oid, "type": category, "name": name, "stats": stats,
                                     "__id__": opts["__id__"], "sql0": opts["sql0"],
                                     "columns": [dict(c)  for c in opts["columns"]],
                                     "bmp": bmp, "bmpsel": bmpsel, "bmparea": bmparea}
                 self._order.append(self._objs[name])
-                reset |= not o0
+                if name in rects:
+                    self._dc.SetIdBounds(oid, rects[name])
+                    if fullbounds: fullbounds.Union(rects[name])
+                    else: fullbounds = wx.Rect(rects[name])
+                else: reset = True
 
         # Increase diagram virtual size if total item area is bigger
         area, vsize = self.GPAD * self.GPAD, self.VIRTUALSZ
-        for o in self._objs.values():
-            area += (o["bmp"].Width + self.GPAD) * (o["bmp"].Height + self.GPAD)
-        while area / self._zoom > vsize[0] * vsize[1]:
-            vsize = vsize[0], vsize[1] + 100
-        if vsize != self.VIRTUALSZ:
-            self.VIRTUALSZ = vsize
-            self.SetVirtualSize(*[int(x * self._zoom) for x in self.VIRTUALSZ])
+        if reset: # Do a very rough calculation based on accumulated area
+            for o in self._objs.values():
+                area += (o["bmp"].Width + self.GPAD) * (o["bmp"].Height + self.GPAD)
+            while area > vsize[0] * vsize[1]:
+                vsize = vsize[0], vsize[1] + 100
+        elif fullbounds:
+            vsize = fullbounds.Right + self.MOVE_STEP, fullbounds.Bottom + self.MOVE_STEP
+        if vsize[0] > self.VIRTUALSZ[0] or vsize[1] > self.VIRTUALSZ[1]:
+            self.VirtualSize = self.VIRTUALSZ = vsize
 
         if reset:
             self._dc.RemoveAll()
             self.SetLayout(self._layout["layout"])
         else:
             self.RecordLines(remake=True)
-            for o in self._order:
-                o0 = next((x for x in objs0 if x["__id__"] == o["__id__"]), {})
-                self.RecordItem(o["name"], rects0.get(o0.get("name")))
+            for o in self._order: self.RecordItem(o["name"], rects.get(o["name"]))
             self.Refresh()
 
 
