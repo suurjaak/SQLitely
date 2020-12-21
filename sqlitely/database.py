@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.12.2020
+@modified    21.12.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -948,6 +948,17 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     meta, sql = opts0["meta"], opts0["sql"]
                 elif parse:
                     meta, _ = grammar.parse(opts["sql0"])
+                    if meta and "table" == mycategory:
+                        if "columns" in opts and "columns" in meta \
+                        and (len(opts["columns"]) != len(opts["columns"]) or any(
+                            c1["name"] != c2["name"] or c1.get("type") != c2.get("type")
+                            for c1, c2 in zip(opts["columns"], meta["columns"])
+                        )):
+                            logger.warn("Table %s SQL parse yielded different columns than "
+                                        "known by SQLite, discarding invalid parse result.\n"
+                                        "SQLite columns %s, parsed columns %s.",
+                                        grammar.quote(myname), opts["columns"], meta["columns"])
+                            meta = None
                     if meta: sql, _ = grammar.generate(meta) # @todo use or lose
                 if meta: opts.update(meta=meta)
                 if sql and (not meta or not meta.get("__comments__")):
