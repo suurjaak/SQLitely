@@ -843,7 +843,7 @@ def titlecase(text):
 
 def to_str(value, encoding=None):
     """
-    Returns the value as an 8-bit  string. Tries encoding as UTF-8 if
+    Returns the value as an 8-bit string. Tries encoding as UTF-8 if
     locale encoding fails.
     """
     result = value
