@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.12.2020
+@modified    22.12.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -497,7 +497,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         self.locklabels = {} # {lock key: label}
         # {"table|index|view|trigger":
         #   {name:
-        #     {name: str, sql: str, ?table: str, ?columns: [], ?count: int, __id__: unique, 
+        #     {name: str, sql: str, ?table: str, ?columns: [], ?count: int,
+        #      __id__: unique, ?__parsed__: bool,
         #      ?meta: {full metadata}}}}
         self.schema = defaultdict(CaselessDict)
         self.connection = None
@@ -935,7 +936,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                         opts["columns"] = []
                         for row in rows:
                             col = {"name": row["name"]}
-                            if "type" in row: col["type"] = row["type"].upper()
+                            if row.get("type"): col["type"] = row["type"].upper()
                             if row.get("dflt_value") is not None:
                                 col["default"] = row["dflt_value"]
                             if row.get("notnull"): col["notnull"] = {}
@@ -946,8 +947,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 meta, sql = None, None
                 if opts0 and opts0.get("meta") and opts["sql0"] == opts0["sql0"]:
                     meta, sql = opts0["meta"], opts0["sql"]
+                    opts["__parsed__"] = True
                 elif parse:
                     meta, _ = grammar.parse(opts["sql0"])
+                    if meta:
+                        opts["__parsed__"] = True
                     if meta and "table" == mycategory:
                         if "columns" in opts and "columns" in meta \
                         and (len(opts["columns"]) != len(opts["columns"]) or any(
@@ -956,7 +960,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                         )):
                             logger.warn("Table %s SQL parse yielded different columns than "
                                         "known by SQLite, discarding invalid parse result.\n"
-                                        "SQLite columns %s, parsed columns %s.",
+                                        "SQLite columns %s.\nParsed columns %s.",
                                         grammar.quote(myname), opts["columns"], meta["columns"])
                             meta = None
                     if meta: sql, _ = grammar.generate(meta) # @todo use or lose

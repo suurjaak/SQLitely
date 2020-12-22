@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.12.2020
+@modified    22.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -3203,7 +3203,9 @@ class SchemaObjectPage(wx.Panel):
         self._hasmeta  = bool(self._item.get("meta"))
 
         self._label_error.Show(not self._hasmeta)
-        self._label_error.Label = "" if self._hasmeta else "Error parsing SQL"
+        self._label_error.Label = "" if self._hasmeta else \
+                                  "Error parsing SQL" if self._item.get("__parsed__") else \
+                                  "Schema not parsed yet"
         if not self._hasmeta and "trigger" != self._category:
             self._panel_columnswrapper.Parent.Shown = True
             self._panel_columnswrapper.Shown = True
