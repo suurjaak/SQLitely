@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    21.12.2020
+@modified    24.12.2020
 ------------------------------------------------------------------------------
 """
 
@@ -370,19 +370,48 @@ RELEASE SAVEPOINT alter_master;{{ LF() }}
 
 
 
-COLUMN_DEFINITION = """
+COLUMN_DEFINITION = """<%
+from collections import OrderedDict
+
+get_constraints = lambda: (
+    (k, data[k]) for k in ("pk", "notnull", "unique", "default", "collate", "check", "fk")
+    if data.get(k) is not None and (k != "collate" or data[k].get("value") not in (None, ""))
+    and (k not in ("default", "check") or data[k].get("expr")  not in (None, ""))
+)
+
+cnstr_breaks, name0 = OrderedDict(), None
+for ctype, cnstr in get_constraints():
+    cnstr_breaks[ctype] = name0 or cnstr.get("name") and (name0 is not None or data.get("type"))
+    name0 = cnstr.get("name") or ""
+%>
 
 {{ GLUE() }}
     %if data.get("name"):
-  {{ Q(data["name"]) }}{{ PAD("name", data, quoted=True) }}
+  {{ Q(data["name"]) }}
+    %else:
+  {{ WS("") }}
+    %endif
+    %if data.get("name") or data.get("type") or cnstr_breaks:
+  {{ PAD("name", data, quoted=True) }}
     %endif
 
     %if data.get("type"):
   {{ WS(" ") }}
-  {{ Q(data["type"]) }}{{ PAD("type", data, quoted=True) }}
+  {{ Q(data["type"], spaceok=True) }}
+    %endif
+    %if cnstr_breaks and data.get("type") and not next(iter(cnstr_breaks.values())):
+  {{ PAD("type", data, quoted=True, quotekw=dict(spaceok=True)) }}
     %endif
 
+
     %if data.get("pk") is not None:
+        %if cnstr_breaks["pk"]:
+  {{ LF() }}{{ PRE() }}
+  {{ PAD("name", {"name": ""}) }}
+        %endif
+        %if data["pk"].get("name"):
+  CONSTRAINT {{ Q(data["pk"]["name"]) }}
+        %endif
   PRIMARY KEY {{ data["pk"].get("order", "") }}
         %if data["pk"].get("conflict"):
   ON CONFLICT {{ data["pk"]["conflict"] }}
@@ -392,33 +421,81 @@ COLUMN_DEFINITION = """
         %endif
     %endif
 
+
     %if data.get("notnull") is not None:
+        %if cnstr_breaks["notnull"]:
+  {{ LF() }}{{ PRE() }}
+  {{ PAD("name", {"name": ""}) }}
+        %endif
+        %if data["notnull"].get("name"):
+  CONSTRAINT {{ Q(data["notnull"]["name"]) }}
+        %endif
   NOT NULL
         %if data["notnull"].get("conflict"):
   ON CONFLICT {{ data["notnull"]["conflict"] }}
         %endif
     %endif
 
+
     %if data.get("unique") is not None:
+        %if cnstr_breaks["unique"]:
+  {{ LF() }}{{ PRE() }}
+  {{ PAD("name", {"name": ""}) }}
+        %endif
+        %if data["unique"].get("name"):
+  CONSTRAINT {{ Q(data["unique"]["name"]) }}
+        %endif
   UNIQUE
         %if data["unique"].get("conflict"):
   ON CONFLICT {{ data["unique"]["conflict"] }}
         %endif
     %endif
 
-    %if data.get("default") not in (None, ""):
-  DEFAULT {{ WS(data["default"]) }}
+
+    %if data.get("default") and data["default"].get("expr") not in (None, ""):
+        %if cnstr_breaks["default"]:
+  {{ LF() }}{{ PRE() }}
+  {{ PAD("name", {"name": ""}) }}
+        %endif
+        %if data["default"].get("name"):
+  CONSTRAINT {{ Q(data["default"]["name"]) }}
+        %endif
+  DEFAULT {{ WS(data["default"]["expr"]) }}
     %endif
 
-    %if data.get("collate") is not None:
-  COLLATE {{ data["collate"] }}
+
+    %if data.get("collate") and data["collate"].get("value") not in (None, ""):
+        %if cnstr_breaks["collate"]:
+  {{ LF() }}{{ PRE() }}
+  {{ PAD("name", {"name": ""}) }}
+        %endif
+        %if data["collate"].get("name"):
+  CONSTRAINT {{ Q(data["collate"]["name"]) }}
+        %endif
+  COLLATE {{ data["collate"]["value"] }}
     %endif
 
-    %if data.get("check") is not None:
-  CHECK ({{ WS(data["check"]) }})
+
+    %if data.get("check") and data["check"].get("expr") not in (None, ""):
+        %if cnstr_breaks["check"]:
+  {{ LF() }}{{ PRE() }}
+  {{ PAD("name", {"name": ""}) }}
+        %endif
+        %if data["check"].get("name"):
+  CONSTRAINT {{ Q(data["check"]["name"]) }}
+        %endif
+  CHECK ({{ WS(data["check"]["expr"]) }})
     %endif
+
 
     %if data.get("fk") is not None:
+        %if cnstr_breaks["fk"]:
+  {{ LF() }}{{ PRE() }}
+  {{ PAD("name", {"name": ""}) }}
+        %endif
+        %if data["fk"].get("name"):
+  CONSTRAINT {{ Q(data["fk"]["name"]) }}
+        %endif
   REFERENCES {{ Q(data["fk"]["table"]) if data["fk"].get("table") else "" }}
         %if data["fk"].get("key"):
   {{ WS(" ") }}({{ Q(data["fk"]["key"]) }})

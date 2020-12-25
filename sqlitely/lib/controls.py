@@ -69,7 +69,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    21.12.2020
+@modified    24.12.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -478,6 +478,11 @@ class FormDialog(wx.Dialog):
        ?choicesedit   true if value not limited to given choices
        ?component     specific wx component to use
        ?toggle:       if true, field is toggle-able and children hidden when off
+       ?togglename: { an additional child editbox for name right next to toggle
+         name:        data subpath for editbox value
+         ?label:      editbox label if not using name for label
+         ?toggle:     if true, editbox is toggle-able and hidden when off
+       }
        ?children:     [{field}, ]
        ?link:         "name" of linked field, cleared and repopulated on change,
                       or callable(data) doing required change and returning field name
@@ -638,18 +643,47 @@ class FormDialog(wx.Dialog):
 
         col = 0
         if field.get("toggle"):
+            mysizer = wx.BoxSizer(wx.HORIZONTAL)
             toggle = wx.CheckBox(parent)
+            mylevel = level
             if field.get("help"): toggle.ToolTip = field["help"]
             if self._editmode:
-                toggle.Label = label=field["label"] if "label" in field else field["name"]
-                sizer.Add(toggle, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
+                toggle.Label = field["label"] if "label" in field else field["name"]
+                sizer.Add(toggle, border=5, pos=(self._rows, mylevel), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
+                mylevel += 2
             else: # Show ordinary label in view mode, checkbox goes very gray
                 label = wx.StaticText(parent, label=field["label"] if "label" in field else field["name"])
                 if field.get("help"): label.ToolTip = field["help"]
-                mysizer = wx.BoxSizer(wx.HORIZONTAL)
                 mysizer.Add(toggle, border=5, flag=wx.RIGHT)
                 mysizer.Add(label)
-                sizer.Add(mysizer, border=5, pos=(self._rows, level), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
+            if field.get("togglename") and field["togglename"].get("name"):
+                # Show the additional name-editbox, with an additional optional toggle
+                mysizer.AddSpacer(30)
+                namefield, edittoggle = field["togglename"], None
+                nfpath = fpath + (namefield["name"], )
+                if namefield.get("toggle"):
+                    edittoggle = wx.CheckBox(parent)
+                    if self._editmode:
+                        edittoggle.Label = namefield.get("label", namefield["name"])
+                    mysizer.Add(edittoggle)
+                    self._BindHandler(self._OnToggleField, edittoggle, namefield, fpath, edittoggle)
+                    self._comps[nfpath].append(edittoggle)
+                    self._toggles[nfpath] = edittoggle
+                if not namefield.get("toggle") or not self._editmode:
+                    editlabel = wx.StaticText(parent, label=namefield.get("label", namefield["name"]))
+                    mysizer.Add(editlabel, border=5, flag=wx.LEFT)
+                    self._comps[nfpath].append(editlabel)
+
+                placeholder = wx.StaticText(parent, label=" ") # Ensure constant row height
+                editbox = wx.TextCtrl(parent)
+
+                placeholder.Size = placeholder.MinSize = placeholder.MaxSize = (1, editbox.Size[1])
+                mysizer.Add(placeholder)
+                mysizer.Add(editbox, border=5, flag=wx.LEFT)
+                self._BindHandler(self._OnChange, editbox, namefield, fpath)
+                self._comps[nfpath].append(editbox)
+            if not mysizer.IsEmpty():
+                sizer.Add(mysizer, border=5, pos=(self._rows, mylevel), span=(1, MAXCOL - mylevel), flag=wx.TOP | wx.BOTTOM)
             self._comps[fpath].append(toggle)
             self._toggles[tuple(field.get("path") or fpath)] = toggle
             self._BindHandler(self._OnToggleField, toggle, field, path, toggle)
@@ -695,6 +729,29 @@ class FormDialog(wx.Dialog):
                     c.Value = (value is not None)
                     self._OnToggleField(field, path, c)
                     c.Enable(self._editmode)
+
+                    if field.get("togglename") and field["togglename"].get("name"):
+                        namefield = field["togglename"]
+                        nfpath = fpath + (namefield["name"], )
+                        nfvalue = self._GetValue(namefield, fpath)
+                        nfshown = c.Value and (self._editmode or bool(nfvalue))
+                        cb, cl, ce = None, None, None
+                        if namefield.get("toggle"):
+                            if self._editmode: cb, ce = self._comps[nfpath] # CheckBox, EditCtrl
+                            else: cb, cl, ce = self._comps[nfpath] # CheckBox, StaticText, EditCtrl
+                        else:
+                            if self._editmode: ce,  = self._comps[nfpath] # EditCtrl
+                            else: cl, ce = self._comps[nfpath] # StaticText, EditCtrl
+                        if cl: cl.Show(nfshown)
+                        ce.Value = "" if nfvalue is None else nfvalue
+                        ce.Enable(self._editmode)
+                        ce.Show(nfshown)
+                        if cb:
+                            cb.Value = bool(nfvalue)
+                            cb.Enable(self._editmode)
+                            cb.Show(nfshown)
+                            self._OnToggleField(namefield, fpath, cb)
+
                     continue # for i, c
                 if isinstance(c, wx.stc.StyledTextCtrl):
                     c.SetText(value or "")
@@ -955,6 +1012,9 @@ class FormDialog(wx.Dialog):
         ctrls = [] # [(field, path, ctrl)]
         for c in self._comps.get(fpath, []):
             ctrls.append((field, path, c))
+        if field.get("togglename") and field["togglename"].get("name"):
+            for c in self._comps.get(fpath + (field["togglename"]["name"], ), []):
+                ctrls.append((field["togglename"], fpath, c))
         for f in field.get("children", []):
             for c in self._comps.get(fpath + (f["name"], ), []):
                 ctrls.append((f, fpath, c))
@@ -972,8 +1032,14 @@ class FormDialog(wx.Dialog):
                 fon = False
 
             c.Show(fon)
+        if self._ignore_change: return
+
         if on and self._GetValue(field, path) is None:
             self._SetValue(field, {} if field.get("children") else "", path)
+        if on and self._editmode and path \
+        and field == self._GetField(path[-1], path[:-1]).get("togglename"):
+            edit = next((c for _, _, c in ctrls if isinstance(c, wx.TextCtrl)), None)
+            if edit: edit.SetFocus(), edit.SelectAll() # Focus name-toggle editbox
         if field.get("link"):
             name = field["link"]
             if callable(name):

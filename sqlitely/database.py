@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.12.2020
+@modified    24.12.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -938,7 +938,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                             col = {"name": row["name"]}
                             if row.get("type"): col["type"] = row["type"].upper()
                             if row.get("dflt_value") is not None:
-                                col["default"] = row["dflt_value"]
+                                col["default"] = {"expr": row["dflt_value"]}
                             if row.get("notnull"): col["notnull"] = {}
                             if row.get("pk"):      col["pk"]      = {}
                             opts["columns"].append(col)

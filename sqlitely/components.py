@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.12.2020
+@modified    24.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -2911,7 +2911,7 @@ class SchemaObjectPage(wx.Panel):
             item = dict(item, sql0=item["sql"])
         self._item     = copy.deepcopy(item)
         self._original = copy.deepcopy(item)
-        self._sql0_applies = True # Can current schema be parsed from item's sql0
+        self._sql0_applies = "sql0" in item # Can current schema be parsed from item's sql0
 
         self._ctrls    = {}  # {}
         self._buttons  = {}  # {name: wx.Button}
@@ -3816,7 +3816,7 @@ class SchemaObjectPage(wx.Panel):
 
         text_name.Value     = col.get("name") or ""
         list_type.Value     = col.get("type") or ""
-        text_default.Text   = col.get("default") or ""
+        text_default.Text   = col.get("default", {}).get("expr") or ""
         check_pk.Value      = col.get("pk") is not None
         check_autoinc.Value = bool(col.get("pk", {}).get("autoincrement"))
         check_notnull.Value = col.get("notnull") is not None
@@ -3844,7 +3844,7 @@ class SchemaObjectPage(wx.Panel):
 
         self._BindDataHandler(self._OnChange,      text_name,    ["columns", text_name,    "name"])
         self._BindDataHandler(self._OnChange,      list_type,    ["columns", list_type,    "type"])
-        self._BindDataHandler(self._OnChange,      text_default, ["columns", text_default, "default"])
+        self._BindDataHandler(self._OnChange,      text_default, ["columns", text_default, "default", "expr"])
         self._BindDataHandler(self._OnOpenItem,    button_open,  ["columns", button_open])
         self._BindDataHandler(self._OnToggleColumnFlag, check_pk,      ["columns", check_pk,      "pk"])
         self._BindDataHandler(self._OnToggleColumnFlag, check_notnull, ["columns", check_notnull, "notnull"])
@@ -4274,7 +4274,8 @@ class SchemaObjectPage(wx.Panel):
 
         def set_alter_sql():
             self._alter_sqler = None
-            sql, _, _ = self._GetAlterSQL()
+            try: sql, _, _ = self._GetAlterSQL()
+            except Exception: sql = "-- Incomplete configuration"
             set_sql(sql)
 
         if self._editmode:
@@ -4344,7 +4345,7 @@ class SchemaObjectPage(wx.Panel):
                 # - may not have certain defaults, or (expression) in default
                 # - if NOT NULL, may not default to NULL
                 # - if FK and foreign key constraints on, must default to NULL
-                default = c2.get("default", "").upper().strip() or "NULL"
+                default = c2.get("default", {}).get("expr", "").upper().strip() or "NULL"
                 can_simple = "pk" not in c2 and "unique" not in c2 \
                              and default not in FORBIDDEN_DEFAULTS \
                              and not default.startswith("(") \
@@ -4534,28 +4535,40 @@ class SchemaObjectPage(wx.Panel):
             return [x["name"] for x in self._item["meta"].get("columns") or ()]
 
         def toggle_pk(data):
-            if "pk" in data: data["notnull"] = {}
+            if "pk" in data: data.setdefault("notnull", {})
             return "notnull"
 
         if "columns" == path[0]: return [
             {"name": "name",    "label": "Name"},
             {"name": "type",    "label": "Type", "choices": self._types, "choicesedit": True},
-            {"name": "default", "label": "Default", "component": controls.SQLiteTextCtrl,
-             "help": "String or numeric constant, NULL, CURRENT_TIME, CURRENT_DATE, "
-                     "CURRENT_TIMESTAMP, or (constant expression)"},
-            {"name": "pk", "label": "PRIMARY KEY", "toggle": True, "link": toggle_pk, "children": [
+            {"name": "default", "label": "DEFAULT", "toggle": True,
+             "togglename": {"toggle": True, "name": "name", "label": "Constraint name"},
+             "children": [
+                {"name": "expr", "label": "Expression", "component": controls.SQLiteTextCtrl,
+                 "help": "String or numeric constant, NULL, CURRENT_TIME, CURRENT_DATE, "
+                        "CURRENT_TIMESTAMP, or (constant expression)"},
+            ]},
+            {"name": "pk", "label": "PRIMARY KEY", "toggle": True, "link": toggle_pk,
+             "togglename": {"name": "name", "toggle": True, "label": "Constraint name"}, 
+             "children": [
                 {"name": "autoincrement", "label": "AUTOINCREMENT", "type": bool},
                 {"name": "order", "label": "Order", "toggle": True, "choices": self.ORDER,
                  "help": "If DESC, an integer key is not an alias for ROWID."},
                 {"name": "conflict", "label": "ON CONFLICT", "toggle": True, "choices": self.CONFLICT},
             ]},
-            {"name": "notnull", "label": "NOT NULL", "toggle": True, "children": [
+            {"name": "notnull", "label": "NOT NULL", "toggle": True,
+             "togglename": {"toggle": True, "name": "name", "label": "Constraint name"}, 
+             "children": [
                 {"name": "conflict", "label": "ON CONFLICT", "toggle": True, "choices": self.CONFLICT},
             ]},
-            {"name": "unique", "label": "UNIQUE", "toggle": True, "children": [
+            {"name": "unique", "label": "UNIQUE", "toggle": True,
+             "togglename": {"toggle": True, "name": "name", "label": "Constraint name"}, 
+             "children": [
                 {"name": "conflict", "label": "ON CONFLICT", "toggle": True, "choices": self.CONFLICT},
             ]},
-            {"name": "fk", "label": "FOREIGN KEY", "toggle": True, "children": [
+            {"name": "fk", "label": "FOREIGN KEY", "toggle": True,
+             "togglename": {"toggle": True, "name": "name", "label": "Constraint name"}, 
+             "children": [
                 {"name": "table",  "label": "Foreign table", "choices": self._tables, "link": "key"},
                 {"name": "key",    "label": "Foreign column", "choices": get_foreign_cols},
                 {"name": "DELETE", "label": "ON DELETE", "toggle": True, "choices": self.ON_ACTION, "path": ["fk", "action"]},
@@ -4569,10 +4582,20 @@ class SchemaObjectPage(wx.Panel):
                     {"name": "initial", "label": "INITIALLY", "choices": self.DEFERRABLE},
                 ]},
             ]},
-            {"name": "check",   "label": "CHECK",   "toggle": True, "component": controls.SQLiteTextCtrl,
-             "help": "Expression yielding a NUMERIC 0 on constraint violation,\ncannot contain a subquery."},
-            {"name": "collate", "label": "COLLATE", "toggle": True, "choices": self.COLLATE, "choicesedit": True,
-             "help": "Ordering sequence to use for text values (defaults to BINARY)."},
+            {"name": "check", "label": "CHECK", "toggle": True, 
+             "help": "Expression yielding a NUMERIC 0 on constraint violation,\ncannot contain a subquery.",
+             "togglename": {"toggle": True, "name": "name", "label": "Constraint name"},
+             "children": [
+                {"name": "expr", "label": "Expression", "component": controls.SQLiteTextCtrl,
+                 "help": "Expression yielding a NUMERIC 0 on constraint violation,\ncannot contain a subquery."},
+            ]},
+            {"name": "collate", "label": "COLLATE", "toggle": True,
+             "help": "Ordering sequence to use for text values (defaults to BINARY).",
+             "togglename": {"toggle": True, "name": "name", "label": "Constraint name"},
+             "children": [
+                {"name": "value", "label": "Collation", "choices": self.COLLATE, "choicesedit": True,
+                 "help": "Ordering sequence to use for text values (defaults to BINARY)."},
+            ]},
         ]
 
         if grammar.SQL.FOREIGN_KEY == data["type"]: return [
@@ -5270,14 +5293,14 @@ class SchemaObjectPage(wx.Panel):
                         changed = True
 
                     elif col.get("check"):
-                        if name.lower() not in col["check"].lower():
+                        if name.lower() not in col["check"].get("expr", "").lower():
                             continue # for opts
                         # Transform CHECK body via grammar and a dummy CREATE-statement
-                        dummysql = "CREATE TABLE t (x CHECK (%s))" % col["check"]
+                        dummysql = "CREATE TABLE t (x CHECK (%s))" % col["check"]["expr"]
                         dummymeta, err = grammar.parse(dummysql, renames={"column": {"t": {name: ""}}})
                         if dummymeta and dummymeta.get("columns"):
-                            col["check"] = dummymeta["columns"][0]["check"].strip()
-                            if not col["check"]: col.pop("check")
+                            col["check"]["expr"] = dummymeta["columns"][0]["check"]["expr"].strip()
+                            if not col["check"]["expr"]: col.pop("check")
                             changed = True
                         elif err:
                             logger.warn("Error cascading column update %s to column %s: %s.",
@@ -5292,14 +5315,14 @@ class SchemaObjectPage(wx.Panel):
                         changed = True
 
                     elif col.get("check"):
-                        if name.lower() not in col["check"].lower():
+                        if name.lower() not in col["check"].get("expr", "").lower():
                             continue # for opts
                         # Transform CHECK body via grammar and a dummy CREATE-statement
-                        dummysql = "CREATE TABLE t (x CHECK (%s))" % col["check"]
+                        dummysql = "CREATE TABLE t (x CHECK (%s))" % col["check"]["expr"]
                         dummymeta, err = grammar.parse(dummysql, renames={"column": {"t": {name: opts["rename"]}}})
                         if dummymeta and dummymeta.get("columns"):
-                            col["check"] = dummymeta["columns"][0]["check"].strip()
-                            if not col["check"]: col.pop("check")
+                            col["check"]["expr"] = dummymeta["columns"][0]["check"]["expr"].strip()
+                            if not col["check"]["expr"]: col.pop("check")
                             changed = True
                         elif err:
                             logger.warn("Error cascading column update %s to column %s: %s.",
@@ -5336,13 +5359,13 @@ class SchemaObjectPage(wx.Panel):
                     changed = True
 
                 elif col.get("check"):
-                    if opts["rename"].lower() not in col["check"].lower():
+                    if opts["rename"].lower() not in col["check"].get("expr", "").lower():
                         continue # for opts
                     # Transform CHECK body via grammar and a dummy CREATE-statement
-                    dummysql = "CREATE TABLE t (x CHECK (%s))" % col["check"]
+                    dummysql = "CREATE TABLE t (x CHECK (%s))" % col["check"]["expr"]
                     dummymeta, err = grammar.parse(dummysql, renames={"table": {name1: opts["rename"]}})
                     if dummymeta and dummymeta.get("columns"):
-                        col["check"] = dummymeta["columns"][0]["check"].strip()
+                        col["check"]["expr"] = dummymeta["columns"][0]["check"]["expr"].strip()
                         changed = True
                     elif err:
                         logger.warn("Error cascading name update %s to column %s: %s.",
@@ -8370,7 +8393,7 @@ class ColumnDialog(wx.Dialog):
         label = "%s #%s: %s" % (self._collabel.capitalize(), self._col + 1, grammar.quote(self._name))
         if self._coldata.get("type"):    label += " " + self._coldata["type"]
         if "notnull" in self._coldata:   label += " NOT NULL"
-        if self._coldata.get("default"): label += " DEFAULT " + self._coldata["default"]
+        if self._coldata.get("default"): label += " DEFAULT " + self._coldata["default"]["expr"]
         self._label_meta.Label = util.ellipsize(label, 500)
         self._label_meta.Wrap(self.Size[0] - 250)
         self.Layout()

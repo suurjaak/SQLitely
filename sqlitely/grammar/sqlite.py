@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    21.12.2020
+@modified    24.12.2020
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -111,15 +111,18 @@ def transform(sql, flags=None, renames=None, indent="  "):
 
 
 @util.memoize
-def quote(val, force=False):
+def quote(val, force=False, spaceok=False):
     """
     Returns value in quotes and proper-escaped for queries,
     if name needs quoting (has non-alphanumerics or starts with number)
     or if force set. Always returns unicode.
+
+    @param   spaceok  whether to allow spaces without quoting
     """
+    pattern = r"(^[^\w\d ])|(?=[^\w ])" if spaceok else r"(^[\W\d])|(?=\W)"
     result = uni(val)
     if force or result.upper() in RESERVED_KEYWORDS \
-    or re.search(r"(^[\W\d])|(?=\W)", result, re.U):
+    or re.search(pattern, result, re.U):
         result = u'"%s"' % result.replace('"', '""')
     return result
 
@@ -672,20 +675,33 @@ class Parser(object):
           name:                column name
           ?type:               column type
           ?pk                  { if PRIMARY KEY
+              ?name            constraint name
               ?autoincrement:  True if AUTOINCREMENT
               ?order:          ASC | DESC
               ?conflict:       ROLLBACK | ABORT | FAIL | IGNORE | REPLACE
           ?
           ?notnull             { if NOT NULL
+              ?name            constraint name
               ?conflict:       ROLLBACK | ABORT | FAIL | IGNORE | REPLACE
           ?
           ?unique              { if UNIQUE
+              ?name            constraint name
               ?conflict:       ROLLBACK | ABORT | FAIL | IGNORE | REPLACE
           ?
-          ?default:            DEFAULT value or expression
-          ?check:              (expression)
-          ?collate:            NOCASE | ..
+          ?default             { if DEFAULT
+              ?name            constraint name
+              expr:            value or expression
+          ?
+          ?check               { if CHECK
+              ?name            constraint name
+              expr:            value or expression
+          ?
+          ?collate             { if COLLATE
+              ?name            constraint name
+              value:           NOCASE | ..
+          ?
           ?fk:                 { if REFERENCES
+              ?name            constraint name
               table:           foreign table
               key:             foreign table column name
               ?defer:          { if DEFERRABLE
@@ -697,7 +713,7 @@ class Parser(object):
                   ?DELETE:     SET NULL | SET DEFAULT | CASCADE | RESTRICT | NO ACTION
               }
               ?match:          MATCH-clause value
-          }
+          ?
         }.
         """
         result = {}
@@ -713,40 +729,49 @@ class Parser(object):
 
         for c in ctx.column_constraint():
             conflict = self.get_conflict(c)
+            key = None
 
             if c.K_PRIMARY() and c.K_KEY():
-                result["pk"] = {}
-                if c.K_AUTOINCREMENT(): result["pk"]["autoincrement"] = True
+                key = "pk"
+                result[key] = {}
+                if c.K_AUTOINCREMENT(): result[key]["autoincrement"] = True
                 order = c.K_ASC() or c.K_DESC()
-                if order: result["pk"]["order"] = self.t(order)
-                if conflict:  result["pk"]["conflict"] = conflict
+                if order:    result[key]["order"]    = self.t(order)
+                if conflict: result[key]["conflict"] = conflict
 
             elif c.K_NOT() and c.K_NULL():
-                result["notnull"] = {}
-                if conflict: result["notnull"]["conflict"] = conflict
+                key = "notnull"
+                result[key] = {}
+                if conflict: result[key]["conflict"] = conflict
 
             elif c.K_UNIQUE():
-                result["unique"] = {}
-                if conflict: result["unique"]["conflict"] = conflict
+                key = "unique"
+                result[key] = {}
+                if conflict: result[key]["conflict"] = conflict
 
             elif c.K_DEFAULT():
-                default = None
+                key, default = "default", None
                 if   c.signed_number(): default = self.t(c.signed_number)
                 elif c.literal_value(): default = self.t(c.literal_value)
                 elif c.expr():          default = "(%s)" % self.r(c.expr())
-                result["default"] = default
+                result[key] = {"expr": default}
 
             elif c.K_CHECK():
-                result["check"] = self.r(c.expr())
+                key = "check"
+                result[key] = {"expr": self.r(c.expr())}
 
             elif c.K_COLLATE():
-                result["collate"] = self.u(c.collation_name).upper()
+                key = "collate"
+                result[key] = {"value": self.u(c.collation_name).upper()}
 
             elif c.foreign_key_clause():
+                key = "fk"
                 fkctx = c.foreign_key_clause()
-                result["fk"] = self.build_fk_extra(fkctx)
-                result["fk"]["table"] = self.u(fkctx.foreign_table)
-                result["fk"]["key"] = self.u(fkctx.column_name(0))
+                result[key] = self.build_fk_extra(fkctx)
+                result[key]["table"] = self.u(fkctx.foreign_table)
+                result[key]["key"] = self.u(fkctx.column_name(0))
+
+            if key and c.constraint_name(): result[key]["name"] = self.u(c.constraint_name)
 
         return result
 
@@ -1096,19 +1121,21 @@ class Generator(object):
         return self.token(self._indent, "PRE") if self._indent else ""
 
 
-    def quote(self, val, force=False):
+    def quote(self, val, force=False, spaceok=False):
         """Returns token for quoted value."""
-        return self.token(quote(val, force=force), "Q")
+        return self.token(quote(val, force=force, spaceok=spaceok), "Q")
 
 
-    def padding(self, key, data, quoted=False):
+    def padding(self, key, data, quoted=False, quotekw=None):
         """
         Returns whitespace padding token for data[key] if indented SQL,
         else empty string. Whitespace will be justified to data[key] max length.
-        If quoted, data[key] is quoted if necessary.
+        If quoted is true, data[key] is quoted if necessary, with quotekw as
+        quote() keywords.
         """
         if not self._indent: return ""
-        val = quote(data[key]) if quoted else data[key]
+        val = data[key] if key in data else ""
+        val = quote(val, **quotekw or {}) if val and quoted else val
         return self.token("%s-%s" % (key, val), "PAD", key=key, value=val)
 
 
