@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.12.2020
+@modified    25.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -5678,7 +5678,7 @@ class SchemaObjectPage(wx.Panel):
         if self.IsChanged(): errors, _ = self._Validate()
         if not errors and self.IsChanged():
             if not self._newmode: sql, _, _ = self._GetAlterSQL()
-            sql2 = "PRAGMA foreign_keys = off;\n\nSAVEPOINT test;\n\n" \
+            sql2 = "SAVEPOINT test;\n\n" \
                    "%s\n\nROLLBACK TO SAVEPOINT test;" % sql.strip()
             if ("table" == self._category and not self._newmode
                 or "index" == self._category) \
@@ -5696,12 +5696,13 @@ class SchemaObjectPage(wx.Panel):
             self._PostEvent(sync=True, close_grids=True)
             logger.info("Executing test SQL:\n\n%s", sql2)
             busy = controls.BusyPanel(self, "Testing..")
-            try: self._db.executescript(sql2)
+            self._fks_on = self._db.execute("PRAGMA foreign_keys", log=False).fetchone().values()[0]
+            try: self._db.executescript(sql2, name="TEST")
             except Exception as e:
                 logger.exception("Error executing test SQL.")
-                try: self._db.execute("ROLLBACK")
+                try: self._db.execute("ROLLBACK", name="TEST")
                 except Exception: pass
-                try: self._fks_on and self._db.execute("PRAGMA foreign_keys = on")
+                try: self._fks_on and self._db.execute("PRAGMA foreign_keys = on", name="TEST")
                 except Exception: pass
                 errors = [util.format_exc(e)]
             finally:
