@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    24.12.2020
+@modified    27.12.2020
 ------------------------------------------------------------------------------
 """
 
@@ -711,7 +711,9 @@ USING {{ data["module"]["name"] }}
 @param   ?i     constraint index
 """
 TABLE_CONSTRAINT = """<%
+cmpath = []
 if not isdef("i"): i = 0
+else: cmpath = ["constraints", i]
 
 %>
 
@@ -737,7 +739,7 @@ if not isdef("i"): i = 0
         %if col.get("order") is not None:
   {{ col["order"] }}
         %endif
-  {{ CM("constraints", i, "key", j, root=root) }}
+  {{ CM(*cmpath + ["key", j], root=root) }}
     %endfor
   {{ GLUE() }}
   )
@@ -752,7 +754,7 @@ if not isdef("i"): i = 0
   (
     {{ GLUE() }}
     %for j, c in enumerate(data.get("columns") or []):
-    {{ Q(c) }}{{ CM("constraints", i, "columns", j, root=root) }}
+    {{ Q(c) }}{{ CM(*cmpath + ["columns", j], root=root) }}
     %endfor
   )
 
@@ -762,7 +764,7 @@ if not isdef("i"): i = 0
   (
   {{ GLUE() }}
         %for j, c in enumerate(data["key"]):
-  {{ Q(c) if c else "" }}{{ CM("constraints", i, "key", j, root=root) }}
+  {{ Q(c) if c else "" }}{{ CM(*cmpath + ["key", j], root=root) }}
         %endfor
   )
     %endif
