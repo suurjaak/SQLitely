@@ -1049,7 +1049,7 @@ class Generator(object):
         if category not in self.TEMPLATES:
             return None, "Unknown category: %s" % category
 
-        REPLACE_ORDER = ["Q", "PAD", "GLUE", "CM", "LF", "PRE", "WS"]
+        REPLACE_ORDER = ["Q", "GLUE", "CM", "LF", "PRE", "PAD", "WS"]
         ns = {"Q":    self.quote,   "LF": self.linefeed, "PRE": self.indentation,
               "PAD":  self.padding, "CM": self.comma,    "WS":  self.token,
               "GLUE": self.glue, "data": data, "root": data,
@@ -1116,9 +1116,18 @@ class Generator(object):
         return self.token("\n", "LF") if self._indent else ""
 
 
-    def indentation(self):
-        """Returns line indentation token if indented SQL, else empty string."""
-        return self.token(self._indent, "PRE") if self._indent else ""
+    def indentation(self, val=None):
+        """
+        Returns line indentation token if indented SQL, else empty string.
+        If value given, inserts indentation after each LF-token in value.
+        """
+        if not self._indent: return val or ""
+
+        if not val: return self.token(self._indent, "PRE")
+
+        return self.token(self._indent, "PRE") + \
+               re.sub(r"(\[\[LF\-[-\w]+\]\](?!\s+$))", # Skip LF at content end
+                      lambda m: m.group() + self.token(self._indent, "PRE"), val)
 
 
     def quote(self, val, force=False, spaceok=False):

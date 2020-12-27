@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.12.2020
+@modified    27.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -4522,7 +4522,10 @@ class SchemaObjectPage(wx.Panel):
 
 
     def _GetFormDialogProps(self, path, data):
-        """Returns (title, field properties) for table column or constraint FormDialog."""
+        """
+        Returns ([{field properties}, ], {footer props})
+        for table column or constraint FormDialog.
+        """
 
         def get_foreign_cols(data):
             result = []
@@ -4534,9 +4537,51 @@ class SchemaObjectPage(wx.Panel):
         def get_table_cols(data):
             return [x["name"] for x in self._item["meta"].get("columns") or ()]
 
-        def toggle_pk(data):
-            if "pk" in data: data.setdefault("notnull", {})
-            return "notnull"
+        def toggle_pk(dlg):
+            if "pk" in dlg.GetData():
+                dlg._data.setdefault("notnull", {})
+                return "notnull"
+
+        def populate_footer(category, dlg, ctrl, immediate=False):
+
+            if not immediate:
+                if getattr(ctrl, "_timer", None): ctrl._timer.Stop()
+                ctrl._timer = wx.CallLater(100, populate_footer, category,
+                                           dlg, ctrl, immediate=True)
+                return
+
+            ctrl._timer = None
+            sql, _ = grammar.generate(dlg.GetData(), category=category)
+            if not sql: sql = "-- Invalid configuration"
+            pos = ctrl.GetScrollPos(wx.VERTICAL)
+            ctrl.SetEditable(True)
+            ctrl.Text = sql
+            ctrl.SetEditable(False)
+            ctrl.ScrollToLine(pos)
+
+        def on_paste(category, dlg, ctrl, text):
+            if grammar.SQL.COLUMN == category:
+                dummysql = "CREATE TABLE t (%s)" % text
+            elif grammar.SQL.CONSTRAINT == category:
+                dummysql = "CREATE TABLE t (a, %s)" % text
+            else: return
+            data, err = grammar.parse(dummysql)
+            if data and "%ss" % category.lower() in data:
+                dlg.Populate(data=data["%ss" % category.lower()][0])
+            else:
+                err = err or "Not a recognized %s." % category.lower()
+                wx.MessageBox("Error parsing %s SQL:\n\n%s" % (category.lower(), err),
+                              conf.Title, wx.OK | wx.ICON_WARNING)
+
+
+        footer = next({
+            "label": "%s SQL:" % c.lower().capitalize(),
+            "tb": filter(bool, 
+                   [{"type": "copy",  "help": "Copy %s SQL to clipboard" % c.lower()},
+                   {"type": "paste", "help": "Paste and parse %s SQL from clipboard" % c.lower(),
+                    "handler": functools.partial(on_paste, c)} if self._editmode else None, ]),
+            "populate": functools.partial(populate_footer, c)
+        } for c in [grammar.SQL.COLUMN if "columns" == path[0] else grammar.SQL.CONSTRAINT])
 
         if "columns" == path[0]: return [
             {"name": "name",    "label": "Name"},
@@ -4596,7 +4641,7 @@ class SchemaObjectPage(wx.Panel):
                 {"name": "value", "label": "Collation", "choices": self.COLLATE, "choicesedit": True,
                  "help": "Ordering sequence to use for text values (defaults to BINARY)."},
             ]},
-        ]
+        ], footer
 
         if grammar.SQL.FOREIGN_KEY == data["type"]: return [
             {"name": "name", "label": "Constraint name", "type": "text", "toggle": True},
@@ -4613,20 +4658,20 @@ class SchemaObjectPage(wx.Panel):
                 {"name": "not",     "label": "NOT", "type": bool, "help": "Whether enforced immediately"},
                 {"name": "initial", "label": "INITIALLY", "choices": self.DEFERRABLE},
             ]},
-        ]
+        ], footer
 
         if grammar.SQL.CHECK == data["type"]: return [
             {"name": "name", "label": "Constraint name", "type": "text", "toggle": True},
             {"name": "check", "label": "CHECK", "component": controls.SQLiteTextCtrl,
              "help": "Expression yielding a NUMERIC 0 on constraint violation,\ncannot contain a subquery."},
-        ]
+        ], footer
 
         if data["type"] in (grammar.SQL.PRIMARY_KEY, grammar.SQL.UNIQUE): return [
             {"name": "name", "label": "Constraint name", "type": "text", "toggle": True},
             {"name": "columns",  "label": "Index",
              "type": (lambda *a, **kw: self._CreateDialogConstraints(*a, **kw))},
             {"name": "conflict", "label": "ON CONFLICT", "choices": self.CONFLICT},
-        ]
+        ], footer
 
 
     def _CreateDialogConstraints(self, dialog, field, parent, data):
@@ -4652,7 +4697,7 @@ class SchemaObjectPage(wx.Panel):
                 self._EmptyControl(panel_columns)
                 for i, col in enumerate(data.get("key") or ()):
                     add_row(i, col, focus)
-                dialog.Layout()
+                dialog._panel.Layout()
             finally: dialog.Thaw()
 
         def size_dialog():
@@ -4962,7 +5007,7 @@ class SchemaObjectPage(wx.Panel):
     def _OnOpenItem(self, path, event=None):
         """Opens a FormDialog for row item."""
         data  = util.getval(self._item["meta"], path)
-        props = self._GetFormDialogProps(path, data)
+        props, footer = self._GetFormDialogProps(path, data)
 
         words = []
         for category in ("table", "view") if self._editmode else ():
@@ -4977,7 +5022,7 @@ class SchemaObjectPage(wx.Panel):
         if "constraints" == path[0]:
             title = "%s constraint" % data["type"]
         dlg = controls.FormDialog(self.TopLevelParent, title, props, data,
-                                  self._editmode, autocomp=words)
+                                  self._editmode, autocomp=words, footer=footer)
         wx_accel.accelerate(dlg)
         if wx.ID_OK != dlg.ShowModal() or not self._editmode: return
         data2 = dlg.GetData()

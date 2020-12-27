@@ -69,7 +69,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    24.12.2020
+@modified    27.12.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -467,7 +467,7 @@ class FormDialog(wx.Dialog):
     Uses ComboBox for fields with choices.
     Uses two ListBoxes for list fields.
 
-    @param   props  [{
+    @param   props    [{
        name:          field name
        ?type:         (bool | list | anything) if field has direct content,
                       or callback(dialog, field, panel, data) making controls
@@ -493,12 +493,18 @@ class FormDialog(wx.Dialog):
     @param   autocomp  list of words to add to SQLiteTextCtrl autocomplete,
                        or a dict for words and subwords
     @param   onclose   callable(data) on closing dialog, returning whether to close
+    @param   footer    { a separate SQLiteTextCtrl in dialog footer
+       ?label:         label for footer, if any
+       ?tb:            [{type, ?help, ?handler}] for SQLiteTextCtrl component, adds toolbar,
+                       supported toolbar buttons "copy", "paste", plus "sep" for separator
+       populate:       function(dialog, ctrl) invoked on startup and each change
+    }
     """
 
     WIDTH = 440
 
 
-    def __init__(self, parent, title, props=None, data=None, edit=None, autocomp=None, onclose=None):
+    def __init__(self, parent, title, props=None, data=None, edit=None, autocomp=None, onclose=None, footer=None):
         wx.Dialog.__init__(self, parent, title=title,
                           style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER)
         self._ignore_change = False
@@ -506,24 +512,28 @@ class FormDialog(wx.Dialog):
         self._comps    = collections.defaultdict(list) # {(path): [wx component, ]}
         self._autocomp = autocomp
         self._onclose  = onclose
+        self._footer   = dict(footer) if footer and footer.get("populate") else None
         self._toggles  = {} # {(path): wx.CheckBox, }
         self._props    = []
         self._data     = {}
         self._rows     = 0
 
-        panel_wrap  = wx.ScrolledWindow(self)
+        splitter = wx.SplitterWindow(self, style=wx.BORDER_NONE) if self._footer else None
+        panel_wrap  = wx.ScrolledWindow(splitter or self)
         panel_items = self._panel = wx.Panel(panel_wrap)
+
         panel_wrap.SetScrollRate(0, 20)
 
         self.Sizer        = wx.BoxSizer(wx.VERTICAL)
+        panel_footer      = self._AddFooter(splitter, self._footer) if self._footer else None
         sizer_buttons     = self.CreateButtonSizer(wx.OK | (wx.CANCEL if self._editmode else 0))
         panel_wrap.Sizer  = wx.BoxSizer(wx.VERTICAL)
         panel_items.Sizer = wx.GridBagSizer(hgap=5, vgap=0)
 
         panel_items.Sizer.SetEmptyCellSize((0, 0))
-        panel_wrap.Sizer.Add(panel_items, border=10, proportion=1, flag=wx.RIGHT | wx.GROW)
+        panel_wrap.Sizer.Add(panel_items, border=10, proportion=1, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
 
-        self.Sizer.Add(panel_wrap, border=15, proportion=1, flag=wx.LEFT | wx.TOP | wx.GROW)
+        self.Sizer.Add(splitter or panel_wrap, proportion=1, flag=wx.GROW)
         self.Sizer.Add(sizer_buttons, border=5, flag=wx.ALL | wx.ALIGN_CENTER_HORIZONTAL)
 
         self.Bind(wx.EVT_BUTTON, self._OnClose, id=wx.ID_OK)
@@ -533,24 +543,34 @@ class FormDialog(wx.Dialog):
             ColourManager.Manage(x, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
         self.Populate(props, data, edit)
 
+        if splitter:
+            splitter.SetSashGravity(1) # Grow top window only
+            splitter.SetMinimumPaneSize(45)
+            splitter.SplitHorizontally(panel_wrap, panel_footer)
+
         self.Fit()
         FRAMEH = 2 * wx.SystemSettings.GetMetric(wx.SYS_FRAMESIZE_Y) + wx.SystemSettings.GetMetric(wx.SYS_CAPTION_Y)
-        self.Size = self.MinSize = (self.WIDTH, panel_wrap.VirtualSize[1] + 25 + sizer_buttons.Size[1] + FRAMEH)
+        MINH = 25 + (65 if panel_footer else 0)
+        self.Size = self.MinSize = (self.WIDTH, panel_wrap.VirtualSize[1] + MINH + sizer_buttons.Size[1] + FRAMEH)
+        if splitter:
+            splitter.SetSashPosition(splitter.Size[1] - 65)
         self.CenterOnParent()
 
 
-    def Populate(self, props, data, edit=None):
+    def Populate(self, props=None, data=None, edit=None):
         """
         Clears current content, if any, adds controls to dialog,
-        and populates with data.
+        and populates with data; non-null arguments override current settings.
         """
         self._ignore_change = True
-        self._props = copy.deepcopy(props or [])
-        self._data  = copy.deepcopy(data  or {})
-        if edit is not None: self._editmode = edit
+        if props is not None: self._props = copy.deepcopy(props)
+        if data is not None:  self._data  = copy.deepcopy(data)
+        if edit is not None:  self._editmode = bool(edit)
         self._rows  = 0
 
-        while self._panel.Sizer.Children: self._panel.Sizer.Remove(0)
+        self.Freeze()
+        sizer = self._panel.Sizer
+        while sizer.Children: sizer.Remove(0)
         for c in self._panel.Children: c.Destroy()
         self._toggles.clear()
         self._comps.clear()
@@ -558,10 +578,14 @@ class FormDialog(wx.Dialog):
         for f in self._props: self._AddField(f)
 
         for f in self._props: self._PopulateField(f)
-        self._panel.Sizer.AddGrowableCol(6, 1)
-        if len(self._comps) == 1: self._panel.Sizer.AddGrowableRow(0, 1)
+        if not sizer.IsColGrowable(sizer.Cols - 2):
+            sizer.AddGrowableCol(sizer.Cols - 2, proportion=1)
+        if len(self._comps) == 1 and not sizer.IsRowGrowable(0):
+            sizer.AddGrowableRow(0, proportion=1)
+        if self._footer: self._footer["populate"](self, self._footer["ctrl"], immediate=True)
         self._ignore_change = False
         self.Layout()
+        self.Thaw()
 
 
     def GetData(self):
@@ -592,6 +616,8 @@ class FormDialog(wx.Dialog):
             if ptr is None: ptr = parent[x] = {}
             parent = ptr
         ptr[field["name"]] = value
+        if not self._ignore_change and self._footer:
+            self._footer["populate"](self, self._footer["ctrl"])
 
 
     def _DelValue(self, field, path=()):
@@ -600,17 +626,21 @@ class FormDialog(wx.Dialog):
         path = field.get("path") or path
         for x in path: ptr = ptr.get(x, {})
         ptr.pop(field["name"], None)
+        if not self._ignore_change and self._footer:
+            self._footer["populate"](self, self._footer["ctrl"])
 
 
     def _GetField(self, name, path=()):
         """Returns field from props."""
         fields, path = self._props, list(path) + [name]
         while fields:
+            stepped = False
             for f in fields:
                 if [f["name"]] == path: return f
                 if f["name"] == path[0] and f.get("children"):
-                    fields, path = f["children"], path[1:]
+                    fields, path, stepped = f["children"], path[1:], True
                     break # for f
+            if not stepped: break # while fields
 
 
     def _GetChoices(self, field, path):
@@ -639,18 +669,16 @@ class FormDialog(wx.Dialog):
         if not callback and not self._editmode and self._GetValue(field, path) is None: return
         MAXCOL = 8
         parent, sizer = self._panel, self._panel.Sizer
-        level, fpath = len(path), path + (field["name"], )
+        col, fpath = len(path), path + (field["name"], )
 
-        col = 0
         if field.get("toggle"):
             mysizer = wx.BoxSizer(wx.HORIZONTAL)
             toggle = wx.CheckBox(parent)
-            mylevel = level
             if field.get("help"): toggle.ToolTip = field["help"]
             if self._editmode:
                 toggle.Label = field["label"] if "label" in field else field["name"]
-                sizer.Add(toggle, border=5, pos=(self._rows, mylevel), span=(1, 2), flag=wx.TOP | wx.BOTTOM)
-                mylevel += 2
+                sizer.Add(toggle, border=5, pos=(self._rows, col), span=(1, 1), flag=wx.TOP | wx.BOTTOM)
+                col += 1
             else: # Show ordinary label in view mode, checkbox goes very gray
                 label = wx.StaticText(parent, label=field["label"] if "label" in field else field["name"])
                 if field.get("help"): label.ToolTip = field["help"]
@@ -683,23 +711,87 @@ class FormDialog(wx.Dialog):
                 self._BindHandler(self._OnChange, editbox, namefield, fpath)
                 self._comps[nfpath].append(editbox)
             if not mysizer.IsEmpty():
-                sizer.Add(mysizer, border=5, pos=(self._rows, mylevel), span=(1, MAXCOL - mylevel), flag=wx.TOP | wx.BOTTOM)
+                colspan = 2 if not callback and any(field.get(x) for x in ["type", "choices", "component"]) \
+                          else MAXCOL - col
+                sizer.Add(mysizer, border=5, pos=(self._rows, col), span=(1, colspan), flag=wx.TOP | wx.BOTTOM)
+                col += colspan
             self._comps[fpath].append(toggle)
             self._toggles[tuple(field.get("path") or fpath)] = toggle
             self._BindHandler(self._OnToggleField, toggle, field, path, toggle)
-            col += 2
 
         if callback: callback(self, field, parent, self._data)
         elif not field.get("toggle") or any(field.get(x) for x in ["type", "choices", "component"]):
             ctrls = self._MakeControls(field, path)
-            for c in ctrls:
-                colspan = 2 if isinstance(c, wx.StaticText) else MAXCOL - level - col
+            for i, c in enumerate(ctrls):
+                colspan = 1 if isinstance(c, wx.StaticText) or i < len(ctrls) - 2 else \
+                          MAXCOL - col - bool(col)
                 brd, BRD = (5, wx.BOTTOM) if isinstance(c, wx.CheckBox) else (0, 0)
-                sizer.Add(c, border=brd, pos=(self._rows, level + col), span=(1, colspan), flag=BRD | wx.GROW)
+                GRW = 0 if isinstance(c, (wx.CheckBox, wx.TextCtrl)) else wx.GROW
+                sizer.Add(c, border=brd, pos=(self._rows, col), span=(1, colspan), flag=BRD | GRW)
                 col += colspan
 
         self._rows += 1
         for f in field.get("children") or (): self._AddField(f, fpath)
+
+
+    def _AddFooter(self, parent, footer):
+        """Adds footer component to dialog, returns footer panel."""
+        panel = wx.Panel(parent)
+        sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
+
+        label, tb, ctrl = None, None, None
+        accname = "footer_%s" % wx.NewIdRef().Id
+
+        if footer.get("label"):
+            label = wx.StaticText(panel, label=footer["label"], name=accname + "_label")
+        if footer.get("tb"):
+            def OnCopy(prop, event=None):
+                if wx.TheClipboard.Open():
+                    wx.TheClipboard.SetData(wx.TextDataObject(ctrl.Text))
+                    wx.TheClipboard.Close()
+            def OnPaste(prop, event=None):
+                if wx.TheClipboard.Open():
+                    d = wx.TextDataObject()
+                    if wx.TheClipboard.GetData(d):
+                        sql = d.GetText()
+                        if prop.get("handler"): prop["handler"](self, ctrl, sql)
+                        else:
+                            ctrl.SetEditable(True)
+                            ctrl.Text = sql
+                            ctrl.SetEditable(False)
+                    wx.TheClipboard.Close()
+
+            OPTS = {"copy":  {"id": wx.ID_COPY,  "bmp": wx.ART_COPY,  "handler": OnCopy},
+                    "paste": {"id": wx.ID_PASTE, "bmp": wx.ART_PASTE, "handler": OnPaste}, }
+
+            tb = wx.ToolBar(panel, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+            for prop in footer["tb"]:
+                if "sep" == prop["type"]:
+                    tb.AddSeparator()
+                    continue # for prop
+                opts = OPTS[prop["type"]]
+                bmp = wx.ArtProvider.GetBitmap(opts["bmp"], wx.ART_TOOLBAR, (16, 16))
+                tb.SetToolBitmapSize(bmp.Size)
+                tb.AddTool(opts["id"], "", bmp, shortHelp=prop.get("help", ""))
+                tb.Bind(wx.EVT_TOOL, functools.partial(opts["handler"], prop), id=opts["id"])
+            tb.Realize()
+
+
+        sep = wx.StaticLine(panel)
+        ctrl = self._footer["ctrl"] = SQLiteTextCtrl(panel, traversable=True, size=(-1, 60), name=accname)
+        ctrl.SetCaretLineVisible(False)
+
+        sizer.Add(sep, flag=wx.GROW)
+
+        if label or tb:
+            hsizer = wx.BoxSizer(wx.HORIZONTAL)
+            if label: hsizer.Add(label, border=5, flag=wx.LEFT | wx.ALIGN_CENTER_VERTICAL)
+            hsizer.AddStretchSpacer()
+            if tb: hsizer.Add(tb)
+            sizer.Add(hsizer, flag=wx.GROW)
+
+        sizer.Add(ctrl, proportion=1, flag=wx.GROW)
+        return panel
 
 
     def _PopulateField(self, field, path=()):
@@ -785,9 +877,7 @@ class FormDialog(wx.Dialog):
         accname = "ctrl_%s" % self._rows # Associating label click with control
 
         if list is field.get("type"):
-            if not field.get("toggle") and field.get("type") not in (bool, list):
-                result.append(wx.StaticText(parent, label=label, name=accname + "_label"))
-
+            # Add two listboxes side by side, with buttons to the right of both
             sizer_f = wx.BoxSizer(wx.VERTICAL)
             sizer_l = wx.BoxSizer(wx.HORIZONTAL)
             sizer_b1 = wx.BoxSizer(wx.VERTICAL)
@@ -804,7 +894,7 @@ class FormDialog(wx.Dialog):
             b3.ToolTip = "Move selected items higher"
             b4.ToolTip = "Move selected items lower"
             ctrl1.SetName(accname)
-            ctrl1.MinSize = ctrl2.MinSize = (150, 100)
+            ctrl1.MinSize = ctrl2.MinSize = (100, 100)
             if field.get("help"): ctrl1.ToolTip = field["help"]
 
             sizer_b1.Add(b1); sizer_b1.Add(b2)
@@ -828,7 +918,7 @@ class FormDialog(wx.Dialog):
             self._BindHandler(self._OnMoveInList,     b3,    field, path, -1)
             self._BindHandler(self._OnMoveInList,     b4,    field, path, +1)
         elif field.get("tb") and field.get("component") is SQLiteTextCtrl:
-            # Special case, add toolbar buttons to STC
+            # Special case, add toolbar buttons for STC
             sizer_top = wx.BoxSizer(wx.HORIZONTAL)
             sizer_stc = wx.BoxSizer(wx.VERTICAL)
 
@@ -934,12 +1024,12 @@ class FormDialog(wx.Dialog):
         if field.get("link"):
             name = field["link"]
             if callable(name):
-                name = field["link"](self._data)
+                name = field["link"](self)
                 linkfield = self._GetField(name, path)
             else:
                 linkfield = self._GetField(name, path)
-                self._DelValue(linkfield, path)
-            self._PopulateField(linkfield, path)
+                if linkfield: self._DelValue(linkfield, path)
+            if linkfield: self._PopulateField(linkfield, path)
 
 
     def _OnAddToList(self, field, path, event):
@@ -1014,10 +1104,12 @@ class FormDialog(wx.Dialog):
             ctrls.append((field, path, c))
         if field.get("togglename") and field["togglename"].get("name"):
             for c in self._comps.get(fpath + (field["togglename"]["name"], ), []):
-                ctrls.append((field["togglename"], fpath, c))
+                if c not in (x for _, _, x in ctrls):
+                    ctrls.append((field["togglename"], fpath, c))
         for f in field.get("children", []):
             for c in self._comps.get(fpath + (f["name"], ), []):
-                ctrls.append((f, fpath, c))
+                if c not in (x for _, _, x in ctrls):
+                    ctrls.append((f, fpath, c))
 
         on = event.EventObject.Value if event else ctrl.Value
         for f, p, c in ctrls:
@@ -1028,7 +1120,10 @@ class FormDialog(wx.Dialog):
             fon = on
             # Hide field children that are toggled off
             if not isinstance(c, wx.CheckBox) and f.get("toggle") \
-            and p != path and self._GetValue(f, p) is None:
+            and (p != path and self._GetValue(f, p) is None or
+                 f == field.get("togglename") and
+                 not getattr(self._toggles.get(fpath + (f["name"], )), "Value", False)
+            ):
                 fon = False
 
             c.Show(fon)
@@ -1036,20 +1131,22 @@ class FormDialog(wx.Dialog):
 
         if on and self._GetValue(field, path) is None:
             self._SetValue(field, {} if field.get("children") else "", path)
-        if on and self._editmode and path \
-        and field == self._GetField(path[-1], path[:-1]).get("togglename"):
+        if on and self._editmode and (path and
+        field == self._GetField(path[-1], path[:-1]).get("togglename")
+        or "text" == field.get("type")):
             edit = next((c for _, _, c in ctrls if isinstance(c, wx.TextCtrl)), None)
-            if edit: edit.SetFocus(), edit.SelectAll() # Focus name-toggle editbox
+            if edit: edit.SetFocus(), edit.SelectAll() # Focus toggle's name-box
         if field.get("link"):
             name = field["link"]
             if callable(name):
-                name = field["link"](self._data)
+                name = field["link"](self)
                 linkfield = self._GetField(name, path)
             else:
                 linkfield = self._GetField(name, path)
-                self._DelValue(linkfield, path)
-            self._PopulateField(linkfield, path)
-        self.Layout()
+                if linkfield: self._DelValue(linkfield, path)
+            if linkfield: self._PopulateField(linkfield, path)
+        if self._footer: self._footer["populate"](self, self._footer["ctrl"])
+        self._panel.Layout()
 
 
     def _OnOpenFile(self, field, path, event=None):

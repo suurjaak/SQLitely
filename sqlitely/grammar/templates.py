@@ -406,7 +406,7 @@ for ctype, cnstr in get_constraints():
 
     %if data.get("pk") is not None:
         %if cnstr_breaks["pk"]:
-  {{ LF() }}{{ PRE() }}
+  {{ LF() }}
   {{ PAD("name", {"name": ""}) }}
         %endif
         %if data["pk"].get("name"):
@@ -424,7 +424,7 @@ for ctype, cnstr in get_constraints():
 
     %if data.get("notnull") is not None:
         %if cnstr_breaks["notnull"]:
-  {{ LF() }}{{ PRE() }}
+  {{ LF() }}
   {{ PAD("name", {"name": ""}) }}
         %endif
         %if data["notnull"].get("name"):
@@ -439,7 +439,7 @@ for ctype, cnstr in get_constraints():
 
     %if data.get("unique") is not None:
         %if cnstr_breaks["unique"]:
-  {{ LF() }}{{ PRE() }}
+  {{ LF() }}
   {{ PAD("name", {"name": ""}) }}
         %endif
         %if data["unique"].get("name"):
@@ -454,7 +454,7 @@ for ctype, cnstr in get_constraints():
 
     %if data.get("default") and data["default"].get("expr") not in (None, ""):
         %if cnstr_breaks["default"]:
-  {{ LF() }}{{ PRE() }}
+  {{ LF() }}
   {{ PAD("name", {"name": ""}) }}
         %endif
         %if data["default"].get("name"):
@@ -466,7 +466,7 @@ for ctype, cnstr in get_constraints():
 
     %if data.get("collate") and data["collate"].get("value") not in (None, ""):
         %if cnstr_breaks["collate"]:
-  {{ LF() }}{{ PRE() }}
+  {{ LF() }}
   {{ PAD("name", {"name": ""}) }}
         %endif
         %if data["collate"].get("name"):
@@ -478,7 +478,7 @@ for ctype, cnstr in get_constraints():
 
     %if data.get("check") and data["check"].get("expr") not in (None, ""):
         %if cnstr_breaks["check"]:
-  {{ LF() }}{{ PRE() }}
+  {{ LF() }}
   {{ PAD("name", {"name": ""}) }}
         %endif
         %if data["check"].get("name"):
@@ -490,7 +490,7 @@ for ctype, cnstr in get_constraints():
 
     %if data.get("fk") is not None:
         %if cnstr_breaks["fk"]:
-  {{ LF() }}{{ PRE() }}
+  {{ LF() }}
   {{ PAD("name", {"name": ""}) }}
         %endif
         %if data["fk"].get("name"):
@@ -571,8 +571,7 @@ TABLE
 {{ LF() or GLUE() }}
 
 %for i, c in enumerate(data.get("columns") or []):
-  {{ PRE() }}
-  {{ Template(templates.COLUMN_DEFINITION, strip=True, collapse=True).expand(dict(locals(), data=c)) }}
+  {{ PRE(Template(templates.COLUMN_DEFINITION, strip=True, collapse=True).expand(dict(locals(), data=c))) }}
   {{ CM("columns", i, root=root) }}
   {{ LF() }}
 %endfor
