@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.12.2020
+@modified    28.12.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3786,6 +3786,7 @@ class DatabasePage(wx.Panel):
         filename = controls.get_dialog_path(dialog)
         extname = os.path.splitext(filename)[-1].lstrip(".")
 
+        busy = controls.BusyPanel(self, "Exporting statistics.")
         try:
             data, diagram = self.statistics.get("data") or {}, None
             if "HTML" == extname.upper():
@@ -3797,6 +3798,7 @@ class DatabasePage(wx.Panel):
             logger.exception(msg); guibase.status(msg)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+        finally: busy.Close()
 
 
     def on_stop_statistics(self, event=None):
