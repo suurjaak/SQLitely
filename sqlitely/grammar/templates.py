@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    27.12.2020
+@modified    28.12.2020
 ------------------------------------------------------------------------------
 """
 
@@ -391,7 +391,7 @@ for ctype, cnstr in get_constraints():
     %else:
   {{ WS("") }}
     %endif
-    %if data.get("name") or data.get("type") or cnstr_breaks:
+    %if data.get("type") or cnstr_breaks:
   {{ PAD("name", data, quoted=True) }}
     %endif
 
