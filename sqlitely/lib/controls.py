@@ -6,6 +6,10 @@ Stand-alone GUI components for wx:
   Primitive hover panel with a message that stays in the center of parent
   window.
 
+- ByteTextCtrl(wx.stc.StyledTextCtrl):
+  A StyledTextCtrl configured for byte editing.
+  Raises CaretPositionEvent, LinePositionEvent and SelectionEvent.
+
 - ColourManager(object):
   Updates managed component colours on Windows system colour change.
 
@@ -15,8 +19,15 @@ Stand-alone GUI components for wx:
 - FormDialog(wx.Dialog):
   Dialog for displaying a complex editable form.
 
+- HexTextCtrl(wx.stc.StyledTextCtrl):
+  A StyledTextCtrl configured for hexadecimal editing.
+  Raises CaretPositionEvent, LinePositionEvent and SelectionEvent.
+
 - HintedTextCtrl(wx.TextCtrl):
   A text control with a hint text shown when no value, hidden when focused.
+
+- JSONTextCtrl(wx.stc.StyledTextCtrl):
+  A StyledTextCtrl configured for JSON syntax highlighting and folding.
 
 - MessageDialog(wx.Dialog):
   A modal message dialog that is closable from another thread.
@@ -62,6 +73,10 @@ Stand-alone GUI components for wx:
 
 - TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
   A tree control with a more convenient API.
+
+- YesNoMessageBox(message, caption, icon=wx.ICON_NONE, defaultno=False):
+  Opens a Yes/No messagebox that is closable by pressing Escape,
+  returns dialog result.
 
 ------------------------------------------------------------------------------
 This file is part of SQLitely - SQLite database tool.
