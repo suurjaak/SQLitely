@@ -84,13 +84,14 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    27.12.2020
+@modified    28.12.2020
 ------------------------------------------------------------------------------
 """
 import collections
 import copy
 import functools
 import locale
+import math
 import os
 import re
 import string
@@ -501,9 +502,9 @@ class FormDialog(wx.Dialog):
        ?children:     [{field}, ]
        ?link:         "name" of linked field, cleared and repopulated on change,
                       or callable(data) doing required change and returning field name
-       ?tb:           [{type, ?help}] for SQLiteTextCtrl component, adds toolbar,
-                      supported toolbar buttons "copy", "paste", "open" and "save",
-                      plus "sep" for separator
+       ?tb:           [{type, ?help, ?toggle, ?on}] for SQLiteTextCtrl component,
+                      adds toolbar, supported toolbar buttons "numbers", "wrap",
+                      "copy", "paste", "open" and "save", plus "sep" for separator
     }]
     @param   autocomp  list of words to add to SQLiteTextCtrl autocomplete,
                        or a dict for words and subwords
@@ -578,9 +579,24 @@ class FormDialog(wx.Dialog):
         and populates with data; non-null arguments override current settings.
         """
         self._ignore_change = True
-        if props is not None: self._props = copy.deepcopy(props)
-        if data is not None:  self._data  = copy.deepcopy(data)
-        if edit is not None:  self._editmode = bool(edit)
+
+        def walk(x, callback):
+            """
+            Walks through the collection of nested dicts or lists or tuples, invoking
+            callback(child) for each element, recursively.
+            """
+            if isinstance(x, collections.Iterable) and not isinstance(x, basestring):
+                for k, v in enumerate(x):
+                    if isinstance(x, collections.Mapping): k, v = v, x[v]
+                    callback(v)
+                    walk(v, callback)
+
+        if props is not None:
+            memo = {} # copy-module produces invalid result for wx.Bitmap
+            walk(props, lambda v: memo.update({id(v): v}) if isinstance(v, wx.Bitmap) else None)
+            self._props = copy.deepcopy(props, memo=memo)
+        if data  is not None: self._data = copy.deepcopy(data)
+        if edit  is not None: self._editmode = bool(edit)
         self._rows  = 0
 
         self.Freeze()
@@ -941,21 +957,38 @@ class FormDialog(wx.Dialog):
             tb = wx.ToolBar(parent, style=wx.TB_FLAT | wx.TB_NODIVIDER)
             ctrl = field["component"](parent, traversable=True)
 
-            OPTS = {"open":  {"id": wx.ID_OPEN,  "bmp": wx.ART_FILE_OPEN, "handler": self._OnOpenFile},
-                    "save":  {"id": wx.ID_SAVE,  "bmp": wx.ART_FILE_SAVE, "handler": self._OnSaveFile},
-                    "copy":  {"id": wx.ID_COPY,  "bmp": wx.ART_COPY,      "handler": self._OnCopy},
-                    "paste": {"id": wx.ID_PASTE, "bmp": wx.ART_PASTE,     "handler": self._OnPaste}, }
+            ctrl.SetName(accname)
+            ctrl.SetMarginCount(1)
+            ctrl.SetMarginType(0, wx.stc.STC_MARGIN_NUMBER)
+            ctrl.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
+            ctrl.SetMarginWidth(0, 0)
+            ctrl.SetWrapMode(wx.stc.STC_WRAP_WORD)
+
+            OPTS = {"numbers": {"id": wx.ID_INDENT, "bmp": wx.ART_HELP,      "handler": self._OnToggleLineNumbers},
+                    "wrap":    {"id": wx.ID_STATIC, "bmp": wx.ART_HELP,      "handler": self._OnToggleWordWrap},
+                    "open":    {"id": wx.ID_OPEN,   "bmp": wx.ART_FILE_OPEN, "handler": self._OnOpenFile},
+                    "save":    {"id": wx.ID_SAVE,   "bmp": wx.ART_FILE_SAVE, "handler": self._OnSaveFile},
+                    "copy":    {"id": wx.ID_COPY,   "bmp": wx.ART_COPY,      "handler": self._OnCopy},
+                    "paste":   {"id": wx.ID_PASTE,  "bmp": wx.ART_PASTE,     "handler": self._OnPaste}, }
             for prop in field["tb"]:
                 if "sep" == prop["type"]:
                     tb.AddSeparator()
                     continue # for prop
                 opts = OPTS[prop["type"]]
-                bmp = wx.ArtProvider.GetBitmap(opts["bmp"], wx.ART_TOOLBAR, (16, 16))
+                bmp = prop.get("bmp") or wx.ArtProvider.GetBitmap(opts["bmp"], wx.ART_TOOLBAR, (16, 16))
                 tb.SetToolBitmapSize(bmp.Size)
-                tb.AddTool(opts["id"], "", bmp, shortHelp=prop.get("help", ""))
+                kind = wx.ITEM_CHECK if prop.get("toggle") else wx.ITEM_NORMAL
+                tb.AddTool(opts["id"], "", bmp, shortHelp=prop.get("help", ""), kind=kind)
+                if prop.get("toggle") and prop.get("on"):
+                    tb.ToggleTool(opts["id"], True)
+
+                if "numbers" == prop["type"] and prop.get("on"):
+                    ctrl.SetMarginWidth(0, 25)
+                if "wrap" == prop["type"] and not prop.get("on"):
+                    ctrl.SetWrapMode(wx.stc.STC_WRAP_NONE)
+
                 tb.Bind(wx.EVT_TOOL, functools.partial(opts["handler"], field, path), id=opts["id"])
             tb.Realize()
-            ctrl.SetName(accname)
 
             sizer_top.Add(mylabel, border=5, flag=wx.BOTTOM | wx.ALIGN_BOTTOM)
             sizer_top.AddStretchSpacer()
@@ -1162,6 +1195,23 @@ class FormDialog(wx.Dialog):
             if linkfield: self._PopulateField(linkfield, path)
         if self._footer: self._footer["populate"](self, self._footer["ctrl"])
         self._panel.Layout()
+
+
+    def _OnToggleLineNumbers(self, field, path, event):
+        """Handler for toggling STC line numbers."""
+        fpath = path + (field["name"], )
+        ctrl, w = self._comps[fpath][0], 0
+        if event.IsChecked():
+            w = max(25, 5 + 10 * int(math.log(ctrl.LineCount, 10)))
+        ctrl.SetMarginWidth(0, w)
+
+
+    def _OnToggleWordWrap(self, field, path, event):
+        """Handler for toggling STC word-wrap."""
+        fpath = path + (field["name"], )
+        ctrl = self._comps[fpath][0]
+        mode = wx.stc.STC_WRAP_WORD if event.IsChecked() else wx.stc.STC_WRAP_NONE
+        ctrl.SetWrapMode(mode)
 
 
     def _OnOpenFile(self, field, path, event=None):

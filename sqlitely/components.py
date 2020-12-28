@@ -2955,7 +2955,7 @@ class SchemaObjectPage(wx.Panel):
         check_alter.ToolTip = "Show SQL statements used for performing schema change"
         check_alter.Shown = self._has_alter = not self._newmode
 
-        tb = wx.ToolBar(panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        tb = self._tb_sql = wx.ToolBar(panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = images.ToolbarNumbered.Bitmap
         bmp2 = images.ToolbarWordWrap.Bitmap
         bmp3 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
@@ -5544,7 +5544,14 @@ class SchemaObjectPage(wx.Panel):
     def _OnImportSQL(self, event=None):
         """Handler for editing SQL directly, opens dialog."""
         props = [{"name": "sql", "label": "SQL:", "component": controls.SQLiteTextCtrl,
-                  "tb": [{"type": "copy",  "help": "Copy to clipboard"},
+                  "tb": [{"type": "numbers", "help": "Show line numbers",
+                          "toggle": True, "bmp": images.ToolbarNumbered.Bitmap,
+                          "on": self._tb_sql.GetToolState(wx.ID_INDENT)},
+                         {"type": "wrap",    "help": "Word-wrap",
+                          "toggle": True, "bmp": images.ToolbarWordWrap.Bitmap,
+                          "on": self._tb_sql.GetToolState(wx.ID_STATIC)},
+                         {"type": "sep"},
+                         {"type": "copy",  "help": "Copy to clipboard"},
                          {"type": "paste", "help": "Paste from clipboard"},
                          {"type": "sep"},
                          {"type": "open",  "help": "Load from file"},

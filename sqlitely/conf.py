@@ -27,7 +27,7 @@ import wx
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.2.dev116"
+Version = "1.2.dev117"
 VersionDate = "28.12.2020"
 
 if getattr(sys, "frozen", False):
@@ -133,11 +133,11 @@ RunStatistics = True
 """Database schema diagram settings, as {path: {..}}."""
 SchemaDiagrams = {}
 
-"""Show line numbers in database full schema panel."""
+"""Show line numbers in SQL controls, like database full schema panel."""
 SchemaLineNumbered = False
 
-"""Word-wrap lines in database full schema panel."""
-SchemaWordWrap = False
+"""Word-wrap lines in SQL controls, like database full schema panel."""
+SchemaWordWrap = True
 
 """
 Texts entered in global search, used for drop down auto-complete.
