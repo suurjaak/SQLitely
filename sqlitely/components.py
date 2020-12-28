@@ -2956,16 +2956,28 @@ class SchemaObjectPage(wx.Panel):
         check_alter.Shown = self._has_alter = not self._newmode
 
         tb = wx.ToolBar(panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
-        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
-        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
+        bmp1 = images.ToolbarNumbered.Bitmap
+        bmp2 = images.ToolbarWordWrap.Bitmap
+        bmp3 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
+        bmp4 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
         tb.SetToolBitmapSize(bmp1.Size)
-        tb.AddTool(wx.ID_COPY, "", bmp1, shortHelp="Copy SQL to clipboard")
-        tb.AddTool(wx.ID_SAVE, "", bmp2, shortHelp="Save SQL to file")
+        tb.AddTool(wx.ID_INDENT,  "", bmp1, shortHelp="Show line numbers", kind=wx.ITEM_CHECK)
+        tb.AddTool(wx.ID_STATIC,  "", bmp2, shortHelp="Word-wrap",         kind=wx.ITEM_CHECK)
+        tb.AddSeparator()
+        tb.AddTool(wx.ID_COPY,    "", bmp3, shortHelp="Copy SQL to clipboard")
+        tb.AddTool(wx.ID_SAVE,    "", bmp4, shortHelp="Save SQL to file")
+        tb.ToggleTool(wx.ID_INDENT, conf.SchemaLineNumbered)
+        tb.ToggleTool(wx.ID_STATIC, conf.SchemaWordWrap)
         tb.Realize()
 
         stc = self._ctrls["sql"] = controls.SQLiteTextCtrl(panel2, traversable=True,
                                                            style=wx.BORDER_STATIC)
+        stc.SetMarginCount(1)
+        stc.SetMarginType(0, wx.stc.STC_MARGIN_NUMBER)
+        stc.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
+        stc.SetMarginWidth(0, 25 if conf.SchemaLineNumbered else 0)
         stc.SetReadOnly(True)
+        stc.SetWrapMode(wx.stc.STC_WRAP_WORD if conf.SchemaWordWrap else wx.stc.STC_WRAP_NONE)
         stc._toggle = "skip"
 
         label_error = self._label_error = wx.StaticText(panel2)
@@ -3013,8 +3025,10 @@ class SchemaObjectPage(wx.Panel):
         panel2.Sizer.Add(label_error,      border=5,  flag=wx.TOP)
         panel2.Sizer.Add(sizer_buttons,    border=10, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
-        tb.Bind(wx.EVT_TOOL, self._OnCopySQL, id=wx.ID_COPY)
-        tb.Bind(wx.EVT_TOOL, self._OnSaveSQL, id=wx.ID_SAVE)
+        tb.Bind(wx.EVT_TOOL, self._OnToggleSQLLineNumbers, id=wx.ID_INDENT)
+        tb.Bind(wx.EVT_TOOL, self._OnToggleSQLWordWrap,    id=wx.ID_STATIC)
+        tb.Bind(wx.EVT_TOOL, self._OnCopySQL,              id=wx.ID_COPY)
+        tb.Bind(wx.EVT_TOOL, self._OnSaveSQL,              id=wx.ID_SAVE)
         self.Bind(wx.EVT_BUTTON,   self._OnSaveOrEdit,     button_edit)
         self.Bind(wx.EVT_BUTTON,   self._OnRefresh,        button_refresh)
         self.Bind(wx.EVT_BUTTON,   self._OnTest,           button_test)
@@ -5470,6 +5484,24 @@ class SchemaObjectPage(wx.Panel):
                                 if self._show_alter else "CREATE SQL:"
         self._ctrls["alter"].Value = self._show_alter
         self._PopulateSQL()
+
+
+    def _OnToggleSQLLineNumbers(self, event):
+        """Handler for toggling SQL line numbers, saves configuration."""
+        conf.SchemaLineNumbered = event.IsChecked()
+        w = 0
+        if conf.SchemaLineNumbered:
+            w = max(25, 5 + 10 * int(math.log(self._ctrls["sql"].LineCount, 10)))
+        self._ctrls["sql"].SetMarginWidth(0, w)
+        util.run_once(conf.save)
+
+
+    def _OnToggleSQLWordWrap(self, event):
+        """Handler for toggling SQL word-wrap, saves configuration."""
+        conf.SchemaWordWrap = event.IsChecked()
+        mode = wx.stc.STC_WRAP_WORD if conf.SchemaWordWrap else wx.stc.STC_WRAP_NONE
+        self._ctrls["sql"].SetWrapMode(mode)
+        util.run_once(conf.save)
 
 
     def _OnCopySQL(self, event=None):

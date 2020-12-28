@@ -116,13 +116,13 @@ IMAGES = {
     "ToolbarData.png":
         "Toolbar icon for data button on search page.",
     "ToolbarNumbered.png":
-        "Toolbar icon for line numbers button on info page.",
+        "Toolbar icon for line numbers button on schema STCs.",
     "ToolbarTabs.png":
         "Toolbar icon for tabs toggle button on search page.",
     "ToolbarTitle.png":
         "Toolbar icon for title toggle button on search page.",
     "ToolbarWordWrap.png":
-        "Toolbar icon for word-wrap button on info page.",
+        "Toolbar icon for word-wrap buttons on schema STCs.",
     "ToolbarZoom100.png":
         "Toolbar icon for zoom 100% button on diagram page.",
     "ToolbarZoomFit.png":

@@ -1967,7 +1967,7 @@ ToolbarLayoutGrid = PyEmbeddedImage(
 )
 
 
-"""Toolbar icon for line numbers button on info page."""
+"""Toolbar icon for line numbers button on schema STCs."""
 ToolbarNumbered = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9i"
     "ZSBJbWFnZVJlYWR5ccllPAAAAMxJREFUeNpi/P//PwNFAGQAIyNjIxCvAWJBIGYgCYMMYGJi"
@@ -2049,7 +2049,7 @@ ToolbarTitle = PyEmbeddedImage(
 )
 
 
-"""Toolbar icon for word-wrap button on info page."""
+"""Toolbar icon for word-wrap buttons on schema STCs."""
 ToolbarWordWrap = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAK3RFWHRDcmVhdGlvbiBUaW1l"
     "AFAgMjcgZGV0cyAyMDIwIDIzOjUyOjU5ICswMjAwTp7NOgAAAAd0SU1FB+QMHAAGA1FtAC4A"
