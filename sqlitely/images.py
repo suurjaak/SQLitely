@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.12.2020
+@modified    28.12.2020
 ------------------------------------------------------------------------------
 """
 try:
@@ -1967,6 +1967,17 @@ ToolbarLayoutGrid = PyEmbeddedImage(
 )
 
 
+"""Toolbar icon for line numbers button on info page."""
+ToolbarNumbered = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9i"
+    "ZSBJbWFnZVJlYWR5ccllPAAAAMxJREFUeNpi/P//PwNFAGQAIyNjIxCvAWJBIGYgCYMMYGJi"
+    "Apm1DohTgPgd1Ow1QMyIhJnQ2FeAuJwFyTFMaI4LIcYHME1tUHYJqUGA7AWyAExnFxDvgNJk"
+    "u8AJiJOAOAYqtw0pwHBha1g0JgDxDCCWIDUaYV4wBGJNIF4JZdMmELGlWlg6mA7EklBsDvUW"
+    "UYbCDJgLxI1AHAjlCwDxFrQAYwZidiDmgOIbQBzKiGQbSHM+EDtADeAiwgHfYf5aC8TPgbiY"
+    "rHRACQAIMABAHzmmSdUHSAAAAABJRU5ErkJggg=="
+)
+
+
 """Toolbar icon for refresh button."""
 ToolbarRefresh = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAABnUlEQVQ4y9XUPWtUQRTG8d/c"
@@ -2035,6 +2046,19 @@ ToolbarTitle = PyEmbeddedImage(
     "AAAACXBIWXMAAAsSAAALEgHS3X78AAAABGdBTUEAALGPC/xhBQAAAEJJREFUeNpjYBhowAhj"
     "JCUl/SdF47x588B6WXBJIBuKTQwGmHBpJmQzUQBkGyGvMRFr2KgBw9oArKkKV+IhKRUSCwAF"
     "qxgZvjJU7QAAAABJRU5ErkJggg=="
+)
+
+
+"""Toolbar icon for word-wrap button on info page."""
+ToolbarWordWrap = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAK3RFWHRDcmVhdGlvbiBUaW1l"
+    "AFAgMjcgZGV0cyAyMDIwIDIzOjUyOjU5ICswMjAwTp7NOgAAAAd0SU1FB+QMHAAGA1FtAC4A"
+    "AAAJcEhZcwAACxIAAAsSAdLdfvwAAAAEZ0FNQQAAsY8L/GEFAAAA7ElEQVR42mNgGPKAEUQ4"
+    "OzsLv3792p8UjaKiohv37t37lgXE+fTpk+yTJ09mkWIAOzv7OSD1dqBDgIwwePr0qZyNjc2E"
+    "jRs3foAbYGpqanD37t0zxBjw48ePN2xsbPc+fPhgDeT+J8qZEydOZIexnZyczEAagbQWiM9E"
+    "SLOxsTF/Z2fnUhj/8+fP+kAX/AWCT3BFIC8ICQn9QcZSUlInQHJ8fHz7mZiY/oHEBAUF/4DY"
+    "KioqrTC9LFBFj2VkZNKQbQba8ubZs2cM3Nzc7f///1cDytcyMjL+Z2ZmvnTu3LmzJEUVMNSN"
+    "SdJAVwAAgEdUon4xxLcAAAAASUVORK5CYII="
 )
 
 

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.12.2020
+@modified    27.12.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -18,6 +18,7 @@ import datetime
 import functools
 import inspect
 import logging
+import math
 import os
 import re
 import shutil
@@ -2532,11 +2533,8 @@ class DatabasePage(wx.Panel):
         and conf.LastActivePages[db.filename] != notebook.Selection:
             notebook.SetSelection(conf.LastActivePages[db.filename])
 
-        try:
-            self.load_data()
-            guibase.status("Opened database %s." % db)
-        finally:
-            busy.Close()
+        try: self.load_data()
+        finally: busy.Close()
         if not self: return
         wx_accel.accelerate(self)
         wx.CallAfter(lambda: self and (edit_search.SetFocus(), edit_search.SelectAll()))
@@ -3228,6 +3226,8 @@ class DatabasePage(wx.Panel):
                                         (16, 16))
         bmp4 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR,
                                         (16, 16))
+        bmp5 = images.ToolbarNumbered.Bitmap
+        bmp6 = images.ToolbarWordWrap.Bitmap
         tb_stats = self.tb_stats = wx.ToolBar(panel_stats,
                                       style=wx.TB_FLAT | wx.TB_NODIVIDER)
         tb_stats.SetToolBitmapSize(bmp1.Size)
@@ -3248,18 +3248,31 @@ class DatabasePage(wx.Panel):
                                       style=wx.TB_FLAT | wx.TB_NODIVIDER)
         tb_sql.SetToolBitmapSize(bmp1.Size)
         tb_sql.AddTool(wx.ID_REFRESH, "", bmp1, shortHelp="Refresh schema SQL")
+        tb_sql.AddSeparator()
+        tb_sql.AddTool(wx.ID_INDENT,  "", bmp5, shortHelp="Show line numbers", kind=wx.ITEM_CHECK)
+        tb_sql.AddTool(wx.ID_STATIC,  "", bmp6, shortHelp="Word-wrap", kind=wx.ITEM_CHECK)
+        tb_sql.AddSeparator()
         tb_sql.AddTool(wx.ID_COPY,    "", bmp3, shortHelp="Copy schema SQL to clipboard")
         tb_sql.AddTool(wx.ID_SAVE,    "", bmp4, shortHelp="Save schema SQL to file")
         tb_sql.Realize()
-        tb_sql.EnableTool(wx.ID_COPY, False)
-        tb_sql.EnableTool(wx.ID_SAVE, False)
+        tb_sql.ToggleTool(wx.ID_INDENT, conf.SchemaLineNumbered)
+        tb_sql.ToggleTool(wx.ID_STATIC, conf.SchemaWordWrap)
+        tb_sql.EnableTool(wx.ID_COPY,   False)
+        tb_sql.EnableTool(wx.ID_SAVE,   False)
         tb_sql.Bind(wx.EVT_TOOL, self.on_update_stc_schema, id=wx.ID_REFRESH)
+        tb_sql.Bind(wx.EVT_TOOL, self.on_toggle_numbers_stc_schema, id=wx.ID_INDENT)
+        tb_sql.Bind(wx.EVT_TOOL, self.on_toggle_wrap_stc_schema,    id=wx.ID_STATIC)
         tb_sql.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_schema), id=wx.ID_COPY)
         tb_sql.Bind(wx.EVT_TOOL, lambda e: self.save_sql(self.stc_schema.Text), id=wx.ID_SAVE)
 
         stc = self.stc_schema = controls.SQLiteTextCtrl(panel_schema, style=wx.BORDER_STATIC)
+        stc.SetMarginCount(1)
+        stc.SetMarginType(0, wx.stc.STC_MARGIN_NUMBER)
+        stc.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
+        stc.SetMarginWidth(0, 0)
         stc.SetText("Parsing..")
         stc.SetReadOnly(True)
+        stc.SetWrapMode(wx.stc.STC_WRAP_NONE)
 
         panel_stats.Sizer.Add(tb_stats, border=5, flag=wx.ALL)
         panel_stats.Sizer.Add(html_stats, proportion=1, flag=wx.GROW)
@@ -3694,6 +3707,23 @@ class DatabasePage(wx.Panel):
         """
         event.Skip()
         self.notebook.GetCurrentPage().SetFocus()
+
+
+    def on_toggle_numbers_stc_schema(self, event):
+        """Handler for toggling line numbers in schema STC, saves configuration."""
+        conf.SchemaLineNumbered = event.IsChecked()
+        w = 0
+        if conf.SchemaLineNumbered:
+            w = max(25, 5 + 10 * int(math.log(self.stc_schema.LineCount, 10)))
+        self.stc_schema.SetMarginWidth(0, w)
+        util.run_once(conf.save)
+
+    def on_toggle_wrap_stc_schema(self, event):
+        """Handler for toggling word-wrap in schema STC, saves configuration."""
+        conf.SchemaWordWrap = event.IsChecked()
+        mode = wx.stc.STC_WRAP_WORD if conf.SchemaWordWrap else wx.stc.STC_WRAP_NONE
+        self.stc_schema.SetWrapMode(mode)
+        util.run_once(conf.save)
 
 
     def on_update_stc_schema(self, event=None):
@@ -6061,6 +6091,7 @@ class DatabasePage(wx.Panel):
                    for n in self.db.schema[c]):
             self.diagram.Scroll(0, 0)
 
+
         wx.CallLater(100, self.reload_schema, parse=True)
         if conf.RunStatistics: self.on_update_statistics()
 
@@ -6080,7 +6111,11 @@ class DatabasePage(wx.Panel):
         self.on_update_stc_schema()
         wx.YieldIfNeeded()
         if not self: return
+        import cProfile
+        self.prof2 = cProfile.Profile()
+        self.prof2.enable()
         self.diagram.Populate()
+        self.prof2.disable()
         self.populate_diagram_finder()
         self.cb_diagram_rels.Enable()
         self.cb_diagram_labels.Enable(self.cb_diagram_rels.Value)

@@ -27,7 +27,7 @@ import wx
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.2.dev111"
+Version = "1.2.dev112"
 VersionDate = "27.12.2020"
 
 if getattr(sys, "frozen", False):
@@ -62,8 +62,9 @@ OptionalFileDirectives = [
     "MaxConsoleHistory", "MaxDBSizeForFullCount", "MaxTableRowIDForFullCount",
     "MaxHistoryInitialMessages", "MaxImportFilesizeForCount", "MaxRecentFiles",
     "MaxSearchHistory", "MaxSearchResults", "PopupUnexpectedErrors", "RunChecksums",
-    "RunStatistics", "SearchResultsChunk", "SeekLength", "SeekLeapLength",
-    "StatisticsPlotWidth", "StatusFlashLength", "UpdateCheckInterval",
+    "RunStatistics", "SchemaLineNumbered", "SchemaWordWrap", "SearchResultsChunk",
+    "SeekLength", "SeekLeapLength", "StatisticsPlotWidth", "StatusFlashLength",
+    "UpdateCheckInterval",
 ]
 Defaults = {}
 
@@ -131,6 +132,12 @@ RunStatistics = True
 
 """Database schema diagram settings, as {path: {..}}."""
 SchemaDiagrams = {}
+
+"""Show line numbers in database full schema panel."""
+SchemaLineNumbered = False
+
+"""Word-wrap lines in database full schema panel."""
+SchemaWordWrap = False
 
 """
 Texts entered in global search, used for drop down auto-complete.

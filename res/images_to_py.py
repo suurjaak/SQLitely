@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  05.12.2020
+@modified  27.12.2020
 ------------------------------------------------------------------------------
 """
 import base64
@@ -115,10 +115,14 @@ IMAGES = {
         "Toolbar icon for inactive stop button on search page.",
     "ToolbarData.png":
         "Toolbar icon for data button on search page.",
+    "ToolbarNumbered.png":
+        "Toolbar icon for line numbers button on info page.",
     "ToolbarTabs.png":
         "Toolbar icon for tabs toggle button on search page.",
     "ToolbarTitle.png":
         "Toolbar icon for title toggle button on search page.",
+    "ToolbarWordWrap.png":
+        "Toolbar icon for word-wrap button on info page.",
     "ToolbarZoom100.png":
         "Toolbar icon for zoom 100% button on diagram page.",
     "ToolbarZoomFit.png":
