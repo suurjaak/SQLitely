@@ -3250,7 +3250,7 @@ class DatabasePage(wx.Panel):
         tb_sql.AddTool(wx.ID_REFRESH, "", bmp1, shortHelp="Refresh schema SQL")
         tb_sql.AddSeparator()
         tb_sql.AddTool(wx.ID_INDENT,  "", bmp5, shortHelp="Show line numbers", kind=wx.ITEM_CHECK)
-        tb_sql.AddTool(wx.ID_STATIC,  "", bmp6, shortHelp="Word-wrap", kind=wx.ITEM_CHECK)
+        tb_sql.AddTool(wx.ID_STATIC,  "", bmp6, shortHelp="Word-wrap",         kind=wx.ITEM_CHECK)
         tb_sql.AddSeparator()
         tb_sql.AddTool(wx.ID_COPY,    "", bmp3, shortHelp="Copy schema SQL to clipboard")
         tb_sql.AddTool(wx.ID_SAVE,    "", bmp4, shortHelp="Save schema SQL to file")
@@ -3269,10 +3269,10 @@ class DatabasePage(wx.Panel):
         stc.SetMarginCount(1)
         stc.SetMarginType(0, wx.stc.STC_MARGIN_NUMBER)
         stc.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
-        stc.SetMarginWidth(0, 0)
+        stc.SetMarginWidth(0, 25 if conf.SchemaLineNumbered else 0)
         stc.SetText("Parsing..")
         stc.SetReadOnly(True)
-        stc.SetWrapMode(wx.stc.STC_WRAP_NONE)
+        stc.SetWrapMode(wx.stc.STC_WRAP_WORD if conf.SchemaWordWrap else wx.stc.STC_WRAP_NONE)
 
         panel_stats.Sizer.Add(tb_stats, border=5, flag=wx.ALL)
         panel_stats.Sizer.Add(html_stats, proportion=1, flag=wx.GROW)
@@ -3717,6 +3717,7 @@ class DatabasePage(wx.Panel):
             w = max(25, 5 + 10 * int(math.log(self.stc_schema.LineCount, 10)))
         self.stc_schema.SetMarginWidth(0, w)
         util.run_once(conf.save)
+
 
     def on_toggle_wrap_stc_schema(self, event):
         """Handler for toggling word-wrap in schema STC, saves configuration."""
