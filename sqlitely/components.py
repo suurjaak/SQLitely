@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.12.2020
+@modified    28.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -9863,18 +9863,27 @@ class SchemaDiagram(wx.ScrolledWindow):
         """
         self.Freeze()
         try:
-            self.Zoom = zoom0 = self.ZOOM_DEFAULT
+            self.SetZoom(self.ZOOM_DEFAULT, refresh=False)
+
             oids = [o["id"] for o in self._objs.values()]
             if self._show_lines:
                 oids += [x["id"] for x in self._lines.values()]
             bounds, bounder = wx.Rect(), self._dc.GetIdBounds
-            if oids: bounds = sum(map(bounder, oids[1:]), bounder(oids[0])).Inflate(5, 5)
-            while self._zoom > self.ZOOM_MIN and (bounds.Width > self.ClientSize.Width
+            if oids: bounds = sum(map(bounder, oids[1:]), bounder(oids[0]))
+            zoom, bounds0 = self._zoom, wx.Rect(bounds)
+            bounds.Inflate(5, 5)
+
+            while zoom > self.ZOOM_MIN and (bounds.Width > self.ClientSize.Width
             or bounds.Height > self.ClientSize.Height):
-                self.Zoom, zoom0 = self._zoom - self.ZOOM_STEP, self._zoom
-                if oids: bounds = sum(map(bounder, oids[1:]), bounder(oids[0])).Inflate(5, 5)
+                zoom -= self.ZOOM_STEP
+                bounds = wx.Rect(bounds0.Position, wx.Size(*[zoom * v for v in bounds0.Size]))
+                bounds.Inflate(5, 5)
+
+            if zoom != self._zoom: self.Zoom = zoom
             self.Scroll(0, 0)
-            if not wx.Rect(self.ClientSize).Contains(bounds): self.ScrollXY(bounds.TopLeft)
+            if oids: bounds = sum(map(bounder, oids[1:]), bounder(oids[0]))
+            if not self.ClientRect.Contains(bounds):
+                self.ScrollXY([v - 5 for v in bounds.TopLeft])
         finally: self.Thaw()
         self._PostEvent(zoom=self._zoom)
 
