@@ -5378,6 +5378,7 @@ class SchemaObjectPage(wx.Panel):
             # Process table and column constraints for table rename
             if "table" != myid or not opts["rename"].strip(): continue # for opts
             name1 = opts["name"] if opts["name"].strip() else self._original["meta"]["name"]
+            renamed = True
 
             for cnstr in constraints:
                 if cnstr["type"] in (grammar.SQL.FOREIGN_KEY, ):
@@ -5417,7 +5418,7 @@ class SchemaObjectPage(wx.Panel):
                                     opts, col, err)
 
         self._cascades = {}
-        if changed or self._show_alter: self._PopulateSQL()
+        if changed or renamed or self._show_alter: self._PopulateSQL()
         if not changed and not renamed: return
 
         self.Freeze()
