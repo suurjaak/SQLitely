@@ -9744,9 +9744,12 @@ class SchemaDiagram(wx.ScrolledWindow):
         super(SchemaDiagram, self).__init__(parent, *args, **kwargs)
         self._db    = db
         self._ids   = {} # {DC ops ID: name or (name1, name2, (cols)) or None}
-        self._objs  = util.CaselessDict() # {name: {id, type, name, bmp, bmpsel, bmparea, stats, sql0, columns, __id__}}
+        self._objs  = util.CaselessDict() # {name: {id, type, name, bmp, bmpsel, bmparea, hasmeta, stats, sql0, columns, __id__}}
         self._lines = util.CaselessDict() # {(name1, name2, (cols)): {id, pts}}
         self._sels  = util.CaselessDict(insertorder=True) # {name selected: DC ops ID}
+        # Bitmap cache, as {zoom: {item.__id__: {(sql, hasmeta, stats, dragrect): (wx.Bitmap, wx.Bitmap) or wx.Bitmap}}}
+        # or {zoom: {PyEmdeddedImage: wx.Bitmap}} for scaled static images
+        self._cache = defaultdict(lambda: defaultdict(dict))
         self._order = []   # Draw order [{obj dict}, ] selected items at end
         self._zoom  = 1.   # Zoom scale, 1 == 100%
         self._page  = None # DatabasePage instance
@@ -9756,6 +9759,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._dragrect    = None # Selection (x, y, w, h) currently being dragged
         self._dragrectabs = None # Selection being dragged, with non-negative dimensions
         self._dragrectid  = None # DC ops ID for selection rect
+        self._use_cache   = True # Use self._cache for item bitmaps
         self._show_lines  = True
         self._show_labels = True
         self._show_stats  = False
@@ -9866,11 +9870,14 @@ class SchemaDiagram(wx.ScrolledWindow):
             if not opts:
                 self._objs.pop(o["name"])
                 self._dc.RemoveId(o["id"])
+                for cc in self._cache.values(): cc.pop(o["__id__"], None)
                 drops.append(o)
                 continue # for o
             stats = self._GetItemStats(opts)
-            bmp, bmpsel = self._MakeItemBitmaps(opts, stats)
-            o.update(bmp=bmp, bmpsel=bmpsel, bmparea=None, stats=stats)
+            bmp, bmpsel = self._GetItemBitmaps(opts, stats)
+            o.update(bmp=bmp, bmpsel=bmpsel, bmparea=None, stats=stats,
+                     sql0=opts["sql0"], hasmeta=bool(opts.get("meta")),
+                     columns=[dict(c)  for c in opts["columns"]])
             r = self._dc.GetIdBounds(o["id"])
             pt = [v * zoom / zoom0 for v in r.TopLeft]
             self._dc.SetIdBounds(o["id"], wx.Rect(wx.Point(pt), bmp.Size))
@@ -10078,6 +10085,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         self.Freeze()
         try:
             zoom0, stats0 = self._zoom, self._show_stats
+            self._use_cache = False
 
             change_colours = defaultcolours and not self._IsDefaultColours()
             if change_colours: self._UpdateColours(defaults=True)
@@ -10114,6 +10122,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             if change_colours: self._UpdateColours()
             if self._show_stats != stats0: self._show_stats = stats0
 
+            self._use_cache = True
             if zoom is not None: self.Zoom = zoom0
             elif remake: self.Redraw(remake=True)
         finally: self.Thaw()
@@ -10347,13 +10356,15 @@ class SchemaDiagram(wx.ScrolledWindow):
                 and o0["columns"] == opts["columns"] and stats == stats0:
                     bmp, bmpsel, bmparea = map(o0.get, ("bmp", "bmpsel", "bmparea"))
                 else:
-                    (bmp, bmpsel), bmparea = self._MakeItemBitmaps(opts, stats), None
+                    for cc in self._cache.values(): cc.pop(opts["__id__"], None)
+                    (bmp, bmpsel), bmparea = self._GetItemBitmaps(opts, stats), None
                 if o0 and o0["name"] in sels0: self._sels[name] = oid
                 if name in itemposes: rects[name] = wx.Rect(wx.Point(itemposes[name]), bmp.Size)
                 elif o0: rects[name] = rects0[o0["name"]]
                 self._ids[oid] = name
                 self._objs[name] = {"id": oid, "type": category, "name": name, "stats": stats,
                                     "__id__": opts["__id__"], "sql0": opts["sql0"],
+                                    "hasmeta": bool(opts.get("meta")),
                                     "columns": [dict(c)  for c in opts["columns"]],
                                     "bmp": bmp, "bmpsel": bmpsel, "bmparea": bmparea}
                 self._order.append(self._objs[name])
@@ -10362,6 +10373,11 @@ class SchemaDiagram(wx.ScrolledWindow):
                     if fullbounds: fullbounds.Union(rects[name])
                     else: fullbounds = wx.Rect(rects[name])
                 else: reset = True
+
+        # Nuke cache for objects no longer in schema
+        for o0 in objs0:
+            if not any(o0["__id__"] == o["__id__"] for o in self._order):
+                for cc in self._cache.values(): cc.pop(o0["__id__"], None)
 
         # Increase diagram virtual size if total item area is bigger
         area, vsize = self.GPAD * self.GPAD, self.VIRTUALSZ
@@ -10396,11 +10412,14 @@ class SchemaDiagram(wx.ScrolledWindow):
             if not opts:
                 self._objs.pop(o["name"])
                 self._dc.RemoveId(o["id"])
+                for cc in self._cache.values(): cc.pop(o["__id__"], None)
                 drops.append(o)
                 continue # for o
             stats = o["stats"] = self._GetItemStats(opts)
-            (bmp, bmpsel), bmparea = self._MakeItemBitmaps(opts, stats), None
-            o.update(bmp=bmp, bmpsel=bmpsel, bmparea=bmparea)
+            (bmp, bmpsel), bmparea = self._GetItemBitmaps(opts, stats), None
+            o.update(bmp=bmp, bmpsel=bmpsel, bmparea=bmparea,
+                     sql0=opts["sql0"], hasmeta=bool(opts.get("meta")),
+                     columns=[dict(c)  for c in opts["columns"]])
             r = self._dc.GetIdBounds(o["id"])
             self._dc.SetIdBounds(o["id"], wx.Rect(r.TopLeft, o["bmp"].Size))
         for o in drops: self._order.remove(o)
@@ -10426,7 +10445,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._dc.RemoveId(o["id"])
         self._dc.SetId(o["id"])
         bmp = o[("bmparea" if self._dragrect else "bmpsel") if o["name"] in self._sels else "bmp"]
-        if bmp is None: bmp = o["bmparea"] = self._MakeItemBitmaps(o, o["stats"], dragrect=True)
+        if bmp is None: bmp = o["bmparea"] = self._GetItemBitmaps(o, o["stats"], dragrect=True)
         pos = [a - (o["name"] in self._sels) * 2 * self._zoom for a in bounds[:2]]
         self._dc.DrawBitmap(bmp, pos, useMask=True)
         self._dc.SetIdBounds(o["id"], wx.Rect(bounds.TopLeft, o["bmp"].Size))
@@ -10788,6 +10807,33 @@ class SchemaDiagram(wx.ScrolledWindow):
         return stats
 
 
+    def _GetStaticBitmap(self, img):
+        """Returns scaled bitmap of PyEmbeddedImage, cached if possible."""
+        result = bmp = img.Bitmap
+        if self._zoom != self.ZOOM_DEFAULT: result = self._cache[self._zoom][img]
+        if not result:
+            sz = [int(math.ceil(x * self._zoom)) for x in bmp.Size]
+            result = self._cache[self._zoom][img] = wx.Bitmap(img.Image.Scale(*sz))
+        return result
+
+
+    def _GetItemBitmaps(self, opts, stats=None, dragrect=False):
+        """Wrapper for _MakeItemBitmaps(), using cache if possible."""
+        if not self._use_cache: return self._MakeItemBitmaps(opts, stats, dragrect)
+
+        key1 = opts["__id__"]
+        key2 = (opts["sql0"], bool(opts.get("meta") or opts.get("hasmeta")),
+                str(stats), bool(dragrect))
+        mycache = self._cache[self._zoom][key1]
+        if key2 not in mycache:
+            for cc in self._cache.values(): # Nuke any outdated bitmaps
+                for k in list(cc.get(key1) or {}):
+                    if k[:2] != key2[:2]: cc[key1].pop(k)
+
+            mycache[key2] = self._MakeItemBitmaps(opts, stats, dragrect)
+        return mycache[key2]
+
+
     def _MakeItemBitmaps(self, opts, stats=None, dragrect=False):
         """
         Returns wx.Bitmaps representing a schema item like table.
@@ -10847,6 +10893,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             w1 = next(d[0] + d[3] for d in [get_extent(text1, stats_font)]) if text1 else 0
             w2 = next(d[0] + d[3] for d in [get_extent(text2, stats_font)]) if text2 else 0
             if w1 + w2 + 2 * self.BRADIUS > w and opts.get("count"):
+                # Rows do not fit as exact number: draw as "6.1M rows"
                 text1 = util.plural("row", opts["count"], max_units=True)
 
             if text1:
@@ -10855,11 +10902,9 @@ class SchemaDiagram(wx.ScrolledWindow):
                 dx = w - w2 - self.BRADIUS
                 statslists[2].append(text2); statslists[3].append((dx, dy))
 
-        pkbmp, fkbmp = images.DiagramPK.Bitmap, images.DiagramFK.Bitmap
-        if pks and self._zoom != self.ZOOM_DEFAULT:
-            pkbmp = wx.Bitmap(images.DiagramPK.Image.Scale(*[int(math.ceil(x * self._zoom)) for x in pkbmp.Size]))
-        if fks and self._zoom != self.ZOOM_DEFAULT:
-            fkbmp = wx.Bitmap(images.DiagramFK.Image.Scale(*[int(math.ceil(x * self._zoom)) for x in fkbmp.Size]))
+        pkbmp, fkbmp = None, None
+        if pks: pkbmp = self._GetStaticBitmap(images.DiagramPK)
+        if fks: fkbmp = self._GetStaticBitmap(images.DiagramFK)
 
         bmp = wx.Bitmap(w, h, depth=24)
         dc = wx.MemoryDC(bmp)
@@ -11003,8 +11048,6 @@ class SchemaDiagram(wx.ScrolledWindow):
         tip = wx.lib.wordwrap.wordwrap("%s %s" % (
             item["type"], grammar.quote(item["name"], force=True)
         ), 400, wx.MemoryDC()) if item else ""
-        # @todo itemit saaks ka meelde jätta et mis eelmine oli, ei peaks tippi iga
-        # kord uuesti tekitama.
         if not self.ToolTip or self.ToolTip.Tip != tip:
             if self._tooltip_timer: self._tooltip_timer.Stop()
             if not tip: self.ToolTip = tip
@@ -11276,6 +11319,7 @@ class SchemaDiagram(wx.ScrolledWindow):
     def _OnSysColourChange(self, event):
         """Handler for system colour change, refreshes content."""
         event.Skip()
+        self._cache.clear()
         self._UpdateColours()
         wx.CallAfter(self.Redraw, remake=True)
 
