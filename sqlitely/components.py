@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.12.2020
+@modified    29.12.2020
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -2935,7 +2935,7 @@ class SchemaObjectPage(wx.Panel):
         sizer_buttons      = wx.FlexGridSizer(cols=7)
         sizer_sql_header   = wx.BoxSizer(wx.HORIZONTAL)
 
-        splitter = wx.SplitterWindow(self, style=wx.BORDER_NONE)
+        splitter = self._splitter = wx.SplitterWindow(self, style=wx.BORDER_NONE)
         panel1, panel2 = wx.Panel(splitter), wx.Panel(splitter)
         panel1.Sizer, panel2.Sizer = wx.BoxSizer(wx.VERTICAL), wx.BoxSizer(wx.VERTICAL)
 
@@ -3042,21 +3042,9 @@ class SchemaObjectPage(wx.Panel):
 
         self._Populate()
 
-        has_cols = self._hasmeta or self._category in ("table", "index", "view")
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
-        size, pos = (100, splitter.Size[1] - 200) if has_cols else (30, 30)
-        if not self._hasmeta and "view" == self._category: pos = 200
-
-        for x in list(panel1.Children)[2:] if not self._hasmeta else ():
-            showntype = wx.ScrolledWindow if "index" == self._category else \
-                        wx.Notebook       if "table" == self._category else False
-            for y in x.Children:
-                y.Shown = showntype and isinstance(y, showntype)
-
+        splitter.SplitHorizontally(panel1, panel2)
         self._UpdateHasMeta(force=True)
-        splitter.SetMinimumPaneSize(size)
-        splitter.SplitHorizontally(panel1, panel2, pos)
-        splitter.SashInvisible = not has_cols
         wx_accel.accelerate(self)
         if grammar.SQL.CREATE_VIRTUAL_TABLE == util.getval(self._item, "meta", "__type__"):
             button_edit.Enabled = False
@@ -3216,6 +3204,20 @@ class SchemaObjectPage(wx.Panel):
         if bool(self._item.get("meta")) == self._hasmeta and not force: return
         self._hasmeta  = bool(self._item.get("meta"))
 
+        has_cols = self._hasmeta or self._category in ("table", "index", "view")
+        size, pos = (100, self._splitter.Size[1] - 200) if has_cols else (30, 30)
+        if not self._hasmeta and "view" == self._category: pos = 200
+
+        for x in list(self._splitter.Window1.Children)[2:]:
+            showntype = wx.ScrolledWindow if "index" == self._category else \
+                        wx.Notebook       if "table" == self._category else False
+            for y in x.Children:
+                y.Shown = self._hasmeta or showntype and isinstance(y, showntype)
+
+        self._splitter.SetMinimumPaneSize(size)
+        self._splitter.SetSashPosition(pos)
+        self._splitter.SashInvisible = not has_cols
+
         self._label_error.Show(not self._hasmeta)
         self._label_error.Label = "" if self._hasmeta else \
                                   "Error parsing SQL" if self._item.get("__parsed__") else \
@@ -3339,6 +3341,7 @@ class SchemaObjectPage(wx.Panel):
         label_upon.ToolTip = "When is trigger executed, defaults to BEFORE.\n\n" \
                              "INSTEAD OF triggers apply to views, enabling to execute " \
                              "INSERT, DELETE or UPDATE statements on the view."
+        list_upon.ToolTip = label_upon.ToolTip.Tip
 
         check_for = self._ctrls["for"] = wx.CheckBox(panel, label="FOR EACH &ROW")
         check_for.ToolTip = "Not enforced by SQLite, all triggers are FOR EACH ROW by default"
@@ -3353,6 +3356,7 @@ class SchemaObjectPage(wx.Panel):
                              "SELECT-INSERT-UPDATE-DELETE statements. " \
                              "Can access OLD row reference on UPDATE and DELETE, " \
                              "and NEW row reference on INSERT and UPDATE."
+        stc_body.ToolTip = label_body.ToolTip.Tip
 
         label_when = wx.StaticText(panel2, label="WHEN:", name="trigger_when_label")
         stc_when   = self._ctrls["when"] = controls.SQLiteTextCtrl(panel2,
@@ -3360,6 +3364,7 @@ class SchemaObjectPage(wx.Panel):
         label_when.ToolTip = "Trigger WHEN expression, trigger executed only if WHEN is true. " \
                              "Can access OLD row reference on UPDATE and DELETE, " \
                              "and NEW row reference on INSERT and UPDATE."
+        stc_when.ToolTip = label_when.ToolTip.Tip
 
         sizer_table.Add(label_table, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_table.Add(list_table)
@@ -3705,7 +3710,8 @@ class SchemaObjectPage(wx.Panel):
         """Populates panel with index-specific data."""
         meta = self._item.get("meta") or {}
         self._ctrls["table"].SetItems(map(util.unprint, self._tables))
-        self._ctrls["table"].Value = util.unprint(meta.get("table") or "")
+        self._ctrls["table"].Value = util.unprint(meta.get("table") if self._hasmeta
+                                                  else self._item.get("tbl_name") or "")
         for j, x in enumerate(self._tables): self._ctrls["table"].SetClientData(j, x)
 
         self._ctrls["unique"].Value = bool(meta.get("unique"))
@@ -3742,7 +3748,8 @@ class SchemaObjectPage(wx.Panel):
             self._ctrls["table"].SetItems(map(util.unprint, self._tables))
             for j, x in enumerate(self._tables): self._ctrls["table"].SetClientData(j, x)
 
-        self._ctrls["table"].Value     = util.unprint(meta.get("table") or "")
+        self._ctrls["table"].Value     = util.unprint(meta.get("table") if self._hasmeta
+                                                      else self._item.get("tbl_name") or "")
         self._ctrls["for"].Value       = bool(meta.get("for"))
         self._ctrls["upon"].Value      = meta.get("upon") or ""
         self._ctrls["action"].Value    = meta.get("action") or ""
