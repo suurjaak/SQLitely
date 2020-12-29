@@ -10883,8 +10883,8 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         # Populate statistics texts
         if stats:
-            stats_font = util.memoize(wx.Font, self.Font.PointSize + self.FONT_STEP_STATS, wx.FONTFAMILY_MODERN,
-                                     wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE)
+            stats_font = util.memoize(wx.Font, self._font.PointSize + self.FONT_STEP_STATS, wx.FONTFAMILY_MODERN,
+                                      wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE)
             dx, dy = self.BRADIUS, h - self.STATSH + 1
 
             text1 = stats.get("rows")
