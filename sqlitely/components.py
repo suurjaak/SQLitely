@@ -9770,6 +9770,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._show_lines  = True
         self._show_labels = True
         self._show_stats  = False
+        self._tooltip_last  = ()   # (type, name, tip)
         self._tooltip_timer = None # wx.Timer for setting delayed tooltip on hover
         self._layout = {"layout": "grid", "active": True,
                         "grid": {"order": "name", "reverse": False, "vertical": True}}
@@ -11052,9 +11053,14 @@ class SchemaDiagram(wx.ScrolledWindow):
                      if self._dc.GetIdBounds(o["id"]).Contains(x, y)), None)
         self.Cursor = wx.Cursor(wx.CURSOR_HAND if item else wx.CURSOR_DEFAULT)
 
-        tip = wx.lib.wordwrap.wordwrap("%s %s" % (
-            item["type"], grammar.quote(item["name"], force=True)
-        ), 400, wx.MemoryDC()) if item else ""
+        tip = ""
+        if item:
+            if (item["type"], item["name"]) == (self._tooltip_last + ("", ""))[:2]:
+                tip = self._tooltip_last[-1]
+            else: tip = wx.lib.wordwrap.wordwrap("%s %s" % (
+                item["type"], grammar.quote(item["name"], force=True)
+            ), 400, wx.MemoryDC())
+            self._tooltip_last = (item["type"], item["name"], tip)
         if not self.ToolTip or self.ToolTip.Tip != tip:
             if self._tooltip_timer: self._tooltip_timer.Stop()
             if not tip: self.ToolTip = tip
