@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.12.2020
+@modified    29.12.2020
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2848,7 +2848,8 @@ class DatabasePage(wx.Panel):
         cb_rels.ToolTip  = "Show foreign relations between tables"
         cb_lbls.ToolTip  = "Show labels on foreign relations between tables"
         cb_stats.ToolTip = "Show table size information"
-        label_find.ToolTip = combo_find.ToolTip = "Select schema items as you type (* is wildcard)"
+        label_find.ToolTip = "Select schema items as you type (* is wildcard)"
+        combo_find.ToolTip = label_find.ToolTip.Tip
 
         sizer_top.Add(tb, flag=wx.ALIGN_BOTTOM)
         sizer_top.AddStretchSpacer()
@@ -3013,7 +3014,7 @@ class DatabasePage(wx.Panel):
             if opts.get("deprecated"):
                 ColourManager.Manage(label, "ForegroundColour", "DisabledColour")
                 ColourManager.Manage(label_text, "ForegroundColour", "DisabledColour")
-            label.ToolTip = ctrl.ToolTip = label_text.ToolTip = description
+            for c in label, ctrl, label_text: c.ToolTip = description
             help_bmp.SetCursor(cursor_pointer)
             help_bmp.Bind(wx.EVT_LEFT_UP, functools.partial(on_help, help_bmp, description))
 

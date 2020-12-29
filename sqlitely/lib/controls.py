@@ -84,7 +84,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    28.12.2020
+@modified    29.12.2020
 ------------------------------------------------------------------------------
 """
 import collections
@@ -1022,7 +1022,7 @@ class FormDialog(wx.Dialog):
                     ctrl.Add(myctrl, border=5, flag=wx.RIGHT)
                     ctrl.Add(mylabel)
                     self._comps[fpath].append(myctrl)
-                    if field.get("help"): myctrl.ToolTip = myctrl.ToolTip = field["help"]
+                    if field.get("help"): myctrl.ToolTip = field["help"]
             elif "choices" in field:
                 style = wx.CB_DROPDOWN | (0 if field.get("choicesedit") else wx.CB_READONLY)
                 ctrl = wx.ComboBox(parent, size=(200, -1), style=style)
@@ -2013,9 +2013,9 @@ class PropertyDialog(wx.Dialog):
         tip = wx.StaticText(self.panel, label=help)
 
         ctrl.Value = self._GetValueForCtrl(value, typeclass)
-        ctrl.ToolTip = label.ToolTip = "Value of type %s%s." % (
-            typeclass.__name__,
-            "" if default is None else ", default %s" % repr(default))
+        label.ToolTip = "Value of type %s%s." % (typeclass.__name__,
+                        "" if default is None else ", default %s" % repr(default))
+        ctrl.ToolTip = label.ToolTip.Tip
         ColourManager.Manage(tip, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
         tipfont, tipfont.PixelSize = tip.Font, (0, 9)
         tip.Font = tipfont

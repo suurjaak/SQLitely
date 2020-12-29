@@ -6621,8 +6621,8 @@ class ImportDialog(wx.Dialog):
         check_header.Value = self._has_header
         check_header.MinSize = (-1, button_table.Size.height)
 
-        button_up1  .ToolTip = button_up2  .ToolTip = "Move column one step higher"
-        button_down1.ToolTip = button_down2.ToolTip = "Move column one step lower"
+        for b in button_up1,   button_up2:   b.ToolTip = "Move column one step higher"
+        for b in button_down1, button_down2: b.ToolTip = "Move column one step lower"
 
         l1.AppendColumn("") # Dummy hidden column, as first can't right-align
         l1.AppendColumn("Index",        wx.LIST_FORMAT_RIGHT)
