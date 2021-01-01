@@ -10224,6 +10224,9 @@ class SchemaDiagram(wx.ScrolledWindow):
             if zoom is not None: self.SetZoom(zoom)
             else: self._CalculateLines(remake=True)
 
+            get_extent = lambda t, f=self._font: util.memoize(self.GetFullTextExtent, t, f,
+                                                              __key__="GetFullTextExtent")
+
             stats = statistics is not False and statistics or self._show_stats
             bounds, ids, bounder = wx.Rect(), list(self._ids), self._dc.GetIdBounds
             if ids: bounds = sum(map(bounder, ids[1:]), bounder(ids[0]))
@@ -10234,7 +10237,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             tpl = step.Template(templates.DIAGRAM_SVG, strip=False)
             title = os.path.splitext(os.path.basename(self._db.name))[0] + " schema"
             ns = {"title": title, "db": self._db, "items": [], "lines": self._lines,
-                  "bounds": bounds, "stats": util.CaselessDict(), "dc": wx.ClientDC(self)}
+                  "bounds": bounds, "stats": util.CaselessDict(), "get_extent": get_extent}
             for o in self._objs.values():
                 opts = self._db.schema[o["type"]].get(o["name"])
                 if opts and stats: ns["stats"][o["name"]] = o["stats"]
@@ -10562,6 +10565,9 @@ class SchemaDiagram(wx.ScrolledWindow):
         if not self._show_lines: return
         if remake or recalculate: self._CalculateLines(remake)
 
+        get_extent = lambda t, f=self._font: util.memoize(self.GetFullTextExtent, t, f,
+                                                          __key__="GetFullTextExtent")
+
         fadedcolour  = controls.ColourManager.Adjust(self.LineColour, self.BackgroundColour, 0.7)
         linepen      = controls.PEN(self.LineColour)
         linefadedpen = controls.PEN(fadedcolour)
@@ -10570,7 +10576,6 @@ class SchemaDiagram(wx.ScrolledWindow):
         textdragpen   = controls.PEN(self._colour_dragbg)
         cornerpen = controls.PEN(controls.ColourManager.Adjust(self.LineColour,  self.BackgroundColour))
         cornerfadedpen = controls.PEN(controls.ColourManager.Adjust(fadedcolour, self.BackgroundColour))
-        textextents = {} # {text: (w, h, descent, leading)}
 
         for (name1, name2, cols), opts in sorted(self._lines.items(),
                 key=lambda x: any(n in self._sels for n in x[0][:2])):
@@ -10624,8 +10629,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             # Draw foreign key label
             if self._show_labels:
                 tname = util.ellipsize(util.unprint(opts["name"]), self.MAX_TEXT)
-                textent = textextents.get(tname) or self.GetFullTextExtent(tname)
-                textextents[tname] = textent
+                textent = get_extent(tname)
                 tw, th = textent[0] + textent[3], textent[1] + textent[2]
                 tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
                                   if pts[i][0] == pts[i+1][0])

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.12.2020
+@modified    01.01.2021
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -2325,13 +2325,13 @@ count += 1
 """
 Database schema diagram SVG template.
 
-@param   bounds  wx.Rect for entire area
-@param   db      database.Database instance
-@param   dc      wx.DC for measuring text
-@param   title   diagram title
-@param   items   diagram objects as [{"name", "bounds", "columns"}]
-@param   lines   diagram relations as {("item1", "item2", ("col1", )): {"name", "pts"}}
-@param   stats   {name: {?size, ?rows}}
+@param   bounds      wx.Rect for entire area
+@param   db          database.Database instance
+@param   get_extent  function(text, font=current dc font) returning full text extent
+@param   title       diagram title
+@param   items       diagram objects as [{"name", "bounds", "columns"}]
+@param   lines       diagram relations as {("item1", "item2", ("col1", )): {"name", "pts"}}
+@param   stats       {name: {?size, ?rows}}
 """
 DIAGRAM_SVG = """<%
 from sqlitely.lib import util
@@ -2352,7 +2352,7 @@ texth       = SchemaDiagram.FONT_SIZE + 2
 %>
 <?xml version="1.0" encoding="UTF-8" ?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
-     width="{{ bounds.Width }}" height="{{ bounds.height }}" version="1.1">
+     viewBox="0 0 {{ bounds.Width }} {{ bounds.height }}" version="1.1">
 
   <title>{{ title }}</title>
   <desc>{{ templates.export_comment() }}</desc>
@@ -2516,7 +2516,7 @@ for i, c in enumerate(cols):
         v = c.get(k)
         t = util.ellipsize(util.unprint(c.get(k, "")), SchemaDiagram.MAX_TEXT)
         coltexts[-1].append(t)
-        if t: extent = dc.GetFullTextExtent(t)
+        if t: extent = get_extent(t)
         if t: colmax[k] = max(colmax[k], extent[0] + extent[3])
 
 istats = stats.get(item["name"])
@@ -2526,20 +2526,20 @@ if istats: height += SchemaDiagram.STATSH - SchemaDiagram.FOOTERH
 
 %>
 
-    <g id="{{ util.unprint(item["name"]) }}" class="item {{ item["category"] }}">
-      <rect x="{{ item["bounds"].Left }}" y="{{ item["bounds"].Top }}" width="{{ item["bounds"].Width }}" height="{{ height }}" {{ 'rx="%s" ry="%s" ' % ((SchemaDiagram.BRADIUS, ) * 2) if "table" == item["category"] else "" }}class="box" />
+    <g id="{{ util.unprint(item["name"]) }}" class="item {{ item["type"] }}">
+      <rect x="{{ item["bounds"].Left }}" y="{{ item["bounds"].Top }}" width="{{ item["bounds"].Width }}" height="{{ height }}" {{ 'rx="%s" ry="%s" ' % ((SchemaDiagram.BRADIUS, ) * 2) if "table" == item["type"] else "" }}class="box" />
       <rect x="{{ item["bounds"].Left + 1 }}" y="{{ item["bounds"].Top + SchemaDiagram.HEADERH }}" width="{{ item["bounds"].Width - 1.5 }}" height="{{ cheight }}" class="content" />
       <path d="M {{ item["bounds"].Left }},{{ item["bounds"].Top + SchemaDiagram.HEADERH }} h{{ item["bounds"].Width }}" class="separator" />
 
       <text x="{{ item["bounds"].Left + item["bounds"].Width / 2 }}" y="{{ item["bounds"].Top + SchemaDiagram.HEADERH - SchemaDiagram.HEADERP }}" class="title">{{ util.ellipsize(util.unprint(item["name"]), SchemaDiagram.MAX_TEXT) }}</text>
 
-      <text y="{{ item["bounds"].Top + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth }}" class="columns">
+      <text x="{{ item["bounds"].Left }}" y="{{ item["bounds"].Top + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth }}" class="columns">
     %for i, col in enumerate(cols):
         <tspan x="{{ item["bounds"].Left + SchemaDiagram.LPAD }}" y="{{ item["bounds"].Top + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth + i * SchemaDiagram.LINEH }}px">{{ coltexts[i][0] }}</tspan>
     %endfor
       </text>
 
-      <text y="{{ item["bounds"].Top + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth }}" class="types">
+      <text x="{{ item["bounds"].Left }}" y="{{ item["bounds"].Top + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth }}" class="types">
     %for i, col in enumerate(cols):
         <tspan x="{{ item["bounds"].Left + SchemaDiagram.LPAD + colmax["name"] + SchemaDiagram.HPAD }}" y="{{ item["bounds"].Top + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth + i * SchemaDiagram.LINEH }}px">{{ coltexts[i][1] }}</tspan>
     %endfor
@@ -2549,13 +2549,13 @@ if istats: height += SchemaDiagram.STATSH - SchemaDiagram.FOOTERH
 <%
 
 text1 = istats.get("rows") or ""
-text2 = util.format_bytes(istats["size"]) if "size" in istats else ""
+text2 = istats.get("size") or ""
 
 ty = item["bounds"].Top + height - SchemaDiagram.STATSH + texth - SchemaDiagram.FONT_STEP_STATS
-w1 = next(d[0] + d[3] for d in [dc.GetFullTextExtent(text1)]) if text1 else 0
-w2 = next(d[0] + d[3] for d in [dc.GetFullTextExtent(text2)]) if text2 else 0
+w1 = next(d[0] + d[3] for d in [get_extent(text1)]) if text1 else 0
+w2 = next(d[0] + d[3] for d in [get_extent(text2)]) if text2 else 0
 if w1 + w2 + 2 * SchemaDiagram.BRADIUS > item["bounds"].Width and item.get("count"):
-    text1 = util.plural("row", item["count"], max_units=True)
+    text1 = istats["size_maxunits"]
 
 %>
 
