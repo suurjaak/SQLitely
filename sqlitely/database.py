@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.12.2020
+@modified    01.01.2021
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -897,7 +897,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             where += " AND type = :type"; args.update(type=category)
             if name: where += " AND LOWER(name) = :name"; args.update(name=name)
         for row in self.execute(
-            "SELECT * FROM sqlite_master "
+            "SELECT type, name, tbl_name, sql FROM sqlite_master "
             "WHERE %s ORDER BY type, name COLLATE NOCASE" % where, args, log=False
         ).fetchall():
             if "table" == row["type"] \
@@ -970,6 +970,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if meta and "table" == mycategory and meta.get("columns"):
                     opts["columns"] = meta["columns"]
 
+                # Use previous size information if available
+                if mycategory in ("table", "index") and opts0:
+                    VARS = "size", "size_index", "size_total"
+                    opts.update({k: opts0[k] for k in VARS if k in opts0})
+
                 # Retrieve table row counts if commanded, or use previous if available
                 if "table" == mycategory and count:
                     opts.update(self.get_count(myname))
@@ -1007,6 +1012,20 @@ WARNING: misuse can easily result in a corrupt database file.""",
             logger.exception("Error fetching COUNT for table %s.",
                              util.unprint(grammar.quote(table)))
         return result
+
+
+    def set_sizes(self, data):
+        """
+        Sets table and index byte sizes.
+
+        @param   data  {"table":  [{name, size, size_index, size_total}],
+                        ?"index": [{name, size}]}
+        """
+        VARS = "size", "size_index", "size_total"
+        for category in "table", "index":
+            for item in data.get(category, []):
+                dbitem = self.schema[category].get(item["name"])
+                if dbitem: dbitem.update({k: item[k] for k in VARS if k in item})
 
 
     def get_category(self, category, name=None):
@@ -1116,7 +1135,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if not item: return [], []
 
         def get_fks(myitem):
-            cc = [c for c in myitem["columns"] if "fk" in c] + [
+            cc = [c for c in myitem.get("columns", []) if "fk" in c] + [
                 dict(name=c["columns"], fk=c)
                 for c in myitem.get("meta", {}).get("constraints", [])
                 if grammar.SQL.FOREIGN_KEY == c["type"]
@@ -1127,7 +1146,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         mykeys = CaselessDict((util.tuplefy(c["name"]),
                                dict(name=util.tuplefy(c["name"]), pk=c["pk"]))
-                              for c in item["columns"] if "pk" in c)
+                              for c in item.get("columns", []) if "pk" in c)
         for c in item.get("meta", {}).get("constraints", []):
             if grammar.SQL.PRIMARY_KEY == c["type"]:
                 names = tuple(x["name"] for x in c["key"])

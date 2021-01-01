@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.12.2020
+@modified    01.01.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2335,9 +2335,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.db_datas.setdefault(db.filename, defaultdict(lambda: None, name=db.filename))
                 self.db_datas[db.filename]["title"] = tab_title
                 page = DatabasePage(self.notebook, tab_title, db, self.memoryfs)
+                if not page: return
                 conf.DBsOpen[db.filename] = db
                 self.db_pages[page] = db
                 util.run_once(conf.save)
+                if not page: return # User closed page before loading was complete
                 self.Bind(wx.EVT_LIST_DELETE_ALL_ITEMS,
                           self.on_clear_searchall, page.edit_searchall)
         else:
@@ -2805,9 +2807,9 @@ class DatabasePage(wx.Panel):
 
         tb = self.tb_diagram = wx.ToolBar(page, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         combo_zoom = self.combo_diagram_zoom = wx.ComboBox(tb, size=(60, -1), style=wx.CB_DROPDOWN)
+        statusgauge = self.diagram_gauge  = wx.Gauge(page)
         button_export = self.button_diagram_export = wx.Button(page, label="Export &diagram")
         diagram = self.diagram = components.SchemaDiagram(page, self.db)
-        panel = wx.Panel(page)
         cb_rels  = self.cb_diagram_rels   = wx.CheckBox(page, label="Foreign &relations")
         cb_lbls  = self.cb_diagram_labels = wx.CheckBox(page, label="Foreign &labels")
         cb_stats = self.cb_diagram_stats  = wx.CheckBox(page, label="&Statistics")
@@ -2850,12 +2852,13 @@ class DatabasePage(wx.Panel):
         cb_stats.ToolTip = "Show table size information"
         label_find.ToolTip = "Select schema items as you type (* is wildcard)"
         combo_find.ToolTip = label_find.ToolTip.Tip
+        statusgauge.Hide()
 
         sizer_top.Add(tb, flag=wx.ALIGN_BOTTOM)
         sizer_top.AddStretchSpacer()
-        sizer_top.Add(button_export, border=5, flag=wx.RIGHT | wx.BOTTOM)
+        sizer_top.Add(statusgauge,   border=15, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
+        sizer_top.Add(button_export, border=5,  flag=wx.RIGHT | wx.BOTTOM)
         sizer_middle.Add(diagram,     proportion=1, flag=wx.GROW)
-        sizer_middle.Add(panel,       border=5,     flag=wx.GROW | wx.LEFT | wx.RIGHT)
         sizer_bottom.Add(cb_rels,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
         sizer_bottom.Add(cb_lbls,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
         sizer_bottom.Add(cb_stats,    border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
@@ -3822,13 +3825,16 @@ class DatabasePage(wx.Panel):
         if not self: return
         self.statistics = result
         self.db.unlock(None, None, self.db)
+        if "data" in result: self.db.set_sizes(result["data"])
 
         def after():
             if not self: return
             if result:
                 if "error" not in result:
                     guibase.status("Statistics analysis complete.")
-                if self.diagram.ShowStatistics: self.diagram.Redraw(remake=True)
+                    self.diagram.UpdateStatistics(redraw=False)
+                    if self.diagram.ShowStatistics: self.diagram.Redraw(remake=True)
+                self.cb_diagram_stats.Enable()
                 self.populate_statistics()
                 self.update_page_header(updated="error" not in result)
         wx.CallAfter(after)
@@ -3886,11 +3892,23 @@ class DatabasePage(wx.Panel):
         self.cb_diagram_rels  .Value = self.diagram.ShowLines
         self.cb_diagram_labels.Value = self.diagram.ShowLineLabels
         self.cb_diagram_stats .Value = self.diagram.ShowStatistics
-        self.cb_diagram_stats.Enable()
 
 
     def on_diagram_event(self, event=None):
         """Handler for SchemaDiagramEvent, updates toolbar state and saves conf."""
+        if getattr(event, "progress", False):
+            VARS = "done", "index", "count"
+            done, index, count = (getattr(event, k, None) for k in VARS)
+            if done:
+                self.diagram_gauge.Hide()
+            else:
+                if not self.diagram_gauge.Shown:
+                    self.diagram_gauge.Show()
+                    self.diagram_gauge.ContainingSizer.Layout()
+                v = self.diagram_gauge.Value = 100 * index / count
+                self.diagram_gauge.ToolTip = "Generating.. %s%% (%s of %s)" % (v, index + 1, count)
+            return
+
         self.update_diagram_controls()
         if not self.db.temporary:
             conf.SchemaDiagrams[self.db.filename] = self.diagram.GetOptions()

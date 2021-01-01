@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.12.2020
+@modified    01.01.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -9736,6 +9736,8 @@ class SchemaDiagram(wx.ScrolledWindow):
     LAYOUT_GRID  = "grid"
     LAYOUT_GRAPH = "graph"
 
+    PROGRESS_MIN_COUNT = 20 # Minimum number of schema items to report bitmap progress for
+
     SCROLL_STEP = 20 # Effective scroll rate for mouse and keyboard
 
     TOOLTIP_DELAY = 500 # Milliseconds before showing hover tooltip
@@ -9751,7 +9753,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         super(SchemaDiagram, self).__init__(parent, *args, **kwargs)
         self._db    = db
         self._ids   = {} # {DC ops ID: name or (name1, name2, (cols)) or None}
-        self._objs  = util.CaselessDict() # {name: {id, type, name, bmp, bmpsel, bmparea, hasmeta, stats, sql0, columns, __id__}}
+        self._objs  = util.CaselessDict() # {name: {id, type, name, bmp, bmpsel, bmparea, hasmeta, stats, sql0, columns, keys, __id__}}
         self._lines = util.CaselessDict() # {(name1, name2, (cols)): {id, pts}}
         self._sels  = util.CaselessDict(insertorder=True) # {name selected: DC ops ID}
         # Bitmap cache, as {zoom: {item.__id__: {(sql, hasmeta, stats, dragrect): (wx.Bitmap, wx.Bitmap) or wx.Bitmap}}}
@@ -9793,6 +9795,9 @@ class SchemaDiagram(wx.ScrolledWindow):
         if filteridx >= 0: self._dlg_save.SetFilterIndex(filteridx)
 
         self._worker_graph = workers.GraphWorker(self._OnWorkerGraph)
+        self._worker_bmp = workers.WorkerThread()
+        # Functions to call on completing making item bitmaps, as {key: func}
+        self._work_finalizers = OrderedDict()
 
         self._UpdateColours()
         self.SetVirtualSize(self.VIRTUALSZ)
@@ -9811,6 +9816,65 @@ class SchemaDiagram(wx.ScrolledWindow):
         self.Bind(wx.EVT_SCROLL_CHANGED,      self._OnScroll)
         self.Bind(wx.EVT_CHAR_HOOK,           self._OnKey)
         self.Bind(wx.EVT_CONTEXT_MENU,        lambda e: self.OpenContextMenu())
+
+
+    def _DoItemBitmaps(self, items=None, callback=None):
+        """
+        Starts making item bitmaps in background thread, raising progress status
+        events.
+
+        @param   objs      items to make bitmaps for if not all current items
+        @param   callback  function invoked on completion, as (key, func)
+        """
+        self._worker_bmp.stop_work()
+        if callback: self._work_finalizers[callback[0]] = callback[1]
+
+        items, stats = items or self._order, self._show_stats or None
+        if all(self._HasItemBitmaps(o, stats and o["stats"]) for o in items):
+            for o in items:
+                bmp, bmpsel = self._GetItemBitmaps(o, stats and o["stats"])
+                o.update(bmp=bmp, bmpsel=bmpsel, bmparea=None)
+            return self._OnWorkerProgress(done=True, immediate=True)
+
+        self._worker_bmp.work(functools.partial(self._BitmapWorker, items))
+
+
+    def _OnWorkerProgress(self, done=False, index=None, count=None, immediate=False):
+        """Handler for bitmap worker result, posts progress event, updates UI if done."""
+        def after():
+            if not self: return
+            if done:
+                callbacks = self._work_finalizers.values()
+                self._work_finalizers.clear()
+                for f in callbacks: self and f()
+                if self and not callbacks and not immediate:
+                    self.Redraw(recalculate=True)
+            if done or count > self.PROGRESS_MIN_COUNT: # With few items, progress is just a flicker
+                self._PostEvent(progress=True, done=done, index=index, count=count)
+
+        after() if immediate else wx.CallAfter(after) 
+
+
+    def _BitmapWorker(self, items):
+        """Function invoked from bitmap worker, processes items and reports progress."""
+        stats = self._show_stats or None
+        for i, o in enumerate(items):
+            if not self or not self._worker_bmp.is_working(): break # for i, o
+            bmp, bmpsel = self._GetItemBitmaps(o, stats and o["stats"])
+            o.update(bmp=bmp, bmpsel=bmpsel, bmparea=None)
+            self._OnWorkerProgress(index=i, count=len(items))
+        if self: self._OnWorkerProgress(done=True)
+
+
+    def UpdateStatistics(self, redraw=True):
+        """
+        Updates local data structures with statistics data from database,
+        redraws diagram.
+        """
+        for o in self._objs.values():
+            opts = self._db.schema[o["type"]].get(o["name"])
+            if opts: o["stats"] = self._GetItemStats(opts)
+        if redraw: self.Redraw(remake=True)
 
 
     def GetBorderColour(self):         return self._colour_border
@@ -9872,41 +9936,34 @@ class SchemaDiagram(wx.ScrolledWindow):
             v = getattr(self.__class__, k)
             setattr(self, k, int(math.ceil(v * zoom)))
 
-        fullbounds, drops = None, []
-        for o in self._objs.values():
-            opts = self._db.schema[o["type"]].get(o["name"])
-            if not opts:
-                self._objs.pop(o["name"])
-                self._dc.RemoveId(o["id"])
-                for cc in self._cache.values(): cc.pop(o["__id__"], None)
-                drops.append(o)
-                continue # for o
-            stats = self._GetItemStats(opts)
-            bmp, bmpsel = self._GetItemBitmaps(opts, stats)
-            o.update(bmp=bmp, bmpsel=bmpsel, bmparea=None, stats=stats,
-                     sql0=opts["sql0"], hasmeta=bool(opts.get("meta")),
-                     columns=[dict(c)  for c in opts["columns"]])
-            r = self._dc.GetIdBounds(o["id"])
-            pt = [v * zoom / zoom0 for v in r.TopLeft]
-            self._dc.SetIdBounds(o["id"], wx.Rect(wx.Point(pt), bmp.Size))
-            if fullbounds: fullbounds.Union(self._dc.GetIdBounds(o["id"]))
-            else: fullbounds = self._dc.GetIdBounds(o["id"])
-        for o in drops: self._order.remove(o)
-        if fullbounds and not wx.Rect(self.VirtualSize).Contains(fullbounds):
-            self.SetVirtualSize([max(a, b + self.MOVE_STEP)
-                                 for a, b in zip(self.VirtualSize, fullbounds.BottomRight)])
+        def after():
+            if not self: return
 
-        if refresh: self.Freeze()
-        try:
-            xy = (p * zoom / zoom0 - (p - v) for v, p in zip(viewport0.TopLeft, focus)) \
-                 if focus else (v * zoom / zoom0 for v in viewport0.TopLeft)
-            self.ScrollXY(xy)
+            fullbounds = None
+            for o in self._order:
+                r = self._dc.GetIdBounds(o["id"])
+                pt = [v * zoom / zoom0 for v in r.TopLeft]
+                self._dc.SetIdBounds(o["id"], wx.Rect(wx.Point(pt), o["bmp"].Size))
+                if fullbounds: fullbounds.Union(self._dc.GetIdBounds(o["id"]))
+                else: fullbounds = self._dc.GetIdBounds(o["id"])
 
-            if refresh:
-                self.Redraw(remakelines=True)
-                self._PostEvent(zoom=zoom)
-        finally:
-            if refresh: self.Thaw()
+            if fullbounds and not wx.Rect(self.VirtualSize).Contains(fullbounds):
+                self.SetVirtualSize([max(a, b + self.MOVE_STEP)
+                                     for a, b in zip(self.VirtualSize, fullbounds.BottomRight)])
+
+            if refresh: self.Freeze()
+            try:
+                xy = (p * zoom / zoom0 - (p - v) for v, p in zip(viewport0.TopLeft, focus)) \
+                     if focus else (v * zoom / zoom0 for v in viewport0.TopLeft)
+                self.ScrollXY(xy)
+
+                if refresh:
+                    self.Redraw(remakelines=True)
+                    self._PostEvent(zoom=zoom)
+            finally:
+                if refresh: self.Thaw()
+
+        self._DoItemBitmaps(callback=("SetZoom", after))
         return True
     Zoom = property(GetZoom, SetZoom)
 
@@ -9934,11 +9991,17 @@ class SchemaDiagram(wx.ScrolledWindow):
                 bounds = wx.Rect(bounds0.Position, wx.Size(*[zoom * v for v in bounds0.Size]))
                 bounds.Inflate(5, 5)
 
-            if zoom != self._zoom: self.Zoom = zoom
-            self.Scroll(0, 0)
-            if oids: bounds = sum(map(bounder, oids[1:]), bounder(oids[0]))
-            if not self.ClientRect.Contains(bounds):
-                self.ScrollXY([v - 5 for v in bounds.TopLeft])
+            def after():
+                if not self: return
+                self.Scroll(0, 0)
+                if oids:
+                    bounds = sum(map(bounder, oids[1:]), bounder(oids[0])).Inflate(5, 5)
+                    if not self.ClientRect.Contains(bounds): self.ScrollXY(bounds.TopLeft)
+            if zoom != self._zoom:
+                self.SetZoom(zoom)
+                if self._work_finalizers: self._work_finalizers["ZoomToFit"] = after
+                else: after()
+            else: after()
         finally: self.Thaw()
         self._PostEvent(zoom=self._zoom)
 
@@ -9980,7 +10043,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         show = bool(show)
         if show == self._show_stats: return
         self._show_stats = show
-        self.Redraw(remake=True)
+        if show: self.UpdateStatistics()
+        else: self.Redraw(remake=True)
         self._PostEvent()
     ShowStatistics = property(GetShowStatistics, SetShowStatistics)
 
@@ -10007,13 +10071,13 @@ class SchemaDiagram(wx.ScrolledWindow):
         if not opts or opts == self.Options: return
 
         remake, remakelines = False, False
-        if "zoom"     in opts:
-            remake = self.SetZoom(opts["zoom"], refresh=False)
         if "fks"      in opts: self._show_lines  = bool(opts["fks"])
         if "fklabels" in opts: self._show_labels = bool(opts["fklabels"])
         if "stats"    in opts and bool(opts["stats"]) != self._show_stats:
             self._show_stats = not self._show_stats
             remake = True
+        if "zoom"     in opts:
+            remake = self.SetZoom(opts["zoom"], refresh=False) or remake
 
         if "layout" in opts:
             lopts = opts["layout"]
@@ -10029,12 +10093,11 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self.Layout = self._layout["layout"]
                 break # for name, (x, y)
             r = self._dc.GetIdBounds(o["id"])
-            if x == r.Left and y == r.Top: continue # for name, (x, y)
-            self._dc.TranslateId(o["id"], x - r.Left, y - r.Top)
-            self._dc.SetIdBounds(o["id"], wx.Rect(x, y, *r.Size))
+            if x != r.Left or y == r.Top:
+                self._dc.TranslateId(o["id"], x - r.Left, y - r.Top)
+                self._dc.SetIdBounds(o["id"], wx.Rect(x, y, *r.Size))
             if fullbounds: fullbounds.Union(self._dc.GetIdBounds(o["id"]))
             else: fullbounds = self._dc.GetIdBounds(o["id"])
-            remakelines = True
         if fullbounds and not wx.Rect(self.VirtualSize).Contains(fullbounds):
             self.SetVirtualSize([max(a, b + self.MOVE_STEP)
                                  for a, b in zip(self.VirtualSize, fullbounds.BottomRight)])
@@ -10093,9 +10156,9 @@ class SchemaDiagram(wx.ScrolledWindow):
         self.Freeze()
         try:
             zoom0, stats0 = self._zoom, self._show_stats
-            self._use_cache = False
 
             change_colours = defaultcolours and not self._IsDefaultColours()
+            self._use_cache = not change_colours
             if change_colours: self._UpdateColours(defaults=True)
             remake = change_colours
             if statistics is not None and bool(statistics) != self._show_stats:
@@ -10106,7 +10169,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
                 if self._zoom == zoom: zoom = None
 
-            if zoom is not None: self.Zoom = zoom
+            if zoom is not None: self.SetZoom(zoom)
             elif remake: self.Redraw(remake=True)
 
             bounds, ids, bounder = wx.Rect(), list(self._ids), self._dc.GetIdBounds
@@ -10131,7 +10194,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             if self._show_stats != stats0: self._show_stats = stats0
 
             self._use_cache = True
-            if zoom is not None: self.Zoom = zoom0
+            if zoom is not None: self.SetZoom(zoom0)
             elif remake: self.Redraw(remake=True)
         finally: self.Thaw()
         return bmp2
@@ -10174,7 +10237,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                   "bounds": bounds, "stats": util.CaselessDict(), "dc": wx.ClientDC(self)}
             for o in self._objs.values():
                 opts = self._db.schema[o["type"]].get(o["name"])
-                if opts and stats: ns["stats"][o["name"]] = self._GetItemStats(opts)
+                if opts and stats: ns["stats"][o["name"]] = o["stats"]
                 item = dict(opts or {}, **o)
                 item["bounds"] = self._dc.GetIdBounds(o["id"])
                 ns["items"].append(item)
@@ -10234,7 +10297,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         self.Scroll([v / d for v, d in zip(pt, delta)])
 
 
-    def OpenContextMenu(self):
+    def OpenContextMenu(self, position=None):
         """Opens context menu, for focused schema item if any."""
         if not self._page: return
         menu = wx.Menu()
@@ -10319,7 +10382,13 @@ class SchemaDiagram(wx.ScrolledWindow):
             if item_rename:
                 menu.Bind(wx.EVT_MENU, cmd("rename", next(iter(categories)), items[0]["name"]), item_rename)
 
-        self.PopupMenu(menu)
+            if not position:
+                rect = self._dc.GetIdBounds(items[0]["id"])
+                viewport = self.GetViewPort()
+                corners = rect.BottomRight, rect.BottomLeft, rect.TopRight, rect.TopLeft
+                position = next((p for p in corners if viewport.Contains(p)), None)
+
+        self.PopupMenu(menu, pos=position or wx.DefaultPosition)
 
 
     def Populate(self, opts=None):
@@ -10329,6 +10398,13 @@ class SchemaDiagram(wx.ScrolledWindow):
         @param   opts  diagram display options as returned from GetOptions()
         """
         if not self: return
+
+        def keys_equal(kk1, kk2):
+            """Returns whether item pks and fks are equal w.r.t. to schema diagram."""
+            (pks1, fks1), (pks2, fks2) = kk1, kk2
+            return len(fks1) == len(fks2) and fks1 == fks2 and \
+                   len(pks1) == len(pks2) and \
+                   all(a["name"] == b["name"] for a, b in zip(pks1, pks2))
 
         objs0  = self._objs.values()
         sels0  = self._sels.copy()
@@ -10344,11 +10420,14 @@ class SchemaDiagram(wx.ScrolledWindow):
         opts, rects, fullbounds = opts or {}, {}, None
         self.SetOptions(opts, refresh=False)
         itemposes = util.CaselessDict(opts.get("items") or {})
+        makeitems = []
 
         reset = any(o["__id__"] not in (x["__id__"] for x in self._db.schema.get(o["type"], {}).values())
                     for o in objs0)
+        keys = {} # {table: (pks, fks)}
         for name1 in self._db.schema.get("table", {}):
-            for fk in self._db.get_keys(name1, pks_only=True)[1]:
+            keys[name1] = self._db.get_keys(name1, pks_only=True)
+            for fk in keys[name1][1]:
                 name2, rname = list(fk["table"])[0], ", ".join(fk["name"])
                 key = name1, name2, tuple(n.lower() for n in fk["name"])
                 lid, maxid = (maxid + 1, ) * 2
@@ -10359,53 +10438,63 @@ class SchemaDiagram(wx.ScrolledWindow):
                 o0 = next((o for o in objs0 if o["__id__"] == opts["__id__"]), None)
                 if o0: oid = o0["id"]
                 else: oid, maxid = (maxid + 1, ) * 2
+
                 stats, stats0 = self._GetItemStats(opts), (o0 or {}).get("stats")
-                if o0 and o0["sql0"] == opts["sql0"] \
-                and o0["columns"] == opts["columns"] and stats == stats0:
-                    bmp, bmpsel, bmparea = map(o0.get, ("bmp", "bmpsel", "bmparea"))
-                else:
-                    for cc in self._cache.values(): cc.pop(opts["__id__"], None)
-                    (bmp, bmpsel), bmparea = self._GetItemBitmaps(opts, stats), None
+                bmp, bmpsel = None, None
+                if o0 and keys_equal(o0["keys"], keys.get(name, ((), ()))) \
+                and self._HasItemBitmaps(o0, self._show_stats and stats):
+                    bmp, bmpsel = self._GetItemBitmaps(o0, self._show_stats and stats)
                 if o0 and o0["name"] in sels0: self._sels[name] = oid
-                if name in itemposes: rects[name] = wx.Rect(wx.Point(itemposes[name]), bmp.Size)
-                elif o0: rects[name] = rects0[o0["name"]]
+                if name in itemposes and bmp:
+                    rects[name] = wx.Rect(wx.Point(itemposes[name]), bmp.Size)
+                elif o0 and bmp: rects[name] = rects0[o0["name"]]
+
                 self._ids[oid] = name
                 self._objs[name] = {"id": oid, "type": category, "name": name, "stats": stats,
                                     "__id__": opts["__id__"], "sql0": opts["sql0"],
                                     "hasmeta": bool(opts.get("meta")),
+                                    "keys": keys.get(name, ((), ())),
                                     "columns": [dict(c)  for c in opts["columns"]],
-                                    "bmp": bmp, "bmpsel": bmpsel, "bmparea": bmparea}
+                                    "bmp": bmp, "bmpsel": bmpsel, "bmparea": None}
                 self._order.append(self._objs[name])
                 if name in rects:
                     self._dc.SetIdBounds(oid, rects[name])
                     if fullbounds: fullbounds.Union(rects[name])
                     else: fullbounds = wx.Rect(rects[name])
-                else: reset = True
+                else:
+                    makeitems.append(self._objs[name])
+                    reset = True
 
         # Nuke cache for objects no longer in schema
         for o0 in objs0:
             if not any(o0["__id__"] == o["__id__"] for o in self._order):
                 for cc in self._cache.values(): cc.pop(o0["__id__"], None)
 
-        # Increase diagram virtual size if total item area is bigger
-        area, vsize = self.GPAD * self.GPAD, self.VIRTUALSZ
-        if reset: # Do a very rough calculation based on accumulated area
-            for o in self._objs.values():
-                area += (o["bmp"].Width + self.GPAD) * (o["bmp"].Height + self.GPAD)
-            while area > vsize[0] * vsize[1]:
-                vsize = vsize[0], vsize[1] + 100
-        elif fullbounds:
-            vsize = fullbounds.Right + self.MOVE_STEP, fullbounds.Bottom + self.MOVE_STEP
-        if vsize[0] > self.VIRTUALSZ[0] or vsize[1] > self.VIRTUALSZ[1]:
-            self.VirtualSize = self.VIRTUALSZ = vsize
+        def after():
+            if not self: return
 
-        if reset:
-            self._dc.RemoveAll()
-            self.SetLayout(self._layout["layout"])
-        else:
-            self.RecordLines(remake=True)
-            for o in self._order: self.RecordItem(o["name"], rects.get(o["name"]))
-            self.Refresh()
+            # Increase diagram virtual size if total item area is bigger
+            area, vsize = self.GPAD * self.GPAD, self.VIRTUALSZ
+            if reset: # Do a very rough calculation based on accumulated area
+                for o in self._objs.values():
+                    area += (o["bmp"].Width + self.GPAD) * (o["bmp"].Height + self.GPAD)
+                while area > vsize[0] * vsize[1]:
+                    vsize = vsize[0], vsize[1] + 100
+            elif fullbounds:
+                vsize = fullbounds.Right + self.MOVE_STEP, fullbounds.Bottom + self.MOVE_STEP
+            if vsize[0] > self.VIRTUALSZ[0] or vsize[1] > self.VIRTUALSZ[1]:
+                self.VirtualSize = self.VIRTUALSZ = vsize
+
+            if reset:
+                self._dc.RemoveAll()
+                self.SetLayout(self._layout["layout"])
+            else:
+                self.RecordLines(remake=True)
+                for o in self._order: self.RecordItem(o["name"], rects.get(o["name"]))
+                self.Refresh()
+
+        if makeitems: self._DoItemBitmaps(makeitems, callback=("Populate", after))
+        else: after()
 
 
     def Redraw(self, remake=False, remakelines=False, recalculate=False):
@@ -10414,27 +10503,18 @@ class SchemaDiagram(wx.ScrolledWindow):
         or recalculating all relation lines if specified,
         or recalculating only those relation lines connected to selected items if specified.
         """
-        drops = []
-        for o in self._order if remake else ():
-            opts = self._db.schema[o["type"]].get(o["name"])
-            if not opts:
-                self._objs.pop(o["name"])
-                self._dc.RemoveId(o["id"])
-                for cc in self._cache.values(): cc.pop(o["__id__"], None)
-                drops.append(o)
-                continue # for o
-            stats = o["stats"] = self._GetItemStats(opts)
-            (bmp, bmpsel), bmparea = self._GetItemBitmaps(opts, stats), None
-            o.update(bmp=bmp, bmpsel=bmpsel, bmparea=bmparea,
-                     sql0=opts["sql0"], hasmeta=bool(opts.get("meta")),
-                     columns=[dict(c)  for c in opts["columns"]])
-            r = self._dc.GetIdBounds(o["id"])
-            self._dc.SetIdBounds(o["id"], wx.Rect(r.TopLeft, o["bmp"].Size))
-        for o in drops: self._order.remove(o)
-        self.RecordSelectionRect()
-        self.RecordLines(remake=remake or remakelines, recalculate=recalculate)
-        self.RecordItems()
-        self.Refresh()
+        def after():
+            for o in self._order if remake else ():
+                r = self._dc.GetIdBounds(o["id"])
+                self._dc.SetIdBounds(o["id"], wx.Rect(r.TopLeft, o["bmp"].Size))
+            self.RecordSelectionRect()
+            self.RecordLines(remake=remake or remakelines, recalculate=recalculate)
+            self.RecordItems()
+            self.Refresh()
+        if remake:
+            self.UpdateStatistics(redraw=False)
+            self._DoItemBitmaps(callback=("Redraw", after))
+        else: after()
 
 
     def RecordItems(self):
@@ -10453,7 +10533,9 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._dc.RemoveId(o["id"])
         self._dc.SetId(o["id"])
         bmp = o[("bmparea" if self._dragrect else "bmpsel") if o["name"] in self._sels else "bmp"]
-        if bmp is None: bmp = o["bmparea"] = self._GetItemBitmaps(o, o["stats"], dragrect=True)
+        if bmp is None:
+            bmp = self._GetItemBitmaps(o, self._show_stats and o["stats"], dragrect=True)
+            o.update(bmparea=bmp)
         pos = [a - (o["name"] in self._sels) * 2 * self._zoom for a in bounds[:2]]
         self._dc.DrawBitmap(bmp, pos, useMask=True)
         self._dc.SetIdBounds(o["id"], wx.Rect(bounds.TopLeft, o["bmp"].Size))
@@ -10807,11 +10889,11 @@ class SchemaDiagram(wx.ScrolledWindow):
     def _GetItemStats(self, opts):
         """Returns {?size, ?rows} for schema item if stats enabled and information available."""
         stats = {}
-        if not self._show_stats: return stats
-        size = next((x["size_total"] for x in util.getval(self._page, "statistics", "data", "table", default=[])
-                     if util.lceq(x["name"], opts["name"])), None)
-        if size is not None: stats["size"] = size
-        if opts.get("count") is not None: stats["rows"] = util.count(opts, unit="row")
+        if opts.get("size_total") is not None:
+            stats["size"] = util.format_bytes(opts["size_total"])
+        if opts.get("count") is not None:
+            stats["rows"] = util.count(opts, unit="row")
+            stats["rows_maxunits"] = util.plural("row", opts["count"], max_units=True)
         return stats
 
 
@@ -10831,7 +10913,7 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         key1 = opts["__id__"]
         key2 = (opts["sql0"], bool(opts.get("meta") or opts.get("hasmeta")),
-                str(stats), bool(dragrect))
+                str(stats) if stats else None, bool(dragrect))
         mycache = self._cache[self._zoom][key1]
         if key2 not in mycache:
             for cc in self._cache.values(): # Nuke any outdated bitmaps
@@ -10842,6 +10924,14 @@ class SchemaDiagram(wx.ScrolledWindow):
         return mycache[key2]
 
 
+    def _HasItemBitmaps(self, opts, stats=None):
+        """Returns whether schema item has cached bitmap for current view."""
+        key1 = opts["__id__"]
+        key2 = (opts["sql0"], bool(opts.get("meta") or opts.get("hasmeta")),
+                str(stats) if stats else None, False)
+        return key1 in self._cache[self._zoom] and key2 in self._cache[self._zoom][key1]
+
+
     def _MakeItemBitmaps(self, opts, stats=None, dragrect=False):
         """
         Returns wx.Bitmaps representing a schema item like table.
@@ -10850,6 +10940,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                             for item inside drag rectangle
         @return   (default bitmap, focused bitmap) or bitmap inside drag rectangle
         """
+        if not self: return
         CRADIUS = self.BRADIUS if "table" == opts["type"] else 0
         w, h = self.MINW, self.HEADERH + self.HEADERP + self.FOOTERH
 
@@ -10877,8 +10968,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         if stats: h += self.STATSH - self.FOOTERH
 
         collists, statslists = [[], []], [[], [], [], []] # [[text, ], [(x, y), ]]
-        pks, fks = (sum((list(c["name"]) for c in x), [])
-                    for x in self._db.get_keys(opts["name"]))
+        pks, fks = (sum((list(c["name"]) for c in v), []) for v in opts["keys"])
 
         # Populate column texts and coordinates
         for i, col in enumerate(opts.get("columns") or []):
@@ -10895,14 +10985,12 @@ class SchemaDiagram(wx.ScrolledWindow):
                                       wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE)
             dx, dy = self.BRADIUS, h - self.STATSH + 1
 
-            text1 = stats.get("rows")
-            text2 = util.format_bytes(stats["size"]) if "size" in stats else None
+            text1, text2 = stats.get("rows"), stats.get("size")
 
             w1 = next(d[0] + d[3] for d in [get_extent(text1, stats_font)]) if text1 else 0
             w2 = next(d[0] + d[3] for d in [get_extent(text2, stats_font)]) if text2 else 0
-            if w1 + w2 + 2 * self.BRADIUS > w and opts.get("count"):
-                # Rows do not fit as exact number: draw as "6.1M rows"
-                text1 = util.plural("row", opts["count"], max_units=True)
+            if w1 + w2 + 2 * self.BRADIUS > w:
+                text1 = stats["rows_maxunits"] # Exact number does not fit: draw as "6.1M rows"
 
             if text1:
                 statslists[0].append(text1); statslists[1].append((dx, dy))
@@ -11113,7 +11201,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self.RefreshRect(fullbounds, eraseBackground=False)
             elif sels0 != self._sels: self.Redraw()
 
-            if   event.RightDown():  self.OpenContextMenu()
+            if   event.RightDown():  self.OpenContextMenu(event.Position)
             elif event.LeftDClick():
                 if oid and self._page:
                     self._page.handle_command("schema", o["type"], o["name"])
@@ -11202,7 +11290,6 @@ class SchemaDiagram(wx.ScrolledWindow):
                 step = self.ZOOM_STEP * (1 if event.WheelRotation > 0 else -1)
                 focus = (x, y) if self.ClientRect.Contains(event.Position) else None
                 self.SetZoom(self.Zoom + step, focus=focus)
-                return
             else: event.Skip()
         else:
             event.Skip()
@@ -11229,7 +11316,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         elif event.KeyCode in controls.KEYS.PLUS + controls.KEYS.MINUS:
             self.Zoom += self.ZOOM_STEP * (1 if event.KeyCode in controls.KEYS.PLUS else -1)
         elif event.KeyCode in controls.KEYS.MULTIPLY:
-            self.Zoom = 1
+            self.SetZoom(1)
         elif event.KeyCode in controls.KEYS.TAB and self._objs:
             names = sorted(self._objs, key=lambda x: self._dc.GetIdBounds(self._objs[x]["id"]).TopLeft[::-1])
             if self._sels:
@@ -11350,6 +11437,7 @@ class SchemaDiagram(wx.ScrolledWindow):
 
     def _PostEvent(self, **kwargs):
         """Posts EVT_DIAGRAM event to parent."""
+        if not self: return
         if kwargs.get("layout") == False: self._layout["active"] = False
         evt = SchemaDiagramEvent(self.Id, **kwargs)
         wx.PostEvent(self.Parent, evt)
