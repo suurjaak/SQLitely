@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.12.2020
+@modified    01.01.2021
 ------------------------------------------------------------------------------
 """
 import __builtin__
@@ -438,6 +438,7 @@ def format_bytes(size, precision=2, max_units=True, with_units=True):
     """
     Returns a formatted byte size (e.g. "421.45 MB" or "421,451,273 bytes").
 
+    @param   size        size in bytes
     @param   precision   number of decimals to leave after converting to
                          maximum units
     @param   max_units   whether to convert value to corresponding maximum
@@ -496,6 +497,7 @@ def plural(word, items=None, numbers=True, single="1", sep="", pref="", suf="", 
     result = word + ("" if 1 == count else suffix)
     if numbers and items is not None:
         if 1 == count: fmtcount = single
+        elif not count: fmtcount = "0"
         elif max_units:
             UNITS = ["", "K", "M", "G", "T", "P", "E", "Z", "Y"]
             log = min(len(UNITS) - 1, math.floor(math.log(count, 1000)))
