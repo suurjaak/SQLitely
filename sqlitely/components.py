@@ -4718,7 +4718,7 @@ class SchemaObjectPage(wx.Panel):
                 self._EmptyControl(panel_columns)
                 for i, col in enumerate(data.get("key") or ()):
                     add_row(i, col, focus)
-                dialog._panel.Layout()
+                dialog._panel.Parent.SendSizeEvent()
             finally: dialog.Thaw()
 
         def size_dialog():
