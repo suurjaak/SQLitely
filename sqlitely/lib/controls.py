@@ -84,7 +84,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    29.12.2020
+@modified    01.01.2021
 ------------------------------------------------------------------------------
 """
 import collections
@@ -1194,7 +1194,7 @@ class FormDialog(wx.Dialog):
                 if linkfield: self._DelValue(linkfield, path)
             if linkfield: self._PopulateField(linkfield, path)
         if self._footer: self._footer["populate"](self, self._footer["ctrl"])
-        self._panel.Layout()
+        self._panel.Parent.SendSizeEvent()
 
 
     def _OnToggleLineNumbers(self, field, path, event):
