@@ -3949,6 +3949,7 @@ class DatabasePage(wx.Panel):
 
     def on_diagram_find(self, event):
         """Handler for change in diagram quickfind, selects schema items."""
+        if not self.combo_diagram_find.Enabled: return
         names, text = [], self.combo_diagram_find.Value.strip().lower()
         if event.ClientData: names.append(event.ClientData)
         elif text:
@@ -6149,10 +6150,12 @@ class DatabasePage(wx.Panel):
     def populate_diagram_finder(self):
         """Refreshes schema items diagram quickfind dropdown."""
         combo = self.combo_diagram_find
+        combo.Disable() # So that combo event handler knows to disregard change
         combo.Clear()
         for name in (x for c in ("table", "view") for x in self.db.schema[c]):
             combo.Append(util.unprint(name))
             combo.SetClientData(combo.Count - 1, name)
+        combo.Enable()
 
 
     def get_tree_state(self, tree, root):
