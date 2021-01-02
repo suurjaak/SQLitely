@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.01.2021
+@modified    02.01.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5400,15 +5400,15 @@ class DatabasePage(wx.Panel):
             self.load_tree_schema()
             self.diagram.Populate()
             self.populate_diagram_finder()
-            for k, p in self.schema_pages[category].items():
-                if p is event.source and name != k:
-                    name0 = k
-                    self.schema_pages[category].pop(k)
+            for n, p in self.schema_pages[category].items():
+                if p is event.source and name != n:
+                    name0 = n
+                    self.schema_pages[category].pop(n)
                     self.schema_pages[category][name] = p
                     for item in self.pages_closed.get(self.notebook_data, []):
-                        if item["name"] == k: item["name"] = name
+                        if item["name"] == n: item["name"] = name
                         break # for item
-                    break # for k, p
+                    break # for n, p
         if updated and not self.save_underway:
             self.on_pragma_refresh(reload=True)
             self.load_tree_data()
@@ -6122,6 +6122,8 @@ class DatabasePage(wx.Panel):
         """Reloads database schema and refreshes relevant controls"""
         if not self: return
         self.db.populate_schema(count=count, parse=parse)
+        for d in self.schema_pages.values():
+            for p in d.values(): p.Reload()
         wx.YieldIfNeeded()
         if not self: return
         self.load_tree_data() # @todo esimesel loadil pole vist vaja?
