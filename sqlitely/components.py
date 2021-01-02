@@ -10579,6 +10579,7 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         for (name1, name2, cols), opts in sorted(self._lines.items(),
                 key=lambda x: any(n in self._sels for n in x[0][:2])):
+            if not opts["pts"]: continue # for (name1, name2, cols)
             b1, b2 = (self._dc.GetIdBounds(o["id"])
                       for o in map(self._objs.get, (name1, name2)))
 
