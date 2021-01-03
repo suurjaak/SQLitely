@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.01.2021
+@modified    03.01.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -9909,11 +9909,12 @@ class SchemaDiagram(wx.ScrolledWindow):
 
     """Returns current zoom level, 1 being 100% and .5 being 50%."""
     def GetZoom(self): return self._zoom
-    def SetZoom(self, zoom, refresh=True, focus=None):
+    def SetZoom(self, zoom, remake=True, refresh=True, focus=None):
         """
         Sets current zoom scale
 
         @param   zoom     scale factor, will be constrained to valid min-max range
+        @param   remake   remake item bitmaps
         @param   refresh  update display immediately
         @param   focus    point to retain at the same position in viewport,
                           defaults to current viewport top left
@@ -9963,7 +9964,8 @@ class SchemaDiagram(wx.ScrolledWindow):
             finally:
                 if refresh: self.Thaw()
 
-        self._DoItemBitmaps(callback=("SetZoom", after))
+        if remake: self._DoItemBitmaps(callback=("SetZoom", after))
+        else: after()
         return True
     Zoom = property(GetZoom, SetZoom)
 
@@ -10144,60 +10146,69 @@ class SchemaDiagram(wx.ScrolledWindow):
         guibase.status("Exported schema diagram to %s.", filename, log=True)
 
 
-    def MakeBitmap(self, zoom=None, defaultcolours=False, statistics=None):
+    def MakeBitmap(self, zoom=None, defaultcolours=False, selections=True, statistics=None, show_lines=None):
         """
         Returns diagram as wx.Bitmap.
 
         @param   zoom            zoom level to use if not current
         @param   defaultcolours  whether bitmap should use default colours instead of system theme
+        @param   selections      whether currently selected items should be drawn as selected
         @param   statistics      whether bitmap should include statistics,
                                  overrides current statistics setting
+        @param   show_lines      whether bitmap should include relation lines,
+                                 overrides current lines setting
         """
-        self.Freeze()
-        try:
-            zoom0, stats0 = self._zoom, self._show_stats
+        zoom0, stats0, lines0 = self._zoom, self._show_stats, self._show_lines
+        linesbak = copy.deepcopy(self._lines)
+        selsbak  = copy.deepcopy(self._sels)
 
-            change_colours = defaultcolours and not self._IsDefaultColours()
-            self._use_cache = not change_colours
-            if change_colours: self._UpdateColours(defaults=True)
-            remake = change_colours
-            if statistics is not None and bool(statistics) != self._show_stats:
-                self._show_stats, remake = bool(statistics), True
+        change_colours = defaultcolours and not self._IsDefaultColours()
+        self._use_cache = not change_colours
+        if change_colours: self._UpdateColours(defaults=True)
+        if statistics is not None: self._show_stats = bool(statistics)
+        if show_lines is not None: self._show_lines = bool(show_lines)
+        if not selections:         self._sels.clear()
 
-            if zoom is not None:
-                zoom = float(zoom) - zoom % self.ZOOM_STEP # Even out to allowed step
-                zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
-                if self._zoom == zoom: zoom = None
+        if zoom is not None:
+            zoom = float(zoom) - zoom % self.ZOOM_STEP # Even out to allowed step
+            zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
+            if self._zoom == zoom: zoom = None
 
-            if zoom is not None: self.SetZoom(zoom)
-            elif remake: self.Redraw(remake=True)
+        if zoom is not None: self.SetZoom(zoom, remake=False, refresh=False)
 
-            bounds, ids, bounder = wx.Rect(), list(self._ids), self._dc.GetIdBounds
-            if ids: bounds = sum(map(bounder, ids[1:]), bounder(ids[0]))
-            bounds.Inflate(10, 10)
+        bounds, ids, bounder = wx.Rect(), list(self._ids), self._dc.GetIdBounds
+        if ids: bounds = sum(map(bounder, ids[1:]), bounder(ids[0]))
 
-            bmp = wx.Bitmap(self.VirtualSize)
-            dc = wx.MemoryDC(bmp)
-            dc.Background = controls.BRUSH(self.BackgroundColour)
-            dc.Clear()
-            dc.Font = self._font
-            self._dc.DrawToDCClipped(dc, bounds)
+        MARGIN = int(math.ceil(10 * self._zoom))
+        shift = [MARGIN - v for v in bounds.TopLeft]
+        bmp = wx.Bitmap([v + 2 * MARGIN for v in bounds.Size])
+        dc = wx.MemoryDC(bmp)
+        dc.Background = controls.BRUSH(self.BackgroundColour)
+        dc.Clear()
+        dc.Font = self._font
 
-            bmp2 = wx.Bitmap(bounds.Width, bounds.Height)
-            dc2 = wx.MemoryDC(bmp2)
-            dc2.Background = controls.BRUSH(self.BackgroundColour)
-            dc2.Clear()
-            dc2.Blit(0, 0, bounds.Width, bounds.Height, dc, bounds.Left, bounds.Top)
-            del dc
+        self.RecordLines(remake=True, dc=dc, shift=shift)
+        for o in (o for o in self._order if o["name"] not in self._sels):
+            pos = [a + b for a, b in zip(self._dc.GetIdBounds(o["id"])[:2], shift)]
+            obmp, _ = self._GetItemBitmaps(o, self._show_stats and o["stats"])
+            dc.DrawBitmap(obmp, pos, useMask=True)
+        for name in self._sels:
+            pos = [a + b - 2 * self._zoom
+                   for a, b in zip(self._dc.GetIdBounds(o["id"])[:2], shift)]
+            _, obmp = self._GetItemBitmaps(o, self._show_stats and o["stats"])
+            dc.DrawBitmap(obmp, pos, useMask=True)
+        dc.SelectObject(wx.NullBitmap)
+        del dc
 
-            if change_colours: self._UpdateColours()
-            if self._show_stats != stats0: self._show_stats = stats0
+        if change_colours: self._UpdateColours()
+        if self._show_stats != stats0: self._show_stats = stats0
+        if self._show_lines != lines0: self._show_lines = lines0
+        self._use_cache = True
+        if zoom is not None: self.SetZoom(zoom0, remake=False, refresh=False)
+        self._lines.update(linesbak)
+        self._sels .update(selsbak)
 
-            self._use_cache = True
-            if zoom is not None: self.SetZoom(zoom0)
-            elif remake: self.Redraw(remake=True)
-        finally: self.Thaw()
-        return bmp2
+        return bmp
 
 
     def MakeTemplate(self, filetype, zoom=None, statistics=None):
@@ -10560,8 +10571,15 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._dc.SetId(-1)
 
 
-    def RecordLines(self, remake=False, recalculate=False):
-        """Records foreign relation lines to DC if showing lines is enabled."""
+    def RecordLines(self, remake=False, recalculate=False, dc=None, shift=None):
+        """
+        Records foreign relation lines to DC if showing lines is enabled.
+
+        @param   remake       whether to recalculate lines of not only selected items
+        @param   recalculate  whether to recalculate lines of selected items
+        @param   dc           wx.DC to use if not own PseudoDC
+        @param   shift        line coordinate shift as (dx, dy) if any
+        """
         if not self._show_lines: return
         if remake or recalculate: self._CalculateLines(remake)
 
@@ -10577,20 +10595,24 @@ class SchemaDiagram(wx.ScrolledWindow):
         cornerpen = controls.PEN(controls.ColourManager.Adjust(self.LineColour,  self.BackgroundColour))
         cornerfadedpen = controls.PEN(controls.ColourManager.Adjust(fadedcolour, self.BackgroundColour))
 
+        adjust = (lambda *a: [a + b for a, b in zip(a, shift)]) if shift else lambda *a: a
+
+        dc = dc or self._dc
         for (name1, name2, cols), opts in sorted(self._lines.items(),
                 key=lambda x: any(n in self._sels for n in x[0][:2])):
             if not opts["pts"]: continue # for (name1, name2, cols)
             b1, b2 = (self._dc.GetIdBounds(o["id"])
                       for o in map(self._objs.get, (name1, name2)))
 
-            self._dc.RemoveId(opts["id"])
-            self._dc.SetId(opts["id"])
+            if isinstance(dc, wx.adv.PseudoDC):
+                dc.RemoveId(opts["id"])
+                dc.SetId(opts["id"])
 
             lpen = linepen
             if self._dragrect and not any(self._dragrectabs.Contains(b) for b in (b1, b2)) \
             or self._sels and name1 not in self._sels and name2 not in self._sels:
                 lpen = linefadedpen # Draw lines of not-focused items more faintly
-            self._dc.SetPen(lpen)
+            dc.SetPen(lpen)
 
             pts = opts["pts"]
             cpts, bounds = [], wx.Rect()
@@ -10602,14 +10624,14 @@ class SchemaDiagram(wx.ScrolledWindow):
                 mywpt1, mywpt2 = wpt1[:], wpt2[:]
                 axis = 0 if wpt1[0] != wpt2[0] else 1
                 direction = 1 if wpt1[axis] < wpt2[axis] else -1
-                if i: # Not first step: shift start 1px further
-                    shift = 1 if direction > 0 else 0
-                    mywpt1 = wpt1[0] + (1 - axis) * shift, wpt1[1] + axis * shift
-                elif direction < 0: # First step going backward: shift start 1px closer
+                if i: # Not first step: nudge start 1px further
+                    nudge = 1 if direction > 0 else 0
+                    mywpt1 = wpt1[0] + (1 - axis) * nudge, wpt1[1] + axis * nudge
+                elif direction < 0: # First step going backward: nudge start 1px closer
                     mywpt1 = mywpt1[0] + 1, mywpt1[1]
-                if i < len(pts) - 2: # Not last step: shift end 1px closer
-                    shift = -1 if direction < 0 else 0
-                    mywpt2 = wpt2[0] - (1 - axis) * shift, wpt2[1] - axis * shift
+                if i < len(pts) - 2: # Not last step: nudge end 1px closer
+                    nudge = -1 if direction < 0 else 0
+                    mywpt2 = wpt2[0] - (1 - axis) * nudge, wpt2[1] - axis * nudge
                 if i: # Add smoothing point at corner between this and last step
                     wpt0 = pts[i - 1]
                     dx = -1 if not axis and direction < 0 else 0
@@ -10618,14 +10640,14 @@ class SchemaDiagram(wx.ScrolledWindow):
                            mywpt1[1] + (1 - axis) * (-1 if wpt0[1] < wpt1[1] else 1) + dy)
                     cpts.append(cpt)
 
-                self._dc.DrawLine(mywpt1, mywpt2)
+                dc.DrawLine(adjust(*mywpt1), adjust(*mywpt2))
 
             # Draw cardinality crowfoot
             ptc0 = pts[0][0] + self.CARDINALW * (-1 if pts[0][0] > pts[1][0] else 1), pts[0][1]
             ptc1 = pts[0][0], ptc0[1] - self.CARDINALH
             ptc2 = pts[0][0], ptc0[1] + self.CARDINALH
-            self._dc.DrawLine(ptc1, ptc0)
-            self._dc.DrawLine(ptc2, ptc0)
+            dc.DrawLine(adjust(*ptc1), adjust(*ptc0))
+            dc.DrawLine(adjust(*ptc2), adjust(*ptc0))
 
             # Draw foreign key label
             if self._show_labels:
@@ -10639,19 +10661,20 @@ class SchemaDiagram(wx.ScrolledWindow):
                 tbrush, tpen = textbrush, textpen
                 if self._dragrect and self._dragrectabs.Contains((tx, ty, tw, th)):
                     tbrush, tpen = textdragbrush, textdragpen
-                self._dc.SetBrush(tbrush)
-                self._dc.SetPen(tpen)
-                self._dc.DrawRectangle(tx, ty, tw, th)
-                self._dc.SetTextForeground(lpen.Colour)
-                self._dc.DrawText(tname, tx, ty)
+                dc.SetBrush(tbrush)
+                dc.SetPen(tpen)
+                dc.DrawRectangle(adjust(tx, ty), (tw, th))
+                dc.SetTextForeground(lpen.Colour)
+                dc.DrawText(tname, adjust(tx, ty))
                 bounds.Union((tx, ty, tw, th))
 
             # Draw inner rounded corners
-            self._dc.SetPen(cornerfadedpen if lpen == linefadedpen else cornerpen)
-            for cpt in cpts: self._dc.DrawPoint(cpt)
+            dc.SetPen(cornerfadedpen if lpen == linefadedpen else cornerpen)
+            for cpt in cpts: dc.DrawPoint(adjust(*cpt))
 
-            self._dc.SetIdBounds(opts["id"], bounds)
-            self._dc.SetId(-1)
+            if isinstance(dc, wx.adv.PseudoDC):
+                dc.SetIdBounds(opts["id"], bounds)
+                dc.SetId(-1)
 
 
     def GetLayout(self, active=True):

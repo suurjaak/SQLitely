@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.01.2021
+@modified    03.01.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3795,7 +3795,9 @@ class DatabasePage(wx.Panel):
         try:
             data, diagram = self.statistics.get("data") or {}, None
             if "HTML" == extname.upper():
-                diagram = self.diagram.MakeBitmap(zoom=1, defaultcolours=True, statistics=True)
+                diagram = self.diagram.MakeBitmap(zoom=1, defaultcolours=True,
+                                                  selections=False, statistics=True,
+                                                  show_lines=True)
             importexport.export_stats(filename, self.db, data, diagram)
             util.start_file(filename)
         except Exception as e:
