@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.01.2021
+@modified    02.01.2021
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1327,8 +1327,8 @@ def urlquote(v): return urllib.quote(util.to_str(v, "utf-8"), safe="")
       text-overflow: ellipsis;
     }
     .right { text-align: right !important; }
-    .name { word-break: break-all; word-break: break-word; }
-    .nowrap { word-break: normal !important; }
+    .name { word-break: break-all; overflow-wrap: anywhere; }
+    .nowrap { word-break: normal !important; overflow-wrap: normal !important; }
     .table { color: {{ conf.PlotTableColour }}; }
     .index { color: {{ conf.PlotIndexColour }}; }
     table.plot {
@@ -1371,7 +1371,7 @@ def urlquote(v): return urllib.quote(util.to_str(v, "utf-8"), safe="")
       position: relative;
       vertical-align: top;
       word-break: break-all;
-      word-break: break-word;
+      overflow-wrap: anywhere;
     }
     table.content > tbody > tr > th {
       text-align: center;
@@ -1384,7 +1384,7 @@ def urlquote(v): return urllib.quote(util.to_str(v, "utf-8"), safe="")
     table.subtable > tbody > tr > td:last-child { text-align: right; vertical-align: top; }
     a, a.visited { color: #3399FF; text-decoration: none; }
     a:hover, a.visited:hover { text-decoration: underline; }
-    div.sql { font-family: monospace; text-align: left; white-space: pre-wrap; word-break: break-all; word-break: break-word; }
+    div.sql { font-family: monospace; text-align: left; white-space: pre-wrap; word-break: break-all; overflow-wrap: anywhere; }
     a.sort:hover, a.toggle:hover { cursor: pointer; text-decoration: none; }
     a.toggle { white-space: nowrap; }
     a.toggle::after { content: " \\\\25b6"; }
@@ -1622,21 +1622,23 @@ has_rows = any(x.get("count") or 0 for x in db.schema.get("table", {}).values())
 %endif
 
 
+%if any(db.schema.values()):
+
 <div class="section">
 
-%for category in filter(db.schema.get, db.CATEGORIES):
+    %for category in filter(db.schema.get, db.CATEGORIES):
 
 <h2><a class="toggle open" title="Toggle {{ util.plural(category) }}" id="toggle_{{ category }}" onclick="onToggle(this, '{{ category }}')">{{ util.plural(category).capitalize() }}</a></h2>
 <table class="content" id="{{ category }}">
   <tr>
 		<th class="index">#</th>
-    %for i, col in enumerate(COLS[category]):
+        %for i, col in enumerate(COLS[category]):
 		<th>
       <a class="sort" title="Sort by {{ grammar.quote(col, force=True) }}" onclick="onSort('{{ category }}', {{ i + 1 }})">{{ col }}</a>
     </th>
-    %endfor
+        %endfor
 	</tr>
-    %for itemi, item in enumerate(db.schema[category].values()):
+        %for itemi, item in enumerate(db.schema[category].values()):
 <%
 flags = {}
 relateds = db.get_related(category, item["name"])
@@ -1661,7 +1663,7 @@ lks, fks = db.get_keys(item["name"]) if "table" == category else [(), ()]
     </td>
 
 
-        %if "table" == category:
+            %if "table" == category:
 <%
 count = item["count"]
 countstr = util.count(item)
@@ -1669,9 +1671,9 @@ countstr = util.count(item)
     <td>
       <a class="toggle right" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urlquote(item["name"]) }}/cols')">{{ len(item["columns"]) }}</a>
       <table class="hidden" id="{{ category }}/{{! urlquote(item["name"]) }}/cols">
-            %for c in item["columns"]:
+                %for c in item["columns"]:
         <tr><td>{{ util.unprint(c["name"]) }}</td><td>{{ util.unprint(c.get("type", "")) }}</td></tr>
-            %endfor
+                %endfor
       </table>
     </td>
 
@@ -1682,7 +1684,7 @@ countstr = util.count(item)
 <%
 rels = [] # [(source, keys, target, keys)]
 %>
-            %for item2 in relateds.get("table", {}).values():
+                %for item2 in relateds.get("table", {}).values():
 <%
 
 lks2, fks2 = db.get_keys(item2["name"])
@@ -1697,94 +1699,94 @@ for col in fks2:
             rels.append((item2["name"], col["name"], None, keys))
 %>
   <a href="#{{category}}/{{! urlquote(item2["name"]) }}" title="Go to {{ category }} {{ grammar.quote(item2["name"], force=True) }}">{{ item2["name"] }}</a><br />
-            %endfor
+                %endfor
           </td>
-            %if rels:
+                %if rels:
           <td>
             <a class="toggle" title="Toggle foreign keys" onclick="onToggle(this, '{{ category }}/{{! urlquote(item["name"]) }}/related')">FKs</a>
           </td>
-            %endif
+                %endif
         </tr>
       </table>
 
-            %if rels:
+                %if rels:
       <div class="hidden" id="{{ category }}/{{! urlquote(item["name"]) }}/related">
         <br />
-                %for (a, c1, b, c2) in rels:
-                    %if a:
+                    %for (a, c1, b, c2) in rels:
+                        %if a:
         <a href="#table/{{! urlquote(a) }}" title="Go to table {{ grammar.quote(a, force=True) }}">{{ util.unprint(grammar.quote(a)) }}</a>.{{ fmtkeys(c1) }} REFERENCES {{ fmtkeys(c2) }}<br />
-                    %else:
+                        %else:
         {{ fmtkeys(c1) }} REFERENCES <a href="#table/{{! urlquote(b) }}" title="Go to table {{ util.unprint(grammar.quote(b, force=True)) }}">{{ grammar.quote(b) }}</a>.{{ fmtkeys(c2) }}<br />
-                    %endif
-                %endfor
+                        %endif
+                    %endfor
         </div>
-            %endif
+                %endif
     </td>
 
     <td>
-            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
-                %if "table" != item2["type"] and util.lceq(item2.get("tbl_name"), item["name"]):
+                %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
+                    %if "table" != item2["type"] and util.lceq(item2.get("tbl_name"), item["name"]):
 <%
 flags["has_direct"] = True
 %>
   {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}">{{ util.unprint(item2["name"]) }}</a><br />
-                %endif
-            %endfor
-
-            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
-                %if "table" != item2["type"] and not util.lceq(item2.get("tbl_name"), item["name"]):
-                    %if flags.get("has_direct") and not flags.get("has_indirect"):
-  <br />
                     %endif
+                %endfor
+
+                %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
+                    %if "table" != item2["type"] and not util.lceq(item2.get("tbl_name"), item["name"]):
+                        %if flags.get("has_direct") and not flags.get("has_indirect"):
+  <br />
+                        %endif
 <%
 flags["has_indirect"] = True
 %>
   <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}">{{ util.unprint(item2["name"]) }}</a></em><br />
-                %endif
-            %endfor
+                    %endif
+                %endfor
     </td>
     <td class="right nowrap" title="{{ count }}" data-sort="{{ count }}">
       {{ countstr }}
     </td>
 
-            %if stats.get("table"):
+                %if stats.get("table"):
 <%
 size = next((x["size_total"] for x in stats["table"] if util.lceq(x["name"], item["name"])), "")
 %>
     <td class="right nowrap" title="{{ util.format_bytes(size) if size != "" else "" }}" data-sort="{{ size }}">
       {{ util.format_bytes(size, max_units=False, with_units=False) if size != "" else "" }}
     </td>
-            %endif
+                %endif
 
         %endif
 
 
-        %if "index" == category:
+            %if "index" == category:
     <td>
       <a href="#table/{{! urlquote(item["tbl_name"]) }}" title="Go to table {{ grammar.quote(item["tbl_name"], force=True) }}">{{ item["tbl_name"] }}</a>
     </td>
     <td>
-            %for col in item["columns"]:
-                %if col.get("expr"):
+                %for col in item["columns"]:
+                    %if col.get("expr"):
       <pre>{{ col["expr"] }}</pre>
-                %else:
+                    %else:
       {{ util.unprint(col["name"]) }}
-                %endif
+                    %endif
       <br />
-            %endfor
+                %endfor
     </td>
-            %if stats.get("index"):
+                %if stats.get("index"):
 <%
 size = next((x["size"] for x in stats["index"] if util.lceq(x["name"], item["name"])), "")
 %>
     <td class="right nowrap" title="{{ util.format_bytes(size) if size != "" else "" }}" data-sort="{{ size }}">
       {{ util.format_bytes(size, max_units=False, with_units=False) if size != "" else "" }}
     </td>
+                %endif
             %endif
-        %endif
 
 
-        %if "trigger" == category:
+            %if "trigger" == category:
     <td>
 <%
 mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "view"
@@ -1793,74 +1795,84 @@ mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "v
     </td>
     <td>
       {{ item.get("meta", {}).get("upon") }} {{ item.get("meta", {}).get("action") }}
-            %if item.get("meta", {}).get("columns"):
+                %if item.get("meta", {}).get("columns"):
       OF {{ ", ".join(grammar.quote(c["name"]) for c in item["meta"]["columns"]) }}
-            %endif
+                %endif
     </td>
     <td>
-            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
-                %if not util.lceq(item2["name"], item["tbl_name"]):
+                %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
+                    %if not util.lceq(item2["name"], item["tbl_name"]):
   <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}">{{ util.unprint(item2["name"]) }}</a></em><br />
-                %endif
-            %endfor
+                    %endif
+                %endfor
     </td>
-        %endif
+            %endif
 
 
-        %if "view" == category:
+            %if "view" == category:
     <td>
       <a class="toggle" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urlquote(item["name"]) }}/cols')">{{ len(item["columns"]) }}</a>
       <table class="hidden" id="{{ category }}/{{! urlquote(item["name"]) }}/cols">
-            %for col in item["columns"]:
+                %for col in item["columns"]:
         <tr><td>{{ util.unprint(col["name"]) }}</td><td>{{ util.unprint(col.get("type", "")) }}</td></tr>
-            %endfor
+                %endfor
       </table>
     </td>
 
     <td>
-            %for item2 in (x for c in ("table", "view") for x in relateds.get(c, {}).values() if x["name"].lower() in item["meta"]["__tables__"]):
+                %for item2 in (x for c in ("table", "view") for x in relateds.get(c, {}).values() if x["name"].lower() in item["meta"]["__tables__"]):
       {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}">{{ util.unprint(item2["name"]) }}</a><br />
-            %endfor
+                %endfor
 
-            %for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, {}).values() if util.lceq(x.get("tbl_name"), item["name"])):
-                %if not i:
+                %for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, {}).values() if util.lceq(x.get("tbl_name"), item["name"])):
+                    %if not i:
       <br />
-                %endif
+                    %endif
       {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}">{{ util.unprint(item2["name"]) }}</a><br />
-            %endfor
+                %endfor
 
     </td>
 
     <td>
-            %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values() if item["name"].lower() in x["meta"]["__tables__"]):
+                %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values() if item["name"].lower() in x["meta"]["__tables__"]):
       <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}">{{ util.unprint(item2["name"]) }}</a></em><br />
-            %endfor
+                %endfor
     </td>
-        %endif
+            %endif
 
   </tr>
-    %endfor
+        %endfor
 </table>
 
-%endfor
+    %endfor
 
 </div>
 
+%endif
+
+
+%if pragma or sql:
 
 <div class="section">
 
+    %if pragma:
 <h2><a class="toggle" title="Toggle PRAGMAs" onclick="onToggle(this, 'pragma')">PRAGMA settings</a></h2>
 <div class="hidden sql" id="pragma">
 {{! Template(templates.PRAGMA_SQL).expand(pragma=pragma) }}
 </div>
+    %endif
 
 
+    %if sql:
 <h2><a class="toggle" title="Toggle full schema" onclick="onToggle(this, 'schema')">Full schema SQL</a></h2>
 <div class="hidden sql" id="schema">
 {{ sql }}
 </div>
+    %endif
 
 </div>
+
+%endif
 
 
 </div>
