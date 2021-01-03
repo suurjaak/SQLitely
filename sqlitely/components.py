@@ -10129,6 +10129,8 @@ class SchemaDiagram(wx.ScrolledWindow):
 
     def SaveFile(self):
         """Opens file dialog and exports diagram in selected format."""
+        if not self._objs: return guibase.status("Empty schema, nothing to export.")
+
         title = os.path.splitext(os.path.basename(self._db.name))[0]
         self._dlg_save.Filename = util.safe_filename(title + " schema")
         if wx.ID_OK != self._dlg_save.ShowModal(): return
@@ -10158,6 +10160,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         @param   show_lines      whether bitmap should include relation lines,
                                  overrides current lines setting
         """
+        if not self._objs: return None
+
         zoom0, stats0, lines0 = self._zoom, self._show_stats, self._show_lines
         linesbak = copy.deepcopy(self._lines)
         selsbak  = copy.deepcopy(self._sels)
