@@ -10602,6 +10602,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         adjust = (lambda *a: [a + b for a, b in zip(a, shift)]) if shift else lambda *a: a
 
         dc = dc or self._dc
+        dc.SetFont(self._font)
         for (name1, name2, cols), opts in sorted(self._lines.items(),
                 key=lambda x: any(n in self._sels for n in x[0][:2])):
             if not opts["pts"]: continue # for (name1, name2, cols)
