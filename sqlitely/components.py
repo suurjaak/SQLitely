@@ -9806,6 +9806,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                                   wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE)
         self._font_bold = util.memoize(wx.Font, self.FONT_SIZE, wx.FONTFAMILY_MODERN, wx.FONTSTYLE_NORMAL,
                                        wx.FONTWEIGHT_BOLD, faceName=self.FONT_FACE)
+        self.SetFont(self._font)
 
         self.Bind(wx.EVT_ERASE_BACKGROUND,    lambda x: None) # Reduces flicker
         self.Bind(wx.EVT_MOUSE_EVENTS,        self._OnMouse)
@@ -10140,7 +10141,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         wxtype   = next(k for k, v in self.EXPORT_FORMATS.items() if v == filetype)
 
         if "SVG" == filetype:
-            content = self.MakeTemplate(filetype, zoom=1)
+            content = self.MakeTemplate(filetype)
             with open(filename, "wb") as f: f.write(content)
         else:
             self.MakeBitmap().SaveFile(filename, wxtype)
@@ -10148,7 +10149,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         guibase.status("Exported schema diagram to %s.", filename, log=True)
 
 
-    def MakeBitmap(self, zoom=None, defaultcolours=False, selections=True, statistics=None, show_lines=None):
+    def MakeBitmap(self, zoom=None, defaultcolours=False,
+                   selections=True, statistics=None, show_lines=None, show_labels=None):
         """
         Returns diagram as wx.Bitmap.
 
@@ -10159,19 +10161,22 @@ class SchemaDiagram(wx.ScrolledWindow):
                                  overrides current statistics setting
         @param   show_lines      whether bitmap should include relation lines,
                                  overrides current lines setting
+        @param   show_labels     whether bitmap should include relation labels,
+                                 overrides current labels setting
         """
         if not self._objs: return None
 
-        zoom0, stats0, lines0 = self._zoom, self._show_stats, self._show_lines
-        linesbak = copy.deepcopy(self._lines)
-        selsbak  = copy.deepcopy(self._sels)
+        zoom0, showstats0 = self._zoom, self._show_stats
+        showlines0, showlabels0 = self._show_lines, self._show_labels
+        lines0, sels0 = copy.deepcopy(self._lines), copy.deepcopy(self._sels)
 
         change_colours = defaultcolours and not self._IsDefaultColours()
         self._use_cache = not change_colours
         if change_colours: self._UpdateColours(defaults=True)
-        if statistics is not None: self._show_stats = bool(statistics)
-        if show_lines is not None: self._show_lines = bool(show_lines)
-        if not selections:         self._sels.clear()
+        if statistics  is not None: self._show_stats  = bool(statistics)
+        if show_lines  is not None: self._show_lines  = bool(show_lines)
+        if show_labels is not None: self._show_labels = bool(show_labels)
+        if not selections:          self._sels.clear()
 
         if zoom is not None:
             zoom = float(zoom) - zoom % self.ZOOM_STEP # Even out to allowed step
@@ -10205,65 +10210,67 @@ class SchemaDiagram(wx.ScrolledWindow):
         del dc
 
         if change_colours: self._UpdateColours()
-        if self._show_stats != stats0: self._show_stats = stats0
-        if self._show_lines != lines0: self._show_lines = lines0
+        if self._show_stats  != showstats0:  self._show_stats  = showstats0
+        if self._show_lines  != showlines0:  self._show_lines  = showlines0
+        if self._show_labels != showlabels0: self._show_labels = showlabels0
         self._use_cache = True
         if zoom is not None: self.SetZoom(zoom0, remake=False, refresh=False)
-        self._lines.update(linesbak)
-        self._sels .update(selsbak)
+        self._lines.update(lines0)
+        self._sels .update(sels0)
 
         return bmp
 
 
-    def MakeTemplate(self, filetype, zoom=None, statistics=None):
+    def MakeTemplate(self, filetype,
+                     selections=True, statistics=None, show_lines=None, show_labels=None):
         """
         Returns diagram as template content.
 
         @param   filetype        template type like "SVG"
-        @param   zoom            zoom level to use if not current
-        @param   statistics      whether bitmap should include statistics,
+        @param   selections      whether currently selected items should be drawn as selected
+        @param   statistics      whether result should include statistics,
                                  overrides current statistics setting
+        @param   show_lines      whether result should include relation lines,
+                                 overrides current lines setting
+        @param   show_labels     whether result should include relation labels,
+                                 overrides current labels setting
         """
-        if "SVG" != filetype: return
-        self.Freeze()
-        try:
-            zoom0, showlines0 = self._zoom, self._show_lines
+        if "SVG" != filetype or not self._objs: return
 
-            if zoom is not None:
-                zoom = float(zoom) - zoom % self.ZOOM_STEP # Even out to allowed step
-                zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
-                if self._zoom == zoom: zoom = None
+        zoom0, showstats0 = self._zoom, self._show_stats
+        showlines0, showlabels0 = self._show_lines, self._show_labels
+        lines0, sels0 = copy.deepcopy(self._lines), copy.deepcopy(self._sels)
 
-            if not self._show_lines:
-                self._show_lines = True
-            if zoom is not None: self.SetZoom(zoom)
-            else: self._CalculateLines(remake=True)
+        if statistics  is not None: self._show_stats  = bool(statistics)
+        if show_lines  is not None: self._show_lines  = bool(show_lines)
+        if show_labels is not None: self._show_labels = bool(show_labels)
+        if not selections:          self._sels.clear()
 
-            get_extent = lambda t, f=self._font: util.memoize(self.GetFullTextExtent, t, f,
-                                                              __key__="GetFullTextExtent")
+        if self._zoom != self.ZOOM_DEFAULT:
+            self.SetZoom(self.ZOOM_DEFAULT, remake=False, refresh=False)
+            self._CalculateLines(remake=True)
 
-            stats = statistics is not False and statistics or self._show_stats
-            bounds, ids, bounder = wx.Rect(), list(self._ids), self._dc.GetIdBounds
-            if ids: bounds = sum(map(bounder, ids[1:]), bounder(ids[0]))
-            bounds.Union(wx.Rect(bounds.bottomRight, wx.Size(*[2 * self.GPAD + 1]*2)))
-            if stats and not self._show_stats:
-                bounds.Union(wx.Rect(bounds.bottomRight, (1, self.STATSH)))
+        get_extent = lambda t, f=self._font: util.memoize(self.GetFullTextExtent, t, f,
+                                                          __key__="GetFullTextExtent")
 
-            tpl = step.Template(templates.DIAGRAM_SVG, strip=False)
-            title = os.path.splitext(os.path.basename(self._db.name))[0] + " schema"
-            ns = {"title": title, "db": self._db, "items": [], "lines": self._lines,
-                  "bounds": bounds, "stats": util.CaselessDict(), "get_extent": get_extent}
-            for o in self._objs.values():
-                opts = self._db.schema[o["type"]].get(o["name"])
-                if opts and stats: ns["stats"][o["name"]] = o["stats"]
-                item = dict(opts or {}, **o)
-                item["bounds"] = self._dc.GetIdBounds(o["id"])
-                ns["items"].append(item)
-            result = tpl.expand(ns)
+        tpl = step.Template(templates.DIAGRAM_SVG, strip=False)
+        title = os.path.splitext(os.path.basename(self._db.name))[0] + " schema"
+        ns = {"title": title, "items": [], "lines": self._lines if self._show_lines else {},
+              "show_labels": self._show_labels, "get_extent": get_extent,
+              "fonts": {"normal": self.Font, "bold": self.Font.Bold()}}
+        for o in self._objs.values():
+            item = dict(o, bounds=self._dc.GetIdBounds(o["id"]))
+            if not self._show_stats: item.pop("stats")
+            ns["items"].append(item)
+        result = tpl.expand(ns)
 
-            self._show_lines = showlines0
-            if zoom is not None: self.SetZoom(zoom0)
-        finally: self.Thaw()
+        if self._show_stats  != showstats0:  self._show_stats  = showstats0
+        if self._show_lines  != showlines0:  self._show_lines  = showlines0
+        if self._show_labels != showlabels0: self._show_labels = showlabels0
+        if zoom0 != self._zoom: self.SetZoom(zoom0, remake=False, refresh=False)
+        self._lines.update(lines0)
+        self._sels .update(sels0)
+
         return result
 
 

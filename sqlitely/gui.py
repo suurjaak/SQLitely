@@ -3465,6 +3465,9 @@ class DatabasePage(wx.Panel):
             self.diagram.Populate()
             self.populate_diagram_finder()
             self.on_pragma_refresh(reload=True)
+            self.update_autocomp()
+
+            # Update name of the item's data/schema pages
             for page, pagemap, nb in zip(pages, [self.data_pages, self.schema_pages],
                                          [self.notebook_data, self.notebook_schema]):
                 for myitem in self.pages_closed.get(nb, []):
@@ -3537,9 +3540,8 @@ class DatabasePage(wx.Panel):
             self.load_tree_schema()
             self.diagram.Populate()
             self.on_pragma_refresh(reload=True)
-            for page in pages:
-                if isinstance(page, components.SchemaObjectPage):
-                    page.Reload(item=self.db.get_category("table", table))
+            self.update_autocomp()
+            for page in pages: page.Reload(item=self.db.get_category("table", table))
             self.toggle_cursors("table", table)
             return True
 
@@ -3548,6 +3550,7 @@ class DatabasePage(wx.Panel):
             self.update_info_panel()
             if conf.RunStatistics: self.on_update_statistics()
             self.on_pragma_refresh(reload=True)
+            self.update_autocomp()
             for p in (y for x in self.data_pages.values() for y in x.values()):
                 if not p.IsChanged(): p.Reload()
             for p in (y for x in self.schema_pages.values() for y in x.values()):
@@ -3797,7 +3800,7 @@ class DatabasePage(wx.Panel):
             if "HTML" == extname.upper():
                 diagram = self.diagram.MakeBitmap(zoom=1, defaultcolours=True,
                                                   selections=False, statistics=True,
-                                                  show_lines=True)
+                                                  show_lines=True, show_labels=True)
             importexport.export_stats(filename, self.db, data, diagram)
             util.start_file(filename)
         except Exception as e:
@@ -5414,6 +5417,7 @@ class DatabasePage(wx.Panel):
                     break # for n, p
         if updated and not self.save_underway:
             self.on_pragma_refresh(reload=True)
+            self.update_autocomp()
             self.load_tree_data()
             datapage = self.data_pages.get(category, {}).get(name0 or name)
             if datapage:
@@ -6138,11 +6142,7 @@ class DatabasePage(wx.Panel):
         self.on_update_stc_schema()
         wx.YieldIfNeeded()
         if not self: return
-        import cProfile
-        self.prof2 = cProfile.Profile()
-        self.prof2.enable()
         self.diagram.Populate()
-        self.prof2.disable()
         self.populate_diagram_finder()
         self.cb_diagram_rels.Enable()
         self.cb_diagram_labels.Enable(self.cb_diagram_rels.Value)

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.01.2021
+@modified    05.01.2021
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -2337,13 +2337,12 @@ count += 1
 """
 Database schema diagram SVG template.
 
-@param   bounds      wx.Rect for entire area
-@param   db          database.Database instance
-@param   get_extent  function(text, font=current dc font) returning full text extent
-@param   title       diagram title
-@param   items       diagram objects as [{"name", "bounds", "columns"}]
-@param   lines       diagram relations as {("item1", "item2", ("col1", )): {"name", "pts"}}
-@param   stats       {name: {?size, ?rows}}
+@param   fonts        {"normal": wx.Font, "bold": wx.Font}
+@param   get_extent   function(text, font=current dc font) returning full text extent
+@param   items        diagram objects as [{"name", "bounds", "columns", "stats"}]
+@param   lines        diagram relations as {("item1", "item2", ("col1", )): {"name", "pts"}}
+@param   show_labels  whether to show foreign relation labels
+@param   title        diagram title
 """
 DIAGRAM_SVG = """<%
 from sqlitely.lib import util
@@ -2353,6 +2352,7 @@ from sqlitely import images, templates
 import wx
 
 CRADIUS     = 1
+MARGIN      = 10
 wincolour   = SchemaDiagram.DEFAULT_COLOURS[wx.SYS_COLOUR_WINDOW]
 wtextcolour = SchemaDiagram.DEFAULT_COLOURS[wx.SYS_COLOUR_WINDOWTEXT]
 gtextcolour = SchemaDiagram.DEFAULT_COLOURS[wx.SYS_COLOUR_GRAYTEXT]
@@ -2360,6 +2360,62 @@ btextcolour = SchemaDiagram.DEFAULT_COLOURS[wx.SYS_COLOUR_BTNTEXT]
 gradcolour  = SchemaDiagram.COLOUR_GRAD_TO
 fontsize    = SchemaDiagram.FONT_SIZE + 3
 texth       = SchemaDiagram.FONT_SIZE + 2
+
+bounds = None
+# Calculate item widths and heights
+MINW, MINH = SchemaDiagram.MINW, SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + SchemaDiagram.FOOTERH
+itemcoltexts, itemcolmax = {}, {} # {item name: [[name, type], ]}, {item name: {"name", "type"}}
+for item in items:
+    # Measure title width
+    title = util.ellipsize(util.unprint(item["name"]), SchemaDiagram.MAX_TITLE)
+    extent = get_extent(title, fonts["bold"]) # (w, h, descent, lead)
+    w, h = max(MINW, extent[0] + extent[3] + 2 * SchemaDiagram.HPAD), MINH
+
+    cols = item.get("columns") or []
+    colmax = itemcolmax[item["name"]] = {"name": 0, "type": 0}
+    coltexts = itemcoltexts[item["name"]] = [] # [[name, type]]
+    for i, c in enumerate(cols):
+        coltexts.append([])
+        for k in ["name", "type"]:
+            v = c.get(k)
+            t = util.ellipsize(util.unprint(c.get(k, "")), SchemaDiagram.MAX_TEXT)
+            coltexts[-1].append(t)
+            if t: extent = get_extent(t)
+            if t: colmax[k] = max(colmax[k], extent[0] + extent[3])
+
+    w = max(w, SchemaDiagram.LPAD + 2 * SchemaDiagram.HPAD + sum(colmax.values()))
+    h += SchemaDiagram.LINEH * len(item.get("columns") or [])
+    if item.get("stats"): h += SchemaDiagram.STATSH - SchemaDiagram.FOOTERH
+
+    item["bounds"] = wx.Rect(item["bounds"].TopLeft, wx.Size(w, h))
+    bounds = bounds.Union(item["bounds"]) if bounds else wx.Rect(item["bounds"])
+    if item["bounds"].Right > bounds.Right:
+        bounds.Right = item["bounds"].Right + SchemaDiagram.HPAD
+    if item["bounds"].Bottom > bounds.Bottom:
+        bounds.Bottom = item["bounds"].Bottom + SchemaDiagram.HPAD
+
+
+# Enlarge bounds by foreign lines/labels
+for line in lines.values():
+    pts = line["pts"]
+    lbounds = wx.Rect(*map(wx.Point, sorted(pts[:2])))
+    for i, pt in enumerate(pts[2:-1:2], 2):
+        lbounds.Union(wx.Rect(*map(wx.Point, sorted(pts[i:i+2]))))
+    bounds.Union(lbounds)
+    if not show_labels: continue # for line
+
+    extent = get_extent(util.ellipsize(util.unprint(line["name"]), SchemaDiagram.MAX_TEXT))
+    tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
+                      if pts[i][0] == pts[i+1][0])
+    tx = tpt1[0]
+    ty = min(tpt1[1], tpt2[1]) + abs(tpt1[1] - tpt2[1]) / 2
+    tw, th = sum(extent[::4]), sum(extent[1:3])
+    bounds.Union(wx.Rect(wx.Point(tx - tw / 2, ty - th), wx.Size(tw, th)))
+
+bounds.Width += 2 * MARGIN; bounds.Height += 2 * MARGIN
+shift = [MARGIN - v for v in bounds.TopLeft]
+adjust = (lambda *a: tuple(a + b for a, b in zip(a, shift))) if shift else lambda *a: a
+
 
 %>
 <?xml version="1.0" encoding="UTF-8" ?>
@@ -2459,10 +2515,12 @@ texth       = SchemaDiagram.FONT_SIZE + 2
 <%
 
 path, pts, R = "", line["pts"], CRADIUS
-tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
-                  if pts[i][0] == pts[i+1][0])
-tx = tpt1[0]
-ty = min(tpt1[1], tpt2[1]) + abs(tpt1[1] - tpt2[1]) / 2
+if show_labels:
+    tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
+                      if pts[i][0] == pts[i+1][0])
+    tx = tpt1[0]
+    ty = min(tpt1[1], tpt2[1]) + abs(tpt1[1] - tpt2[1]) / 2
+    tx, ty = adjust(tx, ty)
 
 for i, pt in enumerate(pts):
     mypt, is_corner = pt, (0 < i < len(pts) - 1)
@@ -2474,7 +2532,7 @@ for i, pt in enumerate(pts):
         if pt[0] == pt0[0]: dy = -R if pt[1] > pt0[1] else R
         mypt = pt[0] + dx, pt[1] + dy
 
-    path += ("  L" if i else "M") + " %s,%s" % tuple(mypt)
+    path += ("  L" if i else "M") + " %s,%s" % adjust(*mypt)
 
     if is_corner: # Draw corner arc
         pt2 = pts[i + 1]
@@ -2495,16 +2553,18 @@ ptc1, ptc2 = [ptc1, ptc2][::1 if to_right else -1]
 crow1, crow2 = "", ""
 for i in range(SchemaDiagram.CARDINALW / 2):
     pt1 = ptc1[0] + i * 2 + (not to_right), ptc1[1] - (SchemaDiagram.CARDINALW / 2 - i if to_right else i + 1)
-    crow1 += "%sM %s,%s h2" % ("  " if i else "", pt1[0], pt1[1])
+    crow1 += "%sM %s,%s h2" % (("  " if i else "", ) + adjust(pt1[0], pt1[1]))
     pt2 = ptc1[0] + i * 2 + (not to_right), ptc1[1] + (SchemaDiagram.CARDINALW / 2 - i if to_right else i + 1)
-    crow2 += "%sM %s,%s h2" % ("  " if i else "", pt2[0], pt2[1])
+    crow2 += "%sM %s,%s h2" % (("  " if i else "", ) + adjust(pt2[0], pt2[1]))
 
 %>
     <g id="{{ util.unprint(name1) }}-{{ util.unprint(name2) }}-{{ util.unprint(line["name"]) }}" class="relation">
       <path d="{{ path }}" />
       <path d="{{ crow1 }}" />
       <path d="{{ crow2 }}" />
+    %if show_labels:
       <text x="{{ tx }}" y="{{ ty }}" class="label">{{ util.ellipsize(util.unprint(line["name"]), SchemaDiagram.MAX_TEXT) }}</text>
+    %endif
     </g>
 %endfor
 
@@ -2517,21 +2577,11 @@ for i in range(SchemaDiagram.CARDINALW / 2):
 %for item in items:
 <%
 
-pks, fks = (sum((list(c["name"]) for c in x), [])
-            for x in db.get_keys(item["name"]))
+pks, fks = item.get("keys") or ((), ())
 cols = item.get("columns") or []
-colmax = {"name": 0, "type": 0}
-coltexts = [] # [[name, type]]
-for i, c in enumerate(cols):
-    coltexts.append([])
-    for k in ["name", "type"]:
-        v = c.get(k)
-        t = util.ellipsize(util.unprint(c.get(k, "")), SchemaDiagram.MAX_TEXT)
-        coltexts[-1].append(t)
-        if t: extent = get_extent(t)
-        if t: colmax[k] = max(colmax[k], extent[0] + extent[3])
+itemx, itemy = adjust(*item["bounds"].TopLeft)
 
-istats = stats.get(item["name"])
+istats = item.get("stats")
 cheight = SchemaDiagram.HEADERP + len(cols) * SchemaDiagram.LINEH
 height = SchemaDiagram.HEADERH + cheight + SchemaDiagram.FOOTERH
 if istats: height += SchemaDiagram.STATSH - SchemaDiagram.FOOTERH
@@ -2539,21 +2589,21 @@ if istats: height += SchemaDiagram.STATSH - SchemaDiagram.FOOTERH
 %>
 
     <g id="{{ util.unprint(item["name"]) }}" class="item {{ item["type"] }}">
-      <rect x="{{ item["bounds"].Left }}" y="{{ item["bounds"].Top }}" width="{{ item["bounds"].Width }}" height="{{ height }}" {{ 'rx="%s" ry="%s" ' % ((SchemaDiagram.BRADIUS, ) * 2) if "table" == item["type"] else "" }}class="box" />
-      <rect x="{{ item["bounds"].Left + 1 }}" y="{{ item["bounds"].Top + SchemaDiagram.HEADERH }}" width="{{ item["bounds"].Width - 1.5 }}" height="{{ cheight }}" class="content" />
-      <path d="M {{ item["bounds"].Left }},{{ item["bounds"].Top + SchemaDiagram.HEADERH }} h{{ item["bounds"].Width }}" class="separator" />
+      <rect x="{{ itemx }}" y="{{ itemy }}" width="{{ item["bounds"].Width }}" height="{{ height }}" {{ 'rx="%s" ry="%s" ' % ((SchemaDiagram.BRADIUS, ) * 2) if "table" == item["type"] else "" }}class="box" />
+      <rect x="{{ itemx + 1 }}" y="{{ itemy + SchemaDiagram.HEADERH }}" width="{{ item["bounds"].Width - 1.5 }}" height="{{ cheight }}" class="content" />
+      <path d="M {{ itemx }},{{ itemy + SchemaDiagram.HEADERH }} h{{ item["bounds"].Width }}" class="separator" />
 
-      <text x="{{ item["bounds"].Left + item["bounds"].Width / 2 }}" y="{{ item["bounds"].Top + SchemaDiagram.HEADERH - SchemaDiagram.HEADERP }}" class="title">{{ util.ellipsize(util.unprint(item["name"]), SchemaDiagram.MAX_TEXT) }}</text>
+      <text x="{{ itemx + item["bounds"].Width / 2 }}" y="{{ itemy + SchemaDiagram.HEADERH - SchemaDiagram.HEADERP }}" class="title">{{ util.ellipsize(util.unprint(item["name"]), SchemaDiagram.MAX_TEXT) }}</text>
 
-      <text x="{{ item["bounds"].Left }}" y="{{ item["bounds"].Top + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth }}" class="columns">
+      <text x="{{ itemx }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth }}" class="columns">
     %for i, col in enumerate(cols):
-        <tspan x="{{ item["bounds"].Left + SchemaDiagram.LPAD }}" y="{{ item["bounds"].Top + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth + i * SchemaDiagram.LINEH }}px">{{ coltexts[i][0] }}</tspan>
+        <tspan x="{{ itemx + SchemaDiagram.LPAD }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth + i * SchemaDiagram.LINEH }}px">{{ itemcoltexts[item["name"]][i][0] }}</tspan>
     %endfor
       </text>
 
-      <text x="{{ item["bounds"].Left }}" y="{{ item["bounds"].Top + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth }}" class="types">
+      <text x="{{ itemx }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth }}" class="types">
     %for i, col in enumerate(cols):
-        <tspan x="{{ item["bounds"].Left + SchemaDiagram.LPAD + colmax["name"] + SchemaDiagram.HPAD }}" y="{{ item["bounds"].Top + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth + i * SchemaDiagram.LINEH }}px">{{ coltexts[i][1] }}</tspan>
+        <tspan x="{{ itemx + SchemaDiagram.LPAD + itemcolmax[item["name"]]["name"] + SchemaDiagram.HPAD }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth + i * SchemaDiagram.LINEH }}px">{{ itemcoltexts[item["name"]][i][1] }}</tspan>
     %endfor
       </text>
 
@@ -2563,7 +2613,7 @@ if istats: height += SchemaDiagram.STATSH - SchemaDiagram.FOOTERH
 text1 = istats.get("rows") or ""
 text2 = istats.get("size") or ""
 
-ty = item["bounds"].Top + height - SchemaDiagram.STATSH + texth - SchemaDiagram.FONT_STEP_STATS
+ty = itemy + height - SchemaDiagram.STATSH + texth - SchemaDiagram.FONT_STEP_STATS
 w1 = next(d[0] + d[3] for d in [get_extent(text1)]) if text1 else 0
 w2 = next(d[0] + d[3] for d in [get_extent(text2)]) if text2 else 0
 if w1 + w2 + 2 * SchemaDiagram.BRADIUS > item["bounds"].Width and item.get("count"):
@@ -2572,12 +2622,12 @@ if w1 + w2 + 2 * SchemaDiagram.BRADIUS > item["bounds"].Width and item.get("coun
 %>
 
       <g class="stats">
-        <path d="M {{ item["bounds"].Left }},{{ item["bounds"].Top + height - SchemaDiagram.STATSH }} h{{ item["bounds"].Width }}" class="separator" />
+        <path d="M {{ itemx }},{{ itemy + height - SchemaDiagram.STATSH }} h{{ item["bounds"].Width }}" class="separator" />
         %if istats.get("rows"):
-          <text x="{{ item["bounds"].Left + SchemaDiagram.BRADIUS }}" y="{{ ty }}" class="rows">{{ text1 }}</text>
+          <text x="{{ itemx + SchemaDiagram.BRADIUS }}" y="{{ ty }}" class="rows">{{ text1 }}</text>
         %endif
         %if istats.get("size"):
-          <text x="{{ item["bounds"].Right - SchemaDiagram.BRADIUS }}" y="{{ ty }}" class="size">{{ text2 }}</text>
+          <text x="{{ itemx + item["bounds"].Width - SchemaDiagram.BRADIUS }}" y="{{ ty }}" class="size">{{ text2 }}</text>
         %endif
       </g>
     %endif
@@ -2585,10 +2635,10 @@ if w1 + w2 + 2 * SchemaDiagram.BRADIUS > item["bounds"].Width and item.get("coun
 
         %for i, col in enumerate(cols):
             %if col["name"] in pks:
-      <use xlink:href="#pk" x="{{ item["bounds"].Left + 3 }}" y="{{ item["bounds"].Top + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + i * SchemaDiagram.LINEH }}" />
+      <use xlink:href="#pk" x="{{ itemx + 3 }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + i * SchemaDiagram.LINEH }}" />
             %endif
             %if col["name"] in fks:
-      <use xlink:href="#fk" x="{{ item["bounds"].Right - 5 - images.DiagramFK.Bitmap.Width }}" y="{{ item["bounds"].Top + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + i * SchemaDiagram.LINEH }}" />
+      <use xlink:href="#fk" x="{{ itemx + item["bounds"].Width - 5 - images.DiagramFK.Bitmap.Width }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + i * SchemaDiagram.LINEH }}" />
             %endif
         %endfor
     %endif
