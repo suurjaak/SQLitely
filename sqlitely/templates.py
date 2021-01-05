@@ -1089,7 +1089,7 @@ Database statistics HTML.
 
 @param   ?error    error message, if any
 @param   ?data     {"table": [{name, size, size_total, ?size_index, ?index: []}],
-                   "index": [{name, size, table}]}
+                    "index": [{name, size, table}]}
 @param   ?running  whether analysis is currently running
 """
 STATISTICS_HTML = """<%
@@ -2557,11 +2557,18 @@ for i in range(SchemaDiagram.CARDINALW / 2):
     pt2 = ptc1[0] + i * 2 + (not to_right), ptc1[1] + (SchemaDiagram.CARDINALW / 2 - i if to_right else i + 1)
     crow2 += "%sM %s,%s h2" % (("  " if i else "", ) + adjust(pt2[0], pt2[1]))
 
+# Assemble parent-item dash
+direction = 2 if pts[-1][1] < pts[-2][1] else -1
+ptd1 = pts[-1][0] - SchemaDiagram.DASHSIDEW - 0.5, pts[-1][1] + direction
+ptd2 = pts[-1][0] + SchemaDiagram.DASHSIDEW + 0.5, ptd1[1]
+dash = "M %s,%s L %s,%s" % (adjust(*ptd1) + adjust(*ptd2))
+
 %>
     <g id="{{ util.unprint(name1) }}-{{ util.unprint(name2) }}-{{ util.unprint(line["name"]) }}" class="relation">
       <path d="{{ path }}" />
       <path d="{{ crow1 }}" />
       <path d="{{ crow2 }}" />
+      <path d="{{ dash }}" />
     %if show_labels:
       <text x="{{ tx }}" y="{{ ty }}" class="label">{{ util.ellipsize(util.unprint(line["name"]), SchemaDiagram.MAX_TEXT) }}</text>
     %endif

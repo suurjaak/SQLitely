@@ -9721,6 +9721,7 @@ class SchemaDiagram(wx.ScrolledWindow):
     FMARGIN   =   2 # Focused item border margin
     CARDINALW =   7 # Horizontal width of cardinality crowfoot
     CARDINALH =   3 # Vertical step for cardinality crowfoot
+    DASHSIDEW =   2 # Horizontal width of one side of parent relation dash
     LPAD      =  15 # Left padding
     HPAD      =  20 # Right and middle padding 
     GPAD      =  30 # Padding between grid items
@@ -9934,7 +9935,8 @@ class SchemaDiagram(wx.ScrolledWindow):
                                        wx.FONTWEIGHT_BOLD, faceName=self.FONT_FACE)
 
         for k in ("MINW", "LINEH", "HEADERP", "HEADERH", "FOOTERH", "BRADIUS",
-        "FMARGIN", "CARDINALW", "CARDINALH", "LPAD", "HPAD", "GPAD", "MOVE_STEP", "STATSH"):
+        "FMARGIN", "CARDINALW", "CARDINALH", "DASHSIDEW", "LPAD", "HPAD",
+        "GPAD", "MOVE_STEP", "STATSH"):
             v = getattr(self.__class__, k)
             setattr(self, k, int(math.ceil(v * zoom)))
 
@@ -10660,6 +10662,12 @@ class SchemaDiagram(wx.ScrolledWindow):
             ptc2 = pts[0][0], ptc0[1] + self.CARDINALH
             dc.DrawLine(adjust(*ptc1), adjust(*ptc0))
             dc.DrawLine(adjust(*ptc2), adjust(*ptc0))
+
+            # Draw parent-item dash
+            direction = 1 if pts[-1][1] > b2.Top else -1
+            ptd1 = pts[-1][0] - self.DASHSIDEW, pts[-1][1] + direction
+            ptd2 = pts[-1][0] + self.DASHSIDEW + 1, ptd1[1]
+            dc.DrawLine(adjust(*ptd1), adjust(*ptd2))
 
             # Draw foreign key label
             if self._show_labels:
