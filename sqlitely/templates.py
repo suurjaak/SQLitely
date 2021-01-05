@@ -2531,7 +2531,8 @@ for i, pt in enumerate(pts):
         if pt[1] == pt0[1]: dx = -R if pt[0] > pt0[0] else R
         if pt[0] == pt0[0]: dy = -R if pt[1] > pt0[1] else R
         mypt = pt[0] + dx, pt[1] + dy
-
+    if pt == pts[-1]: # Pull ending Y back to start exactly at border
+        mypt = mypt[0], mypt[1] + (2 if pt[1] < pts[i-1][1] else -1)
     path += ("  L" if i else "M") + " %s,%s" % adjust(*mypt)
 
     if is_corner: # Draw corner arc

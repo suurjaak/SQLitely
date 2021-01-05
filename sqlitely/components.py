@@ -10250,6 +10250,11 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         if self._zoom != self.ZOOM_DEFAULT:
             self.SetZoom(self.ZOOM_DEFAULT, remake=False, refresh=False)
+            itembounds0 = {} # Remember current bounds, calculate for default zoom
+            for name, o in self._objs.items():
+                size, _, _, _ = self._CalculateItemSize(o)
+                ibounds = itembounds0[name] = self._dc.GetIdBounds(o["id"])
+                self._dc.SetIdBounds(o["id"], wx.Rect(ibounds.Position, wx.Size(size)))
             self._CalculateLines(remake=True)
 
         get_extent = lambda t, f=self._font: util.memoize(self.GetFullTextExtent, t, f,
@@ -10269,7 +10274,10 @@ class SchemaDiagram(wx.ScrolledWindow):
         if self._show_stats  != showstats0:  self._show_stats  = showstats0
         if self._show_lines  != showlines0:  self._show_lines  = showlines0
         if self._show_labels != showlabels0: self._show_labels = showlabels0
-        if zoom0 != self._zoom: self.SetZoom(zoom0, remake=False, refresh=False)
+        if zoom0 != self._zoom:
+            for name, ibounds in itembounds0.items():
+                self._dc.SetIdBounds(self._objs[name]["id"], ibounds)
+            self.SetZoom(zoom0, remake=False, refresh=False)
         self._lines.update(lines0)
         self._sels .update(sels0)
 
@@ -10991,31 +10999,11 @@ class SchemaDiagram(wx.ScrolledWindow):
         """
         if not self: return
         CRADIUS = self.BRADIUS if "table" == opts["type"] else 0
-        w, h = self.MINW, self.HEADERH + self.HEADERP + self.FOOTERH
 
         get_extent = lambda t, f=self._font: util.memoize(self.GetFullTextExtent, t, f,
                                                           __key__="GetFullTextExtent")
 
-        # Measure title width
-        title = util.ellipsize(util.unprint(opts["name"]), self.MAX_TITLE)
-        extent = get_extent(title, self._font_bold) # (w, h, descent, lead)
-        w = max(w, extent[0] + extent[3] + 2 * self.HPAD)
-
-        # Measure column text widths
-        colmax = {"name": 0, "type": 0}
-        coltexts = [] # [[name, type]]
-        for i, c in enumerate(opts.get("columns") or []):
-            coltexts.append([])
-            for k in ["name", "type"]:
-                v = c.get(k)
-                t = util.ellipsize(util.unprint(c.get(k, "")), self.MAX_TEXT)
-                coltexts[-1].append(t)
-                if t: extent = get_extent(t)
-                if t: colmax[k] = max(colmax[k], extent[0] + extent[3])
-        w = max(w, self.LPAD + 2 * self.HPAD + sum(colmax.values()))
-        h += self.LINEH * len(opts.get("columns") or [])
-        if stats: h += self.STATSH - self.FOOTERH
-
+        (w, h), title, coltexts, colmax = self._CalculateItemSize(opts)
         collists, statslists = [[], []], [[], [], [], []] # [[text, ], [(x, y), ]]
         pks, fks = (sum((list(c["name"]) for c in v), []) for v in opts["keys"])
 
@@ -11132,6 +11120,36 @@ class SchemaDiagram(wx.ScrolledWindow):
         if CRADIUS: bmpsel.SetMask(wx.Mask(sbmp, wx.TRANSPARENT_BRUSH.Colour))
 
         return bmpsel if dragrect else (bmp, bmpsel)
+
+
+    def _CalculateItemSize(self, opts):
+        """Returns ((w, h), title, coltexts, colmax) for schema item with current settings."""
+        w, h = self.MINW, self.HEADERH + self.HEADERP + self.FOOTERH
+
+        get_extent = lambda t, f=self._font: util.memoize(self.GetFullTextExtent, t, f,
+                                                          __key__="GetFullTextExtent")
+
+        # Measure title width
+        title = util.ellipsize(util.unprint(opts["name"]), self.MAX_TITLE)
+        extent = get_extent(title, self._font_bold) # (w, h, descent, lead)
+        w = max(w, extent[0] + extent[3] + 2 * self.HPAD)
+
+        # Measure column text widths
+        colmax = {"name": 0, "type": 0}
+        coltexts = [] # [[name, type]]
+        for i, c in enumerate(opts.get("columns") or []):
+            coltexts.append([])
+            for k in ["name", "type"]:
+                v = c.get(k)
+                t = util.ellipsize(util.unprint(c.get(k, "")), self.MAX_TEXT)
+                coltexts[-1].append(t)
+                if t: extent = get_extent(t)
+                if t: colmax[k] = max(colmax[k], extent[0] + extent[3])
+        w = max(w, self.LPAD + 2 * self.HPAD + sum(colmax.values()))
+        h += self.LINEH * len(opts.get("columns") or [])
+        if self._show_stats and opts["stats"]: h += self.STATSH - self.FOOTERH
+
+        return (w, h), title, coltexts, colmax
 
 
     def _UpdateColours(self, defaults=False):
