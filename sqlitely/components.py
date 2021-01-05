@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.01.2021
+@modified    05.01.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -10871,7 +10871,8 @@ class SchemaDiagram(wx.ScrolledWindow):
                     while step > 1 and len(slots) * step > b2.Width - 2 * self.BRADIUS:
                         step -= 1
                     opts = get_opts(name2, name1, cols)
-                    opts["pts"][1][0] = b2.Left + b2.Width / 2 + (len(slots) / 2 - i) * step
+                    shift = 0 if len(slots) % 2 else 0.5
+                    opts["pts"][1][0] = b2.Left + b2.Width / 2 + (len(slots) / 2 - i - shift) * step
 
         # Third pass: insert waypoints between starting and ending X-Y
         for (name1, name2, cols), opts in sorted(lines.items(),
