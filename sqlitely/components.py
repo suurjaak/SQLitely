@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.01.2021
+@modified    06.01.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -2584,7 +2584,6 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnAction(self, event):
         """Handler for showing other actions, opens popup menu."""
-        menu = wx.Menu()
 
         def on_import(event=None):
             dlg = ImportDialog(self, self._db)
@@ -9987,6 +9986,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 oids += [x["id"] for x in self._lines.values()]
             bounds, bounder = wx.Rect(), self._dc.GetIdBounds
             if oids: bounds = sum(map(bounder, oids[1:]), bounder(oids[0]))
+            bounds.Left, bounds.Top = max(0, bounds.Left), max(0, bounds.Top)
             zoom, bounds0 = self._zoom, wx.Rect(bounds)
             bounds.Inflate(5, 5)
 
@@ -10001,6 +10001,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self.Scroll(0, 0)
                 if oids:
                     bounds = sum(map(bounder, oids[1:]), bounder(oids[0])).Inflate(5, 5)
+                    bounds.Left, bounds.Top = max(0, bounds.Left), max(0, bounds.Top)
                     if not self.ClientRect.Contains(bounds): self.ScrollXY(bounds.TopLeft)
             if zoom != self._zoom:
                 self.SetZoom(zoom)
