@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.01.2021
+@modified    06.01.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2809,6 +2809,7 @@ class DatabasePage(wx.Panel):
         combo_zoom = self.combo_diagram_zoom = wx.ComboBox(tb, size=(60, -1), style=wx.CB_DROPDOWN)
         statusgauge = self.diagram_gauge  = wx.Gauge(page)
         button_export = self.button_diagram_export = wx.Button(page, label="Export &diagram")
+        button_action = self.button_diagram_action = wx.Button(page, label="Other &actions ..")
         diagram = self.diagram = components.SchemaDiagram(page, self.db)
         cb_rels  = self.cb_diagram_rels   = wx.CheckBox(page, label="Foreign &relations")
         cb_lbls  = self.cb_diagram_labels = wx.CheckBox(page, label="Foreign &labels")
@@ -2858,6 +2859,7 @@ class DatabasePage(wx.Panel):
         sizer_top.AddStretchSpacer()
         sizer_top.Add(statusgauge,   border=15, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_top.Add(button_export, border=5,  flag=wx.RIGHT | wx.BOTTOM)
+        sizer_top.Add(button_action, border=5,  flag=wx.RIGHT | wx.BOTTOM)
         sizer_middle.Add(diagram,     proportion=1, flag=wx.GROW)
         sizer_bottom.Add(cb_rels,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
         sizer_bottom.Add(cb_lbls,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
@@ -2883,6 +2885,7 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_labels,     cb_lbls)
         self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_stats,      cb_stats)
         self.Bind(wx.EVT_BUTTON,    self.on_diagram_export,     button_export)
+        self.Bind(wx.EVT_BUTTON,    self.on_diagram_action,     button_action)
         self.Bind(wx.EVT_COMBOBOX,  self.on_diagram_find,       combo_find)
         self.Bind(wx.EVT_TEXT,      self.on_diagram_find,       combo_find)
         self.Bind(wx.EVT_CHAR_HOOK, self.on_diagram_find_char,  combo_find)
@@ -3939,6 +3942,43 @@ class DatabasePage(wx.Panel):
     def on_diagram_export(self, event):
         """Handler for exporting diagram, opens file dialog."""
         self.diagram.SaveFile()
+
+
+    def on_diagram_action(self, event):
+        """Handler for other diagram actions, opens popup menu."""
+        menu = wx.Menu()
+
+        def on_export(event=None):
+            CHOICES, LEVELS, index, level = [], [], -1, self.diagram.ZOOM_MAX
+            while level >= self.diagram.ZOOM_MIN:
+                CHOICES.append("%s%%" % util.round_float(100 * level, 2))
+                LEVELS.append(level)
+                if level == self.diagram.Zoom: index = len(CHOICES) - 1
+                level -= self.diagram.ZOOM_STEP
+            dlg = wx.SingleChoiceDialog(self, "", "Select zoom", CHOICES)
+            dlg.SetSelection(index)
+            res, sel = dlg.ShowModal(), dlg.GetSelection()
+            dlg.Destroy()
+            if wx.ID_OK != res: return
+            self.diagram.SaveFile(zoom=LEVELS[sel])
+        def cmd(*args):
+            return lambda e: self.handle_command(*args)
+
+        menu = wx.Menu()
+        item_export = wx.MenuItem(menu, -1, "Export &zoomed bitmap")
+        menu.Append(item_export)
+        menu.Bind(wx.EVT_MENU, on_export, item_export)
+
+        submenu, keys = wx.Menu(), []
+        menu.AppendSubMenu(submenu, text="Create &new ..")
+        for category in database.Database.CATEGORIES:
+            key = next((x for x in category if x not in keys), category[0])
+            keys.append(key)
+            it = wx.MenuItem(submenu, -1, "New " + category.replace(key, "&" + key, 1))
+            submenu.Append(it)
+            menu.Bind(wx.EVT_MENU, cmd("create", category), it)
+
+        event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
 
 
     def on_diagram_zoom(self, direction=0, event=None):

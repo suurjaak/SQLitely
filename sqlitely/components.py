@@ -9753,8 +9753,10 @@ class SchemaDiagram(wx.ScrolledWindow):
         super(SchemaDiagram, self).__init__(parent, *args, **kwargs)
         self._db    = db
         self._ids   = {} # {DC ops ID: name or (name1, name2, (cols)) or None}
-        self._objs  = util.CaselessDict() # {name: {id, type, name, bmp, bmpsel, bmparea, hasmeta, stats, sql0, columns, keys, __id__}}
-        self._lines = util.CaselessDict() # {(name1, name2, (cols)): {id, pts}}
+        # {name: {id, type, name, bmp, bmpsel, bmparea, hasmeta, stats, sql0, columns, keys, __id__}}
+        self._objs  = util.CaselessDict()
+        # {(name1, name2, (cols)): {id, pts, waylines, cardlines, cornerpts, textrect}}
+        self._lines = util.CaselessDict()
         self._sels  = util.CaselessDict(insertorder=True) # {name selected: DC ops ID}
         # Bitmap cache, as {zoom: {item.__id__: {(sql, hasmeta, stats, dragrect): (wx.Bitmap, wx.Bitmap) or wx.Bitmap}}}
         # or {zoom: {PyEmdeddedImage: wx.Bitmap}} for scaled static images
@@ -9787,12 +9789,15 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._font_bold     = wx.NullFont
 
         FMTS = sorted(self.EXPORT_FORMATS.values())
-        wildcard = "|".join("%s image (*.%s)|*.%s" % (x, x.lower(), x.lower())
-                            for x in FMTS)
-        self._dlg_save = wx.FileDialog(self, message="Save diagram as", wildcard=wildcard,
+        wildcarder = lambda a: "|".join("%s image (*.%s)|*.%s" % (x, x.lower(), x.lower())
+                                        for x in a)
+        self._dlg_save = wx.FileDialog(self, message="Save diagram as", wildcard=wildcarder(FMTS),
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
-        filteridx = FMTS.index("PNG") if "PNG" in FMTS else 0
-        if filteridx >= 0: self._dlg_save.SetFilterIndex(filteridx)
+        self._dlg_save.SetFilterIndex(FMTS.index("PNG") if "PNG" in FMTS else 0)
+        BMPFMTS = sorted(x for x in self.EXPORT_FORMATS.values() if "SVG" != x)
+        self._dlg_savebmp = wx.FileDialog(self, message="Save diagram as", wildcard=wildcarder(BMPFMTS),
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
+        self._dlg_savebmp.SetFilterIndex(FMTS.index("PNG") if "PNG" in FMTS else 0)
 
         self._worker_graph = workers.GraphWorker(self._OnWorkerGraph)
         self._worker_bmp = workers.WorkerThread()
@@ -9942,29 +9947,31 @@ class SchemaDiagram(wx.ScrolledWindow):
         def after():
             if not self: return
 
-            fullbounds = None
+            bounds = None
             for o in self._order:
                 r = self._dc.GetIdBounds(o["id"])
                 pt = [v * zoom / zoom0 for v in r.TopLeft]
-                self._dc.SetIdBounds(o["id"], wx.Rect(wx.Point(pt), o["bmp"].Size))
-                if fullbounds: fullbounds.Union(self._dc.GetIdBounds(o["id"]))
-                else: fullbounds = self._dc.GetIdBounds(o["id"])
+                sz, _, _, _ = self._CalculateItemSize(o)
+                self._dc.SetIdBounds(o["id"], wx.Rect(wx.Point(pt), wx.Size(sz)))
+                if bounds: bounds.Union(self._dc.GetIdBounds(o["id"]))
+                else: bounds = self._dc.GetIdBounds(o["id"])
+            if bounds:
+                bounds.Left, bounds.Top = max(0, bounds.Left), max(0, bounds.Top)
 
-            if fullbounds and not wx.Rect(self.VirtualSize).Contains(fullbounds):
+            if bounds and not wx.Rect(self.VirtualSize).Contains(bounds):
                 self.SetVirtualSize([max(a, b + self.MOVE_STEP)
-                                     for a, b in zip(self.VirtualSize, fullbounds.BottomRight)])
+                                     for a, b in zip(self.VirtualSize, bounds.BottomRight)])
+            if not refresh: return
 
-            if refresh: self.Freeze()
+            self.Freeze()
             try:
                 xy = (p * zoom / zoom0 - (p - v) for v, p in zip(viewport0.TopLeft, focus)) \
                      if focus else (v * zoom / zoom0 for v in viewport0.TopLeft)
                 self.ScrollXY(xy)
 
-                if refresh:
-                    self.Redraw(remakelines=True)
-                    self._PostEvent(zoom=zoom)
-            finally:
-                if refresh: self.Thaw()
+                self.Redraw(remakelines=True)
+                self._PostEvent(zoom=zoom)
+            finally: self.Thaw()
 
         if remake: self._DoItemBitmaps(callback=("SetZoom", after))
         else: after()
@@ -10131,15 +10138,20 @@ class SchemaDiagram(wx.ScrolledWindow):
     Selection = property(GetSelection, SetSelection)
 
 
-    def SaveFile(self):
-        """Opens file dialog and exports diagram in selected format."""
+    def SaveFile(self, zoom=None):
+        """
+        Opens file dialog and exports diagram in selected format.
+
+        @param   zoom  if set, exports bitmap at given zoom
+        """
         if not self._objs: return guibase.status("Empty schema, nothing to export.")
 
         title = os.path.splitext(os.path.basename(self._db.name))[0]
-        self._dlg_save.Filename = util.safe_filename(title + " schema")
-        if wx.ID_OK != self._dlg_save.ShowModal(): return
+        dlg = self._dlg_save if zoom is None else self._dlg_savebmp
+        dlg.Filename = util.safe_filename(title + " schema")
+        if wx.ID_OK != dlg.ShowModal(): return
 
-        filename = controls.get_dialog_path(self._dlg_save)
+        filename = controls.get_dialog_path(dlg)
         filetype = os.path.splitext(filename)[-1].lstrip(".").upper()
         wxtype   = next(k for k, v in self.EXPORT_FORMATS.items() if v == filetype)
 
@@ -10147,7 +10159,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             content = self.MakeTemplate(filetype)
             with open(filename, "wb") as f: f.write(content)
         else:
-            self.MakeBitmap().SaveFile(filename, wxtype)
+            self.MakeBitmap(zoom=zoom).SaveFile(filename, wxtype)
             util.start_file(filename)
         guibase.status("Exported schema diagram to %s.", filename, log=True)
 
@@ -10186,10 +10198,13 @@ class SchemaDiagram(wx.ScrolledWindow):
             zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
             if self._zoom == zoom: zoom = None
 
-        if zoom is not None: self.SetZoom(zoom, remake=False, refresh=False)
+        ids, bounder = list(self._ids), self._dc.GetIdBounds
+        boundsmap = {myid: bounder(myid) for myid in ids}
 
-        bounds, ids, bounder = wx.Rect(), list(self._ids), self._dc.GetIdBounds
-        if ids: bounds = sum(map(bounder, ids[1:]), bounder(ids[0]))
+        if zoom is not None: self.SetZoom(zoom, remake=False, refresh=False)
+        self._CalculateLines(remake=True)
+
+        bounds = sum(map(bounder, ids[1:]), bounder(ids[0])) if ids else wx.Rect()
 
         MARGIN = int(math.ceil(10 * self._zoom))
         shift = [MARGIN - v for v in bounds.TopLeft]
@@ -10199,7 +10214,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         dc.Clear()
         dc.Font = self._font
 
-        self.RecordLines(remake=True, dc=dc, shift=shift)
+        self.RecordLines(dc=dc, shift=shift)
         for o in (o for o in self._order if o["name"] not in self._sels):
             pos = [a + b for a, b in zip(self._dc.GetIdBounds(o["id"])[:2], shift)]
             obmp, _ = self._GetItemBitmaps(o, self._show_stats and o["stats"])
@@ -10220,6 +10235,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         if zoom is not None: self.SetZoom(zoom0, remake=False, refresh=False)
         self._lines.update(lines0)
         self._sels .update(sels0)
+        for myid, mybounds in boundsmap.items(): self._dc.SetIdBounds(myid, mybounds)
 
         return bmp
 
@@ -10637,56 +10653,16 @@ class SchemaDiagram(wx.ScrolledWindow):
                 lpen = linefadedpen # Draw lines of not-focused items more faintly
             dc.SetPen(lpen)
 
-            pts = opts["pts"]
-            cpts, bounds = [], wx.Rect()
-            for i, wpt1 in enumerate(pts[:-1]):
-                wpt2 = pts[i + 1]
-                bounds.Union(wx.Rect(wx.Point(wpt1), wx.Point(wpt2)))
+            # Draw main lines
+            for pt1, pt2 in opts["waylines"]: dc.DrawLine(adjust(*pt1), adjust(*pt2))
 
-                # Make rounded corners
-                mywpt1, mywpt2 = wpt1[:], wpt2[:]
-                axis = 0 if wpt1[0] != wpt2[0] else 1
-                direction = 1 if wpt1[axis] < wpt2[axis] else -1
-                if i: # Not first step: nudge start 1px further
-                    nudge = 1 if direction > 0 else 0
-                    mywpt1 = wpt1[0] + (1 - axis) * nudge, wpt1[1] + axis * nudge
-                elif direction < 0: # First step going backward: nudge start 1px closer
-                    mywpt1 = mywpt1[0] + 1, mywpt1[1]
-                if i < len(pts) - 2: # Not last step: nudge end 1px closer
-                    nudge = -1 if direction < 0 else 0
-                    mywpt2 = wpt2[0] - (1 - axis) * nudge, wpt2[1] - axis * nudge
-                if i: # Add smoothing point at corner between this and last step
-                    wpt0 = pts[i - 1]
-                    dx = -1 if not axis and direction < 0 else 0
-                    dy = -1     if axis and direction < 0 else 0
-                    cpt = (mywpt1[0] + axis       * (-1 if wpt0[0] < wpt1[0] else 1) + dx,
-                           mywpt1[1] + (1 - axis) * (-1 if wpt0[1] < wpt1[1] else 1) + dy)
-                    cpts.append(cpt)
-
-                dc.DrawLine(adjust(*mywpt1), adjust(*mywpt2))
-
-            # Draw cardinality crowfoot
-            ptc0 = pts[0][0] + self.CARDINALW * (-1 if pts[0][0] > pts[1][0] else 1), pts[0][1]
-            ptc1 = pts[0][0], ptc0[1] - self.CARDINALH
-            ptc2 = pts[0][0], ptc0[1] + self.CARDINALH
-            dc.DrawLine(adjust(*ptc1), adjust(*ptc0))
-            dc.DrawLine(adjust(*ptc2), adjust(*ptc0))
-
-            # Draw parent-item dash
-            direction = 1 if pts[-1][1] > b2.Top else -1
-            ptd1 = pts[-1][0] - self.DASHSIDEW, pts[-1][1] + direction
-            ptd2 = pts[-1][0] + self.DASHSIDEW + 1, ptd1[1]
-            dc.DrawLine(adjust(*ptd1), adjust(*ptd2))
+            # Draw cardinality crowfoot and parent-item dash
+            for pt1, pt2 in opts["cardlines"]: dc.DrawLine(adjust(*pt1), adjust(*pt2))
 
             # Draw foreign key label
-            if self._show_labels:
+            if self._show_labels and opts["name"]:
                 tname = util.ellipsize(util.unprint(opts["name"]), self.MAX_TEXT)
-                textent = get_extent(tname)
-                tw, th = textent[0] + textent[3], textent[1] + textent[2]
-                tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
-                                  if pts[i][0] == pts[i+1][0])
-                tx = tpt1[0] - tw / 2
-                ty = min(tpt1[1], tpt2[1]) - th / 2 + abs(tpt1[1] - tpt2[1]) / 2
+                tx, ty, tw, th = opts["textrect"]
                 tbrush, tpen = textbrush, textpen
                 if self._dragrect and self._dragrectabs.Contains((tx, ty, tw, th)):
                     tbrush, tpen = textdragbrush, textdragpen
@@ -10695,15 +10671,12 @@ class SchemaDiagram(wx.ScrolledWindow):
                 dc.DrawRectangle(adjust(tx, ty), (tw, th))
                 dc.SetTextForeground(lpen.Colour)
                 dc.DrawText(tname, adjust(tx, ty))
-                bounds.Union((tx, ty, tw, th))
 
             # Draw inner rounded corners
             dc.SetPen(cornerfadedpen if lpen == linefadedpen else cornerpen)
-            for cpt in cpts: dc.DrawPoint(adjust(*cpt))
+            for cpt in opts["cornerpts"]: dc.DrawPoint(adjust(*cpt))
 
-            if isinstance(dc, wx.adv.PseudoDC):
-                dc.SetIdBounds(opts["id"], bounds)
-                dc.SetId(-1)
+            if isinstance(dc, wx.adv.PseudoDC): dc.SetId(-1)
 
 
     def GetLayout(self, active=True):
@@ -10834,9 +10807,12 @@ class SchemaDiagram(wx.ScrolledWindow):
 
     def _CalculateLines(self, remake=False):
         """
-        Records foreign relation lines to DC if showing lines is enabled.
+        Calculates foreign relation line and text positions if showing lines is enabled.
         """
         if not self._show_lines: return
+
+        get_extent = lambda t, f=self._font: util.memoize(self.GetFullTextExtent, t, f,
+                                                          __key__="GetFullTextExtent")
 
         lines = self._lines
         if self._sels and not remake:
@@ -10942,6 +10918,64 @@ class SchemaDiagram(wx.ScrolledWindow):
                     # (halfway to pt2.x, pt1.y), (halfway to pt2.x, pt2.y +- vertical step), (pt2.x, pt2.y +- vertical step)
                     wpts += [ptm1, ptm2, ptm3]
             opts["pts"][1:-1] = wpts
+
+        # Fourth pass: calculate precise waypoints, cornerpoints, crowfoot points etc
+        for (name1, name2, cols), opts in lines.items():
+            pts = opts["pts"]
+            cpts, clines, wlines, trect = [], [], [], []
+            for i, wpt1 in enumerate(pts[:-1]):
+                wpt2 = pts[i + 1]
+
+                # Make rounded corners
+                mywpt1, mywpt2 = wpt1[:], wpt2[:]
+                axis = 0 if wpt1[0] != wpt2[0] else 1
+                direction = 1 if wpt1[axis] < wpt2[axis] else -1
+                if i: # Not first step: nudge start 1px further
+                    nudge = 1 if direction > 0 else 0
+                    mywpt1 = wpt1[0] + (1 - axis) * nudge, wpt1[1] + axis * nudge
+                elif direction < 0: # First step going backward: nudge start 1px closer
+                    mywpt1 = mywpt1[0] + 1, mywpt1[1]
+                if i < len(pts) - 2: # Not last step: nudge end 1px closer
+                    nudge = -1 if direction < 0 else 0
+                    mywpt2 = wpt2[0] - (1 - axis) * nudge, wpt2[1] - axis * nudge
+                if i: # Add smoothing point at corner between this and last step
+                    wpt0 = pts[i - 1]
+                    dx = -1 if not axis and direction < 0 else 0
+                    dy = -1     if axis and direction < 0 else 0
+                    cpt = (mywpt1[0] + axis       * (-1 if wpt0[0] < wpt1[0] else 1) + dx,
+                           mywpt1[1] + (1 - axis) * (-1 if wpt0[1] < wpt1[1] else 1) + dy)
+                    cpts.append(cpt)
+
+                wlines.append((mywpt1, mywpt2))
+
+            # Make cardinality crowfoot
+            ptc0 = pts[0][0] + self.CARDINALW * (-1 if pts[0][0] > pts[1][0] else 1), pts[0][1]
+            ptc1 = pts[0][0], ptc0[1] - self.CARDINALH
+            ptc2 = pts[0][0], ptc0[1] + self.CARDINALH
+            clines.extend([(ptc1, ptc0), (ptc2, ptc0)])
+
+            # Make parent-item dash
+            direction = 1 if pts[-1][1] > b2.Top else -1
+            ptd1 = pts[-1][0] - self.DASHSIDEW, pts[-1][1] + direction
+            ptd2 = pts[-1][0] + self.DASHSIDEW + 1, ptd1[1]
+            clines.append((ptd1, ptd2))
+
+            # Make foreign key label
+            if self._show_labels and opts["name"]:
+                textent = get_extent(util.ellipsize(util.unprint(opts["name"]), self.MAX_TEXT))
+                tw, th = textent[0] + textent[3], textent[1] + textent[2]
+                tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
+                                  if pts[i][0] == pts[i+1][0])
+                tx = tpt1[0] - tw / 2
+                ty = min(tpt1[1], tpt2[1]) - th / 2 + abs(tpt1[1] - tpt2[1]) / 2
+                trect = [tx, ty, tw, th]
+
+            bounds = wx.Rect()
+            for pp in wlines: bounds.Union(wx.Rect(*map(wx.Point, pp)))
+            for pp in clines: bounds.Union(wx.Rect(*map(wx.Point, pp)))
+            if trect: bounds.Union(trect)
+            self._dc.SetIdBounds(opts["id"], bounds)
+            opts.update(waylines=wlines, cardlines=clines, cornerpts=cpts, textrect=trect)
 
 
     def _GetItemStats(self, opts):
