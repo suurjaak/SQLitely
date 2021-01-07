@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.01.2021
+@modified    07.01.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -10833,22 +10833,12 @@ class SchemaDiagram(wx.ScrolledWindow):
         # {name2: {False: [(name1, cols) at top], True: [(name1, cols) at bottom]}}
         vertslots = defaultdict(lambda: defaultdict(list))
 
-        # First pass: determine starting X-Y and ending Y
+        # First pass: determine starting and ending Y
         for (name1, name2, cols), opts in lines.items():
             b1, b2 = (self._dc.GetIdBounds(o["id"])
                       for o in map(self._objs.get, (name1, name2)))
             idx = next((i  for i, c in enumerate(self._db.schema["table"][name1]["columns"])
                         if c["name"].lower() in cols), 0) # Column index in table
-
-            b1_more_left = b1.Left + b1.Width / 2 > b2.Left + b2.Width / 2
-            use_left = True
-            if   b2.Left  < b1.Left < b2.Right: use_left = b1_more_left
-            elif b1.Left  < b2.Left < b1.Right: use_left = b1_more_left
-            elif b1.Right < b2.Left:            use_left = False
-            x1 = (b1.Left - 1) if use_left else (b1.Right + 1)
-            if not (2 * self.CARDINALW < x1 < self.VirtualSize.Width - 2 * self.CARDINALW):
-                # Choose other side if too close to edge
-                x1 = (b1.Left - 1) if not use_left else (b1.Right + 1)
 
             y1 = b1.Top + self.HEADERH + self.HEADERP + (idx + 0.5) * self.LINEH
             y2 = b2.Top if y1 < b2.Top else b2.Bottom
@@ -10857,7 +10847,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 # Choose other side if within b1
                 y2 = b2.Top if y1 >= b2.Top else b2.Bottom
 
-            opts["pts"] = [[x1, y1], [-1, y2]]
+            opts["pts"] = [[-1, y1], [-1, y2]]
             vertslots[name2][y2 == b2.Bottom].append((name1, cols))
 
         # Second pass: determine ending X
@@ -10874,7 +10864,19 @@ class SchemaDiagram(wx.ScrolledWindow):
                     shift = 0 if len(slots) % 2 else 0.5
                     opts["pts"][1][0] = b2.Left + b2.Width / 2 + (len(slots) / 2 - i - shift) * step
 
-        # Third pass: insert waypoints between starting and ending X-Y
+        # Third pass: determine starting X
+        for (name1, name2, cols), opts in lines.items():
+            b1, b2 = (self._dc.GetIdBounds(o["id"])
+                      for o in map(self._objs.get, (name1, name2)))
+
+            use_left = b1.Left + b1.Width / 2 > opts["pts"][1][0]
+            x1 = (b1.Left - 1) if use_left else (b1.Right + 1)
+            if not (2 * self.CARDINALW < x1 < self.VirtualSize.Width - 2 * self.CARDINALW):
+                # Choose other side if too close to edge
+                x1 = (b1.Left - 1) if not use_left else (b1.Right + 1)
+            opts["pts"][0][0] = x1
+
+        # Fourth pass: insert waypoints between starting and ending X-Y
         for (name1, name2, cols), opts in sorted(lines.items(),
                 key=lambda x: any(n in self._sels for n in x[0][:2])):
             b1, b2 = (self._dc.GetIdBounds(o["id"])
@@ -10889,7 +10891,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             if b1.Left - 2 * self.CARDINALW <= pt2[0] <= b1.Right + 2 * self.CARDINALW:
                 # End point straight above or below start item
                 b1_side = b1.Top if pt1[1] > pt2[1] else b1.Bottom
-                ptm1 = pt1[0] + 2 * self.CARDINALW * (-1 if pt1[0] < pt2[0] else 1), pt1[1]
+                ptm1 = pt1[0] + 2 * self.CARDINALW * (-1 if pt1[0] <= b1.Left else 1), pt1[1]
                 ptm2 = ptm1[0], pt2[1] + (b1_side - pt2[1]) / 2
 
                 if b2.Left < pt2[0] < b2.Right \
@@ -10919,7 +10921,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                     wpts += [ptm1, ptm2, ptm3]
             opts["pts"][1:-1] = wpts
 
-        # Fourth pass: calculate precise waypoints, cornerpoints, crowfoot points etc
+        # Fifth pass: calculate precise waypoints, cornerpoints, crowfoot points etc
         for (name1, name2, cols), opts in lines.items():
             pts = opts["pts"]
             cpts, clines, wlines, trect = [], [], [], []
