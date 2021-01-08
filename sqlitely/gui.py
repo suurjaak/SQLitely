@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.01.2021
+@modified    08.01.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2805,7 +2805,7 @@ class DatabasePage(wx.Panel):
         sizer_middle = wx.BoxSizer(wx.HORIZONTAL)
         sizer_bottom = wx.BoxSizer(wx.HORIZONTAL)
 
-        tb = self.tb_diagram = wx.ToolBar(page, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        tb = self.tb_diagram = wx.ToolBar(page, style=wx.TB_FLAT | wx.TB_NODIVIDER | wx.TB_HORZ_TEXT)
         combo_zoom = self.combo_diagram_zoom = wx.ComboBox(tb, size=(60, -1), style=wx.CB_DROPDOWN)
         statusgauge = self.diagram_gauge  = wx.Gauge(page)
         button_export = self.button_diagram_export = wx.Button(page, label="Export &diagram")
@@ -2814,7 +2814,7 @@ class DatabasePage(wx.Panel):
         cb_rels  = self.cb_diagram_rels   = wx.CheckBox(page, label="Foreign &relations")
         cb_lbls  = self.cb_diagram_labels = wx.CheckBox(page, label="Foreign &labels")
         cb_stats = self.cb_diagram_stats  = wx.CheckBox(page, label="&Statistics")
-        label_find = wx.StaticText(page, label="&Quickfind:")
+        label_find = self.label_diagram_find = wx.StaticText(page, label="&Quickfind:")
         combo_find = self.combo_diagram_find = wx.ComboBox(page, size=(100, -1), style=wx.CB_DROPDOWN)
 
         level = diagram.ZOOM_MAX
@@ -2825,23 +2825,27 @@ class DatabasePage(wx.Panel):
             level -= diagram.ZOOM_STEP
         combo_zoom.SetValue("%s%%" % util.round_float(100 * diagram.ZOOM_DEFAULT, 2))
         combo_zoom.ToolTip = "Zoom"
-        bmp1 = images.ToolbarZoomIn.Bitmap
-        bmp2 = images.ToolbarZoomOut.Bitmap
-        bmp3 = images.ToolbarZoom100.Bitmap
-        bmp4 = images.ToolbarZoomFit.Bitmap
-        bmp5 = images.ToolbarLayoutGrid.Bitmap
-        bmp6 = images.ToolbarLayoutGraph.Bitmap
+        bmp1 = images.ToolbarTick.Bitmap
+        bmp2 = images.ToolbarZoomIn.Bitmap
+        bmp3 = images.ToolbarZoomOut.Bitmap
+        bmp4 = images.ToolbarZoom100.Bitmap
+        bmp5 = images.ToolbarZoomFit.Bitmap
+        bmp6 = images.ToolbarLayoutGrid.Bitmap
+        bmp7 = images.ToolbarLayoutGraph.Bitmap
         tb.SetToolBitmapSize(bmp1.Size)
-        tb.AddTool(wx.ID_ZOOM_IN,  "", bmp1, shortHelp="Zoom in one step  (+)")
-        tb.AddTool(wx.ID_ZOOM_OUT, "", bmp2, shortHelp="Zoom out one step  (-)")
+        tb.AddCheckTool(wx.ID_APPLY, "Enable", bmp1, shortHelp="Enable diagram")
         tb.AddSeparator()
-        tb.AddTool(wx.ID_ZOOM_100, "", bmp3, shortHelp="Reset zoom  (*)")
-        tb.AddTool(wx.ID_ZOOM_FIT, "", bmp4, shortHelp="Zoom to fit")
+        tb.AddTool(wx.ID_ZOOM_IN,  "", bmp2, shortHelp="Zoom in one step  (+)")
+        tb.AddTool(wx.ID_ZOOM_OUT, "", bmp3, shortHelp="Zoom out one step  (-)")
+        tb.AddSeparator()
+        tb.AddTool(wx.ID_ZOOM_100, "", bmp4, shortHelp="Reset zoom  (*)")
+        tb.AddTool(wx.ID_ZOOM_FIT, "", bmp5, shortHelp="Zoom to fit")
         tb.AddControl(combo_zoom)
         tb.AddSeparator()
-        tb.AddCheckTool(wx.ID_STATIC,  "", bmp5, shortHelp="Grid layout (click for options)")
-        tb.AddCheckTool(wx.ID_NETWORK, "", bmp6, shortHelp="Graph layout")
+        tb.AddCheckTool(wx.ID_STATIC,  "", bmp6, shortHelp="Grid layout (click for options)")
+        tb.AddCheckTool(wx.ID_NETWORK, "", bmp7, shortHelp="Graph layout")
         tb.EnableTool(wx.ID_ZOOM_100, False)
+        tb.ToggleTool(wx.ID_APPLY,    True)
         tb.ToggleTool(wx.ID_STATIC,   True)
         tb.Realize()
         diagram.DatabasePage = self
@@ -2872,6 +2876,7 @@ class DatabasePage(wx.Panel):
         sizer.Add(sizer_middle, border=5, flag=wx.LEFT | wx.RIGHT | wx.GROW, proportion=1)
         sizer.Add(sizer_bottom, border=5, flag=wx.LEFT | wx.TOP | wx.RIGHT | wx.GROW)
 
+        tb.Bind(wx.EVT_TOOL, self.on_diagram_toggle,   id=wx.ID_APPLY)
         tb.Bind(wx.EVT_TOOL, lambda e: self.on_diagram_zoom(+1),  id=wx.ID_ZOOM_IN)
         tb.Bind(wx.EVT_TOOL, lambda e: self.on_diagram_zoom(-1),  id=wx.ID_ZOOM_OUT)
         tb.Bind(wx.EVT_TOOL, lambda e: self.on_diagram_zoom(0),   id=wx.ID_ZOOM_100)
@@ -3842,7 +3847,7 @@ class DatabasePage(wx.Panel):
                     guibase.status("Statistics analysis complete.")
                     self.diagram.UpdateStatistics(redraw=False)
                     if self.diagram.ShowStatistics: self.diagram.Redraw(remake=True)
-                self.cb_diagram_stats.Enable()
+                self.cb_diagram_stats.Enable(self.diagram.Enabled)
                 self.populate_statistics()
                 self.update_page_header(updated="error" not in result)
         wx.CallAfter(after)
@@ -3891,15 +3896,29 @@ class DatabasePage(wx.Panel):
 
     def update_diagram_controls(self):
         """Updates diagram toolbar and other controls with diagram state."""
-        self.tb_diagram.EnableTool(wx.ID_ZOOM_IN,  self.diagram.Zoom < self.diagram.ZOOM_MAX)
-        self.tb_diagram.EnableTool(wx.ID_ZOOM_OUT, self.diagram.Zoom > self.diagram.ZOOM_MIN)
-        self.tb_diagram.EnableTool(wx.ID_ZOOM_100, self.diagram.Zoom != self.diagram.ZOOM_DEFAULT)
+        self.tb_diagram.EnableTool(wx.ID_ZOOM_IN,  self.diagram.Enabled and self.diagram.Zoom < self.diagram.ZOOM_MAX)
+        self.tb_diagram.EnableTool(wx.ID_ZOOM_OUT, self.diagram.Enabled and self.diagram.Zoom > self.diagram.ZOOM_MIN)
+        self.tb_diagram.EnableTool(wx.ID_ZOOM_100, self.diagram.Enabled and self.diagram.Zoom != self.diagram.ZOOM_DEFAULT)
         self.combo_diagram_zoom.Value = "%s%%" % util.round_float(100 * self.diagram.Zoom, 2)
+        self.tb_diagram.ToggleTool(wx.ID_APPLY,   self.diagram.Enabled)
         self.tb_diagram.ToggleTool(wx.ID_STATIC,  self.diagram.LAYOUT_GRID  == self.diagram.Layout)
         self.tb_diagram.ToggleTool(wx.ID_NETWORK, self.diagram.LAYOUT_GRAPH == self.diagram.Layout)
         self.cb_diagram_rels  .Value = self.diagram.ShowLines
         self.cb_diagram_labels.Value = self.diagram.ShowLineLabels
         self.cb_diagram_stats .Value = self.diagram.ShowStatistics
+
+        for myid in wx.ID_ZOOM_FIT, wx.ID_STATIC, wx.ID_NETWORK:
+            self.tb_diagram.EnableTool(myid, self.diagram.Enabled)
+
+        schema_parsed = any(v.get("__parsed__") for vv in self.db.schema.values() for v in vv.values())
+        self.combo_diagram_zoom.Enable(self.diagram.Enabled)
+        self.cb_diagram_rels  .Enable(self.diagram.Enabled and schema_parsed)
+        self.cb_diagram_labels.Enable(self.diagram.Enabled and schema_parsed)
+        self.cb_diagram_stats .Enable(self.diagram.Enabled and "data" in self.statistics)
+        self.label_diagram_find.Enable(self.diagram.Enabled)
+        self.combo_diagram_find.Enable(self.diagram.Enabled)
+        self.button_diagram_export.Enable(self.diagram.Enabled)
+        self.button_diagram_action.Enable(self.diagram.Enabled)
 
 
     def on_diagram_event(self, event=None):
@@ -3921,6 +3940,12 @@ class DatabasePage(wx.Panel):
         if not self.db.temporary:
             conf.SchemaDiagrams[self.db.filename] = self.diagram.GetOptions()
             util.run_once(conf.save)
+
+
+    def on_diagram_toggle(self, event=None):
+        """Handler for toggling diagram on/off."""
+        self.diagram.Enable(event.IsChecked())
+        if event.IsChecked(): self.diagram.Populate()
 
 
     def on_diagram_stats(self, event):
@@ -6156,8 +6181,9 @@ class DatabasePage(wx.Panel):
         else:  self.update_diagram_controls()
         wx.YieldIfNeeded()
         if not self: return
-        if not any(self.diagram.IsVisible(n) for c in ("table", "view")
-                   for n in self.db.schema[c]):
+        if self.diagram.Enabled \
+        and not any(self.diagram.IsVisible(n) for c in ("table", "view")
+                    for n in self.db.schema[c]):
             self.diagram.Scroll(0, 0)
 
 
@@ -6184,8 +6210,8 @@ class DatabasePage(wx.Panel):
         if not self: return
         self.diagram.Populate()
         self.populate_diagram_finder()
-        self.cb_diagram_rels.Enable()
-        self.cb_diagram_labels.Enable(self.cb_diagram_rels.Value)
+        self.cb_diagram_rels.Enable(self.diagram.Enabled)
+        self.cb_diagram_labels.Enable(self.diagram.Enabled and self.cb_diagram_rels.Value)
         self.update_autocomp()
 
 
@@ -6197,7 +6223,7 @@ class DatabasePage(wx.Panel):
         for name in (x for c in ("table", "view") for x in self.db.schema[c]):
             combo.Append(util.unprint(name))
             combo.SetClientData(combo.Count - 1, name)
-        combo.Enable()
+        combo.Enable(self.diagram.Enabled)
 
 
     def get_tree_state(self, tree, root):

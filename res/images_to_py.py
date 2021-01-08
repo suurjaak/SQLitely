@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  27.12.2020
+@modified  08.01.2021
 ------------------------------------------------------------------------------
 """
 import base64
@@ -119,6 +119,8 @@ IMAGES = {
         "Toolbar icon for line numbers button on schema STCs.",
     "ToolbarTabs.png":
         "Toolbar icon for tabs toggle button on search page.",
+    "ToolbarTick.png":
+        "Toolbar icon for enable button on diagram page.",
     "ToolbarTitle.png":
         "Toolbar icon for title toggle button on search page.",
     "ToolbarWordWrap.png":
