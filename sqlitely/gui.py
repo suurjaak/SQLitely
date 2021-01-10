@@ -3946,6 +3946,8 @@ class DatabasePage(wx.Panel):
         """Handler for toggling diagram on/off."""
         self.diagram.Enable(event.IsChecked())
         if event.IsChecked(): self.diagram.Populate()
+        conf.SchemaDiagramEnabled = event.IsChecked()
+        util.run_once(conf.save)
 
 
     def on_diagram_stats(self, event):
@@ -6170,7 +6172,9 @@ class DatabasePage(wx.Panel):
         self.update_info_panel()
         wx.YieldIfNeeded()
         if not self: return
-        self.diagram.Populate(conf.SchemaDiagrams.get(self.db.filename))
+        dopts = conf.SchemaDiagrams.get(self.db.filename) or {}
+        if "enabled" not in dopts: dopts["enabled" ] = conf.SchemaDiagramEnabled
+        self.diagram.Populate(dopts)
         wx.YieldIfNeeded()
         if not self: return
         self.populate_diagram_finder()

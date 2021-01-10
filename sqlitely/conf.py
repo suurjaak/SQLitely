@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.01.2021
+@modified    09.01.2021
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -27,8 +27,8 @@ import wx
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.2.dev130"
-VersionDate = "08.01.2021"
+Version = "1.2.dev131"
+VersionDate = "09.01.2021"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -62,9 +62,9 @@ OptionalFileDirectives = [
     "MaxConsoleHistory", "MaxDBSizeForFullCount", "MaxTableRowIDForFullCount",
     "MaxHistoryInitialMessages", "MaxImportFilesizeForCount", "MaxRecentFiles",
     "MaxSearchHistory", "MaxSearchResults", "PopupUnexpectedErrors", "RunChecksums",
-    "RunStatistics", "SchemaLineNumbered", "SchemaWordWrap", "SearchResultsChunk",
-    "SeekLength", "SeekLeapLength", "StatisticsPlotWidth", "StatusFlashLength",
-    "UpdateCheckInterval",
+    "RunStatistics", "SchemaDiagramEnabled", "SchemaLineNumbered", "SchemaWordWrap",
+    "SearchResultsChunk", "SeekLength", "SeekLeapLength", "StatisticsPlotWidth",
+    "StatusFlashLength", "UpdateCheckInterval",
 ]
 Defaults = {}
 
@@ -132,6 +132,9 @@ RunStatistics = True
 
 """Database schema diagram settings, as {path: {..}}."""
 SchemaDiagrams = {}
+
+"""Whether database schema diagram is enabled."""
+SchemaDiagramEnabled = True
 
 """Show line numbers in SQL controls, like database full schema panel."""
 SchemaLineNumbered = False
