@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.01.2021
+@modified    10.01.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3414,6 +3414,8 @@ class DatabasePage(wx.Panel):
                 logger.info("Running REINDEX on %s in %s.", label, self.db)
                 self.db.executescript(sql, name="REINDEX")
                 busy.Close()
+                self.update_info_panel()
+                self.on_update_statistics()
                 wx.MessageBox("Re-created %s." % util.plural("index", indexes),
                               conf.Title, wx.ICON_INFORMATION)
             finally: busy.Close()
@@ -3464,16 +3466,10 @@ class DatabasePage(wx.Panel):
                             conf.Title, wx.ICON_WARNING | wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT
                         ): return
                     page.SetReadOnly()
+
             self.toggle_cursors(category, name, close=True)
-
             self.db.rename_item(category, name, name2)
-
-            self.load_tree_data()
-            self.load_tree_schema()
-            self.diagram.Populate()
-            self.populate_diagram_finder()
-            self.on_pragma_refresh(reload=True)
-            self.update_autocomp()
+            self.reload_schema()
 
             # Update name of the item's data/schema pages
             for page, pagemap, nb in zip(pages, [self.data_pages, self.schema_pages],
@@ -3540,29 +3536,15 @@ class DatabasePage(wx.Panel):
                             conf.Title, wx.ICON_WARNING | wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT
                         ): return
                     page.SetReadOnly()
+
             self.toggle_cursors("table", name, close=True)
-
             self.db.rename_column(table, name, name2)
-
-            self.load_tree_data()
-            self.load_tree_schema()
-            self.diagram.Populate()
-            self.on_pragma_refresh(reload=True)
-            self.update_autocomp()
-            for page in pages: page.Reload(item=self.db.get_category("table", table))
+            self.reload_schema()
             self.toggle_cursors("table", table)
             return True
 
         elif "refresh" == cmd:
-            self.reload_schema(count=True, parse=True)
-            self.update_info_panel()
-            if conf.RunStatistics: self.on_update_statistics()
-            self.on_pragma_refresh(reload=True)
-            self.update_autocomp()
-            for p in (y for x in self.data_pages.values() for y in x.values()):
-                if not p.IsChanged(): p.Reload()
-            for p in (y for x in self.schema_pages.values() for y in x.values()):
-                if not p.IsChanged(): p.Reload()
+            self.reload_schema(count=True)
         elif "locks" == cmd:
             locks = self.db.get_locks()
             wx.MessageBox(("Current database locks:\n\n- %s." % "\n- ".join(locks))
@@ -3767,6 +3749,8 @@ class DatabasePage(wx.Panel):
         Handler for refreshing database statistics, sets loading-content
         and tasks worker.
         """
+        if not event and not conf.RunStatistics: return
+
         self.statistics = {}
         self.worker_analyzer.work(self.db.filename)
         self.db.lock(None, None, self.db, label="statistics analysis")
@@ -4378,6 +4362,8 @@ class DatabasePage(wx.Panel):
         guibase.status(msg, log=True)
         self.db.executeaction("PRAGMA optimize", name="PRAGMA")
         guibase.status("")
+        self.update_info_panel()
+        self.on_update_statistics()
         wx.MessageBox("Optimize complete.", conf.Title, wx.OK | wx.ICON_INFORMATION)
 
 
@@ -4473,6 +4459,7 @@ class DatabasePage(wx.Panel):
             wx.MessageBox(util.ellipsize(err, 500), conf.Title, wx.OK | wx.ICON_ERROR)
         else:
             self.update_info_panel()
+            self.on_update_statistics()
             wx.MessageBox("VACUUM complete.\n\nSize before: %s.\nSize after:    %s." %
                 tuple(util.format_bytes(x, max_units=False) for x in (size1, self.db.filesize)),
                 conf.Title, wx.OK | wx.ICON_INFORMATION)
@@ -5282,7 +5269,7 @@ class DatabasePage(wx.Panel):
             self.db.reopen(filename1)
 
         if success or not rename:
-            self.reload_schema(count=True, parse=True)
+            self.reload_schema(count=True)
             if success: self.reload_grids()
 
         if not success and rename:
@@ -5922,7 +5909,7 @@ class DatabasePage(wx.Panel):
                 guibase.status("Failed to export to %s.", filename2)
 
             if is_samefile:
-                self.reload_schema(count=True, parse=True)
+                self.reload_schema(count=True)
                 self.update_page_header(updated=True)
             elif result["result"]:
                 wx.PostEvent(self, OpenDatabaseEvent(self.Id, file=filename2))
@@ -5986,9 +5973,8 @@ class DatabasePage(wx.Panel):
         if table:
             self.reload_schema()
             self.update_page_header(updated=True)
-        if table in self.data_pages["table"]:
-            self.data_pages["table"][table].Reload()
-        elif open and self.tree_data.FindAndActivateItem(type="table", name=table):
+        if table not in self.data_pages["table"] \
+        and open and self.tree_data.FindAndActivateItem(type="table", name=table):
             self.notebook.SetSelection(self.pageorder[self.page_data])
 
 
@@ -6052,8 +6038,7 @@ class DatabasePage(wx.Panel):
                 page = self.schema_pages[category].get(name)
                 if page: page.Close(force=True)
             if deleteds:
-                self.on_pragma_refresh(reload=True)
-                self.reload_schema(count=True)
+                self.reload_schema()
                 self.update_page_header(updated=True)
 
 
@@ -6164,59 +6149,60 @@ class DatabasePage(wx.Panel):
 
         self.db.populate_schema(count=True)
         self.update_tabheader()
-        wx.YieldIfNeeded()
-        if not self: return
+        if (wx.YieldIfNeeded() or True) and not self: return
         self.load_tree_data()
-        wx.YieldIfNeeded()
-        if not self: return
+        if (wx.YieldIfNeeded() or True) and not self: return
         self.update_info_panel()
-        wx.YieldIfNeeded()
-        if not self: return
+        if (wx.YieldIfNeeded() or True) and not self: return
         dopts = conf.SchemaDiagrams.get(self.db.filename) or {}
         if "enabled" not in dopts: dopts["enabled" ] = conf.SchemaDiagramEnabled
         self.diagram.Populate(dopts)
-        wx.YieldIfNeeded()
-        if not self: return
+        if (wx.YieldIfNeeded() or True) and not self: return
         self.populate_diagram_finder()
-        wx.YieldIfNeeded()
-        if not self: return
+        if (wx.YieldIfNeeded() or True) and not self: return
         self.Bind(components.EVT_DIAGRAM, self.on_diagram_event, self.diagram)
         if not self.db.temporary: self.on_diagram_event()
         else:  self.update_diagram_controls()
-        wx.YieldIfNeeded()
-        if not self: return
+        if (wx.YieldIfNeeded() or True) and not self: return
         if self.diagram.Enabled \
         and not any(self.diagram.IsVisible(n) for c in ("table", "view")
                     for n in self.db.schema[c]):
             self.diagram.Scroll(0, 0)
 
+        def after():
+            if not self: return
+            self.db.populate_schema(parse=True)
+            for pmap in self.data_pages, self.schema_pages:
+                for p in (p for d in pmap.values() for p in d.values()): p.Reload()
+            if (wx.YieldIfNeeded() or True) and not self: return
+            self.load_tree_schema()
+            if (wx.YieldIfNeeded() or True) and not self: return
+            self.on_update_stc_schema()
+            if (wx.YieldIfNeeded() or True) and not self: return
+            self.diagram.Populate()
+            self.populate_diagram_finder()
+            self.cb_diagram_rels.Enable(self.diagram.Enabled)
+            self.cb_diagram_labels.Enable(self.diagram.Enabled and self.cb_diagram_rels.Value)
+            self.update_autocomp()
 
-        wx.CallLater(100, self.reload_schema, parse=True)
-        if conf.RunStatistics: self.on_update_statistics()
+        wx.CallLater(100, after)
+        self.on_update_statistics()
 
 
-    def reload_schema(self, count=False, parse=False):
+    def reload_schema(self, count=False):
         """Reloads database schema and refreshes relevant controls"""
         if not self: return
-        self.db.populate_schema(count=count, parse=parse)
-        for d in self.schema_pages.values():
-            for p in d.values(): p.Reload()
-        wx.YieldIfNeeded()
-        if not self: return
-        self.load_tree_data() # @todo esimesel loadil pole vist vaja?
-        wx.YieldIfNeeded()
-        if not self: return
-        self.load_tree_schema()
-        wx.YieldIfNeeded()
-        if not self: return
-        self.on_update_stc_schema()
-        wx.YieldIfNeeded()
-        if not self: return
-        self.diagram.Populate()
-        self.populate_diagram_finder()
-        self.cb_diagram_rels.Enable(self.diagram.Enabled)
-        self.cb_diagram_labels.Enable(self.diagram.Enabled and self.cb_diagram_rels.Value)
-        self.update_autocomp()
+
+        self.db.populate_schema(count=count, parse=True)
+        self.on_pragma_refresh(reload=True)
+        for pmap in self.data_pages, self.schema_pages:
+            for p in (p for d in pmap.values() for p in d.values()): p.Reload()
+        ff = [self.load_tree_data, self.load_tree_schema, self.on_update_stc_schema,
+              self.diagram.Populate, self.populate_diagram_finder,
+              self.update_autocomp, self.update_info_panel, self.on_update_statistics]
+        for func in ff:
+            if (wx.YieldIfNeeded() or True) and not self: return
+            func()
 
 
     def populate_diagram_finder(self):
