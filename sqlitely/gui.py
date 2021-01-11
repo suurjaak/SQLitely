@@ -6214,6 +6214,12 @@ class DatabasePage(wx.Panel):
             self.cb_diagram_rels.Enable(self.diagram.Enabled)
             self.cb_diagram_labels.Enable(self.diagram.Enabled and self.cb_diagram_rels.Value)
             self.update_autocomp()
+            if (wx.YieldIfNeeded() or True) and not self: return
+            self.db.generate_schema(progress=lambda *_, **__: (wx.YieldIfNeeded() or True) and bool(self))
+            if (wx.YieldIfNeeded() or True) and not self: return
+            for p in (p for d in self.schema_pages.values() for p in d.values()): p.Reload()
+            if (wx.YieldIfNeeded() or True) and not self: return
+            self.on_update_stc_schema()
 
         func = functools.partial(self.db.populate_schema, parse=True, progress=progress)
         wx.CallLater(100, workers.WorkerThread(progress).work, func)

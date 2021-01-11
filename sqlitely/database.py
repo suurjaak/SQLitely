@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.01.2021
+@modified    11.01.2021
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -872,12 +872,14 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
-    def populate_schema(self, count=False, parse=False, category=None, name=None, progress=None):
+    def populate_schema(self, count=False, parse=False, generate=True,
+                        category=None, name=None, progress=None):
         """
         Retrieves metadata on all database tables, triggers etc.
 
         @param   count      populate table row counts
         @param   parse      parse all CREATE statements in full, complete metadata
+        @param   generate   generate nicely formatted CREATE SQL from parsed metadata
         @param   category   "table" | "index" | "trigger" | "view" if not everything
         @param   name       category item name if not everything in category
         @param   progress   callback(index, total, ?done) to report progress,
@@ -970,7 +972,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                                         "SQLite columns %s.\nParsed columns %s.",
                                         grammar.quote(myname), opts["columns"], meta["columns"])
                             meta = None
-                    if meta: sql, _ = grammar.generate(meta) # @todo use or lose
+                    if generate and meta and not meta.get("__comments__"):
+                        sql, _ = grammar.generate(meta)
                 if meta: opts.update(meta=meta)
                 if sql and (not meta or not meta.get("__comments__")):
                     opts.update(sql=sql)
@@ -992,7 +995,26 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
                 index += 1
                 if progress and not progress(index=index, total=total): return
-        if progress: progress(index=index, total=total, done=True)
+        if progress: progress(done=True)
+
+
+    def generate_schema(self, progress=None):
+        """
+        Generate nicely formatted CREATE SQL statements for all schema items.
+
+        @param   progress   callback(index, total, ?done) to report progress,
+                            returning false if generate should cancel
+        """
+        index, total = 0, sum(len(vv) for vv in self.schema.values())
+        for category, itemmap in self.schema.items():
+            for name, opts in itemmap.items():
+                meta = opts.get("meta")
+                if opts["sql"] == opts["sql0"] and meta and not meta.get("__comments__"):
+                    sql, _ = grammar.generate(meta)
+                    if sql: opts.update(sql=sql)
+                index += 1
+                if progress and not progress(index=index, total=total): return
+        if progress: progress(done=True)
 
 
     def get_count(self, table):

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.01.2021
+@modified    11.01.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -3099,10 +3099,11 @@ class SchemaObjectPage(wx.Panel):
         self._types = self._GetColumnTypes()
         self._tables = [x["name"] for x in self._db.schema.get("table", {}).values()]
         self._views  = [x["name"] for x in self._db.schema.get("view",  {}).values()]
-        item = item or self._db.get_category(self._category, self._item["name"])
-        if not item: return
-        item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
-        self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
+        if not self._newmode:
+            item = item or self._db.get_category(self._category, self._item["name"])
+            if not item: return
+            item = dict(item, meta=self._AssignColumnIDs(item.get("meta", {})))
+            self._item, self._original = copy.deepcopy(item), copy.deepcopy(item)
         self._UpdateHasMeta()
         if any(prevs[x] != getattr(self, x) for x in prevs): self._Populate()
         self._PostEvent(modified=True)
