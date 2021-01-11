@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.01.2021
+@modified    11.01.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1935,7 +1935,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         detection in a background thread.
         """
         if self.worker_detection.is_working():
-            guibase.status()
+            guibase.status("")
             self.worker_detection.stop_work()
             self.button_detect.Label = "Detect databases"
         else:
@@ -2633,8 +2633,12 @@ class DatabasePage(wx.Panel):
         panel1 = wx.Panel(splitter)
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_topleft = wx.BoxSizer(wx.HORIZONTAL)
+        gauge = self.gauge_data = wx.Gauge(panel1)
+        gauge.Hide()
         button_refresh = self.button_refresh_data = \
             wx.Button(panel1, label="Refresh")
+        button_refresh.Disable()
+        sizer_topleft.Add(gauge, flag=wx.ALIGN_CENTER_VERTICAL)
         sizer_topleft.AddStretchSpacer()
         sizer_topleft.Add(button_refresh)
 
@@ -2718,7 +2722,10 @@ class DatabasePage(wx.Panel):
         splitter.SetMinimumPaneSize(100)
 
         panel1 = wx.Panel(splitter)
-        button_refresh = wx.Button(panel1, label="Refresh")
+        gauge = self.gauge_schema = wx.Gauge(panel1)
+        button_refresh = self.button_refresh_schema = \
+            wx.Button(panel1, label="Refresh")
+        button_refresh.Disable()
         button_new = wx.Button(panel1, label="Create ne&w ..")
 
         tree = self.tree_schema = controls.TreeListCtrl(
@@ -2727,6 +2734,7 @@ class DatabasePage(wx.Panel):
         ColourManager.Manage(tree, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(tree, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
 
+        gauge.Hide()
         isize = (16, 16)
         il = wx.ImageList(*isize)
         self.tree_schema_images = {
@@ -2747,6 +2755,7 @@ class DatabasePage(wx.Panel):
 
         sizer1 = panel1.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_topleft = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_topleft.Add(gauge, flag=wx.ALIGN_CENTER_VERTICAL)
         sizer_topleft.AddStretchSpacer()
         sizer_topleft.Add(button_refresh)
         sizer_topleft.Add(button_new, border=5, flag=wx.LEFT)
@@ -6169,9 +6178,30 @@ class DatabasePage(wx.Panel):
                     for n in self.db.schema[c]):
             self.diagram.Scroll(0, 0)
 
+
+        def progress(result=None, index=None, total=None, done=None):
+            def after2():
+                if not self: return
+
+                if done:
+                    self.gauge_schema.Hide()
+                    self.gauge_schema.ContainingSizer.Layout()
+                    guibase.status("")
+                    after()
+                elif total:
+                    guibase.status("Parsing database schema.")
+                    self.gauge_schema.Value = 100 * index / total
+                    self.gauge_schema.ToolTip = "Parsing.. %s%% (%s of %s)" % (self.gauge_schema.Value, index, total)
+                    if not self.gauge_schema.Shown:
+                        self.gauge_schema.Show()
+                        self.gauge_schema.ContainingSizer.Layout()
+            wx.CallAfter(after2)
+            return bool(self)
+
+
         def after():
             if not self: return
-            self.db.populate_schema(parse=True)
+
             for pmap in self.data_pages, self.schema_pages:
                 for p in (p for d in pmap.values() for p in d.values()): p.Reload()
             if (wx.YieldIfNeeded() or True) and not self: return
@@ -6185,7 +6215,8 @@ class DatabasePage(wx.Panel):
             self.cb_diagram_labels.Enable(self.diagram.Enabled and self.cb_diagram_rels.Value)
             self.update_autocomp()
 
-        wx.CallLater(100, after)
+        func = functools.partial(self.db.populate_schema, parse=True, progress=progress)
+        wx.CallLater(100, workers.WorkerThread(progress).work, func)
         self.on_update_statistics()
 
 
@@ -6197,6 +6228,8 @@ class DatabasePage(wx.Panel):
         self.on_pragma_refresh(reload=True)
         for pmap in self.data_pages, self.schema_pages:
             for p in (p for d in pmap.values() for p in d.values()): p.Reload()
+        self.button_refresh_data.Disable()
+        self.button_refresh_schema.Disable()
         ff = [self.load_tree_data, self.load_tree_schema, self.on_update_stc_schema,
               self.diagram.Populate, self.populate_diagram_finder,
               self.update_autocomp, self.update_info_panel, self.on_update_statistics]
@@ -6269,25 +6302,31 @@ class DatabasePage(wx.Panel):
     def load_tree_data(self, refresh=False):
         """Loads table and view data into data tree."""
         if not self: return
-        tree = self.tree_data
+
+        tree, gauge = self.tree_data, self.gauge_data
+
+        self.button_refresh_data.Disable()
+        gauge.Value, gauge.ToolTip = 0, "Populating.. 0%"
+        gauge.Show()
+        gauge.ContainingSizer.Layout()
         expandeds = self.get_tree_state(tree, tree.RootItem)
+        tree.DeleteAllItems()
+        if (wx.YieldIfNeeded() or True) and not self: return
+
         tree.Freeze()
         try:
-            tree.DeleteAllItems()
-            tree.AddRoot("Loading data..")
             try:
                 if refresh: self.db.populate_schema(count=True)
             except Exception:
-                if not self: return
                 msg = "Error loading data from %s." % self.db
                 logger.exception(msg)
                 return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
 
-            tree.DeleteAllItems()
             root = tree.AddRoot("SQLITE")
             tree.SetItemPyData(root, {"type": "data"})
 
-            tops = []
+            tops, index = [], 0
+            total = sum(len(self.db.schema.get(c, {})) for c in ("table", "view"))
             for category in "table", "view":
                 # Fill data tree with information on row counts and columns
                 items = self.db.get_category(category).values()
@@ -6322,27 +6361,43 @@ class DatabasePage(wx.Panel):
                         tree.SetItemText(subchild, mytype, 1)
                         tree.SetItemPyData(subchild, dict(col, parent=item, type="column"))
 
+                    index += 1
+                    gauge.Value = 100 * index / total
+                    gauge.ToolTip = "Populating.. %s%% (%s of %s)" % (gauge.Value, index, total)
+                    if (wx.YieldIfNeeded() or True) and not self: return
+
             tree.Expand(root)
             for top in tops: tree.Expand(top)
             tree.SetColumnWidth(1, 100)
             tree.SetColumnWidth(0, tree.Size[0] - 130)
             self.set_tree_state(tree, tree.RootItem, expandeds)
-        finally: tree.Thaw()
+        finally:
+            if not self: return
+            self.button_refresh_data.Enable()
+            gauge.Hide()
+            gauge.ContainingSizer.Layout()
+            tree.Thaw()
 
 
     def load_tree_schema(self, refresh=False):
         """Loads database schema into schema tree."""
         if not self: return
-        tree = self.tree_schema
+
+        tree, gauge = self.tree_schema, self.gauge_schema
+
+        self.button_refresh_schema.Disable()
+        gauge.Value, gauge.ToolTip = 0, "Populating.. 0%"
+        gauge.Show()
+        gauge.ContainingSizer.Layout()
         expandeds = self.get_tree_state(tree, tree.RootItem)
+        tree.DeleteAllItems()
+        if (wx.YieldIfNeeded() or True) and not self: return
+
         tree.Freeze()
         try:
-            tree.DeleteAllItems()
-            tree.AddRoot("Loading schema..")
             try:
                 if refresh: self.db.populate_schema(parse=True)
             except Exception:
-                if not self: return
                 msg = "Error loading schema data from %s." % self.db
                 logger.exception(msg)
                 return wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_ERROR)
@@ -6357,11 +6412,10 @@ class DatabasePage(wx.Panel):
             italicfont = tree.Font
             italicfont.SetStyle(wx.FONTSTYLE_ITALIC)
 
-            tree.DeleteAllItems()
             root = tree.AddRoot("SQLITE")
             tree.SetItemPyData(root, {"type": "schema"})
             imgs = self.tree_schema_images
-            tops = []
+            tops, index, total = [], 0, sum(len(vv) for vv in self.db.schema.values())
             for category in database.Database.CATEGORIES:
                 items = self.db.get_category(category).values()
                 categorydata = {"type": "category", "category": category, "level": "category", "items": items}
@@ -6474,13 +6528,23 @@ class DatabasePage(wx.Panel):
                             tree.SetItemText(subchild, t, 1)
                             if is_indirect_item(item, subitem): tree.SetItemFont(subchild, italicfont)
 
+                    index += 1
+                    gauge.Value = 100 * index / total
+                    gauge.ToolTip = "Populating.. %s%% (%s of %s)" % (gauge.Value, index, total)
+                    if (wx.YieldIfNeeded() or True) and not self: return
+
                 tree.Collapse(top)
             tree.SetColumnWidth(0, tree.Size[0] - 180)
             tree.SetColumnWidth(1, 150)
             tree.Expand(root)
             for top in tops: tree.Expand(top)
             self.set_tree_state(tree, tree.RootItem, expandeds)
-        finally: tree.Thaw()
+        finally:
+            if not self: return
+            self.button_refresh_schema.Enable()
+            gauge.Hide()
+            gauge.ContainingSizer.Layout()
+            tree.Thaw()
 
 
     def on_change_tree_data(self, event):

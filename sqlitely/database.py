@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.01.2021
+@modified    10.01.2021
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -872,7 +872,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
-    def populate_schema(self, count=False, parse=False, category=None, name=None):
+    def populate_schema(self, count=False, parse=False, category=None, name=None, progress=None):
         """
         Retrieves metadata on all database tables, triggers etc.
 
@@ -880,6 +880,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         @param   parse      parse all CREATE statements in full, complete metadata
         @param   category   "table" | "index" | "trigger" | "view" if not everything
         @param   name       category item name if not everything in category
+        @param   progress   callback(index, total, ?done) to report progress,
+                            returning false if populate should cancel
         """
         if not self.is_open(): return
         category, name = (x.lower() if x else x for x in (category, name))
@@ -912,6 +914,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
             row["sql"] = row["sql0"] = sql
             self.schema[row["type"]][row["name"]] = row
 
+        index, total = 0, sum(len(vv) for vv in self.schema.values())
+        if category and name: progress = None # Skip progress report if one item
+        elif category: total = len(self.schema.get(category) or {})
+        if progress and not progress(index=0, total=total): return
+            
         for mycategory, itemmap in self.schema.items():
             if category and category != mycategory: continue # for mycategory
             for myname, opts in itemmap.items():
@@ -982,6 +989,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     opts["count"] = opts0["count"]
                     if "is_count_estimated" in opts0:
                         opts["is_count_estimated"] = opts0["is_count_estimated"]
+
+                index += 1
+                if progress and not progress(index=index, total=total): return
+        if progress: progress(index=index, total=total, done=True)
 
 
     def get_count(self, table):
