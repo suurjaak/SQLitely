@@ -13,7 +13,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.11.2020
+@modified    11.01.2021
 """
 import datetime
 import logging
@@ -107,6 +107,7 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
             title=u"%s Console" % conf.Title, size=conf.ConsoleSize)
         self.frame_console.Bind(wx.EVT_CLOSE, self.on_toggle_console)
         self.frame_console_shown = False # Init flag
+        self.status_clearer      = None  # wx.CallLater instance
         console = self.console = self.frame_console.shell
         if not isinstance(conf.ConsoleHistoryCommands, list):
             conf.ConsoleHistoryCommands = []
@@ -227,11 +228,17 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
     def set_status(self, text, timeout=False):
         """Sets main window status bar text, optionally clears after timeout."""
         self.SetStatusText(text)
+        if self.status_clearer: self.status_clearer.Stop()
+        self.status_clearer = None
         if not timeout or not text: return
 
+        def clear(sb, text):
+            if not sb or sb.StatusText != text: return
+            self.status_clearer = None
+            self.SetStatusText("")
+
         if timeout is True: timeout = conf.StatusFlashLength
-        clear = lambda sb: sb and sb.StatusText == text and self.SetStatusText("")
-        wx.CallLater(timeout * 1000, clear, self.StatusBar)
+        self.status_clearer = wx.CallLater(timeout * 1000, clear, self.StatusBar, text)
 
 
     def log_message(self, text):
