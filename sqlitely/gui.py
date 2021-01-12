@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.01.2021
+@modified    12.01.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2428,7 +2428,7 @@ class DatabasePage(wx.Panel):
         self.ready_to_close = False
         self.db = db
         self.db.register_consumer(self)
-        self.save_underway  = False
+        self.flags      = {} # {various flags: bool}
         self.statistics = {} # {?error: message, ?data: {..}}
         self.pages_closed = defaultdict(list) # {notebook: [{name, ..}, ]}
         self.pragma         = db.get_pragma_values() # {pragma_name: value}
@@ -5243,7 +5243,7 @@ class DatabasePage(wx.Panel):
             return
 
         success, error = True, None
-        self.save_underway = True
+        self.flags["save_underway"] = True
         schemas_saved = {} # {category: {key: page}}
         try:
             for dct in self.data_pages, self.schema_pages:
@@ -5263,7 +5263,7 @@ class DatabasePage(wx.Panel):
             error = "Error saving changes:\n\n%s" % util.format_exc(e)
             try: self.db.execute("ROLLBACK")
             except Exception: pass
-        self.save_underway = False
+        self.flags.pop("save_underway", None)
 
         if success and rename:
             try:
@@ -5464,7 +5464,7 @@ class DatabasePage(wx.Panel):
                 if event.source.IsChanged(): title += "*"
                 if self.notebook_schema.GetPageText(idx) != title:
                     self.notebook_schema.SetPageText(idx, title)
-            if not self.save_underway: self.update_page_header(updated=updated)
+            if not self.flags.get("save_underway"): self.update_page_header(updated=updated)
         if updated:
             self.load_tree_schema()
             self.diagram.Populate()
@@ -5478,7 +5478,7 @@ class DatabasePage(wx.Panel):
                         if item["name"] == n: item["name"] = name
                         break # for item
                     break # for n, p
-        if updated and not self.save_underway:
+        if updated and not self.flags.get("save_underway"):
             self.on_pragma_refresh(reload=True)
             self.update_autocomp()
             self.load_tree_data()
@@ -5596,8 +5596,8 @@ class DatabasePage(wx.Panel):
                 if event.source.IsChanged(): title += "*"
                 if self.notebook_data.GetPageText(idx) != title:
                     self.notebook_data.SetPageText(idx, title)
-            if not self.save_underway: self.update_page_header()
-        if updated and not self.save_underway:
+            if not self.flags.get("save_underway"): self.update_page_header()
+        if updated and not self.flags.get("save_underway"):
             self.db.populate_schema(count=True, category=category, name=table or name)
             self.load_tree_data()
         if open:
@@ -6228,8 +6228,9 @@ class DatabasePage(wx.Panel):
 
     def reload_schema(self, count=False):
         """Reloads database schema and refreshes relevant controls"""
-        if not self: return
+        if not self or self.flags.get("reload_schema_underway"): return
 
+        self.flags["reload_schema_underway"] = True
         self.db.populate_schema(count=count, parse=True)
         self.on_pragma_refresh(reload=True)
         for pmap in self.data_pages, self.schema_pages:
@@ -6242,6 +6243,7 @@ class DatabasePage(wx.Panel):
         for func in ff:
             if (wx.YieldIfNeeded() or True) and not self: return
             func()
+        self.flags.pop("reload_schema_underway", None)
 
 
     def populate_diagram_finder(self):
