@@ -534,7 +534,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             "Export all tables to a single Excel spreadsheet, "
             "each table in separate worksheet")
         menu_tools_export_data = self.menu_tools_export_data = menu_tools_export.Append(
-            wx.ID_ANY, "All tables to another &database",
+            wx.ID_ANY, "All tables to another data&base",
             "Export table schemas and data to another SQLite database")
         menu_tools_export_structure = self.menu_tools_export_structure = menu_tools_export.Append(
             wx.ID_ANY, "All table structures to &another database",
@@ -5896,7 +5896,7 @@ class DatabasePage(wx.Panel):
                 category = next(c for c, v in self.db.schema.items() if k in v)
                 if v.get("error"): errors.append("%s %s: %s" % 
                     (category, grammar.quote(k, force=True), v["error"]))
-                if v.get("result"): successes.setdefault("category", []).append(k)
+                if v.get("result"): successes.setdefault(category, []).append(k)
 
             errors.sort(key=lambda x: x.lower())
             if result.get("error"): errors.append(result["error"])
@@ -5908,12 +5908,12 @@ class DatabasePage(wx.Panel):
                 wx.CallLater(500, wx.MessageBox, msg, conf.Title, wx.OK | wx.ICON_WARNING)
 
             if successes:
-                if len(successes) > 1 or any(len(v) > 1 for v in successes.values()):
+                if len(successes) > 1:
                     status =  " and ".join(util.plural(c, vv)
                                            for c, vv in sorted(successes.items()))
-                else: status = "%s %s" % (successes.keys()[0],
-                                          grammar.quote(successes.values()[0]))
-                guibase.status(status)
+                else: status = "%s %s" % (util.plural(successes.keys()[0], successes.values()[0]),
+                                          ", ".join(map(grammar.quote, successes.values()[0])))
+                guibase.status("Exported %s." % status, log=True)
             else:
                 guibase.status("Failed to export to %s.", filename2)
 
@@ -6722,7 +6722,7 @@ class DatabasePage(wx.Panel):
 
             item_file = wx.MenuItem(menu, -1, "Export %s to &file" % data["type"])
             if data["type"] in ("table", "view"):
-                item_database = wx.MenuItem(menu, -1, "Export %s to another &database" % data["type"])
+                item_database = wx.MenuItem(menu, -1, "Export %s to another data&base" % data["type"])
             if "table" == data["type"]:
                 item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
                 item_truncate = wx.MenuItem(menu, -1, "Truncate table")
@@ -6774,7 +6774,7 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, ", ".join(data["items"]), "%s names" % data["category"]), item_copy)
 
             if data["category"] in ("table", "view"):
-                item_database    = wx.MenuItem(menu, -1, "Export all %s to another &database" % util.plural(data["category"]))
+                item_database    = wx.MenuItem(menu, -1, "Export all %s to another data&base" % util.plural(data["category"]))
             if "table" == data["category"]:
                 item_import      = wx.MenuItem(menu, -1, "&Import into table from file")
                 item_reindex_all = wx.MenuItem(menu, -1, "Reindex all")
@@ -6783,7 +6783,7 @@ class DatabasePage(wx.Panel):
             item_create   = wx.MenuItem(menu, -1, "Create &new %s" % data["category"])
         else: # Root
             item_dump   = wx.MenuItem(menu, -1, "Save database d&ump as SQL")
-            item_database_meta = wx.MenuItem(menu, -1, "Export all to another &database")
+            item_database_meta = wx.MenuItem(menu, -1, "Export all to another data&base")
             menu.Append(item_dump)
             menu.Append(item_database_meta)
             menu.Bind(wx.EVT_MENU, self.on_dump, item_dump)
@@ -6920,7 +6920,7 @@ class DatabasePage(wx.Panel):
             if any(self.db.schema.values()):
                 item_copy_sql = wx.MenuItem(menu, -1, "Copy schema S&QL")
                 item_save_sql = wx.MenuItem(menu, -1, "Save schema SQL to fi&le")
-                item_database_meta = wx.MenuItem(menu, -1, "Export all structures to another &database")
+                item_database_meta = wx.MenuItem(menu, -1, "Export all structures to another data&base")
                 menu.Append(item_copy_sql)
                 menu.Append(item_save_sql)
                 menu.Append(item_database_meta)
@@ -6969,7 +6969,7 @@ class DatabasePage(wx.Panel):
                 menu.Append(item_save_sql)
 
                 if data["category"] in ("table", "view"):
-                    item_database_meta = wx.MenuItem(menu, -1, "Export all %s structures to another &database" % data["category"])
+                    item_database_meta = wx.MenuItem(menu, -1, "Export all %s structures to another data&base" % data["category"])
                     menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_to_db, category=data["category"], names=names, data=False),
                               item_database_meta)
                     menu.Append(item_database_meta)
@@ -7079,7 +7079,7 @@ class DatabasePage(wx.Panel):
                       item_drop)
 
             if data["type"] in ("table", "view"):
-                item_database_meta = wx.MenuItem(menu, -1, "Export %s structure to another &database" % data["type"])
+                item_database_meta = wx.MenuItem(menu, -1, "Export %s structure to another data&base" % data["type"])
                 menu.Append(item_database_meta)
                 menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_to_db, category=data["type"], names=data["name"], data=False),
                           item_database_meta)
