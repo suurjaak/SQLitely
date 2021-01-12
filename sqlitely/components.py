@@ -9801,7 +9801,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
         self._dlg_savebmp.SetFilterIndex(FMTS.index("PNG") if "PNG" in FMTS else 0)
 
-        self._worker_graph = workers.GraphWorker(self._OnWorkerGraph)
+        self._worker_graph = workers.WorkerThread()
         self._worker_bmp = workers.WorkerThread()
         # Functions to call on completing making item bitmaps, as {key: func}
         self._work_finalizers = OrderedDict()
@@ -10739,12 +10739,12 @@ class SchemaDiagram(wx.ScrolledWindow):
             for o in items:
                 bmp, bmpsel = self._GetItemBitmaps(o, stats and o["stats"])
                 o.update(bmp=bmp, bmpsel=bmpsel, bmparea=None)
-            return self._OnWorkerProgress(done=True, immediate=True)
+            return self._OnBitmapWorkerProgress(done=True, immediate=True)
 
         self._worker_bmp.work(functools.partial(self._BitmapWorker, items))
 
 
-    def _OnWorkerProgress(self, done=False, index=None, count=None, immediate=False):
+    def _OnBitmapWorkerProgress(self, done=False, index=None, count=None, immediate=False):
         """Handler for bitmap worker result, posts progress event, updates UI if done."""
         def after():
             if not self: return
@@ -10767,13 +10767,13 @@ class SchemaDiagram(wx.ScrolledWindow):
             if not self or not self._worker_bmp.is_working(): break # for i, o
             bmp, bmpsel = self._GetItemBitmaps(o, stats and o["stats"])
             o.update(bmp=bmp, bmpsel=bmpsel, bmparea=None)
-            self._OnWorkerProgress(index=i, count=len(items))
-        if self: self._OnWorkerProgress(done=True)
+            self._OnBitmapWorkerProgress(index=i, count=len(items))
+        if self: self._OnBitmapWorkerProgress(done=True)
 
 
     def _PositionItemsGrid(self):
         """Calculates item positions using a simple grid layout."""
-        self._worker_graph.stop_work(drop=True)
+        self._worker_graph.stop_work()
         MAXW = max(500 * self._zoom, self.ClientSize[0])
         MAXH = max(500 * self._zoom, self.ClientSize[1])
 
@@ -10873,7 +10873,196 @@ class SchemaDiagram(wx.ScrolledWindow):
         links = [(n1, n2) for n1, n2, opts in self._lines]
 
         bounds = [0, 0] + list(self.VirtualSize)
-        self._worker_graph.work((nodes, links, bounds, self.GetViewPort()))
+        self._worker_graph.work(functools.partial(self._GraphWorker, nodes, links,
+                                                  bounds, self.GetViewPort()))
+
+
+
+    def _GraphWorker(self, items, links, bounds, viewport):
+        """
+        Calculates item positions using a force-directed graph.
+
+        @param   items     [{"name", "x", "y", "size"}, ]
+        @param   links     [(name1, name2), (..)]
+        @param   bounds    graph bounds as (x, y, width, height)
+        @param   viewport  preferred viewport within bounds, as (x, y, width, height)
+        """
+
+        """
+        @todo
+
+        inertia 0.5 pole paha
+
+        edge_weight 10 jätab kauem siplema, rohkem ülalt alla. aga koondab paremini kokku related.
+
+        attraction oli 10, aga 1 on päris hea
+
+        """
+
+
+        DEFAULT_EDGE_WEIGHT     =    1
+        MAX_ITERATIONS          =  100
+        MIN_COMPLETION_DISTANCE =    0.1
+        INERTIA                 =    0.1  # node speed inertia
+        REPULSION               =  400    # repulsion between all nodes
+        ATTRACTION              =    1    # attraction between connected nodes
+        MAX_DISPLACE            =   10    # node displacement limit
+        DO_FREEZE_BALANCE       = True    # whether unstable nodes are stabilized
+        FREEZE_STRENGTH         =   80    # stabilization strength
+        FREEZE_INERTIA          =    0.2  # stabilization inertia [0..1]
+        GRAVITY                 =   50    # force of attraction to graph centre, smaller values push less connected nodes more outwards
+        SPEED                   =    1    # convergence speed (>0)
+        COOLING                 =    1.0  # dampens force if >0
+        DO_OUTBOUND_ATTRACTION  = True    # whether attraction is distributed along outbound links (pushes hubs to center)
+
+
+        def intersects(n1, n2):
+            (w1, h1), (w2, h2) = n1["size"], n2["size"]
+            x1, y1 = max(n1["x"], n2["x"]), max(n1["y"], n2["y"])
+            x2, y2 = min(n1["x"] + w1, n2["x"] + w2), min(n1["y"] + h1, n2["y"] + h2)
+            return x1 < x2 and y1 < y2
+
+
+        def repulsor(n1, n2, c):
+            xdist, ydist = n1["x"] - n2["x"], n1["y"] - n2["y"]
+            dist = math.sqrt(xdist ** 2 + ydist ** 2) - n1["span"] - n2["span"]
+            if not dist: return
+
+            f = 0.001 * c / dist if dist > 0 else -c
+            if intersects(n1, n2): f *= 100
+            if not n1["fixed"]:
+                n1["dx"] += xdist / dist * f
+                n1["dy"] += ydist / dist * f
+            if not n2["fixed"]:
+                n2["dx"] -= xdist / dist * f
+                n2["dy"] -= ydist / dist * f
+
+
+        def attractor(n1, n2, c):
+            xdist, ydist = n1["x"] - n2["x"], n1["y"] - n2["y"]
+            dist = math.sqrt(xdist ** 2 + ydist ** 2) - n1["span"] - n2["span"]
+            if not dist: return
+
+            f = 0.01 * -c * dist
+            if not n1["fixed"]:
+                n1["dx"] += xdist / dist * f
+                n1["dy"] += ydist / dist * f
+            if not n2["fixed"]:
+                n2["dx"] -= xdist / dist * f
+                n2["dy"] -= ydist / dist * f
+
+
+        def step(nodes, links):
+            result = 0
+
+            for n, o in nodes.items():
+                o.update(dx0=o["dx"], dy0=o["dy"], dx=o["dx"] * INERTIA, dy=o["dy"] * INERTIA)
+            nodelist = nodes.values()
+
+            # repulsion
+            for i, n1 in enumerate(nodelist):
+                for j, n2 in enumerate(nodelist[i+1:]):
+                    c = REPULSION * (1 + n1["cardinality"]) * (1 + n2["cardinality"])
+                    repulsor(n1, n2, c)
+
+            # attraction
+            for name1, name2 in links:
+                n1, n2 = nodes[name1], nodes[name2]
+                bonus = 100 if n1["fixed"] or n2["fixed"] else 1
+                bonus *= DEFAULT_EDGE_WEIGHT
+                c = bonus * ATTRACTION / (1. + n1["cardinality"] * DO_OUTBOUND_ATTRACTION)
+                attractor(n1, n2, c)
+
+            # gravity
+            for n in nodelist:
+                if n["fixed"]: continue # for n
+                d = 0.0001 + math.sqrt(node["x"] ** 2 + node["y"] ** 2)
+                gf = 0.0001 * GRAVITY * d
+                n["dx"] -= gf * n["x"] / d
+                n["dy"] -= gf * n["y"] / d
+
+            # speed
+            for n in nodelist:
+                if n["fixed"]: continue # for n
+                n["dx"] *= SPEED * (10 if DO_FREEZE_BALANCE else 1)
+                n["dy"] *= SPEED * (10 if DO_FREEZE_BALANCE else 1)
+
+            # apply forces
+            for n in nodelist:
+                if node["fixed"]: continue # for n
+
+                d = 0.0001 + math.sqrt(n["dx"] ** 2 + n["dy"] ** 2)
+                if DO_FREEZE_BALANCE:
+                    ddist = math.sqrt((n["dx0"] - n["dx"]) ** 2 + (n["dy0"] - n["dy"]) ** 2)
+                    n["freeze"] = FREEZE_INERTIA * n["freeze"] + (1 - FREEZE_INERTIA) * 0.1 * FREEZE_STRENGTH * math.sqrt(ddist)
+                    ratio = min(d / (d * (1 + n["freeze"])), MAX_DISPLACE / d)
+                else:
+                    ratio = min(1, MAX_DISPLACE / d)
+
+                n["dx"], n["dy"] = n["dx"] * ratio / COOLING, n["dy"] * ratio / COOLING
+                x, y = n["x"] + n["dx"], n["y"] + n["dy"]
+
+                # Bounce back from edges
+                if x < bounds[0]: n["dx"] = bounds[0] - n["x"]
+                elif x + n["size"][0] > bounds[0] + bounds[2]:
+                    n["dx"] = bounds[2] - n["size"][0] - n["x"]
+                if y < bounds[1]: n["dy"] = bounds[1] - n["y"]
+                elif y + n["size"][1] > bounds[1] + bounds[3]:
+                    n["dy"] = bounds[3] - n["size"][1] - n["y"]
+
+                n["x"], n["y"] = n["x"] + n["dx"], n["y"] + n["dy"]
+                result = max(result, abs(n["dx"]), abs(n["dy"]))
+
+            return result
+
+
+        nodes = util.CaselessDict() # {name: {id, size, dx, dy, freeze, fixed, cardinality}, }
+
+        for o in items:
+            node = {"x": o["x"], "y": o["y"], "size": o["size"], "name": o["name"],
+                    "dx": 0, "dy": 0, "freeze": 0, "cardinality": 0, "fixed": False}
+            node["span"] = math.sqrt(o["size"][0] ** 2 + o["size"][1] ** 2) / 2.5
+            nodes[o["name"]] = node
+
+        for name1, name2 in links:
+            if name1 != name2:
+                for n in name1, name2: nodes[n]["cardinality"] += 1
+
+        # Start with all items in center
+        center = viewport[0] + viewport[2] / 2, viewport[1] + viewport[3] / 2
+        for i, n in enumerate(nodes.values()):
+            x, y = (c - s/2 for c, s in zip(center, o["size"]))
+            if not n["cardinality"]: x += 200 # Push solitary nodes out
+            n["x"], n["y"] = x, y
+
+
+        steps = 0
+        while self and self._worker_graph.is_working():
+            dist, steps = step(nodes, links), steps + 1
+            if dist < MIN_COMPLETION_DISTANCE or steps >= MAX_ITERATIONS:
+                break # while
+        if self and self._worker_graph.is_working():
+            items = {n: {"x": o["x"], "y": o["y"]} for n, o in nodes.items()}
+            wx.CallAfter(self._OnWorkerGraphResult, items)
+
+
+    def _OnWorkerGraphResult(self, items):
+        """Callback handler for graph worker, updates item positions."""
+        if not self: return
+
+        self.Freeze()
+        for name, opts in items.items():
+            o = self._objs.get(name)
+            if not o: continue # for
+
+            bounds = self._dc.GetIdBounds(o["id"])
+            dx, dy = opts["x"] - bounds.Left, opts["y"] - bounds.Top
+            bounds.Offset(dx, dy)
+            self._dc.TranslateId(o["id"], dx, dy)
+            self._dc.SetIdBounds(o["id"], bounds)
+        self.Redraw(remakelines=True)
+        self.Thaw()
+        self._PostEvent()
 
 
     def _CalculateLines(self, remake=False):
@@ -11557,29 +11746,6 @@ class SchemaDiagram(wx.ScrolledWindow):
             else:
                 self.ScrollXY(v + d for v, d in zip(self.GetViewPort().TopLeft, (dx, dy)))
         else: event.Skip() # Allow to propagate to other handlers
-
-
-    def _OnWorkerGraph(self, items):
-        """Callback handler for graph worker, updates item positions."""
-
-        def after():
-            if not self: return
-
-            self.Freeze()
-            for name, opts in items.items():
-                o = self._objs.get(name)
-                if not o: continue # for
-
-                bounds = self._dc.GetIdBounds(o["id"])
-                dx, dy = opts["x"] - bounds.Left, opts["y"] - bounds.Top
-                bounds.Offset(dx, dy)
-                self._dc.TranslateId(o["id"], dx, dy)
-                self._dc.SetIdBounds(o["id"], bounds)
-            self.Redraw(remakelines=True)
-            self.Thaw()
-            self._PostEvent()
-
-        wx.CallAfter(after)
 
 
     def _OnPaint(self, event):

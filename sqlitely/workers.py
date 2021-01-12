@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.12.2020
+@modified    12.01.2021
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
