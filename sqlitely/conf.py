@@ -50,9 +50,9 @@ ConfigFile = "%s.ini" % os.path.join(EtcDirectory, Title.lower())
 """List of attribute names that can be saved to and loaded from ConfigFile."""
 FileDirectives = ["AllowMultipleInstances", "ConsoleHistoryCommands", "DBFiles",
     "DBSort", "LastActivePages", "LastExportType", "LastSearchResults",
-    "LastSelectedFiles", "LastUpdateCheck", "RecentFiles", "SchemaDiagrams",
-    "SearchHistory", "SearchInMeta", "SearchInData", "SearchUseNewTab",
-    "SearchCaseSensitive", "SQLWindowTexts", "TrayIconEnabled",
+    "LastSelectedFiles", "LastUpdateCheck", "ParseCache", "RecentFiles",
+    "SchemaDiagrams", "SearchHistory", "SearchInMeta", "SearchInData",
+    "SearchUseNewTab", "SearchCaseSensitive", "SQLWindowTexts", "TrayIconEnabled",
     "UpdateCheckAutomatic", "WindowMaximized", "WindowMinimizedToTray",
     "WindowPosition", "WindowSize",
 ]
@@ -61,10 +61,10 @@ OptionalFileDirectives = [
     "DBExtensions", "ExportDbTemplate", "LogSQL", "MinWindowSize",
     "MaxConsoleHistory", "MaxDBSizeForFullCount", "MaxTableRowIDForFullCount",
     "MaxHistoryInitialMessages", "MaxImportFilesizeForCount", "MaxRecentFiles",
-    "MaxSearchHistory", "MaxSearchResults", "PopupUnexpectedErrors", "RunChecksums",
-    "RunStatistics", "SchemaDiagramEnabled", "SchemaLineNumbered", "SchemaWordWrap",
-    "SearchResultsChunk", "SeekLength", "SeekLeapLength", "StatisticsPlotWidth",
-    "StatusFlashLength", "UpdateCheckInterval",
+    "MaxSearchHistory", "MaxSearchResults", "MaxParseCache", "PopupUnexpectedErrors",
+    "RunChecksums", "RunStatistics", "SchemaDiagramEnabled", "SchemaLineNumbered",
+    "SchemaWordWrap", "SearchResultsChunk", "SeekLength", "SeekLeapLength",
+    "StatisticsPlotWidth", "StatusFlashLength", "UpdateCheckInterval",
 ]
 Defaults = {}
 
@@ -120,6 +120,9 @@ SeekLength = 100
 
 """Number of rows to seek ahead on data grids, when scrolling freely or jumping to data grid bottom."""
 SeekLeapLength = 10000
+
+"""Cached parse results, as {CREATE SQL: {meta}}."""
+ParseCache = {}
 
 """Contents of Recent Files menu."""
 RecentFiles = []
@@ -219,6 +222,9 @@ ConsoleSize = (800, 300)
 
 """Maximum number of console history commands to store."""
 MaxConsoleHistory = 1000
+
+"""Maximum number of cached SQL parse results."""
+MaxParseCache = 500
 
 """Maximum number of search texts to store."""
 MaxSearchHistory = 500

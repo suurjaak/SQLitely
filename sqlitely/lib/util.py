@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.01.2021
+@modified    12.01.2021
 ------------------------------------------------------------------------------
 """
 import __builtin__
@@ -192,20 +192,39 @@ def memoize(*args, **kwargs):
     @memoize(__nohash__=True)
     def otherfunction(a, b, unhashable): ..
 
+    Cached values are also available via memoize.get_cache(),
+    and they can be pre-set via memoize.set_cache().
+
     @param   args        (function, ?arg1, ..) or () if argumented decorator
     @param   __key__     cache root key to use if not function, must be hashable
     @param   __nohash__  whether arguments can be unhashable,
                          checks unhashable arguments by equality instead
     """
     func, root, nohash, ns = None, None, False, {}
-    cache = getattr(memoize, "cache", None)
+    cache       = getattr(memoize, "cache",       None)
     nohashcache = getattr(memoize, "nohashcache", None)
+    wrappeds    = getattr(memoize, "wrappeds",    None)
+
     if cache is None:       # {root: {(args): value}}
         cache = collections.defaultdict(dict)
         setattr(memoize, "cache", cache)
     if nohashcache is None: # {root: {(args): [((unhashable args), value)]}}
         nohashcache = collections.defaultdict(lambda: collections.defaultdict(list))
         setattr(memoize, "nohashcache", nohashcache)
+    if wrappeds is None: # {wrapper: original function}
+        wrappeds = {}
+        setattr(memoize, "wrappeds", wrappeds)
+
+    if not hasattr(memoize, "get_cache"):
+        def get_cache(root):
+            """Returns cache for specified function or other root key."""
+            return cache[wrappeds.get(root)]
+        setattr(memoize, "get_cache", get_cache)
+    if not hasattr(memoize, "set_cache"):
+        def set_cache(root, items):
+            """Sets cached items for specified function or other root key."""
+            cache[wrappeds.get(root)].update(items)
+        setattr(memoize, "set_cache", set_cache)
 
 
     NOCOPY = str, unicode, int, long, float, bool, type(None), \
@@ -222,6 +241,7 @@ def memoize(*args, **kwargs):
         result.__name__ = func.__name__
         result.__doc__  = func.__doc__ or ""
         result.__doc__  += "\n\nDecorated with %s.memoize()." % __name__
+        wrappeds[result] = ns["root"]
         return result
 
     def outer(func): return decorate(func)

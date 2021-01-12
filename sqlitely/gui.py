@@ -109,6 +109,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.is_dragging_page = False
         self.wizard_import = None # components.ImportWizard
 
+        # Restore cached parse results; memoize cache is {(sql, ..): (meta, error)}
+        cache = {(k, ): (v, None) for k, v in (conf.ParseCache or {}).items()}
+        util.memoize.set_cache(grammar.parse, cache)
+
         icons = images.get_appicons()
         self.SetIcons(icons)
 
@@ -2134,6 +2138,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             db.close()
         self.worker_detection.stop()
         self.worker_folder.stop()
+
+        # Save cached parse results; memoize cache is {(sql, ..): (meta, error)}
+        cache = util.memoize.get_cache(grammar.parse) or {}
+        conf.ParseCache = {k[0]: v[0] for i, (k, v) in enumerate(cache.items())
+                           if i < conf.MaxParseCache and len(k) == 1 and v[-1] is None}
 
         # Save last selected files in db lists, to reselect them on rerun
         conf.LastSelectedFiles[:] = self.dbs_selected[:]
