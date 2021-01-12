@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.01.2021
+@modified    12.01.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -9901,9 +9901,11 @@ class SchemaDiagram(wx.ScrolledWindow):
             if bounds:
                 bounds.Left, bounds.Top = max(0, bounds.Left), max(0, bounds.Top)
 
-            if bounds and not wx.Rect(self.VirtualSize).Contains(bounds):
-                self.SetVirtualSize([max(a, b + self.MOVE_STEP)
-                                     for a, b in zip(self.VirtualSize, bounds.BottomRight)])
+
+            if bounds and bounds.Right >= self.VirtualSize[0]:
+                self.VirtualSize = bounds.Right + self.GPAD, self.VirtualSize[1]
+            if bounds and bounds.Bottom >= self.VirtualSize[1]:
+                self.VirtualSize = self.VirtualSize[0], bounds.Bottom + self.GPAD
             if not self._enabled or not refresh: return
 
             self.Freeze()
@@ -10810,6 +10812,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         sortkey = lambda o: (catval(o["type"]), numval(o), o["name"].lower())
         items = sorted(self._order, key=sortkey, reverse=do_reverse)
 
+        fullbounds = None
         if self._layout["grid"]["vertical"]:
             col, colrects = 0, [[]] # [[col 0 rect 0, rect 1, ], ]
             for o in items:
@@ -10834,6 +10837,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                                  None) if col else None
 
                 self._dc.SetIdBounds(o["id"], rect)
+                fullbounds = fullbounds.Union(rect) if fullbounds else wx.Rect(rect)
                 colrects[-1].append(rect)
         else:
             row, rowrects = 0, [[]] # [[row 0 rect 0, rect 1, ], ]
@@ -10846,7 +10850,14 @@ class SchemaDiagram(wx.ScrolledWindow):
                     rect = wx.Rect(x, get_dy(rowrects, row), *o["bmp"].Size)
 
                 self._dc.SetIdBounds(o["id"], rect)
+                fullbounds = fullbounds.Union(rect) if fullbounds else wx.Rect(rect)
                 rowrects[-1].append(rect)
+
+        if fullbounds and fullbounds.Right >= self.VirtualSize[0]:
+            self.VirtualSize = fullbounds.Right + self.GPAD, self.VirtualSize[1]
+        if fullbounds and fullbounds.Bottom >= self.VirtualSize[1]:
+            self.VirtualSize = self.VirtualSize[0], fullbounds.Bottom + self.GPAD
+
 
         if self._enabled:
             self.Scroll(0, 0)
