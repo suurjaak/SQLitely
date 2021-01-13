@@ -6466,9 +6466,8 @@ class ImportDialog(wx.Dialog):
         splitter = wx.SplitterWindow(self, style=wx.BORDER_NONE)
         p1, p2   = wx.Panel(splitter), wx.Panel(splitter)
         sizer_p1 = p1.Sizer = wx.FlexGridSizer(rows=5, cols=2, gap=(0, 0))
-        sizer_p2 = p2.Sizer = wx.FlexGridSizer(rows=5, cols=2, gap=(0, 0))
-        sizer_p1.AddGrowableCol(1), sizer_p2.AddGrowableCol(0)
-        sizer_p1.AddGrowableRow(3), sizer_p2.AddGrowableRow(3)
+        sizer_p2 = p2.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_p1.AddGrowableCol(1), sizer_p1.AddGrowableRow(3)
 
         sizer_header  = wx.BoxSizer(wx.HORIZONTAL)
         sizer_footer  = wx.BoxSizer(wx.VERTICAL)
@@ -6476,6 +6475,7 @@ class ImportDialog(wx.Dialog):
 
         sizer_b1     = wx.BoxSizer(wx.VERTICAL)
         sizer_b2     = wx.BoxSizer(wx.VERTICAL)
+        sizer_l2     = wx.BoxSizer(wx.HORIZONTAL)
         sizer_pk     = wx.BoxSizer(wx.HORIZONTAL)
 
         info_file = wx.StaticText(self)
@@ -6547,26 +6547,25 @@ class ImportDialog(wx.Dialog):
         sizer_p1.Add(check_header, border=5, flag=wx.RIGHT | wx.TOP | wx.BOTTOM | wx.GROW)
 
         sizer_p2.Add(label_table,  border=10, flag=wx.GROW)
-        sizer_p2.Add(0, 0)
         sizer_p2.Add(combo_table,  border=10, flag=wx.GROW)
-        sizer_p2.Add(0, 0)
         sizer_p2.Add(button_table, border=5, flag=wx.TOP | wx.BOTTOM | wx.ALIGN_RIGHT)
-        sizer_p2.Add(0, button_table.Size[1] + 10)
 
         sizer_b1.Add(button_up1)
         sizer_b1.Add(button_down1)
         sizer_b2.Add(button_up2)
         sizer_b2.Add(button_down2)
+        sizer_l2.Add(l2, proportion=1, flag=wx.GROW)
+        sizer_l2.Add(sizer_b2, flag=wx.ALIGN_CENTER)
 
         sizer_pk.Add(check_pk, border=5, flag=wx.TOP | wx.ALIGN_CENTER)
         sizer_pk.Add(edit_pk,  border=5, flag=wx.LEFT | wx.TOP)
+        sizer_pk.Add(button_up2.Size.Width, 0)
 
         sizer_p1.Add(sizer_b1, flag=wx.ALIGN_CENTER)
         sizer_p1.Add(l1, flag=wx.GROW)
         sizer_p1.Add(0, 0)
         sizer_p1.Add(pk_placeholder)
-        sizer_p2.Add(l2, flag=wx.GROW)
-        sizer_p2.Add(sizer_b2, flag=wx.ALIGN_CENTER)
+        sizer_p2.Add(sizer_l2, proportion=1, flag=wx.GROW)
         sizer_p2.Add(sizer_pk, flag=wx.ALIGN_RIGHT)
 
         sizer_footer.Add(info_help, flag=wx.GROW)
