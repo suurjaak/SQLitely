@@ -7457,6 +7457,7 @@ class ImportDialog(wx.Dialog):
             for c in sum((list(x.Children) for x in [self] + list(self._splitter.Children)), []):
                 c.Enable()
 
+            self._gauge.Value = 100 # Stop pulse
             for c in self._gauge, self._info_gauge: c.Hide()
             self._l1.ReadOnly = self._l2.ReadOnly = False
             self._info_help.Show()
@@ -11839,6 +11840,7 @@ class ImportWizard(wx.adv.Wizard):
             self.filename   = None
             self.filedata   = {} # {name, size, format, sheets: [{name, rows, columns}]}
             self.use_header = True
+            self.worker = workers.WorkerThread(self.OnWorkerRead)
 
             filebutton = self.button_file = wx.lib.filebrowsebutton.FileBrowseButton(
                             self, labelText="Source file:",
@@ -11848,6 +11850,9 @@ class ImportWizard(wx.adv.Wizard):
                                      wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
             label_info = self.label_info = wx.StaticText(self)
 
+            gauge       = self.gauge       = wx.Gauge(self, size=(300, -1))
+            label_gauge = self.label_gauge = wx.StaticText(self)
+
             panel       = self.panel       = wx.Panel(self)
             cb_all      = self.cb_all      = wx.CheckBox(panel, label="Select &all")
             label_count = self.label_count = wx.StaticText(panel)
@@ -11855,11 +11860,16 @@ class ImportWizard(wx.adv.Wizard):
             cb_header   = self.cb_header   = wx.CheckBox(panel, label="Use first row as column name &header")
 
             filebutton.textControl.SetEditable(False)
+            label_gauge.Label = "Reading file.."
+            gauge.Shown = label_gauge.Shown = False
             cb_all.Value = cb_header.Value = True
 
             sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
-            top_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            gauge_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            top_sizer   = wx.BoxSizer(wx.HORIZONTAL)
             panel.Sizer = wx.BoxSizer(wx.VERTICAL)
+            gauge_sizer.Add(gauge)
+            gauge_sizer.Add(label_gauge, border=5, flag=wx.LEFT)
             top_sizer.Add(cb_all)
             top_sizer.AddStretchSpacer()
             top_sizer.Add(label_count)
@@ -11868,7 +11878,8 @@ class ImportWizard(wx.adv.Wizard):
             panel.Sizer.Add(cb_header, border=5,     flag=wx.TOP)
 
             sizer.Add(filebutton, flag=wx.GROW)
-            sizer.Add(label_info, border=4, flag=wx.GROW | wx.LEFT)
+            sizer.Add(gauge_sizer, border=4, flag=wx.GROW | wx.LEFT)
+            sizer.Add(label_info,  border=4, flag=wx.GROW | wx.LEFT)
             sizer.AddSpacer(15)
             sizer.Add(panel, proportion=1, border=4, flag=wx.GROW | wx.LEFT)
 
@@ -11913,45 +11924,66 @@ class ImportWizard(wx.adv.Wizard):
                     return
             self.Reset()
 
-            try: data = importexport.get_import_file_data(filename)
-            except Exception as e:
-                logger.exception("Error reading import file %s.", filename)
-                # Using wx.MessageBox can open the popup on main window,
-                # depending on event source
-                wx.MessageDialog(self.Parent, "Error reading file:\n\n%s" % util.format_exc(e),
-                                 conf.Title, wx.OK | wx.ICON_ERROR).ShowModal()
-                return
-
-            self.filename = filename
-            self.filedata = data
-            self.listbox.Clear()
-            self.listbox.Enable()
-
-            has_sheets = not data["name"].lower().endswith(".json")
-            info = "Size: %s (%s).%s" % (
-                util.format_bytes(data["size"]),
-                util.format_bytes(data["size"], max_units=False),
-                (" Worksheets: %s." % len(data["sheets"])) if has_sheets else "",
-            )
-
-            self.button_file.SetValue(filename, callBack=False)
-            self.label_info.Label = info
-            for i, sheet in enumerate(data["sheets"]):
-                label = "%s (%s%s)" % (sheet["name"],
-                    util.plural("column", sheet["columns"]),
-                    (", file too large to count rows" if not i else "")
-                    if sheet["rows"] < 0 else ", " + util.plural("row", sheet["rows"]))
-                self.listbox.Append(label, i)
-                self.listbox.Check(i)
-            self.cb_all.Enable(has_sheets and len(data["sheets"]) > 1)
-            self.cb_all.Value = True
-            self.label_count.Label = ("%s selected" % len(data["sheets"])) if has_sheets else ""
-            self.cb_header.Enabled = self.cb_header.Value = has_sheets
-            self.listbox.Enable(has_sheets and len(data["sheets"]) > 1)
-            self.panel.Show()
+            for c in self.gauge, self.label_gauge: c.Show()
+            self.gauge.Pulse()
             self.Layout()
-            self.UpdateButtons()
-            self.FindWindowById(wx.ID_FORWARD).SetFocus()
+
+            progress = lambda *_, **__: bool(self) and self.worker.is_working()
+            callable = functools.partial(importexport.get_import_file_data,
+                                         filename, progress)
+            self.worker.work(callable, filename=filename)
+
+
+        def OnWorkerRead(self, result, filename, **kwargs):
+            """Handler for file read result, updates dialog, shows error if any."""
+
+            def after():
+                if not self: return
+
+                self.gauge.Value = 100 # Stop pulse
+                for c in self.gauge, self.label_gauge: c.Hide()
+
+                if "error" in result:
+                    self.Layout()
+                    logger.exception("Error reading import file %s.", filename)
+                    # Using wx.MessageBox can open the popup on main window,
+                    # depending on event source
+                    wx.MessageDialog(self.Parent, "Error reading file:\n\n%s" % result["error"],
+                                     conf.Title, wx.OK | wx.ICON_ERROR).ShowModal()
+                else:
+                    data = result["result"]
+                    self.filename = filename
+                    self.filedata = data
+                    self.listbox.Clear()
+                    self.listbox.Enable()
+
+                    has_sheets = not data["name"].lower().endswith(".json")
+                    info = "Size: %s (%s).%s" % (
+                        util.format_bytes(data["size"]),
+                        util.format_bytes(data["size"], max_units=False),
+                        (" Worksheets: %s." % len(data["sheets"])) if has_sheets else "",
+                    )
+
+                    self.button_file.SetValue(filename, callBack=False)
+                    self.label_info.Label = info
+                    for i, sheet in enumerate(data["sheets"]):
+                        label = "%s (%s%s)" % (sheet["name"],
+                            util.plural("column", sheet["columns"]),
+                            (", file too large to count rows" if not i else "")
+                            if sheet["rows"] < 0 else ", " + util.plural("row", sheet["rows"]))
+                        self.listbox.Append(label, i)
+                        self.listbox.Check(i)
+                    self.cb_all.Enable(has_sheets and len(data["sheets"]) > 1)
+                    self.cb_all.Value = True
+                    self.label_count.Label = ("%s selected" % len(data["sheets"])) if has_sheets else ""
+                    self.cb_header.Enabled = self.cb_header.Value = has_sheets
+                    self.listbox.Enable(has_sheets and len(data["sheets"]) > 1)
+                    self.panel.Show()
+                    self.Layout()
+                    self.UpdateButtons()
+                    self.FindWindowById(wx.ID_FORWARD).SetFocus()
+
+            wx.CallAfter(after)
 
 
         def UpdateFile(self):
@@ -12264,6 +12296,7 @@ class ImportWizard(wx.adv.Wizard):
     def OnCancel(self, event):
         """Handler for canceling import, confirms with user popup."""
         if self.CurrentPage is self.page1 and not self.page1.filename:
+            self.page1.worker.stop()
             return # Nothing set yet, close wizard
         if self.index >= 0 and not self.page2.importing:
             return # Import finished
@@ -12272,6 +12305,7 @@ class ImportWizard(wx.adv.Wizard):
                 "Are you sure you want to cancel data import?",
                 conf.Title, wx.OK | wx.CANCEL
             ): event.Veto()
+            self.page1.worker.stop()
             return # Import not started yet
 
         event.Veto() # Keep wizard open
