@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.12.2020
+@modified    13.01.2021
 ------------------------------------------------------------------------------
 """
 import collections
@@ -525,7 +525,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, p
     
 
 
-def get_import_file_data(filename):
+def get_import_file_data(filename, progress=None):
     """
     Returns import file metadata, as {
         "name":        file name and path}.
@@ -537,6 +537,8 @@ def get_import_file_data(filename):
             "rows":    count or -1 if file too large,
             "columns": [first row cell value, ],
     ]}.
+
+    @param   progress  callback() returning false if function should cancel
     """
     logger.info("Getting import data from %s.", filename)
     sheets, size = [], os.path.getsize(filename)
@@ -559,10 +561,14 @@ def get_import_file_data(filename):
                     firstline = firstline.encode("latin1", errors="xmlcharrefreplace")
             iterable = itertools.chain([firstline], f)
             csvfile = csv.reader(iterable, csv.Sniffer().sniff(firstline, ",;\t"))
+            if progress and not progress(): return
             rows, columns = -1, next(csvfile)
             if not columns: rows = 0
             elif 0 < size <= conf.MaxImportFilesizeForCount:
-                rows = sum((1 for _ in csvfile), 1 if firstline else 0)
+                rows = 1 if firstline else 0
+                for _ in csvfile:
+                    rows += 1
+                    if progress and not progress(): return
         sheets.append({"rows": rows, "columns": columns, "name": "<no name>"})
     elif is_json:
         rows, columns, buffer, started = 0, {}, "", False
@@ -574,6 +580,7 @@ def get_import_file_data(filename):
                     buffer = re.sub("^//[^\n]*$", "", buffer.lstrip(), flags=re.M).lstrip()
                     if buffer[:1] == "[": buffer, started = buffer[1:].lstrip(), True
                 while started and buffer:
+                    if progress and not progress(): return
                     # Strip whitespace and interleaving commas from between dicts
                     buffer = re.sub(r"^\s*[,]?\s*", "", buffer)
                     try:
@@ -590,6 +597,7 @@ def get_import_file_data(filename):
     elif is_xls:
         with xlrd.open_workbook(filename, on_demand=True) as wb:
             for sheet in wb.sheets():
+                if progress and not progress(): return
                 columns = [x.value for x in next(sheet.get_rows(), [])]
                 while columns and columns[-1] is None: columns.pop(-1)
                 columns = [x.strip() if isinstance(x, basestring)
@@ -605,6 +613,7 @@ def get_import_file_data(filename):
 
                 wb = openpyxl.load_workbook(filename, data_only=True, read_only=True)
                 for sheet in wb.worksheets:
+                    if progress and not progress(): return
                     columns = list(next(sheet.values, []))
                     while columns and columns[-1] is None: columns.pop(-1)
                     columns = [x.strip() if isinstance(x, basestring)

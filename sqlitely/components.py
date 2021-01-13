@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.01.2021
+@modified    13.01.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -6452,7 +6452,8 @@ class ImportDialog(wx.Dialog):
         self._importing   = False # Whether import underway
         self._table_fixed = False # Whether table selection is immutable
         self._progress   = {}     # {count}
-        self._worker = workers.WorkerThread()
+        self._worker_import = workers.WorkerThread()
+        self._worker_read   = workers.WorkerThread(self._OnWorkerRead)
 
         self._dialog_file = wx.FileDialog(self, message="Open",
             wildcard=importexport.IMPORT_WILDCARD,
@@ -7070,7 +7071,7 @@ class ImportDialog(wx.Dialog):
                                      self._db, [(table, sheet)], {table: columns},
                                      {table: self._table.get("pk")}, self._has_header,
                                      self._OnProgressCallback)
-        self._worker.work(callable)
+        self._worker_import.work(callable)
 
 
     def _OnProgressCallback(self, **kwargs):
@@ -7198,18 +7199,19 @@ class ImportDialog(wx.Dialog):
         """Empties source file data, and table data if not fixed."""
         self._data, self._sheet, self._cols1 = None, None, []
 
+        self._combo_table.Enable(not self._table_fixed)
         if self._table_fixed:
             self._cols2.sort(key=lambda x: x["index"])
             for c in self._cols2: c["skip"] = False
         else:
             self._cols2, self._table = [], None
             self._combo_table.Select(-1)
+            self._button_table.Enabled = False
         if self._has_new:
             self._tables = [x for x in self._tables if not x.get("new")]
             self._combo_table.SetItems(["%s (%s)" % (util.unprint(x["name"]), util.plural("column", x["columns"]))
                                         for x in self._tables])
             self._button_table.Label = "&New table"
-            self._button_table.Enabled = False
             self._button_table.ContainingSizer.Layout()
         self._has_new = False
         self._has_pk = self._check_pk.Value = False
@@ -7230,6 +7232,8 @@ class ImportDialog(wx.Dialog):
         confirms and cancels work if import underway.
         """
         def destroy():
+            self._worker_import.stop()
+            self._worker_read.stop()
             wx.CallAfter(self.EndModal, wx.ID_CANCEL)
             wx.CallAfter(lambda: self and self.Destroy())
         if not self._importing: return destroy()
@@ -7259,7 +7263,7 @@ class ImportDialog(wx.Dialog):
         if wx.ID_CANCEL == keep or not self._importing: return
 
         self._importing = None if wx.ID_NO == keep else False
-        self._worker.stop_work()
+        self._worker_import.stop_work()
         self._gauge.Value = self._gauge.Value # Stop pulse, if any
 
         if isinstance(event, wx.CloseEvent): return destroy()
@@ -7423,16 +7427,50 @@ class ImportDialog(wx.Dialog):
             filename = self._dialog_file.GetPath()
             if self._data and filename == self._data["name"]: return
 
-        busy = controls.BusyPanel(self, "Reading file..")
-        try: data = importexport.get_import_file_data(filename)
-        except Exception as e:
-            busy.Close()
-            logger.exception("Error reading import file %s.", filename)
-            wx.MessageBox("Error reading file:\n\n%s" % util.format_exc(e),
-                          conf.Title, wx.OK | wx.ICON_ERROR)
-            return
-        finally: busy.Close()
-        self.SetFile(data)
+        SKIP = (self._gauge, self._info_gauge, self._info_file,
+                self._button_cancel, self._splitter, self._l1, self._l2)
+        for c in sum((list(x.Children) for x in [self] + list(self._splitter.Children)), []):
+            if not isinstance(c, wx.StaticText) and c not in SKIP: c.Disable()
+
+        self._info_file.Label = ""
+        self._info_help.Hide()
+        self._l1.ReadOnly = self._l2.ReadOnly = True
+        self._gauge.Show()
+        self._info_gauge.Show()
+        self._info_gauge.Label = "Reading file.."
+
+        self.Layout()
+        self._gauge.Pulse()
+
+        progress = lambda *_, **__: bool(self) and self._worker_read.is_working()
+        callable = functools.partial(importexport.get_import_file_data,
+                                     filename, progress)
+        self._worker_read.work(callable, filename=filename)
+
+
+    def _OnWorkerRead(self, result, filename, **kwargs):
+        """Handler for file read result, updates dialog, shows error if any."""
+
+        def after():
+            if not self: return
+
+            self._data = self._sheet = None
+            for c in sum((list(x.Children) for x in [self] + list(self._splitter.Children)), []):
+                c.Enable()
+
+            for c in self._gauge, self._info_gauge: c.Hide()
+            self._l1.ReadOnly = self._l2.ReadOnly = False
+            self._info_help.Show()
+            self._OnReset()
+
+            if "error" in result:
+                logger.exception("Error reading import file %s.", filename)
+                wx.MessageBox("Error reading file:\n\n%s" % result["error"],
+                              conf.Title, wx.OK | wx.ICON_ERROR)
+            else:
+                self.SetFile(result["result"])
+
+        wx.CallAfter(after)
 
 
     def _OnSheet(self, event):
