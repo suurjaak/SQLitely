@@ -84,7 +84,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    01.01.2021
+@modified    18.01.2021
 ------------------------------------------------------------------------------
 """
 import collections
@@ -4580,13 +4580,16 @@ class TabbedHtmlWindow(wx.Panel):
         ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
 
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
+        agwStyle = (wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
+                    wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
+                    wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
+                    wx.lib.agw.flatnotebook.FNB_VC8)
+        if "linux2" == sys.platform and wx.VERSION[:3] == (4, 1, 1):
+            # wxPython 4.1.1 on Linux crashes with FNB_VC8
+            agwStyle ^= wx.lib.agw.flatnotebook.FNB_VC8
         notebook = self._notebook = wx.lib.agw.flatnotebook.FlatNotebook(
-            self, size=(-1, 27),
-            agwStyle=wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
-                     wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
-                     wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
-                     wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
-                     wx.lib.agw.flatnotebook.FNB_VC8)
+            parent=self, size=(-1, 27), style=wx.NB_TOP,
+            agwStyle=agwStyle)
         self._html = wx.html.HtmlWindow(self, style=style, name=name)
 
         self.Sizer.Add(notebook, flag=wx.GROW)
