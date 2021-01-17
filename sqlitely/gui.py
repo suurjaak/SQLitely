@@ -2025,7 +2025,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def on_open_from_list_db(self, event):
         """Handler for clicking to open selected files from database list."""
         if event.GetIndex() > 0:
-            self.load_database_page(event.GetText())
+            self.load_database_page(self.list_db.GetItemText(event.GetIndex()))
 
 
     def update_database_stats(self, filename):
@@ -2064,9 +2064,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_select_list_db(self, event):
         """Handler for selecting an item in main list, updates info panel."""
+        filename = self.list_db.GetItemText(event.GetIndex())
         if event.GetIndex() > 0 \
-        and event.GetText() not in self.dbs_selected:
-            self.dbs_selected.append(event.GetText())
+        and filename not in self.dbs_selected:
+            self.dbs_selected.append(filename)
             conf.LastSelectedFiles[:] = self.dbs_selected[:]
             self.update_database_detail()
         elif event.GetIndex() == 0 and not self.dbs_selected \
@@ -2080,7 +2081,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for deselecting an item in main list, updates info panel."""
         if not self.dbs_selected or not event.GetIndex(): return
 
-        filename = event.GetText()
+        filename = self.list_db.GetItemText(event.GetIndex())
         self.dbs_selected = [x for x in self.dbs_selected if x != filename]
         conf.LastSelectedFiles[:] = self.dbs_selected[:]
 
