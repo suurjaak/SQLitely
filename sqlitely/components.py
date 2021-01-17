@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.01.2021
+@modified    18.01.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -9928,26 +9928,16 @@ class SchemaDiagram(wx.ScrolledWindow):
         def after():
             if not self: return
 
-            bounds = None
             for o in self._order:
                 r = self._dc.GetIdBounds(o["id"])
                 pt = [v * zoom / zoom0 for v in r.TopLeft]
                 sz, _, _, _ = self._CalculateItemSize(o)
                 self._dc.SetIdBounds(o["id"], wx.Rect(wx.Point(pt), wx.Size(sz)))
-                if bounds: bounds.Union(self._dc.GetIdBounds(o["id"]))
-                else: bounds = self._dc.GetIdBounds(o["id"])
-            if bounds:
-                bounds.Left, bounds.Top = max(0, bounds.Left), max(0, bounds.Top)
-
-
-            if bounds and bounds.Right >= self.VirtualSize[0]:
-                self.VirtualSize = bounds.Right + self.GPAD, self.VirtualSize[1]
-            if bounds and bounds.Bottom >= self.VirtualSize[1]:
-                self.VirtualSize = self.VirtualSize[0], bounds.Bottom + self.GPAD
             if not self._enabled or not refresh: return
 
             self.Freeze()
             try:
+                self._EnsureVirtualSize()
                 xy = (p * zoom / zoom0 - (p - v) for v, p in zip(viewport0.TopLeft, focus)) \
                      if focus else (v * zoom / zoom0 for v in viewport0.TopLeft)
                 self.ScrollXY(xy)
@@ -10611,6 +10601,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             self.RecordSelectionRect()
             self.RecordLines(remake=remake or remakelines, recalculate=recalculate)
             self.RecordItems()
+            self._EnsureVirtualSize()
             self.Refresh()
         if remake:
             self.UpdateStatistics(redraw=False)
@@ -10782,6 +10773,20 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._worker_bmp.work(functools.partial(self._BitmapWorker, items))
 
 
+    def _EnsureVirtualSize(self, bounds=None):
+        """Enlarge virtual size if less than full bounds."""
+        if bounds is None:
+            oids = [o["id"] for o in self._objs.values()]
+            if self._show_lines:
+                oids += [x["id"] for x in self._lines.values()]
+            bounds, bounder = wx.Rect(), self._dc.GetIdBounds
+            if oids: bounds = sum(map(bounder, oids[1:]), bounder(oids[0]))
+        if bounds and bounds.Right >= self.VirtualSize[0]:
+            self.VirtualSize = bounds.Right + self.GPAD, self.VirtualSize[1]
+        if bounds and bounds.Bottom >= self.VirtualSize[1]:
+            self.VirtualSize = self.VirtualSize[0], bounds.Bottom + self.GPAD
+
+
     def _OnBitmapWorkerProgress(self, done=False, index=None, count=None, immediate=False):
         """Handler for bitmap worker result, posts progress event, updates UI if done."""
         def after():
@@ -10850,7 +10855,6 @@ class SchemaDiagram(wx.ScrolledWindow):
         sortkey = lambda o: (catval(o["type"]), numval(o), o["name"].lower())
         items = sorted(self._order, key=sortkey, reverse=do_reverse)
 
-        fullbounds = None
         if self._layout["grid"]["vertical"]:
             col, colrects = 0, [[]] # [[col 0 rect 0, rect 1, ], ]
             for o in items:
@@ -10875,7 +10879,6 @@ class SchemaDiagram(wx.ScrolledWindow):
                                  None) if col else None
 
                 self._dc.SetIdBounds(o["id"], rect)
-                fullbounds = fullbounds.Union(rect) if fullbounds else wx.Rect(rect)
                 colrects[-1].append(rect)
         else:
             row, rowrects = 0, [[]] # [[row 0 rect 0, rect 1, ], ]
@@ -10888,14 +10891,9 @@ class SchemaDiagram(wx.ScrolledWindow):
                     rect = wx.Rect(x, get_dy(rowrects, row), *o["bmp"].Size)
 
                 self._dc.SetIdBounds(o["id"], rect)
-                fullbounds = fullbounds.Union(rect) if fullbounds else wx.Rect(rect)
                 rowrects[-1].append(rect)
 
-        if fullbounds and fullbounds.Right >= self.VirtualSize[0]:
-            self.VirtualSize = fullbounds.Right + self.GPAD, self.VirtualSize[1]
-        if fullbounds and fullbounds.Bottom >= self.VirtualSize[1]:
-            self.VirtualSize = self.VirtualSize[0], fullbounds.Bottom + self.GPAD
-
+        self._EnsureVirtualSize()
 
         if self._enabled:
             self.Scroll(0, 0)
