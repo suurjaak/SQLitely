@@ -3711,8 +3711,8 @@ class SchemaObjectPage(wx.Panel):
         """Populates panel with index-specific data."""
         meta = self._item.get("meta") or {}
         self._ctrls["table"].SetItems(map(util.unprint, self._tables))
-        self._ctrls["table"].Value = util.unprint(meta.get("table") if self._hasmeta
-                                                  else self._item.get("tbl_name") or "")
+        self._ctrls["table"].Value = util.unprint((meta.get("table") if self._hasmeta
+                                                   else self._item.get("tbl_name")) or "")
         for j, x in enumerate(self._tables): self._ctrls["table"].SetClientData(j, x)
 
         self._ctrls["unique"].Value = bool(meta.get("unique"))
