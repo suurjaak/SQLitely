@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.01.2021
+@modified    18.02.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -2802,10 +2802,11 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             else: self._backup = None
 
             self._grid.Table.SetFilterSort(state)
+
             self._grid.Scroll(*scrollpos)
             maxpos = self._grid.GetNumberRows() - 1, self._grid.GetNumberCols() - 1
-            cursorpos = [max(0, min(x)) for x in zip(cursorpos, maxpos)]
-            self._grid.SetGridCursor(*cursorpos)
+            if all(x >= 0 for x in maxpos):
+                self._grid.SetGridCursor(*[max(0, min(x)) for x in zip(cursorpos, maxpos)])
         finally: self._grid.Thaw()
         self._OnChange(updated=True)
 
