@@ -5440,8 +5440,7 @@ class SchemaObjectPage(wx.Panel):
                                     opts, col, err)
 
         self._cascades = {}
-        if changed or renamed or self._show_alter: self._PopulateSQL()
-        if not changed and not renamed: return
+        if not changed and not renamed: return self._PopulateSQL()
 
         self.Freeze()
         try:
