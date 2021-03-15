@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.01.2021
+@modified    14.03.2021
 ------------------------------------------------------------------------------
 """
 import __builtin__
@@ -533,6 +533,11 @@ def plural(word, items=None, numbers=True, single="1", sep="", pref="", suf="", 
     return result.strip()
 
 
+def articled(word):
+    """Returns the word prefixed with an indefinite article, "a " or "an "."""
+    return ("an " if word[0].lower() in "aeiou" else "a ") + word
+
+
 def count(items, unit=None, key="count", suf=""):
     """
     Returns formatted count string, prefixed with "~" and rounded to the lowest
@@ -904,7 +909,9 @@ def to_unicode(value, encoding=None):
 @memoize
 def ellipsize(text, limit=50, front=False, ellipsis=".."):
     """
-    Returns text ellipsized if beyond limit.
+    Returns text ellipsized if beyond limit. If text is enclosed in quotes or
+    brackets ('' "" [] () <> {}), it is ellipsized inside the enclosure,
+    e.g. ellipsize('"0123456789"', 10) returns '"012345.."'.
 
     @param   text      value to ellipsize, converted to string if not string
     @param   limit     length beyond which text is truncated
@@ -914,8 +921,14 @@ def ellipsize(text, limit=50, front=False, ellipsis=".."):
     """
     if type(text) not in (str, unicode): text = to_unicode(text)
     if len(text) <= limit: return text
-    if front: return (ellipsis + text[-limit + len(ellipsis):])
-    else:     return (text[:limit - len(ellipsis)] + ellipsis)
+
+    ENCLOSURES = "''", '""', "[]", "()", "<>", "{}"
+    extra = next((a if front else b for a, b in ENCLOSURES
+                  if a == text[0] and b == text[-1]), "")
+    if extra: limit -= 1
+
+    if front: return (extra + ellipsis + text[-limit + len(ellipsis):])
+    else:     return (text[:limit - len(ellipsis)] + ellipsis + extra)
 
 
 def longpath(path):

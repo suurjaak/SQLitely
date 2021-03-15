@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.01.2021
+@modified    14.03.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -484,6 +484,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_edit_index    = wx.Menu()
         menu_edit_trigger  = wx.Menu()
         menu_edit_view     = wx.Menu()
+        menu_edit_clone    = wx.Menu()
         menu_edit_drop     = wx.Menu()
         menu_edit_truncate = wx.Menu()
         self.menu_edit_table   = menu_edit.AppendSubMenu(menu_edit_table,   "&Table")
@@ -496,16 +497,21 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_edit_cancel = self.menu_edit_cancel = menu_edit.Append(
             wx.ID_ANY, "&Cancel unsaved changes", "Roll back all unsaved changes")
         menu_edit.AppendSeparator()
+        self.menu_edit_clone    = menu_edit.AppendSubMenu(menu_edit_clone,    "&Clone")
         self.menu_edit_truncate = menu_edit.AppendSubMenu(menu_edit_truncate, "Tr&uncate")
         self.menu_edit_drop     = menu_edit.AppendSubMenu(menu_edit_drop,     "&Drop")
+        menu_edit_clone_table   = wx.Menu()
+        menu_edit_clone_view    = wx.Menu()
         menu_edit_drop_table    = wx.Menu()
         menu_edit_drop_index    = wx.Menu()
         menu_edit_drop_trigger  = wx.Menu()
         menu_edit_drop_view     = wx.Menu()
-        self.menu_edit_drop_table   = menu_edit_drop.AppendSubMenu(menu_edit_drop_table,   "&Table")
-        self.menu_edit_drop_index   = menu_edit_drop.AppendSubMenu(menu_edit_drop_index,   "&Index")
-        self.menu_edit_drop_trigger = menu_edit_drop.AppendSubMenu(menu_edit_drop_trigger, "T&rigger")
-        self.menu_edit_drop_view    = menu_edit_drop.AppendSubMenu(menu_edit_drop_view,    "&View")
+        self.menu_edit_clone_table  = menu_edit_clone.AppendSubMenu(menu_edit_clone_table, "&Table")
+        self.menu_edit_clone_view   = menu_edit_clone.AppendSubMenu(menu_edit_clone_view,  "&View")
+        self.menu_edit_drop_table   = menu_edit_drop .AppendSubMenu(menu_edit_drop_table,   "&Table")
+        self.menu_edit_drop_index   = menu_edit_drop .AppendSubMenu(menu_edit_drop_index,   "&Index")
+        self.menu_edit_drop_trigger = menu_edit_drop .AppendSubMenu(menu_edit_drop_trigger, "T&rigger")
+        self.menu_edit_drop_view    = menu_edit_drop .AppendSubMenu(menu_edit_drop_view,    "&View")
 
         menu_tools = self.menu_tools = wx.Menu()
         menu.Append(menu_tools, "&Tools")
@@ -663,10 +669,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.menu_view_changes.Enabled = bool(db.temporary or changes)
         self.menu_edit_save.Enabled = self.menu_edit_cancel.Enabled = bool(changes)
         self.menu_view_folder.Enabled = not db.temporary
-        self.menu_edit_drop.Enabled = any(db.schema.values())
+        self.menu_edit_clone.Enabled    = any(db.schema.values())
+        self.menu_edit_truncate.Enabled = bool(db.schema.get("table"))
+        self.menu_edit_drop.Enabled     = any(db.schema.values())
 
         EDITMENUS  = {"table":   self.menu_edit_table,   "index": self.menu_edit_index,
                       "trigger": self.menu_edit_trigger, "view":  self.menu_edit_view}
+        CLONEMENUS = {"table":   self.menu_edit_clone_table,  "view":  self.menu_edit_clone_view}
         DROPMENUS  = {"table":   self.menu_edit_drop_table,   "index": self.menu_edit_drop_index,
                       "trigger": self.menu_edit_drop_trigger, "view":  self.menu_edit_drop_view}
         TRUNCMENUS = {"table":   self.menu_edit_truncate}
@@ -719,6 +728,18 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     menuitem = menu.SubMenu.Append(wx.ID_ANY, util.ellipsize(util.unprint(name)), help)
                     menuitem.Enable(bool(item.get("count")))
                     args = ["truncate", name]
+                    self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
+
+            if category in CLONEMENUS:
+                menu = CLONEMENUS[category]
+                for x in menu.SubMenu.MenuItems: menu.SubMenu.Delete(x)
+                menu.Enabled = bool(items)
+                for name, item in items.items():
+                    if menu.SubMenu.MenuItemCount and not menu.SubMenu.MenuItemCount % PAGESIZE:
+                        menu.SubMenu.Break()
+                    help = "Clone %s %s" % (category, util.unprint(grammar.quote(name, force=True)))
+                    menuitem = menu.SubMenu.Append(wx.ID_ANY, util.ellipsize(util.unprint(name)), help)
+                    args = ["clone", category, name, "table" == category]
                     self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
 
             if category not in VIEWMENUS: continue # for category
@@ -3324,18 +3345,21 @@ class DatabasePage(wx.Panel):
     def handle_command(self, cmd, *args):
         """Handles a command, like "drop", ["table", name]."""
 
+        fquote  = lambda s, f=True: util.unprint(grammar.quote(s, force=f))
+        sfquote = lambda s: util.ellipsize(fquote(s), conf.MaxTabTitleLength)
+
         def format_changes(temp=False):
             """Returns unsaved changes as readable text."""
             info, changes = "", self.get_unsaved()
             if changes.get("table"):
                 info += "Unsaved data in tables:\n- "
-                info += "\n- ".join(map(grammar.quote, changes["table"]))
+                info += "\n- ".join(fquote(x, f=False) for x in changes["table"])
             if changes.get("schema"):
                 info += "%sUnsaved schema changes:\n- " % ("\n\n" if info else "")
                 names = {}
                 for x in changes["schema"]:
                     names.setdefault(x.Category, []).append(x.Name)
-                info += "\n- ".join("%s %s" % (c, grammar.quote(n))
+                info += "\n- ".join("%s %s" % (c, fquote(n, f=False))
                         for c in self.db.CATEGORIES for n in names.get(c, ()))
             if changes.get("pragma"):
                 info += "%sPRAGMA settings" % ("\n\n" if info else "")
@@ -3400,12 +3424,12 @@ class DatabasePage(wx.Panel):
                 names = [n for n in names if any("index" == k for k in self.db.get_related(category, n, own=True))]
                 label = "%s on %s %s" % (util.plural("index", indexes, single="the"),
                                          util.plural("table", names, numbers=False),
-                                         ", ".join(grammar.quote(name, force=True) for name in names))
+                                         ", ".join(map(sfquote, names)))
                 lock = any(self.db.get_lock(category, n) for n in names)
             elif names:
                 targets = indexes = names
                 label = "%s %s" % (util.plural("index", names, numbers=False, single="the"),
-                                   ", ".join(grammar.quote(name, force=True) for name in names))
+                                   ", ".join(map(sfquote, names)))
                 lock = any(self.db.get_lock("table", self.db.schema["index"][name]["tbl_name"])
                            for name in names)
             elif "table" == category:
@@ -3443,7 +3467,7 @@ class DatabasePage(wx.Panel):
             if name not in self.db.schema.get(category) or {}: return
             if not name2:
                 dlg = wx.TextEntryDialog(self, 
-                    'Rename %s %s to:' % (category, grammar.quote(name, force=True)),
+                    'Rename %s %s to:' % (category, sfquote(name)),
                     conf.Title, value=name, style=wx.OK | wx.CANCEL
                 )
                 dlg.CenterOnParent()
@@ -3452,12 +3476,12 @@ class DatabasePage(wx.Panel):
                 name2 = dlg.GetValue().strip()
                 if not name2 or name2 == name: return
 
-            duplicate = next((v for vv in self.db.schema.values() for v in vv.values()
-                              if util.lceq(name2, v["name"])), None)
+            duplicate = next((vv.get(name2) for vv in self.db.schema.values()), None)
             if duplicate:
                 wx.MessageBox(
-                    "Cannot rename %s: there already exists a %s named %s." %
-                    (category, duplicate["type"], grammar.quote(duplicate["name"], force=True)),
+                    "Cannot rename %s: there already exists %s named %s." %
+                    (category, util.articled(duplicate["type"]),
+                     sfquote(duplicate["name"])),
                     conf.Title, wx.ICON_WARNING | wx.OK
                 )
                 return
@@ -3469,7 +3493,7 @@ class DatabasePage(wx.Panel):
                     if page.IsChanged():
                         res = wx.MessageBox(
                             "There are unsaved changes to table %s data.\n\n"
-                            "Commit changes before rename?" % grammar.quote(name, force=True),
+                            "Commit changes before rename?" % sfquote(name),
                             conf.Title, wx.ICON_WARNING | wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT
                         )
                         if res == wx.CANCEL: return
@@ -3481,7 +3505,7 @@ class DatabasePage(wx.Panel):
                     if page.IsChanged():
                         if wx.CANCEL == wx.MessageBox(
                             "There are unsaved changes to %s %s schema.\n\n"
-                            "Discard changes before rename?" % (category, grammar.quote(name, force=True)),
+                            "Discard changes before rename?" % (category, sfquote(name)),
                             conf.Title, wx.ICON_WARNING | wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT
                         ): return
                     page.SetReadOnly()
@@ -3499,7 +3523,7 @@ class DatabasePage(wx.Panel):
                 if not page: continue # for page, pagemap, nb
 
                 pagemap[category].pop(name)
-                title = "%s %s" % (category.capitalize(), util.unprint(grammar.quote(name2)))
+                title = "%s %s" % (category.capitalize(), fquote(name2, f=False))
                 title = make_unique_page_title(title, nb, skip=nb.GetPageIndex(page))
                 nb.SetPageText(nb.GetPageIndex(page), title)
                 pagemap[category][name2] = page
@@ -3514,7 +3538,8 @@ class DatabasePage(wx.Panel):
             if not item: return
             if not name2:
                 dlg = wx.TextEntryDialog(self, 
-                    'Rename column %s.%s %s to:' % (grammar.quote(table), grammar.quote(name)),
+                    "Rename column %s.%s %s to:"
+                    % (fquote(table, f=False), f(name, f=False)),
                     conf.Title, value=name, style=wx.OK | wx.CANCEL
                 )
                 dlg.CenterOnParent()
@@ -3527,7 +3552,7 @@ class DatabasePage(wx.Panel):
             if duplicate:
                 wx.MessageBox(
                     "Cannot rename column: table %s already has a column named %s." %
-                    (grammar.quote(table, force=True), grammar.quote(duplicate["name"], force=True)),
+                    (sfquote(table), sfquote(duplicate["name"])),
                     conf.Title, wx.ICON_WARNING | wx.OK
                 )
                 return
@@ -3539,7 +3564,7 @@ class DatabasePage(wx.Panel):
                     if page.IsChanged():
                         res = wx.MessageBox(
                             "There are unsaved changes to table %s data.\n\n"
-                            "Commit changes before column rename?" % grammar.quote(table, force=True),
+                            "Commit changes before column rename?" % sfquote(table),
                             conf.Title, wx.ICON_WARNING | wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT
                         )
                         if res == wx.CANCEL: return
@@ -3551,7 +3576,7 @@ class DatabasePage(wx.Panel):
                     if page.IsChanged():
                         if wx.CANCEL == wx.MessageBox(
                             "There are unsaved changes to table %s schema.\n\n"
-                            "Discard changes before column rename?" % grammar.quote(table, force=True),
+                            "Discard changes before column rename?" % sfquote(table),
                             conf.Title, wx.ICON_WARNING | wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT
                         ): return
                     page.SetReadOnly()
@@ -3561,6 +3586,98 @@ class DatabasePage(wx.Panel):
             self.reload_schema()
             self.toggle_cursors("table", table)
             return True
+
+        elif "clone" == cmd:
+            (category, name), with_data = args[:2], (list(args) + [False])[2]
+            item = self.db.schema[category][name]
+
+            allnames = sum(map(list, self.db.schema.values()), [])
+            name2 = util.make_unique(name, allnames)
+            dlg = wx.TextEntryDialog(self, "Clone %s%s %s as:"
+                % (category, sfquote(name), "" if with_data else " structure"),
+                conf.Title, value=name2, style=wx.OK | wx.CANCEL
+            )
+            dlg.CenterOnParent()
+            if wx.ID_OK != dlg.ShowModal(): return
+
+            name2 = dlg.GetValue().strip()
+            if not name2 or name2.lower() == name.lower(): return
+
+            qname, qname2 = (grammar.quote(n, force=True) for n in (name, name2))
+            sname, sname2 = sfquote(name), sfquote(name2)
+
+            duplicate = next((vv.get(name2) for vv in self.db.schema.values()), None)
+            if duplicate:
+                wx.MessageBox(
+                    "Cannot clone %s as %s:\n\nthere already exists %s named %s."
+                    % (category, sname2, util.articled(duplicate["type"]),
+                       sfquote(duplicate["name"])),
+                    conf.Title, wx.ICON_WARNING | wx.OK
+                )
+                return
+
+            busy = controls.BusyPanel(self, "Cloning %s.." % category)
+            try:
+                allnames.append(name2)
+                renames = {category: {name: name2}}
+                rels = self.db.get_related(category, name, own=True)
+
+                create_sql = grammar.transform(item["sql"], renames=renames)[0]
+                rel_sqls = []
+                for relitem in (x for xx in rels.values() for x in xx.values()):
+                    relname2 = util.make_unique(relitem["name"], allnames)
+                    allnames.append(relname2)
+                    renames.setdefault(relitem["type"], {})[relitem["name"]] = relname2
+                    rel_sql2, err = grammar.transform(relitem["sql"], renames=renames)
+                    if not err: rel_sqls.append(rel_sql2)
+                errors = []
+                guibase.status("Cloning %s %s as %s." % (category, qname, qname2), log=True)
+                try:
+                    self.db.executescript(create_sql, name="CLONE")
+                except Exception as e:
+                    logger.exception("Error cloning %s %s as %s.", category, qname, create_sql)
+                    msg = "Error cloning %s %s as\n\n%s." % (category, sname, create_sql)
+                    guibase.status(msg)
+                    error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
+                    wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
+                    return
+
+                try:
+                    if "table" == category and with_data:
+                        insert_sql = "INSERT INTO %s SELECT * FROM %s" \
+                                     % (grammar.quote(name2), grammar.quote(name))
+                        logger.info("Copying data from %s %s to %s.", category, qname, qname2)
+                        self.db.executescript(insert_sql, name="CLONE")
+                except Exception as e:
+                    logger.exception("Error copying %s %s data to %s.",
+                                     category, qname, qname2)
+                    msg = "Error copying %s %s data to %s." % (category, sname, sname2)
+                    guibase.status(msg)
+                    errors.append(msg[:-1] + (":\n\n%s" % util.format_exc(e)))
+
+                rellabel = " and ".join(util.plural(k, v, numbers=False)
+                                        for k, v in rels.items())
+                try:
+                    if rel_sqls:
+                        logger.info("Cloning %s of %s %s for %s.",
+                                    rellabel, category, qname, qname2)
+                        self.db.executescript("\n\n".join(rel_sqls), name="CLONE")
+                except Exception as e:
+                    logger.exception("Error cloning %s %s %s for %s.",
+                                     category, qname, rellabel, qname2)
+                    msg = "Error cloning %s %s %s for %s." \
+                          % (category, sname, rellabel, sname2)
+                    guibase.status(msg)
+                    errors.append(msg[:-1] + (":\n\n%s" % util.format_exc(e)))
+
+                busy.Close()
+                self.reload_schema(count=True)
+                guibase.status("Cloned %s %s as %s." % (category, qname, qname2), log=True)
+                if errors: wx.MessageBox("Errors were encountered during cloning:\n\n%s"
+                                         % "\n\n".join(errors), conf.Title,
+                                         wx.OK | wx.ICON_WARNING)
+            finally:
+                busy.Close()
 
         elif "refresh" == cmd:
             self.reload_schema(count=True)
@@ -6047,7 +6164,9 @@ class DatabasePage(wx.Panel):
                                   conf.Title, wx.OK | wx.ICON_WARNING)
                     continue # for name
                 page = self.data_pages.get(category, {}).get(name)
-                if page: page.Close(force=True)
+                if page:
+                    page.Close(force=True)
+                    self.data_pages[category].pop(name)
                 self.db.executeaction("DROP %s %s" % (category.upper(),
                                       grammar.quote(name)), name="DROP")
                 deleteds += [name]
@@ -6055,7 +6174,9 @@ class DatabasePage(wx.Panel):
             for name in deleteds:
                 category = next((c for c, xx in self.db.schema.items() if name in xx), None)
                 page = self.schema_pages[category].get(name)
-                if page: page.Close(force=True)
+                if page:
+                    page.Close(force=True)
+                    self.schema_pages[category].pop(name)
             if deleteds:
                 self.reload_schema()
                 self.update_page_header(updated=True)
@@ -6699,7 +6820,7 @@ class DatabasePage(wx.Panel):
         menu = wx.Menu()
         item_file = item_file_single = item_database = item_import = None
         item_reindex = item_reindex_all = item_truncate = None
-        item_rename = item_drop = item_drop_all = item_create = None
+        item_rename = item_clone = item_drop = item_drop_all = item_create = None
         if data.get("type") in ("table", "view"): # Single table/view
             item_name = wx.MenuItem(menu, -1, "%s %s" % (
                         data["type"].capitalize(),
@@ -6733,6 +6854,7 @@ class DatabasePage(wx.Panel):
             item_file = wx.MenuItem(menu, -1, "Export %s to &file" % data["type"])
             if data["type"] in ("table", "view"):
                 item_database = wx.MenuItem(menu, -1, "Export %s to another data&base" % data["type"])
+                item_clone    = wx.MenuItem(menu, -1, "C&lone %s" % data["type"])
             if "table" == data["type"]:
                 item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
                 item_truncate = wx.MenuItem(menu, -1, "Truncate table")
@@ -6825,6 +6947,8 @@ class DatabasePage(wx.Panel):
                 menu.Append(item_rename)
             if item_reindex_all:
                 menu.Append(item_reindex_all)
+            if item_clone:
+                menu.Append(item_clone)
             if item_drop:
                 menu.Append(item_drop)
             names = data["items"] if "category" == data["type"] else data["name"]
@@ -6851,6 +6975,8 @@ class DatabasePage(wx.Panel):
                 menu.Bind(wx.EVT_MENU, functools.partial(self.on_truncate, data["name"]), item_truncate)
             if item_rename:
                 menu.Bind(wx.EVT_MENU, lambda e: tree.EditLabel(item), item_rename)
+            if item_clone:
+                menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("clone", data["type"], data["name"], "table" == data["type"]), item_clone)
             if item_drop:
                 menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["type"], [data["name"]]), item_drop)
 
@@ -7058,6 +7184,8 @@ class DatabasePage(wx.Panel):
             item_copy_rel  = wx.MenuItem(menu, -1, "Copy all &related SQL")
             item_rename    = wx.MenuItem(menu, -1, "Rena&me %s\t(F2)" % data["type"]) \
                              if "category" == data.get("parent", {}).get("type") else None
+            item_clone     = wx.MenuItem(menu, -1, "C&lone %s structure" % data["type"]) \
+                             if data["type"] in ("table", "view") else None
             item_drop      = wx.MenuItem(menu, -1, "Drop %s" % data["type"])
             item_reindex   = wx.MenuItem(menu, -1, "Reindex") \
                              if data["type"] in ("table", "index") else None
@@ -7109,6 +7237,9 @@ class DatabasePage(wx.Panel):
 
             if item_rename:
                 menu.Append(item_rename)
+            if item_clone:
+                menu.Append(item_clone)
+                menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("clone", data["type"], data["name"]), item_clone)
             menu.Append(item_drop)
             if item_reindex:
                 menu.Append(item_reindex)

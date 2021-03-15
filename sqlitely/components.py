@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.02.2021
+@modified    14.03.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -7300,7 +7300,7 @@ class ImportDialog(wx.Dialog):
                              for n in self._db.schema.get(c, {})
                              if util.lceq(n, name)), None)
             if category:
-                msg = "A %s by this name already exists." % category
+                msg = "%s by this name already exists." % util.articled(category).capitalize()
                 continue # while not valid
             break # while not valid
 
