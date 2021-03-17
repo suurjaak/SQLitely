@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.01.2021
+@modified    17.03.2021
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1637,10 +1637,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def rename_item(self, category, name, name2):
         """
-        Carries out renaming schema item, using "ALTER TABLE" if table else
-        dropping and re-creating the item under the new name. Retains item ID.
+        Carries out renaming schema item, using "ALTER TABLE" if table 
+        and name is not case change, else dropping and re-creating the item 
+        under the new name. Retains item ID.
         """
-        if util.lceq(name, name2): return
+        if name == name2: return
+
         category, item = category.lower(), self.get_category(category, name)
         data, renames = dict(name=name, name2=name2), {category: {name: name2}}
         if "table" != category:
@@ -1667,7 +1669,15 @@ WARNING: misuse can easily result in a corrupt database file.""",
                         data.setdefault(subitem["type"], []).append(dict(subitem, sql=sql))
                         used[subitem["name"]] = True
 
-        altersql, err = grammar.generate(data, category="ALTER %s" % category.upper())
+        altercategory = "ALTER %s" % category.upper()
+        if "table" == category and util.lceq(name, name2):
+            altercategory = "COMPLEX %s" % altercategory
+            sql, _ = grammar.transform(item["sql"], renames=renames)
+            data = dict(item, name=name2, meta=item["meta"])
+            fks_on = self.execute("PRAGMA foreign_keys", log=False).fetchone().values()[0]
+            data = self.get_complex_alter_args(item, data, {"table": {name: name2}}, clone=False)
+            data = dict(data, fks=fks_on)
+        altersql, err = grammar.generate(data, category=altercategory)
         if err: raise Exception(err)
 
         try: self.executescript(altersql, name="RENAME")
@@ -1696,7 +1706,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def rename_column(self, table, name, name2):
         """Carries out renaming table column."""
-        if util.lceq(name, name2): return
+        if name == name2: return
 
         item = self.get_category("table", table)
         if not item \

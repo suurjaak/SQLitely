@@ -3472,7 +3472,8 @@ class DatabasePage(wx.Panel):
                 name2 = dlg.GetValue().strip()
                 if not name2 or name2 == name: return
 
-            duplicate = next((vv.get(name2) for vv in self.db.schema.values()), None)
+            duplicate = next((vv.get(name2) for vv in self.db.schema.values()), None) \
+                        if not util.lceq(name, name2) else None
             if duplicate:
                 wx.MessageBox(
                     "Cannot rename %s: there already exists %s named %s." %
@@ -3544,7 +3545,8 @@ class DatabasePage(wx.Panel):
                 name2 = dlg.GetValue().strip()
                 if not name2 or name2 == name: return
 
-            duplicate = next((v for v in item["columns"] if util.lceq(name2, v["name"])), None)
+            duplicate = next((v for v in item["columns"] if util.lceq(name2, v["name"])), None) \
+                        if not util.lceq(name, name2) else None
             if duplicate:
                 wx.MessageBox(
                     "Cannot rename column: table %s already has a column named %s." %
