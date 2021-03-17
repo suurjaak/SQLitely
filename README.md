@@ -70,6 +70,9 @@ Mac/Linux/other: install Python2 and pip, run `pip install sqlitely`.
 
 The pip installation will add the `sqlitely` command to path.
 
+SQLitely has a [Dockerfile](Dockerfile), see
+[build/README for Docker.md](build/README%20for%20Docker.md).
+
 Windows installers have been provided for convenience. The program itself 
 is stand-alone, can work from any directory, and does not need additional
 installation. The installed program can be copied to a USB stick and used
