@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.03.2021
+@modified    17.03.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -692,7 +692,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             for name in items:
                 if menu.SubMenu.MenuItemCount and not menu.SubMenu.MenuItemCount % PAGESIZE:
                     menu.SubMenu.Break()
-                help = "Open schema editor for %s %s" % (category, util.unprint(grammar.quote(name, force=True)))
+                help = "Open schema editor for %s %s" % (category, fmt_entity(name))
                 menuitem = menu.SubMenu.Append(wx.ID_ANY, util.ellipsize(util.unprint(name)), help)
                 args = ["schema", category, name]
                 self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
@@ -708,7 +708,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 for name in items:
                     if menu.SubMenu.MenuItemCount and not menu.SubMenu.MenuItemCount % PAGESIZE:
                         menu.SubMenu.Break()
-                    help = "Drop %s %s" % (category, util.unprint(grammar.quote(name, force=True)))
+                    help = "Drop %s %s" % (category, fmt_entity(name))
                     menuitem = menu.SubMenu.Append(wx.ID_ANY, util.ellipsize(util.unprint(name)), help)
                     args = ["drop", category, name]
                     self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
@@ -724,7 +724,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 for name, item in items.items():
                     if menu.SubMenu.MenuItemCount and not menu.SubMenu.MenuItemCount % PAGESIZE:
                         menu.SubMenu.Break()
-                    help = "Delete all rows from %s %s" % (category, util.unprint(grammar.quote(name, force=True)))
+                    help = "Delete all rows from %s %s" % (category, fmt_entity(name))
                     menuitem = menu.SubMenu.Append(wx.ID_ANY, util.ellipsize(util.unprint(name)), help)
                     menuitem.Enable(bool(item.get("count")))
                     args = ["truncate", name]
@@ -737,7 +737,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 for name, item in items.items():
                     if menu.SubMenu.MenuItemCount and not menu.SubMenu.MenuItemCount % PAGESIZE:
                         menu.SubMenu.Break()
-                    help = "Clone %s %s" % (category, util.unprint(grammar.quote(name, force=True)))
+                    help = "Clone %s %s" % (category, fmt_entity(name))
                     menuitem = menu.SubMenu.Append(wx.ID_ANY, util.ellipsize(util.unprint(name)), help)
                     args = ["clone", category, name, "table" == category]
                     self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
@@ -749,7 +749,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             for name in items:
                 if menu.SubMenu.MenuItemCount and not menu.SubMenu.MenuItemCount % PAGESIZE:
                     menu.SubMenu.Break()
-                help = "Open data grid for %s %s" % (category, util.unprint(grammar.quote(name, force=True)))
+                help = "Open data grid for %s %s" % (category, fmt_entity(name))
                 menuitem = menu.SubMenu.Append(wx.ID_ANY, util.ellipsize(util.unprint(name)), help)
                 args = ["data", category, name]
                 self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, args), menuitem)
@@ -2066,7 +2066,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if tables:
                 s = ""
                 for t in tables:
-                    s += (", " if s else "") + util.ellipsize(util.unprint(grammar.quote(t["name"])), 50)
+                    s += (", " if s else "") + fmt_entity(t["name"], limit=50)
                     if len(s) > 400:
                         s += ", .."
                         break # for t
@@ -2208,8 +2208,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 if unsaved.get("table"):
                     info += (", and " if info else "")
                     info += util.plural("table", unsaved["table"], numbers=False)
-                    info += " " + ", ".join(grammar.quote(x, force=True)
-                                            for x in unsaved["table"])
+                    info += " " + ", ".join(map(fmt_entity, unsaved["table"]))
                 if unsaved.get("schema"):
                     info += (", and " if info else "") + "schema changes"
                 if unsaved.get("temporary"):
@@ -3345,21 +3344,18 @@ class DatabasePage(wx.Panel):
     def handle_command(self, cmd, *args):
         """Handles a command, like "drop", ["table", name]."""
 
-        fquote  = lambda s, f=True: util.unprint(grammar.quote(s, force=f))
-        sfquote = lambda s: util.ellipsize(fquote(s), conf.MaxTabTitleLength)
-
         def format_changes(temp=False):
             """Returns unsaved changes as readable text."""
             info, changes = "", self.get_unsaved()
             if changes.get("table"):
                 info += "Unsaved data in tables:\n- "
-                info += "\n- ".join(fquote(x, f=False) for x in changes["table"])
+                info += "\n- ".join(fmt_entity(x, force=False) for x in changes["table"])
             if changes.get("schema"):
                 info += "%sUnsaved schema changes:\n- " % ("\n\n" if info else "")
                 names = {}
                 for x in changes["schema"]:
                     names.setdefault(x.Category, []).append(x.Name)
-                info += "\n- ".join("%s %s" % (c, fquote(n, f=False))
+                info += "\n- ".join("%s %s" % (c, fmt_entity(n, force=False))
                         for c in self.db.CATEGORIES for n in names.get(c, ()))
             if changes.get("pragma"):
                 info += "%sPRAGMA settings" % ("\n\n" if info else "")
@@ -3424,12 +3420,12 @@ class DatabasePage(wx.Panel):
                 names = [n for n in names if any("index" == k for k in self.db.get_related(category, n, own=True))]
                 label = "%s on %s %s" % (util.plural("index", indexes, single="the"),
                                          util.plural("table", names, numbers=False),
-                                         ", ".join(map(sfquote, names)))
+                                         ", ".join(map(fmt_entity, names)))
                 lock = any(self.db.get_lock(category, n) for n in names)
             elif names:
                 targets = indexes = names
                 label = "%s %s" % (util.plural("index", names, numbers=False, single="the"),
-                                   ", ".join(map(sfquote, names)))
+                                   ", ".join(map(fmt_entity, names)))
                 lock = any(self.db.get_lock("table", self.db.schema["index"][name]["tbl_name"])
                            for name in names)
             elif "table" == category:
@@ -3467,7 +3463,7 @@ class DatabasePage(wx.Panel):
             if name not in self.db.schema.get(category) or {}: return
             if not name2:
                 dlg = wx.TextEntryDialog(self, 
-                    'Rename %s %s to:' % (category, sfquote(name)),
+                    'Rename %s %s to:' % (category, fmt_entity(name)),
                     conf.Title, value=name, style=wx.OK | wx.CANCEL
                 )
                 dlg.CenterOnParent()
@@ -3481,7 +3477,7 @@ class DatabasePage(wx.Panel):
                 wx.MessageBox(
                     "Cannot rename %s: there already exists %s named %s." %
                     (category, util.articled(duplicate["type"]),
-                     sfquote(duplicate["name"])),
+                     fmt_entity(duplicate["name"])),
                     conf.Title, wx.ICON_WARNING | wx.OK
                 )
                 return
@@ -3493,7 +3489,7 @@ class DatabasePage(wx.Panel):
                     if page.IsChanged():
                         res = wx.MessageBox(
                             "There are unsaved changes to table %s data.\n\n"
-                            "Commit changes before rename?" % sfquote(name),
+                            "Commit changes before rename?" % fmt_entity(name),
                             conf.Title, wx.ICON_WARNING | wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT
                         )
                         if res == wx.CANCEL: return
@@ -3505,7 +3501,7 @@ class DatabasePage(wx.Panel):
                     if page.IsChanged():
                         if wx.CANCEL == wx.MessageBox(
                             "There are unsaved changes to %s %s schema.\n\n"
-                            "Discard changes before rename?" % (category, sfquote(name)),
+                            "Discard changes before rename?" % (category, fmt_entity(name)),
                             conf.Title, wx.ICON_WARNING | wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT
                         ): return
                     page.SetReadOnly()
@@ -3523,7 +3519,7 @@ class DatabasePage(wx.Panel):
                 if not page: continue # for page, pagemap, nb
 
                 pagemap[category].pop(name)
-                title = "%s %s" % (category.capitalize(), fquote(name2, f=False))
+                title = "%s %s" % (category.capitalize(), grammar.quote(name2))
                 title = make_unique_page_title(title, nb, skip=nb.GetPageIndex(page))
                 nb.SetPageText(nb.GetPageIndex(page), title)
                 pagemap[category][name2] = page
@@ -3538,8 +3534,8 @@ class DatabasePage(wx.Panel):
             if not item: return
             if not name2:
                 dlg = wx.TextEntryDialog(self, 
-                    "Rename column %s.%s %s to:"
-                    % (fquote(table, f=False), f(name, f=False)),
+                    "Rename column %s.%s to:"
+                    % (fmt_entity(table, force=False), fmt_entity(name, force=False)),
                     conf.Title, value=name, style=wx.OK | wx.CANCEL
                 )
                 dlg.CenterOnParent()
@@ -3552,7 +3548,7 @@ class DatabasePage(wx.Panel):
             if duplicate:
                 wx.MessageBox(
                     "Cannot rename column: table %s already has a column named %s." %
-                    (sfquote(table), sfquote(duplicate["name"])),
+                    (fmt_entity(table), fmt_entity(duplicate["name"])),
                     conf.Title, wx.ICON_WARNING | wx.OK
                 )
                 return
@@ -3564,7 +3560,7 @@ class DatabasePage(wx.Panel):
                     if page.IsChanged():
                         res = wx.MessageBox(
                             "There are unsaved changes to table %s data.\n\n"
-                            "Commit changes before column rename?" % sfquote(table),
+                            "Commit changes before column rename?" % fmt_entity(table),
                             conf.Title, wx.ICON_WARNING | wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT
                         )
                         if res == wx.CANCEL: return
@@ -3576,7 +3572,7 @@ class DatabasePage(wx.Panel):
                     if page.IsChanged():
                         if wx.CANCEL == wx.MessageBox(
                             "There are unsaved changes to table %s schema.\n\n"
-                            "Discard changes before column rename?" % sfquote(table),
+                            "Discard changes before column rename?" % fmt_entity(table),
                             conf.Title, wx.ICON_WARNING | wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT
                         ): return
                     page.SetReadOnly()
@@ -3594,7 +3590,7 @@ class DatabasePage(wx.Panel):
             allnames = sum(map(list, self.db.schema.values()), [])
             name2 = util.make_unique(name, allnames)
             dlg = wx.TextEntryDialog(self, "Clone %s%s %s as:"
-                % (category, sfquote(name), "" if with_data else " structure"),
+                % (category, fmt_entity(name), "" if with_data else " structure"),
                 conf.Title, value=name2, style=wx.OK | wx.CANCEL
             )
             dlg.CenterOnParent()
@@ -3604,14 +3600,14 @@ class DatabasePage(wx.Panel):
             if not name2 or name2.lower() == name.lower(): return
 
             qname, qname2 = (grammar.quote(n, force=True) for n in (name, name2))
-            sname, sname2 = sfquote(name), sfquote(name2)
+            sname, sname2 = fmt_entity(name), fmt_entity(name2)
 
             duplicate = next((vv.get(name2) for vv in self.db.schema.values()), None)
             if duplicate:
                 wx.MessageBox(
                     "Cannot clone %s as %s:\n\nthere already exists %s named %s."
                     % (category, sname2, util.articled(duplicate["type"]),
-                       sfquote(duplicate["name"])),
+                       fmt_entity(duplicate["name"])),
                     conf.Title, wx.ICON_WARNING | wx.OK
                 )
                 return
@@ -3631,7 +3627,7 @@ class DatabasePage(wx.Panel):
                     rel_sql2, err = grammar.transform(relitem["sql"], renames=renames)
                     if not err: rel_sqls.append(rel_sql2)
                 errors = []
-                guibase.status("Cloning %s %s as %s." % (category, qname, qname2), log=True)
+                guibase.status("Cloning %s %s as %s." % (category, sname, sname2), log=True)
                 try:
                     self.db.executescript(create_sql, name="CLONE")
                 except Exception as e:
@@ -3672,7 +3668,7 @@ class DatabasePage(wx.Panel):
 
                 busy.Close()
                 self.reload_schema(count=True)
-                guibase.status("Cloned %s %s as %s." % (category, qname, qname2), log=True)
+                guibase.status("Cloned %s %s as %s." % (category, sname, sname2), log=True)
                 if errors: wx.MessageBox("Errors were encountered during cloning:\n\n%s"
                                          % "\n\n".join(errors), conf.Title,
                                          wx.OK | wx.ICON_WARNING)
@@ -5112,7 +5108,7 @@ class DatabasePage(wx.Panel):
         def fmtname(item, cap=False):
             vv = tuple(item.get(x) for x in ("type", "name"))
             if nb is self.notebook_search: t = "%s search: %s" % vv
-            else: t = "%s %s" % (vv[0], grammar.quote(vv[1])) if all(vv) else vv[-1]
+            else: t = "%s %s" % (vv[0], fmt_entity(vv[1])) if all(vv) else vv[-1]
             return "%s%s" % (t[0].capitalize(), t[1:]) if cap else t
 
         def on_take(event=None):
@@ -5450,7 +5446,7 @@ class DatabasePage(wx.Panel):
 
     def add_data_page(self, data):
         """Opens and returns a data object page for specified object data."""
-        title = "%s %s" % (data["type"].capitalize(), util.unprint(grammar.quote(data["name"])))
+        title = "%s %s" % (data["type"].capitalize(), fmt_entity(data["name"], force=False))
         title = make_unique_page_title(title, self.notebook_data)
         self.notebook_data.Freeze()
         try:
@@ -5524,9 +5520,9 @@ class DatabasePage(wx.Panel):
     def add_schema_page(self, data):
         """Opens and returns schema object page for specified object data."""
         if "name" in data:
-            title = "%s %s" % (data["type"].capitalize(), util.unprint(grammar.quote(data["name"])))
+            title = "%s %s" % (data["type"].capitalize(), fmt_entity(data["name"], force=False))
             busy = controls.BusyPanel(self.notebook_schema, "Opening %s %s." %
-                                      (data["type"], grammar.quote(data["name"], force=True)))
+                                      (data["type"], fmt_entity(data["name"])))
         else:
             title, busy = "* New %s *" % data["type"], None
         title = make_unique_page_title(title, self.notebook_schema)
@@ -5586,7 +5582,7 @@ class DatabasePage(wx.Panel):
             self.toggle_cursors(category, name)
         if (modified is not None or updated is not None) and event.source:
             if name:
-                title = "%s %s" % (category.capitalize(), util.unprint(grammar.quote(name)))
+                title = "%s %s" % (category.capitalize(), fmt_entity(name, force=False))
                 title = make_unique_page_title(title, self.notebook_schema, skip=idx)
                 if event.source.IsChanged(): title += "*"
                 if self.notebook_schema.GetPageText(idx) != title:
@@ -5718,7 +5714,7 @@ class DatabasePage(wx.Panel):
             self.handle_command("reindex", category, name)
         if (modified is not None or updated is not None) and event.source:
             if name:
-                title = "%s %s" % (category.capitalize(), util.unprint(grammar.quote(name)))
+                title = "%s %s" % (category.capitalize(), fmt_entity(name, force=False))
                 title = make_unique_page_title(title, self.notebook_data, skip=idx)
                 if event.source.IsChanged(): title += "*"
                 if self.notebook_data.GetPageText(idx) != title:
@@ -5923,8 +5919,7 @@ class DatabasePage(wx.Panel):
             """Returns schema information string as "tables A, B and views C, D"."""
             return " and ".join(
                 "%s %s" % (util.plural(c, vv, numbers=False),
-                           ", ".join(grammar.quote(v, force=True)
-                                     for v in sorted(vv, key=lambda x: x.lower())))
+                           ", ".join(map(fmt_entity, sorted(vv, key=lambda x: x.lower()))))
                 for c, vv in sorted(dct.items())
             )
 
@@ -5960,8 +5955,8 @@ class DatabasePage(wx.Panel):
                 entrydialog = wx.TextEntryDialog(self, entrymsg % {
                     "category":  category, "category2": category2,
                     "depend": depend,
-                    "name":      grammar.quote(name,  force=True),
-                    "name2":     grammar.quote(name2, force=True),
+                    "name":      fmt_entity(name),
+                    "name2":     fmt_entity(name2),
                     "filename2": filename2, "entryheader": entryheader
                 }, conf.Title, name2)
                 if wx.ID_OK != entrydialog.ShowModal(): return
@@ -6022,7 +6017,7 @@ class DatabasePage(wx.Panel):
             for k, v in result["subtasks"].items():
                 category = next(c for c, v in self.db.schema.items() if k in v)
                 if v.get("error"): errors.append("%s %s: %s" % 
-                    (category, grammar.quote(k, force=True), v["error"]))
+                    (category, fmt_entity(k), v["error"]))
                 if v.get("result"): successes.setdefault(category, []).append(k)
 
             errors.sort(key=lambda x: x.lower())
@@ -6039,7 +6034,8 @@ class DatabasePage(wx.Panel):
                     status =  " and ".join(util.plural(c, vv)
                                            for c, vv in sorted(successes.items()))
                 else: status = "%s %s" % (util.plural(successes.keys()[0], successes.values()[0]),
-                                          ", ".join(map(grammar.quote, successes.values()[0])))
+                                          ", ".join(fmt_entity(x, force=False)
+                                                    for x in successes.values()[0]))
                 guibase.status("Exported %s." % status, log=True)
             else:
                 guibase.status("Failed to export to %s.", filename2)
@@ -6065,8 +6061,7 @@ class DatabasePage(wx.Panel):
                     if error:
                         t = error
                         if name: t = "%s: %s" % (grammar.quote(name, force=True), t)
-                        msg = "Failed to export %s." % t
-                        guibase.status(msg)
+                        guibase.status("Failed to export %s.", t)
                     if result:
                         busy.Close()
                         result = dict(result, subtasks=subtasks, error=result.get("error", "\n".join(errors)))
@@ -6127,11 +6122,10 @@ class DatabasePage(wx.Panel):
         extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
                 if "table" in categories else ""
         itemtext = " and ".join("%s %s" % (
-            util.plural(c, nn, numbers=False),
-            ", ".join(grammar.quote(n, force=True) for n in nn)
+            util.plural(c, nn, numbers=False), ", ".join(map(fmt_entity, nn))
         ) for c, nn in categories.items())
         if len(names) == 1:
-            itemtext = "the %s %s" % (next(iter(categories)), grammar.quote(names[0], force=True))
+            itemtext = "the %s %s" % (next(iter(categories)), fmt_entity(names[0]))
 
         if wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to drop %s?%s" % (itemtext, extra),
@@ -6190,7 +6184,7 @@ class DatabasePage(wx.Panel):
             "Are you sure you want to delete all rows from %s %s?\n\n"
             "This action is not undoable." % (
                 util.plural("table", names, numbers=False),
-                ", ".join(grammar.quote(name, force=True) for name in names)
+                ", ".join(map(fmt_entity, names))
             ),
             conf.Title, wx.ICON_WARNING, defaultno=True
         ): return
@@ -6215,7 +6209,7 @@ class DatabasePage(wx.Panel):
         wx.MessageBox("Deleted %s from %s %s." % (
                           util.plural("row", count),
                           util.plural("table", names, numbers=False),
-                          ", ".join(grammar.quote(name, force=True) for name in names),
+                          ", ".join(map(fmt_entity, names)),
                       ), conf.Title)
 
 
@@ -6576,7 +6570,7 @@ class DatabasePage(wx.Panel):
                         subcategories, emptysubs = ["table", "index", "trigger", "view"], True
                         childtext = util.plural("column", columns)
                     elif "index" == category:
-                        childtext = "ON " + grammar.quote(item["tbl_name"])
+                        childtext = "ON " + util.unprint(grammar.quote(item["tbl_name"]))
                         columns = copy.deepcopy(item.get("meta", {}).get("columns")
                                                 or item.get("columns") or [])
                         table = self.db.schema.get("table", {}).get(item["tbl_name"])
@@ -6823,9 +6817,7 @@ class DatabasePage(wx.Panel):
         item_rename = item_clone = item_drop = item_drop_all = item_create = None
         if data.get("type") in ("table", "view"): # Single table/view
             item_name = wx.MenuItem(menu, -1, "%s %s" % (
-                        data["type"].capitalize(),
-                        util.ellipsize(util.unprint(grammar.quote(data["name"], force=True)),
-                                       conf.MaxTabTitleLength)))
+                        data["type"].capitalize(), fmt_entity(data["name"])))
             item_open = wx.MenuItem(menu, -1, "&Open %s data" % data["type"])
             item_open_meta = wx.MenuItem(menu, -1, "Open %s &schema" % data["type"])
             item_copy      = wx.MenuItem(menu, -1, "&Copy name")
@@ -6864,8 +6856,8 @@ class DatabasePage(wx.Panel):
 
         elif "column" == data.get("type"): # Column
             item_name = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
-                        util.unprint(grammar.quote(data["parent"]["name"])),
-                        util.unprint(grammar.quote(data["name"]))))
+                        fmt_entity(data["parent"]["name"], force=False),
+                        fmt_entity(data["name"], force=False)))
             item_open      = wx.MenuItem(menu, -1, "&Open %s data" % data["parent"]["type"])
             item_open_meta = wx.MenuItem(menu, -1, "Open %s &schema" % data["parent"]["type"])
             item_copy      = wx.MenuItem(menu, -1, "&Copy name")
@@ -7135,9 +7127,11 @@ class DatabasePage(wx.Panel):
                 menu.Bind(wx.EVT_MENU, lambda e: tree.EditLabel(item), item_renamecol)
 
             if has_name:
-                item_name = wx.MenuItem(menu, -1, 'Column "%s"' % ".".join(
-                    util.unprint(grammar.quote(x)) for x in (table.get("name"), data["name"]) if x
-                ))
+                parts = [fmt_entity(x, force=False)
+                         for x in (table.get("name"), data["name"]) if x]
+                inter = " ." if len(parts) > 1 and parts[0][-2:] == ".." else "."
+                title = ("%s" if any('"' in x for x in parts) else '"%s"') % inter.join(parts)
+                item_name = wx.MenuItem(menu, -1, 'Column %s' % title)
                 item_name.Font = boldfont
                 item_copy = wx.MenuItem(menu, -1, "&Copy name")
 
@@ -7173,9 +7167,7 @@ class DatabasePage(wx.Panel):
             sqlkws = {"category": data["type"], "name": data["name"]}
 
             item_name   = wx.MenuItem(menu, -1, "%s %s" % (
-                          data["type"].capitalize(),
-                          util.ellipsize(util.unprint(grammar.quote(data["name"], force=True)),
-                                         conf.MaxTabTitleLength)))
+                          data["type"].capitalize(), fmt_entity(data["name"])))
             item_open = wx.MenuItem(menu, -1, "&Open %s schema" % data["type"])
             item_open_data = wx.MenuItem(menu, -1, "Open %s &data" % data["type"]) \
                              if data["type"] in ("table", "view") else None
@@ -7337,3 +7329,15 @@ def make_unique_page_title(title, notebook, maxlen=None, front=False, skip=-1):
     all_titles = [notebook.GetPageText(i).rstrip("*")
                   for i in range(notebook.GetPageCount()) if i != skip]
     return util.make_unique(title, all_titles, suffix=" (%s)", case=True)
+
+
+def fmt_entity(name, force=True, limit=None):
+    """
+    Formats the schema entity for display, enclosed in quotes,
+    unprintable characters escaped, and ellipsized if too long.
+
+    @param   force  whether to force quotes even if name is a single ASCII word
+    @param   limit  max length for ellipsizing, defaults to conf.MaxTabTitleLength
+    """
+    if limit is None: limit = conf.MaxTabTitleLength
+    return util.ellipsize(util.unprint(grammar.quote(name, force=force)), limit)
