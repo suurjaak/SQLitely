@@ -3752,8 +3752,8 @@ class SchemaObjectPage(wx.Panel):
             self._ctrls["table"].SetItems(map(util.unprint, self._tables))
             for j, x in enumerate(self._tables): self._ctrls["table"].SetClientData(j, x)
 
-        self._ctrls["table"].Value     = util.unprint(meta.get("table") if self._hasmeta
-                                                      else self._item.get("tbl_name") or "")
+        self._ctrls["table"].Value     = util.unprint((meta.get("table") if self._hasmeta
+                                                       else self._item.get("tbl_name")) or "")
         self._ctrls["for"].Value       = bool(meta.get("for"))
         self._ctrls["upon"].Value      = meta.get("upon") or ""
         self._ctrls["action"].Value    = meta.get("action") or ""
