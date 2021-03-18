@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.03.2021
+@modified    18.03.2021
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -718,31 +718,31 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if "category" not in kwargs and args: kwargs["category"]  = args[0]
         if "name" not in kwargs and len(args) > 1: kwargs["name"] = args[1]
         if "skip" not in kwargs and len(args) > 2: kwargs["skip"] = args[2]
-        skipkeys = set(util.tuplefy(kwargs.get("skip", ())))
         for k, v in kwargs.items():
             if isinstance(v, basestring): kwargs[k] = v.lower()
+        skipkeys = set(util.tuplefy(kwargs.pop("skip", ())))
         result, keys = "", ()
 
         if kwargs.get("category") and kwargs.get("name"):
             category, name = kwargs["category"], kwargs["name"]
             keys = self.locks.get(category, {}).get(name)
-            if keys and skipkeys: keys -= skipkeys
+            if keys and skipkeys: keys = keys - skipkeys
             name = self.schema.get(category, {}).get(name, {}).get("name", name)
             if keys: result = "%s %s is currently locked" % \
                               (category.capitalize(), util.unprint(grammar.quote(name, force=True)))
         elif kwargs.get("category"): # Check for lock on any item in category
             category = kwargs["category"]
             keys = set(y for x in self.locks.get(category, {}).values() for y in x)
-            if keys and skipkeys: keys -= skipkeys
+            if keys and skipkeys: keys = keys - skipkeys
             if keys: result = "%s are currently locked" % util.plural(category.capitalize())
 
         if not result: # Check for global lock
             keys = self.locks.get(None, {}).get(None)
-            if keys and skipkeys: keys -= skipkeys
+            if keys and skipkeys: keys = keys - skipkeys
             if keys: result = "Database is currently locked"
         if not kwargs and not result and self.locks: # No args: check for any lock
-            keys = self.locklabels.keys()
-            if keys and skipkeys: keys -= skipkeys
+            keys = set(self.locklabels.keys())
+            if keys and skipkeys: keys = keys - skipkeys
             if keys: result = "Database is currently locked"
 
         if result and keys:
@@ -751,14 +751,19 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
-    def get_locks(self):
+    def get_locks(self, skip=()):
         """
         Returns user-friendly information on all current locks, as
         ["global lock (statistics analysis)", "table "MyTable" (export)", ].
+
+        @param   skip  keys to skip, if any
         """
         result = []
+        skipkeys = set(util.tuplefy(skip or ()))
         for category in sorted(self.locks):
             for name, keys in sorted(self.locks[category].items()):
+                keys = keys - skipkeys
+                if not keys: continue # for name, keys
                 t, labels = "", filter(bool, map(self.locklabels.get, keys))
                 if category and name:
                     name = self.schema.get(category, {}).get(name, {}).get("name", name)

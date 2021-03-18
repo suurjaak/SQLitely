@@ -512,6 +512,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.menu_edit_drop_index   = menu_edit_drop .AppendSubMenu(menu_edit_drop_index,   "&Index")
         self.menu_edit_drop_trigger = menu_edit_drop .AppendSubMenu(menu_edit_drop_trigger, "T&rigger")
         self.menu_edit_drop_view    = menu_edit_drop .AppendSubMenu(menu_edit_drop_view,    "&View")
+        menu_edit_drop.AppendSeparator()
+        menu_edit_drop_schema       = self.menu_edit_drop_schema = menu_edit_drop.Append(
+            wx.ID_ANY, "Drop everything", "Drop all entities in the database")
 
         menu_tools = self.menu_tools = wx.Menu()
         menu.Append(menu_tools, "&Tools")
@@ -628,8 +631,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["changes"]), menu_view_changes)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["history"]), menu_view_history)
 
-        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["save"]),   menu_edit_save)
-        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["cancel"]), menu_edit_cancel)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["save"]),        menu_edit_save)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["cancel"]),      menu_edit_cancel)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["drop schema"]), menu_edit_drop_schema)
 
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["optimize"]),  menu_tools_optimize)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["reindex"]),   menu_tools_reindex)
@@ -3398,6 +3402,56 @@ class DatabasePage(wx.Panel):
                 page = self.schema_pages[category].get(name) or \
                        self.add_schema_page(self.db.get_category(category, name))
                 self.notebook_schema.SetSelection(self.notebook_schema.GetPageIndex(page))
+        elif "drop schema" == cmd:
+            CATEGORY_ORDER = ["table", "view", "index", "trigger"]
+
+            categories = {c: list(vv) for c, vv in self.db.schema.items() if vv}
+            if wx.YES != controls.YesNoMessageBox(
+                "Are you sure you want to drop everything in the database?",
+                conf.Title, wx.ICON_WARNING, defaultno=True
+            ): return
+
+            if wx.YES != controls.YesNoMessageBox(
+                "Are you REALLY sure you want to drop everything in the database?\n\n"
+                "This will delete: %s." % ", ".join(
+                    util.plural(c, categories[c]) for c in CATEGORY_ORDER if c in categories
+                ), conf.Title, wx.ICON_WARNING, defaultno=True
+            ): return
+
+            datapages = sum((list(d.values()) for d in self.data_pages.values()), [])
+            locks = self.db.get_locks(skip=datapages)
+            if locks:
+                wx.MessageBox("Cannot drop schema, database has locks:\n\n- %s." % "\n- ".join(locks),
+                              conf.Title)
+                return
+            if any(p.IsExporting() for p in self.sql_pages.values()):
+                wx.MessageBox("Cannot drop schema, SQL query exports in progress.",
+                              conf.Title)
+                return
+
+            pages = []
+            for category, names in categories.items():
+                for pagedict in (self.data_pages, self.schema_pages):
+                    pages.extend(pagedict[category][n] for n in names
+                                 if n in pagedict.get(category, {}))
+            for page in pages: page.Close(force=True)
+            for page in self.sql_pages.values(): page.CloseGrid()
+
+            deleteds = []
+            try:
+                for category, names in ((c, categories.get(c)) for c in CATEGORY_ORDER):
+                    for name in names or ():
+                        self.db.executeaction("DROP %s IF EXISTS %s" % (category.upper(),
+                                              grammar.quote(name)), name="DROP")
+                        deleteds += [name]
+            finally:
+                if deleteds:
+                    try: self.db.executeaction("VACUUM", name="DROP")
+                    except Exception:
+                        logger.exception("Error running VACUUM after dropping schema.")
+                    self.reload_schema()
+                    self.update_page_header(updated=True)
+
         elif "drop" == cmd:
             category = args[0]
             names = args[1:] if len(args) > 1 else list(self.db.schema[category])
@@ -6060,6 +6114,7 @@ class DatabasePage(wx.Panel):
                     else: errors.append(error)
                 elif name: subtasks.setdefault(name, {})["result"] = True
                 def after(result, name, error):
+                    if not self: return
                     if error:
                         t = error
                         if name: t = "%s: %s" % (grammar.quote(name, force=True), t)
@@ -6163,7 +6218,7 @@ class DatabasePage(wx.Panel):
                 if page:
                     page.Close(force=True)
                     self.data_pages[category].pop(name)
-                self.db.executeaction("DROP %s %s" % (category.upper(),
+                self.db.executeaction("DROP %s IF EXISTS %s" % (category.upper(),
                                       grammar.quote(name)), name="DROP")
                 deleteds += [name]
         finally:
@@ -6921,6 +6976,11 @@ class DatabasePage(wx.Panel):
                 it = wx.MenuItem(submenu, -1, "New " + category.replace(key, "&" + key, 1))
                 submenu.Append(it)
                 menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), it)
+            item_drop_schema = wx.MenuItem(menu, -1, "Drop everything")
+            menu.Append(item_drop_schema)
+            menu.Bind(wx.EVT_MENU, functools.partial(self.handle_command, "drop schema"),
+                      item_drop_schema)
+            item_drop_schema.Enabled = any(self.db.schema.values())
 
         if item_file:
             menu.AppendSeparator()
@@ -7068,6 +7128,11 @@ class DatabasePage(wx.Panel):
                 it = wx.MenuItem(submenu, -1, "New " + category.replace(key, "&" + key, 1))
                 submenu.Append(it)
                 menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), it)
+            item_drop_schema = wx.MenuItem(menu, -1, "Drop everything")
+            menu.Append(item_drop_schema)
+            menu.Bind(wx.EVT_MENU, functools.partial(self.handle_command, "drop schema"),
+                      item_drop_schema)
+            item_drop_schema.Enabled = any(self.db.schema.values())
         elif "category" == data["type"]:
             sqlkws = {"category": data["category"]}
             if data.get("parent"): sqlkws["name"] = [x["name"] for x in data["items"]]

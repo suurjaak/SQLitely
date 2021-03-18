@@ -1,15 +1,16 @@
 CHANGELOG
 =========
 
-1.2, 2021-03-17
+1.2, 2021-03-18
 ---------------
 - added schema diagram, exportable as bitmap or vector;
 - added option to create database from spreadsheet or JSON;
 - added option to have only single instance running;
 - added option to clone a table or view;
+- added option to drop entire schema;
 - added support for single-user install;
 - added easy rename options to data & schema tree;
-- added spreadsheet file drop support to database page;
+- added spreadsheet file drag-drop support to database page;
 - added Dockerfile;
 - improved auto-altering related items;
 - minor fixes and UI tweaks.
