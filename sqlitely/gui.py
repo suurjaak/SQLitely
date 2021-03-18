@@ -1564,7 +1564,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         t = "all" if count == total else "current"
         if (self.list_db.GetItemCount() > 1) and wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to clear the list of %s databases?" % t,
-            conf.Title, wx.ICON_INFORMATION, defaultno=True
+            conf.Title, wx.ICON_INFORMATION, default=wx.NO
         ): return
 
         if count == total:
@@ -1684,7 +1684,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         msg = util.plural("file", self.dbs_selected, single="this")
         if wx.YES != controls.YesNoMessageBox(
             "Remove %s from database list?\n\n%s" % (msg, "\n".join(self.dbs_selected)),
-            conf.Title, wx.ICON_INFORMATION, defaultno=True
+            conf.Title, wx.ICON_INFORMATION, default=wx.NO
         ): return
 
         for filename in self.dbs_selected:
@@ -1729,7 +1729,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         msg = util.plural("file", self.dbs_selected, single="this")
         if wx.YES != controls.YesNoMessageBox(
             "Delete %s from disk?\n\n%s" % (msg, "\n".join(self.dbs_selected)),
-            conf.Title, wx.ICON_WARNING, defaultno=True
+            conf.Title, wx.ICON_WARNING, default=wx.NO
         ): return
 
         unsaved_pages, ongoing_pages = {}, {}
@@ -1746,7 +1746,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     util.plural("page", unsaved_pages, single="this"),
                     "\n".join(sorted(unsaved_pages.values()))
                 ),
-                conf.Title, wx.ICON_INFORMATION, defaultno=True
+                conf.Title, wx.ICON_INFORMATION, default=wx.NO
             ): return
         if ongoing_pages:
             if wx.YES != controls.YesNoMessageBox(
@@ -1755,7 +1755,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     util.plural(ongoing_pages, single="this"),
                     "\n".join(sorted(ongoing_pages.values()))
                 ),
-                conf.Title, wx.ICON_INFORMATION, defaultno=True
+                conf.Title, wx.ICON_INFORMATION, default=wx.NO
             ): return
 
         errors = []
@@ -2150,7 +2150,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     util.plural("file", ongoing_pages, single="this"),
                     "\n".join(sorted(ongoing_pages.values()))
                 ),
-                conf.Title, wx.ICON_INFORMATION, defaultno=True
+                conf.Title, wx.ICON_INFORMATION, default=wx.NO
             ): return
 
         for page, db in self.db_pages.items():
@@ -2243,7 +2243,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if wx.YES != controls.YesNoMessageBox(
                 "There are ongoing exports in this file:\n\n%s\n\n- %s\n\n"
                 "Are you sure you want to cancel them?" % (page.db, "\n- ".join(infos)),
-                conf.Title, wx.ICON_INFORMATION, defaultno=True
+                conf.Title, wx.ICON_INFORMATION, default=wx.NO
             ): return event.Veto()
 
         # Remove page from MainWindow data structures
@@ -3408,14 +3408,14 @@ class DatabasePage(wx.Panel):
             categories = {c: list(vv) for c, vv in self.db.schema.items() if vv}
             if wx.YES != controls.YesNoMessageBox(
                 "Are you sure you want to drop everything in the database?",
-                conf.Title, wx.ICON_WARNING, defaultno=True
+                conf.Title, wx.ICON_WARNING, default=wx.NO
             ): return
 
             if wx.YES != controls.YesNoMessageBox(
                 "Are you REALLY sure you want to drop everything in the database?\n\n"
                 "This will delete: %s." % ", ".join(
                     util.plural(c, categories[c]) for c in CATEGORY_ORDER if c in categories
-                ), conf.Title, wx.ICON_WARNING, defaultno=True
+                ), conf.Title, wx.ICON_WARNING, default=wx.NO
             ): return
 
             datapages = sum((list(d.values()) for d in self.data_pages.values()), [])
@@ -3494,7 +3494,7 @@ class DatabasePage(wx.Panel):
                 
             if wx.YES != controls.YesNoMessageBox(
                 "Are you sure you want to re-create %s?" % label,
-                conf.Title, wx.ICON_INFORMATION, defaultno=True
+                conf.Title, wx.ICON_INFORMATION, default=wx.NO
             ): return
 
             if lock: return wx.MessageBox("%s, cannot reindex." % lock,
@@ -3747,14 +3747,14 @@ class DatabasePage(wx.Panel):
         elif "save" == cmd:
             if wx.YES != controls.YesNoMessageBox(
                 "Are you sure you want to save the following changes:\n\n%s" %
-                format_changes(), conf.Title, wx.ICON_INFORMATION, defaultno=True
+                format_changes(), conf.Title, wx.ICON_INFORMATION, default=wx.NO
             ): return
 
             self.save_database()
         elif "cancel" == cmd:
             if wx.YES != controls.YesNoMessageBox(
                 "Are you sure you want to cancel the following changes:\n\n%s" %
-                format_changes(), conf.Title, wx.ICON_INFORMATION, defaultno=True
+                format_changes(), conf.Title, wx.ICON_INFORMATION, default=wx.NO
             ): return
 
             self.on_pragma_cancel()
@@ -4402,7 +4402,7 @@ class DatabasePage(wx.Panel):
         sql = template.expand(pragma=self.pragma_changes)
         if sql and wx.YES != controls.YesNoMessageBox(
             "Save PRAGMA changes?\n\n%s" % sql, conf.Title,
-            wx.ICON_INFORMATION, defaultno=True
+            wx.ICON_INFORMATION, default=wx.NO
         ): return
 
         lock = self.db.get_lock(category=None)
@@ -4482,7 +4482,7 @@ class DatabasePage(wx.Panel):
         """Handler for clicking to cancel PRAGMA changes."""
         if event and self.pragma_changes and wx.YES != controls.YesNoMessageBox(
             "You have unsaved changes, are you sure you want to discard them?",
-            conf.Title, wx.ICON_INFORMATION, defaultno=True
+            conf.Title, wx.ICON_INFORMATION, default=wx.NO
         ): return
 
         self.pragma_edit = False
@@ -6186,7 +6186,7 @@ class DatabasePage(wx.Panel):
 
         if wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to drop %s?%s" % (itemtext, extra),
-            conf.Title, wx.ICON_WARNING, defaultno=True
+            conf.Title, wx.ICON_WARNING, default=wx.NO
         ): return
 
         items = self.db.get_category("table", categories["table"]).values() \
@@ -6199,7 +6199,7 @@ class DatabasePage(wx.Panel):
                     "They" if len(categories["table"]) > 1 else "It",
                     "contain" if len(categories["table"]) > 1 else "contains",
                     util.count(items, "row")
-                ), conf.Title, wx.ICON_WARNING, defaultno=True
+                ), conf.Title, wx.ICON_WARNING, default=wx.NO
             ): return
         lock = self.db.get_lock(category=None)
         if lock: return wx.MessageBox("%s, cannot drop." % lock,
@@ -6243,7 +6243,7 @@ class DatabasePage(wx.Panel):
                 util.plural("table", names, numbers=False),
                 ", ".join(map(fmt_entity, names))
             ),
-            conf.Title, wx.ICON_WARNING, defaultno=True
+            conf.Title, wx.ICON_WARNING, default=wx.NO
         ): return
 
 
@@ -6278,13 +6278,13 @@ class DatabasePage(wx.Panel):
         if wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to delete all rows from all tables?\n\n"
             "This action is not undoable.",
-            conf.Title, wx.ICON_WARNING, defaultno=True
+            conf.Title, wx.ICON_WARNING, default=wx.NO
         ): return
 
         if wx.YES != controls.YesNoMessageBox(
             "Are you REALLY sure you want to delete all rows from all tables?\n\n"
             "Database currently contains %s." % util.count(items, "row"),
-            conf.Title, wx.ICON_WARNING, defaultno=True
+            conf.Title, wx.ICON_WARNING, default=wx.NO
         ): return
 
         names = [x["name"] for x in items]

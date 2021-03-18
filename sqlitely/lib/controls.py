@@ -74,7 +74,7 @@ Stand-alone GUI components for wx:
 - TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
   A tree control with a more convenient API.
 
-- YesNoMessageBox(message, caption, icon=wx.ICON_NONE, defaultno=False):
+- YesNoMessageBox(message, caption, icon=wx.ICON_NONE, default=wx.YES):
   Opens a Yes/No messagebox that is closable by pressing Escape,
   returns dialog result.
 
@@ -84,7 +84,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    18.01.2021
+@modified    18.03.2021
 ------------------------------------------------------------------------------
 """
 import collections
@@ -5339,15 +5339,16 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
 
 
 
-def YesNoMessageBox(message, caption, icon=wx.ICON_NONE, defaultno=False):
+def YesNoMessageBox(message, caption, icon=wx.ICON_NONE, default=wx.YES):
     """
     Opens a Yes/No messagebox that is closable by pressing Escape,
     returns dialog result.
 
-    @param   icon       dialog icon to use, one of wx.ICON_XYZ
-    @param   defaultno  True if No-button should be default
+    @param   icon     dialog icon to use, one of wx.ICON_XYZ
+    @param   default  default selected button, wx.YES or wx.NO
     """
-    style = icon | wx.OK | wx.CANCEL | (wx.CANCEL_DEFAULT if defaultno else 0)
+    style = icon | wx.OK | wx.CANCEL
+    if wx.NO == default: style |= wx.CANCEL_DEFAULT 
     dlg = wx.MessageDialog(None, message, caption, style)
     dlg.SetOKCancelLabels("&Yes", "&No")
     return wx.YES if wx.ID_OK == dlg.ShowModal() else wx.NO

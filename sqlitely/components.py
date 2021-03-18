@@ -1008,7 +1008,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             msg = "Are you sure you want to delete %s%s?\n\n" \
                   "%sThis action executes immediately and is not undoable." % (name, inter1, inter2)
             if wx.YES != controls.YesNoMessageBox(msg, "Delete %s" % caption, wx.ICON_WARNING,
-            defaultno=True): return
+            default=wx.NO): return
 
             lock = self.db.get_lock(self.category, self.name, skip=self.View.Parent)
             if lock: return wx.MessageBox("%s, cannot delete." % lock,
@@ -1959,7 +1959,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         and wx.YES != controls.YesNoMessageBox(
             "Export is currently underway, "
             "are you sure you want to cancel it?",
-            conf.Title, wx.ICON_WARNING, defaultno=True
+            conf.Title, wx.ICON_WARNING, default=wx.NO
         ): return
         self._export.Stop()
         self._worker.stop()
@@ -2452,7 +2452,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         if not force and wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to discard these changes (%s)?" %
-            info, conf.Title, wx.ICON_INFORMATION, defaultno=True
+            info, conf.Title, wx.ICON_INFORMATION, default=wx.NO
         ): return
 
         self._grid.Table.UndoChanges()
@@ -2491,7 +2491,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         if wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to delete all rows from this table?\n\n"
             "This action is not undoable.",
-            conf.Title, wx.ICON_WARNING, defaultno=True
+            conf.Title, wx.ICON_WARNING, default=wx.NO
         ): return
 
         lock = self._db.get_lock("table", self.Name)
@@ -2552,7 +2552,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         if self._export.IsRunning() and wx.YES != controls.YesNoMessageBox(
             "Export is currently underway, "
             "are you sure you want to cancel it?",
-            conf.Title, wx.ICON_WARNING, defaultno=True
+            conf.Title, wx.ICON_WARNING, default=wx.NO
         ): return
         if self._export.IsRunning():
             self._export.Stop()
@@ -2751,7 +2751,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         info = self._grid.Table.GetChangedInfo()
         if wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to commit these changes (%s)?" %
-            info, conf.Title, wx.ICON_INFORMATION, defaultno=True
+            info, conf.Title, wx.ICON_INFORMATION, default=wx.NO
         ): return
 
         lock = self._db.get_lock(self._category, self._item["name"], skip=self)
@@ -2785,7 +2785,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             "There are unsaved changes (%s).\n\n"
             "Are you sure you want to discard them?" %
             self._grid.Table.GetChangedInfo(),
-            conf.Title, wx.ICON_INFORMATION, defaultno=True
+            conf.Title, wx.ICON_INFORMATION, default=wx.NO
         ): return
 
         if item: self._item = copy.deepcopy(item)
@@ -5670,7 +5670,7 @@ class SchemaObjectPage(wx.Panel):
         if is_changed and not force and wx.YES != controls.YesNoMessageBox(
             "There are unsaved changes, "
             "are you sure you want to discard them?",
-            conf.Title, wx.ICON_INFORMATION, defaultno=True
+            conf.Title, wx.ICON_INFORMATION, default=wx.NO
         ): return
 
         self._editmode = not self._editmode
@@ -5781,7 +5781,7 @@ class SchemaObjectPage(wx.Panel):
                 "Make a full test run of the following schema change, "
                 "rolling it all back without committing? "
                 "This may take some time:\n\n%s" % sql,
-                conf.Title, defaultno=True
+                conf.Title, default=wx.NO
             ): return
 
             lock = self._db.get_lock(*filter(bool, [self._category, self._item.get("name")]))
@@ -6116,7 +6116,7 @@ class ExportProgressPanel(wx.Panel):
         """Confirms with popup if tasks underway, notifies parent."""
         if self._worker.is_working() and wx.YES != controls.YesNoMessageBox(
             "Export is currently underway, are you sure you want to cancel it?",
-            conf.Title, wx.ICON_WARNING, defaultno=True
+            conf.Title, wx.ICON_WARNING, default=wx.NO
         ): return
 
         self.Stop()
@@ -6135,7 +6135,7 @@ class ExportProgressPanel(wx.Panel):
         else:
             msg = "Are you sure you want to cancel this export?"
         if wx.YES != controls.YesNoMessageBox(msg, conf.Title, wx.ICON_WARNING,
-                                              defaultno=True): return
+                                              default=wx.NO): return
 
         if self._tasks[index]["pending"]: self._OnResult(self._tasks[index], index)
 
@@ -7843,7 +7843,7 @@ class DataDialog(wx.Dialog):
         """Handler for deleting the row, confirms choice."""
         if wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to delete this row?", conf.Title,
-            wx.ICON_INFORMATION, defaultno=True
+            wx.ICON_INFORMATION, default=wx.NO
         ): return
 
         wx.PostEvent(self.Parent, GridBaseEvent(-1, delete=True, rows=[self._row]))
@@ -7867,7 +7867,7 @@ class DataDialog(wx.Dialog):
         if not self._tb.GetToolEnabled(wx.ID_SAVE): return
         if self._data != self._original and wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to commit this row?",
-            conf.Title, wx.ICON_INFORMATION, defaultno=True
+            conf.Title, wx.ICON_INFORMATION, default=wx.NO
         ): return
 
         self._OnUpdate(norefresh=True)
@@ -7881,7 +7881,7 @@ class DataDialog(wx.Dialog):
         if not reload and not self._tb.GetToolEnabled(wx.ID_UNDO): return
         if self._data != self._original and wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to discard changes to this row?",
-            conf.Title, wx.ICON_INFORMATION, defaultno=True
+            conf.Title, wx.ICON_INFORMATION, default=wx.NO
         ): return
 
         self._original = self._gridbase.RollbackRow(self._data, reload=reload)
