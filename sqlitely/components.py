@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.03.2021
+@modified    18.03.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -3164,12 +3164,14 @@ class SchemaObjectPage(wx.Panel):
             if si.Window: si.Window.MinSize = si.Window.MaxSize = (-1, -1)
 
         def after():
+            if not self: return
             self.Layout()
             self.Refresh()
             if self._category in ("index", "table"): wx.CallAfter(after2)
 
         def after2():
             # Align table column headers to precise spot over column row widgets
+            if not self: return
             pos, itop = 0, 0
             for i in range(colsizer.Cols):
                 if i > colsizer.ItemCount - 1: break # for i
@@ -3562,6 +3564,7 @@ class SchemaObjectPage(wx.Panel):
         def on_header(i, e):
             if grid.GridCursorRow >= 0: grid.SetGridCursor(grid.GridCursorRow, i)
             def after():
+                if not self: return
                 ctrl = self.FindFocus()
                 if isinstance(ctrl, wx.CheckBox) and ctrl.IsEnabled():
                     ctrl.Value = not ctrl.Value
@@ -6158,7 +6161,7 @@ class ExportProgressPanel(wx.Panel):
         opts, ctrls = (x[index] for x in (self._tasks, self._ctrls))
 
         def after(name, count, error):
-            if not ctrls["text"]: return
+            if not self or not ctrls["text"]: return
 
             ctrls["text"].Parent.Freeze()
             total, subopts = count, None
@@ -7761,6 +7764,7 @@ class DataDialog(wx.Dialog):
                 c.Parent.Fit()
 
         def after(w, h):
+            if not self: return
             for i in range(self.Sizer.ItemCount):
                 si = self.Sizer.GetItem(i)
                 sz = (si.Window.Sizer.MinSize if si.Window.Sizer else si.Window.VirtualSize) \
@@ -10593,6 +10597,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         if not self._enabled: return
 
         def after():
+            if not self: return
             for o in self._order if remake else ():
                 r = self._dc.GetIdBounds(o["id"])
                 self._dc.SetIdBounds(o["id"], wx.Rect(r.TopLeft, o["bmp"].Size))
