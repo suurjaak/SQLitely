@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.03.2021
+@modified    21.03.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -61,6 +61,7 @@ from . import images
 from . import importexport
 from . import templates
 from . import workers
+from . database import fmt_entity
 
 logger = logging.getLogger(__name__)
 
@@ -749,6 +750,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         except Exception as e:
             msg = "Error saving changes in %s." % grammar.quote(self.name)
             logger.exception(msg); guibase.status(msg)
+            msg = "Error saving changes in %s." % fmt_entity(self.name, force=False)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         for idx in reload_idxs:
@@ -801,6 +803,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         except Exception as e:
             msg = "Error saving changes in %s." % grammar.quote(self.name)
             logger.exception(msg); guibase.status(msg)
+            msg = "Error saving changes in %s." % fmt_entity(self.name)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         if refresh:
@@ -998,11 +1001,11 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                         "Deleting %s will delete any related rows " \
                         "in related tables also,\ncascading further to related " \
                         "rows in any of their related tables, etc.\n\n" % (
-                    util.unprint(grammar.quote(self.name, force=True)),
+                    fmt_entity(self.name),
                     "\n- ".join("table %s %s (ON %s)" % (
-                        util.unprint(grammar.quote(t, force=True)),
-                        ", ".join(map(util.unprint, map(grammar.quote, kk))),
-                        ", ".join(map(util.unprint, map(grammar.quote, x["name"])))
+                        fmt_entity(t),
+                        ", ".join(fmt_entity(k, force=False) for k in kk),
+                        ", ".join(fmt_entity(x["name"], force=False))
                     ) for x in lks for t, kk in x.get("table", {}).items()), name
                 )
             msg = "Are you sure you want to delete %s%s?\n\n" \
@@ -1024,7 +1027,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
             msg = "Deleted %s:\n" % util.plural("row", sum((xx for t, xx in result), []))
             for t, xx in result:
-                msg += "\n- %s in table %s" % (util.plural("row", xx), util.unprint(grammar.quote(t, force=True)))
+                msg += "\n- %s in table %s" % (util.plural("row", xx), fmt_entity(t))
             wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_INFORMATION)
 
         def on_col_copy(col, event=None):
@@ -1055,7 +1058,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
             if len(rows) > 1: caption = util.plural("row", rows)
             elif rowdatas[0][self.KEY_NEW]: caption = "New row"
-            elif pks: caption = ", ".join("%s %s" % (util.unprint(c["name"]), rowdatas0[0][c["name"]])
+            elif pks: caption = ", ".join("%s %s" % (util.ellipsize(util.unprint(c["name"])),
+                                                     util.ellipsize(rowdatas0[0][c["name"]]))
                                           for c in pks)
             elif idxs[0] in self.rowids:
                 caption = "ROWID %s" % self.rowids[idxs[0]]
@@ -1118,7 +1122,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             titles = []
             for rowdata in rowdatas0:
                 for c in keys:
-                    itemtitle = util.unprint(", ".join(c["name"])) + " " + fmtvals(rowdata, c["name"])
+                    itemtitle = util.unprint(", ".join(fmt_entity(n, force=False) for n in c["name"])) + \
+                                " " + fmtvals(rowdata, c["name"])
                     if itemtitle in titles: continue # for c
                     if (is_fks or "table" in c) and all(rowdata[x] is not None for x in c["name"]):
                         if not is_fks: has_cascade = True
@@ -1126,10 +1131,10 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                         menu2.Append(wx.ID_ANY, itemtitle, submenu)
                         for table2, keys2 in c["table"].items():
                             vals = {a: rowdata[b] for a, b in zip(keys2, c["name"])}
-                            valstr = ", ".join("%s %s" % (util.unprint(k), fmtval(v))
+                            valstr = ", ".join("%s %s" % (fmt_entity(k, force=False), fmtval(v))
                                                for k, v in vals.items())
                             item_link = wx.MenuItem(submenu, -1, "Open table %s ON %s" %
-                                                    (grammar.quote(table2, force=True), valstr))
+                                                    (fmt_entity(table2), valstr))
                             submenu.Append(item_link)
                             menu.Bind(wx.EVT_MENU, functools.partial(on_event, open=True, table=table2, data=vals), item_link)
                     else:
@@ -1141,7 +1146,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         for col, coldata in enumerate(self.columns):
             submenu = wx.Menu()
             tip = self.db.get_sql(self.category, self.name, coldata["name"])
-            label = util.unprint(coldata["name"])
+            label = util.ellipsize(util.unprint(coldata["name"]))
             if any(label in x["name"] for x in lks):
                 label += u"\t\u1d18\u1d0b" # Unicode small caps "PK"
             elif any(label in x["name"] for x in fks):
@@ -1383,7 +1388,7 @@ class SQLiteGridBaseMixin(object):
 
         current_filter = unicode(grid_data.filters[col]) \
                          if col in grid_data.filters else ""
-        name = util.unprint(grammar.quote(grid_data.columns[col]["name"], force=True))
+        name = fmt_entity(grid_data.columns[col]["name"])
         dlg = wx.TextEntryDialog(self,
                   "Filter column %s by:" % name, "Filter", value=current_filter,
                   style=wx.OK | wx.CANCEL)
@@ -2503,7 +2508,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._grid.Table.UndoChanges()
         self.Reload()
         wx.MessageBox("Deleted %s from table %s." % (util.plural("row", count),
-                      grammar.quote(self.Name, force=True)), conf.Title)
+                      fmt_entity(self.Name)), conf.Title)
 
 
     def _Populate(self):
@@ -2564,7 +2569,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             info = self._grid.Table.GetChangedInfo()
             res = wx.MessageBox(
                 "Do you want to save changes to %s %s?\n\n%s" %
-                (self._category, grammar.quote(self._item["name"], force=True), info),
+                (self._category, fmt_entity(self._item["name"]), info),
                 conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION
             )
             if wx.CANCEL == res: return
@@ -5539,7 +5544,7 @@ class SchemaObjectPage(wx.Panel):
         if wx.ID_OK != dialog.ShowModal(): return
 
         filename = controls.get_dialog_path(dialog)
-        title = " ".join(filter(bool, (category, grammar.quote(name))))
+        title = " ".join(filter(bool, (category, util.unprint(grammar.quote(name)))))
         if self._show_alter: title = " ".join((action, title))
         try:
             importexport.export_sql(filename, self._db, self._ctrls["sql"].Text, title)
@@ -5586,10 +5591,10 @@ class SchemaObjectPage(wx.Panel):
 
             if not err and "INSTEAD OF" == meta.get("upon") and "table" in meta \
             and not any(util.lceq(meta["table"], x) for x in self._views):
-                err = "No such view: %s" % grammar.quote(meta["table"], force=True)
+                err = "No such view: %s" % fmt_entity(meta["table"])
             if not err and "table" in meta \
             and not any(util.lceq(meta["table"], x) for x in self._tables):
-                err = "No such table: %s" % grammar.quote(meta["table"], force=True)
+                err = "No such table: %s" % fmt_entity(meta["table"])
             if not err: return True
 
             if isinstance(err, grammar.ParseError):
@@ -5633,7 +5638,7 @@ class SchemaObjectPage(wx.Panel):
             item = self._db.get_category(self._category, self._item["name"])
             if event and not item: return wx.MessageBox(
                 "%s %s no longer present in the database." %
-                (self._category.capitalize(), grammar.quote(self._item["name"])),
+                (self._category.capitalize(), fmt_entity(self._item["name"], force=False)),
                 conf.Title, wx.OK | wx.ICON_ERROR
             )
             if item:
@@ -5720,7 +5725,7 @@ class SchemaObjectPage(wx.Panel):
         if self._editmode and self.IsChanged():
             if self._newmode: msg = "Do you want to save the new %s?" % self._category
             else: msg = "Do you want to save changes to %s %s?" % (
-                        self._category, grammar.quote(self._item["name"], force=True))
+                        self._category, fmt_entity(self._item["name"]))
             res = wx.MessageBox(msg, conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.ICON_INFORMATION)
             if wx.CANCEL == res: return
             if wx.YES == res and not self._OnSave(): return
@@ -5756,8 +5761,8 @@ class SchemaObjectPage(wx.Panel):
 
         if (self._newmode or not util.lceq(name, self._item["name"])) \
         and name in self._db.schema.get(self._category, {}):
-            errors += ["%s named %s already exists." % (self._category.capitalize(),
-                       grammar.quote(name, force=True))]
+            errors += ["%s named %s already exists." % 
+                       (self._category.capitalize(), fmt_entity(name))]
         if not errors:
             meta2, err = grammar.parse(self._item["sql"])
             if not meta2: errors.append(util.ellipsize(err, 200))
@@ -6171,7 +6176,7 @@ class ExportProgressPanel(wx.Panel):
                 subopts["count"] = count
                 subpercent, subtext = self._FormatPercent(subopts, opts.get("unit"))
                 subtitle = "Processing %s." % " ".join(filter(bool,
-                           (self._category, grammar.quote(name))))
+                           (self._category, fmt_entity(name, force=False))))
                 if subpercent is not None: ctrls["subgauge"].Value = subpercent
                 ctrls["subtext"].Label  = subtext
                 ctrls["subtitle"].Label = subtitle
@@ -7043,9 +7048,8 @@ class ImportDialog(wx.Dialog):
 
         if wx.YES != controls.YesNoMessageBox(
             "Start import into %stable %s?" % 
-            ("new " if self._table.get("new") else "",
-             grammar.quote(self._table["name"], force=True)), conf.Title,
-             wx.ICON_INFORMATION
+            ("new " if self._table.get("new") else "", fmt_entity(self._table["name"])),
+            conf.Title, wx.ICON_INFORMATION
         ): return
 
         self._importing = True
@@ -7151,8 +7155,9 @@ class ImportDialog(wx.Dialog):
                 "complete" if success else "cancelled",
                 util.plural("row", count),
                 "new " if self._table.get("new") else "" ,
-                grammar.quote(self._table["name"], force=True),
-                ("\n%s failed." % util.plural("row", self._progress["errorcount"])) if self._progress.get("errorcount") else "",
+                fmt_entity(self._table["name"]),
+                ("\n%s failed." % util.plural("row", self._progress["errorcount"]))
+                if self._progress.get("errorcount") else "",
                 ("\n\nAll changes rolled back." if success is None else ""),
             )
             icon = wx.ICON_ERROR if error else wx.ICON_INFORMATION if success else wx.ICON_WARNING
@@ -7248,11 +7253,10 @@ class ImportDialog(wx.Dialog):
         if wx.ID_YES != res: return
         if not self._importing: return destroy()
 
-        qname = grammar.quote(self._table["name"], force=True)
         changes = "%s%stable %s." % (
             ("%s in " % util.plural("row", self._progress["count"]))
              if self._progress.get("count") else "",
-            "new " if self._table.get("new") else "", qname
+            "new " if self._table.get("new") else "", fmt_entity(self._table["name"])
         ) if (self._progress.get("count") or self._table.get("new")) else ""
 
         dlg = self._dlg_cancel = controls.MessageDialog(self,
@@ -7713,7 +7717,8 @@ class DataDialog(wx.Dialog):
             pks = [{"name": y} for x in gridbase.db.get_keys(gridbase.name, True)[0]
                    for y in x["name"]]
             if self._data[gridbase.KEY_NEW]: rowtitle = "New row"
-            elif pks: rowtitle = ", ".join("%s %s" % (c["name"], self._original[c["name"]])
+            elif pks: rowtitle = ", ".join("%s %s" % (fmt_entity(c["name"], force=False),
+                                                      self._original[c["name"]])
                                           for c in pks)
             elif self._data[gridbase.KEY_ID] in gridbase.rowids:
                 rowtitle = "ROWID %s" % gridbase.rowids[self._data[gridbase.KEY_ID]]
@@ -8525,7 +8530,8 @@ class ColumnDialog(wx.Dialog):
 
 
     def _SetLabel(self):
-        label = "%s #%s: %s" % (self._collabel.capitalize(), self._col + 1, grammar.quote(self._name))
+        label = "%s #%s: %s" % (self._collabel.capitalize(), self._col + 1,
+                                util.unprint(grammar.quote(self._name)))
         if self._coldata.get("type"):    label += " " + self._coldata["type"]
         if "notnull" in self._coldata:   label += " NOT NULL"
         if self._coldata.get("default"): label += " DEFAULT " + self._coldata["default"]["expr"]
@@ -10402,8 +10408,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             for o in items: categories.setdefault(o["type"], []).append(o)
             title = "%s %s" % (
                         items[0]["type"].capitalize(),
-                        util.ellipsize(util.unprint(grammar.quote(items[0]["name"], force=True)),
-                                       self.MAX_TEXT)
+                        fmt_entity(items[0]["name"], self.MAX_TEXT)
                     ) if len(items) == 1 else \
                     util.plural(next(iter(categories)), items) if len(categories) == 1 else \
                     util.plural("item", items)
@@ -11553,7 +11558,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             if (item["type"], item["name"]) == (self._tooltip_last + ("", ""))[:2]:
                 tip = self._tooltip_last[-1]
             else: tip = wx.lib.wordwrap.wordwrap("%s %s" % (
-                item["type"], grammar.quote(item["name"], force=True)
+                item["type"], fmt_entity(item["name"])
             ), 400, wx.MemoryDC())
             self._tooltip_last = (item["type"], item["name"], tip)
         if not self.ToolTip or self.ToolTip.Tip != tip:
@@ -12322,8 +12327,7 @@ class ImportWizard(wx.adv.Wizard):
         changes = "\n- ".join(
             "%snew table %s." % (
                 ("%s in " % util.plural("row", self.page2.progress[i]["count"], sep=","))
-                 if self.page2.progress[i].get("count") else "",
-                grammar.quote(item["tname"], force=True)
+                if self.page2.progress[i].get("count") else "", fmt_entity(item["tname"])
             ) for i, item in self.items.items() if i in self.page2.progress
         )
         dlg = self.dlg_cancel = controls.MessageDialog(self,
@@ -12572,7 +12576,7 @@ class ImportWizard(wx.adv.Wizard):
                 if success and errors_total: info += "\nFailed to insert %s (%s %s)." % (
                     util.plural("row", errors_total),
                     util.plural("table", len([1 for x in self.page2.progress.values() if x.get("errorcount")])),
-                    ", ".join(grammar.quote(x["tname"], force=True)
+                    ", ".join(fmt_entity(x["tname"], limit=0)
                               for x in self.page2.progress.values() if x.get("errorcount"))
                 )
                 if not success:
