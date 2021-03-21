@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.03.2021
+@modified    21.03.2021
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -676,7 +676,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
             for subcategory, itemmap in relateds.items():
                 for subname in itemmap:
                     self.locks[subcategory][subname.lower()].add(subkey)
-            qname = util.unprint(grammar.quote(self.schema[category][name]["name"], force=True))
+            qname = util.ellipsize(util.unprint(grammar.quote(
+                self.schema[category][name]["name"], force=True)))
             self.locklabels[subkey] = " ".join(filter(bool, (category, qname, label, "cascade")))
 
 
@@ -729,7 +730,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
             if keys and skipkeys: keys = keys - skipkeys
             name = self.schema.get(category, {}).get(name, {}).get("name", name)
             if keys: result = "%s %s is currently locked" % \
-                              (category.capitalize(), util.unprint(grammar.quote(name, force=True)))
+                              (category.capitalize(), util.ellipsize(
+                                   util.unprint(grammar.quote(name, force=True))))
         elif kwargs.get("category"): # Check for lock on any item in category
             category = kwargs["category"]
             keys = set(y for x in self.locks.get(category, {}).values() for y in x)
@@ -1946,3 +1948,16 @@ def find_databases(folder):
         for f in files:
             p = os.path.join(root, f)
             yield [p] if is_sqlite_file(p) else []
+
+
+def fmt_entity(name, force=True, limit=None):
+    """
+    Formats the schema entity for display, enclosed in quotes,
+    unprintable characters escaped, and ellipsized if too long.
+
+    @param   force  whether to force quotes even if name is a single ASCII word
+    @param   limit  max length for ellipsizing, defaults to 50, 0 disables
+    """
+    v = util.unprint(grammar.quote(name, force=force))
+    if limit is None: limit = 50
+    return util.ellipsize(v, limit) if limit else v

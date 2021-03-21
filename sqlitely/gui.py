@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.03.2021
+@modified    21.03.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -53,6 +53,7 @@ from . import importexport
 from . import support
 from . import templates
 from . import workers
+from . database import fmt_entity
 
 logger = logging.getLogger(__name__)
 
@@ -3413,8 +3414,8 @@ class DatabasePage(wx.Panel):
 
             if wx.YES != controls.YesNoMessageBox(
                 "Are you REALLY sure you want to drop everything in the database?\n\n"
-                "This will delete: %s." % ", ".join(
-                    util.plural(c, categories[c]) for c in CATEGORY_ORDER if c in categories
+                "This will delete: %s." % util.join(", ", 
+                    (util.plural(c, categories[c]) for c in CATEGORY_ORDER if c in categories)
                 ), conf.Title, wx.ICON_WARNING, default=wx.NO
             ): return
 
@@ -3425,7 +3426,7 @@ class DatabasePage(wx.Panel):
                               conf.Title)
                 return
             if any(p.IsExporting() for p in self.sql_pages.values()):
-                wx.MessageBox("Cannot drop schema, SQL query exports in progress.",
+                wx.MessageBox("Cannot drop schema, SQL query export in progress.",
                               conf.Title)
                 return
 
@@ -3449,13 +3450,95 @@ class DatabasePage(wx.Panel):
                     try: self.db.executeaction("VACUUM", name="DROP")
                     except Exception:
                         logger.exception("Error running VACUUM after dropping schema.")
-                    self.reload_schema()
-                    self.update_page_header(updated=True)
+                    def after():
+                        if not self: return
+                        self.reload_schema()
+                        self.update_page_header(updated=True)
+                    wx.CallAfter(after)
 
         elif "drop" == cmd:
             category = args[0]
-            names = args[1:] if len(args) > 1 else list(self.db.schema[category])
-            self.on_drop_items(category, names)
+            names = args[1] if len(args) > 1 else list(self.db.schema[category])
+
+            lock = self.db.get_lock(category=None)
+            if lock: return wx.MessageBox("%s, cannot drop." % lock,
+                                          conf.Title, wx.OK | wx.ICON_WARNING)
+
+            CATEGORY_ORDER = ["table", "view", "index", "trigger"]
+            categories = {category: names} if category else \
+                         OrderedDict((c, [n for n in names if n in d])
+                                     for c in CATEGORY_ORDER
+                                     for d in [self.db.schema.get(c, {})]
+                                     if set(names) & set(d))
+            extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
+                    if "table" in categories else ""
+            itemtext = ", and ".join("%s %s" % (
+                util.plural(c, nn, numbers=False), ", ".join(map(fmt_entity, nn))
+            ) for c, nn in categories.items())
+            if len(names) == 1:
+                itemtext = "the %s %s" % (next(iter(categories)), fmt_entity(names[0]))
+
+            if wx.YES != controls.YesNoMessageBox(
+                "Are you sure you want to drop %s?%s" % (itemtext, extra),
+                conf.Title, wx.ICON_WARNING, default=wx.NO
+            ): return
+
+            items = self.db.get_category("table", categories["table"]).values() \
+                    if "table" in categories else ()
+            if any(x.get("count") for x in items):
+                if wx.YES != controls.YesNoMessageBox(
+                    "Are you REALLY sure you want to drop the %s?\n\n"
+                    "%s currently %s %s." % (
+                        util.plural("table", categories["table"]),
+                        "They" if len(categories["table"]) > 1 else "It",
+                        "contain" if len(categories["table"]) > 1 else "contains",
+                        util.count(items, "row")
+                    ), conf.Title, wx.ICON_WARNING, default=wx.NO
+                ): return
+
+            datapages = sum(([p for n, p in d.items() if n in categories.get(c, {})]
+                             for c, d in self.data_pages.items()), [])
+            deleteds, notdeleteds = {}, OrderedDict()
+            try:
+                for category, names in categories.items():
+                    for name in names:
+                        lock = self.db.get_lock(category, name, skip=datapages)
+                        if lock:
+                            notdeleteds.setdefault(category, {})[name] = lock
+                            continue # for name
+
+                        for pagedict in (self.data_pages, self.schema_pages):
+                            page = pagedict.get(category, {}).get(name)
+                            if page: page.Close(force=True)
+
+                        try:
+                            self.db.executeaction("DROP %s IF EXISTS %s" % (category.upper(),
+                                                  grammar.quote(name)), name="DROP")
+                            deleteds.setdefault(category, []).append(name)
+                        except Exception as e:
+                            logger.exception("Error dropping %s %s.", category,
+                                             fmt_entity(name, limit=0))
+                            notdeleteds.setdefault(category, {})[name] = util.format_exc(e)
+            finally:
+                def after():
+                    if not self: return
+                    wx.MessageBox("Failed to drop %s:\n\n- %s" % (
+                        util.join(", ", (util.plural(c, nn) for c, nn in notdeleteds.items())),
+                        "\n- ".join("%s %s: %s" % (c, fmt_entity(n), v)
+                                    for c, d in notdeleteds.items() for n, v in d.items())
+                    ), conf.Title, wx.ICON_WARNING | wx.OK)
+                    
+                if notdeleteds: wx.CallAfter(after) if deleteds else after()
+                if deleteds:
+                    guibase.status("Dropped %s." % util.join(", ", (
+                        util.plural(c, deleteds[c]) for c in CATEGORY_ORDER if c in deleteds
+                    )), log=True)
+                    def after():
+                        if not self: return
+                        self.reload_schema()
+                        self.update_page_header(updated=True)
+                    wx.CallAfter(after)
+
         elif "truncate" == cmd:
             self.on_truncate(args) if args else self.on_truncate_all()
         elif "reindex" == cmd:
@@ -3474,12 +3557,12 @@ class DatabasePage(wx.Panel):
                 names = [n for n in names if any("index" == k for k in self.db.get_related(category, n, own=True))]
                 label = "%s on %s %s" % (util.plural("index", indexes, single="the"),
                                          util.plural("table", names, numbers=False),
-                                         ", ".join(map(fmt_entity, names)))
+                                         util.join(", ", map(fmt_entity, names)))
                 lock = any(self.db.get_lock(category, n) for n in names)
             elif names:
                 targets = indexes = names
                 label = "%s %s" % (util.plural("index", names, numbers=False, single="the"),
-                                   ", ".join(map(fmt_entity, names)))
+                                   util.join(", ", map(fmt_entity, names)))
                 lock = any(self.db.get_lock("table", self.db.schema["index"][name]["tbl_name"])
                            for name in names)
             elif "table" == category:
@@ -5631,7 +5714,7 @@ class DatabasePage(wx.Panel):
         if truncate:
             self.on_truncate(name)
         if drop:
-            self.on_drop_items(category, [name])
+            self.handle_command("drop", category, [name])
         if close_grids:
             self.toggle_cursors(category, name, close=True)
         if reload_grids:
@@ -5765,7 +5848,7 @@ class DatabasePage(wx.Panel):
         if close and idx >= 0:
             self.notebook_data.DeletePage(idx)
         if drop:
-            self.on_drop_items(category, [name])
+            self.handle_command("drop", category, [name])
         if reindex:
             self.handle_command("reindex", category, name)
         if (modified is not None or updated is not None) and event.source:
@@ -5812,7 +5895,7 @@ class DatabasePage(wx.Panel):
                      and x in self.data_pages[category]
                      and self.data_pages[category][x].IsExporting()]
         if exporting:
-            return wx.MessageBox("Export is already underway for %s." % ", ".join(exporting),
+            return wx.MessageBox("Export is already underway for %s." % util.join(", ", exporting),
                                  conf.Title, wx.OK | wx.ICON_INFORMATION)
 
         if conf.LastExportType in importexport.EXPORT_EXTS:
@@ -6089,9 +6172,9 @@ class DatabasePage(wx.Panel):
                 if len(successes) > 1:
                     status =  " and ".join(util.plural(c, vv)
                                            for c, vv in sorted(successes.items()))
-                else: status = "%s %s" % (util.plural(successes.keys()[0], successes.values()[0]),
-                                          ", ".join(fmt_entity(x, force=False)
-                                                    for x in successes.values()[0]))
+                else: status = "%s %s" % (util.plural(next(iter(successes.items()))),
+                                          util.join(", ", (fmt_entity(x, force=False)
+                                                           for x in successes.values()[0])))
                 guibase.status("Exported %s." % status, log=True)
             else:
                 guibase.status("Failed to export to %s.", filename2)
@@ -6166,73 +6249,6 @@ class DatabasePage(wx.Panel):
             self.notebook.SetSelection(self.pageorder[self.page_data])
 
 
-    def on_drop_items(self, category, names, event=None):
-        """
-        Handler for deleting schema items, confirms choice.
-
-        @param   category  None if names are under more than one category
-        """
-        if not self: return
-        categories = {category: names} if category else \
-                     {c: [n for n in names if n in xx]
-                      for c, xx in self.db.schema.items() if set(names) & set(xx)}
-        extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
-                if "table" in categories else ""
-        itemtext = " and ".join("%s %s" % (
-            util.plural(c, nn, numbers=False), ", ".join(map(fmt_entity, nn))
-        ) for c, nn in categories.items())
-        if len(names) == 1:
-            itemtext = "the %s %s" % (next(iter(categories)), fmt_entity(names[0]))
-
-        if wx.YES != controls.YesNoMessageBox(
-            "Are you sure you want to drop %s?%s" % (itemtext, extra),
-            conf.Title, wx.ICON_WARNING, default=wx.NO
-        ): return
-
-        items = self.db.get_category("table", categories["table"]).values() \
-                if "table" in categories else ()
-        if any(x.get("count") for x in items):
-            if wx.YES != controls.YesNoMessageBox(
-                "Are you REALLY sure you want to drop the %s?\n\n"
-                "%s currently %s %s." % (
-                    util.plural("table", categories["table"]),
-                    "They" if len(categories["table"]) > 1 else "It",
-                    "contain" if len(categories["table"]) > 1 else "contains",
-                    util.count(items, "row")
-                ), conf.Title, wx.ICON_WARNING, default=wx.NO
-            ): return
-        lock = self.db.get_lock(category=None)
-        if lock: return wx.MessageBox("%s, cannot drop." % lock,
-                                      conf.Title, wx.OK | wx.ICON_WARNING)
-
-        deleteds = []
-        try:
-            for name in names:
-                category = next((c for c, xx in self.db.schema.items() if name in xx), None)
-                lock = self.db.get_lock(category, name)
-                if lock:
-                    wx.MessageBox("%s, cannot drop." % lock,
-                                  conf.Title, wx.OK | wx.ICON_WARNING)
-                    continue # for name
-                page = self.data_pages.get(category, {}).get(name)
-                if page:
-                    page.Close(force=True)
-                    self.data_pages[category].pop(name)
-                self.db.executeaction("DROP %s IF EXISTS %s" % (category.upper(),
-                                      grammar.quote(name)), name="DROP")
-                deleteds += [name]
-        finally:
-            for name in deleteds:
-                category = next((c for c, xx in self.db.schema.items() if name in xx), None)
-                page = self.schema_pages[category].get(name)
-                if page:
-                    page.Close(force=True)
-                    self.schema_pages[category].pop(name)
-            if deleteds:
-                self.reload_schema()
-                self.update_page_header(updated=True)
-
-
     def on_truncate(self, names, event=None):
         """Handler for deleting all rows from a table, confirms choice."""
         names = [names] if isinstance(names, basestring) else names
@@ -6241,7 +6257,7 @@ class DatabasePage(wx.Panel):
             "Are you sure you want to delete all rows from %s %s?\n\n"
             "This action is not undoable." % (
                 util.plural("table", names, numbers=False),
-                ", ".join(map(fmt_entity, names))
+                util.join(", ", map(fmt_entity, names))
             ),
             conf.Title, wx.ICON_WARNING, default=wx.NO
         ): return
@@ -6266,7 +6282,7 @@ class DatabasePage(wx.Panel):
         wx.MessageBox("Deleted %s from %s %s." % (
                           util.plural("row", count),
                           util.plural("table", names, numbers=False),
-                          ", ".join(map(fmt_entity, names)),
+                          util.join(", ", map(fmt_entity, names)),
                       ), conf.Title)
 
 
@@ -7032,11 +7048,11 @@ class DatabasePage(wx.Panel):
             if item_clone:
                 menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("clone", data["type"], data["name"], "table" == data["type"]), item_clone)
             if item_drop:
-                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["type"], [data["name"]]), item_drop)
+                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.handle_command, "drop", data["type"], [data["name"]]), item_drop)
 
         if item_drop_all:
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["category"], data["items"]),
-                      item_drop_all)
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.handle_command, ("drop", data["category"], data["items"]),
+                      item_drop_all))
         if item_create:
             menu.Bind(wx.EVT_MENU, functools.partial(create_object, data["category"]),
                       item_create)
@@ -7148,7 +7164,7 @@ class DatabasePage(wx.Panel):
                     item_reindex = wx.MenuItem(menu, -1, "Reindex all")
                     menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("reindex", data["category"]), item_reindex)
 
-                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["category"], names),
+                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.handle_command, "drop", data["category"], names),
                           item_drop_all)
                 menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, lambda: "\n".join(map(grammar.quote, names)), "%s names" % data["category"]),
                           item_copy)
@@ -7272,7 +7288,7 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, copy_related, item_copy_rel)
             if item_rename:
                 menu.Bind(wx.EVT_MENU, lambda e: tree.EditLabel(item), item_rename)
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.on_drop_items, data["type"], [data["name"]]),
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.handle_command, "drop", data["type"], [data["name"]]),
                       item_drop)
 
             if data["type"] in ("table", "view"):
@@ -7396,15 +7412,3 @@ def make_unique_page_title(title, notebook, maxlen=None, front=False, skip=-1):
     all_titles = [notebook.GetPageText(i).rstrip("*")
                   for i in range(notebook.GetPageCount()) if i != skip]
     return util.make_unique(title, all_titles, suffix=" (%s)", case=True)
-
-
-def fmt_entity(name, force=True, limit=None):
-    """
-    Formats the schema entity for display, enclosed in quotes,
-    unprintable characters escaped, and ellipsized if too long.
-
-    @param   force  whether to force quotes even if name is a single ASCII word
-    @param   limit  max length for ellipsizing, defaults to conf.MaxTabTitleLength
-    """
-    if limit is None: limit = conf.MaxTabTitleLength
-    return util.ellipsize(util.unprint(grammar.quote(name, force=force)), limit)
