@@ -538,6 +538,12 @@ def articled(word):
     return ("an " if word[0].lower() in "aeiou" else "a ") + word
 
 
+def join(sep, iterable, last=", and "):
+    """Returns sep.join(iterable) but with a custom separator before last."""
+    lst = list(iterable)
+    return sep.join(lst[:-1]) + last + lst[-1]
+
+
 def count(items, unit=None, key="count", suf=""):
     """
     Returns formatted count string, prefixed with "~" and rounded to the lowest
