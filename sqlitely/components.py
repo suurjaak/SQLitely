@@ -5629,10 +5629,13 @@ class SchemaObjectPage(wx.Panel):
 
 
 
-    def _OnRefresh(self, event=None, parse=False, name0=None):
+    def _OnRefresh(self, event=None, parse=False, count=False, name0=None):
         """Handler for clicking refresh, updates database data in controls."""
         if name0: self._db.notify_rename(self._category, name0, self.Name)
-        else: self._db.populate_schema(parse=parse)
+        else:
+            self._db.populate_schema(parse=parse)
+            if count: self._db.populate_schema(category=self._category,
+                                               name=self.Name, parse=parse, count=count)
         prevs = {"_types": self._types, "_tables": self._tables,
                  "_views": self._views, "_item": self._item}
         self._types = self._GetColumnTypes()
@@ -5673,7 +5676,7 @@ class SchemaObjectPage(wx.Panel):
         self._OnSave() if self._editmode else self._OnToggleEdit()
 
 
-    def _OnToggleEdit(self, event=None, parse=False, name0=None, force=False):
+    def _OnToggleEdit(self, event=None, parse=False, count=False, name0=None, force=False):
         """Handler for toggling edit mode."""
         is_changed = self.IsChanged()
         if is_changed and not force and wx.YES != controls.YesNoMessageBox(
@@ -5711,7 +5714,8 @@ class SchemaObjectPage(wx.Panel):
             else:
                 self._buttons["edit"].ToolTip = ""
                 if self._show_alter: self._OnToggleAlterSQL()
-                if is_changed or parse or name0: self._OnRefresh(parse=parse, name0=name0)
+                if is_changed or parse or name0:
+                    self._OnRefresh(parse=parse, count=count, name0=name0)
                 else:
                     self._item = copy.deepcopy(self._original)
                     self._sql0_applies = True
@@ -5846,8 +5850,9 @@ class SchemaObjectPage(wx.Panel):
             self._original = copy.deepcopy(self._item)
             if self._show_alter: self._OnToggleAlterSQL()
             self._has_alter = True
-            self._newmode = False
-            self._OnToggleEdit(parse=True, name0=name0 if name0 and name0 != meta2["name"] else None)
+            was_newmode, self._newmode = self._newmode, False
+            self._OnToggleEdit(parse=True, count=was_newmode,
+                               name0=name0 if name0 and name0 != meta2["name"] else None)
             if post: self._PostEvent(updated=True, reload_grids=True)
             return True
 
