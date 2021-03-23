@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.03.2021
+@modified    23.03.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -1125,7 +1125,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                     itemtitle = util.unprint(", ".join(fmt_entity(n, force=False) for n in c["name"])) + \
                                 " " + fmtvals(rowdata, c["name"])
                     if itemtitle in titles: continue # for c
-                    if (is_fks or "table" in c) and all(rowdata[x] is not None for x in c["name"]):
+                    if (is_fks or "table" in c) and all(rowdata[x] is not None for x in c["name"]) \
+                    and any(n in self.db.schema["table"] for n in c["table"]):
                         if not is_fks: has_cascade = True
                         submenu = wx.Menu()
                         menu2.Append(wx.ID_ANY, itemtitle, submenu)
@@ -1171,7 +1172,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             menu.AppendSeparator()
             menu.Append(item_insert)
             menu.Append(item_delete)
-            if any(x.get("table") for x in lks):
+            if any(n in self.db.schema["table"] for x in lks for n in x.get("table", [])):
                 menu.Append(item_delete_cascade)
             if not lks: item_lks.Enabled = False
             if not fks: item_fks.Enabled = False
@@ -10513,6 +10514,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             keys[name1] = self._db.get_keys(name1, pks_only=True)
             for fk in keys[name1][1]:
                 name2, rname = list(fk["table"])[0], ", ".join(fk["name"])
+                if name2 not in self._db.schema["table"]: continue # for fk
                 key = name1, name2, tuple(n.lower() for n in fk["name"])
                 lid, maxid = (maxid + 1, ) * 2
                 self._ids[lid] = key
