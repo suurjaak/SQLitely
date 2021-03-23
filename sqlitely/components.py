@@ -2795,6 +2795,9 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         ): return
 
         if item: self._item = copy.deepcopy(item)
+        else:
+            self._db.populate_schema(category=self._category, name=self.Name, parse=True)
+            self._item = self._db.get_category(self._category, self.Name)
 
         scrollpos = map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL])
         cursorpos = [self._grid.GridCursorRow, self._grid.GridCursorCol]
