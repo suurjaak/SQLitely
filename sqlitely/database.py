@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.03.2021
+@modified    23.03.2021
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -895,7 +895,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if not self.is_open(): return
         category, name = (x.lower() if x else x for x in (category, name))
 
-        schema0 = copy.copy(self.schema)
+        schema0 = CaselessDict((c, CaselessDict(
+            (k, copy.copy(v)) for k, v in d.items()
+        )) for c, d in self.schema.items())
         if category:
             if name: self.schema[category].pop(name, None)
             else: self.schema[category].clear()
