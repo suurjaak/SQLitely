@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    28.12.2020
+@modified    24.03.2021
 ------------------------------------------------------------------------------
 """
 
@@ -397,10 +397,10 @@ for ctype, cnstr in get_constraints():
 
     %if data.get("type"):
   {{ WS(" ") }}
-  {{ Q(data["type"], spaceok=True) }}
+  {{ Q(data["type"], allow="() ") }}
     %endif
     %if cnstr_breaks and data.get("type") and not next(iter(cnstr_breaks.values())):
-  {{ PAD("type", data, quoted=True, quotekw=dict(spaceok=True)) }}
+  {{ PAD("type", data, quoted=True, quotekw=dict(allow="() ")) }}
     %endif
 
 

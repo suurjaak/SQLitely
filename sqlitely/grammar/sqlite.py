@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    24.12.2020
+@modified    24.03.2021
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict
@@ -111,15 +111,16 @@ def transform(sql, flags=None, renames=None, indent="  "):
 
 
 @util.memoize
-def quote(val, force=False, spaceok=False):
+def quote(val, force=False, allow=""):
     """
     Returns value in quotes and proper-escaped for queries,
     if name needs quoting (has non-alphanumerics or starts with number)
     or if force set. Always returns unicode.
 
-    @param   spaceok  whether to allow spaces without quoting
+    @param   allow  extra characters to allow without quoting
     """
-    pattern = r"(^[^\w\d ])|(?=[^\w ])" if spaceok else r"(^[\W\d])|(?=\W)"
+    pattern = r"(^[^\w\d%s])|(?=[^\w%s])" % ((re.escape(allow) ,) * 2) \
+              if allow else r"(^[\W\d])|(?=\W)"
     result = uni(val)
     if force or result.upper() in RESERVED_KEYWORDS \
     or re.search(pattern, result, re.U):
@@ -725,7 +726,7 @@ class Parser(object):
                 ww = ctx.type_name().type_name_text().type_or_constraint_name_word()
                 result["type"] = unquote(" ".join(self.t(x).upper() for x in ww))
             if ctx.type_name().signed_number():
-                result["type"] += " (%s)" % ".".join(self.t(x).upper() for x in ctx.type_name().signed_number())
+                result["type"] += "(%s)" % ",".join(self.t(x).upper() for x in ctx.type_name().signed_number())
 
         for c in ctx.column_constraint():
             conflict = self.get_conflict(c)
@@ -1130,9 +1131,9 @@ class Generator(object):
                       lambda m: m.group() + self.token(self._indent, "PRE"), val)
 
 
-    def quote(self, val, force=False, spaceok=False):
+    def quote(self, val, force=False, allow=""):
         """Returns token for quoted value."""
-        return self.token(quote(val, force=force, spaceok=spaceok), "Q")
+        return self.token(quote(val, force=force, allow=allow), "Q")
 
 
     def padding(self, key, data, quoted=False, quotekw=None):
