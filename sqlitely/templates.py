@@ -2220,12 +2220,13 @@ DATA_STATISTICS_SQL = """<%
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
+filesize = stats.get("size", db.filesize)
 dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
                            for dt in (db.date_created, db.last_modified))
 
 %>-- Output from sqlite3_analyzer.
 -- Source: {{ db.name }}.
--- Size: {{ util.format_bytes(stats["filesize"]) }} ({{ util.format_bytes(stats["filesize"], max_units=False) }}).
+-- Size: {{ util.format_bytes(filesize) }} ({{ util.format_bytes(filesize, max_units=False) }}).
 %if dt_created and dt_modified and dt_created != dt_modified:
 -- Date: {{ dt_modified }} (created {{ dt_created }}).
 %elif dt_modified:
@@ -2236,7 +2237,7 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
 -- {{ templates.export_comment() }}
 
 
-{{! stats["sql"].replace("\\r", "") }}
+{{! stats.get("sql", "-- sqlite3_analyzer result unavailable.").replace("\\r", "") }}
 """
 
 
