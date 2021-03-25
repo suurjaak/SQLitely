@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.01.2021
+@modified    25.03.2021
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1481,6 +1481,8 @@ index_total = sum(x["size"] for x in stats.get("index", []))
 table_total = sum(x["size"] for x in stats.get("table", []))
 total = index_total + sum(x["size"] for x in stats.get("table", []))
 has_rows = any(x.get("count") or 0 for x in db.schema.get("table", {}).values())
+dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
+                           for dt in (db.date_created, db.last_modified))
 %>
 <tr><td><table id="header_table">
   <tr>
@@ -1488,6 +1490,13 @@ has_rows = any(x.get("count") or 0 for x in db.schema.get("table", {}).values())
       <div id="title">{{ title }}</div><br />
       Source: <b>{{ db.name }}</b>.<br />
       Size: <b title="{{ stats.get("size", db.filesize) }}">{{ util.format_bytes(stats.get("size", db.filesize)) }}</b> (<span title="{{ stats.get("size", db.filesize) }}">{{ util.format_bytes(stats.get("size", db.filesize), max_units=False) }}</span>).<br />
+%if dt_created and dt_modified and dt_created != dt_modified:
+      Date: <b>{{ dt_modified }}</b> (created <b>{{ dt_created }}</b>).<br />
+%elif dt_modified:
+      Date: <b>{{ dt_modified }}</b>.<br />
+%elif dt_created:
+      Date: created <b>{{ dt_created }}</b>.<br />
+%endif
 %if db.schema.get("table"):
       <b>{{ util.plural("table", db.schema["table"]) }}</b>{{ ", " if stats or has_rows else "." }}
     %if stats:
@@ -1937,6 +1946,8 @@ index_total = sum(x["size"] for x in stats["index"]) if stats else None
 table_total = sum(x["size"] for x in stats["table"]) if stats else None
 total = (index_total + sum(x["size"] for x in stats["table"])) if stats else None
 has_rows = any(x.get("count") or 0 for x in db.schema.get("table", {}).values())
+dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
+                           for dt in (db.date_created, db.last_modified))
 
 tblstext = idxstext = othrtext = ""
 if db.schema.get("table"):
@@ -1955,6 +1966,13 @@ if db.schema.get("view"):
 %>
 Source: {{ db.name }}.
 Size: {{ util.format_bytes(db.filesize) }} ({{ util.format_bytes(db.filesize, max_units=False) }}).
+%if dt_created and dt_modified and dt_created != dt_modified:
+Date: {{ dt_modified }} (created {{ dt_created }}).
+%elif dt_modified:
+Date: {{ dt_modified }}.
+%elif dt_created:
+Date: created {{ dt_created }}.
+%endif
 %if tblstext:
 {{ tblstext }}
 %endif
@@ -2202,9 +2220,19 @@ DATA_STATISTICS_SQL = """<%
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
+dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
+                           for dt in (db.date_created, db.last_modified))
+
 %>-- Output from sqlite3_analyzer.
 -- Source: {{ db.name }}.
 -- Size: {{ util.format_bytes(stats["filesize"]) }} ({{ util.format_bytes(stats["filesize"], max_units=False) }}).
+%if dt_created and dt_modified and dt_created != dt_modified:
+-- Date: {{ dt_modified }} (created {{ dt_created }}).
+%elif dt_modified:
+-- Date: {{ dt_modified }}.
+%elif dt_created:
+-- Date: created {{ dt_created }}.
+%endif
 -- {{ templates.export_comment() }}
 
 
