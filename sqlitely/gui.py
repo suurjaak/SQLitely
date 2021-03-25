@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.03.2021
+@modified    25.03.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -6612,6 +6612,8 @@ class DatabasePage(wx.Panel):
                 trg = next((x for x in (a, b) if x["type"] == "trigger"), None)
                 tbv = next((x for x in (a, b) if x["type"] in ("table", "view")), None)
                 if trg and tbv: return not util.lceq(trg["tbl_name"], tbv["name"])
+                if a["type"] == b["type"] == "table":
+                    return b["name"].lower() not in a.get("meta", {}).get("__tables__", ())
                 return a["type"] == b["type"] == "view" and \
                        b["name"].lower() not in a.get("meta", {}).get("__tables__", ())
 
