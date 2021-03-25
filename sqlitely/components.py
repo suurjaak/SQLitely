@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.03.2021
+@modified    25.03.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -1349,6 +1349,7 @@ class SQLiteGridBaseMixin(object):
         grid.Bind(wx.grid.EVT_GRID_CELL_RIGHT_CLICK,  self._OnGridMenu)
         grid.Bind(wx.grid.EVT_GRID_ROW_SIZE,          self._OnGridSizeRow)
         grid.Bind(wx.grid.EVT_GRID_COL_SIZE,          self._OnGridSizeCol)
+        grid.Bind(wx.EVT_CONTEXT_MENU,                self._OnGridMenu)
         grid.GridWindow.Bind(wx.EVT_RIGHT_UP,         self._OnGridMenu)
         grid.GridWindow.Bind(wx.EVT_MOTION,           self._OnGridMouse)
         grid.GridWindow.Bind(wx.EVT_CHAR_HOOK,        self._OnGridKey)
