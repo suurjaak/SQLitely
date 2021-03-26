@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.03.2021
+@modified    26.03.2021
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1798,12 +1798,12 @@ size = next((x["size"] for x in stats["index"] if util.lceq(x["name"], item["nam
             %if "trigger" == category:
     <td>
 <%
-mycategory = "table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "view"
+mycategory = "view" if item["tbl_name"] in db.schema["view"] else "table"
 %>
       {{ mycategory }} <a href="#{{ mycategory }}/{{! urlquote(item["tbl_name"]) }}" title="Go to {{ mycategory }} {{ grammar.quote(item["tbl_name"], force=True) }}">{{ util.unprint(item["tbl_name"]) }}</a>
     </td>
     <td>
-      {{ item.get("meta", {}).get("upon") }} {{ item.get("meta", {}).get("action") }}
+      {{ item.get("meta", {}).get("upon", "") }} {{ item.get("meta", {}).get("action", "") }}
                 %if item.get("meta", {}).get("columns"):
       OF {{ ", ".join(grammar.quote(c["name"]) for c in item["meta"]["columns"]) }}
                 %endif
@@ -2102,8 +2102,8 @@ for item in db.schema.get(category).values():
             row["Size in bytes"] = util.format_bytes(size, max_units=False, with_units=False) if size != "" else ""
 
     elif "trigger" == category:
-        row["Owner"] = ("table" if "INSTEAD OF" != item.get("meta", {}).get("upon") else "view") + " " + util.unprint(grammar.quote(item["tbl_name"]))
-        row["When"] = "%s %s" % (item.get("meta", {}).get("upon"), item.get("meta", {}).get("action"))
+        row["Owner"] = ("view" if item["tbl_name"] in db.schema["view"] else "table") + " " + util.unprint(grammar.quote(item["tbl_name"]))
+        row["When"] = " ".join(filter(bool, (item.get("meta", {}).get(k, "") for k in ("upon", "action"))))
         if item.get("meta", {}).get("columns"):
             row["When"] += " OF " + ", ".join(util.unprint(grammar.quote(c["name"])) for c in item["meta"]["columns"])
         usetexts = []
