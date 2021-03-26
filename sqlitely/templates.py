@@ -13,13 +13,14 @@ Released under the MIT License.
 """
 import datetime
 import re
+import urllib
 
+from . lib import util
 from . import conf
 
 # Modules imported inside templates:
-#import base64, collections, itertools, json, logging, math, os, pyparsing, sys, urllib, wx
+#import base64, collections, itertools, json, logging, math, os, pyparsing, sys, wx
 #from sqlitely import conf, grammar, images, searchparser, templates
-#from sqlitely.lib import util
 
 """Regex for matching unprintable characters (\x00 etc)."""
 SAFEBYTE_RGX = re.compile(r"[\x00-\x1f\x7f-\xa0]")
@@ -32,6 +33,10 @@ def export_comment():
     """Returns export comment like "Exported with SQLitely on [DATETIME]"."""
     dt = datetime.datetime.now().strftime("%d.%m.%Y %H:%M")
     return "Exported with %s on %s." % (conf.Title, dt)
+
+
+@util.memoize
+def urlquote(v): return urllib.quote(util.to_str(v, "utf-8"), safe="")
 
 
 
@@ -1250,24 +1255,23 @@ HTML statistics export template.
 @param   db           database.Database instance
 @param   pragma       pragma settings to export, as {name: value},
 @param   sql          database schema SQL,
-@param   diagram      schema diagram as wx.Bitmap
+@param   diagram      {"bmp": schema diagram as wx.Bitmap,
+                       "svg": schema diagram as SVG string}
 @param   stats        {"table":   [{name, size, size_total, ?size_index, ?index: []}],
                        "index":   [{name, size, table}],
 """
 DATA_STATISTICS_HTML = """<%
-import base64, math, urllib
+import base64, math
 from sqlitely.lib.vendor.step import Template
 from sqlitely.lib import util
 from sqlitely import conf, grammar, images, templates
+from sqlitely.templates import urlquote
 
 COLS = {"table":   ["Name", "Columns", "Related tables", "Other relations", "Rows", "Size in bytes"]
                    if stats else ["Name", "Columns", "Related tables", "Other relations", "Rows"],
         "index":   ["Name", "Table", "Columns", "Size in bytes"] if stats else ["Name", "Table", "Columns"],
         "trigger": ["Name", "Owner", "When", "Uses"],
         "view":    ["Name", "Columns", "Uses", "Used by"], }
-
-@util.memoize(__key__="urlquote")
-def urlquote(v): return urllib.quote(util.to_str(v, "utf-8"), safe="")
 
 @util.memoize(__key__="wrapclass")
 def wrapclass(v):
@@ -1319,10 +1323,18 @@ def wrapclass(v):
     div.section > h2:first-child {
       margin-top: 0;
     }
-    #diagram img {
+    #diagram { position: relative; }
+    #diagram .img {
       max-width: 100%;
       padding-top: 10px;
     }
+    #diagram .diagram-format {
+      position: absolute;
+      right: 0px;
+      top: -20px;
+    }
+    #diagram .diagram-format a:hover { cursor: pointer; text-decoration: underline; }
+    #diagram .diagram-format a.open { cursor: default; font-weight: bold; text-decoration: none; }
     table.stats > tbody > tr > th { text-align: left; white-space: nowrap; }
     table.stats > tbody > tr > td { text-align: left; white-space: nowrap; }
     table.stats > tbody > tr > td:nth-child(n+2) {
@@ -1470,6 +1482,18 @@ def wrapclass(v):
       return false;
     };
 
+    function onSwitch(a1, id1, aid2, id2) {
+      var on = a1.classList.contains("open");
+      var a2 = document.getElementById(aid2);
+      var e1 = document.getElementById(id1);
+      var e2 = document.getElementById(id2);
+      a1.classList.toggle("open");
+      a2.classList.toggle("open");
+      e1.classList.toggle("hidden");
+      e2.classList.toggle("hidden");
+      return false;
+    };
+
     var sortfn = function(sort_col, sort_direction, a, b) {
       var v1 = (a.children[sort_col].hasAttribute("data-sort") ? a.children[sort_col].getAttribute("data-sort") : a.children[sort_col].innerText).toLowerCase();
       var v2 = (b.children[sort_col].hasAttribute("data-sort") ? b.children[sort_col].getAttribute("data-sort") : b.children[sort_col].innerText).toLowerCase();
@@ -1542,8 +1566,23 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
 <div class="section">
 
   <h2><a class="toggle" title="Toggle diagram" onclick="onToggle(this, 'diagram')">Schema diagram</a></h2>
-  <div class="hidden diagram" id="diagram">
-    <img title="Schema diagram" alt="Schema diagram" src="data:image/png;base64,{{! base64.b64encode(util.img_wx_to_raw(diagram)) }}" />
+  <div id="diagram" class="hidden">
+
+    %if diagram.get("bmp") and diagram.get("svg"):
+    <div class="diagram-format">
+      <a id="diagram-png-link" title="Show schema diagram as PNG" onclick="onSwitch(this, 'diagram-png', 'diagram-svg-link', 'diagram-svg')" class="open">PNG</a>
+      <a id="diagram-svg-link" title="Show schema diagram as SVG" onclick="onSwitch(this, 'diagram-svg', 'diagram-png-link', 'diagram-png')">SVG</a>
+    </div>
+    %endif
+
+    %if diagram.get("bmp"):
+    <img id="diagram-png" class="img" title="Schema diagram" alt="Schema diagram" src="data:image/png;base64,{{! base64.b64encode(util.img_wx_to_raw(diagram["bmp"])) }}" />
+    %endif
+    %if diagram.get("svg"):
+    <div id="diagram-svg" class="img hidden">
+{{! diagram["svg"] }}
+    </div>
+    %endif
   </div>
 </div>
 %endif
@@ -2372,16 +2411,18 @@ Database schema diagram SVG template.
 
 @param   fonts        {"normal": wx.Font, "bold": wx.Font}
 @param   get_extent   function(text, font=current dc font) returning full text extent
-@param   items        diagram objects as [{"name", "bounds", "columns", "stats"}]
+@param   items        diagram objects as [{"name", "type", "bounds", "columns", "stats"}]
 @param   lines        diagram relations as {("item1", "item2", ("col1", )): {"name", "pts"}}
 @param   show_labels  whether to show foreign relation labels
-@param   title        diagram title
+@param   ?title       diagram title
+@param   ?embed       whether to omit full XML headers and provide links for embedding in HTML
 """
 DIAGRAM_SVG = """<%
 from sqlitely.lib import util
 from sqlitely.lib.controls import ColourManager
 from sqlitely.components   import SchemaDiagram
-from sqlitely import images, templates
+from sqlitely import grammar, images, templates
+from sqlitely.templates import urlquote
 import wx
 
 CRADIUS     = 1
@@ -2400,8 +2441,8 @@ MINW, MINH = SchemaDiagram.MINW, SchemaDiagram.HEADERH + SchemaDiagram.HEADERP +
 itemcoltexts, itemcolmax = {}, {} # {item name: [[name, type], ]}, {item name: {"name", "type"}}
 for item in items:
     # Measure title width
-    title = util.ellipsize(util.unprint(item["name"]), SchemaDiagram.MAX_TITLE)
-    extent = get_extent(title, fonts["bold"]) # (w, h, descent, lead)
+    ititle = util.ellipsize(util.unprint(item["name"]), SchemaDiagram.MAX_TITLE)
+    extent = get_extent(ititle, fonts["bold"]) # (w, h, descent, lead)
     w, h = max(MINW, extent[0] + extent[3] + 2 * SchemaDiagram.HPAD), MINH
 
     cols = item.get("columns") or []
@@ -2451,11 +2492,17 @@ adjust = (lambda *a: tuple(a + b for a, b in zip(a, shift))) if shift else lambd
 
 
 %>
+%if isdef("embed") and embed:
+<svg viewBox="0 0 {{ bounds.Width }} {{ bounds.height }}" version="1.1">
+%else:
 <?xml version="1.0" encoding="UTF-8" ?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
      viewBox="0 0 {{ bounds.Width }} {{ bounds.height }}" version="1.1">
+%endif
 
+%if isdef("title") and title:
   <title>{{ title }}</title>
+%endif
   <desc>{{ templates.export_comment() }}</desc>
 
   <defs>
@@ -2634,7 +2681,14 @@ if istats: height += SchemaDiagram.STATSH - SchemaDiagram.FOOTERH
       <rect x="{{ itemx + 1 }}" y="{{ itemy + SchemaDiagram.HEADERH }}" width="{{ item["bounds"].Width - 1.5 }}" height="{{ cheight }}" class="content" />
       <path d="M {{ itemx }},{{ itemy + SchemaDiagram.HEADERH }} h{{ item["bounds"].Width }}" class="separator" />
 
+
+    %if isdef("embed") and embed:
+      <a xlink:title="Go to {{ item["type"] }} {{ grammar.quote(item["name"], force=True) }}" xlink:href="#{{ item["type"] }}/{{! urlquote(item["name"]) }}">
+    %endif
       <text x="{{ itemx + item["bounds"].Width / 2 }}" y="{{ itemy + SchemaDiagram.HEADERH - SchemaDiagram.HEADERP }}" class="title">{{ util.ellipsize(util.unprint(item["name"]), SchemaDiagram.MAX_TEXT) }}</text>
+    %if isdef("embed") and embed:
+      </a>
+    %endif
 
       <text x="{{ itemx }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth }}" class="columns">
     %for i, col in enumerate(cols):

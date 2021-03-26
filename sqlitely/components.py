@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.03.2021
+@modified    26.03.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -10276,12 +10276,14 @@ class SchemaDiagram(wx.ScrolledWindow):
         return bmp
 
 
-    def MakeTemplate(self, filetype,
-                     selections=True, statistics=None, show_lines=None, show_labels=None):
+    def MakeTemplate(self, filetype, title=None, embed=False, selections=True,
+                     statistics=None, show_lines=None, show_labels=None):
         """
         Returns diagram as template content.
 
         @param   filetype        template type like "SVG"
+        @param   title           specific title to set if not from database filename
+        @param   embed           whether to omit full XML headers for embedding in HTML
         @param   selections      whether currently selected items should be drawn as selected
         @param   statistics      whether result should include statistics,
                                  overrides current statistics setting
@@ -10314,10 +10316,11 @@ class SchemaDiagram(wx.ScrolledWindow):
                                                           __key__="GetFullTextExtent")
 
         tpl = step.Template(templates.DIAGRAM_SVG, strip=False)
-        title = os.path.splitext(os.path.basename(self._db.name))[0] + " schema"
+        if title is None:
+            title = os.path.splitext(os.path.basename(self._db.name))[0] + " schema"
         ns = {"title": title, "items": [], "lines": self._lines if self._show_lines else {},
               "show_labels": self._show_labels, "get_extent": get_extent,
-              "fonts": {"normal": self.Font, "bold": self.Font.Bold()}}
+              "embed": embed, "fonts": {"normal": self.Font, "bold": self.Font.Bold()}}
         for o in self._objs.values():
             item = dict(o, bounds=self._dc.GetIdBounds(o["id"]))
             if not self._show_stats: item.pop("stats")
