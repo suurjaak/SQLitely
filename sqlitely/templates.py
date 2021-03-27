@@ -1272,6 +1272,10 @@ COLS = {"table":   ["Name", "Columns", "Related tables", "Other relations", "Row
         "index":   ["Name", "Table", "Columns", "Size in bytes"] if stats else ["Name", "Table", "Columns"],
         "trigger": ["Name", "Owner", "When", "Uses"],
         "view":    ["Name", "Columns", "Uses", "Used by"], }
+COL_TOGGLES = {"table":   ["Name", "Columns", "Related tables"],
+               "index":   ["Name"],
+               "trigger": ["Name"],
+               "view":    ["Name", "Columns"], }
 
 @util.memoize(__key__="wrapclass")
 def wrapclass(v):
@@ -1412,10 +1416,12 @@ def wrapclass(v):
     .hidden { display: none; }
     div.toggle.header { text-align: right; }
     div.section div.toggle.header { position: absolute; right: 5px; top: 5px; }
-    a.sort { display: block; }
-    a.sort::after      { content: ""; display: inline-block; min-width: 6px; position: relative; left: 3px; top: -1px; }
+    a.sort { display: inline-block; }
+    a.sort::after      { content: ""; display: inline-block; min-width: 10px; text-align: left; position: relative; left: 3px; top: -1px; }
     a.sort.asc::after  { content: "↓"; }
     a.sort.desc::after { content: "↑"; }
+    th a.sort:only-child { display: block; }
+    th a.toggle { display: inline-block; }
     #footer {
       text-align: center;
       padding-bottom: 10px;
@@ -1485,6 +1491,19 @@ def wrapclass(v):
         var section = (ptr && ptr.tagName == "DIV" && ptr.classList.contains("section")) ? ptr : null;
       }
       var linklist = section ? section.querySelectorAll("a.toggle") : [];
+      for (var i = 0; i < linklist.length; i++) {
+        if (on != linklist[i].classList.contains("open")) linklist[i].click();
+      };
+      return false;
+    };
+
+    function onToggleColumn(a, id, col) {
+      a.classList.toggle("open");
+      var on = a.classList.contains("open");
+
+      var selector = "table#" + id + " > tbody > tr > td:nth-child(" + (col + 1) + ") a.toggle";
+      var table = document.getElementById(id);
+      var linklist = table.querySelectorAll(selector);
       for (var i = 0; i < linklist.length; i++) {
         if (on != linklist[i].classList.contains("open")) linklist[i].click();
       };
@@ -1699,6 +1718,9 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
         %for i, col in enumerate(COLS[category]):
 		<th>
       <a class="sort" title="Sort by {{ grammar.quote(col, force=True) }}" onclick="onSort('{{ category }}', {{ i + 1 }})">{{ col }}</a>
+            %if col in COL_TOGGLES[category]:
+      <a class="toggle" title="Toggle all rows in column" onclick="onToggleColumn(this, '{{ category }}', {{ i + 1 }})"> </a>
+            %endif
     </th>
         %endfor
 	</tr>
