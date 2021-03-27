@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.03.2021
+@modified    27.03.2021
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1319,6 +1319,7 @@ def wrapclass(v):
       border-radius: 10px;
       margin-top: 10px;
       padding: 10px;
+      position: relative;
     }
     div.section > h2:first-child {
       margin-top: 0;
@@ -1331,7 +1332,7 @@ def wrapclass(v):
     #diagram .diagram-format {
       position: absolute;
       right: 0px;
-      top: -20px;
+      top: 0px;
     }
     #diagram .diagram-format a:hover { cursor: pointer; text-decoration: underline; }
     #diagram .diagram-format a.open { cursor: default; font-weight: bold; text-decoration: none; }
@@ -1402,14 +1403,15 @@ def wrapclass(v):
     a:hover, a.visited:hover { text-decoration: underline; }
     div.sql { font-family: monospace; text-align: left; white-space: pre-wrap; word-break: break-all; overflow-wrap: anywhere; }
     a.sort:hover, a.toggle:hover { cursor: pointer; text-decoration: none; }
-    a.toggle { white-space: nowrap; }
+    a.toggle { display: block; white-space: nowrap; }
     a.toggle::after { content: " \\\\25b6"; }
     a.toggle.open::after { content: " \\\\25bc"; font-size: 0.7em; }
     h2 > a.toggle::after { position: relative; top: 2px; }
     h2 > a.toggle.open::after { top: 0; }
     a.toggle.right { display: block; text-align: right; }
     .hidden { display: none; }
-    #toggle_all { text-align: right; }
+    div.toggle.header { text-align: right; }
+    div.section div.toggle.header { position: absolute; right: 5px; top: 5px; }
     a.sort { display: block; }
     a.sort::after      { content: ""; display: inline-block; min-width: 6px; position: relative; left: 3px; top: -1px; }
     a.sort.asc::after  { content: "↓"; }
@@ -1472,10 +1474,17 @@ def wrapclass(v):
       return false;
     };
 
-    function onToggleAll(a) {
+    function onToggleSection(a, id) {
       a.classList.toggle("open");
       var on = a.classList.contains("open");
-      var linklist = document.getElementsByClassName("toggle");
+      if (id) var section = document.getElementById(id);
+      else {
+        var ptr = a.parentElement;
+        while (ptr && (ptr.tagName != "DIV" || !ptr.classList.contains("section")))
+          ptr = ptr.parentElement;
+        var section = (ptr && ptr.tagName == "DIV" && ptr.classList.contains("section")) ? ptr : null;
+      }
+      var linklist = section ? section.querySelectorAll("a.toggle") : [];
       for (var i = 0; i < linklist.length; i++) {
         if (on != linklist[i].classList.contains("open")) linklist[i].click();
       };
@@ -1555,8 +1564,8 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
   </tr></table>
 </td></tr><tr><td>
 
-<div id="toggle_all">
-  <a class="toggle" title="Toggle all sections opened or closed" onclick="onToggleAll(this)">Toggle all</a>
+<div class="toggle header">
+  <a class="toggle" title="Toggle all sections opened or closed" onclick="onToggleSection(this, 'content_wrapper')">Toggle all</a>
 </div>
 
 <div id="content_wrapper">
@@ -1668,6 +1677,9 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
 
     %endif
 
+<div class="toggle header">
+  <a class="toggle" title="Toggle section opened or closed" onclick="onToggleSection(this)">Toggle all</a>
+</div>
 
 </div>
 
@@ -1898,6 +1910,10 @@ mycategory = "view" if item["tbl_name"] in db.schema["view"] else "table"
 
     %endfor
 
+<div class="toggle header">
+  <a class="toggle" title="Toggle section opened or closed" onclick="onToggleSection(this)">Toggle all</a>
+</div>
+
 </div>
 
 %endif
@@ -1921,6 +1937,10 @@ mycategory = "view" if item["tbl_name"] in db.schema["view"] else "table"
 {{ sql }}
 </div>
     %endif
+
+<div class="toggle header">
+  <a class="toggle" title="Toggle section opened or closed" onclick="onToggleSection(this)">Toggle all</a>
+</div>
 
 </div>
 
@@ -2683,7 +2703,7 @@ if istats: height += SchemaDiagram.STATSH - SchemaDiagram.FOOTERH
 
 
     %if isdef("embed") and embed:
-      <a xlink:title="Go to {{ item["type"] }} {{ grammar.quote(item["name"], force=True) }}" xlink:href="#{{ item["type"] }}/{{! urlquote(item["name"]) }}">
+      <a xlink:title="Go to {{ item["type"] }} {{ escape(grammar.quote(item["name"], force=True)) }}" xlink:href="#{{ item["type"] }}/{{! urlquote(item["name"]) }}">
     %endif
       <text x="{{ itemx + item["bounds"].Width / 2 }}" y="{{ itemy + SchemaDiagram.HEADERH - SchemaDiagram.HEADERP }}" class="title">{{ util.ellipsize(util.unprint(item["name"]), SchemaDiagram.MAX_TEXT) }}</text>
     %if isdef("embed") and embed:
