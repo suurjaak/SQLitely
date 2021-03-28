@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.03.2021
+@modified    28.03.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -10848,7 +10848,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             """Returns starting X for column or row."""
             if self._layout["grid"]["vertical"]:
                 result = 0
-                for rr in rects[:idx]:
+                for rr in filter(bool, rects[:idx]):
                     ww = [r.Width for r in rr]
                     median = sorted(ww)[len(rr) / 2]
                     result += max(w for w in ww if w < 1.5 * median)
