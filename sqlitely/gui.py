@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.03.2021
+@modified    27.03.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2270,13 +2270,16 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.db_datas.get(page.db.filename, {}).pop("title", None)
             logger.info("Closed database %s.", page.db)
         # Remove any dangling references
+        self.pages_visited = [x for x in self.pages_visited if x != page]
         if self.page_db_latest == page:
             self.page_db_latest = next((i for i in self.pages_visited[::-1]
                                         if isinstance(i, DatabasePage)), None)
+            CMDS = ["page = self.page_db_latest # Database tab",
+                    "db = page.db if page else None # SQLite database wrapper"]
+            for cmd in CMDS: self.TopLevelParent.run_console(cmd)
         self.SendSizeEvent() # Multiline wx.Notebooks need redrawing
 
         # Remove page from visited pages order
-        self.pages_visited = [x for x in self.pages_visited if x != page]
         index_new = 0
         if self.pages_visited:
             for i in range(self.notebook.GetPageCount()):
