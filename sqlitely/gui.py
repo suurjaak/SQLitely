@@ -6358,6 +6358,12 @@ class DatabasePage(wx.Panel):
             tabid = wx.NewIdRef().Id if 0 != last_search.get("id") else 0
             self.notebook_search.InsertPage(0, html, title, tabid, info)
 
+        dopts = conf.SchemaDiagrams.get(self.db.filename) or {}
+        if "enabled" not in dopts: dopts["enabled" ] = conf.SchemaDiagramEnabled
+        self.diagram.SetOptions(dopts, refresh=False)
+        self.update_diagram_controls()
+        self.tb_diagram.Disable()
+
         self.db.populate_schema(count=True)
         self.update_tabheader()
         if (wx.YieldIfNeeded() or True) and not self: return
@@ -6365,15 +6371,13 @@ class DatabasePage(wx.Panel):
         if (wx.YieldIfNeeded() or True) and not self: return
         self.update_info_panel()
         if (wx.YieldIfNeeded() or True) and not self: return
-        dopts = conf.SchemaDiagrams.get(self.db.filename) or {}
-        if "enabled" not in dopts: dopts["enabled" ] = conf.SchemaDiagramEnabled
         self.diagram.Populate(dopts)
+        self.tb_diagram.Enable()
         if (wx.YieldIfNeeded() or True) and not self: return
         self.populate_diagram_finder()
         if (wx.YieldIfNeeded() or True) and not self: return
         self.Bind(components.EVT_DIAGRAM, self.on_diagram_event, self.diagram)
         if not self.db.temporary: self.on_diagram_event()
-        else:  self.update_diagram_controls()
         if (wx.YieldIfNeeded() or True) and not self: return
         if self.diagram.Enabled \
         and not any(self.diagram.IsVisible(n) for c in ("table", "view")
