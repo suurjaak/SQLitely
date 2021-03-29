@@ -3514,6 +3514,13 @@ class DatabasePage(wx.Panel):
                             page = pagedict.get(category, {}).get(name)
                             if page: page.Close(force=True)
 
+                        for subcategory, subdict in self.db.get_related(
+                            category, name, own=True, clone=False
+                        ).items() if category in ("table", "view") else ():
+                            for subname in subdict: # Close child index/trigger pages
+                                page = self.schema_pages.get(subcategory, {}).get(subname)
+                                if page: page.Close(force=True)
+
                         try:
                             self.db.executeaction("DROP %s IF EXISTS %s" % (category.upper(),
                                                   grammar.quote(name)), name="DROP")
@@ -3523,7 +3530,7 @@ class DatabasePage(wx.Panel):
                                              fmt_entity(name, limit=0))
                             notdeleteds.setdefault(category, {})[name] = util.format_exc(e)
             finally:
-                def after():
+                def after_err():
                     if not self: return
                     wx.MessageBox("Failed to drop %s:\n\n- %s" % (
                         util.join(", ", (util.plural(c, nn) for c, nn in notdeleteds.items())),
@@ -3531,7 +3538,7 @@ class DatabasePage(wx.Panel):
                                     for c, d in notdeleteds.items() for n, v in d.items())
                     ), conf.Title, wx.ICON_WARNING | wx.OK)
                     
-                if notdeleteds: wx.CallAfter(after) if deleteds else after()
+                if notdeleteds: wx.CallAfter(after_err) if deleteds else after_err()
                 if deleteds:
                     guibase.status("Dropped %s." % util.join(", ", (
                         util.plural(c, deleteds[c]) for c in CATEGORY_ORDER if c in deleteds
