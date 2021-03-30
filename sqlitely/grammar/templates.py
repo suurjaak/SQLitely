@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    24.03.2021
+@modified    01.04.2021
 ------------------------------------------------------------------------------
 """
 
@@ -102,11 +102,12 @@ copy rows from existing to new, drop existing, rename new to existing. Steps:
              columns:   [(column name in old, column name in new)]
              fks:       whether foreign_keys PRAGMA is on
              ?table:    [{related table {name, tempname, sql, ?index, ?trigger}, using new names}, ]
-             ?index:    [{related index {name, sql}, using new names}, ]
-             ?trigger:  [{related trigger {name, sql}, using new names}, ]
+             ?index:    [{related index {name, sql?}, using new names}, ]
+             ?trigger:  [{related trigger {name, sql?}, using new names}, ]
              ?view:     [{related view {name, sql}, using new names}, ]
              ?no_tx:    whether to not include savepoint
          }
+If a related index or trigger does not have "sql", it is only dropped not re-created
 """
 ALTER_TABLE_COMPLEX = """<%
 CATEGORIES = ["index", "view", "trigger"]
@@ -178,6 +179,9 @@ sep = False
 %>
 %for category in CATEGORIES:
     %for x in data.get(category) or []:
+        %if not x.get("sql"):
+<% continue %>
+        %endif
 {{ LF() if sep else "" }}
 {{ WS(x["sql"]) }}{{ LF() }}
 <%

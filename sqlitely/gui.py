@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.03.2021
+@modified    02.04.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3549,6 +3549,73 @@ class DatabasePage(wx.Panel):
                         self.update_page_header(updated=True)
                     wx.CallAfter(after)
 
+        elif "drop column" == cmd:
+            category, (name, column) = "table", args[:2]
+            qname, qcolumn = (fmt_entity(n, force=True) for n in (name, column))
+            if wx.YES != controls.YesNoMessageBox(
+                "Are you sure you want to drop %s %s column %s?" % 
+                (category, qname, qcolumn), conf.Title, wx.ICON_WARNING, default=wx.NO
+            ): return
+
+            deps = self.db.get_column_dependents(category, name, column)
+            if deps:
+                wx.MessageBox("Cannot drop %s %s column %s, in use in:\n\n- %s" %
+                    (category, qname, qcolumn, "\n- ".join("%s: %s" % (
+                        util.plural(c, nn, numbers=False), util.join(", ", map(fmt_entity, nn))
+                    ) for c, nn in deps.items())), conf.Title, wx.ICON_WARNING
+                )
+                return
+
+            datapage = self.data_pages.get(category, {}).get(name)
+            lock = self.db.get_lock(category, name, skip=filter(bool, [datapage]))
+            if lock:
+                wx.MessageBox(
+                    "Cannot drop %s %s column %s.\n\n" % 
+                    (category, qname, qcolumn, lock), conf.Title, wx.ICON_WARNING
+                )
+                return
+
+            schemapage = self.schema_pages.get(category, {}).get(name)
+            if datapage and datapage.IsChanged():
+                res = wx.MessageBox(
+                    "There are unsaved changes to %s %s data.\n\n"
+                    "Commit changes before column drop?" % (category, qname),
+                    conf.Title, wx.ICON_WARNING | wx.YES_NO | wx.CANCEL | wx.CANCEL_DEFAULT
+                )
+                if res == wx.CANCEL: return
+                elif res == wx.YES:
+                    if not datapage.Save(): return
+                else: datapage.Rollback(force=True)
+            if datapage: datapage.CloseCursor()
+            if schemapage and schemapage.IsChanged():
+                if wx.CANCEL == wx.MessageBox(
+                    "There are unsaved changes to %s %s schema.\n\n"
+                    "Discard changes before column drop?" % (category, qname),
+                    conf.Title, wx.ICON_WARNING | wx.OK | wx.CANCEL | wx.CANCEL_DEFAULT
+                ): return
+            if schemapage: schemapage.SetReadOnly()
+
+            self.toggle_cursors(category, name, close=True)
+            extradrops = self.db.drop_column(name, column)
+            def after():
+                if not self: return
+                self.reload_schema()
+                self.toggle_cursors(category, name)
+            wx.CallAfter(after) if extradrops else after()
+            for c, d in extradrops.items():
+                for n in d:
+                    schemapage = self.schema_pages.get(c, {}).get(n)
+                    if schemapage: schemapage.Close(force=True)
+            if extradrops:
+                wx.MessageBox("Also dropped column %s dependents:\n\n- %s\n\n%s" % 
+                              (qname, "\n- ".join("%s %s" % (
+                                  (util.plural(c, d, numbers=False),
+                                   ", ".join(map(fmt_entity, d)))
+                               ) for c, d in extradrops.items()),
+                               "\n\n".join(x["sql"] for c, d in extradrops.items()
+                                           for x in d.values())
+                              ), conf.Title)
+
         elif "truncate" == cmd:
             self.on_truncate(args) if args else self.on_truncate_all()
         elif "reindex" == cmd:
@@ -6907,7 +6974,8 @@ class DatabasePage(wx.Panel):
         menu = wx.Menu()
         item_file = item_file_single = item_database = item_import = None
         item_reindex = item_reindex_all = item_truncate = None
-        item_rename = item_clone = item_drop = item_drop_all = item_create = None
+        item_rename = item_clone = item_create = None
+        item_drop = item_drop_all = item_drop_col = None
         if data.get("type") in ("table", "view"): # Single table/view
             item_name = wx.MenuItem(menu, -1, "%s %s" % (
                         data["type"].capitalize(), fmt_entity(data["name"])))
@@ -6957,6 +7025,8 @@ class DatabasePage(wx.Panel):
             item_copy_sql  = wx.MenuItem(menu, -1, "Copy column S&QL")
             item_renamecol = wx.MenuItem(menu, -1, "Rena&me column\t(F2)") \
                              if "table" == data["parent"]["type"] else None
+            item_drop_col  = wx.MenuItem(menu, -1, "Drop column") \
+                             if "table" == data["parent"]["type"] else None
 
             item_name.Font = boldfont
 
@@ -6966,9 +7036,13 @@ class DatabasePage(wx.Panel):
             menu.Append(item_open_meta)
             menu.Append(item_copy)
             menu.Append(item_copy_sql)
-            if item_renamecol:
+            if item_renamecol or item_drop_col:
                 menu.AppendSeparator()
+            if item_renamecol:
                 menu.Append(item_renamecol)
+            if item_drop_col:
+                if len(data["parent"]["columns"]) == 1: item_drop_col.Enable(False)
+                menu.Append(item_drop_col)
 
             menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
                       item_name)
@@ -6980,6 +7054,8 @@ class DatabasePage(wx.Panel):
                 "column SQL"), item_copy_sql)
             if item_renamecol:
                 menu.Bind(wx.EVT_MENU, lambda e: tree.EditLabel(item), item_renamecol)
+            if item_drop_col:
+                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.handle_command, "drop column", data["parent"]["name"], data["name"]), item_drop_col)
 
         elif "category" == data.get("type"): # Category list
             item_copy = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
@@ -7211,7 +7287,7 @@ class DatabasePage(wx.Panel):
             menu.Append(item_create)
             menu.Bind(wx.EVT_MENU, functools.partial(create_object, data["category"]), item_create)
         elif "column" == data["type"]:
-            has_name, has_sql, table, item_renamecol = True, True, {}, None
+            has_name, has_sql, table, item_renamecol, item_dropcol = True, True, {}, None, None
             if "view" == data["parent"]["type"]:
                 has_sql = False
             elif "index" == data["parent"]["type"]:
@@ -7228,6 +7304,8 @@ class DatabasePage(wx.Panel):
                 sqltext = functools.partial(self.db.get_sql, **sqlkws)
                 item_renamecol = wx.MenuItem(menu, -1, "Rena&me column\t(F2)")
                 menu.Bind(wx.EVT_MENU, lambda e: tree.EditLabel(item), item_renamecol)
+                item_dropcol   = wx.MenuItem(menu, -1, "Drop column")
+                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.handle_command, "drop column", data["parent"]["name"], data["name"]), item_dropcol)
 
             if has_name:
                 parts = [fmt_entity(x, force=False)
@@ -7256,9 +7334,13 @@ class DatabasePage(wx.Panel):
                 menu.Append(item_copy)
             if has_sql:
                 menu.Append(item_copy_sql)
-            if item_renamecol:
+            if item_renamecol or item_dropcol:
                 menu.AppendSeparator()
+            if item_renamecol:
                 menu.Append(item_renamecol)
+            if item_dropcol:
+                if len(data["parent"]["columns"]) == 1: item_dropcol.Enable(False)
+                menu.Append(item_dropcol)
         elif "columns" == data["type"]:
             cols = data["parent"].get("columns") or data["parent"].get("meta", {}).get("columns", [])
             names = [x["name"] for x in cols]

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.03.2021
+@modified    02.04.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -4449,7 +4449,6 @@ class SchemaObjectPage(wx.Panel):
         else:
             # Need to re-create table, first under temporary name to copy data.
             args = self._db.get_complex_alter_args(self._original, self._item, renames, droppedcols)
-            args.update(fks=self._fks_on)
 
         short, err = grammar.generate(dict(args, no_tx=True))
         if err: raise Exception(err)
@@ -5767,6 +5766,22 @@ class SchemaObjectPage(wx.Panel):
             errors += ["Select is required."]
         if self._category in ("table", "index") and not meta.get("columns"):
             errors += ["Columns are required."]
+
+        if "table" == self._category and not self._newmode:
+            deps, old, new = {}, self._original["meta"], self._item["meta"]
+            colmap1 = {c["__id__"]: c for c in old.get("columns", [])}
+            colmap2 = {c["__id__"]: c for c in new.get("columns", [])}
+            drops = [colmap1[x]["name"] for x in colmap1 if x not in colmap2]
+            if drops:
+                deps = self._db.get_column_dependents(self._category,
+                                                      self._original["name"], drops)
+            if deps:
+                errors.append("Cannot drop %s %s, in use in:\n\n- %s" %
+                    (util.plural("column", drops, numbers=False),
+                     ", ".join(map(fmt_entity, drops)), "\n- ".join("%s: %s" % (
+                        util.plural(c, nn, numbers=False), util.join(", ", map(fmt_entity, nn))
+                    ) for c, nn in deps.items()))
+                )
 
         if (self._newmode or not util.lceq(name, self._item["name"])) \
         and name in self._db.schema.get(self._category, {}):

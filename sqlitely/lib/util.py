@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.03.2021
+@modified    01.04.2021
 ------------------------------------------------------------------------------
 """
 import __builtin__
@@ -541,7 +541,7 @@ def articled(word):
 def join(sep, iterable, last=", and "):
     """Returns sep.join(iterable) but with a custom separator before last."""
     lst = list(iterable)
-    return sep.join(lst[:-1]) + last + lst[-1]
+    return lst[0] if len(lst) < 2 else sep.join(lst[:-1]) + last + lst[-1]
 
 
 def count(items, unit=None, key="count", suf=""):

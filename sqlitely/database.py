@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.03.2021
+@modified    02.04.2021
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1683,9 +1683,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             altercategory = "COMPLEX %s" % altercategory
             sql, _ = grammar.transform(item["sql"], renames=renames)
             data = dict(item, name=name2, meta=item["meta"])
-            fks_on = self.execute("PRAGMA foreign_keys", log=False).fetchone().values()[0]
             data = self.get_complex_alter_args(item, data, {"table": {name: name2}}, clone=False)
-            data = dict(data, fks=fks_on)
         altersql, err = grammar.generate(data, category=altercategory)
         if err: raise Exception(err)
 
@@ -1718,8 +1716,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if name == name2: return
 
         item = self.get_category("table", table)
-        if not item \
-        or not any(util.lceq(c["name"], name) for c in item["columns"]):
+        if not any(util.lceq(c["name"], column)
+                   for c in (item or {}).get("meta", {}).get("columns", [])):
             return
         table = item["name"]
         if self.has_rename_column():
@@ -1727,9 +1725,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 name=table, name2=table, columns=[(name, name2)]
             ), category="ALTER TABLE")
         else:
-            fks_on = self.execute("PRAGMA foreign_keys", log=False).fetchone().values()[0]
             args = self.get_complex_alter_args(item, item, {"column": {table: {name: name2}}}, clone=False)
-            altersql, err = grammar.generate(dict(args, fks=fks_on))
+            altersql, err = grammar.generate(args)
         if err: raise Exception(err)
 
         try: self.executescript(altersql, name="RENAME")
@@ -1743,7 +1740,94 @@ WARNING: misuse can easily result in a corrupt database file.""",
             self.notify_rename("table", table, table)
 
 
-    def get_complex_alter_args(self, item1, item2, renames, drops=None, clone=True):
+    def drop_column(self, name, column):
+        """
+        Carries out dropping table column.
+
+        @return  additionally deleted entities like indexes 
+                 and UPDATE OF triggers firing on column,
+                 as {category: {name: item}}
+        """
+        result, category, item = {}, "table", self.get_category("table", name)
+        if not any(util.lceq(c["name"], column)
+                   for c in (item or {}).get("meta", {}).get("columns", [])) \
+        or len(item["meta"]["columns"]) < 2:
+            return result
+
+        item["meta"]["columns"] = [c for c in item["meta"]["columns"]
+                                   if not util.lceq(c["name"], column)]
+        sql2, err = grammar.generate(item["meta"])
+        if err: raise Exception(err)
+
+        args = self.get_complex_alter_args(item, item, drops=[column], clone=False)
+        altersql, err = grammar.generate(args)
+        if err: raise Exception(err)
+
+        try:
+            import wx
+            wx.MessageBox(altersql, conf.Title)
+            #self.executescript(altersql, name="DROP COLUMN")
+        except Exception:
+            _, e, tb = sys.exc_info()
+            logger.exception("Error executing SQL.")
+            try: self.execute("ROLLBACK")
+            except Exception: pass
+            raise e, None, tb
+
+        result = {c: CaselessDict((x["name"], self.get_category(c, x["name"]))
+                                   for x in args[c] if not x.get("sql"))
+                  for c in self.CATEGORIES
+                  if any(not x.get("sql") for x in args.get(c, []))}
+        self.notify_rename(category, name, name)
+        return result
+
+
+    def get_column_dependents(self, category, name, *columns):
+        """
+        Returns triggers and views referring to specified table/view columns
+        in their body, as {category: [name, ]}.
+        """
+        result, category = {}, category.lower()
+        item = self.schema.get(category, {}).get(name)
+        if not item: return result
+
+        mycols = [x["name"] for x in item.get("columns", [])]
+        if len(columns) == 1 and isinstance(columns[0], list): columns = columns[0]
+        columns = [c for c in columns if any(util.lceq(c, c2) for c2 in mycols)]
+        if not columns: return result
+
+        renames = {"column": {name: {}}}
+        for c in columns:
+            c2 = renames["column"][name][c] = util.make_unique(c, mycols)
+            mycols.append(c2)
+        columns_lc = [c.lower() for c in columns]
+        for category2, items2 in self.get_related(category, name, clone=False).items():
+            if category2 not in ("trigger", "view"): continue # for category2
+            for name2, item2 in items2.items():
+                sql_lc = item2["sql"].lower()
+                if not any(c in sql_lc for c in columns_lc): continue # for name2
+
+                if "trigger" == category2 and "columns" in item2.get("meta", {}) \
+                and set(columns_lc) & set(c["name"] for c in item2["meta"]["columns"]):
+                    tcolumns = [c for c in item2["meta"]["columns"]
+                                if c["name"].lower() not in columns_lc]
+                    if not tcolumns or any(c in item2["meta"]["body"].lower()
+                                           for c in columns_lc):
+                        continue # for name2
+
+                    # Make new SQL without these columns in trigger condition
+                    meta2 = dict(item2["meta"], columns=tcolumns)
+                    sql1, err = grammar.generate(meta2)
+                    if not err: item2 = dict(item2, sql=sql1)
+
+                sql2, err = grammar.transform(item2["sql"], renames=renames)
+                if not err and sql2 != item2["sql"]:
+                    result.setdefault(category2, []).append(name2)
+
+        return result
+
+
+    def get_complex_alter_args(self, item1, item2, renames=None, drops=None, clone=True):
         """
         Returns arguments for a complex ALTER TABLE operation, as {
             __type__:  "COMPLEX ALTER TABLE"
@@ -1752,6 +1836,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             tempname:  table temporary name
             sql:       table CREATE statement with tempname
             columns:   [(column name in old, column name in new)]
+            fks        whether foreign key constraints are currently enabled
             ?table:    [{related table {name, tempname, sql, sql0, ?index, ?trigger}, using new names}, ]
             ?index:    [{related index {name, sql}, using new names}, ]
             ?trigger:  [{related trigger {name, sql}, using new names}, ]
@@ -1761,23 +1846,93 @@ WARNING: misuse can easily result in a corrupt database file.""",
         @param   item1    original table item as {name, sql, meta, ..}
         @param   item2    new table item as {name, sql, meta, ..}
         @param   renames  {?table: {old: new}, ?column: {table: {oldcol: newcol}}}
-        @param   drops    dropped columns as [name, ], if any
+        @param   drops    dropped columns as [name, ], if any,
+                          for altering foreign tables and dropping indexes,
+                          and altering/dropping UPDATE OF triggers
         @param   clone    whether to make copies of data
         """
-        name1, name2 = item1["name"], item2["name"]
+        name1, name2, sql = item1["name"], item2["name"], item2["sql"]
+
+        def drop_from_sql(item):
+            """
+            Returns table item SQL with dropped columns removed from primary/foreign
+            key and unique constraints, or just foreign constraints if foreign table.
+            """
+            result = item["sql"]
+            columns, constraints = (item.get("meta", {}).get(n, [])
+                                    for n in ("columns", "constraints"))
+            dirty, altered_constraints = False, []
+            for col in columns:
+                if "fk" in col and util.lceq(name1, col["fk"]["table"]) \
+                and col["fk"]["key"].lower() in drops:
+                    col.pop("fk")
+                    dirty = True
+            for i, cnstr in list(enumerate(constraints))[::-1]:
+                cnstr_dirty = False
+                if cnstr["type"] in (grammar.SQL.PRIMARY_KEY, grammar.SQL.UNIQUE) \
+                and util.lceq(item2["name"], item["name"]):
+                    for j, keycol in list(enumerate(cnstr["key"]))[::-1]:
+                        if keycol.get("name", "").lower() in drops:
+                            del cnstr["key"][j]
+                            cnstr_dirty = dirty = True
+                    if not cnstr["key"]:
+                        del item["meta"]["constraints"][i]
+                        continue # for i, cnstr
+
+                if grammar.SQL.FOREIGN_KEY == cnstr["type"] \
+                and util.lceq(item2["name"], item["name"]):
+                    for j, column in list(enumerate(cnstr["columns"]))[::-1]:
+                        if column.lower() in drops:
+                            del cnstr["key"][j]; del cnstr["columns"][j]
+                            cnstr_dirty = dirty = True
+                    if not cnstr["key"]:
+                        del item["meta"]["constraints"][i]
+                        continue # for i, cnstr
+
+                if grammar.SQL.FOREIGN_KEY == cnstr["type"] \
+                and util.lceq(name1, cnstr["table"]):
+                    for j, keycol in list(enumerate(cnstr["key"]))[::-1]:
+                        if keycol.lower() in drops:
+                            del cnstr["key"][j]; del cnstr["columns"][j]
+                            cnstr_dirty = dirty = True
+                    if not cnstr["key"]:
+                        del item["meta"]["constraints"][i]
+                        continue # for i, cnstr
+
+                if cnstr_dirty: altered_constraints.append(cnstr)
+
+            while dirty and altered_constraints:
+                # Possible duplicate constraints from reduced compound columns
+                cnstr1 = altered_constraints.pop()
+                for cnstr2 in constraints:
+                    if cnstr1 is not cnstr2 and cnstr1 == cnstr2:
+                        constraints.remove(cnstr1)
+                        break # for cnstr2
+
+            if dirty or (util.lceq(item2["name"], item["name"])
+            and any(c in result for c in drops)):
+                result, err = grammar.generate(item["meta"])
+                if err: raise Exception(err)
+            return result
+
+        if drops:
+            drops = [x.lower() for x in drops]
+            sql = drop_from_sql(item2)
 
         allnames = set(sum((list(x) for x in self.schema.values()), []))
         tempname = util.make_unique(name2, allnames)
         allnames.add(tempname)
-        myrenames = copy.deepcopy(renames)
+        renames, myrenames = renames or {}, copy.deepcopy(renames or {})
         myrenames.setdefault("table", {}).update({name1: tempname})
         if "column" in myrenames and name2 in myrenames["column"]:
             myrenames["column"][tempname] = myrenames["column"].pop(name2)
-        sql, err = grammar.transform(item2["sql"], renames=myrenames)
-        if err: raise Exception(err)
+        if myrenames:
+            sql, err = grammar.transform(sql, renames=myrenames)
+            if err: raise Exception(err)
 
+        fks_on = self.execute("PRAGMA foreign_keys", log=False).fetchone().values()[0]
         args = {"name": name1, "name2": name2, "tempname": tempname,
-                "sql": sql, "__type__": "COMPLEX ALTER TABLE",
+                "sql": sql, "__type__": "COMPLEX ALTER TABLE", "fks": fks_on,
                 "columns": [(c1["name"],
                              util.getval(myrenames, "column", tempname, c1["name"]) or c1["name"])
                             for c1 in item1["meta"]["columns"] 
@@ -1786,6 +1941,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
                                    for c2 in item2["meta"]["columns"])]}
 
 
+        mycols = [x["name"] for x in item1.get("columns", [])]
+        droprenames = {"column": {name1: {n: util.make_unique(n, mycols)} for n in drops}}
+
         items_processed = set([name1])
         for category, itemmap in self.get_related("table", name1, clone=clone).items():
             for relitem in itemmap.values():
@@ -1793,28 +1951,30 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 items_processed.add(relitem["name"])
 
                 rel_sql = relitem["sql"]
-                if drops and "table" == category:
-                    drops = [x.lower() for x in drops]
-                    dropped = False
-                    for col in relitem.get("meta", {}).get("columns", []):
-                        if "fk" in col and util.lceq(name1, col["fk"]["table"]) \
-                        and col["fk"]["key"].lower() in drops:
-                            col.pop("fk")
-                            dropped = True
-                    for i, cnstr in list(enumerate(relitem.get("meta", {}).get("constraints", [])))[::-1]:
-                        if grammar.SQL.FOREIGN_KEY == cnstr["type"] \
-                        and util.lceq(name1, cnstr["table"]):
-                            for j, keycol in list(enumerate(cnstr["key"]))[::-1]:
-                                if keycol.lower() in drops:
-                                    del cnstr["key"][j]; del cnstr["columns"][j]
-                                    dropped = True
-                            if not cnstr["key"]:
-                                del relitem["meta"]["constraints"][i]
-                    if dropped:
-                        rel_sql, err = grammar.generate(relitem["meta"])
-                        if err: raise Exception(err)
+                is_our_item = util.lceq(relitem["meta"].get("table"), name1)
+                if drops:
+                    if   "table"   == category: rel_sql = drop_from_sql(relitem)
+                    elif "index"   == category:
+                        rel_sql_lc = rel_sql.lower()
+                        if any(n in rel_sql_lc for n in drops):
+                            sql2, err = grammar.transform(rel_sql, renames=droprenames)
+                            if not err and sql2 != rel_sql:
+                                # Dropped columns are used in index: drop index
+                                args.setdefault(category, []).append({"name": relitem["name"]})
+                                continue # for relitem
+                    elif "trigger" == category:
+                        columns1 = relitem.get("meta", {}).get("columns", [])
+                        columns2 = [c for c in columns1 if c["name"].lower() not in drops]
+                        if columns1 != columns2 and not columns2:
+                            # Trigger fired only on dropped columns: drop trigger
+                            args.setdefault(category, []).append({"name": relitem["name"]})
+                            continue # for relitem
+                        if columns1 != columns2 and columns2:
+                            # Other columns remained in trigger header:
+                            # make new SQL if dropped columns not in trigger body
+                            sql2, err = grammar.generate(dict(item2["meta"], columns=columns2))
+                            if not err: rel_sql = sql2
 
-                is_our_item = util.lceq(item1["meta"].get("table"), name1)
                 sql0, _ = grammar.transform(rel_sql, renames=renames)
                 if sql0 == relitem["sql"] and not is_our_item and "view" != category:
                     # Views need recreating, as SQLite can raise "no such table" error
