@@ -34,10 +34,11 @@
  *                more use of with_clause; dropped Java-specific exception;
  *                double quotes allowed in string_literal; fixed module arguments;
  *                only ROWID allowed after WITHOUT; disallowed certain keywords in
- *                column types and constraint names; added TRUE/FALSE literals.
+ *                column types and constraint names; added TRUE/FALSE literals;
+ *                added support for INDEX expressions.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
- * Updated by   : Erki Suurjaak, 2019-2020
+ * Updated by   : Erki Suurjaak, 2019-2021
  */
 grammar SQLite;
 
@@ -384,7 +385,7 @@ raise_function
  ;
 
 indexed_column
- : column_name ( K_COLLATE collation_name )? ( K_ASC | K_DESC )?
+ : ( column_name | expr ) ( K_COLLATE collation_name )? ( K_ASC | K_DESC )?
  ;
 
 table_constraint

@@ -6763,7 +6763,7 @@ class DatabasePage(wx.Panel):
                         tree.SetItemImage(colchild, imgs["columns"], wx.TreeItemIcon_Normal)
                         lks, fks = self.db.get_keys(item["name"]) if "table" == category else [(), ()]
                         for col in columns:
-                            subchild = tree.AppendItem(colchild, util.unprint(col["name"]))
+                            subchild = tree.AppendItem(colchild, util.unprint(col.get("name") or col.get("expr")))
                             mytype = util.unprint(col.get("type", ""))
                             if any(col["name"] in x["name"] for x in lks):
                                 mytype = u"\u1d18\u1d0b  " + mytype # Unicode small caps "PK"

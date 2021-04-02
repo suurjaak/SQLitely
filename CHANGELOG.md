@@ -14,7 +14,7 @@ CHANGELOG
 - added spreadsheet file drag-drop support to database page;
 - added Dockerfile;
 - improved auto-altering related items;
-- minor fixes and UI tweaks.
+- many fixes and UI tweaks.
 
 
 1.1, 2020-08-08
