@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.04.2021
+@modified    03.04.2021
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1183,7 +1183,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if grammar.SQL.FOREIGN_KEY == c["type"]
             ]
             return [dict(name=util.tuplefy(c["name"]), table=CaselessDict(
-                {c["fk"]["table"]: util.tuplefy(c["fk"]["key"])}
+                {c["fk"]["table"]: util.tuplefy(c["fk"].get("key") or [])}
             )) for c in cc]
 
         mykeys = CaselessDict((util.tuplefy(c["name"]),

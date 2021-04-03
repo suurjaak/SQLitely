@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.03.2021
+@modified    03.04.2021
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1728,7 +1728,6 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
 <%
 flags = {}
 relateds = db.get_related(category, item["name"])
-lks, fks = db.get_keys(item["name"]) if "table" == category else [(), ()]
 %>
   <tr>
     <td class="index">{{ itemi + 1 }}</td>
@@ -1778,11 +1777,11 @@ fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(util.unprin
 for col in lks2:
     for table, keys in col.get("table", {}).items():
         if util.lceq(table, item["name"]):
-            rels.append((None, keys, item2["name"], col["name"]))
+            rels.append((None, keys or [], item2["name"], col["name"]))
 for col in fks2:
     for table, keys in col.get("table", {}).items():
         if util.lceq(table, item["name"]):
-            rels.append((item2["name"], col["name"], None, keys))
+            rels.append((item2["name"], col["name"], None, keys or []))
 %>
   <a href="#{{category}}/{{! urlquote(item2["name"]) }}" title="Go to {{ category }} {{ grammar.quote(item2["name"], force=True) }}" {{! wrapclass(item2["name"]) }}>{{ item2["name"] }}</a><br />
                 %endfor
@@ -1800,9 +1799,9 @@ for col in fks2:
         <br />
                     %for (a, c1, b, c2) in rels:
                         %if a:
-        <a href="#table/{{! urlquote(a) }}" title="Go to table {{ grammar.quote(a, force=True) }}" {{! wrapclass(a) }}>{{ util.unprint(grammar.quote(a)) }}</a>.{{ fmtkeys(c1) }} <span class="nowrap">REFERENCES</span> {{ fmtkeys(c2) }}<br />
+        <a href="#table/{{! urlquote(a) }}" title="Go to table {{ grammar.quote(a, force=True) }}" {{! wrapclass(a) }}>{{ util.unprint(grammar.quote(a)) }}</a>{{ "." if c1 else "" }}{{ fmtkeys(c1) }} <span class="nowrap">REFERENCES</span> {{ fmtkeys(c2) }}<br />
                         %else:
-        {{ fmtkeys(c1) }} <span class="nowrap">REFERENCES</span> <a href="#table/{{! urlquote(b) }}" title="Go to table {{ util.unprint(grammar.quote(b, force=True)) }}" {{! wrapclass(b) }}>{{ grammar.quote(b) }}</a>.{{ fmtkeys(c2) }}<br />
+        {{ fmtkeys(c1) }} <span class="nowrap">REFERENCES</span> <a href="#table/{{! urlquote(b) }}" title="Go to table {{ util.unprint(grammar.quote(b, force=True)) }}" {{! wrapclass(b) }}>{{ grammar.quote(b) }}</a>{{ "." if c2 else "" }}{{ fmtkeys(c2) }}<br />
                         %endif
                     %endfor
         </div>
@@ -1856,7 +1855,7 @@ size = next((x["size_total"] for x in stats["table"] if util.lceq(x["name"], ite
                     %if col.get("expr"):
       <pre>{{ col["expr"] }}</pre>
                     %else:
-      {{ util.unprint(col["name"]) }}
+      {{ util.unprint(col["name"] or "") }}
                     %endif
       <br />
                 %endfor
@@ -2160,8 +2159,8 @@ for item in db.schema.get(category).values():
                         rels.append((item2["name"], col["name"], None, keys))
         reltexts = []
         for (a, c1, b, c2) in rels:
-            if a: s = "%s.%s REFERENCES %s" % (util.unprint(grammar.quote(a)), fmtkeys(c1), fmtkeys(c2))
-            else: s = "%s REFERENCES %s.%s" % (fmtkeys(c1), util.unprint(grammar.quote(b)), fmtkeys(c2))
+            if a: s = "%s%s%s REFERENCES %s" % (util.unprint(grammar.quote(a)), "." if c1 else "", fmtkeys(c1), fmtkeys(c2))
+            else: s = "%s REFERENCES %s%s%s" % (fmtkeys(c1), util.unprint(grammar.quote(b)), "." if c2 else "", fmtkeys(c2))
             reltexts.append(s)
         row["Related tables"] = reltexts or [""]
 

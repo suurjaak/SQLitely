@@ -84,7 +84,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    18.03.2021
+@modified    03.04.2021
 ------------------------------------------------------------------------------
 """
 import collections
@@ -491,8 +491,10 @@ class FormDialog(wx.Dialog):
        ?help:         field tooltip
        ?path:         [data path, if, more, complex, nesting]
        ?choices:      [value, ] or callback(field, path, data) returning list
-       ?choicesedit   true if value not limited to given choices
-       ?component     specific wx component to use
+       ?choicesedit:  true if value not limited to given choices
+       ?component:    specific wx component to use
+       ?exclusive:    if true, list-type choices are removed from left list
+                      when added to the right
        ?toggle:       if true, field is toggle-able and children hidden when off
        ?togglename: { an additional child editbox for name right next to toggle
          name:        data subpath for editbox value
@@ -836,14 +838,13 @@ class FormDialog(wx.Dialog):
                  if not isinstance(x, (wx.StaticText, wx.Sizer))]
         if list is field.get("type"):
             value = value or []
+            if field.get("exclusive"):
+                choices = [x for x in choices if x not in value]
             listbox1, listbox2 = (x for x in ctrls if isinstance(x, wx.ListBox))
-            listbox1.SetItems([self._Unprint(x) for x in choices if x not in value])
-            listbox2.SetItems(map(self._Unprint, value or []))
-            for j, x in enumerate(x for x in choices if x not in value):
-                listbox1.SetClientData(j, x)
-            for j, x in enumerate(value or []): listbox2.SetClientData(j, x)
-            listbox1.Enable(self._editmode)
-            listbox2.Enable(self._editmode)
+            for listbox, vv in zip((listbox1, listbox2), (choices, value)):
+                listbox.SetItems(map(self._Unprint, vv))
+                for j, x in enumerate(vv): listbox.SetClientData(j, x)
+                listbox.Enable(self._editmode)
             for c in ctrls:
                 if isinstance(c, wx.Button): c.Enable(self._editmode)
         else:
@@ -1093,7 +1094,8 @@ class FormDialog(wx.Dialog):
             if not indexes and listbox1.GetCount(): indexes.append(0)
         selecteds = map(listbox1.GetClientData, indexes)
 
-        for i in indexes[::-1]: listbox1.Delete(i)
+        if field.get("exclusive"):
+            for i in indexes[::-1]: listbox1.Delete(i)
         listbox2.AppendItems(map(self._Unprint, selecteds))
         for j, x in enumerate(selecteds, listbox2.Count - len(selecteds)):
             listbox2.SetClientData(j, x)
