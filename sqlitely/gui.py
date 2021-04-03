@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.04.2021
+@modified    03.04.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3389,6 +3389,7 @@ class DatabasePage(wx.Panel):
             self.notebook.SetSelection(self.pageorder[self.page_schema])
             category = args[0]
             sourcecat, sourcename = (list(args[1:]) + [None, None])[:2]
+            meta = args[3] if len(args) > 3 else {}
             newdata = {"type": category,
                        "meta": {"__type__": "CREATE %s" % category.upper()}}
             if category in ("index", "trigger"):
@@ -3397,6 +3398,7 @@ class DatabasePage(wx.Panel):
                 elif "trigger" == category and "view" == sourcecat:
                     newdata["meta"]["table"] = sourcename
                     newdata["meta"]["upon"] = grammar.SQL.INSTEAD_OF
+            if meta: newdata["meta"].update(meta)
             self.add_schema_page(newdata)
         elif "schema" == cmd:
             self.notebook.SetSelection(self.pageorder[self.page_schema])
@@ -7201,12 +7203,17 @@ class DatabasePage(wx.Panel):
         def open_meta(data, *_, **__):
             tree.FindAndActivateItem(type=data["type"], name=data["name"],
                                      level=data["level"])
-        def create_object(category, *_, **__):
+        def create_object(category, column=None, *_, **__):
             args = []
             if data.get("type") in self.db.CATEGORIES:
                 args = data["type"], data["name"]
             elif data.get("parent"):
                 args = data["parent"]["type"], data["parent"]["name"]
+            if column:
+                if "trigger" == category:
+                    args += ({"columns": [{"name": column}], "action": "UPDATE"}, )
+                elif "index" == category:
+                    args += ({"columns": [{"name": column}]}, )
             self.handle_command("create", category, *args)
         def copy_related(*_, **__):
             self.handle_command("copy", "related", data["type"], data["name"])
@@ -7239,7 +7246,7 @@ class DatabasePage(wx.Panel):
                 keys.append(key)
                 it = wx.MenuItem(submenu, -1, "New " + category.replace(key, "&" + key, 1))
                 submenu.Append(it)
-                menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), it)
+                menu.Bind(wx.EVT_MENU, functools.partial(create_object, category, None), it)
             item_drop_schema = wx.MenuItem(menu, -1, "Drop everything")
             menu.Append(item_drop_schema)
             menu.Bind(wx.EVT_MENU, functools.partial(self.handle_command, "drop schema"),
@@ -7285,9 +7292,10 @@ class DatabasePage(wx.Panel):
                 if item_reindex: menu.Append(item_reindex)
                 menu.Append(item_drop_all)
             menu.Append(item_create)
-            menu.Bind(wx.EVT_MENU, functools.partial(create_object, data["category"]), item_create)
+            menu.Bind(wx.EVT_MENU, functools.partial(create_object, data["category"], None), item_create)
         elif "column" == data["type"]:
-            has_name, has_sql, table, item_renamecol, item_dropcol = True, True, {}, None, None
+            has_name, has_sql, table = True, True, {}
+            submenu_col_create, item_renamecol, item_dropcol = None, None, None
             if "view" == data["parent"]["type"]:
                 has_sql = False
             elif "index" == data["parent"]["type"]:
@@ -7302,6 +7310,16 @@ class DatabasePage(wx.Panel):
                 table = self.db.schema.get("table", {}).get(data["parent"]["name"])
                 sqlkws = {"category": "table", "name": table["name"], "column": data["name"]}
                 sqltext = functools.partial(self.db.get_sql, **sqlkws)
+
+                submenu_col_create, keys = wx.Menu(), []
+                for category in database.Database.CATEGORIES :
+                    key = next((x for x in category if x not in keys), category[0])
+                    keys.append(key)
+                    if category not in ("index", "trigger"): continue # for category
+                    it = wx.MenuItem(submenu_col_create, -1, "New " + category.replace(key, "&" + key, 1))
+                    submenu_col_create.Append(it)
+                    menu.Bind(wx.EVT_MENU, functools.partial(create_object, category, data["name"]), it)
+
                 item_renamecol = wx.MenuItem(menu, -1, "Rena&me column\t(F2)")
                 menu.Bind(wx.EVT_MENU, lambda e: tree.EditLabel(item), item_renamecol)
                 item_dropcol   = wx.MenuItem(menu, -1, "Drop column")
@@ -7334,8 +7352,10 @@ class DatabasePage(wx.Panel):
                 menu.Append(item_copy)
             if has_sql:
                 menu.Append(item_copy_sql)
-            if item_renamecol or item_dropcol:
+            if submenu_col_create or item_renamecol or item_dropcol:
                 menu.AppendSeparator()
+            if submenu_col_create:
+                menu.AppendSubMenu(submenu_col_create, text="Create &new ..")
             if item_renamecol:
                 menu.Append(item_renamecol)
             if item_dropcol:
@@ -7404,13 +7424,15 @@ class DatabasePage(wx.Panel):
             if data["type"] in ("table", "view"):
                 submenu, keys = wx.Menu(), []
                 menu.AppendSubMenu(submenu, text="Create &new ..")
-                for category in database.Database.CATEGORIES if "table" == data["type"] else ["trigger"]:
+                for category in database.Database.CATEGORIES:
                     key = next((x for x in category if x not in keys), category[0])
                     keys.append(key)
+                    if "view" == data["type"] and category not in ["trigger"]:
+                        continue # for category
                     if category == data["type"]: continue # for category
                     it = wx.MenuItem(submenu, -1, "New " + category.replace(key, "&" + key, 1))
                     submenu.Append(it)
-                    menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), it)
+                    menu.Bind(wx.EVT_MENU, functools.partial(create_object, category, None), it)
 
             if item_rename:
                 menu.Append(item_rename)
