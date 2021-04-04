@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.04.2021
+@modified    04.04.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1157,7 +1157,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         if ready or rename: self.update_notebook_header()
 
-        if rename or modified is not None:
+        if (rename or modified is not None) and event.source.db.filename in self.db_datas:
             suffix = "*" if modified else ""
             title1 = self.db_datas[event.source.db.filename].get("title") \
                      or make_unique_page_title(event.source.db.name, self.notebook, front=True)
