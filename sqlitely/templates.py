@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.04.2021
+@modified    28.04.2021
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1407,7 +1407,7 @@ def wrapclass(v):
     a:hover, a.visited:hover { text-decoration: underline; }
     div.sql { font-family: monospace; text-align: left; white-space: pre-wrap; word-break: break-all; overflow-wrap: anywhere; }
     a.sort:hover, a.toggle:hover { cursor: pointer; text-decoration: none; }
-    a.toggle { display: block; white-space: nowrap; }
+    a.toggle { display: inline-block; white-space: nowrap; }
     a.toggle::after { content: " \\\\25b6"; }
     a.toggle.open::after { content: " \\\\25bc"; font-size: 0.7em; }
     h2 > a.toggle::after { position: relative; top: 2px; }
