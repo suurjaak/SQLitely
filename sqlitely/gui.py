@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.04.2021
+@modified    28.04.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4140,12 +4140,10 @@ class DatabasePage(wx.Panel):
         try:
             data, diagram = self.statistics.get("data") or {}, None
             if "HTML" == extname.upper():
-                bmp = self.diagram.MakeBitmap(zoom=1, defaultcolours=True,
-                                              selections=False, statistics=True,
-                                              show_lines=True, show_labels=True)
-                svg = self.diagram.MakeTemplate("SVG", title="", embed=True,
-                                                selections=False, statistics=True,
-                                                show_lines=True, show_labels=True)
+                args = dict(selections=False, statistics=True,
+                            show_lines=True, show_labels=True)
+                bmp = self.diagram.MakeBitmap(zoom=1, defaultcolours=True, **args)
+                svg = self.diagram.MakeTemplate("SVG", title="", embed=True, **args)
                 diagram = {"bmp": bmp, "svg": svg}
             importexport.export_stats(filename, self.db, data, diagram)
             util.start_file(filename)
