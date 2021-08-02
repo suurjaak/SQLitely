@@ -2071,7 +2071,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if tables:
                 s = ""
                 for t in tables:
-                    s += (", " if s else "") + fmt_entity(t["name"], limit=50)
+                    s += (", " if s else "") + fmt_entity(t["name"], force=False, limit=50)
                     if len(s) > 400:
                         s += ", .."
                         break # for t
