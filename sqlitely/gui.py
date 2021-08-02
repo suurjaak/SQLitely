@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.04.2021
+@modified    02.08.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2554,6 +2554,11 @@ class DatabasePage(wx.Panel):
 
         self.dialog_savefile = wx.FileDialog(
             self, defaultDir=os.getcwdu(), wildcard=importexport.EXPORT_WILDCARD,
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
+        # Need separate dialog w/o overwrite prompt, cannot swap style in Linux
+        self.dialog_savefile_ow = wx.FileDialog(
+            self, defaultDir=os.getcwdu(), wildcard=importexport.EXPORT_WILDCARD,
+            message="Choose directory where to save files",
             style=wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
 
         self.Layout()
@@ -5979,23 +5984,22 @@ class DatabasePage(wx.Panel):
             return wx.MessageBox("Export is already underway for %s." % util.join(", ", exporting),
                                  conf.Title, wx.OK | wx.ICON_INFORMATION)
 
-        if conf.LastExportType in importexport.EXPORT_EXTS:
-            self.dialog_savefile.SetFilterIndex(importexport.EXPORT_EXTS.index(conf.LastExportType))
         if len(items) == 1:
+            dialog = self.dialog_savefile
             filename = "%s %s" % (category.capitalize(), items[0])
-            self.dialog_savefile.Filename = util.safe_filename(filename)
-            self.dialog_savefile.Message = "Save %s as" % category
-            self.dialog_savefile.WindowStyle |= wx.FD_OVERWRITE_PROMPT
+            dialog.Filename = util.safe_filename(filename)
+            dialog.Message = "Save %s as" % category
         else:
-            self.dialog_savefile.Filename = "Filename will be ignored"
-            self.dialog_savefile.Message = "Choose directory where to save files"
-            self.dialog_savefile.WindowStyle ^= wx.FD_OVERWRITE_PROMPT
-        if wx.ID_OK != self.dialog_savefile.ShowModal(): return
+            dialog = self.dialog_savefile_ow
+            dialog.Filename = "Filename will be ignored"
+        if conf.LastExportType in importexport.EXPORT_EXTS:
+            dialog.SetFilterIndex(importexport.EXPORT_EXTS.index(conf.LastExportType))
+        if wx.ID_OK != dialog.ShowModal(): return
 
         wx.YieldIfNeeded() # Allow dialog to disappear
-        extname = importexport.EXPORT_EXTS[self.dialog_savefile.FilterIndex]
+        extname = importexport.EXPORT_EXTS[dialog.FilterIndex]
         conf.LastExportType = extname
-        path = controls.get_dialog_path(self.dialog_savefile)
+        path = controls.get_dialog_path(dialog)
         filenames = [path]
         if len(items) > 1:
             path, _ = os.path.split(path)
