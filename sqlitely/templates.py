@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.04.2021
+@modified    03.08.2021
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -19,7 +19,7 @@ from . lib import util
 from . import conf
 
 # Modules imported inside templates:
-#import base64, collections, itertools, json, logging, math, os, pyparsing, sys, wx
+#import base64, collections, itertools, json, logging, math, os, pyparsing, sys, wx, yaml
 #from sqlitely import conf, grammar, images, searchparser, templates
 
 """Regex for matching unprintable characters (\x00 etc)."""
@@ -367,7 +367,7 @@ rows = iter(rows)
 i, row, nextrow = 1, next(rows, None), next(rows, None)
 indent = "  " if nextrow else ""
 while row:
-    namespace["row_count"] += 1
+    if isdef("namespace"): namespace["row_count"] += 1
     data = collections.OrderedDict(((c["name"], row[c["name"]]) for c in columns))
     text = json.dumps(data, indent=2)
     echo("  " + text.replace("\\n", "\\n  ") + (",\\n" if nextrow else "\\n"))
@@ -604,6 +604,92 @@ value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
 
 
 """
+YAML export template.
+
+@param   title        export title
+@param   db_filename  database path or temporary name
+@param   row_count    number of rows
+@param   sql          SQL query giving export data, if any
+@param   create_sql   CREATE SQL statement for export object, if any
+@param   data_buffer  iterable yielding rows data in text chunks
+"""
+DATA_YAML = """<%
+from sqlitely.lib import util
+from sqlitely import conf, templates
+
+%># {{ title }}.
+# Source: {{ db_filename }}.
+# {{ templates.export_comment() }}
+# {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
+%if sql:
+#
+# SQL: {{ sql.replace("\\n", "\\n#      ") }};
+#
+%endif
+%if isdef("create_sql") and create_sql:
+#
+# {{ create_sql.rstrip(";").replace("\\n", "\\n#  ") }};
+#
+%endif
+
+<%
+for chunk in data_buffer:
+    echo(chunk)
+%>
+"""
+
+
+
+"""
+YAML data export template for the rows part.
+
+@param   rows          iterable
+@param   columns       [{name}, ]
+@param   name          table name
+@param   ?namespace    {"row_count"}
+@param   ?progress     callback(count) returning whether to cancel, if any
+"""
+DATA_ROWS_YAML = """<%
+import yaml
+
+progress = isdef("progress") and progress
+for i, row in enumerate(rows, 1):
+    if isdef("namespace"): namespace["row_count"] += 1
+    for j, c in enumerate(columns):
+        data = {c["name"]: row[c["name"]]}
+        value = yaml.safe_dump([data], default_flow_style=False, width=1000)
+        if j: value = "  " + value[2:]
+        echo(value)
+    if not i % 100 and progress and not progress(count=i):
+        break # while row
+if progress: progress(name=name, count=i)
+%>"""
+
+
+
+"""
+YAML data export template for copying row as page.
+
+@param   rows          iterable
+@param   columns       [{name}, ]
+@param   name          table name
+"""
+DATA_ROWS_PAGE_YAML = """<%
+import yaml
+
+flat = isinstance(rows, list) and len(rows) == 1
+for i, row in enumerate(rows, 1):
+    for j, c in enumerate(columns):
+        data = {c["name"]: row[c["name"]]}
+        value = yaml.safe_dump([data], default_flow_style=False, width=1000)
+        if flat: value = "\\n".join(x[2:] for x in value.split("\\n"))
+        elif j: value = "  " + value[2:]
+        echo(value)
+%>"""
+
+
+
+"""
 HTML template for search results header.
 
 @param   text      search query
@@ -742,6 +828,8 @@ under the MIT License.
       <a href="https://www.python.org/"><font color="{{ conf.LinkColour }}">python.org</font></a></li>
   <li>pytz,
       <a href="https://pythonhosted.org/pytz/"><font color="{{ conf.LinkColour }}">pythonhosted.org/pytz</font></a></li>
+  <li>PyYAML,
+      <a href="https://pypi.org/project/PyYAML/"><font color="{{ conf.LinkColour }}">pypi.org/project/PyYAML</font></a></li>
   <li>SQLite,
       <a href="https://www.sqlite.org/"><font color="{{ conf.LinkColour }}">sqlite.org</font></a></li>
   <li>sqlite-parser,

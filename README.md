@@ -91,6 +91,7 @@ and the following 3rd-party Python packages:
 - Pillow (https://pypi.org/project/Pillow)
 - pyparsing (https://pypi.org/project/pyparsing)
 - pytz (https://pythonhosted.org/pytz/)
+- PyYAML (https://pypi.org/project/PyYAML/)
 - wxPython 4.0+ (https://wxpython.org)
 - xlrd (https://pypi.org/project/xlrd)
 - XlsxWriter (https://pypi.org/project/XlsxWriter)
@@ -98,7 +99,7 @@ and the following 3rd-party Python packages:
 All dependencies can be installed by running `pip install -r requirements.txt`
 in SQLitely source distribution folder.
 
-If openpyxl or pyparsing or xlrd or XlsxWriter are not available,
+If openpyxl or pyparsing or PyYAML or xlrd or XlsxWriter are not available,
 the program will function regardless, only with lesser service - 
 lacking Excel import-export or full search syntax.
 

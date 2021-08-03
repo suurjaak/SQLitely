@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.01.2021
+@modified    03.08.2021
 ------------------------------------------------------------------------------
 """
 import collections
@@ -28,6 +28,8 @@ try: from PIL import ImageFont
 except ImportError: ImageFont = None
 try: import openpyxl
 except ImportError: openpyxl = None
+try: import yaml
+except ImportError: yaml = None
 try: import xlrd
 except ImportError: xlrd = None
 try: import xlsxwriter
@@ -62,16 +64,24 @@ IMPORT_WILDCARD = "All supported formats (%s)|%s|%s%s"\
 IMPORT_EXTS = EXCEL_EXTS + ["csv", "json"]
 
 """FileDialog wildcard strings, matching extensions lists and default names."""
-XLSX_WILDCARD = "Excel workbook (*.xlsx)|*.xlsx|" if xlsxwriter else ""
+XLSX_WILDCARD = "Excel workbook (*.xlsx)|*.xlsx" if xlsxwriter else ""
+
+"""FileDialog wildcard strings, matching extensions lists and default names."""
+YAML_WILDCARD = "YAML data (*.yaml)|*.yaml" if yaml else ""
 
 """Wildcards for export file dialog."""
-EXPORT_WILDCARD = ("CSV spreadsheet (*.csv)|*.csv|%s"
-                   "HTML document (*.html)|*.html|"
-                   "JSON data (*.json)|*.json|"
-                   "SQL INSERT statements (*.sql)|*.sql|"
-                   "Text document (*.txt)|*.txt" % XLSX_WILDCARD)
-EXPORT_EXTS = ["csv", "xlsx", "html", "json", "sql", "txt"] if xlsxwriter \
-               else ["csv", "html", "json", "sql", "txt"]
+EXPORT_WILDCARD = "|".join(filter(bool, [
+    "CSV spreadsheet (*.csv)|*.csv",
+    XLSX_WILDCARD,
+    "HTML document (*.html)|*.html",
+    "JSON data (*.json)|*.json",
+    "SQL INSERT statements (*.sql)|*.sql",
+    "Text document (*.txt)|*.txt",
+    YAML_WILDCARD,
+]))
+EXPORT_EXTS = list(filter(bool, [
+    "csv", xlsxwriter and "xlsx", "html", "json", "sql", "txt", yaml and "yaml"
+]))
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +112,7 @@ def export_data(make_iterable, filename, title, db, columns,
     is_sql  = filename.lower().endswith(".sql")
     is_txt  = filename.lower().endswith(".txt")
     is_xlsx = filename.lower().endswith(".xlsx")
+    is_yaml = filename.lower().endswith(".yaml")
     columns = [{"name": c} if isinstance(c, basestring) else c for c in columns]
     colnames = [c["name"] for c in columns]
     tmpfile, tmpname = None, None # Temporary file for exported rows
@@ -181,7 +192,8 @@ def export_data(make_iterable, filename, title, db, columns,
                 tmpfile = open(tmpname, "wb+")
                 template = step.Template(templates.DATA_ROWS_HTML if is_html else
                            templates.DATA_ROWS_SQL if is_sql else templates.DATA_ROWS_JSON
-                           if is_json else templates.DATA_ROWS_TXT,
+                           if is_json else templates.DATA_ROWS_YAML if is_yaml 
+                           else templates.DATA_ROWS_TXT,
                            strip=False, escape=is_html)
                 template.stream(tmpfile, namespace)
 
@@ -202,7 +214,8 @@ def export_data(make_iterable, filename, title, db, columns,
                 namespace["data_buffer"] = iter(lambda: tmpfile.read(65536), "")
                 template = step.Template(templates.DATA_HTML if is_html else
                            templates.DATA_SQL if is_sql else templates.DATA_JSON
-                           if is_json else templates.DATA_TXT,
+                           if is_json else templates.DATA_YAML if is_yaml
+                           else templates.DATA_TXT,
                            strip=False, escape=is_html)
                 template.stream(f, namespace)
                 count = namespace["row_count"]

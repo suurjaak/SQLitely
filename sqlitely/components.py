@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.04.2021
+@modified    03.08.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -982,6 +982,14 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             text = json.dumps(data, indent=2)
             mycopy(text, "Copied row%s JSON to clipboard%s", rowsuff, cutoff)
 
+        def on_copy_yaml(event=None):
+            """Copies rows to clipboard as YAML."""
+            data = [{c["name"]: x[c["name"]] for c in self.columns}
+                    for x in rowdatas]
+            tpl = step.Template(templates.DATA_ROWS_PAGE_YAML, strip=False)
+            text = tpl.expand(name=self.name, rows=data, columns=self.columns)
+            mycopy(text, "Copied row%s YAML to clipboard%s", rowsuff, cutoff)
+
         def on_reset(event=None):
             """Resets row changes."""
             for idx, rowdata in zip(idxs, rowdatas0):
@@ -1076,6 +1084,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             item_copy_update = wx.MenuItem(menu_copy, -1, "Copy row%s &UPDATE SQL" % rowsuff)
             item_copy_txt    = wx.MenuItem(menu_copy, -1, "Copy row%s as &text" % rowsuff)
             item_copy_json   = wx.MenuItem(menu_copy, -1, "Copy row%s as &JSON" % rowsuff)
+            item_copy_yaml   = wx.MenuItem(menu_copy, -1, "Copy row%s as &YAML" % rowsuff) \
+                               if importexport.yaml else None
+
             item_open_row    = wx.MenuItem(menu,      -1, "&Open row form\tF4")
             item_open_col    = wx.MenuItem(menu,      -1, "Op&en column form\t%s-F2" % controls.KEYS.NAME_CTRL)
 
@@ -1104,6 +1115,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             menu_copy.Append(item_copy_update)
             menu_copy.Append(item_copy_txt)
             menu_copy.Append(item_copy_json)
+            menu_copy.Append(item_copy_yaml) if item_copy_yaml else None
             menu.Append(wx.ID_ANY, "Co&py ..", menu_copy)
             menu.Append(item_paste)
             item_paste.Enabled = wx.TheClipboard.IsSupported(wx.DataFormat(wx.DF_TEXT))
@@ -1196,6 +1208,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             menu.Bind(wx.EVT_MENU, on_copy_update, item_copy_update)
             menu.Bind(wx.EVT_MENU, on_copy_txt,    item_copy_txt)
             menu.Bind(wx.EVT_MENU, on_copy_json,   item_copy_json)
+            menu.Bind(wx.EVT_MENU, on_copy_yaml,   item_copy_yaml) if item_copy_yaml else None
             menu.Bind(wx.EVT_MENU, lambda e: self.Paste(), item_paste)
             menu.Bind(wx.EVT_MENU, functools.partial(on_event, form=True, row=rows[0]), item_open_row)
             kws = dict(form=True, row=rows[0], col=cols[0] if cols else 0)
@@ -8094,24 +8107,33 @@ class DataDialog(wx.Dialog):
             text = json.dumps(mydata, indent=2)
             mycopy(text, "Copied row JSON to clipboard")
 
+        def on_copy_yaml(event=None):
+            tpl = step.Template(templates.DATA_ROWS_PAGE_YAML, strip=False)
+            text = tpl.expand(name=self._gridbase.name, rows=[self._data],
+                              columns=self._columns)
+            mycopy(text, "Copied row YAML to clipboard")
 
         item_data   = wx.MenuItem(menu, -1, "Copy row &data")
         item_insert = wx.MenuItem(menu, -1, "Copy &INSERT SQL")
         item_update = wx.MenuItem(menu, -1, "Copy &UPDATE SQL")
         item_text   = wx.MenuItem(menu, -1, "Copy row as &text")
         item_json   = wx.MenuItem(menu, -1, "Copy row as &JSON")
+        item_yaml   = wx.MenuItem(menu, -1, "Copy row as &YAML") if importexport.yaml \
+                      else None
 
         menu.Append(item_data)
         menu.Append(item_insert)
         menu.Append(item_update)
         menu.Append(item_text)
         menu.Append(item_json)
+        menu.Append(item_yaml) if item_yaml else None
 
         menu.Bind(wx.EVT_MENU, on_copy_data,   item_data)
         menu.Bind(wx.EVT_MENU, on_copy_insert, item_insert)
         menu.Bind(wx.EVT_MENU, on_copy_update, item_update)
         menu.Bind(wx.EVT_MENU, on_copy_txt,    item_text)
         menu.Bind(wx.EVT_MENU, on_copy_json,   item_json)
+        menu.Bind(wx.EVT_MENU, on_copy_yaml,   item_yaml) if item_yaml else None
 
         # Position x 52px: one icon 27px + spacer 15px + separator 2+2*3px + margin 2*1px
         event.EventObject.PopupMenu(menu, (52, event.EventObject.Size[1]))
