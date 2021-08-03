@@ -74,6 +74,9 @@ Stand-alone GUI components for wx:
 - TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
   A tree control with a more convenient API.
 
+- YAMLTextCtrl(wx.stc.StyledTextCtrl):
+  A StyledTextCtrl configured for YAML syntax highlighting and folding.
+
 - YesNoMessageBox(message, caption, icon=wx.ICON_NONE, default=wx.YES):
   Opens a Yes/No messagebox that is closable by pressing Escape,
   returns dialog result.
@@ -84,7 +87,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    02.08.2021
+@modified    03.08.2021
 ------------------------------------------------------------------------------
 """
 import collections
@@ -5338,6 +5341,256 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
             if ctrl: wx.CallAfter(ctrl.StopEditing)
         ctrl.Bind(wx.EVT_KILL_FOCUS, on_kill_focus)
         return ctrl       
+
+
+
+class YAMLTextCtrl(wx.stc.StyledTextCtrl):
+    """
+    A StyledTextCtrl configured for YAML syntax highlighting and folding.
+    """
+
+    """YAML reserved keywords."""
+    KEYWORDS = map(unicode, sorted(["true", "false", "null"]))
+    AUTOCOMP_STOPS = " .,;:([)]}'\"\\<>%^&+-=*/|`"
+    """String length from which autocomplete starts."""
+    AUTOCOMP_LEN = 2
+    FONT_FACE = "Courier New" if os.name == "nt" else "Courier"
+
+
+    def __init__(self, *args, **kwargs):
+        wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
+
+        self.SetLexer(wx.stc.STC_LEX_YAML)
+        self.SetTabWidth(2)
+        # Keywords must be lowercase, required by StyledTextCtrl
+        self.SetKeyWords(0, u" ".join(self.KEYWORDS).lower())
+        self.AutoCompStops(self.AUTOCOMP_STOPS)
+        self.SetWrapMode(wx.stc.STC_WRAP_WORD)
+        self.SetCaretLineBackAlpha(20)
+        self.SetCaretLineVisible(False)
+        self.AutoCompSetIgnoreCase(False)
+
+        self.SetTabWidth(2)
+        self.SetUseTabs(False)
+
+        self.SetMarginCount(2)
+        self.SetMarginType(0, wx.stc.STC_MARGIN_NUMBER)
+        self.SetMarginWidth(0, 25)
+        self.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
+
+        self.SetProperty("fold", "1")
+        self.SetMarginType(1, wx.stc.STC_MARGIN_SYMBOL)
+        self.SetMarginMask(1, wx.stc.STC_MASK_FOLDERS)
+        self.SetMarginSensitive(1, True)
+        self.SetMarginWidth(1, 12)
+
+        self.MarkerDefine(wx.stc.STC_MARKNUM_FOLDEROPEN,    wx.stc.STC_MARK_BOXMINUS,          "white", "#808080")
+        self.MarkerDefine(wx.stc.STC_MARKNUM_FOLDER,        wx.stc.STC_MARK_BOXPLUS,           "white", "#808080")
+        self.MarkerDefine(wx.stc.STC_MARKNUM_FOLDERSUB,     wx.stc.STC_MARK_VLINE,             "white", "#808080")
+        self.MarkerDefine(wx.stc.STC_MARKNUM_FOLDERTAIL,    wx.stc.STC_MARK_LCORNER,           "white", "#808080")
+        self.MarkerDefine(wx.stc.STC_MARKNUM_FOLDEREND,     wx.stc.STC_MARK_BOXPLUSCONNECTED,  "white", "#808080")
+        self.MarkerDefine(wx.stc.STC_MARKNUM_FOLDEROPENMID, wx.stc.STC_MARK_BOXMINUSCONNECTED, "white", "#808080")
+        self.MarkerDefine(wx.stc.STC_MARKNUM_FOLDERMIDTAIL, wx.stc.STC_MARK_TCORNER,           "white", "#808080")
+
+        self.SetStyleSpecs()
+
+        self.Bind(wx.EVT_KEY_DOWN,            self.OnKeyDown)
+        self.Bind(wx.EVT_SET_FOCUS,           self.OnFocus)
+        self.Bind(wx.EVT_KILL_FOCUS,          self.OnKillFocus)
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED,  self.OnSysColourChange)
+        self.Bind(wx.stc.EVT_STC_MARGINCLICK, self.OnMarginClick)
+        self.Bind(wx.stc.EVT_STC_ZOOM,        self.OnZoom)
+
+
+    def SetStyleSpecs(self):
+        """Sets STC style colours."""
+        fgcolour, bgcolour, highcolour = (
+            wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
+            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
+                      if self.Enabled else wx.SYS_COLOUR_BTNFACE,
+                      wx.SYS_COLOUR_HOTLIGHT)
+        )
+
+        self.SetCaretForeground(fgcolour)
+        self.SetCaretLineBackground("#00FFFF")
+        self.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT,
+                          "face:%s,back:%s,fore:%s" % (self.FONT_FACE, bgcolour, fgcolour))
+        self.StyleSetSpec(wx.stc.STC_STYLE_BRACELIGHT, "fore:%s" % highcolour)
+        self.StyleSetSpec(wx.stc.STC_STYLE_BRACEBAD, "fore:#FF0000")
+        self.StyleClearAll() # Apply the new default style to all styles
+
+        # @todo on veel STC_YAML_REFERENCE STC_YAML_KEYWORD STC_YAML_IDENTIFIER STC_YAML_DOCUMENT
+
+        self.StyleSetSpec(wx.stc.STC_YAML_DEFAULT,   "face:%s" % self.FONT_FACE)
+        self.StyleSetSpec(wx.stc.STC_YAML_TEXT,    "fore:#FF007F") # "
+        # 01234567890.+-e
+        self.StyleSetSpec(wx.stc.STC_YAML_NUMBER, "fore:#FF00FF")
+        # : [] {}
+        self.StyleSetSpec(wx.stc.STC_YAML_OPERATOR, "fore:%s" % highcolour)
+        # #...
+        self.StyleSetSpec(wx.stc.STC_YAML_COMMENT, "fore:#008000")
+
+
+    def Enable(self, enable=True):
+        """Enables or disables the control, updating display."""
+        if self.Enabled == enable: return False
+        result = super(self.__class__, self).Enable(enable)
+        self.SetStyleSpecs()
+        return result
+
+    def OnFocus(self, event):
+        """Handler for control getting focus, shows caret."""
+        event.Skip()
+        self.SetCaretStyle(wx.stc.STC_CARETSTYLE_LINE)
+
+
+    def OnKillFocus(self, event):
+        """Handler for control losing focus, hides autocomplete and caret."""
+        event.Skip()
+        self.AutoCompCancel()
+        self.SetCaretStyle(wx.stc.STC_CARETSTYLE_INVISIBLE)
+
+
+    def OnSysColourChange(self, event):
+        """Handler for system colour change, updates STC styling."""
+        event.Skip()
+        self.SetStyleSpecs()
+
+
+    def OnZoom(self, event):
+        """Disables zoom."""
+        if self.Zoom: self.Zoom = 0
+
+
+    def ToggleFolding(self):
+        """Toggles all current folding, off if all lines folded else on."""
+        lineCount = self.GetLineCount()
+        expanding = True
+
+        # Find out if we are folding or unfolding
+        for lineNum in range(lineCount):
+            if self.GetFoldLevel(lineNum) & wx.stc.STC_FOLDLEVELHEADERFLAG:
+                expanding = not self.GetFoldExpanded(lineNum)
+                break
+
+        lineNum = 0
+        while lineNum < lineCount:
+            level = self.GetFoldLevel(lineNum)
+            if level & wx.stc.STC_FOLDLEVELHEADERFLAG \
+            and (level & wx.stc.STC_FOLDLEVELNUMBERMASK) == wx.stc.STC_FOLDLEVELBASE:
+                if expanding:
+                    self.SetFoldExpanded(lineNum, True)
+                    lineNum = self.ToggleLineFolding(lineNum, True)
+                    lineNum = lineNum - 1
+                else:
+                    lastChild = self.GetLastChild(lineNum, -1)
+                    self.SetFoldExpanded(lineNum, False)
+                    if lastChild > lineNum:
+                        self.HideLines(lineNum+1, lastChild)
+            lineNum = lineNum + 1
+
+
+    def ToggleLineFolding(self, line, doExpand, force=False, visLevels=0, level=-1):
+        """Expands or collapses folding on specified line."""
+        lastChild = self.GetLastChild(line, level)
+        line = line + 1
+
+        while line <= lastChild:
+            if force:
+                (self.ShowLines if visLevels > 0 else self.HideLines)(line, line)
+            elif doExpand: self.ShowLines(line, line)
+
+            if level == -1:
+                level = self.GetFoldLevel(line)
+
+            if level & self.STC_FOLDLEVELHEADERFLAG:
+                if force:
+                    self.SetFoldExpanded(line, visLevels > 1)
+
+                    line = self.ToggleLineFolding(line, doExpand, force, visLevels-1)
+
+                else:
+                    on = doExpand and self.GetFoldExpanded(line)
+                    line = self.ToggleLineFolding(line, on, force, visLevels-1)
+            else:
+                line += 1
+
+        return line
+
+
+    def OnMarginClick(self, event):
+        """Handler for clicking margin, folds 2nd margin icons."""
+        if event.GetMargin() != 1: return
+
+        if event.GetShift() and event.GetControl():
+            self.ToggleFolding()
+            return
+
+        lineClicked = self.LineFromPosition(event.GetPosition())
+        if not self.GetFoldLevel(lineClicked) & wx.stc.STC_FOLDLEVELHEADERFLAG:
+            return
+
+        if event.GetShift():
+            self.SetFoldExpanded(lineClicked, True)
+            self.ToggleLineFolding(lineClicked, True, True, 1)
+        elif event.GetControl():
+            if self.GetFoldExpanded(lineClicked):
+                self.SetFoldExpanded(lineClicked, False)
+                self.ToggleLineFolding(lineClicked, False, True, 0)
+            else:
+                self.SetFoldExpanded(lineClicked, True)
+                self.ToggleLineFolding(lineClicked, True, True, 100)
+        else:
+            self.ToggleFold(lineClicked)
+
+
+    def OnKeyDown(self, event):
+        """
+        Shows autocomplete if user is entering a known word, or pressed
+        Ctrl-Space.
+        """
+        skip = True
+        if self.CallTipActive():
+            self.CallTipCancel()
+        if not self.AutoCompActive() and not event.AltDown():
+            do_autocomp = False
+            words = self.KEYWORDS
+            autocomp_len = 0
+            if event.UnicodeKey in KEYS.SPACE and event.CmdDown():
+                # Start autocomp when user presses Ctrl+Space
+                do_autocomp = True
+            elif not event.CmdDown():
+                # Check if we have enough valid text to start autocomplete
+                char = None
+                try: # Not all keycodes can be chars
+                    char = chr(event.UnicodeKey).decode("latin1")
+                except Exception:
+                    pass
+                if char not in KEYS.ENTER and char is not None:
+                    # Get a slice of the text on the current text up to caret.
+                    line_text = self.GetTextRange(
+                        self.PositionFromLine(self.GetCurrentLine()),
+                        self.GetCurrentPos()
+                    )
+                    text = u""
+                    for last_word in re.findall(r"(\w+)$", line_text, re.I):
+                        text += last_word
+                    text = text.upper()
+                    if char in string.letters:
+                        text += char.upper()
+                        if len(text) >= self.AUTOCOMP_LEN and any(x for x in
+                        words if x.upper().startswith(text)):
+                            do_autocomp = True
+                            current_pos = self.GetCurrentPos() - 1
+                            while chr(self.GetCharAt(current_pos)).isalnum():
+                                current_pos -= 1
+                            autocomp_len = self.GetCurrentPos() - current_pos - 1
+            if do_autocomp:
+                if skip: event.Skip()
+                self.AutoCompShow(autocomp_len, u" ".join(words))
+        elif self.AutoCompActive() and event.KeyCode in KEYS.DELETE:
+            self.AutoCompCancel()
+        if skip: event.Skip()
 
 
 

@@ -12,7 +12,7 @@ CHANGELOG
 - added easy rename options to data & schema tree;
 - added easy drop column options to data & schema tree;
 - added spreadsheet file drag-drop support to database page;
-- added YAML export support;
+- added YAML support in export and value editor;
 - added Dockerfile;
 - improved auto-altering related items;
 - many fixes and UI tweaks.

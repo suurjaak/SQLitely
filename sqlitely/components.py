@@ -8440,6 +8440,7 @@ class ColumnDialog(wx.Dialog):
         nb.AddPage(self._CreatePageSimple(nb), "Simple")
         nb.AddPage(self._CreatePageHex(nb),    "Hex")
         nb.AddPage(self._CreatePageJSON(nb),   "JSON")
+        nb.AddPage(self._CreatePageYAML(nb),   "YAML")
         nb.AddPage(self._CreatePageBase64(nb), "Base64")
         nb.AddPage(self._CreatePageDate(nb),   "Date / time")
         nb.AddPage(self._CreatePageImage(nb),  "Image")
@@ -9014,8 +9015,12 @@ class ColumnDialog(wx.Dialog):
             status.Label, colour = "", wx.SYS_COLOUR_GRAYTEXT
             if state["validate"] and value:
                 try: json.loads(value)
-                except Exception as e: status.Label, colour = str(e), wx.RED
-                else: status.Label = "Valid"
+                except Exception as e:
+                    status.Label, colour = str(e).replace("\n", " "), wx.RED
+                    status.ToolTip = str(e)
+                else:
+                    status.Label = "Valid"
+                    status.ToolTip = ""
                 ColourManager.Manage(status, "ForegroundColour", colour)
                 page.Layout()
             if propagate: self._Populate(value, skip=NAME)
@@ -9043,6 +9048,76 @@ class ColumnDialog(wx.Dialog):
 
         hint.Label = "Value in JSON highlight, with simple validation check"
         cb.ToolTip = "Show warning if value is not parseable as JSON"
+        cb.Value   = True
+        ColourManager.Manage(hint, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
+
+        page.Sizer   = wx.BoxSizer(wx.VERTICAL)
+        sizer_header = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_footer = wx.BoxSizer(wx.HORIZONTAL)
+
+        sizer_header.Add(tb,   border=5, flag=wx.ALL)
+        sizer_header.AddStretchSpacer()
+        sizer_header.Add(hint, border=5, flag=wx.ALL | wx.ALIGN_BOTTOM)
+
+        sizer_footer.Add(cb,     border=5, flag=wx.ALL)
+        sizer_footer.AddStretchSpacer()
+        sizer_footer.Add(status, border=5, flag=wx.ALL)
+
+        page.Sizer.Add(sizer_header, flag=wx.GROW)
+        page.Sizer.Add(stc, border=5, flag=wx.RIGHT | wx.GROW, proportion=1)
+        page.Sizer.Add(sizer_footer, flag=wx.GROW)
+
+        stc.Bind(wx.stc.EVT_STC_MODIFIED, functools.partial(self._OnChar, name=NAME, handler=validate))
+        self.Bind(wx.EVT_CHECKBOX,        on_toggle_validate, cb)
+
+        self._getters[NAME] = stc.GetText
+        self._setters[NAME] = update
+        state = self._state.setdefault(NAME, {"validate": True, "changing": False})
+        return page
+
+
+    def _CreatePageYAML(self, notebook):
+        NAME = "yaml"
+        page = wx.Panel(notebook)
+
+
+        def validate(value, propagate=True):
+            status.Label, colour = "", wx.SYS_COLOUR_GRAYTEXT
+            if state["validate"] and value:
+                try: importexport.yaml.safe_load(value)
+                except Exception as e:
+                    status.Label, colour = str(e).replace("\n", " "), wx.RED
+                    status.ToolTip = str(e)
+                else:
+                    status.Label = "Valid"
+                    status.ToolTip = ""
+                ColourManager.Manage(status, "ForegroundColour", colour)
+                page.Layout()
+            if propagate: self._Populate(value, skip=NAME)
+
+        def on_toggle_validate(event):
+            state["validate"] = cb.Value
+            validate(stc.Text, propagate=False)
+
+        def on_undo(*a, **kw): stc.Undo()
+        def on_redo(*a, **kw): stc.Redo()
+
+        def update(value, reset=False):
+            state["changing"] = True
+            stc.Text = "" if value is None else util.to_unicode(value)
+            if reset: stc.EmptyUndoBuffer()
+            validate(stc.Text, propagate=False)
+            wx.CallLater(1, state.update, {"changing": False})
+
+
+        tb     = self._MakeToolBar(page, NAME, label="", filelabel="", undo=on_undo, redo=on_redo)
+        hint   = wx.StaticText(page)
+        stc    = controls.YAMLTextCtrl(page, style=wx.BORDER_NONE)
+        cb     = wx.CheckBox(page, label="&Validate")
+        status = wx.StaticText(page)
+
+        hint.Label = "Value in YAML highlight, with simple validation check"
+        cb.ToolTip = "Show warning if value is not parseable as YAML"
         cb.Value   = True
         ColourManager.Manage(hint, "ForegroundColour", wx.SYS_COLOUR_GRAYTEXT)
 
