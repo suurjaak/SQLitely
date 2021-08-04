@@ -87,7 +87,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    03.08.2021
+@modified    04.08.2021
 ------------------------------------------------------------------------------
 """
 import collections
@@ -4337,7 +4337,6 @@ class JSONTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED,  self.OnSysColourChange)
         self.Bind(wx.stc.EVT_STC_MARGINCLICK, self.OnMarginClick)
         self.Bind(wx.stc.EVT_STC_UPDATEUI,    self.OnUpdateUI)
-        self.Bind(wx.stc.EVT_STC_ZOOM,        self.OnZoom)
 
 
     def SetStyleSpecs(self):
@@ -4393,11 +4392,6 @@ class JSONTextCtrl(wx.stc.StyledTextCtrl):
         """Handler for system colour change, updates STC styling."""
         event.Skip()
         self.SetStyleSpecs()
-
-
-    def OnZoom(self, event):
-        """Disables zoom."""
-        if self.Zoom: self.Zoom = 0
 
 
     def OnUpdateUI(self, evt):
@@ -5399,7 +5393,6 @@ class YAMLTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.EVT_KILL_FOCUS,          self.OnKillFocus)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED,  self.OnSysColourChange)
         self.Bind(wx.stc.EVT_STC_MARGINCLICK, self.OnMarginClick)
-        self.Bind(wx.stc.EVT_STC_ZOOM,        self.OnZoom)
 
 
     def SetStyleSpecs(self):
@@ -5455,11 +5448,6 @@ class YAMLTextCtrl(wx.stc.StyledTextCtrl):
         """Handler for system colour change, updates STC styling."""
         event.Skip()
         self.SetStyleSpecs()
-
-
-    def OnZoom(self, event):
-        """Disables zoom."""
-        if self.Zoom: self.Zoom = 0
 
 
     def ToggleFolding(self):

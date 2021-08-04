@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.08.2021
+@modified    04.08.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -9238,7 +9238,6 @@ class ColumnDialog(wx.Dialog):
         page.Bind(wx.EVT_CHECKBOX,           on_toggle_validate, cb)
         stc.Bind(wx.EVT_CHAR_HOOK,           functools.partial(self._OnChar, name=NAME, handler=validate, mask=MASK))
         stc.Bind(wx.stc.EVT_STC_MODIFIED,    functools.partial(self._OnChar, name=NAME, handler=validate))
-        stc.Bind(wx.stc.EVT_STC_ZOOM,        lambda e: stc.Zoom and stc.SetZoom(0)) # Disable zoom
         page.Bind(wx.EVT_SYS_COLOUR_CHANGED, lambda e: set_styles())
 
         self._getters[NAME] = stc.GetText
