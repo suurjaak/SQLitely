@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.08.2021
+@modified    04.08.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -7124,7 +7124,7 @@ class DatabasePage(wx.Panel):
             names = data["items"] if "category" == data["type"] else data["name"]
             category = data["category"] if "category" == data["type"] else data["type"]
             menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, category, names),
-                     item_file)
+                      item_file)
             if item_file_single:
                 menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_singlefile, category),
                           item_file_single)
@@ -7151,8 +7151,8 @@ class DatabasePage(wx.Panel):
                 menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.handle_command, "drop", data["type"], [data["name"]]), item_drop)
 
         if item_drop_all:
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.handle_command, ("drop", data["category"], data["items"]),
-                      item_drop_all))
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.handle_command, "drop", data["category"], data["items"]),
+                      item_drop_all)
         if item_create:
             menu.Bind(wx.EVT_MENU, functools.partial(create_object, data["category"]),
                       item_create)
