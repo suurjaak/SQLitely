@@ -5448,7 +5448,7 @@ class DatabasePage(wx.Panel):
         dialog = wx.FileDialog(
             self, message="Save %s as" % util.plural(category),
             defaultFile=title,
-            wildcard="%sAll files|*.*" % importexport.XLSX_WILDCARD,
+            wildcard="|".join(filter(bool, (importexport.XLSX_WILDCARD, "All files|*.*"))),
             style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE |
                   wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
