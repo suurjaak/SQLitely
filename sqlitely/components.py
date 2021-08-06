@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.08.2021
+@modified    05.08.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -6732,7 +6732,8 @@ class ImportDialog(wx.Dialog):
                        for i, x in enumerate(self._sheet["columns"])]
         for i, c in enumerate(self._cols2): c["skip"] = i >= len(self._cols1)
 
-        has_sheets = not data["name"].lower().endswith(".json")
+        has_sheets = not any(n.endswith(x) for n in [data["name"].lower()]
+                             for x in [".json"] + [".%s" % x for x in importexport.YAML_EXTS])
         info = "Import from %s.\nSize: %s (%s).%s" % (
             data["name"],
             util.format_bytes(data["size"]),
@@ -7108,8 +7109,9 @@ class ImportDialog(wx.Dialog):
         self.Layout()
         self._gauge.Pulse()
 
+        has_names = self._data["format"] in ("json", "yaml")
         sheet, table = self._sheet.get("name"), self._table["name"]
-        columns = OrderedDict((a["index"], b["name"])
+        columns = OrderedDict((a["name" if has_names else "index"], b["name"])
                               for a, b in zip(self._cols1, self._cols2))
         callable = functools.partial(importexport.import_data, self._data["name"],
                                      self._db, [(table, sheet)], {table: columns},
@@ -12090,7 +12092,7 @@ class ImportWizard(wx.adv.Wizard):
                     self.listbox.Clear()
                     self.listbox.Enable()
 
-                    has_sheets = not data["name"].lower().endswith(".json")
+                    has_sheets = data["format"] not in ("json", "yaml")
                     info = "Size: %s (%s).%s" % (
                         util.format_bytes(data["size"]),
                         util.format_bytes(data["size"], max_units=False),
@@ -12109,7 +12111,7 @@ class ImportWizard(wx.adv.Wizard):
                     self.cb_all.Enable(has_sheets and len(data["sheets"]) > 1)
                     self.cb_all.Value = True
                     self.label_count.Label = ("%s selected" % len(data["sheets"])) if has_sheets else ""
-                    self.cb_header.Enabled = self.cb_header.Value = has_sheets
+                    self.cb_header.Enabled = self.cb_header.Value = self.use_header = has_sheets
                     self.listbox.Enable(has_sheets and len(data["sheets"]) > 1)
                     self.panel.Show()
                     self.Layout()
@@ -12139,7 +12141,7 @@ class ImportWizard(wx.adv.Wizard):
             self.listbox.Clear()
             self.listbox.Enable()
 
-            has_sheets = not data["name"].lower().endswith(".json") if data else False
+            has_sheets = data.get("format") not in ("json", "yaml")
             info = "Size: %s (%s).%s" % (
                 util.format_bytes(data["size"]),
                 util.format_bytes(data["size"], max_units=False),
@@ -12212,7 +12214,7 @@ class ImportWizard(wx.adv.Wizard):
                             fileMode=wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
             label_finfo = self.label_finfo = wx.StaticText(self)
             label_info  = self.label_info  = wx.StaticText(self)
-            cb_pk = self.cb_pk = wx.CheckBox(self, label="Add auto-increment &primary key to created tables")
+            cb_pk = self.cb_pk = wx.CheckBox(self, label="Add auto-increment &primary key")
 
             panel = self.panel = wx.Panel(self)
             label_gauge1 = self.label_gauge1 = wx.StaticText(panel)
@@ -12222,9 +12224,8 @@ class ImportWizard(wx.adv.Wizard):
             log = self.log = wx.TextCtrl(panel, style=wx.TE_MULTILINE)
 
             filebutton.textControl.SetEditable(False)
-            cb_pk.Value, cb_pk.Enabled, cb_pk.Shown = True, False, False
-            cb_pk.ToolTip = "A primary key column will be added to the new tables " \
-                            "in addition to imported columns"
+            cb_pk.Value, cb_pk.Enabled = True, False
+            cb_pk.ToolTip = "An additional primary key column will be created, with a unique name"
             log.SetEditable(False)
             log.Disable()
 
@@ -12260,7 +12261,7 @@ class ImportWizard(wx.adv.Wizard):
                 self.label_finfo.Label = ""
                 self.button_file.SetValue("", callBack=False)
             self.button_file.Enable()
-            self.cb_pk.Value, self.cb_pk.Enabled, self.cb_pk.Shown = self.add_pk, False, False
+            self.cb_pk.Value, self.cb_pk.Enabled = self.add_pk, keepfile
             self.gauge.Value = 0
             self.label_gauge1.Label = ""
             self.label_gauge2.Label = ""
@@ -12325,7 +12326,7 @@ class ImportWizard(wx.adv.Wizard):
                 util.plural("table", db.schema["table"]),
             ) if self.file_existed else "<new database>"
             self.label_finfo.Label = finfo
-            self.cb_pk.Shown = self.cb_pk.Enabled = True
+            self.cb_pk.Enabled = True
 
             db.close()
             try: not self.file_existed and os.unlink(db.filename)
@@ -12488,7 +12489,7 @@ class ImportWizard(wx.adv.Wizard):
         if event.Page is self.page1 and event.Direction:
             info, pkinfo = "source file content", "the created table"
             if len(self.page1.filedata["sheets"]) > 1:
-                info, pkinfo = "each source worksheet", "the created tables"
+                info, pkinfo = "each source worksheet", "created tables"
             self.page2.label_info.Label = "A new table will be created for %s." % info
             self.page2.cb_pk.Label = "Add auto-increment &primary key to %s" % pkinfo
             self.page2.UpdateFile()
@@ -12525,7 +12526,7 @@ class ImportWizard(wx.adv.Wizard):
                 continue # for sheet
             item = sheet.copy()
             table = sheet["name"].strip()
-            if self.page1.filedata["format"] in ("csv", "json"):
+            if self.page1.filedata["format"] in ("csv", "json", "yaml"):
                 table = os.path.split(os.path.basename(self.page1.filename))[0].strip()
                 if not table: table = "import_data"
             if not self.db.is_valid_name(table=table):
@@ -12545,10 +12546,13 @@ class ImportWizard(wx.adv.Wizard):
 
         self.index = 1
 
+        has_names = self.page1.filedata["format"] in ("json", "yaml")
         tables  = [(x["tname"], x["name"]) for _, x in sorted(self.items.items())]
-        pks     = {x["tname"]:  x["pk"]    for x in self.items.values()}
-        columns = {x["tname"]:  OrderedDict(enumerate(item["tcolumns"]))
-                   for x in self.items.values()}
+        pks     = {x["tname"]:  x["pk"]    for x in self.items.values() if "pk" in x}
+        columns = {x["tname"]:  OrderedDict(
+            (a if has_names else i, b) for i, (a, b) in
+            enumerate(zip(item["columns"], item["tcolumns"]))
+        ) for x in self.items.values()}
         callable = functools.partial(importexport.import_data, self.page1.filename,
                                      self.db, tables, columns, pks, 
                                      self.page1.use_header, self.OnProgressCallback)

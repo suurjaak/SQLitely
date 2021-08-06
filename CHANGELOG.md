@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-1.2, 2021-08-03
+1.2, 2021-08-05
 ---------------
 - added schema diagram, exportable as bitmap or vector;
 - added option to create database from spreadsheet or JSON;
@@ -12,7 +12,7 @@ CHANGELOG
 - added easy rename options to data & schema tree;
 - added easy drop column options to data & schema tree;
 - added spreadsheet file drag-drop support to database page;
-- added YAML support in export and value editor;
+- added YAML support;
 - added Dockerfile;
 - improved auto-altering related items;
 - many fixes and UI tweaks.

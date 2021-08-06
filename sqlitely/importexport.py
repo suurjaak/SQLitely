@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.08.2021
+@modified    04.08.2021
 ------------------------------------------------------------------------------
 """
 import collections
@@ -53,21 +53,25 @@ except Exception: # Fall back to a simple mono-spaced calculation if no PIL
 
 """Wildcards for import file dialog."""
 EXCEL_EXTS = (["xls"] if xlrd else []) + (["xlsx"] if openpyxl else [])
-IMPORT_WILDCARD = "All supported formats (%s)|%s|%s%s"\
-                  "CSV spreadsheet (*.csv)|*.csv|JSON data (*.json)|*.json" % (
-    ";".join("*." + x for x in EXCEL_EXTS + ["csv"] + ["json"]),
-    ";".join("*." + x for x in EXCEL_EXTS + ["csv"] + ["json"]),
-    "All spreadsheets ({0})|{0}|".format(";".join("*." + x for x in EXCEL_EXTS + ["csv"])),
-    "Excel workbook ({0})|{0}|".format(";".join("*." + x for x in EXCEL_EXTS))
-    if EXCEL_EXTS else ""
-)
-IMPORT_EXTS = EXCEL_EXTS + ["csv", "json"]
+YAML_EXTS = ["yaml", "yml"] if yaml else []
+IMPORT_EXTS = EXCEL_EXTS + ["csv", "json"] + YAML_EXTS
+IMPORT_WILDCARD = "|".join(filter(bool, [
+    "All supported formats ({0})|{0}".format(";".join("*." + x for x in IMPORT_EXTS)),
+    "CSV spreadsheet (*.csv)|*.csv",
+    "JSON data (*.json)|*.json",
+    "All spreadsheets ({0})|{0}".format(";".join("*." + x for x in EXCEL_EXTS + ["csv"]))
+    if EXCEL_EXTS else None,
+    "Excel workbook ({0})|{0}".format(";".join("*." + x for x in EXCEL_EXTS))
+    if EXCEL_EXTS else None,
+    "YAML data ({0})|{0}".format(";".join("*." + x for x in YAML_EXTS))
+    if YAML_EXTS else None,
+]))
 
 """FileDialog wildcard strings, matching extensions lists and default names."""
 XLSX_WILDCARD = "Excel workbook (*.xlsx)|*.xlsx" if xlsxwriter else ""
 
 """FileDialog wildcard strings, matching extensions lists and default names."""
-YAML_WILDCARD = "YAML data (*.yaml)|*.yaml" if yaml else ""
+YAML_WILDCARD = "YAML data ({0})|{0}".format(";".join("*." + x for x in YAML_EXTS)) if yaml else ""
 
 """Wildcards for export file dialog."""
 EXPORT_WILDCARD = "|".join(filter(bool, [
@@ -112,7 +116,7 @@ def export_data(make_iterable, filename, title, db, columns,
     is_sql  = filename.lower().endswith(".sql")
     is_txt  = filename.lower().endswith(".txt")
     is_xlsx = filename.lower().endswith(".xlsx")
-    is_yaml = filename.lower().endswith(".yaml")
+    is_yaml = any(n.endswith("." + x) for n in [filename.lower()] for x in YAML_EXTS)
     columns = [{"name": c} if isinstance(c, basestring) else c for c in columns]
     colnames = [c["name"] for c in columns]
     tmpfile, tmpname = None, None # Temporary file for exported rows
@@ -544,7 +548,7 @@ def get_import_file_data(filename, progress=None):
         "name":        file name and path}.
         "size":        file size in bytes,
         "modified":    file modification timestamp
-        "format":      "xlsx", "xlsx", "csv" or "json",
+        "format":      "xlsx", "xlsx", "csv", "json" or "yaml",
         "sheets":      [
             "name":    sheet name,
             "rows":    count or -1 if file too large,
@@ -561,6 +565,7 @@ def get_import_file_data(filename, progress=None):
     extname = os.path.splitext(filename)[-1][1:].lower()
     is_csv, is_json, is_xls, is_xlsx = \
         (extname == x for x in ("csv", "json", "xls", "xlsx"))
+    is_yaml = extname in YAML_EXTS
     if is_csv:
         with open(filename, "rbU") as f:
             firstline = next(f, "")
@@ -635,6 +640,41 @@ def get_import_file_data(filename, progress=None):
                            else sum(1 for _ in sheet.iter_rows())
                     sheets.append({"rows": rows, "columns": columns, "name": sheet.title})
         finally: wb and wb.close()
+    elif is_yaml:
+        extname = "yaml"
+        rows, columns = 0, {}
+        with open(filename, "rbU") as f:
+            parser = yaml.parse(f, yaml.SafeLoader)
+            stack, collections_stack, mappings_stack, mapping_items = [], [], [], []
+            for event in parser:
+                if not columns: stack.append(event)
+
+                if len(mappings_stack) == 1 and len(collections_stack) < 3 \
+                and isinstance(event, yaml.NodeEvent):  # Collection or scalar in root dictionary
+                    # Root level key or value
+                    mapping_items.append(event)
+
+                if isinstance(event, yaml.CollectionStartEvent):
+                    collections_stack.append(event)
+                elif isinstance(event, yaml.CollectionEndEvent):
+                    collections_stack.pop()
+
+                if isinstance(event, yaml.MappingStartEvent):
+                    mappings_stack.append(event)
+                elif isinstance(event, yaml.MappingEndEvent):
+                    mappings_stack.pop()
+                    if not mappings_stack and len(collections_stack) < 2:  # Root level dictionary
+                        rows += 1
+                        if not columns:
+                            keys = mapping_items[::2]
+                            data = yaml.safe_load(yaml.emit(stack))
+                            if isinstance(data, list): data = data[0]
+                            columns = collections.OrderedDict((k.value, data[k.value]) for k in keys)
+                if columns and size > conf.MaxImportFilesizeForCount:
+                    rows = -1
+                    break # for chunk
+                if progress and not progress(): return
+        sheets.append({"rows": rows, "columns": columns, "name": "<YAML data>"})
     else:
         raise ValueError("File type not recognized.")
 
@@ -645,15 +685,16 @@ def get_import_file_data(filename, progress=None):
 def import_data(filename, db, tables, tablecolumns, pks=None,
                 has_header=True, progress=None):
     """
-    Imports data from spreadsheet or JSON data file to database table.
+    Imports data from spreadsheet or JSON or YAML data file to database table.
     Will create tables if not existing yet.
 
     @param   filename       file path to import from
     @param   db             database.Database instance
     @param   tables         tables to import to and sheets to import from, as [(table, sheet)]
-                            (sheet is None if file is CSV/JSON)
+                            (sheet is None if file is CSV/JSON/YAML)
     @param   tablecolumns   mapping of file columns to table columns,
-                            as {table: OrderedDict(file column index: table columm name)}
+                            as {table: OrderedDict(file column key: table columm name)},
+                            where key is column index if spreadsheet else column name
     @param   pks            names of auto-increment primary key to add
                             for new tables, if any, as {table: pk}
     @param   has_header     whether spreadsheet file has a header row
@@ -779,10 +820,11 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
 
 def iter_file_rows(filename, columns, sheet=None):
     """
-    Yields rows as [value, ] from spreadsheet or JSON file.
+    Yields rows as [value, ] from spreadsheet or JSON or YAML file.
 
     @param   filename    file path to open
-    @param   columns     list of column indexes to return
+    @param   columns     list of column keys to return,
+                         where key is column index if spreadsheet else column name
     @param   sheet       sheet name to read from, if applicable
     """
     size = os.path.getsize(filename)
@@ -790,6 +832,7 @@ def iter_file_rows(filename, columns, sheet=None):
     is_json = filename.lower().endswith(".json")
     is_xls  = filename.lower().endswith(".xls")
     is_xlsx = filename.lower().endswith(".xlsx")
+    is_yaml = any(n.endswith("." + x) for n in [filename.lower()] for x in YAML_EXTS)
     if is_csv:
         with open(filename, "rbU") as f:
             firstline = next(f, "")
@@ -821,10 +864,7 @@ def iter_file_rows(filename, columns, sheet=None):
                         data, index = decoder.raw_decode(buffer)
                         buffer = buffer[index:]
                         if isinstance(data, collections.OrderedDict):
-                            row = data.values()
-                            if len(row) < len(columns):
-                                row += [None] * (len(columns) - len(row))
-                            yield row
+                            yield [data.get(x) for x in columns]
                     except ValueError: # Not enough data to decode, read more
                         break # while started and buffer
                 if f.tell() >= size: break # for chunk
@@ -842,6 +882,28 @@ def iter_file_rows(filename, columns, sheet=None):
                 for row in wb.get_sheet_by_name(sheet).iter_rows(values_only=True):
                     yield [row[i] if i < len(row) else None for i in columns]
         finally: wb and wb.close()
+    elif is_yaml:
+        with open(filename, "rbU") as f:
+            parser = yaml.parse(f, yaml.SafeLoader)
+            START_STACK = [yaml.StreamStartEvent(), yaml.DocumentStartEvent()]
+            item_stack, collections_stack, mappings_stack = [], [], []
+            for event in parser:
+                if mappings_stack or isinstance(event, yaml.MappingStartEvent):
+                    item_stack.append(event)
+
+                if isinstance(event, yaml.CollectionStartEvent):
+                    collections_stack.append(event)
+                elif isinstance(event, yaml.CollectionEndEvent):
+                    collections_stack.pop()
+
+                if isinstance(event, yaml.MappingStartEvent):
+                    mappings_stack.append(event)
+                elif isinstance(event, yaml.MappingEndEvent):
+                    mappings_stack.pop()
+                    if not mappings_stack and len(collections_stack) < 2:  # Root level dictionary
+                        data = yaml.safe_load(yaml.emit(START_STACK + item_stack))
+                        del item_stack[:]
+                        yield [data.get(x) for x in columns]
 
 
 
