@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.08.2021
+@modified    07.08.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -12408,13 +12408,6 @@ class ImportWizard(wx.adv.Wizard):
         return super(ImportWizard, self).RunWizard(self.page1)
 
 
-    def Cleanup(self):
-        """Removes database file if it did not exist before import."""
-        if not self: return
-        try: not self.page2.file_existed and os.unlink(self.page2.filename)
-        except Exception: logger.exception("Failed to delete %s.", self.page2.filename)
-
-
     def OnDrop(self, files):
         """Handler for drag-dropping files onto wizard, loads file in current page."""
         files = [files] if isinstance(files, basestring) else files
@@ -12556,6 +12549,9 @@ class ImportWizard(wx.adv.Wizard):
         callable = functools.partial(importexport.import_data, self.page1.filename,
                                      self.db, tables, columns, pks, 
                                      self.page1.use_header, self.OnProgressCallback)
+        self.db.close()
+        try: not self.page2.file_existed and os.unlink(self.db.filename)
+        except Exception: pass
         self.worker.work(callable)
 
         if len(self.items) > 1:
@@ -12660,7 +12656,6 @@ class ImportWizard(wx.adv.Wizard):
 
 
         if finished:
-            self.db.close()
             success = self.page2.importing # True: ok, False: aborted, None: rolled back
             if success: self.page2.importing = False
             self.page2.gauge.Value = 100 if success else self.page2.gauge.Value # Stop pulse, if any
@@ -12671,9 +12666,8 @@ class ImportWizard(wx.adv.Wizard):
             self.page2.FindWindowById(wx.ID_CANCEL  ).ContainingSizer.Layout()
             if success is None:
                 self.page2.FindWindowById(wx.ID_FORWARD).Disable()
-                self.Cleanup()
             else:
-                wx.CallAfter(self.Parent.update_database_list, self.page2.filename)
+                wx.CallLater(100, self.Parent.update_database_list, self.page2.filename)
 
             wx.Bell()
             if error: # Top-level error in import

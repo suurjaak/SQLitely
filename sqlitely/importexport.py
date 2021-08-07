@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.08.2021
+@modified    07.08.2021
 ------------------------------------------------------------------------------
 """
 import collections
@@ -708,7 +708,9 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
 
     extname = os.path.splitext(filename)[-1][1:].lower()
     table, sheet, cursor, isolevel = None, None, None, None
+    was_open, file_existed = db.is_open(), os.path.isfile(db.filename)
     try:
+        if not was_open: db.open()
         continue_on_error, create_sql = None, None
         isolevel = db.connection.isolation_level
         db.connection.isolation_level = None # Disable autocommit
@@ -813,6 +815,9 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
             if isolevel is not None: db.connection.isolation_level = isolevel
             if cursor: util.try_until(cursor.close)
             if table: db.unlock("table", table, filename)
+            if not was_open: db.close()
+        if result is None and not file_existed:
+            util.try_until(lambda: os.unlink(db.filename))
 
     return result
 

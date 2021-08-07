@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.08.2021
+@modified    07.08.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1460,6 +1460,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         @param   filename  possibly new filename, if any (single string or list)
         @return            True if was file was new or changed, False otherwise
         """
+        if not self: return
         result, refresh_idxs = False, []
         # Insert into database lists, if not already there
         if isinstance(filenames, basestring): filenames = [filenames]
