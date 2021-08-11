@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.08.2021
+@modified    11.08.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -8641,9 +8641,10 @@ class ColumnDialog(wx.Dialog):
                     value = value.replace(" " * 4, "\t")
                 elif "whitespace" == category:
                     v = value.strip()          # Empty surrounding ws
+                    v = re.sub("[ \t]+", " ", v) # Collapse spaces+tabs
+                    v = re.sub("(\n )|( \n)", "\n", v) # Collapse lf+space and space+lf
                     v = re.sub("[ \t]+\n", "\n", v) # Empty ws-only lines
-                    v = re.sub("[\r\n]+",  "\n", v) # Collapse blank lines
-                    value = re.sub("[ \t]+", " ", v) # Collapse spaces+tabs
+                    value = re.sub("[\r\n]+",  "\n", v) # Collapse blank lines
                 elif "strip" == category:
                     value = re.sub("\s+", "", value)
                 elif "urlencode" == category:
