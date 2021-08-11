@@ -9067,6 +9067,32 @@ class ColumnDialog(wx.Dialog):
             state["validate"] = cb.Value
             validate(stc.Text, propagate=False)
 
+        def do_indent(indent):
+            value = None
+            try: value = json.dumps(json.loads(stc.Text), indent=indent)
+            except Exception: pass
+            if value and value != stc.Text: update(value)
+
+        def on_format(event):
+            menu = wx.Menu()
+
+            item_indent4    = wx.MenuItem(menu, -1, "&4-space indent")
+            item_indent2    = wx.MenuItem(menu, -1, "&2-space indent")
+            item_indent0    = wx.MenuItem(menu, -1, "&No indent")
+            item_indentnone = wx.MenuItem(menu, -1, "&Flat")
+
+            menu.Append(item_indent4)
+            menu.Append(item_indent2)
+            menu.Append(item_indent0)
+            menu.Append(item_indentnone)
+
+            menu.Bind(wx.EVT_MENU, lambda e: do_indent(4),    item_indent4)
+            menu.Bind(wx.EVT_MENU, lambda e: do_indent(2),    item_indent2)
+            menu.Bind(wx.EVT_MENU, lambda e: do_indent(0),    item_indent0)
+            menu.Bind(wx.EVT_MENU, lambda e: do_indent(None), item_indentnone)
+
+            event.EventObject.PopupMenu(menu, (0, event.EventObject.Size[1]))
+
         def on_undo(*a, **kw): stc.Undo()
         def on_redo(*a, **kw): stc.Redo()
 
@@ -9082,6 +9108,7 @@ class ColumnDialog(wx.Dialog):
         hint   = wx.StaticText(page)
         stc    = controls.JSONTextCtrl(page, style=wx.BORDER_NONE)
         cb     = wx.CheckBox(page, label="&Validate")
+        btn    = wx.Button(page, label="Format ..")
         status = wx.StaticText(page)
 
         hint.Label = "Value in JSON highlight, with simple validation check"
@@ -9097,7 +9124,8 @@ class ColumnDialog(wx.Dialog):
         sizer_header.AddStretchSpacer()
         sizer_header.Add(hint, border=5, flag=wx.ALL | wx.ALIGN_BOTTOM)
 
-        sizer_footer.Add(cb,     border=5, flag=wx.ALL)
+        sizer_footer.Add(cb,     border=5, flag=wx.ALL | wx.ALIGN_CENTER_VERTICAL)
+        sizer_footer.Add(btn,    border=5, flag=wx.ALL ^ wx.LEFT)
         sizer_footer.AddStretchSpacer()
         sizer_footer.Add(status, border=5, flag=wx.ALL)
 
@@ -9107,6 +9135,7 @@ class ColumnDialog(wx.Dialog):
 
         stc.Bind(wx.stc.EVT_STC_MODIFIED, functools.partial(self._OnChar, name=NAME, handler=validate))
         self.Bind(wx.EVT_CHECKBOX,        on_toggle_validate, cb)
+        self.Bind(wx.EVT_BUTTON,          on_format, btn)
 
         self._getters[NAME] = stc.GetText
         self._setters[NAME] = update
