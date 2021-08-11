@@ -8645,8 +8645,6 @@ class ColumnDialog(wx.Dialog):
                     v = re.sub("(\n )|( \n)", "\n", v) # Collapse lf+space and space+lf
                     v = re.sub("[ \t]+\n", "\n", v) # Empty ws-only lines
                     value = re.sub("[\r\n]+",  "\n", v) # Collapse blank lines
-                elif "strip" == category:
-                    value = re.sub("\s+", "", value)
                 elif "urlencode" == category:
                     value = urllib.quote(util.to_str(value, "utf-8"))
                 elif "urldecode" == category:
@@ -8655,6 +8653,18 @@ class ColumnDialog(wx.Dialog):
                     value = util.html_escape(value)
                 elif "htmlunescape" == category:
                     value = HTMLParser.HTMLParser().unescape(value)
+                elif "strip" == category:
+                    value = re.sub("\s+", "", value)
+                elif "punctuation" == category:
+                    value = re.sub("[%s]+" % re.escape(string.punctuation), "", value)
+                elif "letters" == category:
+                    value = re.sub(r"[^\W\d]+", "", value, re.U)
+                elif "numbers" == category:
+                    value = re.sub("\d+", "", value, re.U)
+                elif "alphanums" == category:
+                    value = re.sub("\w+", "", value, re.U)
+                elif "nonalphanums" == category:
+                    value = re.sub("\W+", "", value, re.U)
                 elif "htmlstrip" == category:
                     value = re.sub("<[^>]+?>", "", value)
             except Exception: pass
@@ -8739,35 +8749,52 @@ class ColumnDialog(wx.Dialog):
 
         def on_transform(event):
             menu = wx.Menu()
+            menu_strip     = wx.Menu()
 
-            item_tabs      = wx.MenuItem(menu, -1, "Spaces to &tabs")
-            item_spaces    = wx.MenuItem(menu, -1, "Tabs to &spaces")
-            item_wspace    = wx.MenuItem(menu, -1, "Collapse &whitespace")
-            item_strip     = wx.MenuItem(menu, -1, "Stri&p whitespace")
-            item_urlenc    = wx.MenuItem(menu, -1, "&URL-encode")
-            item_urldec    = wx.MenuItem(menu, -1, "URL-&decode")
-            item_hescape   = wx.MenuItem(menu, -1, "Escape &HTML entities")
-            item_hunescape = wx.MenuItem(menu, -1, "Unescape HTML &entities")
-            item_hstrip    = wx.MenuItem(menu, -1, "Strip &HTML tags")
+            item_tabs      = wx.MenuItem(menu,       -1, "Spaces to &tabs")
+            item_spaces    = wx.MenuItem(menu,       -1, "Tabs to &spaces")
+            item_wspace    = wx.MenuItem(menu,       -1, "Collapse &whitespace")
+            item_urlenc    = wx.MenuItem(menu,       -1, "&URL-encode")
+            item_urldec    = wx.MenuItem(menu,       -1, "URL-&decode")
+            item_hescape   = wx.MenuItem(menu,       -1, "Escape &HTML entities")
+            item_hunescape = wx.MenuItem(menu,       -1, "Unescape HTML &entities")
+            item_strip     = wx.MenuItem(menu_strip, -1, "Strip &whitespace")
+            item_punct     = wx.MenuItem(menu_strip, -1, "Strip &punctuation")
+            item_letters   = wx.MenuItem(menu_strip, -1, "Strip &letters")
+            item_numbers   = wx.MenuItem(menu_strip, -1, "Strip &numbers")
+            item_alnum     = wx.MenuItem(menu_strip, -1, "Strip &alphanumerics")
+            item_nonalnum  = wx.MenuItem(menu_strip, -1, "Strip non-a&lphanumerics")
+            item_hstrip    = wx.MenuItem(menu_strip, -1, "Strip &HTML tags")
 
             menu.Append(item_tabs)
             menu.Append(item_spaces)
             menu.Append(item_wspace)
-            menu.Append(item_strip)
             menu.Append(item_urlenc)
             menu.Append(item_urldec)
             menu.Append(item_hescape)
             menu.Append(item_hunescape)
-            menu.Append(item_hstrip)
+            menu.AppendSubMenu(menu_strip, text="Stri&p ..")
+            menu_strip.Append(item_strip)
+            menu_strip.Append(item_punct)
+            menu_strip.Append(item_letters)
+            menu_strip.Append(item_numbers)
+            menu_strip.Append(item_alnum)
+            menu_strip.Append(item_nonalnum)
+            menu_strip.Append(item_hstrip)
 
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("tabs"),         item_tabs)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("spaces"),       item_spaces)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("whitespace"),   item_wspace)
-            menu.Bind(wx.EVT_MENU, lambda e: do_transform("strip"),        item_strip)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("urlencode"),    item_urlenc)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("urldecode"),    item_urldec)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("htmlescape"),   item_hescape)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("htmlunescape"), item_hunescape)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("strip"),        item_strip)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("punctuation"),  item_punct)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("letters"),      item_letters)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("numbers"),      item_numbers)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("alphanums"),    item_alnum)
+            menu.Bind(wx.EVT_MENU, lambda e: do_transform("nonalphanums"), item_nonalnum)
             menu.Bind(wx.EVT_MENU, lambda e: do_transform("htmlstrip"),    item_hstrip)
 
             event.EventObject.PopupMenu(menu, (0, event.EventObject.Size[1]))
