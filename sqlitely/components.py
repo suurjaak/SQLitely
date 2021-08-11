@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.08.2021
+@modified    09.08.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -8608,8 +8608,16 @@ class ColumnDialog(wx.Dialog):
                 value = "".join(x.capitalize() if x else ""
                                 for x in re.split("([\.\?\!]\s+)|(\r*\n\r*\n+)", value))
             elif "snake" == category:
-                v = re.sub("[%s]" % re.escape(string.punctuation), "", value)
-                value = re.sub("\s+", "_", v)
+                PUNCT = re.escape(re.sub(r"[\.\,\!\?\;\:\'\"]", "", string.punctuation))
+                parts1 = re.split(r"([ \t]+)", value, re.U)
+                parts2 = parts1[:1]
+                for i, part in enumerate(parts1[2::2]):
+                    snakeable =  bool(re.search(r"\w([%s])*$(?!\s)" % PUNCT, parts2[-1], re.U))
+                    snakeable &= bool(re.search(r"^([%s])*\w" % PUNCT, part, re.U))
+                    parts2.append("_" if snakeable else parts1[2 + 2*i - 1])
+                    parts2.append(part)
+                value = "".join(parts2)
+                value = re.sub(r"_+", r"_", value) # Collapse underscores
             elif "alternate" == category:
                 value = "".join(x.lower() if i % 2 else x.upper()
                                 for i, x in enumerate(value))
