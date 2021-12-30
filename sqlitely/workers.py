@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.01.2021
+@modified    30.12.2021
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -489,6 +489,7 @@ class AnalyzerThread(WorkerThread):
                     if "table" == category: tablemap[row["name"]] = item
                     else:
                         item["table"] = row["tblname"]
+                        tablemap.setdefault(row["tblname"], {"name": row["tblname"], "size": 0})
                         tablemap[row["tblname"]].setdefault("index", []).append(item)
                     data[category].append(item)
                 for item in data["table"]:
