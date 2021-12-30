@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.08.2021
+@modified    30.12.2021
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -599,13 +599,33 @@ WARNING: misuse can easily result in a corrupt database file.""",
         # Copy data from all tables
         for name, opts in self.schema["table"].items():
             sql = "INSERT INTO new.%s SELECT * FROM main.%s" % ((grammar.quote(name),) * 2)
+            error = False
             try:
                 self.execute(sql)
                 sqls.append(sql)
             except Exception as e:
+                error = True
                 result.append(util.format_exc(e))
                 logger.exception("Error copying table %s from %s to %s.",
                                  util.unprint(grammar.quote(name)), self.filename, filename)
+            if not error: continue # for name
+
+            self.connection.row_factory, index = None, -1
+            try:
+                sql1, sql2 = "SELECT * FROM main.%s" % grammar.quote(name), None
+                for index, row in enumerate(self.execute(sql1)):
+                    sql2 = sql2 or "INSERT INTO new.%s VALUES (%s)" % \
+                                   (grammar.quote(name), ", ".join("?" * len(row)))
+                    self.execute(sql2, row, log=False)
+                sql2 and sqls.append(sql2)
+            except Exception as e:
+                error = True
+                result.append(util.format_exc(e))
+                logger.exception("Error copying table %s rows from %s to %s (at row #%s).",
+                                 util.unprint(grammar.quote(name)), self.filename, filename,
+                                 index + 1)
+            finally:
+                self.connection.row_factory = self.row_factory
 
         # Create indexes-triggers-views
         for category in "index", "trigger", "view":
