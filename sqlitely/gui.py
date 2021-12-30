@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.08.2021
+@modified    30.12.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -6258,7 +6258,7 @@ class DatabasePage(wx.Panel):
                 if len(successes) > 1:
                     status =  " and ".join(util.plural(c, vv)
                                            for c, vv in sorted(successes.items()))
-                else: status = "%s %s" % (util.plural(next(iter(successes.items()))),
+                else: status = "%s %s" % (util.plural(*next(iter(successes.items()))),
                                           util.join(", ", (fmt_entity(x, force=False)
                                                            for x in successes.values()[0])))
                 guibase.status("Exported %s." % status, log=True)
