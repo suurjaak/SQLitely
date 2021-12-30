@@ -524,7 +524,7 @@ def plural(word, items=None, numbers=True, single="1", sep="", pref="", suf="", 
             formatted = "%.*f" % (2, count / math.pow(1000, log))
             fmtcount = formatted.rstrip("0").rstrip(".") + UNITS[int(log)]
         elif sep: fmtcount = "".join([
-            x + ("," if i and not i % 3 else "") for i, x in enumerate(str(count)[::-1])
+            x + (sep if i and not i % 3 else "") for i, x in enumerate(str(count)[::-1])
         ][::-1])
         else: fmtcount = str(count)
 
