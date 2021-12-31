@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.12.2021
+@modified    31.12.2021
 ------------------------------------------------------------------------------
 """
 import ast
@@ -6550,6 +6550,8 @@ class DatabasePage(wx.Panel):
         Returns ({data, children: [{data, children}]} for expanded nodes,
                  {selected item data}).
         """
+        if not root or not root.IsOk(): return None, None
+
         item = tree.GetNext(root) if tree.IsExpanded(root) else None
         state, sel = {"data": tree.GetItemPyData(root)} if item else None, None
         while item and item.IsOk():
@@ -6597,10 +6599,9 @@ class DatabasePage(wx.Panel):
 
     def load_tree_data(self, refresh=False):
         """Loads table and view data into data tree."""
-        if not self: return
+        if not self or self.gauge_data.Shown: return
 
         tree, gauge = self.tree_data, self.gauge_data
-
         self.button_refresh_data.Disable()
         gauge.Value, gauge.ToolTip = 0, "Populating.. 0%"
         gauge.Show()
