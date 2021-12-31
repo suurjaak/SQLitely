@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.08.2021
+@modified    31.12.2021
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -62,7 +62,7 @@ from sqlitely.lib import util
   <title>{{ title }}</title>
   <link rel="shortcut icon" type="image/png" href="data:image/ico;base64,{{! images.Icon16x16_8bit.data }}"/>
   <style>
-    * { font-family: Tahoma; font-size: 11px; }
+    * { font-family: Tahoma, DejaVu Sans; color: black; font-size: 11px; }
     body {
       background: #8CBEFF;
       margin: 0;
@@ -84,7 +84,6 @@ from sqlitely.lib import util
     table#body_table > tbody > tr > td {
       background: white;
       min-width: 800px;
-      font-family: Tahoma;
       font-size: 11px;
       border-radius: 10px;
       padding: 10px;
@@ -1378,7 +1377,8 @@ def wrapclass(v):
   <style>
     body {
       background: #8CBEFF;
-      font-family: Tahoma;
+      color: black;
+      font-family: Tahoma, DejaVu Sans;
       font-size: 11px;
       margin: 0;
     }
@@ -1400,7 +1400,6 @@ def wrapclass(v):
     table#body_table > tbody > tr > td {
       background: white;
       min-width: 800px;
-      font-family: Tahoma;
       font-size: 11px;
       border-radius: 10px;
       padding: 10px;
