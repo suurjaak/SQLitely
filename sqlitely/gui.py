@@ -2180,7 +2180,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if not self.IsMaximized(): conf.WindowSize = self.Size[:]
         conf.save()
         self.trayicon.Destroy()
-        wx.CallAfter(sys.exit) # Immediate exit fails if exiting from tray
+        # Linux can terminate with segfault on sys.exit()
+        exiter = functools.partial(os._exit, 0) if hasattr(os, "_exit") else sys.exit
+        wx.CallAfter(exiter) # Immediate exit fails if exiting from tray
 
 
     def on_close_page(self, event):
