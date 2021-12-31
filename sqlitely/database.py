@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.12.2021
+@modified    31.12.2021
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -949,7 +949,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if category and name: progress = None # Skip progress report if one item
         elif category: total = len(self.schema.get(category) or {})
         if progress and not progress(index=0, total=total): return
-            
+
+        # First pass, rapid: retrieve columns, use cache if available
         for mycategory, itemmap in self.schema.items():
             if category and category != mycategory: continue # for mycategory
             for myname, opts in itemmap.items():
@@ -981,12 +982,38 @@ WARNING: misuse can easily result in a corrupt database file.""",
                             if row.get("pk"):      col["pk"]      = {}
                             opts["columns"].append(col)
 
-                # Parse metainfo from SQL, or use previous if unchanged
+                # Use previous metainfo if unchanged
                 meta, sql = None, None
                 if opts0 and opts0.get("meta") and opts["sql0"] == opts0["sql0"]:
                     meta, sql = opts0["meta"], opts0["sql"]
                     opts["__parsed__"] = True
-                elif parse:
+                if meta: opts.update(meta=meta)
+                if sql and (not meta or not meta.get("__comments__")):
+                    opts.update(sql=sql)
+                if meta and "table" == mycategory and meta.get("columns"):
+                    opts["columns"] = meta["columns"]
+
+                # Use previous size information if available
+                if mycategory in ("table", "index") and opts0:
+                    VARS = "size", "size_index", "size_total"
+                    opts.update({k: opts0[k] for k in VARS if k in opts0})
+
+                if "table" == mycategory and opts0 and "count" in opts0:
+                    opts["count"] = opts0["count"]
+                    if "is_count_estimated" in opts0:
+                        opts["is_count_estimated"] = opts0["is_count_estimated"]
+
+        # Second pass, slow: parse SQL, retrieve counts
+        for mycategory, itemmap in self.schema.items():
+            if category and category != mycategory: continue # for mycategory
+            for myname, opts in itemmap.items():
+                if category and name and not util.lceq(myname, name): continue # for myname
+
+                opts0 = schema0.get(mycategory, {}).get(myname, {})
+
+                # Parse metainfo from SQL if commanded and previous not available
+                meta, sql = None, None
+                if parse and not opts.get("__parsed__"):
                     meta, _ = grammar.parse(opts["sql0"])
                     if meta:
                         opts["__parsed__"] = True
@@ -1009,21 +1036,13 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if meta and "table" == mycategory and meta.get("columns"):
                     opts["columns"] = meta["columns"]
 
-                # Use previous size information if available
-                if mycategory in ("table", "index") and opts0:
-                    VARS = "size", "size_index", "size_total"
-                    opts.update({k: opts0[k] for k in VARS if k in opts0})
-
-                # Retrieve table row counts if commanded, or use previous if available
+                # Retrieve table row counts if commanded
                 if "table" == mycategory and count:
                     opts.update(self.get_count(myname))
-                elif "table" == mycategory and opts0 and "count" in opts0:
-                    opts["count"] = opts0["count"]
-                    if "is_count_estimated" in opts0:
-                        opts["is_count_estimated"] = opts0["is_count_estimated"]
 
                 index += 1
                 if progress and not progress(index=index, total=total): return
+
         if progress: progress(done=True)
 
 
