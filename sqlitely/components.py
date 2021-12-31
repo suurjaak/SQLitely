@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.08.2021
+@modified    31.12.2021
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -6294,6 +6294,7 @@ class ExportProgressPanel(wx.Panel):
         else: # User cancel
             ctrls["title"].Label = 'Export to "%s".' % opts["filename"]
             ctrls["text"].Label = "Cancelled"
+            if ctrls["subtitle"].Label: ctrls["subtitle"].Label += ". cancelled"
             if index == self._current:
                 self._worker.stop_work()
                 self._current = None
