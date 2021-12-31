@@ -2722,15 +2722,7 @@ class DatabasePage(wx.Panel):
         panel2 = wx.Panel(splitter)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
-        nb = self.notebook_data = wx.lib.agw.flatnotebook.FlatNotebook(
-            panel2, size=(-1, 27),
-            agwStyle=wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
-                     wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
-                     wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
-                     wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
-                     wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
-                     wx.lib.agw.flatnotebook.FNB_X_ON_TAB |
-                     wx.lib.agw.flatnotebook.FNB_VC8)
+        nb = self.notebook_data = self.make_page_notebook(panel2)
         ColourManager.Manage(nb, "ActiveTabColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(nb, "TabAreaColour",   wx.SYS_COLOUR_BTNFACE)
         try: nb._pages.GetSingleLineBorderColour = nb.GetActiveTabColour
@@ -2813,15 +2805,7 @@ class DatabasePage(wx.Panel):
         panel2 = wx.Panel(splitter)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
 
-        nb = self.notebook_schema = wx.lib.agw.flatnotebook.FlatNotebook(
-            panel2, size=(-1, 27),
-            agwStyle=wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
-                     wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
-                     wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
-                     wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
-                     wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
-                     wx.lib.agw.flatnotebook.FNB_X_ON_TAB |
-                     wx.lib.agw.flatnotebook.FNB_VC8)
+        nb = self.notebook_schema = self.make_page_notebook(panel2)
         ColourManager.Manage(nb, "ActiveTabColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(nb, "TabAreaColour",   wx.SYS_COLOUR_BTNFACE)
         try: nb._pages.GetSingleLineBorderColour = nb.GetActiveTabColour
@@ -2962,15 +2946,7 @@ class DatabasePage(wx.Panel):
 
         sizer = page.Sizer = wx.BoxSizer(wx.VERTICAL)
 
-        nb = self.notebook_sql = wx.lib.agw.flatnotebook.FlatNotebook(
-            page, size=(-1, 27),
-            agwStyle=wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
-                     wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
-                     wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
-                     wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
-                     wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
-                     wx.lib.agw.flatnotebook.FNB_X_ON_TAB |
-                     wx.lib.agw.flatnotebook.FNB_VC8)
+        nb = self.notebook_sql = self.make_page_notebook(page)
         ColourManager.Manage(nb, "ActiveTabColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(nb, "TabAreaColour",   wx.SYS_COLOUR_BTNFACE)
         try: nb._pages.GetSingleLineBorderColour = nb.GetActiveTabColour
@@ -4034,6 +4010,21 @@ class DatabasePage(wx.Panel):
             dlg = components.ImportDialog(self, self.db)
             wx.CallAfter(lambda: dlg and dlg._OnFile(filename=importfiles[0]))
             dlg.ShowModal()
+
+
+    def make_page_notebook(self, parent):
+        """Returns wx.lib.agw.flatnotebook.FlatNotebook for a subpage."""
+        agwStyle = (wx.lib.agw.flatnotebook.FNB_DROPDOWN_TABS_LIST |
+                    wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
+                    wx.lib.agw.flatnotebook.FNB_NO_NAV_BUTTONS |
+                    wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
+                    wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
+                    wx.lib.agw.flatnotebook.FNB_X_ON_TAB |
+                    wx.lib.agw.flatnotebook.FNB_VC8)
+        if "linux2" == sys.platform and wx.VERSION[:3] == (4, 1, 1):
+            # wxPython 4.1.1 on Linux crashes with FNB_VC8
+            agwStyle ^= wx.lib.agw.flatnotebook.FNB_VC8
+        return wx.lib.agw.flatnotebook.FlatNotebook(parent, size=(-1, 27), agwStyle=agwStyle)
 
 
     def register_notebook_hotkeys(self, notebook):
