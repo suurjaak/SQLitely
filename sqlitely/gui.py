@@ -2842,9 +2842,10 @@ class DatabasePage(wx.Panel):
         sizer_top    = wx.BoxSizer(wx.HORIZONTAL)
         sizer_middle = wx.BoxSizer(wx.HORIZONTAL)
         sizer_bottom = wx.BoxSizer(wx.HORIZONTAL)
+        WIDTH_FACTOR = 1.5 if "linux2" == sys.platform else 1
 
         tb = self.tb_diagram = wx.ToolBar(page, style=wx.TB_FLAT | wx.TB_NODIVIDER | wx.TB_HORZ_TEXT)
-        combo_zoom = self.combo_diagram_zoom = wx.ComboBox(tb, size=(60, -1), style=wx.CB_DROPDOWN)
+        combo_zoom = self.combo_diagram_zoom = wx.ComboBox(tb, size=(60 * WIDTH_FACTOR, -1), style=wx.CB_DROPDOWN)
         statusgauge = self.diagram_gauge  = wx.Gauge(page)
         button_export = self.button_diagram_export = wx.Button(page, label="Export &diagram")
         button_action = self.button_diagram_action = wx.Button(page, label="Other &actions ..")
@@ -2853,7 +2854,7 @@ class DatabasePage(wx.Panel):
         cb_lbls  = self.cb_diagram_labels = wx.CheckBox(page, label="Foreign &labels")
         cb_stats = self.cb_diagram_stats  = wx.CheckBox(page, label="&Statistics")
         label_find = self.label_diagram_find = wx.StaticText(page, label="&Quickfind:")
-        combo_find = self.combo_diagram_find = wx.ComboBox(page, size=(100, -1), style=wx.CB_DROPDOWN)
+        combo_find = self.combo_diagram_find = wx.ComboBox(page, size=(100 * WIDTH_FACTOR, -1), style=wx.CB_DROPDOWN)
 
         level = diagram.ZOOM_MAX
         while level >= diagram.ZOOM_MIN:
