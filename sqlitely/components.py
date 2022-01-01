@@ -7677,7 +7677,7 @@ class DataDialog(wx.Dialog):
             sizer_columns.Add(label, flag=wx.GROW)
             sizer_columns.Add(rw if resizable else edit, border=wx.lib.resizewidget.RW_THICKNESS,
                               flag=wx.GROW | (0 if resizable else wx.RIGHT | wx.BOTTOM))
-            button = wx.Button(panel, label="..", size=(20, 20))
+            button = wx.Button(panel, label="..", size=(controls.BUTTON_MIN_WIDTH, ) * 2)
             button.AcceptsFocusFromKeyboard = lambda: False # Tab to next edit instead
             button.ToolTip = "Open options menu"
             sizer_columns.Add(button)
