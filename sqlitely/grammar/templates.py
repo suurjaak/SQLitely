@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    01.04.2021
+@modified    01.01.2022
 ------------------------------------------------------------------------------
 """
 
@@ -504,6 +504,12 @@ for ctype, cnstr in get_constraints():
         %if data["fk"].get("key"):
   {{ WS(" ") }}({{ Q(data["fk"]["key"]) }})
         %endif
+        %for action, act in data["fk"].get("action", {}).items():
+    ON {{ action }} {{ act }}
+        %endfor
+        %if data["fk"].get("match"):
+    MATCH {{ data["fk"]["match"] }}
+        %endif
         %if data["fk"].get("defer") is not None:
     {{ "NOT" if data["fk"]["defer"].get("not") else "" }}
     DEFERRABLE
@@ -511,12 +517,6 @@ for ctype, cnstr in get_constraints():
     INITIALLY {{ data["fk"]["defer"]["initial"] }}
             %endif
         %endif
-        %for action, act in data["fk"].get("action", {}).items():
-    ON {{ action }} {{ act }}
-        %endfor
-        %if data["fk"].get("match"):
-    MATCH {{ data["fk"]["match"] }}
-        %endfor
     %endif
 """
 
