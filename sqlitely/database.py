@@ -885,7 +885,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """Returns dict from resultset rows, with BLOBs converted to strings."""
         result = {}
         for idx, col in enumerate(cursor.description):
-            name = col[0]
+            try: name = col[0].decode("utf-8")
+            except Exception: name = col[0]
             result[name] = row[idx]
         for name in result.keys():
             datatype = type(result[name])

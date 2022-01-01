@@ -4420,8 +4420,7 @@ class SchemaObjectPage(wx.Panel):
             dummyname = util.make_unique(new["name"], allnames)
             sql1,  sql2  = self._original["sql"], self._item["sql"]
             rens1, rens2 = ({"table": {n: dummyname},
-                             "column": {dummyname: {c["name"]: str(cid)
-                                                    for cid, c in m.items()}}}
+                             "column": {dummyname: {c["name"]: cid for cid, c in m.items()}}}
                             for n, m in ((old["name"], colmap1), (new["name"], colmap2)))
             (sql1t, e1), (sql2t, e2) = (grammar.transform(s, renames=r, indent=None)
                                         for s, r in ((sql1, rens1), (sql2, rens2)))
@@ -4983,7 +4982,7 @@ class SchemaObjectPage(wx.Panel):
             if ptr is None: ptr = parent[p] = {} if i < len(path) - 1 else []
             parent = ptr
         if self._category in ("table", "view") and ["columns"] == path:
-            value = dict(value, __id__=wx.NewIdRef().Id)
+            value = dict(value, __id__=str(wx.NewIdRef().Id))
         ptr.append(copy.deepcopy(value))
 
         self.Freeze()
@@ -7989,7 +7988,7 @@ class DataDialog(wx.Dialog):
             text = util.to_unicode(coldata["name"])
             mycopy(text, "Copied column name to clipboard")
         def on_copy_sql(event=None):
-            text = "%s = %s" % (grammar.quote(coldata["name"]),
+            text = "%s = %s" % (grammar.quote(coldata["name"]).encode("utf-8"),
                                 grammar.format(self._data[coldata["name"]], coldata))
             mycopy(text, "Copied column UPDATE SQL to clipboard")
         def on_reset(event=None):
@@ -8815,7 +8814,7 @@ class ColumnDialog(wx.Dialog):
                 text = util.to_unicode(self._name)
                 mycopy(text, "Copied %s name to clipboard" % self._collabel)
             def on_copy_sql(event=None):
-                text = "%s = %s" % (grammar.quote(self._name),
+                text = "%s = %s" % (grammar.quote(self._name).encode("utf-8"),
                                     grammar.format(self._value, self._coldata))
                 mycopy(text, "Copied %s UPDATE SQL to clipboard" % self._collabel)
 
