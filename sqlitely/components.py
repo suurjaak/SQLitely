@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.12.2021
+@modified    01.01.2022
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -4969,7 +4969,7 @@ class SchemaObjectPage(wx.Panel):
             if grammar.SQL.PRIMARY_KEY == ctype \
             and (any(grammar.SQL.PRIMARY_KEY == x["type"]
                     for x in self._item["meta"].get("constraints") or ())
-            or any(x.get("pk") for x in self._item["meta"].get("columns") or ())):
+            or any(x.get("pk") is not None for x in self._item["meta"].get("columns") or ())):
                 menu.Enable(it.GetId(), False)
             menu.Bind(wx.EVT_MENU, functools.partial(add_constraint, ctype), it)
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
