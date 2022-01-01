@@ -4798,9 +4798,9 @@ class SchemaObjectPage(wx.Panel):
                 style=wx.CB_DROPDOWN | wx.CB_READONLY)
             list_collate  = wx.ComboBox(panel_columns, choices=self.COLLATE, style=wx.CB_DROPDOWN)
             list_order    = wx.ComboBox(panel_columns, choices=self.ORDER, style=wx.CB_DROPDOWN | wx.CB_READONLY)
-            button_up     = wx.Button(panel_columns, label=u"\u2191", size=(20, -1))
-            button_down   = wx.Button(panel_columns, label=u"\u2193", size=(20, -1))
-            button_remove = wx.Button(panel_columns, label=u"\u2715", size=(20, -1))
+            button_up     = wx.Button(panel_columns, label=u"\u2191", size=(controls.BUTTON_MIN_WIDTH, -1))
+            button_down   = wx.Button(panel_columns, label=u"\u2193", size=(controls.BUTTON_MIN_WIDTH, -1))
+            button_remove = wx.Button(panel_columns, label=u"\u2715", size=(controls.BUTTON_MIN_WIDTH, -1))
             for j, x in enumerate(tablecols): ctrl_index.SetClientData(j, x)
 
             ctrl_index.MinSize =   (250, -1)
@@ -6538,13 +6538,13 @@ class ImportDialog(wx.Dialog):
 
         button_table = wx.Button(p2,   label="&New table", size=(-1, 20))
 
-        button_up1   = wx.Button(p1, label=u"\u2191", size=(20, -1))
-        button_down1 = wx.Button(p1, label=u"\u2193", size=(20, -1))
+        button_up1   = wx.Button(p1, label=u"\u2191", size=(controls.BUTTON_MIN_WIDTH, -1))
+        button_down1 = wx.Button(p1, label=u"\u2193", size=(controls.BUTTON_MIN_WIDTH, -1))
         l1 = self.ListCtrl(p1, style=wx.LC_REPORT)
 
         l2 = self.ListCtrl(p2, style=wx.LC_REPORT)
-        button_up2   = wx.Button(p2, label=u"\u2191", size=(20, -1))
-        button_down2 = wx.Button(p2, label=u"\u2193", size=(20, -1))
+        button_up2   = wx.Button(p2, label=u"\u2191", size=(controls.BUTTON_MIN_WIDTH, -1))
+        button_down2 = wx.Button(p2, label=u"\u2193", size=(controls.BUTTON_MIN_WIDTH, -1))
 
         pk_placeholder = wx.Panel(p1)
         check_pk = wx.CheckBox(p2, label="Add auto-increment &primary key")

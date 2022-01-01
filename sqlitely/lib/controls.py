@@ -122,6 +122,8 @@ import wx.stc
 BRUSH = lambda c,      s=wx.BRUSHSTYLE_SOLID: wx.TheBrushList.FindOrCreateBrush(c,    s)
 PEN   = lambda c, w=1, s=wx.PENSTYLE_SOLID:   wx.ThePenList  .FindOrCreatePen  (c, w, s)
 
+# Linux produces an empty button for less than 35px
+BUTTON_MIN_WIDTH = 35 if "linux2" == sys.platform else 20
 
 
 class KEYS(object):
@@ -919,11 +921,11 @@ class FormDialog(wx.Dialog):
             sizer_b1 = wx.BoxSizer(wx.VERTICAL)
             sizer_b2 = wx.BoxSizer(wx.VERTICAL)
             ctrl1 = wx.ListBox(parent, style=wx.LB_EXTENDED)
-            b1    = wx.Button(parent, label=">", size=(30, -1))
-            b2    = wx.Button(parent, label="<", size=(30, -1))
+            b1    = wx.Button(parent, label=">", size=(max(30, BUTTON_MIN_WIDTH), -1))
+            b2    = wx.Button(parent, label="<", size=(max(30, BUTTON_MIN_WIDTH), -1))
             ctrl2 = wx.ListBox(parent, style=wx.LB_EXTENDED)
-            b3    = wx.Button(parent, label=u"\u2191", size=(20, -1))
-            b4    = wx.Button(parent, label=u"\u2193", size=(20, -1))
+            b3    = wx.Button(parent, label=u"\u2191", size=(BUTTON_MIN_WIDTH, -1))
+            b4    = wx.Button(parent, label=u"\u2193", size=(BUTTON_MIN_WIDTH, -1))
 
             b1.ToolTip = "Add selected from left to right"
             b2.ToolTip = "Remove selected from right"
