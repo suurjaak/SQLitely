@@ -1370,6 +1370,23 @@ class HintedTextCtrl(wx.TextCtrl):
         wx.CallAfter(after)
 
 
+    def SetBackgroundColour(self, colour):
+        """Sets the background colour of the control."""
+        if colour != self.BackgroundColour and self.Value \
+        and not self._hint_on and "linux2" == sys.platform:
+            # Workaround for existing text background colour remaining same in Linux
+            self._ignore_change = True
+            sel, val = self.GetSelection(), self.Value
+            wx.TextCtrl.SetValue(self, "")
+            wx.TextCtrl.SetBackgroundColour(self, colour)
+            wx.TextCtrl.SetValue(self, val)
+            self.SetSelection(*sel)
+            self._ignore_change = False
+            return True
+        return wx.TextCtrl.SetBackgroundColour(self, colour)
+    BackgroundColour = property(wx.TextCtrl.GetBackgroundColour, SetBackgroundColour)
+
+
     def GetHint(self):
         """Returns the current hint."""
         return self._hint
@@ -1394,10 +1411,10 @@ class HintedTextCtrl(wx.TextCtrl):
     def SetValue(self, value):
         """Sets the value in the text entry field."""
         self._ignore_change = True
-        wx.TextCtrl.SetValue(self, value)
         if value or self.FindFocus() is self:
             self.SetForegroundColour(self._text_colour)
             self._hint_on = False
+            wx.TextCtrl.SetValue(self, value)
         elif not value and self.FindFocus() is not self:
             wx.TextCtrl.SetValue(self, self._hint)
             self.SetForegroundColour(self._hint_colour)
@@ -1409,10 +1426,10 @@ class HintedTextCtrl(wx.TextCtrl):
     def ChangeValue(self, value):
         """Sets the new text control value."""
         self._ignore_change = True
-        wx.TextCtrl.ChangeValue(self, value)
         if value or self.FindFocus() is self:
             self.SetForegroundColour(self._text_colour)
             self._hint_on = False
+            wx.TextCtrl.ChangeValue(self, value)
         elif not value and self.FindFocus() is not self:
             wx.TextCtrl.SetValue(self, self._hint)
             self.SetForegroundColour(self._hint_colour)

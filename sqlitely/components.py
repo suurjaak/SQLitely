@@ -7768,13 +7768,12 @@ class DataDialog(wx.Dialog):
             self._ignore_change = True
             bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
             for n, c in self._edits.items():
-                c.BackgroundColour = bg
                 v = self._data[n]
+                c.BackgroundColour = bg if v == self._original[n] \
+                                     else wx.Colour(conf.GridRowChangedColour)
                 c.Value = "" if v is None else util.to_unicode(v)
                 c.Hint  = "<NULL>" if v is None else ""
                 c.ToolTip = "   NULL  " if v is None else util.ellipsize(c.Value, 1000)
-                if v != self._original[n]:
-                    c.BackgroundColour = wx.Colour(conf.GridRowChangedColour)
             wx.CallAfter(lambda: self and setattr(self, "_ignore_change", False))
             self.Layout()
         finally: self.Thaw()
@@ -7788,13 +7787,13 @@ class DataDialog(wx.Dialog):
         name = self._columns[col]["name"]
         c = self._edits[name]
         self._data[name] = val
+        bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
+        if val != self._original[name]: bg = wx.Colour(conf.GridRowChangedColour)
+        c.BackgroundColour = bg
         c.Value = "" if val is None else util.to_unicode(val)
         c.Hint  = "<NULL>" if val is None else ""
         c.ToolTip = "   NULL  " if val is None else util.ellipsize(c.Value, 1000)
 
-        bg = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
-        if val != self._original[name]: bg = wx.Colour(conf.GridRowChangedColour)
-        c.BackgroundColour = bg
         changed = self._data[self._gridbase.KEY_NEW] or (self._data != self._original)
         self._tb.EnableTool(wx.ID_SAVE, changed)
         self._tb.EnableTool(wx.ID_UNDO, changed)
