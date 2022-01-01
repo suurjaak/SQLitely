@@ -3490,8 +3490,8 @@ class SchemaObjectPage(wx.Panel):
                 "CURRENT_TIMESTAMP, or (constant expression)"
         elif "index" == self._category:
             sizer_headers.Add(wx.StaticText(panel, label="Column",  size=(250, -1)), border=7, flag=wx.LEFT)
-            sizer_headers.Add(wx.StaticText(panel, label="Collate", size=(80, -1)))
-            sizer_headers.Add(wx.StaticText(panel, label="Order",   size=(60, -1)))
+            sizer_headers.Add(wx.StaticText(panel, label="Collate", size=(80 * controls.COMBO_WIDTH_FACTOR, -1)))
+            sizer_headers.Add(wx.StaticText(panel, label="Order",   size=(60 * controls.COMBO_WIDTH_FACTOR, -1)))
             sizer_headers.GetItem(1).Window.ToolTip = \
                 "Table column or an expression to index"
             sizer_headers.GetItem(2).Window.ToolTip = \
@@ -4083,8 +4083,8 @@ class SchemaObjectPage(wx.Panel):
         list_order.ToolTip = "Index sort order"
 
         ctrl_index.MinSize =   (250, -1 if self._hasmeta and "name" in col else list_collate.Size[1])
-        list_collate.MinSize = (80,  -1)
-        list_order.MinSize   = (60,  -1)
+        list_collate.MinSize = (80 * controls.COMBO_WIDTH_FACTOR,  -1)
+        list_order.MinSize   = (60 * controls.COMBO_WIDTH_FACTOR,  -1)
 
         ctrl_index.Value   = util.unprint(col.get("name") or col.get("expr") or "")
         list_collate.Value = col.get("collate") or ""
@@ -4767,8 +4767,8 @@ class SchemaObjectPage(wx.Panel):
         button_add_column = wx.Button(panel_wrapper, label="&Add column")
 
         label_column  = wx.StaticText(panel_wrapper, label="Column",  size=(250, -1))
-        label_collate = wx.StaticText(panel_wrapper, label="Collate", size=( 80, -1))
-        label_order   = wx.StaticText(panel_wrapper, label="Order",   size=( 60, -1))
+        label_collate = wx.StaticText(panel_wrapper, label="Collate", size=( 80 * controls.COMBO_WIDTH_FACTOR, -1))
+        label_order   = wx.StaticText(panel_wrapper, label="Order",   size=( 60 * controls.COMBO_WIDTH_FACTOR, -1))
         label_collate.ToolTip = "Ordering sequence to use for text values, defaults to the " \
                                 "collating sequence defined for the table column, or BINARY"
         label_order.ToolTip = "If DESC, an integer key is not an alias for ROWID."
@@ -4803,8 +4803,8 @@ class SchemaObjectPage(wx.Panel):
             for j, x in enumerate(tablecols): ctrl_index.SetClientData(j, x)
 
             ctrl_index.MinSize =   (250, -1)
-            list_collate.MinSize = ( 80, -1)
-            list_order.MinSize =   ( 60, -1)
+            list_collate.MinSize = ( 80 * controls.COMBO_WIDTH_FACTOR, -1)
+            list_order.MinSize =   ( 60 * controls.COMBO_WIDTH_FACTOR, -1)
             if first: button_up.Enable(False)
             if last:  button_down.Enable(False)
             button_up.ToolTip     = "Move one step higher"

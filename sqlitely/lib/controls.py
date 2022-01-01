@@ -122,8 +122,11 @@ import wx.stc
 BRUSH = lambda c,      s=wx.BRUSHSTYLE_SOLID: wx.TheBrushList.FindOrCreateBrush(c,    s)
 PEN   = lambda c, w=1, s=wx.PENSTYLE_SOLID:   wx.ThePenList  .FindOrCreatePen  (c, w, s)
 
-# Linux produces an empty button for less than 35px
+# Linux produces wx.Button with no visible text if less than 35px
 BUTTON_MIN_WIDTH = 35 if "linux2" == sys.platform else 20
+
+# Multiplier for wx.ComboBox width ~100px ranges
+COMBO_WIDTH_FACTOR = 1.5 if "linux2" == sys.platform else 1
 
 
 class KEYS(object):

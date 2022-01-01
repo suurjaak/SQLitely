@@ -2842,7 +2842,7 @@ class DatabasePage(wx.Panel):
         sizer_top    = wx.BoxSizer(wx.HORIZONTAL)
         sizer_middle = wx.BoxSizer(wx.HORIZONTAL)
         sizer_bottom = wx.BoxSizer(wx.HORIZONTAL)
-        WIDTH_FACTOR = 1.5 if "linux2" == sys.platform else 1
+        WIDTH_FACTOR = controls.COMBO_WIDTH_FACTOR
 
         tb = self.tb_diagram = wx.ToolBar(page, style=wx.TB_FLAT | wx.TB_NODIVIDER | wx.TB_HORZ_TEXT)
         combo_zoom = self.combo_diagram_zoom = wx.ComboBox(tb, size=(60 * WIDTH_FACTOR, -1), style=wx.CB_DROPDOWN)
