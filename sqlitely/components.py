@@ -1186,9 +1186,9 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             menu.Append(item_delete)
             if any(n in self.db.schema["table"] for x in lks for n in x.get("table", [])):
                 menu.Append(item_delete_cascade)
+                item_delete_cascade.Enabled = has_cascade and any(not x[self.KEY_NEW] for x in rowdatas)
             if not lks: item_lks.Enabled = False
             if not fks: item_fks.Enabled = False
-            item_delete_cascade.Enabled = has_cascade and any(not x[self.KEY_NEW] for x in rowdatas)
         elif is_table:
             menu.Append(item_insert)
         else:
