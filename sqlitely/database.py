@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.12.2021
+@modified    01.01.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1755,7 +1755,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if name == name2: return
 
         item = self.get_category("table", table)
-        if not any(util.lceq(c["name"], column)
+        if not any(util.lceq(c["name"], name)
                    for c in (item or {}).get("meta", {}).get("columns", [])):
             return
         table = item["name"]
