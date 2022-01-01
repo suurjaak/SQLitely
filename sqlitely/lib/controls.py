@@ -87,7 +87,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    04.08.2021
+@modified    01.01.2022
 ------------------------------------------------------------------------------
 """
 import collections
@@ -814,7 +814,8 @@ class FormDialog(wx.Dialog):
 
 
         sep = wx.StaticLine(panel)
-        ctrl = self._footer["ctrl"] = SQLiteTextCtrl(panel, traversable=True, size=(-1, 60), name=accname)
+        ctrl = self._footer["ctrl"] = SQLiteTextCtrl(panel, traversable=True, size=(-1, 60),
+                                                     name=accname, style=wx.BORDER_SUNKEN)
         ctrl.SetCaretLineVisible(False)
 
         sizer.Add(sep, flag=wx.GROW)
@@ -959,7 +960,7 @@ class FormDialog(wx.Dialog):
 
             mylabel = wx.StaticText(parent, label=label, name=accname + "_label")
             tb = wx.ToolBar(parent, style=wx.TB_FLAT | wx.TB_NODIVIDER)
-            ctrl = field["component"](parent, traversable=True)
+            ctrl = field["component"](parent, traversable=True, style=wx.BORDER_SUNKEN)
 
             ctrl.SetName(accname)
             ctrl.SetMarginCount(1)
@@ -2919,6 +2920,15 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.caretline_focus = kwargs.pop("caretline_focus", None)
         self.traversable     = kwargs.pop("traversable", False)
         self.wheelable       = kwargs.pop("wheelable", True)
+
+        if "linux2" == sys.platform:
+            # If no explicit border specified, set BORDER_SIMPLE to make control visible
+            # (STC in Linux supports only BORDER_SIMPLE and by default has no border)
+            ALLBORDERS = (wx.BORDER_DOUBLE | wx.BORDER_MASK | wx.BORDER_NONE | wx.BORDER_RAISED |
+                          wx.BORDER_SIMPLE | wx.BORDER_STATIC | wx.BORDER_SUNKEN | wx.BORDER_THEME)
+            if not kwargs.get("style", 0) & ALLBORDERS:
+                kwargs["style"] = kwargs.get("style", 0) | wx.BORDER_SIMPLE
+
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
         self.autocomps_added = set(["sqlite_master"])
         # All autocomps: added + KEYWORDS
