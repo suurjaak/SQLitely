@@ -2905,6 +2905,7 @@ class SchemaObjectPage(wx.Panel):
     }
     CASCADE_INTERVAL = 1000 # Interval in millis after which to cascade name/column updates
     ALTER_INTERVAL   =  500 # Interval in millis after which to re-create ALTER statement
+    GRID_ROW_HEIGHT = 30 if "linux2" == sys.platform else 23
 
 
     def __init__(self, parent, db, item, id=wx.ID_ANY, pos=wx.DefaultPosition,
@@ -3467,7 +3468,7 @@ class SchemaObjectPage(wx.Panel):
         panel_grid = self._panel_columnsgrid = wx.ScrolledWindow(panel, style=s2)
         panel_grid.Sizer = wx.BoxSizer(wx.HORIZONTAL)
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
-        panel_grid.SetScrollRate(0, 23)
+        panel_grid.SetScrollRate(0, self.GRID_ROW_HEIGHT)
 
         sizer_headers.Add(50, 0)
         if "table" == self._category:
@@ -3513,7 +3514,7 @@ class SchemaObjectPage(wx.Panel):
         grid.DisableDragColSize()
         grid.HideColLabels()
         grid.SetRowLabelSize(50)
-        grid.SetDefaultRowSize(23)
+        grid.SetDefaultRowSize(self.GRID_ROW_HEIGHT)
         grid.SetCellHighlightPenWidth(0)
         grid.SetCellHighlightROPenWidth(0)
         grid.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
@@ -3628,7 +3629,7 @@ class SchemaObjectPage(wx.Panel):
         grid.DisableDragColSize()
         grid.HideColLabels()
         grid.SetRowLabelSize(50)
-        grid.SetDefaultRowSize(23)
+        grid.SetDefaultRowSize(self.GRID_ROW_HEIGHT)
         grid.SetCellHighlightPenWidth(0)
         grid.SetCellHighlightROPenWidth(0)
         grid.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
@@ -4133,10 +4134,10 @@ class SchemaObjectPage(wx.Panel):
         if insert:
             start = panel.Sizer.Cols * i
             panel.Sizer.Insert(start, list_column, border=5, flag=wx.LEFT)
-            panel.Sizer.InsertSpacer(start+1, (0, 23))
+            panel.Sizer.InsertSpacer(start+1, (0, self.GRID_ROW_HEIGHT))
         else:
             panel.Sizer.Add(list_column, border=5, flag=wx.LEFT)
-            panel.Sizer.Add(0, 23)
+            panel.Sizer.Add(0, self.GRID_ROW_HEIGHT)
 
         self._BindDataHandler(self._OnChange, list_column, ["columns", list_column, "name"])
         ctrls = [list_column]
@@ -4162,10 +4163,10 @@ class SchemaObjectPage(wx.Panel):
         if insert:
             start = panel.Sizer.Cols * i
             panel.Sizer.Insert(start, text_column, border=5, flag=wx.LEFT | wx.GROW)
-            panel.Sizer.InsertSpacer(start+1, (0, 23))
+            panel.Sizer.InsertSpacer(start+1, (0, self.GRID_ROW_HEIGHT))
         else:
             panel.Sizer.Add(text_column, border=5, flag=wx.LEFT | wx.GROW)
-            panel.Sizer.Add(0, 23)
+            panel.Sizer.Add(0, self.GRID_ROW_HEIGHT)
 
         self._BindDataHandler(self._OnChange, text_column, ["columns", text_column, "name"])
         ctrls = [text_column]
