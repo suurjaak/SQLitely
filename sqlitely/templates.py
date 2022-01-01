@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.12.2021
+@modified    01.01.2022
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -465,9 +465,9 @@ str_cols = ", ".join(grammar.quote(c["name"]) for c in columns)
 %>
 %for row, original in zip(rows, originals):
 <%
-setstr = ", ".join("%s = %s" % (grammar.quote(c["name"]), grammar.format(row[c["name"]], c))
+setstr = ", ".join("%s = %s" % (grammar.quote(c["name"]).encode("utf-8"), grammar.format(row[c["name"]], c))
                    for c in columns if c["name"] not in pks or row[c["name"]] != original[c["name"]])
-wherestr = " AND ".join("%s = %s" % (grammar.quote(c["name"]), grammar.format(original[c["name"]], c))
+wherestr = " AND ".join("%s = %s" % (grammar.quote(c["name"]).encode("utf-8"), grammar.format(original[c["name"]], c))
                        for c in columns if c["name"] in pks and c["name"] in original)
 %>
 UPDATE {{ name }} SET {{ setstr }}{{ (" WHERE " + wherestr) if wherestr else "" }};
