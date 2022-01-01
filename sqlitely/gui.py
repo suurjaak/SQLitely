@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.12.2021
+@modified    01.01.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -213,8 +213,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         notebook.Bind(wx.EVT_MENU, on_close_hotkey, id=id_close)
         notebook.SetAcceleratorTable(wx.AcceleratorTable(accelerators))
 
-        drop = controls.FileDrop(on_files=self.on_drop_files, on_folders=self.on_drop_folders)
-        self.DropTarget = self.notebook.DropTarget = drop
+        dropargs = dict(on_files=self.on_drop_files, on_folders=self.on_drop_folders)
+        self.DropTarget = controls.FileDrop(**dropargs)
+        self.notebook.DropTarget = controls.FileDrop(**dropargs)
 
         self.MinSize = conf.MinWindowSize
         if conf.WindowMaximized:
@@ -2180,9 +2181,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if not self.IsMaximized(): conf.WindowSize = self.Size[:]
         conf.save()
         self.trayicon.Destroy()
-        # Linux can terminate with segfault on sys.exit()
-        exiter = functools.partial(os._exit, 0) if hasattr(os, "_exit") else sys.exit
-        wx.CallAfter(exiter) # Immediate exit fails if exiting from tray
+        wx.CallAfter(sys.exit) # Immediate exit fails if exiting from tray
 
 
     def on_close_page(self, event):
