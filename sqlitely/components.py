@@ -9556,10 +9556,8 @@ class ColumnDialog(wx.Dialog):
         sizer_right.Add(tslabel, flag=wx.ALIGN_RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_right.Add(tsedit, border=5, flag=wx.RIGHT)
 
-        sizer_center.AddStretchSpacer()
-        sizer_center.Add(panel,       border=10, flag=wx.RIGHT | wx.ALIGN_CENTER, proportion=1)
-        sizer_center.Add(sizer_right, border=10, flag=wx.TOP   | wx.ALIGN_CENTER)
-        sizer_center.AddStretchSpacer()
+        sizer_center.Add(panel,       border=10, flag=wx.RIGHT, proportion=1)
+        sizer_center.Add(sizer_right, border=10, flag=wx.TOP)
 
         page.Sizer.Add(sizer_header, flag=wx.GROW)
         page.Sizer.Add(sizer_center, flag=wx.GROW, proportion=1)
