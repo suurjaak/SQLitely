@@ -87,7 +87,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    01.01.2022
+@modified    02.01.2022
 ------------------------------------------------------------------------------
 """
 import collections
@@ -527,7 +527,8 @@ class FormDialog(wx.Dialog):
     }
     """
 
-    WIDTH = 440
+    WIDTH = 640 if "linux2" == sys.platform else 440
+    HEIGHT_FOOTER = 100 if "linux2" == sys.platform else 65
 
 
     def __init__(self, parent, title, props=None, data=None, edit=None, autocomp=None, onclose=None, footer=None):
@@ -576,7 +577,7 @@ class FormDialog(wx.Dialog):
 
         self.Fit()
         FRAMEH = 2 * wx.SystemSettings.GetMetric(wx.SYS_FRAMESIZE_Y) + wx.SystemSettings.GetMetric(wx.SYS_CAPTION_Y)
-        MINH = 25 + (65 if panel_footer else 0)
+        MINH = 25 + (self.HEIGHT_FOOTER if panel_footer else 0)
         self.Size = self.MinSize = (self.WIDTH, panel_wrap.VirtualSize[1] + MINH + sizer_buttons.Size[1] + FRAMEH)
         if splitter:
             splitter.SetSashPosition(splitter.Size[1] - 65)

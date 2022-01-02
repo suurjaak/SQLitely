@@ -4782,7 +4782,8 @@ class SchemaObjectPage(wx.Panel):
         sizer_wrapper.Add(panel_columns, border=5, proportion=1, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer_wrapper.Add(button_add_column, border=5, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.ALIGN_RIGHT)
 
-        parent.Sizer.Add(panel_wrapper, border=10, pos=(dialog._rows, 0), span=(1, 12), flag=wx.BOTTOM)
+        parent.Sizer.Add(panel_wrapper, border=10, pos=(dialog._rows, 0), span=(1, 4), flag=wx.BOTTOM | wx.GROW)
+        parent.Sizer.AddGrowableRow(dialog._rows)
 
         if not dialog._editmode: button_add_column.Hide()
         dialog._BindHandler(on_add, button_add_column)
