@@ -5839,7 +5839,7 @@ class SchemaObjectPage(wx.Panel):
             try: self._db.executescript(sql2, name="TEST")
             except Exception as e:
                 logger.exception("Error executing test SQL.")
-                try: self._db.execute("ROLLBACK", name="TEST")
+                try: self._db.executescript("ROLLBACK", name="TEST")
                 except Exception: pass
                 try: self._fks_on and self._db.execute("PRAGMA foreign_keys = on", name="TEST")
                 except Exception: pass
