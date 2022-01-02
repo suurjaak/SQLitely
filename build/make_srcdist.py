@@ -4,7 +4,7 @@ sqlitely\. Sets execute flag permission on .sh files.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  05.07.2020
+@modified  02.01.2022
 """
 import glob
 import os
@@ -17,10 +17,10 @@ import zlib
 if "__main__" == __name__:
     NAME = "sqlitely"
     INITIAL_DIR = os.getcwd()
-    PACKAGING_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__)))
-    os.chdir(os.path.join(os.path.dirname(__file__), ".."))
-    sys.path.append(NAME)
-    import conf
+    ROOT_DIR    = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    SRC_DIR     = "src"
+    sys.path.insert(0, os.path.join(ROOT_DIR, SRC_DIR))
+    from sqlitely import conf
 
     BASE_DIR = ""
     ZIP_DIR = "%s_%s" % (NAME, conf.Version)
@@ -31,12 +31,11 @@ if "__main__" == __name__:
         # Cannot have ZIP system UNIX with paths like Windows
         return "/".join(filter(None, args))
 
-    def add_files(zf, filenames, subdir="", subdir_local=None):
+    def add_files(zf, filenames, subdir=""):
         global BASE_DIR
         size = 0
         for filename in filenames:
-            fullpath = os.path.join(BASE_DIR,
-                subdir_local if subdir_local is not None else subdir, filename)
+            fullpath = os.path.join(BASE_DIR, subdir, filename)
             zi = zipfile.ZipInfo()
             zi.filename = pathjoin(ZIP_DIR, subdir, filename)
             zi.date_time = time.localtime(os.path.getmtime(fullpath))[:6]
@@ -51,13 +50,20 @@ if "__main__" == __name__:
             size += os.path.getsize(fullpath)
         return size
 
+    os.chdir(ROOT_DIR)
     with zipfile.ZipFile(os.path.join(INITIAL_DIR, DEST_FILE), mode="w") as zf:
         size = 0
-        for subdir, wildcard in [("build", "*"), ("res", "*"),
-        (NAME, "*.py"), (pathjoin(NAME, "bin"), "*"),
-        (pathjoin(NAME, "grammar"), "*"), (pathjoin(NAME, "lib"), "*.py"), 
-        (pathjoin(NAME, "lib", "vendor"), "*.py"), (pathjoin(NAME, "media"), "*"), 
-        (pathjoin(NAME, "etc"), "%s.ini" % NAME)]:
+        for subdir, wildcard in [
+            ("build",                                  "*"),
+            ("res",                                    "*"),
+            (pathjoin(SRC_DIR, NAME),                  "*.py"),
+            (pathjoin(SRC_DIR, NAME, "bin"),           "*"),
+            (pathjoin(SRC_DIR, NAME, "grammar"),       "*"),
+            (pathjoin(SRC_DIR, NAME, "lib"),           "*.py"), 
+            (pathjoin(SRC_DIR, NAME, "lib", "vendor"), "*.py"),
+            (pathjoin(SRC_DIR, NAME, "media"),         "*"), 
+            (pathjoin(SRC_DIR, NAME, "etc"),           "%s.ini" % NAME)
+        ]:
             entries = glob.glob(os.path.join(BASE_DIR, subdir, wildcard))
             files = sorted([os.path.basename(x) for x in entries
                           if os.path.isfile(x)], key=str.lower)

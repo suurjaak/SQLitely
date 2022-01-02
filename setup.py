@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.12.2020
+@modified    02.01.2022
 ------------------------------------------------------------------------------
 """
 import atexit
@@ -19,7 +19,13 @@ import sys
 import setuptools
 from setuptools.command.install import install
 
+ROOTPATH  = os.path.abspath(os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(ROOTPATH, "src"))
+
 from sqlitely import conf
+
+
+PACKAGE = conf.Title.lower()
 
 
 class CustomInstall(install):
@@ -41,7 +47,7 @@ class CustomInstall(install):
                         return os.path.join(p, name)
                 except Exception: pass
 
-        install_path = find_module_path(conf.Title.lower())
+        install_path = find_module_path(PACKAGE)
         bin_path = os.path.join(install_path, "bin") if install_path else None
         mask = stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
         for f in os.listdir(bin_path) if bin_path else ():
@@ -80,9 +86,10 @@ setuptools.setup(
     install_requires=["antlr4-python2-runtime==4.9", "appdirs", "openpyxl<=3.0.0",
                       "Pillow<=6.2.2", "pyparsing", "pytz", "wxPython>=4.0",
                       "xlrd", "XlsxWriter"],
-    entry_points={"gui_scripts": ["sqlitely = sqlitely.main:run"]},
+    entry_points={"gui_scripts": ["{0} = {0}.main:run".format(PACKAGE)]},
 
-    packages=setuptools.find_packages(),
+    package_dir      = {"": "src"},
+    packages         = [PACKAGE],
     include_package_data=True, # Use MANIFEST.in for data files
     classifiers=[
         "Development Status :: 5 - Production/Stable",

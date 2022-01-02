@@ -6,7 +6,7 @@ depending on Python environment.
 Pyinstaller-provided names and variables: Analysis, EXE, PYZ, SPEC, TOC.
 
 @created   23.08.2019
-@modified  19.09.2020
+@modified  02.01.2022
 """
 import os
 import struct
@@ -17,12 +17,12 @@ DO_DEBUGVER = False
 DO_64BIT    = (struct.calcsize("P") * 8 == 64)
 
 BUILDPATH = os.path.dirname(os.path.abspath(SPEC))
-APPPATH   = os.path.join(os.path.dirname(BUILDPATH), NAME)
-ROOTPATH  = os.path.dirname(APPPATH)
+ROOTPATH  = os.path.dirname(BUILDPATH)
+APPPATH   = os.path.join(ROOTPATH, "src")
 os.chdir(ROOTPATH)
-sys.path.append(APPPATH)
+sys.path.insert(0, APPPATH)
 
-import conf
+from sqlitely import conf
 
 app_file = "%s_%s%s%s" % (NAME, conf.Version, "_x64" if DO_64BIT else "",
                           ".exe" if "nt" == os.name else "")
@@ -40,10 +40,10 @@ SQLITE_ANALYZER = "sqlite3_analyzer.exe"   if "nt"  == os.name else \
                   "sqlite3_analyzer_osx"   if "os2" == os.name else \
                   "sqlite3_analyzer_linux" if not DO_64BIT else \
                   "sqlite3_analyzer_linux_x64"
-a.datas += [("conf.py",                "%s/conf.py" % NAME,                   "DATA"), # For configuration docstrings
-            ("bin/" + SQLITE_ANALYZER, "%s/bin/%s" % (NAME, SQLITE_ANALYZER), "DATA"),
-            ("res/Carlito.ttf",        "%s/media/Carlito.ttf" % NAME,         "DATA"),
-            ("res/CarlitoBold.ttf",    "%s/media/CarlitoBold.ttf" % NAME,     "DATA"), ]
+a.datas += [("conf.py",                "src/%s/conf.py" % NAME,                   "DATA"), # For configuration docstrings
+            ("bin/" + SQLITE_ANALYZER, "src/%s/bin/%s" % (NAME, SQLITE_ANALYZER), "DATA"),
+            ("res/Carlito.ttf",        "src/%s/media/Carlito.ttf" % NAME,         "DATA"),
+            ("res/CarlitoBold.ttf",    "src/%s/media/CarlitoBold.ttf" % NAME,     "DATA"), ]
 a.binaries = a.binaries - TOC([
     ('tcl85.dll', None, None), ('tk85.dll',  None, None), ('_tkinter',  None, None)
 ])

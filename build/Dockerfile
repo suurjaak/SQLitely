@@ -7,7 +7,7 @@
 #     xhost +
 #     docker run -it --rm --mount src=/,target=/mnt/host,type=bind -e DISPLAY -v /tmp/.X11-unix/:/tmp/.X11-unix/ sqlitely
 #
-# Add 'sudo' before docker commands if not running as root user.
+# Add 'sudo' before docker commands if not running as root user and not in docker-users group.
 #
 # Add '--mount src="path to host directory",target=/etc/sqlitely' after 'docker run'
 # to retain SQLitely configuration in a host directory between runs.
