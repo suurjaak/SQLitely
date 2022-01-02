@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.01.2022
+@modified    02.01.2022
 ------------------------------------------------------------------------------
 """
 import calendar
@@ -9805,9 +9805,10 @@ class ColumnDialog(wx.Dialog):
 
     def _OnClose(self, event=None):
         """Handler for closing dialog."""
-        event.Skip()
-        if wx.ID_OK == event.Id: self._PropagateChange()
-        if self.IsModal(): wx.CallAfter(self.EndModal, wx.OK)
+        if event:
+            event.Skip()
+            if wx.ID_OK == event.Id: self._PropagateChange()
+        elif self.IsModal(): wx.CallAfter(self.EndModal, wx.OK)
         if self.IsModal(): wx.CallAfter(lambda: self and self.Destroy())
 
 
