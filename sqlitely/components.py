@@ -10372,7 +10372,7 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         if "SVG" == filetype:
             content = self.MakeTemplate(filetype)
-            with open(filename, "wb") as f: f.write(content)
+            with open(filename, "wb") as f: f.write(content.encode("utf-8"))
         else:
             self.MakeBitmap(zoom=zoom).SaveFile(filename, wxtype)
             util.start_file(filename)
