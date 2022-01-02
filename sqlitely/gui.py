@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.01.2022
+@modified    02.01.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -339,7 +339,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             setattr(self, "label_" + field, valtext)
         sizer_labels.AddGrowableCol(1, proportion=1)
         sizer_labels.AddGrowableRow(0, proportion=1)
-        sizer_labels.AddGrowableRow(3, proportion=1)
+        sizer_labels.AddGrowableRow(3, proportion=10)
 
         BUTTONS_DETAIL = [
             ("button_open", "&Open", images.ButtonOpen,
@@ -391,7 +391,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         panel_main.Sizer.Add(self.button_missing, flag=wx.GROW)
         panel_main.Sizer.Add(self.button_clear,   flag=wx.GROW)
         panel_detail.Sizer.Add(label_db,     border=10, flag=wx.ALL | wx.GROW)
-        panel_detail.Sizer.Add(sizer_labels, border=10, flag=wx.ALL | wx.GROW)
+        panel_detail.Sizer.Add(sizer_labels, border=10, flag=wx.ALL | wx.GROW,
+                               proportion=2 if "linux2" == sys.platform else 0)
         panel_detail.Sizer.AddStretchSpacer()
         panel_detail.Sizer.Add(self.button_open,   flag=wx.GROW)
         panel_detail.Sizer.Add(self.button_saveas, flag=wx.GROW)
