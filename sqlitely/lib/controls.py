@@ -503,6 +503,7 @@ class FormDialog(wx.Dialog):
        ?component:    specific wx component to use
        ?exclusive:    if true, list-type choices are removed from left list
                       when added to the right
+       ?dropempty:    true if field should be deleted from data when set value is empty
        ?toggle:       if true, field is toggle-able and children hidden when off
        ?togglename: { an additional child editbox for name right next to toggle
          name:        data subpath for editbox value
@@ -671,7 +672,7 @@ class FormDialog(wx.Dialog):
         """Deletes field data value."""
         ptr = self._data
         path = field.get("path") or path
-        for x in path: ptr = ptr.get(x, {})
+        for x in path: ptr = ptr.get(x, {}) if isinstance(ptr, dict) else ptr[x]
         ptr.pop(field["name"], None)
         if not self._ignore_change: self.PopulateFooter()
 
@@ -1083,7 +1084,8 @@ class FormDialog(wx.Dialog):
         or not value.strip()): value = value.strip()
         if isinstance(src, wx.ComboBox) and src.HasClientData():
             value = src.GetClientData(src.Selection)
-        self._SetValue(field, value, path)
+        if value in (None, "") and field.get("dropempty"): self._DelValue(field, path)
+        else: self._SetValue(field, value, path)
         if field.get("link"):
             name = field["link"]
             if callable(name):

@@ -4829,8 +4829,8 @@ class SchemaObjectPage(wx.Panel):
 
             if dialog._editmode:
                 path = ["key", i]
-                dialog._BindHandler(dialog._OnChange, ctrl_index,   {"name": "name"},   path)
-                dialog._BindHandler(dialog._OnChange, list_collate, {"name": "collate"}, path)
+                dialog._BindHandler(dialog._OnChange, ctrl_index,   {"name": "name"},    path)
+                dialog._BindHandler(dialog._OnChange, list_collate, {"name": "collate", "dropempty": True}, path)
                 dialog._BindHandler(dialog._OnChange, list_order,   {"name": "order"},   path)
                 dialog._BindHandler(on_move,   button_up,     i, -1)
                 dialog._BindHandler(on_move,   button_down,   i, +1)
