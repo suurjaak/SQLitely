@@ -9620,7 +9620,7 @@ class ColumnDialog(wx.Dialog):
             if filteridx >= 0: dlg.SetFilterIndex(filteridx)
             if wx.ID_OK != dlg.ShowModal(): return
 
-            filename = get_dialog_path(dlg)
+            filename = controls.get_dialog_path(dlg)
             filetype = os.path.splitext(filename)[-1].lstrip(".").upper()
             v = convert(filetype)
             if not v: return
