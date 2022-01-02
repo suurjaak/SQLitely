@@ -10671,13 +10671,6 @@ class SchemaDiagram(wx.ScrolledWindow):
         """
         if not self: return
 
-        def keys_equal(kk1, kk2):
-            """Returns whether item pks and fks are equal w.r.t. to schema diagram."""
-            (pks1, fks1), (pks2, fks2) = kk1, kk2
-            return len(fks1) == len(fks2) and fks1 == fks2 and \
-                   len(pks1) == len(pks2) and \
-                   all(a["name"] == b["name"] for a, b in zip(pks1, pks2))
-
         objs0  = self._objs.values()
         sels0  = self._sels.copy()
         lines0 = self._lines.copy()
@@ -10718,7 +10711,7 @@ class SchemaDiagram(wx.ScrolledWindow):
 
                 stats, stats0 = self._GetItemStats(opts), (o0 or {}).get("stats")
                 bmp, bmpsel = None, None
-                if o0 and keys_equal(o0["keys"], keys.get(name, ((), ()))) \
+                if o0 and o0["sql0"] == opts["sql0"] \
                 and self._HasItemBitmaps(o0, self._show_stats and stats):
                     bmp, bmpsel = self._GetItemBitmaps(o0, self._show_stats and stats)
                 if o0 and o0["name"] in sels0: self._sels[name] = oid
