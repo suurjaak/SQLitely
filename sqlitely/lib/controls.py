@@ -624,7 +624,7 @@ class FormDialog(wx.Dialog):
             sizer.AddGrowableCol(sizer.Cols - 2, proportion=1)
         if len(self._comps) == 1 and not sizer.IsRowGrowable(0):
             sizer.AddGrowableRow(0, proportion=1)
-        if self._footer: self._footer["populate"](self, self._footer["ctrl"], immediate=True)
+        self.PopulateFooter(immediate=True)
         self._ignore_change = False
         self.Layout()
         self.Thaw()
@@ -639,6 +639,12 @@ class FormDialog(wx.Dialog):
                 for x in p[:-1]: ptr = ptr.get(x) or {}
                 ptr.pop(p[-1], None)
         return result
+
+
+    def PopulateFooter(self, immediate=False):
+        """Populates footer, if any."""
+        if self._footer:
+            self._footer["populate"](self, self._footer["ctrl"], immediate=immediate)
 
 
     def _GetValue(self, field, path=()):
@@ -658,8 +664,7 @@ class FormDialog(wx.Dialog):
             if ptr is None: ptr = parent[x] = {}
             parent = ptr
         ptr[field["name"]] = value
-        if not self._ignore_change and self._footer:
-            self._footer["populate"](self, self._footer["ctrl"])
+        if not self._ignore_change: self.PopulateFooter()
 
 
     def _DelValue(self, field, path=()):
@@ -668,8 +673,7 @@ class FormDialog(wx.Dialog):
         path = field.get("path") or path
         for x in path: ptr = ptr.get(x, {})
         ptr.pop(field["name"], None)
-        if not self._ignore_change and self._footer:
-            self._footer["populate"](self, self._footer["ctrl"])
+        if not self._ignore_change: self.PopulateFooter()
 
 
     def _GetField(self, name, path=()):

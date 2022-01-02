@@ -4736,6 +4736,7 @@ class SchemaObjectPage(wx.Panel):
         def on_remove(index, event=None):
             del data["key"][index]
             populate_rows()
+            dialog.PopulateFooter()
 
         def populate_rows(focus=False):
             """"""
