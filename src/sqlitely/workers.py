@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.12.2021
+@modified    02.01.2022
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -388,6 +388,8 @@ class AnalyzerThread(WorkerThread):
         """
         super(AnalyzerThread, self).__init__(callback)
         self._process = None # subprocess.Popen
+        try: os.chmod(conf.DBAnalyzer, 0o755)
+        except Exception: pass
 
 
     def stop(self, drop=True):
@@ -408,6 +410,7 @@ class AnalyzerThread(WorkerThread):
 
     def run(self):
         self._is_running = True
+
         while self._is_running:
             path = self._queue.get()
             if not path: continue # while self._is_running

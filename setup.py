@@ -11,49 +11,17 @@ Released under the MIT License.
 @modified    02.01.2022
 ------------------------------------------------------------------------------
 """
-import atexit
 import os
 import re
-import stat
 import sys
 import setuptools
-from setuptools.command.install import install
 
 ROOTPATH  = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(ROOTPATH, "src"))
 
 from sqlitely import conf
 
-
 PACKAGE = conf.Title.lower()
-
-
-class CustomInstall(install):
-    """Sets executable bits on sqlite_analyzer binaries after installation."""
-
-    def __init__(self, *args, **kwargs):
-        install.__init__(self, *args, **kwargs)
-        if "nt" != os.name: atexit.register(self._post_install)
-
-    def _post_install(self):
-
-        def find_module_path(name):
-            paths = list(sys.path)
-            if getattr(self, "install_purelib", None):
-                paths.insert(0, self.install_purelib)
-            for p in paths:
-                try:
-                    if os.path.isdir(p) and name in os.listdir(p):
-                        return os.path.join(p, name)
-                except Exception: pass
-
-        install_path = find_module_path(PACKAGE)
-        bin_path = os.path.join(install_path, "bin") if install_path else None
-        mask = stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
-        for f in os.listdir(bin_path) if bin_path else ():
-            p = os.path.join(bin_path, f)
-            try: os.chmod(p, mask)
-            except Exception: pass
 
 
 def readfile(path):
@@ -71,8 +39,7 @@ def readfile(path):
 
 
 setuptools.setup(
-    cmdclass={"install": CustomInstall},
-    name=conf.Title,
+    name=PACKAGE,
     version=conf.Version,
     description="SQLite database tool",
     url="https://github.com/suurjaak/SQLitely",
@@ -88,8 +55,8 @@ setuptools.setup(
                       "xlrd", "XlsxWriter"],
     entry_points={"gui_scripts": ["{0} = {0}.main:run".format(PACKAGE)]},
 
-    package_dir      = {"": "src"},
-    packages         = [PACKAGE],
+    package_dir={"": "src"},
+    packages=[PACKAGE],
     include_package_data=True, # Use MANIFEST.in for data files
     classifiers=[
         "Development Status :: 5 - Production/Stable",
