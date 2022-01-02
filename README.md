@@ -57,7 +57,7 @@ Python packages are installed.
 If running from pip installation, run `sqlitely` from the command-line. 
 If running straight from source code, launch `sqlitely.sh` where shell 
 scripts are supported, or `sqlitely.bat` under Windows, or open 
-a terminal and run `python -m sqlitely` in SQLitely directory.
+a terminal and run `python -m sqlitely` in SQLitely/src directory.
 
 
 Installation
