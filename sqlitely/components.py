@@ -10636,7 +10636,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             names = [o["name"] for o in items]
             menu.Bind(wx.EVT_MENU, cmd("data",   None, *names), item_data)
             menu.Bind(wx.EVT_MENU, cmd("schema", None, *names), item_schema)
-            menu.Bind(wx.EVT_MENU, cmd("drop",   None, *names), item_drop)
+            menu.Bind(wx.EVT_MENU, cmd("drop",   None, names),  item_drop)
 
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, "\n".join(map(grammar.quote, names)),
                                                      util.plural("name", names, numbers=False)), item_copy)
