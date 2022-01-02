@@ -6130,7 +6130,8 @@ class DatabasePage(wx.Panel):
                     if util.lceq(name, name2): continue # for name2
                     category2 = "table" if name2 in self.db.schema.get("table", ()) else "view"
                     requireds[name][name2] = category2
-                    if name2 not in mynames and name2 not in eschema.get(category2, ()):
+                    if name2 not in mynames and name2 not in eschema.get(category2, ()) \
+                    and self.db.is_valid_name(name2): # Skip sqlite_* specials
                         mynames.append(name2)
 
 
@@ -6149,7 +6150,7 @@ class DatabasePage(wx.Panel):
             for name0, kv in requireds.items():
                 if name in kv: rels.setdefault(kv[name], []).append(name0)
             return fmt_schema_items(rels)
-            
+
 
         entrymsg = ("Name conflict on exporting %(category)s %(name)s as %(name2)s%(depend)s.\n"
                     "Database %(filename2)s %(entryheader)s "
