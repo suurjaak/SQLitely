@@ -87,7 +87,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    02.01.2022
+@modified    21.01.2022
 ------------------------------------------------------------------------------
 """
 import collections
@@ -4080,7 +4080,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         v = self._AdaptValue(value)
 
         self._bytes[:] = v
-        if not noreset: 
+        if not noreset:
             self._type      = type(value) if is_long or not isinstance(value, long) else str
             self._fixed     = is_long or value is None or isinstance(value, (int, float))
             self._bytes0[:] = map(ord, v)
@@ -4227,7 +4227,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
                 pos = sself.CurrentPos
                 linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
                 if linepos >= self.WIDTH:  # Already at line end:
-                    self.CharRightExtend() # include first char at next line 
+                    self.CharRightExtend() # include first char at next line
 
         elif event.KeyCode in KEYS.DELETE + KEYS.BACKSPACE:
             self._QueueEvents()
@@ -5373,7 +5373,7 @@ class TreeListCtrl(wx.lib.gizmos.TreeListCtrl):
             event.Skip()
             if ctrl: wx.CallAfter(ctrl.StopEditing)
         ctrl.Bind(wx.EVT_KILL_FOCUS, on_kill_focus)
-        return ctrl       
+        return ctrl
 
 
 
@@ -5436,11 +5436,11 @@ class YAMLTextCtrl(wx.stc.StyledTextCtrl):
 
     def SetStyleSpecs(self):
         """Sets STC style colours."""
-        fgcolour, bgcolour, highcolour = (
+        fgcolour, bgcolour, highcolour, graycolour = (
             wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
             for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
                       if self.Enabled else wx.SYS_COLOUR_BTNFACE,
-                      wx.SYS_COLOUR_HOTLIGHT)
+                      wx.SYS_COLOUR_HOTLIGHT, wx.SYS_COLOUR_GRAYTEXT)
         )
 
         self.SetCaretForeground(fgcolour)
@@ -5448,19 +5448,20 @@ class YAMLTextCtrl(wx.stc.StyledTextCtrl):
         self.StyleSetSpec(wx.stc.STC_STYLE_DEFAULT,
                           "face:%s,back:%s,fore:%s" % (self.FONT_FACE, bgcolour, fgcolour))
         self.StyleSetSpec(wx.stc.STC_STYLE_BRACELIGHT, "fore:%s" % highcolour)
-        self.StyleSetSpec(wx.stc.STC_STYLE_BRACEBAD, "fore:#FF0000")
+        self.StyleSetSpec(wx.stc.STC_STYLE_BRACEBAD,  "fore:#FF0000")
         self.StyleClearAll() # Apply the new default style to all styles
 
-        # @todo on veel STC_YAML_REFERENCE STC_YAML_KEYWORD STC_YAML_IDENTIFIER STC_YAML_DOCUMENT
+        self.StyleSetSpec(wx.stc.STC_YAML_IDENTIFIER, "fore:%s" % highcolour)
+        self.StyleSetSpec(wx.stc.STC_YAML_DOCUMENT,   "fore:%s" % graycolour)
 
-        self.StyleSetSpec(wx.stc.STC_YAML_DEFAULT,   "face:%s" % self.FONT_FACE)
-        self.StyleSetSpec(wx.stc.STC_YAML_TEXT,    "fore:#FF007F") # "
+        self.StyleSetSpec(wx.stc.STC_YAML_DEFAULT,    "face:%s" % self.FONT_FACE)
+        self.StyleSetSpec(wx.stc.STC_YAML_TEXT,       "fore:#FF007F") # "
         # 01234567890.+-e
-        self.StyleSetSpec(wx.stc.STC_YAML_NUMBER, "fore:#FF00FF")
+        self.StyleSetSpec(wx.stc.STC_YAML_NUMBER,     "fore:#FF00FF")
         # : [] {}
-        self.StyleSetSpec(wx.stc.STC_YAML_OPERATOR, "fore:%s" % highcolour)
+        self.StyleSetSpec(wx.stc.STC_YAML_OPERATOR,   "fore:%s" % highcolour)
         # #...
-        self.StyleSetSpec(wx.stc.STC_YAML_COMMENT, "fore:#008000")
+        self.StyleSetSpec(wx.stc.STC_YAML_COMMENT,    "fore:#008000")
 
 
     def Enable(self, enable=True):
@@ -5630,7 +5631,7 @@ def YesNoMessageBox(message, caption, icon=wx.ICON_NONE, default=wx.YES):
     @param   default  default selected button, wx.YES or wx.NO
     """
     style = icon | wx.OK | wx.CANCEL
-    if wx.NO == default: style |= wx.CANCEL_DEFAULT 
+    if wx.NO == default: style |= wx.CANCEL_DEFAULT
     dlg = wx.MessageDialog(None, message, caption, style)
     dlg.SetOKCancelLabels("&Yes", "&No")
     return wx.YES if wx.ID_OK == dlg.ShowModal() else wx.NO
@@ -5639,7 +5640,7 @@ def YesNoMessageBox(message, caption, icon=wx.ICON_NONE, default=wx.YES):
 def get_dialog_path(dialog):
     """
     Returns the file path chosen in FileDialog, adding extension if dialog result
-    has none even though a filter has been selected, or if dialog result has a 
+    has none even though a filter has been selected, or if dialog result has a
     different extension than what is available in selected filter.
     """
     result = dialog.GetPath()
