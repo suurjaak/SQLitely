@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.01.2022
+@modified    16.03.2022
 ------------------------------------------------------------------------------
 """
 from ConfigParser import RawConfigParser
@@ -27,8 +27,8 @@ import wx
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.2.dev224"
-VersionDate = "22.01.2022"
+Version = "1.2.dev225"
+VersionDate = "16.03.2022"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -74,7 +74,7 @@ Defaults = {}
 DBFiles = []
 
 """Database filename extensions, as ('.extension', )."""
-DBExtensions = [".db", ".sqlite", ".sqlite3"]
+DBExtensions = [".db", ".db3", ".s3db", ".sl3", ".sqlite", ".sqlite3", ".sqlitedb"]
 
 """Database list sort state, [col, ascending]."""
 DBSort = []
