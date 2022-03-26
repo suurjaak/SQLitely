@@ -87,7 +87,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    21.01.2022
+@modified    22.03.2022
 ------------------------------------------------------------------------------
 """
 import collections
@@ -364,7 +364,7 @@ class ColourManager(object):
     @classmethod
     def UpdateControls(cls):
         """Updates all managed controls."""
-        for ctrl, props in cls.ctrlprops.items():
+        for ctrl, props in list(cls.ctrlprops.items()):
             if not ctrl: # Component destroyed
                 cls.ctrlprops.pop(ctrl)
                 continue # for ctrl, props
@@ -372,7 +372,7 @@ class ColourManager(object):
             for prop, colour in props.items():
                 cls.UpdateControlColour(ctrl, prop, colour)
 
-        for ctrl in cls.regctrls:
+        for ctrl in list(cls.regctrls):
             if not ctrl: cls.regctrls.discard(ctrl)
             elif isinstance(ctrl, wx.py.shell.Shell): cls.SetShellStyles(ctrl)
 
