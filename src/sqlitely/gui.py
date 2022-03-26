@@ -2282,7 +2282,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             for cmd in CMDS: self.TopLevelParent.run_console(cmd)
         self.SendSizeEvent() # Multiline wx.Notebooks need redrawing
 
-        # Remove page from visited pages order
+        # Change notebook page to last visited
         index_new = 0
         if self.pages_visited:
             for i in range(self.notebook.GetPageCount()):
