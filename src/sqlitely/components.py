@@ -2451,8 +2451,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         if not self._grid.Table.SaveChanges(): return False
 
         self._OnChange(updated=True)
-        # Refresh cell colours; without CallLater wx 2.8 can crash
-        wx.CallLater(1, lambda: self and self._grid.ForceRefresh())
+        self._grid.ForceRefresh()  # Refresh cell colours
         return True
 
 
@@ -2478,9 +2477,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         ): return
 
         self._grid.Table.UndoChanges()
-        # Refresh scrollbars and colours; without CallAfter wx 2.8 can crash
-        wx.CallLater(1, lambda: self and (self._grid.ContainingSizer.Layout(),
-                                          self._grid.ForceRefresh()))
+        self._grid.ContainingSizer.Layout()  # Refresh scrollbars
+        self._grid.ForceRefresh()            # Refresh colours
         self._backup = None
         self._OnChange(updated=True)
 
@@ -2712,8 +2710,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         self._grid.InsertRows(pos=0, numRows=1)
         self._grid.GoToCell(0, 0)
         self._grid.Refresh()
-        # Refresh scrollbars; without CallAfter wx 2.8 can crash
-        wx.CallAfter(lambda: self and self.Layout())
+        self.Layout()  # Refresh scrollbars
         self._OnChange()
 
 
@@ -2786,8 +2783,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
         self._backup = None
         self._OnChange(updated=True)
-        # Refresh cell colours; without CallLater wx 2.8 can crash
-        wx.CallLater(1, lambda: self and self._grid.ForceRefresh())
+        self._grid.ForceRefresh()  # Refresh cell colours
 
 
     def _OnRollback(self, event=None):

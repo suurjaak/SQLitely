@@ -28,7 +28,7 @@ import wx
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.0.dev227"
+Version = "2.0.dev228"
 VersionDate = "27.03.2022"
 
 if getattr(sys, "frozen", False):

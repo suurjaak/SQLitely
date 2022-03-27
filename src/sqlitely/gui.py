@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.03.2022
+@modified    27.03.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2529,10 +2529,6 @@ class DatabasePage(wx.Panel):
         bookstyle = wx.lib.agw.fmresources.INB_LEFT
         if "posix" == os.name: # Hard to identify selected tab in Gtk
             bookstyle |= wx.lib.agw.fmresources.INB_BOLD_TAB_SELECTION
-        if (wx.version().startswith("2.8") and sys.version_info.major == 2
-        and sys.version_info < (2, 7, 3)):
-            # wx 2.8 + Python below 2.7.3: labelbook can partly cover tab area
-            bookstyle |= wx.lib.agw.fmresources.INB_FIT_LABELTEXT
         notebook = self.notebook = wx.lib.agw.labelbook.FlatImageBook(
             self, agwStyle=bookstyle, style=wx.BORDER_STATIC)
 
@@ -4876,22 +4872,6 @@ class DatabasePage(wx.Panel):
         # Save schema diagram state
         if not self.db.temporary:
             conf.SchemaDiagrams[self.db.filename] = self.diagram.GetOptions()
-
-
-    def split_panels(self):
-        """
-        Splits all SplitterWindow panels. To be called after layout in
-        Linux wx 2.8, as otherwise panels do not get sized properly.
-        """
-        if not self: return
-
-        for splitter in self.splitter_data, self.splitter_schema, self.splitter_info:
-            panel1, panel2 = splitter.Children
-            splitter.Unsplit()
-            splitter.SplitVertically(panel1, panel2, 270)
-        wx.CallLater(1000, lambda: self and
-                     (self.tree_data.SetColumnWidth(0, -1),
-                      self.tree_data.SetColumnWidth(1, -1)))
 
 
     def update_info_panel(self, reload=False):
