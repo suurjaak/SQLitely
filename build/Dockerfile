@@ -14,39 +14,30 @@
 #
 # Host filesystem is made available under /mnt/host.
 
-FROM ubuntu:18.04
+FROM ubuntu:20.04
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-      apt-utils \
-      locales-all \
-      python2.7 \
-      python-pip \
-      python-dbus \
-      python-gobject \
-      python-setuptools \
-      python-wheel \
-      python-wxgtk3.0 \
-      dbus-x11 \
-      libsdl2-2.0 \
-      libxtst6
+RUN apt-get update
+
+RUN DEBIAN_FRONTEND=noninteractive \
+    apt-get install -y --no-install-recommends \
+    libgtk-3-0 \
+    libsdl2-2.0 \
+    libwebkit2gtk-4.0 \
+    python3 \
+    python3-pip
 
 ENV LC_ALL   en_US.UTF-8
 ENV LANG     en_US.UTF-8
 ENV LANGUAGE en_US.UTF-8
 
-RUN pip install --upgrade pip
+RUN pip install wxPython==4.1.1 \
+    --find-links https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-20.04
 
-RUN pip install --ignore-installed --find-links \
-    https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-18.04 \
-    wxPython==4.1.0 --no-cache-dir --no-python-version-warning
-
-RUN pip install sqlitely --no-python-version-warning
+RUN pip install sqlitely
 
 RUN printf '\nConfigFile = "/etc/sqlitely/sqlitely.ini"\n' \
-    >> /usr/local/lib/python2.7/dist-packages/sqlitely/conf.py
+    >> /usr/local/lib/python3.8/dist-packages/sqlitely/conf.py
 
 VOLUME /etc/sqlitely
-
 
 CMD /usr/local/bin/sqlitely
