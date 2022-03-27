@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.01.2022
+@modified    26.03.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -24,9 +24,10 @@ import re
 import shutil
 import sys
 import tempfile
-import urllib
 import webbrowser
 
+import six
+from six.moves import urllib
 import wx
 import wx.adv
 import wx.html
@@ -69,7 +70,7 @@ DatabasePageEvent, EVT_DATABASE_PAGE = wx.lib.newevent.NewCommandEvent()
 class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     """Program main window."""
 
-    TRAY_ICON = (images.Icon16x16_32bit if "linux2" != sys.platform
+    TRAY_ICON = (images.Icon16x16_32bit if "linux" not in sys.platform
                  else images.Icon24x24_32bit)
 
     def __init__(self):
@@ -162,9 +163,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         self.dialog_selectfolder = wx.DirDialog(
             self, message="Choose a directory where to search for databases",
-            defaultPath=os.getcwdu(),
+            defaultPath=six.moves.getcwd(),
             style=wx.DD_DIR_MUST_EXIST | wx.RESIZE_BORDER)
-        self.dialog_savefile = wx.FileDialog(self, defaultDir=os.getcwdu(),
+        self.dialog_savefile = wx.FileDialog(self, defaultDir=six.moves.getcwd(),
             style=wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
 
@@ -392,7 +393,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         panel_main.Sizer.Add(self.button_clear,   flag=wx.GROW)
         panel_detail.Sizer.Add(label_db,     border=10, flag=wx.ALL | wx.GROW)
         panel_detail.Sizer.Add(sizer_labels, border=10, flag=wx.ALL | wx.GROW,
-                               proportion=2 if "linux2" == sys.platform else 0)
+                               proportion=2 if "linux" in sys.platform else 0)
         panel_detail.Sizer.AddStretchSpacer()
         panel_detail.Sizer.Add(self.button_open,   flag=wx.GROW)
         panel_detail.Sizer.Add(self.button_saveas, flag=wx.GROW)
@@ -795,7 +796,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             except (TypeError, ValueError):
                 pass
         # Schedule a check for due date, should the program run that long.
-        millis = max(1, min(sys.maxint, util.timedelta_seconds(interval) * 1000))
+        millis = max(1, min(sys.maxsize, util.timedelta_seconds(interval) * 1000))
         wx.CallLater(millis, self.update_check)
 
 
@@ -1043,7 +1044,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if conf.WindowMinimizedToTray: self.on_toggle_to_tray()
             else: self.Restore()
             self.Raise()
-            data = data if isinstance(data, (list, set, tuple)) else filter(bool, [data])
+            data = data if isinstance(data, (list, set, tuple)) else list(filter(bool, [data]))
             if data: self.load_database_pages(data, clearselection=True)
         wx.CallAfter(after, data)
 
@@ -1443,7 +1444,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
             if idx >= self.list_db.GetCountPerPage():
                 lh = self.list_db.GetUserLineHeight()
-                dy = (idx - self.list_db.GetCountPerPage() / 2) * lh
+                dy = (idx - self.list_db.GetCountPerPage() // 2) * lh
                 self.list_db.ScrollList(0, dy)
                 self.list_db.Update()
 
@@ -1465,7 +1466,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if not self: return
         result, refresh_idxs = False, []
         # Insert into database lists, if not already there
-        if isinstance(filenames, basestring): filenames = [filenames]
+        if isinstance(filenames, six.string_types): filenames = [filenames]
         for filename in filenames:
             filename = util.to_unicode(filename)
             if filename not in conf.DBFiles:
@@ -1598,7 +1599,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_save_database_as(self, event=None):
         """Handler for clicking to save a copy of a database in the list."""
-        filenames = filter(os.path.exists, self.dbs_selected)
+        filenames = list(filter(os.path.exists, self.dbs_selected))
         if not filenames:
             m = "None of the selected files" if len(self.dbs_selected) > 1 \
                 else 'The file "%s" does not' % self.dbs_selected[0]
@@ -1609,7 +1610,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
         dialog = wx.DirDialog(self,
             message="Choose directory where to save databases",
-            defaultPath=os.getcwdu(),
+            defaultPath=six.moves.getcwd(),
             style=wx.DD_DIR_MUST_EXIST | wx.RESIZE_BORDER
         ) if len(filenames) > 1 else wx.FileDialog(self,
             message="Save a copy..", wildcard=wildcard,
@@ -1708,7 +1709,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_remove_missing(self, event, selecteds=None):
         """Handler to remove nonexistent files from the database list."""
-        selecteds = selecteds or range(1, self.list_db.GetItemCount())
+        selecteds = selecteds or list(range(1, self.list_db.GetItemCount()))
         filter_func = lambda i: not os.path.exists(self.list_db.GetItemText(i))
         selecteds = list(filter(filter_func, selecteds))
         filenames = list(map(self.list_db.GetItemText, selecteds))
@@ -1817,9 +1818,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if self.columndlg is None:
             cols = [{"name": "text",    "type": "TEXT"},
                     {"name": "float",   "type": "REAL"},
-                    {"name": "integer", "type": "INTEGER"},
-                    {"name": "long",    "type": "BIGINT"}]
-            rowdata = {"text": "", "integer": 0, "long": 0L, "float": 0.0}
+                    {"name": "integer", "type": "INTEGER"}]
+            rowdata = {"text": "", "integer": 0, "float": 0.0}
+            if six.PY2:
+                cols.append({"name": "long",    "type": "BIGINT"})
+                rowdata["long"] = long(0)
 
             dummydb = lambda: None
             dummydb.get_keys = lambda *a, **kw: ([], [])
@@ -1873,15 +1876,16 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         def get_field_doc(name, tree=ast.parse(source)):
             """Returns the docstring immediately before name assignment."""
             for i, node in enumerate(tree.body):
-                if i and ast.Assign == type(node) and node.targets[0].id == name:
+                if i and isinstance(node, ast.Assign) and node.targets[0].id == name:
                     prev = tree.body[i - 1]
-                    if ast.Expr == type(prev) and ast.Str == type(prev.value):
+                    if isinstance(prev, ast.Expr) \
+                    and isinstance(prev.value, (ast.Str, ast.Constant)):  # Py2: Str, Py3: Constant
                         return prev.value.s.strip()
             return ""
 
         def typelist(mytype):
             def convert(v):
-                v = ast.literal_eval(v) if isinstance(v, basestring) else v
+                v = ast.literal_eval(v) if isinstance(v, six.string_types) else v
                 if not isinstance(v, (list, tuple)): v = tuple([v])
                 if not v: raise ValueError("Empty collection")
                 return tuple(map(mytype, v))
@@ -1904,7 +1908,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if wx.ID_OK == dialog.ShowModal():
             for k, v in dialog.GetProperties():
                 # Keep numbers in sane regions
-                if type(v) in [int, long]: v = max(1, min(sys.maxint, v))
+                if isinstance(v, six.integer_types): v = max(1, min(sys.maxsize, v))
                 setattr(conf, k, v)
             util.run_once(conf.save)
             self.MinSize = conf.MinWindowSize
@@ -2069,7 +2073,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             logger.exception("Error opening %s.", filename)
             return
         try:
-            tables = db.schema.get("table", {}).values()
+            tables = list(db.schema.get("table", {}).values())
             self.label_tables.Value = str(len(tables))
             if tables:
                 s = ""
@@ -2556,11 +2560,11 @@ class DatabasePage(wx.Panel):
         sizer.Add(notebook, proportion=1, border=5, flag=wx.GROW | wx.ALL)
 
         self.dialog_savefile = wx.FileDialog(
-            self, defaultDir=os.getcwdu(), wildcard=importexport.EXPORT_WILDCARD,
+            self, defaultDir=six.moves.getcwd(), wildcard=importexport.EXPORT_WILDCARD,
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
         # Need separate dialog w/o overwrite prompt, cannot swap style in Linux
         self.dialog_savefile_ow = wx.FileDialog(
-            self, defaultDir=os.getcwdu(), wildcard=importexport.EXPORT_WILDCARD,
+            self, defaultDir=six.moves.getcwd(), wildcard=importexport.EXPORT_WILDCARD,
             message="Choose directory where to save files",
             style=wx.FD_SAVE | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
 
@@ -3044,7 +3048,7 @@ class DatabasePage(wx.Panel):
                 ctrl.Bind(wx.EVT_CHOICE, self.on_pragma_change)
             elif int == opts["type"]:
                 ctrl = wx.SpinCtrl(panel_pragma, name=ctrl_name)
-                ctrl.SetRange(opts.get("min", -sys.maxint), opts.get("max", sys.maxint))
+                ctrl.SetRange(opts.get("min", -sys.maxsize), opts.get("max", sys.maxsize))
                 ctrl.Value = value
                 ctrl.Bind(wx.EVT_SPINCTRL, self.on_pragma_change)
             else:
@@ -3329,7 +3333,7 @@ class DatabasePage(wx.Panel):
         sizer2.Add(nb, proportion=1, flag=wx.GROW)
 
         sizer.Add(splitter, border=5, proportion=1, flag=wx.ALL | wx.GROW)
-        splitter.SplitVertically(panel1, panel2, self.Size[0] / 2 - 60)
+        splitter.SplitVertically(panel1, panel2, self.Size[0] // 2 - 60)
 
         self.populate_statistics()
 
@@ -3554,7 +3558,7 @@ class DatabasePage(wx.Panel):
                 return
 
             datapage = self.data_pages.get(category, {}).get(name)
-            lock = self.db.get_lock(category, name, skip=filter(bool, [datapage]))
+            lock = self.db.get_lock(category, name, skip=list(filter(bool, [datapage])))
             if lock:
                 wx.MessageBox(
                     "Cannot drop %s %s column %s.\n\n" % 
@@ -4022,7 +4026,7 @@ class DatabasePage(wx.Panel):
                     wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
                     wx.lib.agw.flatnotebook.FNB_X_ON_TAB |
                     wx.lib.agw.flatnotebook.FNB_VC8)
-        if "linux2" == sys.platform and wx.VERSION[:3] == (4, 1, 1):
+        if "linux" in sys.platform and wx.VERSION[:3] == (4, 1, 1):
             # wxPython 4.1.1 on Linux crashes with FNB_VC8
             agwStyle ^= wx.lib.agw.flatnotebook.FNB_VC8
         return wx.lib.agw.flatnotebook.FlatNotebook(parent, size=(-1, 27), agwStyle=agwStyle)
@@ -4268,7 +4272,7 @@ class DatabasePage(wx.Panel):
                 if not self.diagram_gauge.Shown:
                     self.diagram_gauge.Show()
                     self.diagram_gauge.ContainingSizer.Layout()
-                v = self.diagram_gauge.Value = 100 * index / count
+                v = self.diagram_gauge.Value = 100 * index // count
                 self.diagram_gauge.ToolTip = "Generating.. %s%% (%s of %s)" % (v, index + 1, count)
             return
 
@@ -4478,7 +4482,7 @@ class DatabasePage(wx.Panel):
 
         if (value == self.pragma.get(name)
         or not value and bool(value) == bool(self.pragma.get(name))
-        and database.Database.PRAGMA[name]["type"] in (str, unicode)):
+        and isinstance(database.Database.PRAGMA[name]["type"], six.string_types)):
             self.pragma_changes.pop(name, None)
         else: self.pragma_changes[name] = value
 
@@ -4526,7 +4530,7 @@ class DatabasePage(wx.Panel):
         search = event.String.strip()
         if search == self.pragma_filter: return
 
-        patterns = map(re.escape, search.split())
+        patterns = list(map(re.escape, search.split()))
         values = dict(self.pragma, **self.pragma_changes)
         show_deprecated = False
         self.page_pragma.Freeze()
@@ -4698,7 +4702,7 @@ class DatabasePage(wx.Panel):
                             (grammar.quote(fk), grammar.quote(table),
                              self.db.get_rowid(table), ", ".join(map(str, rowids)))
                         ).fetchall()]
-                        if vals: line += "\nKeys: (%s)" % ", ".join(map(unicode, sorted(vals)))
+                        if vals: line += "\nKeys: (%s)" % ", ".join(map(six.text_type, sorted(vals)))
                     lines.append(line)
 
         msg = "Detected %s in %s:\n\n%s" % (
@@ -5001,10 +5005,10 @@ class DatabasePage(wx.Panel):
 
             menutitle = "C&opy link location"
             if href.startswith("file://"):
-                href = urllib.url2pathname(href[5:])
+                href = urllib.request.url2pathname(href[5:])
                 if any(href.startswith(x) for x in ["\\\\\\", "///"]):
                     href = href[3:] # Strip redundant filelink slashes
-                if isinstance(href, unicode):
+                if isinstance(href, six.text_type):
                     # Workaround for wx.html.HtmlWindow double encoding
                     href = href.encode("latin1", errors="xmlcharrefreplace"
                            ).decode("utf-8")
@@ -5033,7 +5037,7 @@ class DatabasePage(wx.Panel):
             self.notebook_search.PopupMenu(menu)
         elif href.startswith("file://"):
             # Open the link, or file, or program internal link to table
-            filename = path = urllib.url2pathname(href[5:])
+            filename = path = urllib.request.url2pathname(href[5:])
             if any(path.startswith(x) for x in ["\\\\\\", "///"]):
                 filename = href = path[3:]
             if path and os.path.exists(path):
@@ -5203,7 +5207,7 @@ class DatabasePage(wx.Panel):
                            text, self.db)
             nb = self.notebook_search
             data = {"id": wx.NewIdRef().Id, "db": self.db, "text": text,
-                    "map": {}, "width": nb.Size.width * 5/9, "partial_html": "",
+                    "map": {}, "width": nb.Size.width * 5//9, "partial_html": "",
                     "case": conf.SearchCaseSensitive}
             if "meta" == source or conf.SearchInMeta:
                 data["source"] = "meta"
@@ -5970,7 +5974,7 @@ class DatabasePage(wx.Panel):
         Handler for exporting one or more tables/views to file, opens file dialog
         and performs export.
         """
-        items = [item] if isinstance(item, basestring) else item
+        items = [item] if isinstance(item, six.string_types) else item
 
         exporting = [x for x in items if category in self.data_pages
                      and x in self.data_pages[category]
@@ -6033,7 +6037,7 @@ class DatabasePage(wx.Panel):
                 "is_total_estimated": data.get("is_count_estimated")
             })
 
-        if isinstance(item, basestring): # Chose one specific table to export
+        if isinstance(item, six.string_types): # Chose one specific table to export
             page = self.data_pages[category].get(item) or \
                    self.add_data_page(self.db.get_category(category, item))
             page.Export(exports)
@@ -6063,7 +6067,7 @@ class DatabasePage(wx.Panel):
             "A global export is already underway.", conf.Title, wx.ICON_NONE
         )
 
-        names = [names] if isinstance(names, basestring) else names or []
+        names = [names] if isinstance(names, six.string_types) else names or []
         if not names and category: names = list(self.db.schema[category])
         elif not names: names = sum((list(self.db.schema.get(x) or [])
                                      for x in ("table", "view")), [])
@@ -6255,7 +6259,7 @@ class DatabasePage(wx.Panel):
                                            for c, vv in sorted(successes.items()))
                 else: status = "%s %s" % (util.plural(*next(iter(successes.items()))),
                                           util.join(", ", (fmt_entity(x, force=False)
-                                                           for x in successes.values()[0])))
+                                                           for x in next(iter(successes.values())))))
                 guibase.status("Exported %s." % status, log=True)
             else:
                 guibase.status("Failed to export to %s.", filename2)
@@ -6332,7 +6336,7 @@ class DatabasePage(wx.Panel):
 
     def on_truncate(self, names, event=None):
         """Handler for deleting all rows from a table, confirms choice."""
-        names = [names] if isinstance(names, basestring) else names
+        names = [names] if isinstance(names, six.string_types) else names
 
         if wx.YES != controls.YesNoMessageBox(
             "Are you sure you want to delete all rows from %s %s?\n\n"
@@ -6473,7 +6477,7 @@ class DatabasePage(wx.Panel):
                     after()
                 elif total:
                     guibase.status("Parsing database schema.")
-                    self.gauge_schema.Value = 100 * index / total
+                    self.gauge_schema.Value = 100 * index // total
                     self.gauge_schema.ToolTip = "Parsing.. %s%% (%s of %s)" % (self.gauge_schema.Value, index, total)
                     if not self.gauge_schema.Shown:
                         self.gauge_schema.Show()
@@ -6621,7 +6625,7 @@ class DatabasePage(wx.Panel):
             total = sum(len(self.db.schema.get(c, {})) for c in ("table", "view"))
             for category in "table", "view":
                 # Fill data tree with information on row counts and columns
-                items = self.db.get_category(category).values()
+                items = list(self.db.get_category(category).values())
                 if not items and "view" == category: continue # for category
                 categorydata = {"type": "category", "category": category,
                                 "items": [x["name"] for x in items]}
@@ -6654,7 +6658,7 @@ class DatabasePage(wx.Panel):
                         tree.SetItemPyData(subchild, dict(col, parent=item, type="column"))
 
                     index += 1
-                    gauge.Value = 100 * index / total
+                    gauge.Value = 100 * index // total
                     gauge.ToolTip = "Populating.. %s%% (%s of %s)" % (gauge.Value, index, total)
                     if (wx.YieldIfNeeded() or True) and not self: return
 
@@ -6711,7 +6715,7 @@ class DatabasePage(wx.Panel):
             imgs = self.tree_schema_images
             tops, index, total = [], 0, sum(len(vv) for vv in self.db.schema.values())
             for category in database.Database.CATEGORIES:
-                items = self.db.get_category(category).values()
+                items = list(self.db.get_category(category).values())
                 categorydata = {"type": "category", "category": category, "level": "category", "items": items}
 
                 t = util.plural(category).capitalize()
@@ -6773,7 +6777,7 @@ class DatabasePage(wx.Panel):
                             tree.SetItemText(subchild, mytype, 1)
                             tree.SetItemPyData(subchild, dict(col, parent=itemdata, type="column", level=item["name"]))
                     for subcategory in subcategories:
-                        subitems = relateds.get(subcategory, {}).values()
+                        subitems = list(relateds.get(subcategory, {}).values())
                         if not subitems and (not emptysubs or category == subcategory):
                             continue # for subcategory
 
@@ -6823,7 +6827,7 @@ class DatabasePage(wx.Panel):
                             if is_indirect_item(item, subitem): tree.SetItemFont(subchild, italicfont)
 
                     index += 1
-                    gauge.Value = 100 * index / total
+                    gauge.Value = 100 * index // total
                     gauge.ToolTip = "Populating.. %s%% (%s of %s)" % (gauge.Value, index, total)
                     if (wx.YieldIfNeeded() or True) and not self: return
 

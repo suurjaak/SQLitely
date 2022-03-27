@@ -8,19 +8,18 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.06.2020
+@modified    27.03.2022
 ------------------------------------------------------------------------------
 """
-import HTMLParser
 import logging
 import os
 import platform
 import re
+import ssl
 import sys
 import tempfile
-import urllib2
-import urlparse
 
+from six.moves import html_parser, urllib
 import wx
 
 from . lib import controls
@@ -34,7 +33,9 @@ logger = logging.getLogger(__name__)
 update_window = None
 
 """URL-opener with program useragent."""
-url_opener = urllib2.build_opener()
+url_opener = urllib.request.build_opener(
+    urllib.request.HTTPSHandler(context=ssl._create_unverified_context())
+)
 
 
 def check_newest_version(callback=None):
@@ -50,7 +51,7 @@ def check_newest_version(callback=None):
     update_window = True
     try:
         logger.info("Checking for new version at %s.", conf.DownloadURL)
-        html = url_opener.open(conf.DownloadURL).read()
+        html = util.to_unicode(url_opener.open(conf.DownloadURL).read())
         links = re.findall(r"<a[^>]*\shref=['\"](.+)['\"][^>]*>", html, re.I)
         if links:
             # Determine release types
@@ -79,21 +80,21 @@ def check_newest_version(callback=None):
                 changes = ""
                 try:
                     logger.info("Reading changelog from %s.", conf.ChangelogURL)
-                    html = url_opener.open(conf.ChangelogURL).read()
+                    html = util.to_unicode(url_opener.open(conf.ChangelogURL).read())
                     match = re.search(r"<h4[^>]*>(v%s,.*)</h4\s*>" % version,
                                       html, re.I)
                     if match:
                         ul = html[match.end(0):html.find("</ul", match.end(0))]
                         lis = re.findall(r"(<li[^>]*>(.+)</li\s*>)+", ul, re.I)
                         items = [re.sub("<[^>]+>", "", x[1]) for x in lis]
-                        items = map(HTMLParser.HTMLParser().unescape, items)
+                        items = list(map(html_parser.HTMLParser().unescape, items))
                         changes = "\n".join("- " + i.strip() for i in items)
                         if changes:
                             title = match.group(1)
                             changes = "Changes in %s\n\n%s" % (title, changes)
                 except Exception:
                     logger.exception("Failed to read changelog.")
-                url = urlparse.urljoin(conf.DownloadURL, link)
+                url = urllib.parse.urljoin(conf.DownloadURL, link)
                 result = (version, url, changes)
     except Exception:
         logger.exception("Failed to retrieve new version from %s", conf.DownloadURL)
@@ -121,7 +122,7 @@ def download_and_install(url):
         urlfile = url_opener.open(url)
         filepath = os.path.join(tmp_dir, filename)
         logger.info("Downloading %s to %s.", url, filepath)
-        filesize = int(urlfile.headers.get("content-length", sys.maxint))
+        filesize = int(urlfile.headers.get("content-length", sys.maxsize))
         with open(filepath, "wb") as f:
             BLOCKSIZE = 65536
             bytes_downloaded = 0
@@ -178,7 +179,7 @@ def canonic_version(v):
     nums[0:0] = [0] * (3 - len(nums)) # Zero-pad if version like 1.4 or just 2
     # Like 1.4a: subtract 1 and add fractions to last number to make < 1.4
     if re.findall(r"\d+([\D]+)$", v):
-        ords = map(ord, re.findall(r"\d+([\D]+)$", v)[0])
+        ords = [ord(x) for x in re.findall(r"\d+([\D]+)$", v)[0]]
         nums[0] += sum(x / (65536. ** (i + 1)) for i, x in enumerate(ords)) - 1
     return sum((x * 100 ** i) for i, x in enumerate(nums))
 

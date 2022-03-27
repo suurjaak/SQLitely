@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-1.2, 2021-08-05
+2.0, 2022-03-27
 ---------------
 - added schema diagram, exportable as bitmap or vector;
 - added option to create database from spreadsheet or JSON;
@@ -14,6 +14,7 @@ CHANGELOG
 - added spreadsheet file drag-drop support to database page;
 - added YAML support;
 - added Dockerfile;
+- full Python2 / Python3 compatibility;
 - improved auto-altering related items;
 - many fixes and UI tweaks.
 

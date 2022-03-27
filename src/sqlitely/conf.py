@@ -10,25 +10,26 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.03.2022
+@modified    27.03.2022
 ------------------------------------------------------------------------------
 """
-from ConfigParser import RawConfigParser
+try: from ConfigParser import RawConfigParser                 # Py2
+except ImportError: from configparser import RawConfigParser  # Py3
 import datetime
 import json
 import os
 import platform
 import sys
-import urllib
 
 import appdirs
+import six
 import wx
 
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "1.2.dev226"
-VersionDate = "22.03.2022"
+Version = "2.0.dev227"
+VersionDate = "27.03.2022"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -89,7 +90,7 @@ launched instances if not AllowMultipleInstances.
 IPCPort = 59987
 
 """Identifier for inter-process communication."""
-IPCName = urllib.quote_plus("%s-%s" % (wx.GetUserId(), ApplicationFile))
+IPCName = six.moves.urllib.parse.quote_plus("%s-%s" % (wx.GetUserId(), ApplicationFile))
 
 """History of commands entered in console."""
 ConsoleHistoryCommands = []
@@ -340,7 +341,7 @@ def load():
 
     section = "*"
     module = sys.modules[__name__]
-    VARTYPES = (basestring, bool, int, long, list, tuple, dict, type(None))
+    VARTYPES = six.string_types + six.integer_types + (bool, list, tuple, dict, type(None))
     Defaults = {k: v for k, v in vars(module).items() if not k.startswith("_")
                 and isinstance(v, VARTYPES)}
 
@@ -388,7 +389,7 @@ def save():
         for path in configpaths:
             try: os.makedirs(os.path.split(path)[0])
             except Exception: pass
-            try: f = open(path, "wb")
+            try: f = open(path, "w")
             except Exception: continue # for path
             else: break # for path
 

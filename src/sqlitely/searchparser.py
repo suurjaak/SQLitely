@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.12.2019
+@modified    26.03.2022
 """
 import calendar
 import collections
@@ -32,6 +32,9 @@ import logging
 import re
 import string
 import warnings
+
+import six
+from six import unichr
 
 try:
     from pyparsing import CaselessLiteral, Combine, FollowedBy, Forward, Group, \
@@ -168,7 +171,7 @@ class SearchQueryParser(object):
 
     def _parseWords(self, parseresult, words, keywords, case=False, parent_name=None):
         """Populates the words and keywords collections."""
-        if isinstance(parseresult, basestring):
+        if isinstance(parseresult, six.string_types):
             words.append(parseresult if "QUOTES" != parent_name else (parseresult, ))
             return words, keywords
 
@@ -204,7 +207,7 @@ class SearchQueryParser(object):
         if not item: return result, params
         match_kw = lambda k, x: match_words(x["name"], keywords[k], any, case)
 
-        if isinstance(parseresult, basestring):
+        if isinstance(parseresult, six.string_types):
             op, wild = ("GLOB", "*") if case else ("LIKE", "%")
             safe = escape(parseresult, "QUOTES" == parent_name)
 
@@ -291,7 +294,7 @@ class SearchQueryParser(object):
                 date_words = word.split("..", 1)
 
             for i, d in ((i, d) for i, d in enumerate(date_words) if d):
-                parts = filter(None, d.split("-")[:3])
+                parts = list(filter(bool, d.split("-")[:3]))
                 ymd = list(map(util.to_int, parts))
                 if not ymd or ymd[0] is None:
                     continue # for i, d
@@ -368,7 +371,7 @@ def join_strings(strings, glue=" AND "):
     @param   glue  separator used as glue between strings
     @return        (joined string, number of strings actually used)
     """
-    strings = list(filter(None, strings))
+    strings = list(filter(bool, strings))
     return glue.join(strings), len(strings)
 
 

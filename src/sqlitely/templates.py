@@ -8,25 +8,26 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.01.2022
+@modified    27.03.2022
 ------------------------------------------------------------------------------
 """
 import datetime
 import re
-import urllib
+
+from six.moves import urllib
 
 from . lib import util
 from . import conf
 
 # Modules imported inside templates:
-#import base64, collections, itertools, json, logging, math, os, pyparsing, sys, wx, yaml
+#import base64, collections, itertools, json, logging, math, os, pyparsing, sys, six, wx, yaml
 #from sqlitely import conf, grammar, images, searchparser, templates
 
 """Regex for matching unprintable characters (\x00 etc)."""
 SAFEBYTE_RGX = re.compile(r"[\x00-\x1f\x7f-\xa0]")
 
 """Replacer callback for unprintable characters (\x00 etc)."""
-SAFEBYTE_REPL = lambda m: m.group(0).encode("unicode-escape")
+SAFEBYTE_REPL = lambda m: m.group(0).encode("unicode-escape").decode("latin1")
 
 
 def export_comment():
@@ -36,7 +37,7 @@ def export_comment():
 
 
 @util.memoize
-def urlquote(v): return urllib.quote(util.to_str(v, "utf-8"), safe="")
+def urlquote(v): return urllib.parse.quote(util.to_str(v, "utf-8"), safe="")
 
 
 
@@ -465,9 +466,9 @@ str_cols = ", ".join(grammar.quote(c["name"]) for c in columns)
 %>
 %for row, original in zip(rows, originals):
 <%
-setstr = ", ".join("%s = %s" % (grammar.quote(c["name"]).encode("utf-8"), grammar.format(row[c["name"]], c))
+setstr = ", ".join("%s = %s" % (grammar.quote(c["name"]).encode("utf-8").decode("latin1"), grammar.format(row[c["name"]], c))
                    for c in columns if c["name"] not in pks or row[c["name"]] != original[c["name"]])
-wherestr = " AND ".join("%s = %s" % (grammar.quote(c["name"]).encode("utf-8"), grammar.format(original[c["name"]], c))
+wherestr = " AND ".join("%s = %s" % (grammar.quote(c["name"]).encode("utf-8").decode("latin1"), grammar.format(original[c["name"]], c))
                        for c in columns if c["name"] in pks and c["name"] in original)
 %>
 UPDATE {{ name }} SET {{ setstr }}{{ (" WHERE " + wherestr) if wherestr else "" }};
@@ -540,6 +541,7 @@ TXT data export template for the rows part.
 @param   ?progress     callback(count) returning whether to cancel, if any
 """
 DATA_ROWS_TXT = """<%
+import six
 from sqlitely import templates
 
 progress = isdef("progress") and progress
@@ -553,8 +555,8 @@ if isdef("namespace"): namespace["row_count"] += 1
 <%
 raw = row[c["name"]]
 value = "" if raw is None \
-        else raw if isinstance(raw, basestring) else str(raw)
-value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
+        else raw if isinstance(raw, six.string_types) else str(raw)
+value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, six.text_type(value))
 values.append((value.ljust if columnjusts[c["name"]] else value.rjust)(columnwidths[c["name"]]))
 %>
     %endfor
@@ -578,6 +580,7 @@ TXT data export template for copying row as page.
 @param   columns       [{name}, ]
 """
 DATA_ROWS_PAGE_TXT = """<%
+import six
 from sqlitely.lib import util
 from sqlitely import templates
 
@@ -592,8 +595,8 @@ colwidth = max(map(len, fmtcols))
 <%
 raw = row[c["name"]]
 value = "" if raw is None \
-        else raw if isinstance(raw, basestring) else str(raw)
-value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
+        else raw if isinstance(raw, six.string_types) else str(raw)
+value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, six.text_type(value))
 %>
 {{ fmtcol.ljust(colwidth) }} = {{ value }}
     %endfor
@@ -775,7 +778,7 @@ wrap_b   = lambda x: "<b>%s</b>" % x.group(0)
 <%
 value = row[c["name"]]
 value = value if value is not None else ""
-value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(value))
+value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, six.text_type(value))
 value = escape(value)
 
 if not (keywords.get("column") and not match_kw("column", c)) \
@@ -829,13 +832,15 @@ under the MIT License.
       <a href="https://pythonhosted.org/pytz/"><font color="{{ conf.LinkColour }}">pythonhosted.org/pytz</font></a></li>
   <li>PyYAML,
       <a href="https://pypi.org/project/PyYAML/"><font color="{{ conf.LinkColour }}">pypi.org/project/PyYAML</font></a></li>
+  <li>six,
+      <a href="https://pypi.org/project/six/"><font color="{{ conf.LinkColour }}">pypi.org/project/six</font></a></li>
   <li>SQLite,
       <a href="https://www.sqlite.org/"><font color="{{ conf.LinkColour }}">sqlite.org</font></a></li>
   <li>sqlite-parser,
       <a href="https://github.com/bkiers/sqlite-parser"><font color="{{ conf.LinkColour }}">github.com/bkiers/sqlite-parser</font></a></li>
   <li>step, Simple Template Engine for Python,
       <a href="https://github.com/dotpy/step"><font color="{{ conf.LinkColour }}">github.com/dotpy/step</font></a></li>
-  <li>wxPython{{ " %s" % getattr(wx, "__version__", "") if getattr(sys, 'frozen', False) else "" }},
+  <li>wxPython,
       <a href="http://wxpython.org"><font color="{{ conf.LinkColour }}">wxpython.org</font></a></li>
   <li>xlrd,
       <a href="https://pypi.org/project/xlrd"><font color="{{ conf.LinkColour }}">
@@ -1646,7 +1651,7 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
       <span title="{{ table_total }}">{{ util.format_bytes(table_total) }}</span>{{ "" if has_rows else "." }}
     %endif
     %if has_rows:
-(<span title="{{ util.count(db.schema["table"].values()) }}">{{ util.count(db.schema["table"].values(), "row") }}</span>).
+(<span title="{{ util.count(list(db.schema["table"].values())) }}">{{ util.count(list(db.schema["table"].values()), "row") }}</span>).
     %endif
       <br />
 %endif
@@ -2487,6 +2492,7 @@ Database PRAGMA statements SQL template.
 @param   ?schema  schema for PRAGMA directive, if any
 """
 PRAGMA_SQL = """<%
+import six
 from sqlitely import database, grammar
 
 pragma = dict(pragma)
@@ -2496,9 +2502,11 @@ for name, opts in database.Database.PRAGMA.items():
 
 lastopts, lastvalue, count = {}, None, 0
 is_initial = lambda o, v: o["initial"](None, v) if callable(o.get("initial")) else o.get("initial")
-sortkey = lambda (k, v, o): ((-1, not callable(o.get("initial"))) if is_initial(o, v)
-                             else (1, 0) if callable(o.get("initial")) else (0, 0),
-                             bool(o.get("deprecated")), o.get("label", k))
+def sortkey(x):
+    k, v, o = x
+    return ((-1, not callable(o.get("initial"))) if is_initial(o, v)
+            else (1, 0) if callable(o.get("initial")) else (0, 0),
+            bool(o.get("deprecated")), o.get("label", k))
 %>
 %for name, value, opts in sorted(((k, pragma.get(k), o) for k, o in database.Database.PRAGMA.items()), key=sortkey):
 <%
@@ -2520,7 +2528,7 @@ if name not in pragma:
     %endif
 <%
 lastopts, lastvalue = opts, value
-if isinstance(value, basestring):
+if isinstance(value, six.string_types):
     value = '"%s"' % value.replace('"', '""')
 elif isinstance(value, bool): value = str(value).upper()
 %>
@@ -2610,9 +2618,9 @@ for line in lines.values():
     tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
                       if pts[i][0] == pts[i+1][0])
     tx = tpt1[0]
-    ty = min(tpt1[1], tpt2[1]) + abs(tpt1[1] - tpt2[1]) / 2
+    ty = min(tpt1[1], tpt2[1]) + abs(tpt1[1] - tpt2[1]) // 2
     tw, th = sum(extent[::4]), sum(extent[1:3])
-    bounds.Union(wx.Rect(wx.Point(tx - tw / 2, ty - th), wx.Size(tw, th)))
+    bounds.Union(wx.Rect(wx.Point(tx - tw // 2, ty - th), wx.Size(tw, th)))
 
 bounds.Width += 2 * MARGIN; bounds.Height += 2 * MARGIN
 shift = [MARGIN - v for v in bounds.TopLeft]
@@ -2727,7 +2735,7 @@ if show_labels:
     tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
                       if pts[i][0] == pts[i+1][0])
     tx = tpt1[0]
-    ty = min(tpt1[1], tpt2[1]) + abs(tpt1[1] - tpt2[1]) / 2
+    ty = min(tpt1[1], tpt2[1]) + abs(tpt1[1] - tpt2[1]) // 2
     tx, ty = adjust(tx, ty)
 
 for i, pt in enumerate(pts):
@@ -2760,10 +2768,10 @@ ptc1 = pts[0][0] + 0.5, pts[0][1]
 ptc2 = ptc1[0] + 0.5 + SchemaDiagram.CARDINALW * (1 if to_right else -1), ptc1[1]
 ptc1, ptc2 = [ptc1, ptc2][::1 if to_right else -1]
 crow1, crow2 = "", ""
-for i in range(SchemaDiagram.CARDINALW / 2):
-    pt1 = ptc1[0] + i * 2 + (not to_right), ptc1[1] - (SchemaDiagram.CARDINALW / 2 - i if to_right else i + 1)
+for i in range(SchemaDiagram.CARDINALW // 2):
+    pt1 = ptc1[0] + i * 2 + (not to_right), ptc1[1] - (SchemaDiagram.CARDINALW // 2 - i if to_right else i + 1)
     crow1 += "%sM %s,%s h2" % (("  " if i else "", ) + adjust(pt1[0], pt1[1]))
-    pt2 = ptc1[0] + i * 2 + (not to_right), ptc1[1] + (SchemaDiagram.CARDINALW / 2 - i if to_right else i + 1)
+    pt2 = ptc1[0] + i * 2 + (not to_right), ptc1[1] + (SchemaDiagram.CARDINALW // 2 - i if to_right else i + 1)
     crow2 += "%sM %s,%s h2" % (("  " if i else "", ) + adjust(pt2[0], pt2[1]))
 
 # Assemble parent-item dash
@@ -2813,7 +2821,7 @@ if istats: height += SchemaDiagram.STATSH - SchemaDiagram.FOOTERH
     %if isdef("embed") and embed:
       <a xlink:title="Go to {{ item["type"] }} {{ escape(grammar.quote(item["name"], force=True)) }}" xlink:href="#{{ item["type"] }}/{{! urlquote(item["name"]) }}">
     %endif
-      <text x="{{ itemx + item["bounds"].Width / 2 }}" y="{{ itemy + SchemaDiagram.HEADERH - SchemaDiagram.HEADERP }}" class="title">{{ util.ellipsize(util.unprint(item["name"]), SchemaDiagram.MAX_TEXT) }}</text>
+      <text x="{{ itemx + item["bounds"].Width // 2 }}" y="{{ itemy + SchemaDiagram.HEADERH - SchemaDiagram.HEADERP }}" class="title">{{ util.ellipsize(util.unprint(item["name"]), SchemaDiagram.MAX_TEXT) }}</text>
     %if isdef("embed") and embed:
       </a>
     %endif

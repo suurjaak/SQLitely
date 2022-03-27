@@ -74,34 +74,21 @@ installation. The installed program can be copied to a USB stick and used
 elsewhere, same goes for the source code.
 
 
-Source Dependencies
--------------------
+Attribution
+-----------
 
-If running from source code, SQLitely needs Python 2.7,
-and the following 3rd-party Python packages:
+Built using the following open-source software:
 
-- antlr4-python2-runtime (https://pypi.org/project/antlr4-python2-runtime)
+- ANTLR Python runtime (https://antlr.org)
 - openpyxl (https://pypi.org/project/openpyxl)
 - Pillow (https://pypi.org/project/Pillow)
 - pyparsing (https://pypi.org/project/pyparsing)
 - pytz (https://pythonhosted.org/pytz/)
 - PyYAML (https://pypi.org/project/PyYAML/)
-- wxPython 4.0+ (https://wxpython.org)
+- six (https://pypi.org/project/six/)
+- wxPython (https://wxpython.org)
 - xlrd (https://pypi.org/project/xlrd)
 - XlsxWriter (https://pypi.org/project/XlsxWriter)
-
-All dependencies can be installed by running `pip install -r requirements.txt`
-in SQLitely source distribution folder.
-
-If openpyxl or pyparsing or PyYAML or xlrd or XlsxWriter are not available,
-the program will function regardless, only with lesser service - 
-lacking Excel import-export or full search syntax.
-
-Python 3 is yet unsupported.
-
-
-Attribution
------------
 
 Includes sqlite_analyzer, a command-line utility for table space analysis,
 (c) 2000, D. Richard Hipp, https://www.sqlite.org.

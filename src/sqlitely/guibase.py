@@ -13,7 +13,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.01.2021
+@modified    26.03.2022
 """
 import datetime
 import logging
@@ -263,7 +263,7 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
             # form, and position it immediately under the main form, or
             # covering its bottom if no room.
             self.frame_console_shown = True
-            size = wx.Size(self.Size.width, max(200, self.Size.height / 3))
+            size = wx.Size(self.Size.width, max(200, self.Size.height // 3))
             self.frame_console.Size = size
             display = wx.GetDisplaySize()
             y = 0
@@ -276,7 +276,7 @@ class TemplateFrameMixIn(wx_accel.AutoAcceleratorMixIn):
                 self.Position.x, self.Position.y + self.Size.height + y
             )
         if show: self.console.ScrollToLine(self.console.LineCount + 3 - (
-            self.console.Size.height / self.console.GetTextExtent(" ")[1]
+            self.console.Size.height // self.console.GetTextExtent(" ")[1]
         )) # Scroll to the last line
         self.frame_console.Show(show)
         self.frame_console.Iconize(False)

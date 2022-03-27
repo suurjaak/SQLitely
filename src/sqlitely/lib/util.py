@@ -8,16 +8,16 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.04.2021
+@modified    27.03.2022
 ------------------------------------------------------------------------------
 """
-import __builtin__
+try: import __builtin__ as builtins  # Py2
+except ImportError: import builtins  # Py3
 import collections
 import contextlib
 import copy
 import ctypes
 import datetime
-import htmlentitydefs
 import io
 import locale
 import math
@@ -30,10 +30,11 @@ import subprocess
 import sys
 import threading
 import time
-import urllib
 import warnings
 
 from PIL import Image
+import six
+from six.moves import html_entities
 import pytz
 import wx
 
@@ -131,7 +132,7 @@ class CaselessDict(dict):
     def __iter__(self):
         if self._order is not None:
             return iter(self._keys[k] for k in self._order)
-        sortkey = lambda (a, b): a if isinstance(a, tuple) else (a, )
+        sortkey = lambda x: coalesce(x[0] if isinstance(x[0], tuple) else (x[1], ), "")
         return iter(x for _, x in sorted(self._keys.items(), key=sortkey))
 
     def __setitem__(self, key, value):
@@ -142,12 +143,12 @@ class CaselessDict(dict):
     def _(self, key):
         """Returns lowercased key value."""
         if key is None: return key
-        if isinstance(key, basestring): return key.lower()
-        return tuple(x.lower() if isinstance(x, basestring) else x for x in key)
+        if isinstance(key, six.string_types): return key.lower()
+        return tuple(x.lower() if isinstance(x, six.string_types) else x for x in key)
 
     def __str__(self): return repr(self)
 
-    def __repr__(self): return "%s(%s)" % (type(self).__name__, self.items())
+    def __repr__(self): return "%s(%s)" % (type(self).__name__, list(self.items()))
 
 
 
@@ -166,11 +167,16 @@ UTC = tzinfo_utc() # UTC timezone singleton
 
 
 
+def coalesce(value, fallback):
+    """Returns fallback if value is None else value."""
+    return fallback if value is None else value
+
+
 def hashable(x):
     """Returns whether object is hashable."""
-    KNOWN = str, unicode, int, long, float, bool, type(None), \
-            datetime.date, datetime.datetime, datetime.time
-    if type(x) in KNOWN: return True
+    KNOWN = six.string_types + six.integer_types + (float, bool, type(None),
+            datetime.date, datetime.datetime, datetime.time)
+    if isinstance(x, KNOWN): return True
     if type(x) is tuple: return all(hashable(y) for y in x)
     if isinstance(x, (dict, list, set)): return False
     try: hash(x)
@@ -227,8 +233,8 @@ def memoize(*args, **kwargs):
         setattr(memoize, "set_cache", set_cache)
 
 
-    NOCOPY = str, unicode, int, long, float, bool, type(None), \
-             datetime.date, datetime.datetime, datetime.time
+    NOCOPY = six.string_types + six.integer_types + (float, bool, type(None),
+             datetime.date, datetime.datetime, datetime.time)
     def returner(v):
         if type(v) is tuple and all(type(x) in NOCOPY for x in v): return v
         return copy.deepcopy(v) if isinstance(v, (dict, list, set, tuple)) else v
@@ -304,7 +310,7 @@ def parse_datetime(s):
     Tries to parse string as ISO8601 datetime, returns input on error.
     Supports "YYYY-MM-DD[ T]HH:MM(:SS)(.micros)?(Z|[+-]HH(:MM)?)?".
     """
-    if not isinstance(s, basestring) or len(s) < 18: return s
+    if not isinstance(s, six.string_types) or len(s) < 18: return s
     rgx = r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})(\.\d+)?(([+-]\d{2}(:?\d{2})?)|Z)?$"
     result, match = s, re.match(rgx, s)
     if match:
@@ -331,7 +337,7 @@ def parse_date(s):
     Supports "YYYY-MM-DD", "YYYY.MM.DD", "YYYY/MM/DD", "YYYYMMDD",
     "DD.MM.YYYY", "DD/MM/YYYY", and "DD-MM-YYYY".
     """
-    if not isinstance(s, basestring) or len(s) < 8: return s
+    if not isinstance(s, six.string_types) or len(s) < 8: return s
     rgxs = [r"^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})$",
             r"^(?P<year>\d{4})\.(?P<month>\d{2})\.(?P<day>\d{2})$",
             r"^(?P<year>\d{4})\/(?P<month>\d{2})\/(?P<day>\d{2})$",
@@ -354,7 +360,7 @@ def parse_time(s):
     Tries to parse string as time, returns input on error.
     Supports "HH:MM(:SS)?(.micros)?(Z|[+-]HH(:MM)?)?".
     """
-    if not isinstance(s, basestring) or len(s) < 18: return s
+    if not isinstance(s, six.string_types) or len(s) < 18: return s
     rgx = r"^\d{2}:\d{2}(:\d{2})?(\.\d+)?(([+-]\d{2}(:?\d{2})?)|Z)?$"
     result, match = s, re.match(rgx, s)
     if match:
@@ -418,7 +424,7 @@ def ctx(enter, exit, *a, **kw):
 
 def m(o, name, case_insensitive=True):
     """Returns the members of the object or dict, filtered by name."""
-    members = o.keys() if isinstance(o, dict) else dir(o)
+    members = o if isinstance(o, dict) else dir(o)
     if case_insensitive:
         return [i for i in members if name.lower() in i.lower()]
     else:
@@ -438,16 +444,15 @@ def safe_filename(filename):
 @memoize
 def unprint(s, escape=True):
     """Returns string with unprintable characters escaped or stripped."""
-    enc = "unicode_escape" if isinstance(s, unicode) else "string_escape"
-    repl = (lambda m: m.group(0).encode(enc)) if escape else ""
+    repl = (lambda m: m.group(0).encode("unicode-escape").decode("latin1")) if escape else ""
     return re.sub(r"[\x00-\x1f]", repl, s)
 
 
 def html_escape(v):
     """Converts characters like "ä" in string to HTML entities like "&auml;"."""
     lookup, patterns = {}, []
-    for cp, n in htmlentitydefs.codepoint2name.items():
-        c = unichr(cp)
+    for cp, n in html_entities.codepoint2name.items():
+        c = six.unichr(cp)
         if "'" != c: patterns.append(c); lookup[c] = n
     subst = lambda m: "&%s;" % lookup[m.group(0)]
     return re.sub("[%s]" % "".join(patterns), subst, v)
@@ -557,7 +562,7 @@ def count(items, unit=None, key="count", suf=""):
     """
     result = ""
     if isinstance(items, dict): items = [items]
-    elif isinstance(items, (int, long, float)): items = [{key: items}]
+    elif isinstance(items, six.integer_types + (float, )): items = [{key: items}]
     value = sum(x.get(key) or 0 for x in items)
     pref = "~" if any(x.get("is_%s_estimated" % key) for x in items) else ""
     if pref: value = int(math.ceil(value / 100.) * 100)
@@ -597,9 +602,9 @@ def unique_path(pathname):
     (e.g. "C:\config (2).sys" if ""C:\config.sys" already exists).
     """
     result = pathname
-    if "linux2" == sys.platform and isinstance(result, unicode) \
+    if "linux" in sys.platform and isinstance(result, six.text_type) \
     and "utf-8" != sys.getfilesystemencoding():
-        result = result.encode("utf-8") # Linux has trouble if locale not UTF-8
+        result = result.encode("utf-8").decode("latin1") # Linux has trouble if locale not UTF-8
     path, name = os.path.split(result)
     base, ext = os.path.splitext(name)
     if len(name) > 255: # Filesystem limitation
@@ -651,6 +656,11 @@ def select_file(filepath):
     except Exception: start_file(os.path.split(filepath)[0])
 
 
+def is_long(value):
+    """Returns whether value is of type long in Python2, or int in Python3."""
+    return isinstance(value, long if six.PY2 else int)
+
+
 def is_os_64bit():
     """Returns whether the operating system is 64-bit."""
     return "64" in platform.architecture()[0]
@@ -663,7 +673,7 @@ def is_python_64bit():
 
 def run_once(function):
     """Runs the function in a later thread at most once."""
-    myqueue = getattr(run_once, "queue", __builtin__.set())
+    myqueue = getattr(run_once, "queue", builtins.set())
     setattr(run_once, "queue", myqueue)
 
     def later():
@@ -689,8 +699,7 @@ def divide_delta(td1, td2):
     """Divides two timedeltas and returns the integer result."""
     us1 = td1.microseconds + 1000000 * (td1.seconds + 86400 * td1.days)
     us2 = td2.microseconds + 1000000 * (td2.seconds + 86400 * td2.days)
-    # Integer division, fractional division would be float(us1) / us2
-    return us1 / us2
+    return us1 // us2
 
 
 def timedelta_seconds(timedelta):
@@ -703,7 +712,7 @@ def timedelta_seconds(timedelta):
     return result
 
 
-def add_unique(lst, item, direction=1, maxlen=sys.maxint):
+def add_unique(lst, item, direction=1, maxlen=sys.maxsize):
     """
     Adds the item to the list from start or end. If item is already in list,
     removes it first. If list is longer than maxlen, shortens it.
@@ -739,7 +748,7 @@ def make_spreadsheet_column(index):
     """Returns spreadsheet-like column name for index, e.g. "AA" for 26."""
     digits, base = string.ascii_uppercase, len(string.ascii_uppercase)
     t, n = "", index + 1 # Convert to 1-based alphabetic label
-    while n: t, n = digits[(n % base or base) - 1] + t, (n - 1) / base
+    while n: t, n = digits[(n % base or base) - 1] + t, (n - 1) // base
     return t
 
 
@@ -756,13 +765,13 @@ def getval(collection, *path, **kwargs):
     if len(path) == 1 and isinstance(path[0], list): path = path[0]
     for p in path:
         if isinstance(result, collections.Sequence):  # Iterable with index
-            if isinstance(p, (int, long)) and p < len(result):
+            if isinstance(p, six.integer_types) and p < len(result):
                 result = result[p]
             else:
                 result = default
         elif isinstance(result, collections.Mapping): # Container with lookup
             result = result.get(p, default)
-        elif isinstance(p, basestring) and hasattr(result, p): # Object attribute
+        elif isinstance(p, six.string_types) and hasattr(result, p): # Object attribute
             result = getattr(result, p)
         else:
             result = default
@@ -780,7 +789,7 @@ def setval(collection, value, *path):
     ptr = collection
     for p in path[:-1]:
         if isinstance(ptr, collections.Sequence):  # Iterable with index
-            if isinstance(p, (int, long)) and p < len(ptr):
+            if isinstance(p, six.integer_types) and p < len(ptr):
                 ptr = ptr[p]
             else:
                 ptr.append({})
@@ -797,7 +806,7 @@ def walk(data, callback):
     Walks through the collection of nested dicts or lists or tuples, invoking
     callback(child, key, parent) for each element, recursively.
     """
-    if isinstance(data, collections.Iterable) and not isinstance(data, basestring):
+    if isinstance(data, collections.Iterable) and not isinstance(data, six.string_types):
         for k, v in enumerate(data):
             if isinstance(data, collections.Mapping): k, v = v, data[v]
             callback(k, v, data)
@@ -813,7 +822,7 @@ def tuplefy(value):
 @memoize
 def lceq(a, b):
     """Returns whether x and y are caselessly equal."""
-    a, b = (x if isinstance(x, basestring) else "" if x is None else str(x)
+    a, b = (x if isinstance(x, six.string_types) else "" if x is None else str(x)
             for x in (a, b))
     return a.lower() == b.lower()
 
@@ -829,28 +838,6 @@ def get_locale_day_date(dt):
             except Exception: pass
     weekday = weekday.capitalize()
     return weekday, weekdate
-
-
-def path_to_url(path, encoding="utf-8"):
-    """
-    Returns the local file path as a URL, e.g. "file:///C:/path/file.ext".
-    """
-    path = path.encode(encoding) if isinstance(path, unicode) else path
-    if ":" not in path:
-        # No drive specifier, just convert slashes and quote the name
-        if path[:2] == "\\\\":
-            path = "\\\\" + path
-        url = urllib.quote("/".join(path.split("\\")))
-    else:
-        url, parts = "", path.split(":")
-        if len(parts[0]) == 1: # Looks like a proper drive, e.g. C:\
-            url = "///" + urllib.quote(parts[0].upper()) + ":"
-            parts = parts[1:]
-        components = ":".join(parts).split("\\")
-        for part in filter(None, components):
-            url += "/" + urllib.quote(part)
-    url = "file:%s%s" % ("" if url.startswith("///") else "///" , url)
-    return url
 
 
 def titlecase(text):
@@ -874,13 +861,18 @@ def titlecase(text):
     return "".join(done)
 
 
+def to_long(value):
+    """Returns value as long in Python2, int in Python3."""
+    return long(value) if six.PY2 else int(value)
+
+
 def to_str(value, encoding=None):
     """
     Returns the value as an 8-bit string. Tries encoding as UTF-8 if
     locale encoding fails.
     """
     result = value
-    if isinstance(value, unicode):
+    if isinstance(value, six.text_type):
         encoding = encoding or locale.getpreferredencoding()
         try: result = value.encode(encoding)
         except Exception:
@@ -888,8 +880,8 @@ def to_str(value, encoding=None):
             except Exception:
                 try: result = value.encode("latin1", errors="backslashreplace")
                 except Exception: result = value.encode("latin1", errors="replace")
-    elif not isinstance(value, str): result = str(value)
-    return result
+    elif not isinstance(value, six.binary_type): result = str(value)
+    return result.decode("latin1") if six.PY3 else result
 
 
 def to_unicode(value, encoding=None):
@@ -898,17 +890,15 @@ def to_unicode(value, encoding=None):
     locale decoding fails.
     """
     result = value
-    if type(value) != unicode:
-        encoding = encoding or locale.getpreferredencoding()
-        if not isinstance(value, str):
-            try: value = str(value)
-            except Exception: value = repr(value)
-        try: result = unicode(value, encoding)
+    if isinstance(result, six.binary_type):
+        try: result = six.text_type(result, encoding, errors)
         except Exception:
-            try: result = unicode(value, "utf-8", errors="backslashreplace")
-            except Exception:
-                try: result = unicode(value, "latin1", errors="backslashreplace")
-                except Exception: result = unicode(value, "latin1", errors="replace")
+            result = six.text_type(result, "utf-8", errors="backslashreplace")
+    elif not isinstance(result, six.text_type):
+        try: result = str(result)
+        except Exception: result = repr(result)
+    if not isinstance(result, six.text_type):
+        result = six.text_type(result)
     return result
 
 
@@ -925,7 +915,7 @@ def ellipsize(text, limit=50, front=False, ellipsis=".."):
                        and text is truncated from the end
     @param   ellipsis  the ellipsis string to use
     """
-    if type(text) not in (str, unicode): text = to_unicode(text)
+    if not isinstance(text, six.string_types): text = to_unicode(text)
     if len(text) <= limit: return text
 
     ENCLOSURES = "''", '""', "[]", "()", "<>", "{}"
@@ -943,11 +933,11 @@ def longpath(path):
     try:
         buf = ctypes.create_unicode_buffer(65536)
         GetLongPathNameW = ctypes.windll.kernel32.GetLongPathNameW
-        if GetLongPathNameW(unicode(path), buf, 65536):
+        if GetLongPathNameW(to_unicode(path), buf, 65536):
             result = buf.value
         else:
             head, tail = os.path.split(path)
-            if GetLongPathNameW(unicode(head), buf, 65536):
+            if GetLongPathNameW(to_unicode(head), buf, 65536):
                 result = os.path.join(buf.value, tail)
     except Exception: pass
     return result
@@ -955,7 +945,7 @@ def longpath(path):
 
 def shortpath(path):
     """Returns the path in short Windows form (PROGRA~1 not "Program Files")."""
-    if isinstance(path, str): return path
+    if isinstance(path, bytes): return path
     from ctypes import wintypes
 
     ctypes.windll.kernel32.GetShortPathNameW.argtypes = [

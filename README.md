@@ -66,9 +66,16 @@ Installation
 Windows: download and launch the latest setup from
 https://suurjaak.github.io/SQLitely/downloads.html.
 
-Mac/Linux/other: install Python2 and pip, run `pip install sqlitely`.
+Mac/Linux/other: install Python and pip, run `pip install sqlitely`.
 
 The pip installation will add the `sqlitely` command to path.
+
+Installing the required wxPython on Linux can be faster via one of their
+prepared Python wheels. Example for Ubuntu 20:
+
+* run `sudo apt-get install libgtk-3-0 libsdl2-2.0 libwebkit2gtk-4.0`
+* run `sudo pip install wxPython --find-links \`
+      `https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-20.04`
 
 SQLitely has a [Dockerfile](Dockerfile), see
 [build/README for Docker.md](build/README%20for%20Docker.md).
@@ -82,16 +89,17 @@ elsewhere, same goes for the source code.
 Source Dependencies
 -------------------
 
-If running from source code, SQLitely needs Python 2.7,
+If running from source code, SQLitely needs Python 3.5+ or Python 2.7,
 and the following 3rd-party Python packages:
 
-- antlr4-python2-runtime (https://pypi.org/project/antlr4-python2-runtime)
+- ANTLR Python runtime (https://antlr.org)
 - appdirs (https://pypi.org/project/appdirs)
 - openpyxl (https://pypi.org/project/openpyxl)
 - Pillow (https://pypi.org/project/Pillow)
 - pyparsing (https://pypi.org/project/pyparsing)
 - pytz (https://pythonhosted.org/pytz/)
 - PyYAML (https://pypi.org/project/PyYAML/)
+- six (https://pypi.org/project/six/)
 - wxPython 4.0+ (https://wxpython.org)
 - xlrd (https://pypi.org/project/xlrd)
 - XlsxWriter (https://pypi.org/project/XlsxWriter)
@@ -102,8 +110,6 @@ in SQLitely source distribution folder.
 If openpyxl or pyparsing or PyYAML or xlrd or XlsxWriter are not available,
 the program will function regardless, only with lesser service - 
 lacking Excel import-export or full search syntax.
-
-Python 3 is yet unsupported.
 
 
 Attribution

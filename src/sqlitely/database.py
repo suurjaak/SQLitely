@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.01.2022
+@modified    27.03.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -22,6 +22,8 @@ import re
 import sqlite3
 import sys
 import tempfile
+
+import six
 
 from . lib.util import CaselessDict
 from . lib.vendor import step
@@ -89,7 +91,7 @@ class Database(object):
         "values": {0: "NONE", 1: "FULL", 2: "INCREMENTAL"},
         "dump": True,
         "initial": True,
-        "write": lambda db: not db.schema.values() and not db.filesize,
+        "write": lambda db: not list(db.schema.values()) and not db.filesize,
         "short": "Auto-vacuum settings",
         "description": """  FULL: truncate deleted rows on every commit.
   INCREMENTAL: truncate on PRAGMA incremental_vacuum.
@@ -179,7 +181,7 @@ class Database(object):
       "data_store_directory": {
         "name": "data_store_directory",
         "label": "Data-store directory",
-        "type": unicode,
+        "type": six.text_type,
         "default": "",
         "deprecated": True,
         "short": "Windows-specific directory for relative pathnames",
@@ -224,7 +226,7 @@ class Database(object):
         "type": str,
         "dump": True,
         "initial": True,
-        "write": lambda db: not db.schema.values() and not db.filesize,
+        "write": lambda db: not list(db.schema.values()) and not db.filesize,
         "short": "Database text encoding",
         "values": {"UTF-8": "UTF-8", "UTF-16": "UTF-16 native byte-ordering", "UTF-16le": "UTF-16 little endian", "UTF-16be": "UTF-16 big endian"},
         "description": "The text encoding used by the database. It is not possible to change the encoding after the database has been created.",
@@ -413,7 +415,7 @@ class Database(object):
       "temp_store_directory": {
         "name": "temp_store_directory",
         "label": "Temporary store directory",
-        "type": unicode,
+        "type": six.text_type,
         "default": "",
         "deprecated": True,
         "short": "Location of temporary storage",
@@ -515,8 +517,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
             self.connection = sqlite3.connect(self.filename,
                                               check_same_thread=False)
             self.connection.row_factory = self.row_factory
-            self.connection.text_factory = str
-            self.compile_options = [x.values()[0] for x in
+            self.connection.text_factory = six.binary_type
+            self.compile_options = [next(iter(x.values())) for x in
                                     self.execute("PRAGMA compile_options", log=False).fetchall()]
             self.populate_schema(parse=parse)
             self.update_fileinfo()
@@ -526,7 +528,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             try: self.connection.close()
             except Exception: pass
             self.connection = None
-            raise e, None, tb
+            raise six.rerase(type(e), e, tb)
 
 
     def close(self):
@@ -556,7 +558,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """Checks SQLite database integrity, returning a list of errors."""
         result = []
         rows = self.execute("PRAGMA integrity_check").fetchall()
-        if len(rows) != 1 or "ok" != rows[0].values()[0].lower():
+        if len(rows) != 1 or "ok" != next(iter(rows[0].values())).lower():
             result = [r["integrity_check"] for r in rows]
         return result
 
@@ -672,7 +674,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
     def has_consumers(self):
         """Returns whether the database has currently registered consumers."""
         return len(self.consumers) > 0 \
-               or any(x.values() for x in self.locks.values())
+               or any(list(x.values()) for x in self.locks.values())
 
 
     def lock(self, category, name, key, label=None):
@@ -740,7 +742,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if "name" not in kwargs and len(args) > 1: kwargs["name"] = args[1]
         if "skip" not in kwargs and len(args) > 2: kwargs["skip"] = args[2]
         for k, v in kwargs.items():
-            if isinstance(v, basestring): kwargs[k] = v.lower()
+            if isinstance(v, six.string_types): kwargs[k] = v.lower()
         skipkeys = set(util.tuplefy(kwargs.pop("skip", ())))
         result, keys = "", ()
 
@@ -768,7 +770,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             if keys: result = "Database is currently locked"
 
         if result and keys:
-            labels = filter(bool, map(self.locklabels.get, keys))
+            labels = list(filter(bool, map(self.locklabels.get, keys)))
             if labels: result += " (%s)" % ", ".join(sorted(labels))
         return result
 
@@ -786,7 +788,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             for name, keys in sorted(self.locks[category].items()):
                 keys = keys - skipkeys
                 if not keys: continue # for name, keys
-                t, labels = "", filter(bool, map(self.locklabels.get, keys))
+                t, labels = "", list(filter(bool, map(self.locklabels.get, keys)))
                 if category and name:
                     name = self.schema.get(category, {}).get(name, {}).get("name", name)
                     t = "%s %s" % (category, util.unprint(grammar.quote(name, force=True)))
@@ -888,15 +890,17 @@ WARNING: misuse can easily result in a corrupt database file.""",
             try: name = col[0].decode("utf-8")
             except Exception: name = col[0]
             result[name] = row[idx]
-        for name in result.keys():
+        for name in list(result):
             datatype = type(result[name])
-            if datatype is buffer:
+            if sys.version_info < (3, ) and datatype is buffer:  # Py2
                 result[name] = str(result[name]).decode("latin1")
-            elif datatype is str or datatype is unicode:
+            elif datatype is memoryview:
+                result[name] = datatype.to_bytes().decode("latin1")
+            elif datatype is six.binary_type:
                 try:
-                    result[name] = str(result[name]).decode("utf-8")
+                    result[name] = result[name].decode("utf-8")
                 except Exception:
-                    result[name] = str(result[name]).decode("latin1")
+                    result[name] = result[name].decode("latin1")
         return result
 
 
@@ -1024,10 +1028,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
                             c1["name"] != c2["name"] or c1.get("type") != c2.get("type")
                             for c1, c2 in zip(opts["columns"], meta["columns"])
                         )):
-                            logger.warn("Table %s SQL parse yielded different columns than "
-                                        "known by SQLite, discarding invalid parse result.\n"
-                                        "SQLite columns %s.\nParsed columns %s.",
-                                        grammar.quote(myname), opts["columns"], meta["columns"])
+                            logger.warning("Table %s SQL parse yielded different columns than "
+                                           "known by SQLite, discarding invalid parse result.\n"
+                                           "SQLite columns %s.\nParsed columns %s.",
+                                           grammar.quote(myname), opts["columns"], meta["columns"])
                             meta = None
                     if generate and meta and not meta.get("__comments__"):
                         sql, _ = grammar.generate(meta)
@@ -1123,7 +1127,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         category = category.lower()
 
-        if isinstance(name, basestring):
+        if isinstance(name, six.string_types):
             return copy.deepcopy(self.schema.get(category, {}).get(name))
 
         result = CaselessDict()
@@ -1321,7 +1325,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         @return       matched affinity, or "BLOB" if unknown or unspecified type
         """
         mytype = col.get("type") if isinstance(col, dict) else col
-        if not mytype or not isinstance(mytype, basestring): return "BLOB"
+        if not mytype or not isinstance(mytype, six.string_types): return "BLOB"
 
         mytype = mytype.upper()
         for aff, types in Database.AFFINITY.items(): # Exact match
@@ -1367,7 +1371,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         map_columns = dict([(i["name"], i) for i in col_data])
         for i, val in enumerate(list_values):
             if val and "BLOB" == self.get_affinity(map_columns[list_columns[i]]):
-                if isinstance(val, unicode):
+                if isinstance(val, six.text_type):
                     val = val.encode("latin1")
                 val = sqlite3.Binary(val)
             result.append(val)
@@ -1654,9 +1658,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
             if not rows:
                 if not callable(opts["type"]): continue # for name, opts
                 value = opts["type"]()
-            elif "table" == opts["type"]: value = [x.values()[0] for x in rows]
+            elif "table" == opts["type"]: value = [next(iter(x.values())) for x in rows]
             else:
-                value = rows[0].values()[0]
+                value = next(iter(rows[0].values()))
                 if callable(opts["type"]): value = opts["type"](value)
             if not (dump or stats) or value != opts.get("default"):
                 result[name] = value
@@ -1733,7 +1737,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             logger.exception("Error executing SQL.")
             try: self.execute("ROLLBACK")
             except Exception: pass
-            raise e, None, tb
+            raise six.reraise(type(e), e, tb)
         else:
             resets  = defaultdict(dict) # {category: {name: SQL}}
             if "table" == category and (name2 == grammar.quote(name2) or not self.has_full_rename_table()):
@@ -1775,7 +1779,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             logger.exception("Error executing SQL.")
             try: self.execute("ROLLBACK")
             except Exception: pass
-            raise e, None, tb
+            six.reraise(type(e), e, tb)
         else:
             self.notify_rename("table", table, table)
 
@@ -1812,7 +1816,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             logger.exception("Error executing SQL.")
             try: self.execute("ROLLBACK")
             except Exception: pass
-            raise e, None, tb
+            six.reraise(type(e), e, tb)
 
         result = {c: CaselessDict((x["name"], self.get_category(c, x["name"]))
                                    for x in args[c] if not x.get("sql"))
@@ -1970,7 +1974,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             sql, err = grammar.transform(sql, renames=myrenames)
             if err: raise Exception(err)
 
-        fks_on = self.execute("PRAGMA foreign_keys", log=False).fetchone().values()[0]
+        fks_on = next(iter(self.execute("PRAGMA foreign_keys", log=False).fetchone().values()))
         args = {"name": name1, "name2": name2, "tempname": tempname,
                 "sql": sql, "__type__": "COMPLEX ALTER TABLE", "fks": fks_on,
                 "columns": [(c1["name"],
@@ -2063,13 +2067,13 @@ WARNING: misuse can easily result in a corrupt database file.""",
         @param   schema  {category: {name: CREATE SQL}}
         """
         try:
-            v = self.execute("PRAGMA schema_version", log=False).fetchone().values()[0]
+            v = next(iter(self.execute("PRAGMA schema_version", log=False).fetchone().values()))
             schema = dict(schema, version=v)
             sql, err = grammar.generate(schema, category="ALTER MASTER")
-            if err: logger.warn("Error syncing sqlite_master contents: %s.", err)
+            if err: logger.warning("Error syncing sqlite_master contents: %s.", err)
             else: self.executescript(sql, name="ALTER")
         except Exception:
-            logger.warn("Error syncing sqlite_master contents.", exc_info=True)
+            logger.warning("Error syncing sqlite_master contents.", exc_info=True)
             try: self.execute("ROLLBACK")
             except Exception: pass
 
@@ -2083,7 +2087,7 @@ def is_sqlite_file(filename, path=None, empty=False, ext=True):
     @param   empty  whether an empty file is considered valid
     @param   ext    whether to check file extension
     """
-    SQLITE_HEADER = "SQLite format 3\00"
+    SQLITE_HEADER = b"SQLite format 3\00"
     result = not ext or os.path.splitext(filename)[1].lower() in conf.DBExtensions
     if result:
         try:
@@ -2117,7 +2121,7 @@ def detect_databases(progress=None):
     else:
         search_paths = [os.getenv("HOME"),
                         "/Users" if "mac" == os.name else "/home"]
-    search_paths = map(util.to_unicode, search_paths)
+    search_paths = [util.to_unicode(x) for x in search_paths]
     for search_path in filter(os.path.exists, search_paths):
         if progress and not progress(): return
         logger.info("Looking for SQLite databases under %s.", search_path)
@@ -2131,7 +2135,7 @@ def detect_databases(progress=None):
     if progress and not progress(): return
 
     # Then search current working directory for database files.
-    search_path = os.getcwdu()
+    search_path = six.moves.getcwd()
     logger.info("Looking for SQLite databases under %s.", search_path)
     for root, _, files in os.walk(search_path):
         if progress and not progress(): return

@@ -87,7 +87,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    22.03.2022
+@modified    27.03.2022
 ------------------------------------------------------------------------------
 """
 import collections
@@ -118,15 +118,23 @@ import wx.lib.wordwrap
 import wx.stc
 
 
+try:
+    integer_types, string_types, text_type = (int, long), (basestring, ), unicode  # Py2
+except NameError:
+    integer_types, string_types, text_type = (int, ),     (str, ),        str      # Py3
+try:              unichr = unichr  # Py2
+except NameError: unichr = chr     # Py3
+
+
 # Convenience methods for creating a wx.Brush and wx.Pen or returning cached.
 BRUSH = lambda c,      s=wx.BRUSHSTYLE_SOLID: wx.TheBrushList.FindOrCreateBrush(c,    s)
 PEN   = lambda c, w=1, s=wx.PENSTYLE_SOLID:   wx.ThePenList  .FindOrCreatePen  (c, w, s)
 
 # Linux produces wx.Button with no visible text if less than 35px
-BUTTON_MIN_WIDTH = 35 if "linux2" == sys.platform else 20
+BUTTON_MIN_WIDTH = 35 if "linux" in sys.platform else 20
 
 # Multiplier for wx.ComboBox width ~100px ranges
-COMBO_WIDTH_FACTOR = 1.5 if "linux2" == sys.platform else 1
+COMBO_WIDTH_FACTOR = 1.5 if "linux" in sys.platform else 1
 
 
 class KEYS(object):
@@ -188,7 +196,7 @@ class BusyPanel(wx.Window):
         self.Sizer.Add(label, border=15, flag=wx.ALL | wx.ALIGN_CENTER_HORIZONTAL)
         self.Fit()
 
-        maxsize = [self.Parent.Size.width / 2, self.Parent.Size.height * 2 / 3]
+        maxsize = [self.Parent.Size.width // 2, self.Parent.Size.height * 2 // 3]
         self.Size = tuple(min(a, b) for a, b in zip(self.Size, maxsize))
 
         self.Bind(wx.EVT_PAINT, lambda e: (e.Skip(), self.Refresh()))
@@ -323,7 +331,7 @@ class ColourManager(object):
     def GetColour(cls, colour):
         if isinstance(colour, wx.Colour): return colour
         return wx.Colour(getattr(cls.colourcontainer, colour)) \
-               if isinstance(colour, basestring) \
+               if isinstance(colour, string_types) \
                else wx.SystemSettings.GetColour(colour)
 
 
@@ -337,9 +345,9 @@ class ColourManager(object):
         @param   ratio    RGB channel adjustment ratio towards second colour
         """
         colour1 = wx.SystemSettings.GetColour(colour1) \
-                  if isinstance(colour1, (int, long)) else wx.Colour(colour1)
+                  if isinstance(colour1, integer_types) else wx.Colour(colour1)
         colour2 = wx.SystemSettings.GetColour(colour2) \
-                  if isinstance(colour2, (int, long)) else wx.Colour(colour2)
+                  if isinstance(colour2, integer_types) else wx.Colour(colour2)
         rgb1, rgb2 = tuple(colour1)[:3], tuple(colour2)[:3]
         delta  = tuple(a - b for a, b in zip(rgb1, rgb2))
         result = tuple(a - (d * ratio) for a, d in zip(rgb1, delta))
@@ -478,8 +486,8 @@ class FileDrop(wx.FileDropTarget):
 
     def ProcessFiles(self, paths):
         if not self: return
-        folders   = filter(os.path.isdir,  paths)
-        filenames = filter(os.path.isfile, paths)
+        folders   = list(filter(os.path.isdir,  paths))
+        filenames = list(filter(os.path.isfile, paths))
         if folders   and self.on_folders: self.on_folders(folders)
         if filenames and self.on_files:   self.on_files(filenames)
 
@@ -528,8 +536,8 @@ class FormDialog(wx.Dialog):
     }
     """
 
-    WIDTH = 640 if "linux2" == sys.platform else 440
-    HEIGHT_FOOTER = 100 if "linux2" == sys.platform else 65
+    WIDTH = 640 if "linux" in sys.platform else 440
+    HEIGHT_FOOTER = 100 if "linux" in sys.platform else 65
 
 
     def __init__(self, parent, title, props=None, data=None, edit=None, autocomp=None, onclose=None, footer=None):
@@ -597,7 +605,7 @@ class FormDialog(wx.Dialog):
             Walks through the collection of nested dicts or lists or tuples, invoking
             callback(child) for each element, recursively.
             """
-            if isinstance(x, collections.Iterable) and not isinstance(x, basestring):
+            if isinstance(x, collections.Iterable) and not isinstance(x, string_types):
                 for k, v in enumerate(x):
                     if isinstance(x, collections.Mapping): k, v = v, x[v]
                     callback(v)
@@ -704,8 +712,7 @@ class FormDialog(wx.Dialog):
 
     def _Unprint(self, s, escape=True):
         """Returns string with unprintable characters escaped or stripped."""
-        enc = "unicode_escape" if isinstance(s, unicode) else "string_escape"
-        repl = (lambda m: m.group(0).encode(enc)) if escape else ""
+        repl = (lambda m: m.group(0).encode("unicode-escape").decode("latin1")) if escape else ""
         return re.sub(r"[\x00-\x1f]", repl, s)
 
 
@@ -857,7 +864,7 @@ class FormDialog(wx.Dialog):
                 choices = [x for x in choices if x not in value]
             listbox1, listbox2 = (x for x in ctrls if isinstance(x, wx.ListBox))
             for listbox, vv in zip((listbox1, listbox2), (choices, value)):
-                listbox.SetItems(map(self._Unprint, vv))
+                listbox.SetItems(list(map(self._Unprint, vv)))
                 for j, x in enumerate(vv): listbox.SetClientData(j, x)
                 listbox.Enable(self._editmode)
             for c in ctrls:
@@ -904,7 +911,7 @@ class FormDialog(wx.Dialog):
                 else:
                     if isinstance(value, (list, tuple)): value = "".join(value)
                     if isinstance(c, wx.ComboBox):
-                        c.SetItems(map(self._Unprint, choices))
+                        c.SetItems(list(map(self._Unprint, choices)))
                         for j, x in enumerate(choices): c.SetClientData(j, x)
                         value = self._Unprint(value) if value else value
                     c.Value = "" if value is None else value
@@ -1079,7 +1086,7 @@ class FormDialog(wx.Dialog):
         if self._ignore_change: return
         value, src = event.EventObject.Value, event.EventObject
 
-        if isinstance(value, basestring) \
+        if isinstance(value, string_types) \
         and (not isinstance(src, wx.stc.StyledTextCtrl)
         or not value.strip()): value = value.strip()
         if isinstance(src, wx.ComboBox) and src.HasClientData():
@@ -1108,14 +1115,14 @@ class FormDialog(wx.Dialog):
         else:
             indexes.extend(listbox1.GetSelections())
             if not indexes and listbox1.GetCount(): indexes.append(0)
-        selecteds = map(listbox1.GetClientData, indexes)
+        selecteds = list(map(listbox1.GetClientData, indexes))
 
         if field.get("exclusive"):
             for i in indexes[::-1]: listbox1.Delete(i)
-        listbox2.AppendItems(map(self._Unprint, selecteds))
+        listbox2.AppendItems(list(map(self._Unprint, selecteds)))
         for j, x in enumerate(selecteds, listbox2.Count - len(selecteds)):
             listbox2.SetClientData(j, x)
-        items2 = map(listbox2.GetClientData, range(listbox2.Count))
+        items2 = list(map(listbox2.GetClientData, range(listbox2.Count)))
         self._SetValue(field, items2, path)
 
 
@@ -1131,7 +1138,7 @@ class FormDialog(wx.Dialog):
             if not indexes and listbox2.GetCount(): indexes.append(0)
 
         for i in indexes[::-1]: listbox2.Delete(i)
-        items2 = map(listbox2.GetClientData, range(listbox2.Count))
+        items2 = list(map(listbox2.GetClientData, range(listbox2.Count)))
         allchoices = self._GetChoices(field, path)
         listbox1.SetItems([self._Unprint(x) for x in allchoices if x not in items2])
         for j, x in enumerate(x for x in allchoices if x not in items2):
@@ -1144,17 +1151,17 @@ class FormDialog(wx.Dialog):
         _, listbox2 = (x for x in self._comps[path + (field["name"], )]
                        if isinstance(x, wx.ListBox))
         indexes = listbox2.GetSelections()
-        items = map(listbox2.GetClientData, range(listbox2.Count))
+        items = list(map(listbox2.GetClientData, range(listbox2.Count)))
 
         if not indexes or direction < 0 and not indexes[0] \
         or direction > 0 and indexes[-1] == len(items) - 1: return
 
-        for i in range(len(items))[::-direction]:
+        for i in list(range(len(items)))[::-direction]:
             if i not in indexes: continue # for i
             i2 = i + direction
             items[i], items[i2] = items[i2], items[i]
 
-        listbox2.SetItems(map(self._Unprint, items))
+        listbox2.SetItems(list(map(self._Unprint, items)))
         for j, x in enumerate(items): listbox2.SetClientData(j, x)
         for i in indexes: listbox2.Select(i + direction)
         self._SetValue(field, items, path)
@@ -1383,7 +1390,7 @@ class HintedTextCtrl(wx.TextCtrl):
     def SetBackgroundColour(self, colour):
         """Sets the background colour of the control."""
         if colour != self.BackgroundColour and self.Value \
-        and not self._hint_on and "linux2" == sys.platform:
+        and not self._hint_on and "linux" in sys.platform:
             # Workaround for existing text background colour remaining same in Linux
             self._ignore_change = True
             sel, val = self.GetSelection(), self.Value
@@ -1621,7 +1628,7 @@ class NoteButton(wx.Panel, wx.Button):
         if (self._align & wx.ALIGN_RIGHT):
             x = width - 10 - self._bmp.Size.width
         elif (self._align & wx.ALIGN_CENTER):
-            x = 10 + (width - self.DoGetBestSize().width) / 2
+            x = 10 + (width - self.DoGetBestSize().width) // 2
 
         dc.Font = self.Font
         dc.Brush = BRUSH(self.BackgroundColour)
@@ -1702,7 +1709,7 @@ class NoteButton(wx.Panel, wx.Button):
         if "&" in self._label:
             text_label, h = "", y - 1
             dc.Pen = wx.Pen(dc.TextForeground)
-            for line in self._text_label.split("\n"):
+            for line in self._text_label.splitlines():
                 i, chars = 0, ""
                 while i < len(line):
                     if "&" == line[i]:
@@ -2033,7 +2040,7 @@ class PropertyDialog(wx.Dialog):
         ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_WINDOW)
 
 
-    def AddProperty(self, name, value, help="", default=None, typeclass=unicode):
+    def AddProperty(self, name, value, help="", default=None, typeclass=text_type):
         """Adds a property to the frame."""
         row = len(self.properties) * 2
         label = wx.StaticText(self.panel, label=name)
@@ -2111,9 +2118,9 @@ class PropertyDialog(wx.Dialog):
         """Returns value in type expected, or None on failure."""
         try:
             result = typeclass(value)
-            if isinstance(result, (int, long)) and result < 0:
+            if isinstance(result, integer_types) and result < 0:
                 raise ValueError() # Reject negative numbers
-            isinstance(result, basestring) and result.strip()[0] # Reject empty
+            isinstance(result, string_types) and result.strip()[0] # Reject empty
             return result
         except Exception:
             return None
@@ -2123,9 +2130,9 @@ class PropertyDialog(wx.Dialog):
         """Returns the value in type suitable for appropriate wx control."""
         value = tuple(value) if isinstance(value, list) else value
         if isinstance(value, tuple):
-            value = tuple(str(x) if isinstance(x, unicode) else x for x in value)
+            value = tuple(str(x) if isinstance(x, text_type) else x for x in value)
         return "" if value is None else value \
-               if isinstance(value, (basestring, bool)) else unicode(value)
+               if isinstance(value, (string_types, bool)) else text_type(value)
 
 
 
@@ -2334,7 +2341,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         self.AssignImageList(self._CreateImageList(), wx.IMAGE_LIST_SMALL)
 
         # Default row column formatter function
-        frmt = lambda: lambda r, c: "" if r.get(c) is None else unicode(r[c])
+        frmt = lambda: lambda r, c: "" if r.get(c) is None else text_type(r[c])
         self._formatters = collections.defaultdict(frmt)
         id_copy = wx.NewIdRef().Id
         entries = [(wx.ACCEL_CMD, x, id_copy) for x in KEYS.INSERT + (ord("C"), )]
@@ -2686,8 +2693,8 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         if not selecteds: # Dragged beyond last item
             idx, selecteds = self.GetItemCount() - 1, [start]
 
-        datas     = map(self.GetItemMappedData, selecteds)
-        image_ids = map(self._id_images.get, map(self.GetItemData, selecteds))
+        datas     = list(map(self.GetItemMappedData, selecteds))
+        image_ids = list(map(self._id_images.get, map(self.GetItemData, selecteds)))
 
         self.Freeze()
         try:
@@ -2840,7 +2847,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                 self.Select(idindx[item_id])
                 if idindx[item_id] >= self.GetCountPerPage():
                     lh = self.GetUserLineHeight()
-                    dy = (idindx[item_id] - self.GetCountPerPage() / 2) * lh
+                    dy = (idindx[item_id] - self.GetCountPerPage() // 2) * lh
                     self.ScrollList(0, dy)
 
 
@@ -2849,7 +2856,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         result = True
         if self._filter:
             result = False
-            patterns = map(re.escape, self._filter.split())
+            patterns = list(map(re.escape, self._filter.split()))
             for col_name, col_label in self._columns:
                 col_value = self._formatters[col_name](row, col_name)
                 if all(re.search(p, col_value, re.I | re.U) for p in patterns):
@@ -2872,11 +2879,12 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         item2 = self.itemDataMap[key2][col]
 
         #--- Internationalization of string sorting with locale module
-        if isinstance(item1, unicode) and isinstance(item2, unicode):
+        if isinstance(item1, text_type) and isinstance(item2, text_type):
             cmpVal = locale.strcoll(item1.lower(), item2.lower())
-        elif isinstance(item1, str) or isinstance(item2, str):
-            items = item1.lower(), item2.lower()
-            cmpVal = locale.strcoll(*map(unicode, items))
+        elif isinstance(item1, bytes) or isinstance(item2, bytes):
+            item1 = item1.lower() if isinstance(item1, bytes) else str(item1).encode("latin1").lower()
+            item2 = item2.lower() if isinstance(item2, bytes) else str(item2).encode("latin1").lower()
+            cmpVal = locale.strcoll(text_type(item1), text_type(item2))
         else:
             if item1 is None:
                 cmpVal = -1
@@ -2887,7 +2895,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
         # If items are equal, pick something else to make the sort value unique
         if cmpVal == 0:
-            cmpVal = apply(cmp, self.GetSecondarySortValues(col, key1, key2))
+            cmpVal = cmp(*self.GetSecondarySortValues(col, key1, key2))
 
         result = cmpVal if ascending else -cmpVal
         return result
@@ -2906,7 +2914,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     """
 
     """SQLite reserved keywords."""
-    KEYWORDS = map(unicode, sorted([
+    KEYWORDS = list(map(text_type, sorted([
         "ABORT", "ACTION", "ADD", "AFTER", "ALL", "ALTER", "ANALYZE",
         "AND", "AS", "ASC", "ATTACH", "AUTOINCREMENT", "BEFORE",
         "BEGIN", "BETWEEN", "BINARY", "BY", "CASCADE", "CASE", "CAST",
@@ -2927,16 +2935,16 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         "TABLE", "TEMP", "TEMPORARY", "THEN", "TO", "TRANSACTION", "TRIGGER",
         "UNION", "UNIQUE", "UPDATE", "USING", "VACUUM", "VALUES", "VIEW",
         "VIRTUAL", "WHEN", "WHERE", "WITHOUT",
-    ]))
+    ])))
     """SQLite data types."""
-    TYPEWORDS = map(unicode, sorted([
+    TYPEWORDS = list(map(text_type, sorted([
         "BLOB",
         "INTEGER", "BIGINT", "INT", "INT2", "INT8", "MEDIUMINT", "SMALLINT",
                    "TINYINT", "UNSIGNED",
         "NUMERIC", "BOOLEAN", "DATE", "DATETIME", "DECIMAL",
         "TEXT", "CHARACTER", "CLOB", "NCHAR", "NVARCHAR", "VARCHAR", "VARYING",
         "REAL", "DOUBLE", "FLOAT", "PRECISION",
-    ]))
+    ])))
     AUTOCOMP_STOPS = " .,;:([)]}'\"\\<>%^&+-=*/|`"
     """String length from which autocomplete starts."""
     AUTOCOMP_LEN = 2
@@ -2950,7 +2958,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.traversable     = kwargs.pop("traversable", False)
         self.wheelable       = kwargs.pop("wheelable", True)
 
-        if "linux2" == sys.platform:
+        if "linux" in sys.platform:
             # If no explicit border specified, set BORDER_SIMPLE to make control visible
             # (STC in Linux supports only BORDER_SIMPLE and by default has no border)
             ALLBORDERS = (wx.BORDER_DOUBLE | wx.BORDER_MASK | wx.BORDER_NONE | wx.BORDER_RAISED |
@@ -3039,12 +3047,12 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         words = [x for x in words if not self.SAFEBYTE_RGX.search(x)]
         if not words: return
 
-        self.autocomps_added.update(map(unicode, words))
+        self.autocomps_added.update(map(text_type, words))
         # A case-insensitive autocomp has to be sorted, will not work
         # properly otherwise. UserList would support arbitrarily sorting.
         self.autocomps_total = sorted(list(self.autocomps_added) +
-                                      map(unicode, self.KEYWORDS),
-                                      cmp=self.stricmp)
+                                      list(map(text_type, self.KEYWORDS)),
+                                      key=lambda x: x.lower())
 
 
     def AutoCompAddSubWords(self, word, subwords):
@@ -3055,7 +3063,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         subwords = [x for x in subwords if not self.SAFEBYTE_RGX.search(x)]
         if not subwords or self.SAFEBYTE_RGX.search(word): return
 
-        word, subwords = unicode(word), map(unicode, subwords)
+        word, subwords = text_type(word), map(text_type, subwords)
         if word not in self.autocomps_added:
             self.AutoCompAddWords([word])
         if subwords:
@@ -3177,7 +3185,8 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
                 # Check if we have enough valid text to start autocomplete
                 char = None
                 try: # Not all keycodes can be chars
-                    char = chr(event.UnicodeKey).decode("latin1")
+                    char = chr(event.UnicodeKey)
+                    char = char.decode("latin1")
                 except Exception:
                     pass
                 if char not in KEYS.ENTER and char is not None:
@@ -3194,9 +3203,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
                         # User entered "word.", show subword autocompletion if
                         # defined for the text.
                         if text in self.autocomps_subwords:
-                            words = sorted(
-                                self.autocomps_subwords[text], cmp=self.stricmp
-                            )
+                            words = sorted(self.autocomps_subwords[text], key=lambda x: x.lower())
                             do_autocomp = True
                             skip = False
                             self.AddText(char)
@@ -3433,21 +3440,21 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
     def GetText(self):
         """Returns current content as non-hex-encoded string."""
-        return str(self._bytes)
+        return bytes(self._bytes).decode("latin1")
     def SetText(self, text):
         """Set current content as non-hex-encoded string."""
-        return self.SetValue(text if isinstance(text, basestring) else str(text))
+        return self.SetValue(text if isinstance(text, string_types) else str(text))
     Text = property(GetText, SetText)
 
 
     def GetValue(self):
         """Returns current content as original type (string or number)."""
-        v = str(self._bytes)
-        if v == "" and self._type in (int, float, long): v = None
-        elif self._type is     int: v = struct.unpack(">l", v)[0]
-        elif self._type is   float: v = struct.unpack(">f", v)[0]
-        elif self._type is    long: v = struct.unpack(">q", v)[0]
-        elif self._type is unicode:
+        v = bytes(self._bytes)
+        if v == b"" and self._type in integer_types + (float, ): v = None
+        elif is_fixed_long(self._type(), v): v = struct.unpack(">q", v)[0]
+        elif self._type is     int:          v = struct.unpack(">l", v)[0]
+        elif self._type is   float:          v = struct.unpack(">f", v)[0]
+        elif self._type is text_type:
             try: v = v.decode("utf-8")
             except Exception: v = v.decode("latin1")
         return v
@@ -3518,13 +3525,13 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
             del self._bytes [selection[0]:selection[1] + 1]
             del self._bytes0[selection[0]:selection[1] + 1]
 
+        bpos = pos // 3 + (pos == self.GetLastPosition())
         text = re.sub("[^0-9a-fA-F]", "", self._AdaptValue(text))
         text = text[:len(text) - len(text) % 2]
         v = bytearray.fromhex(text)
         maxlen = min(len(v), len(self._bytes) - bpos) if self._fixed else len(v)
         v = v[:maxlen]
 
-        bpos = pos / 3 + (pos == self.GetLastPosition())
         if bpos + maxlen > len(self._bytes):
             self._bytes0.extend([None] * (bpos + maxlen - len(self._bytes)))
         if self.Overtype:
@@ -3572,18 +3579,18 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     def _PosOut(self, pos):
         line = self.LineFromPosition(pos)
         linepos = pos - self.PositionFromLine(self.LineFromPosition(pos))
-        return line * self.WIDTH + linepos / 3
+        return line * self.WIDTH + linepos // 3
 
 
     def _Populate(self):
         """Sets current content to widget."""
-        fulltext, count = bytearray(), len(self._bytes)
+        fulltext, count = [], len(self._bytes)
         for i, c in enumerate(self._bytes):
-            text, line = "%02X" % c, i / self.WIDTH
+            text, line = "%02X" % c, i // self.WIDTH
             if i < count - 1:
                 text += "\n" if i and not (i + 1) % self.WIDTH else " "
-            fulltext += text
-        super(HexTextCtrl, self).ChangeValue(str(fulltext))
+            fulltext.append(text)
+        super(HexTextCtrl, self).ChangeValue("".join(fulltext))
         self._Restyle()
         self._Remargin()
 
@@ -3603,20 +3610,19 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         sself = super(HexTextCtrl, self)
         margintexts = []
         self.MarginTextClearAll()
-        for line in xrange((sself.Length + self.WIDTH - 1) / self.WIDTH):
+        for line in range((sself.Length + self.WIDTH - 1) // self.WIDTH):
             self.MarginSetStyle(line, self.STYLE_MARGIN)
             self.MarginSetText (line, " %08X " % line)
 
 
     def _SetValue(self, value):
         """Set current content as typed value (string or number), clears undo."""
-        is_long = isinstance(value, long) and not isinstance(value, int) \
-                  and -2**63 <= value < 2**63
+        is_long = is_fixed_long(value)
         v = self._AdaptValue(value)
 
-        self._type      = type(value) if is_long or not isinstance(value, long) else str
-        self._fixed     = is_long or value is None or isinstance(value, (int, float))
-        self._bytes0[:] = map(ord, v)
+        self._type      = type(value) if is_long or not is_long_long(value) else str
+        self._fixed     = is_long or value is None or is_fixed(value)
+        self._bytes0[:] = [x if isinstance(x, int) else ord(x) for x in v]
         self._bytes[:]  = v
         if self._fixed: self.SetOvertype(True)
         self._undoredo.ClearCommands()
@@ -3805,17 +3811,18 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
 
     def _AdaptValue(self, value):
-        """Returns the value as str for hex representation."""
-        is_long = isinstance(value, long) and not isinstance(value, int) \
-                  and -2**63 <= value < 2**63
-        if   isinstance(value, int):   v = struct.pack(">l", value)
+        """Returns the value as bytes() for hex representation."""
+        is_long = is_fixed_long(value) and not is_long_long(value)
+        if is_long:                    v = struct.pack(">q", value)
+        elif isinstance(value, int):   v = struct.pack(">l", value)
         elif isinstance(value, float): v = struct.pack(">f", value)
-        elif is_long:                  v = struct.pack(">q", value)
-        elif value is None:            v = ""
-        elif isinstance(value, unicode):
+        elif value is None:            v = b""
+        elif isinstance(value, text_type):
             try: v = value.encode("latin1")
             except Exception: v = value.encode("utf-8")
-        else: v = str(value)
+        else: v = value
+        if not isinstance(v, bytes):
+            v = str(v).encode("latin1")
         return v
 
 
@@ -3949,18 +3956,18 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         return str(self._bytes)
     def SetText(self, text):
         """Set current content as raw byte string."""
-        return self.SetValue(self._AdaptValue(v))
+        return self.SetValue(self._AdaptValue(text))
     Text = property(GetText, SetText)
 
 
     def GetValue(self):
         """Returns current content as original type (string or number)."""
-        v = str(self._bytes)
-        if v == "" and self._type in (int, float, long): v = None
-        elif self._type is     int: v = struct.unpack(">l", v)[0]
-        elif self._type is   float: v = struct.unpack(">f", v)[0]
-        elif self._type is    long: v = struct.unpack(">q", v)[0]
-        elif self._type is unicode:
+        v = bytes(self._bytes)
+        if v == b"" and self._type in integer_types + (float, ): v = None
+        elif is_fixed_long(self._type(), v): v = struct.unpack(">q", v)[0]
+        elif self._type is     int:          v = struct.unpack(">l", v)[0]
+        elif self._type is   float:          v = struct.unpack(">f", v)[0]
+        elif self._type is text_type:
             try: v = v.decode("utf-8")
             except Exception: v = v.decode("latin1")
         return v
@@ -4052,12 +4059,12 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
     def _Populate(self):
         """Sets current content to widget."""
         count = len(self._bytes)
-        fulltext = bytearray()
+        fulltext = []
         for i, c in enumerate(self._bytes):
-            fulltext += re.sub("[^\x20-\x7e]", ".", chr(self._bytes[i]))
+            fulltext.append(re.sub("[^\x20-\x7e]", ".", chr(self._bytes[i])))
             if i and i < count - 1 and not (i + 1) % self.WIDTH:
-                fulltext += "\n"
-        fullstr = str(fulltext)
+                fulltext.append("\n")
+        fullstr = "".join(fulltext)
         if super(ByteTextCtrl, self).Text != fullstr:
             super(ByteTextCtrl, self).ChangeValue(fullstr)
         self._Restyle()
@@ -4069,21 +4076,20 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         self.SetStyling(super(ByteTextCtrl, self).Length, 0)
         for i, c in enumerate(self._bytes):
             if c == self._bytes0[i]: continue # for i, c
-            self.StartStyling(i / self.WIDTH + i)
+            self.StartStyling(i // self.WIDTH + i)
             self.SetStyling(1, self.STYLE_CHANGED)
 
 
     def _SetValue(self, value, noreset=False):
         """Set current content as typed value (string or number)."""
-        is_long = isinstance(value, long) and not isinstance(value, int) \
-                  and -2**63 <= value < 2**63
+        is_long = is_fixed_long(value)
         v = self._AdaptValue(value)
 
         self._bytes[:] = v
         if not noreset:
-            self._type      = type(value) if is_long or not isinstance(value, long) else str
-            self._fixed     = is_long or value is None or isinstance(value, (int, float))
-            self._bytes0[:] = map(ord, v)
+            self._type      = type(value) if is_long or not is_long_long(value) else str
+            self._fixed     = is_long or value is None or is_fixed(value)
+            self._bytes0[:] = [x if isinstance(x, int) else ord(x) for x in v]
         if self._fixed: self.SetOvertype(True)
 
 
@@ -4280,16 +4286,17 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
 
     def _AdaptValue(self, value):
         """Returns the value as str for byte representation."""
-        is_long = isinstance(value, long) and not isinstance(value, int) \
-                  and -2**63 <= value < 2**63
-        if   isinstance(value, int):   v = struct.pack(">l", value)
+        is_long = is_fixed_long(value) and not is_long_long(value)
+        if is_long:                    v = struct.pack(">q", value)
+        elif isinstance(value, int):   v = struct.pack(">l", value)
         elif isinstance(value, float): v = struct.pack(">f", value)
-        elif is_long:                  v = struct.pack(">q", value)
-        elif value is None:            v = ""
-        elif isinstance(value, unicode):
+        elif value is None:            v = b""
+        elif isinstance(value, text_type):
             try: v = value.encode("latin1")
             except Exception: v = value.encode("utf-8")
-        else: v = str(value)
+        else: v = value
+        if not isinstance(v, bytes):
+            v = str(v).encode("latin1")
         return v
 
 
@@ -4326,7 +4333,7 @@ class JSONTextCtrl(wx.stc.StyledTextCtrl):
     """
 
     """JSON reserved keywords."""
-    KEYWORDS = map(unicode, sorted(["null"]))
+    KEYWORDS = list(map(text_type, sorted(["null"])))
     AUTOCOMP_STOPS = " .,;:([)]}'\"\\<>%^&+-=*/|`"
     """String length from which autocomplete starts."""
     AUTOCOMP_LEN = 2
@@ -4583,7 +4590,7 @@ class JSONTextCtrl(wx.stc.StyledTextCtrl):
                     for last_word in re.findall(r"(\w+)$", line_text, re.I):
                         text += last_word
                     text = text.upper()
-                    if char in string.letters:
+                    if char in string.ascii_letters:
                         text += char.upper()
                         if len(text) >= self.AUTOCOMP_LEN and any(x for x in
                         words if x.upper().startswith(text)):
@@ -4622,7 +4629,7 @@ class TabbedHtmlWindow(wx.Panel):
                     wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
                     wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
                     wx.lib.agw.flatnotebook.FNB_VC8)
-        if "linux2" == sys.platform and wx.VERSION[:3] == (4, 1, 1):
+        if "linux" in sys.platform and wx.VERSION[:3] == (4, 1, 1):
             # wxPython 4.1.1 on Linux crashes with FNB_VC8
             agwStyle ^= wx.lib.agw.flatnotebook.FNB_VC8
         notebook = self._notebook = wx.lib.agw.flatnotebook.FlatNotebook(
@@ -5218,7 +5225,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
             size = self._listwindow.GetSize()
             width, height = self.Size.width - 3, self.Size.height
             x, y = self.ClientToScreen(0, height - 2)
-            if size.GetWidth() <> width:
+            if size.GetWidth() != width:
                 size.SetWidth(width)
                 self._listwindow.SetSize(size)
                 self._listbox.SetSize(self._listwindow.GetClientSize())
@@ -5383,7 +5390,7 @@ class YAMLTextCtrl(wx.stc.StyledTextCtrl):
     """
 
     """YAML reserved keywords."""
-    KEYWORDS = map(unicode, sorted(["true", "false", "null"]))
+    KEYWORDS = list(map(text_type, sorted(["true", "false", "null"])))
     AUTOCOMP_STOPS = " .,;:([)]}'\"\\<>%^&+-=*/|`"
     """String length from which autocomplete starts."""
     AUTOCOMP_LEN = 2
@@ -5604,7 +5611,7 @@ class YAMLTextCtrl(wx.stc.StyledTextCtrl):
                     for last_word in re.findall(r"(\w+)$", line_text, re.I):
                         text += last_word
                     text = text.upper()
-                    if char in string.letters:
+                    if char in string.ascii_letters:
                         text += char.upper()
                         if len(text) >= self.AUTOCOMP_LEN and any(x for x in
                         words if x.upper().startswith(text)):
@@ -5635,6 +5642,17 @@ def YesNoMessageBox(message, caption, icon=wx.ICON_NONE, default=wx.YES):
     dlg = wx.MessageDialog(None, message, caption, style)
     dlg.SetOKCancelLabels("&Yes", "&No")
     return wx.YES if wx.ID_OK == dlg.ShowModal() else wx.NO
+
+
+def cmp(x, y):
+    """Return negative if x<y, zero if x==y, positive if x>y."""
+    if x == y: return 0
+    if x is None: return -1
+    if y is None: return +1
+    try:
+        return -1 if x < y else +1
+    except TypeError:
+        return -1 if str(x) < str(y) else +1
 
 
 def get_dialog_path(dialog):
@@ -5669,3 +5687,29 @@ def get_tool_rect(toolbar, id_tool):
                                else tool.Control.Size[0])
 
     return result
+
+
+def is_fixed(value):
+    """Returns whether value is fixed-size (float, or 32/64-bit integer)."""
+    return isinstance(value, float) or isinstance(value, integer_types) and -2**63 <= value < 2**63
+
+
+def is_fixed_long(value, bytevalue=None):
+    """
+    Returns whether value is integer smaller than 64 bits.
+    In Python2, checks also that value is not int.
+
+    @param   bytevalue  optional value buffer to check for length
+    """
+    if not isinstance(value, integer_types):
+        return False
+    if sys.version_info < (3, ):
+        return isinstance(value, long) and -2**63 <= value < 2**63
+    if bytevalue is not None:
+        return len(bytevalue) == 8
+    return not (-2**31 <= value < 2**31) and -2**63 <= value < 2**63
+
+
+def is_long_long(value):
+    """Returns whether value is integer larger than 64 bits."""
+    return isinstance(value, integer_types) and not (-2**63 <= value < 2**63)

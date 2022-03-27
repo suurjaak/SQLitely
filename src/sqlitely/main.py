@@ -9,12 +9,13 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.12.2020
+@modified    26.03.2022
 ------------------------------------------------------------------------------
 """
 import argparse
 import functools
 import glob
+import locale
 import logging
 import multiprocessing.connection
 import os
@@ -42,6 +43,21 @@ ARGUMENTS = {
          "help": "SQLite database to open on startup, if any"},
     ],
 }
+
+
+class MainApp(wx.App):
+
+    def InitLocale(self):
+        self.ResetLocale()
+        if "win32" == sys.platform:  # Avoid dialog buttons in native language
+            mylocale = wx.Locale(wx.LANGUAGE_ENGLISH_US, wx.LOCALE_LOAD_DEFAULT)
+            mylocale.AddCatalog("wxstd")
+            self._initial_locale = mylocale  # Override wx.App._initial_locale
+            # Workaround for MSW giving locale as "en-US"; standard format is "en_US".
+            # Py3 provides "en[-_]US" in wx.Locale names and accepts "en" in locale.setlocale();
+            # Py2 provides "English_United States.1252" in wx.Locale.SysName and accepts only that.
+            name = mylocale.SysName if sys.version_info < (3, ) else mylocale.Name.split("_", 1)[0]
+            locale.setlocale(locale.LC_ALL, name)
 
 
 def except_hook(etype, evalue, etrace):
@@ -111,7 +127,7 @@ def ipc_send(authkey, port, data, limit=10000):
 def run_gui(filenames):
     """Main GUI program entrance."""
     global logger
-    filenames = filter(os.path.isfile, filenames)
+    filenames = list(filter(os.path.isfile, filenames))
 
     # Set up logging to GUI log window
     logger.addHandler(guibase.GUILogHandler())
@@ -119,7 +135,7 @@ def run_gui(filenames):
 
     singlechecker = wx.SingleInstanceChecker(conf.IPCName)
     if not conf.AllowMultipleInstances and singlechecker.IsAnotherRunning():
-        data = map(os.path.realpath, filenames)
+        data = list(map(os.path.realpath, filenames))
         if ipc_send(conf.IPCName, conf.IPCPort, data): return
         else: logger.error("Failed to communicate with allowed instance.")
 
@@ -127,8 +143,7 @@ def run_gui(filenames):
     sys.excepthook = except_hook
 
     # Create application main window
-    app = wx.App(redirect=True) # stdout and stderr redirected to wx popup
-    locale = wx.Locale(wx.LANGUAGE_ENGLISH) # Avoid dialog buttons in native language
+    app = MainApp(redirect=True) # stdout and stderr redirected to wx popup
     window = gui.MainWindow()
     app.SetTopWindow(window) # stdout/stderr popup closes with MainWindow
 
@@ -164,7 +179,7 @@ def run():
         argparser.add_argument(*arg.pop("args"), **arg)
 
     argv = sys.argv[1:]
-    if "nt" == os.name: # Fix Unicode arguments, otherwise converted to ?
+    if "nt" == os.name and sys.version_info < (3, ): # Fix Unicode arguments, otherwise converted to ?
         argv = util.win32_unicode_argv()[1:]
     arguments, _ = argparser.parse_known_args(argv)
 
@@ -172,7 +187,7 @@ def run():
         arguments.FILE = sum([glob.glob(f) if "*" in f else [f]
                               for f in arguments.FILE], [])
         arguments.FILE = sorted(set(util.to_unicode(f) for f in arguments.FILE))
-        arguments.FILE = map(util.longpath, arguments.FILE)
+        arguments.FILE = list(map(util.longpath, arguments.FILE))
 
     run_gui(arguments.FILE)
 

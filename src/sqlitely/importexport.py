@@ -8,9 +8,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.08.2021
+@modified    27.03.2022
 ------------------------------------------------------------------------------
 """
+import codecs
 import collections
 import csv
 import datetime
@@ -34,6 +35,7 @@ try: import xlrd
 except ImportError: xlrd = None
 try: import xlsxwriter
 except ImportError: xlsxwriter = None
+import six
 
 from . lib import util
 from . lib.vendor import step
@@ -109,7 +111,7 @@ def export_data(make_iterable, filename, title, db, columns,
                              returning false if export should cancel
     """
     result = False
-    f, cursor = None, None
+    f, writer, cursor = None, None, None
     is_csv  = filename.lower().endswith(".csv")
     is_html = filename.lower().endswith(".html")
     is_json = filename.lower().endswith(".json")
@@ -117,7 +119,7 @@ def export_data(make_iterable, filename, title, db, columns,
     is_txt  = filename.lower().endswith(".txt")
     is_xlsx = filename.lower().endswith(".xlsx")
     is_yaml = any(n.endswith("." + x) for n in [filename.lower()] for x in YAML_EXTS)
-    columns = [{"name": c} if isinstance(c, basestring) else c for c in columns]
+    columns = [{"name": c} if isinstance(c, six.string_types) else c for c in columns]
     colnames = [c["name"] for c in columns]
     tmpfile, tmpname = None, None # Temporary file for exported rows
     try:
@@ -127,37 +129,26 @@ def export_data(make_iterable, filename, title, db, columns,
             cursor = make_iterable()
 
             if is_csv or is_xlsx:
+                f.close()
                 if is_csv:
-                    dialect = csv.excel
-                    dialect.delimiter = ";" # default "," is not actually used by Excel
-                    writer = csv.writer(f, dialect)
-                    if query:
-                        flat = query.replace("\r", " ").replace("\n", " ")
-                        query = flat.encode("latin1", "replace")
-                    header = [c.encode("latin1", "replace") for c in colnames]
+                    writer = csv_writer(filename)
+                    if query: query = query.replace("\r", " ").replace("\n", " ")
                 else:
                     props = {"title": title, "comments": templates.export_comment()}
                     writer = xlsx_writer(filename, name or "SQL Query", props=props)
                     writer.set_header(True)
-                    header = colnames
                 if query:
                     a = [[query]] + (["bold", 0, False] if is_xlsx else [])
                     writer.writerow(*a)
-                writer.writerow(*([header, "bold"] if is_xlsx else [header]))
+                writer.writerow(*([colnames, "bold"] if is_xlsx else [colnames]))
                 writer.set_header(False) if is_xlsx else 0
                 for i, row in enumerate(cursor, 1):
-                    values = []
-                    for col in colnames:
-                        val = "" if row[col] is None else row[col]
-                        if is_csv:
-                            val = val if isinstance(val, unicode) else str(val)
-                            val = val.encode("latin1", "replace")
-                        values.append(val)
-                    writer.writerow(values)
+                    writer.writerow(["" if row[c] is None else row[c] for c in colnames])
                     count = i
                     if not i % 100 and progress and not progress(count=i):
                         break # for i, row
-                if is_xlsx: writer.close()
+                writer.close()
+                writer = None
             else:
                 namespace = {
                     "db_filename": db.name,
@@ -180,10 +171,10 @@ def export_data(make_iterable, filename, title, db, columns,
                         for i, row in enumerate(cursor2):
                             for col in colnames:
                                 v = row[col]
-                                if isinstance(v, (int, long, float)): justs[col] = False
+                                if isinstance(v, six.integer_types + (float, )): justs[col] = False
                                 v = "" if v is None \
-                                    else v if isinstance(v, basestring) else str(v)
-                                v = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, unicode(v))
+                                    else v if isinstance(v, six.string_types) else str(v)
+                                v = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, six.text_type(v))
                                 widths[col] = max(widths[col], len(v))
                             if not i % 100 and progress and not progress(): return
                     finally: util.try_until(lambda: cursor2.close())
@@ -215,7 +206,7 @@ def export_data(make_iterable, filename, title, db, columns,
                     namespace["create_sql"] = create_sql
 
                 tmpfile.flush(), tmpfile.seek(0)
-                namespace["data_buffer"] = iter(lambda: tmpfile.read(65536), "")
+                namespace["data_buffer"] = iter(lambda: tmpfile.read(65536), b"")
                 template = step.Template(templates.DATA_HTML if is_html else
                            templates.DATA_SQL if is_sql else templates.DATA_JSON
                            if is_json else templates.DATA_YAML if is_yaml
@@ -226,6 +217,7 @@ def export_data(make_iterable, filename, title, db, columns,
 
             result = progress(count=count) if progress else True
     finally:
+        if writer:     util.try_until(writer.close)
         if tmpfile:    util.try_until(tmpfile.close)
         if tmpname:    util.try_until(lambda: os.unlink(tmpname))
         if not result: util.try_until(lambda: os.unlink(filename))
@@ -409,7 +401,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, p
     try:
         schema2 = "main"
         if not is_samefile:
-            schemas = [x.values()[1] for x in
+            schemas = [list(x.values())[1] for x in
                        db.execute("PRAGMA database_list").fetchall()]
             schema2 = util.make_unique("main", schemas, suffix="%s")
             db.execute("ATTACH DATABASE ? AS %s;" % schema2, [filename])
@@ -618,7 +610,7 @@ def get_import_file_data(filename, progress=None):
                 if progress and not progress(): return
                 columns = [x.value for x in next(sheet.get_rows(), [])]
                 while columns and columns[-1] is None: columns.pop(-1)
-                columns = [x.strip() if isinstance(x, basestring)
+                columns = [x.strip() if isinstance(x, six.string_types)
                            else "" if x is None else str(x) for x in columns]
                 if not columns: rows = 0
                 else: rows = -1 if size > conf.MaxImportFilesizeForCount else sheet.nrows
@@ -634,7 +626,7 @@ def get_import_file_data(filename, progress=None):
                     if progress and not progress(): return
                     columns = list(next(sheet.values, []))
                     while columns and columns[-1] is None: columns.pop(-1)
-                    columns = [x.strip() if isinstance(x, basestring)
+                    columns = [x.strip() if isinstance(x, six.string_types)
                                else "" if x is None else str(x) for x in columns]
                     rows = 0 if not columns else -1 if size > conf.MaxImportFilesizeForCount \
                            else sum(1 for _ in sheet.iter_rows())
@@ -912,6 +904,32 @@ def iter_file_rows(filename, columns, sheet=None):
 
 
 
+class csv_writer(object):
+    """Convenience wrapper for csv.Writer, with Python2/3 compatbility."""
+
+    def __init__(self, filename):
+        self._file = open(filename, "wb") if six.PY2 else codecs.open(filename, "w", "utf-8")
+        # csv.excel.delimiter default "," is not actually used by Excel.
+        self._writer = csv.writer(self._file, csv.excel, delimiter=";")
+
+
+    def writerow(self, sequence):
+        """Writes a CSV record from a sequence of fields."""
+        values = []
+        for v in sequence:
+            if six.PY2:
+                v = util.to_unicode(v).encode("utf-8", "backslashreplace")
+            if isinstance(v, six.string_types):
+                v = v.replace("\r", "\\r").replace("\n", "\\n").replace("\x00", "\\x00")
+            values.append(v)
+        self._writer.writerow(values)
+
+
+    def close(self):
+        """Closes CSV file writer."""
+        self._file.close()
+
+
 class xlsx_writer(object):
     """Convenience wrapper for xslxwriter, with csv.Writer-like interface."""
     COL_MAXWIDTH   = 100 # In Excel units, 1 == width of "0" in standard font
@@ -942,7 +960,7 @@ class xlsx_writer(object):
         self._sheetnames = {} # {xlsxwriter.Worksheet: original given name, }
         self._headers    = {} # {sheet name: [[values, style, merge_cols], ], }
         self._col_widths = {} # {sheet name: {col index: width in Excel units}}
-        self._autowrap   = [c for c in autowrap] # [column index to autowrap, ]
+        self._autowrap   = list(autowrap or ()) # [column index to autowrap, ]
         self._format     = None
 
         # Worksheet style formats
@@ -994,7 +1012,7 @@ class xlsx_writer(object):
         self._writers = collections.defaultdict(lambda: sheet.write)
         self._writers[datetime.datetime] = sheet.write_datetime
         # Avoid using write_url: URLs are very limited in Excel (max len 256)
-        self._writers[str] = self._writers[unicode] = sheet.write_string
+        self._writers[six.binary_type] = self._writers[six.text_type] = sheet.write_string
 
 
     def set_header(self, start):
@@ -1031,7 +1049,7 @@ class xlsx_writer(object):
             values = values[0] if values else []
         for c, v in enumerate(values):
             writefunc = self._writers[type(v)]
-            fmt_name = style if isinstance(style, basestring) \
+            fmt_name = style if isinstance(style, six.string_types) \
                        else style.get(c, self._format)
             writefunc(self._row, c, v, self._formats[fmt_name])
             if (merge_cols or not autowidth or "wrap" == fmt_name
@@ -1039,10 +1057,10 @@ class xlsx_writer(object):
                 continue # for c, v
 
             # Calculate and update maximum written column width
-            strval = (v.encode("latin1", "replace") if isinstance(v, unicode)
-                      else v.strftime("%Y-%m-%d %H:%M") \
-                      if isinstance(v, datetime.datetime) else
-                      v if isinstance(v, basestring) else str(v))
+            strval = (v.encode("latin1", "replace").decode("latin1")
+                      if isinstance(v, six.text_type)
+                      else v.strftime("%Y-%m-%d %H:%M") if isinstance(v, datetime.datetime)
+                      else v if isinstance(v, six.string_types) else str(v))
             pixels = max(self._fonts[fmt_name].getsize(x)[0]
                          for x in strval.split("\n"))
             width = float(pixels) / self._unit_widths[fmt_name] + 1

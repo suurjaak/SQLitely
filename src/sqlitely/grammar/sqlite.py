@@ -8,9 +8,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    24.03.2021
+@modified    26.03.2022
 ------------------------------------------------------------------------------
 """
+import codecs
 from collections import defaultdict
 import json
 import logging
@@ -20,6 +21,7 @@ import traceback
 import uuid
 
 from antlr4 import InputStream, CommonTokenStream, TerminalNode, Token
+import six
 
 from .. lib import util
 from .. lib.vendor import step
@@ -143,24 +145,24 @@ def unquote(val):
 
 def format(value, coldata=None):
     """Formats a value for use in an SQL statement like INSERT."""
-    if isinstance(value, basestring):
+    if isinstance(value, six.string_types):
         success = False
         if isinstance(coldata, dict) \
-        and isinstance(coldata.get("type"), basestring) \
+        and isinstance(coldata.get("type"), six.string_types) \
         and "JSON" == coldata["type"].upper():
             try: result, success = "'%s'" % json.dumps(json.loads(value)), True
             except Exception: pass
 
         if not success and SAFEBYTE_RGX.search(value):
-            if isinstance(value, unicode):
+            if isinstance(value, six.text_type):
                 try:
                     value = value.encode("latin1")
                 except UnicodeError:
-                    value = value.encode("utf-8", errors="replace")
-            result = "X'%s'" % value.encode("hex").upper()
+                    value = value.encode("utf-8", errors="backslashreplace")
+            result = "X'%s'" % codecs.encode(value, "hex").decode("latin1").upper()
         elif not success:
-            if isinstance(value, unicode):
-                value = value.encode("utf-8")
+            if isinstance(value, six.text_type):
+                value = value.encode("utf-8").decode("latin1")
             result = "'%s'" % value.replace("'", "''")
     else:
         result = "NULL" if value is None else str(value)
@@ -169,8 +171,8 @@ def format(value, coldata=None):
 
 def uni(x, encoding="utf-8"):
     """Convert anything to Unicode, except None."""
-    if x is None or isinstance(x, unicode): return x
-    return unicode(str(x), encoding, errors="replace")
+    if x is None or isinstance(x, six.text_type): return x
+    return six.text_type(str(x), encoding, errors="replace")
 
 
 
@@ -256,8 +258,8 @@ RESERVED_KEYWORDS = ["ACTION", "ADD", "AFTER", "ALL", "ALTER", "ALWAYS", "ANALYZ
     "WHERE", "WITHOUT"]
 
 
-class ParseError(Exception, basestring):
-    """Parse exception with line and column, also usable in string context."""
+class ParseError(Exception):
+    """Parse exception with line and column."""
 
     def __init__(self, message, line, column):
         Exception.__init__(self, message)
@@ -269,21 +271,6 @@ class ParseError(Exception, basestring):
 
     def __repr__(self):           return repr(self.message)
     def __str__ (self):           return str(self.message)
-    def __hash__(self):           return hash(self.message)
-    def __len__ (self):           return len(self.message)
-    def __eq__  (self, other):    return self.message == other
-    def __ne__  (self, other):    return self.message != other
-    def __lt__  (self, other):    return self.message <  other
-    def __le__  (self, other):    return self.message <= other
-    def __gt__  (self, other):    return self.message >  other
-    def __ge__  (self, other):    return self.message >= other
-    def __add__ (self, other):    return self.message + type(self.message)(other)
-    def __radd__(self, other):    return self.message + type(self.message)(other)
-    def __mul__ (self, other):    return self.message * other
-    def __contains__(self, item): return item in self.message
-    def __getitem__ (self, key):  return self.message.__getitem__ (key)
-    def __getslice__(self, i, j): return self.message.__getslice__(i, j)
-    def __unicode__ (self):       return util.to_unicode(self.message)
 
 
 
@@ -437,7 +424,7 @@ class Parser(object):
         sctx = next((x for x in ctx.children if isinstance(x, CTX.SCHEMA_NAME)), None)
         if sctx:
             # Schema present in statement: modify content or remove token
-            if isinstance(srenames, basestring):
+            if isinstance(srenames, six.string_types):
                 sctx.start.text = util.to_unicode(srenames)
             elif srenames is None or isinstance(srenames, dict) \
             and any(v is None and util.lceq(k, self.u(sctx)) for k, v in srenames.items()):
@@ -447,7 +434,7 @@ class Parser(object):
             and any(util.lceq(k, self.u(sctx)) for k, v in srenames.items()):
                 sctx.start.text = util.to_unicode(next(v for k, v in srenames.items()
                                                        if util.lceq(k, self.u(sctx))))
-        elif isinstance(srenames, basestring):
+        elif isinstance(srenames, six.string_types):
             # Schema not present in statement: insert tokens before item name token
             cname = next(k for k, v in self.CATEGORIES.items() if v == self._category)
             ctype = self.RENAME_CTXS[cname]
@@ -560,7 +547,7 @@ class Parser(object):
 
         result["columns"] = [self.build_table_column(x) for x in ctx.column_def()]
         if self._repls:
-            sql, shift = self._stream.getText(0, sys.maxint), 0
+            sql, shift = self._stream.getText(0, sys.maxsize), 0
             for start, end, repl in self._repls:
                 sql = sql[:start + shift] + repl + sql[end + shift:]
                 shift = len(repl) - end + start
@@ -1284,24 +1271,24 @@ def test():
                },
                "schema":  u"renämed schéma"}
     for sql1 in TEST_STATEMENTS:
-        print "\n%s\nORIGINAL:\n" % ("-" * 70)
-        print sql1.encode("utf-8")
+        print("\n%s\nORIGINAL:\n" % ("-" * 70))
+        print(sql1.encode("utf-8"))
 
         x, err = parse(sql1)
         if not x:
-            print "ERROR:", err
+            print("ERROR: %s" % err)
             continue # for sql1
 
-        print "\n%s\nPARSED:" % ("-" * 70)
-        print json.dumps(x, indent=2)
+        print("\n%s\nPARSED:" % ("-" * 70))
+        print(json.dumps(x, indent=2))
         sql2, err2 = generate(x, indent)
         if sql2:
-            print "\n%s\nGENERATED:\n" % ("-" * 70)
-            print sql2.encode("utf-8") if sql2 else sql2
+            print("\n%s\nGENERATED:\n" % ("-" * 70))
+            print(sql2.encode("utf-8") if sql2 else sql2)
 
-            print "\n%s\nTRANSFORMED:\n" % ("-" * 70)
+            print("\n%s\nTRANSFORMED:\n" % ("-" * 70))
             sql3, err3 = transform(sql2, renames=renames, indent=indent)
-            print sql3.encode("utf-8") if sql3 else sql3
+            print(sql3.encode("utf-8") if sql3 else sql3)
 
 
 

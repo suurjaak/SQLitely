@@ -37,6 +37,10 @@ by Erki Suurjaak.
 import re
 
 
+try:              text_type, string_types = unicode, (basestring, )  # Py2
+except NameError: text_type, string_types = str,     (str, )         # Py3
+
+
 class Template(object):
 
     TRANSPILED_TEMPLATES = {} # {(template string, compile options): compilable code string}
@@ -166,15 +170,17 @@ class Template(object):
 def escape_html(x):
     """Escape HTML special characters &<> and quotes "'."""
     CHARS, ENTITIES = "&<>\"'", ["&amp;", "&lt;", "&gt;", "&quot;", "&#39;"]
-    string = x if isinstance(x, basestring) else str(x)
+    string = x if isinstance(x, text_type) else str(x)
     for c, e in zip(CHARS, ENTITIES): string = string.replace(c, e)
     return string
 
 
 def to_unicode(x, encoding="utf-8"):
     """Convert anything to Unicode."""
-    if not isinstance(x, unicode):
-        x = unicode(str(x), encoding, errors="replace")
+    if isinstance(x, bytes):
+        x = text_type(x, encoding, errors="replace")
+    elif not isinstance(x, string_types):
+        x = text_type(str(x))
     return x
 
 

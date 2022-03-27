@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.01.2022
+@modified    26.03.2022
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -17,13 +17,15 @@ import logging
 import math
 import multiprocessing.connection
 import os
-import Queue
 import re
 import sqlite3
 import subprocess
 import sys
 import threading
 import traceback
+
+import six
+from six.moves import queue
 
 from . lib import util
 from . lib.vendor import step
@@ -50,7 +52,7 @@ class WorkerThread(threading.Thread):
         self._is_running   = False # Flag whether thread is running
         self._is_working   = False # Flag whether thread is currently working
         self._drop_results = False # Flag to not post back obtained results
-        self._queue = Queue.Queue()
+        self._queue = queue.Queue()
 
 
     def work(self, function, **kws):
@@ -423,13 +425,13 @@ class AnalyzerThread(WorkerThread):
 
             try:
                 pargs = dict(stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT)
+                             stderr=subprocess.STDOUT, universal_newlines=True)
                 if hasattr(subprocess, "STARTUPINFO"):
                     startupinfo = subprocess.STARTUPINFO()
                     startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                     pargs.update(startupinfo=startupinfo)
                 paths = [path]
-                if filesize and "nt" == os.name and isinstance(path, unicode):
+                if filesize and "nt" == os.name and isinstance(path, six.text_type):
                     paths.append(util.shortpath(path))
                 for mypath in paths if filesize else ():
                     args = [conf.DBAnalyzer, mypath]
@@ -446,7 +448,7 @@ class AnalyzerThread(WorkerThread):
                                 self._process.kill()
                                 output, error = self._process.communicate()
                             except Exception: pass
-                            if mypath == paths[-1]: raise e, None, tb
+                            if mypath == paths[-1]: six.reraise(type(e), e, tb)
                         else:
                             if not self._process \
                             or output and output.strip().startswith("/**"): break # for mypath
@@ -702,7 +704,7 @@ class GraphWorker(WorkerThread):
 
             for n, o in nodes.items():
                 o.update(dx0=o["dx"], dy0=o["dy"], dx=o["dx"] * INERTIA, dy=o["dy"] * INERTIA)
-            nodelist = nodes.values()
+            nodelist = list(nodes.values())
 
             # repulsion
             for i, n1 in enumerate(nodelist):

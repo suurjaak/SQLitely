@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.01.2022
+@modified    27.03.2022
 ------------------------------------------------------------------------------
 """
 import os
@@ -50,9 +50,12 @@ setuptools.setup(
     platforms=["any"],
     keywords="sqlite database",
 
-    install_requires=["antlr4-python2-runtime==4.9", "appdirs", "openpyxl<=3.0.0",
-                      "Pillow<=6.2.2", "pyparsing", "pytz", "wxPython>=4.0",
-                      "xlrd", "XlsxWriter"],
+    install_requires=["appdirs", "openpyxl", "Pillow", "pyparsing", "pytz", "six",
+                      "wxPython>=4.0", "xlrd", "XlsxWriter"],
+    extras_require={
+        ':python_version < "3"': ["antlr4-python2-runtime==4.9"],
+        ':python_version > "3"': ["antlr4-python3-runtime==4.9"],
+    },
     entry_points={"gui_scripts": ["{0} = {0}.main:run".format(PACKAGE)]},
 
     package_dir={"": "src"},
@@ -70,6 +73,7 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 2",
         "Programming Language :: Python :: 2.7",
+        "Programming Language :: Python :: 3",
     ],
 
     long_description_content_type="text/markdown",
