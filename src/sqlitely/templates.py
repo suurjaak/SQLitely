@@ -114,7 +114,7 @@ from sqlitely.lib import util
     #sqlintro { font-family: monospace; white-space: pre-wrap; }
     #sql { font-family: monospace; white-space: pre-wrap; }
     a.toggle:hover { cursor: pointer; text-decoration: none; }
-    a.toggle::after { content: ".. \\\\25b6"; font-size: 1.2em; position: relative; top: 2px; }
+    a.toggle::after { content: ".. \\\\25b6"; font-size: 1.2em; }
     a.toggle.open::after { content: " \\\\25b2"; font-size: 0.7em; }
     a.sort { display: block; }
     a.sort:hover { cursor: pointer; text-decoration: none; }
@@ -122,10 +122,6 @@ from sqlitely.lib import util
     a.sort.asc::after  { content: "↓"; }
     a.sort.desc::after { content: "↑"; }
     .hidden { display: none; }
-    @-moz-document url-prefix() { /* Firefox-specific tweaks */
-        a.toggle { top: 0; }
-        a.toggle::after { font-size: 0.7em; top: 0 !important; }
-    }
   </style>
   <script>
     var sort_col = 0;
@@ -1501,9 +1497,7 @@ def wrapclass(v):
     a.sort:hover, a.toggle:hover { cursor: pointer; text-decoration: none; }
     a.toggle { display: inline-block; white-space: nowrap; }
     a.toggle::after { content: " \\\\25b6"; }
-    a.toggle.open::after { content: " \\\\25bc"; font-size: 0.7em; }
-    h2 > a.toggle::after { position: relative; top: 2px; }
-    h2 > a.toggle.open::after { top: 0; }
+    a.toggle.open::after { content: " \\\\25bc"; }
     a.toggle.right { display: block; text-align: right; }
     .hidden { display: none; }
     div.toggle.header { text-align: right; }
@@ -1518,9 +1512,6 @@ def wrapclass(v):
       text-align: center;
       padding-bottom: 10px;
       color: #666;
-    }
-    @-moz-document url-prefix() { /* Firefox-specific tweaks */
-        a.toggle::after { font-size: 0.7em; top: 0 !important; }
     }
   </style>
   <script>
