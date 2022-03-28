@@ -10376,7 +10376,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         else:
             self.MakeBitmap(zoom=zoom).SaveFile(filename, wxtype)
             util.start_file(filename)
-        guibase.status("Exported schema diagram to %s.", filename, log=True)
+        guibase.status('Exported schema diagram to "%s".', filename, log=True)
 
 
     def MakeBitmap(self, zoom=None, defaultcolours=False,

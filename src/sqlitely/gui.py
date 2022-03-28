@@ -4146,6 +4146,7 @@ class DatabasePage(wx.Panel):
                 svg = self.diagram.MakeTemplate("SVG", title="", embed=True, **args)
                 diagram = {"bmp": bmp, "svg": svg}
             importexport.export_stats(filename, self.db, data, diagram)
+            guibase.status('Exported to "%s".', filename, log=True)
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving statistics %s to %s." % (extname.upper(), filename)
@@ -5269,6 +5270,7 @@ class DatabasePage(wx.Panel):
             title = "PRAGMA settings." if "PRAGMA" == title else \
                     "Database %s." % (title or "schema")
             importexport.export_sql(filename, self.db, sql, title)
+            guibase.status('Exported to "%s".', filename, log=True)
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving SQL to %s." % filename
@@ -6246,7 +6248,7 @@ class DatabasePage(wx.Panel):
                 else: status = "%s %s" % (util.plural(*next(iter(successes.items()))),
                                           util.join(", ", (fmt_entity(x, force=False)
                                                            for x in next(iter(successes.values())))))
-                guibase.status("Exported %s." % status, log=True)
+                guibase.status('Exported %s to "%s".', status, filename2, log=True)
             else:
                 guibase.status("Failed to export to %s.", filename2)
 
