@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.03.2022
+@modified    28.03.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -396,7 +396,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, p
                 if util.lceq(name, name2): continue # for name2
                 requireds.setdefault(name, []).append(name2)
 
-    finalargs = {"done": True}
+    finalargs, fks_on = {"done": True}, None
     db.lock(None, None, filename, label="database export")
     try:
         schema2 = "main"
@@ -474,6 +474,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, p
                                             grammar.quote(name))
                     logger.info("Copying data to %s in %s.", label, filename)
                     db.execute(sql)
+                    db.connection.commit()
                     actionsqls.append(sql)
                     exporteds.add(name)
 
