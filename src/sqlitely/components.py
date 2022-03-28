@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.03.2022
+@modified    28.03.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -11410,18 +11410,18 @@ class SchemaDiagram(wx.ScrolledWindow):
             if b1.Left - 2 * self.CARDINALW <= pt2[0] <= b1.Right + 2 * self.CARDINALW:
                 # End point straight above or below start item
                 b1_side = b1.Top if pt1[1] > pt2[1] else b1.Bottom
-                ptm1 = pt1[0] + 2 * self.CARDINALW * (-1 if pt1[0] <= b1.Left else 1), pt1[1]
-                ptm2 = ptm1[0], pt2[1] + (b1_side - pt2[1]) // 2
+                ptm1 = [pt1[0] + 2 * self.CARDINALW * (-1 if pt1[0] <= b1.Left else 1), pt1[1]]
+                ptm2 = [ptm1[0], pt2[1] + (b1_side - pt2[1]) // 2]
 
                 if b2.Left < pt2[0] < b2.Right \
                 and b2.Top - 2 * self.BRADIUS < ptm2[1] < b2.Bottom + 2 * self.BRADIUS:
-                    ptm2 = ptm2[0], (b2.Top if pt1[1] > b2.Top else b2.Bottom) + 2 * self.BRADIUS * (-1 if pt1[1] > b2.Top else 1)
+                    ptm2 = [ptm2[0], (b2.Top if pt1[1] > b2.Top else b2.Bottom) + 2 * self.BRADIUS * (-1 if pt1[1] > b2.Top else 1)]
 
-                ptm3 = pt2[0], ptm2[1]
+                ptm3 = [pt2[0], ptm2[1]]
                 # (pt1.x +- cardinal step, pt1.y), (pt1.x +- cardinal step, halfway to pt2.y), (pt2x, halfway to pt2.y)
                 wpts += [ptm1, ptm2, ptm3]
             else:
-                ptm = pt2[0], pt1[1]
+                ptm = [pt2[0], pt1[1]]
                 if not  b2.Contains(ptm[0], ptm[1] - self.CARDINALW) \
                 and not b2.Contains(ptm[0], ptm[1] + self.CARDINALW):
                     # Middle point not within end item: single waypoint (pt2.x, pt1.y)
@@ -11429,13 +11429,13 @@ class SchemaDiagram(wx.ScrolledWindow):
                 else: # Middle point within end item
                     pt2_in_b2 = b2.Contains(pt2[0], pt2[1] + self.CARDINALW * (idx + 1))
                     b2_side   = b2.Left if pt1[0] < pt2[0] else b2.Right
-                    ptm3 = pt2[0], pt2[1] + self.CARDINALW * (idx + 1) * (-1 if pt2_in_b2 else 1)
+                    ptm3 = [pt2[0], pt2[1] + self.CARDINALW * (idx + 1) * (-1 if pt2_in_b2 else 1)]
 
                     if b2.Contains(ptm3):
-                        ptm3 = ptm3[0], pt2[1] + self.CARDINALW * (idx + 1) * (+1 if pt2_in_b2 else -1)
+                        ptm3 = [ptm3[0], pt2[1] + self.CARDINALW * (idx + 1) * (+1 if pt2_in_b2 else -1)]
 
-                    ptm2 = pt1[0] + (b2_side - pt1[0]) // 2, ptm3[1]
-                    ptm1 = ptm2[0], pt1[1]
+                    ptm2 = [pt1[0] + (b2_side - pt1[0]) // 2, ptm3[1]]
+                    ptm1 = [ptm2[0], pt1[1]]
                     # (halfway to pt2.x, pt1.y), (halfway to pt2.x, pt2.y +- vertical step), (pt2.x, pt2.y +- vertical step)
                     wpts += [ptm1, ptm2, ptm3]
             opts["pts"][1:-1] = wpts
@@ -11453,34 +11453,34 @@ class SchemaDiagram(wx.ScrolledWindow):
                 direction = 1 if wpt1[axis] < wpt2[axis] else -1
                 if i: # Not first step: nudge start 1px further
                     nudge = 1 if direction > 0 else 0
-                    mywpt1 = wpt1[0] + (1 - axis) * nudge, wpt1[1] + axis * nudge
+                    mywpt1 = [wpt1[0] + (1 - axis) * nudge, wpt1[1] + axis * nudge]
                 elif direction < 0: # First step going backward: nudge start 1px closer
-                    mywpt1 = mywpt1[0] + 1, mywpt1[1]
+                    mywpt1 = [mywpt1[0] + 1, mywpt1[1]]
                 if i < len(pts) - 2: # Not last step: nudge end 1px closer
                     nudge = -1 if direction < 0 else 0
-                    mywpt2 = wpt2[0] - (1 - axis) * nudge, wpt2[1] - axis * nudge
+                    mywpt2 = [wpt2[0] - (1 - axis) * nudge, wpt2[1] - axis * nudge]
                 elif mywpt2[1] < mywpt1[1]: # Last step to item bottom: nudge end 1px lower
-                    mywpt2 = mywpt2[0], mywpt2[1] + 1
+                    mywpt2 = [mywpt2[0], mywpt2[1] + 1]
                 if i: # Add smoothing point at corner between this and last step
                     wpt0 = pts[i - 1]
                     dx = -1 if not axis and direction < 0 else 0
                     dy = -1     if axis and direction < 0 else 0
-                    cpt = (mywpt1[0] + axis       * (-1 if wpt0[0] < wpt1[0] else 1) + dx,
-                           mywpt1[1] + (1 - axis) * (-1 if wpt0[1] < wpt1[1] else 1) + dy)
+                    cpt = [mywpt1[0] + axis       * (-1 if wpt0[0] < wpt1[0] else 1) + dx,
+                           mywpt1[1] + (1 - axis) * (-1 if wpt0[1] < wpt1[1] else 1) + dy]
                     cpts.append(cpt)
 
                 wlines.append((mywpt1, mywpt2))
 
             # Make cardinality crowfoot
-            ptc0 = pts[0][0] + self.CARDINALW * (-1 if pts[0][0] > pts[1][0] else 1), pts[0][1]
-            ptc1 = pts[0][0], ptc0[1] - self.CARDINALH
-            ptc2 = pts[0][0], ptc0[1] + self.CARDINALH
+            ptc0 = [pts[0][0] + self.CARDINALW * (-1 if pts[0][0] > pts[1][0] else 1), pts[0][1]]
+            ptc1 = [pts[0][0], ptc0[1] - self.CARDINALH]
+            ptc2 = [pts[0][0], ptc0[1] + self.CARDINALH]
             clines.extend([(ptc1, ptc0), (ptc2, ptc0)])
 
             # Make parent-item dash
             direction = 1 if pts[-1][1] > b2.Top else -1
-            ptd1 = pts[-1][0] - self.DASHSIDEW, pts[-1][1] + direction
-            ptd2 = pts[-1][0] + self.DASHSIDEW + 1, ptd1[1]
+            ptd1 = [pts[-1][0] - self.DASHSIDEW, pts[-1][1] + direction]
+            ptd2 = [pts[-1][0] + self.DASHSIDEW + 1, ptd1[1]]
             clines.append((ptd1, ptd2))
 
             # Make foreign key label

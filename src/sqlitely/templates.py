@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.03.2022
+@modified    28.03.2022
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -2741,14 +2741,14 @@ if show_labels:
 for i, pt in enumerate(pts):
     mypt, is_corner = pt, (0 < i < len(pts) - 1)
     if not i: # Push first point right to start exactly at item border
-        mypt = pt[0] + 0.5, pt[1]
+        mypt = [pt[0] + 0.5, pt[1]]
     if is_corner: # Pull point back by corner arc radius
         pt0, dx, dy = pts[i - 1], 0, 0
         if pt[1] == pt0[1]: dx = -R if pt[0] > pt0[0] else R
         if pt[0] == pt0[0]: dy = -R if pt[1] > pt0[1] else R
-        mypt = pt[0] + dx, pt[1] + dy
+        mypt = [pt[0] + dx, pt[1] + dy]
     if pt == pts[-1]: # Pull ending Y back to start exactly at border
-        mypt = mypt[0], mypt[1] + (2 if pt[1] < pts[i-1][1] else -1)
+        mypt = [mypt[0], mypt[1] + (2 if pt[1] < pts[i-1][1] else -1)]
     path += ("  L" if i else "M") + " %s,%s" % adjust(*mypt)
 
     if is_corner: # Draw corner arc
@@ -2764,20 +2764,20 @@ for i, pt in enumerate(pts):
 
 # Assemble crowfoot path in segments for consistent rendering
 to_right = pts[0][0] < pts[1][0]
-ptc1 = pts[0][0] + 0.5, pts[0][1]
-ptc2 = ptc1[0] + 0.5 + SchemaDiagram.CARDINALW * (1 if to_right else -1), ptc1[1]
+ptc1 = [pts[0][0] + 0.5, pts[0][1]]
+ptc2 = [ptc1[0] + 0.5 + SchemaDiagram.CARDINALW * (1 if to_right else -1), ptc1[1]]
 ptc1, ptc2 = [ptc1, ptc2][::1 if to_right else -1]
 crow1, crow2 = "", ""
 for i in range(SchemaDiagram.CARDINALW // 2):
-    pt1 = ptc1[0] + i * 2 + (not to_right), ptc1[1] - (SchemaDiagram.CARDINALW // 2 - i if to_right else i + 1)
+    pt1 = [ptc1[0] + i * 2 + (not to_right), ptc1[1] - (SchemaDiagram.CARDINALW // 2 - i if to_right else i + 1)]
     crow1 += "%sM %s,%s h2" % (("  " if i else "", ) + adjust(pt1[0], pt1[1]))
-    pt2 = ptc1[0] + i * 2 + (not to_right), ptc1[1] + (SchemaDiagram.CARDINALW // 2 - i if to_right else i + 1)
+    pt2 = [ptc1[0] + i * 2 + (not to_right), ptc1[1] + (SchemaDiagram.CARDINALW // 2 - i if to_right else i + 1)]
     crow2 += "%sM %s,%s h2" % (("  " if i else "", ) + adjust(pt2[0], pt2[1]))
 
 # Assemble parent-item dash
 direction = 2 if pts[-1][1] < pts[-2][1] else -1
-ptd1 = pts[-1][0] - SchemaDiagram.DASHSIDEW - 0.5, pts[-1][1] + direction
-ptd2 = pts[-1][0] + SchemaDiagram.DASHSIDEW + 0.5, ptd1[1]
+ptd1 = [pts[-1][0] - SchemaDiagram.DASHSIDEW - 0.5, pts[-1][1] + direction]
+ptd2 = [pts[-1][0] + SchemaDiagram.DASHSIDEW + 0.5, ptd1[1]]
 dash = "M %s,%s L %s,%s" % (adjust(*ptd1) + adjust(*ptd2))
 
 %>
