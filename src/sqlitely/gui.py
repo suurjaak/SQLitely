@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.03.2022
+@modified    28.03.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2474,6 +2474,7 @@ class DatabasePage(wx.Panel):
         self.db = db
         self.db.register_consumer(self)
         self.flags      = {} # {various flags: bool}
+        self.timers     = {} # {name: wx.Timer}
         self.statistics = {} # {?error: message, ?data: {..}}
         self.pages_closed = defaultdict(list) # {notebook: [{name, ..}, ]}
         self.pragma         = db.get_pragma_values() # {pragma_name: value}
@@ -2932,7 +2933,6 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_BUTTON,    self.on_diagram_export,     button_export)
         self.Bind(wx.EVT_BUTTON,    self.on_diagram_action,     button_action)
         self.Bind(wx.EVT_COMBOBOX,  self.on_diagram_find,       combo_find)
-        self.Bind(wx.EVT_TEXT,      self.on_diagram_find,       combo_find)
         self.Bind(wx.EVT_CHAR_HOOK, self.on_diagram_find_char,  combo_find)
 
 
@@ -4355,11 +4355,12 @@ class DatabasePage(wx.Panel):
         if event.ClientData: self.diagram.Zoom = event.ClientData
 
 
-    def on_diagram_find(self, event):
+    def on_diagram_find(self, event=None):
         """Handler for change in diagram quickfind, selects schema items."""
-        if not self.combo_diagram_find.Enabled: return
+        if not self or not self.combo_diagram_find.Enabled: return
+        if "diagram_find" in self.timers: self.timers.pop("diagram_find").Stop()
         names, text = [], self.combo_diagram_find.Value.strip().lower()
-        if event.ClientData: names.append(event.ClientData)
+        if event and event.ClientData: names.append(event.ClientData)
         elif text:
             pattern = "".join((".*" if i or not x else "") + re.escape(x)
                               for i, x in enumerate(text.split("*")))
@@ -4379,14 +4380,19 @@ class DatabasePage(wx.Panel):
         scrolls viewport to selected item start if Enter.
         """
         event.Skip()
+        had_timer = "diagram_find" in self.timers
+        if had_timer: self.timers.pop("diagram_find").Stop()
         if event.KeyCode in controls.KEYS.ESCAPE:
             text = event.EventObject.Value
             event.EventObject.Value = ""
             self.diagram.SetSelection()
             if not text: self.diagram.Scroll(0, 0)
-        if event.KeyCode in controls.KEYS.ENTER:
+        elif event.KeyCode in controls.KEYS.ENTER:
+            if had_timer: self.on_diagram_find() # Apply pending search
             if self.diagram.Selection:
                 self.diagram.EnsureVisible(self.diagram.Selection[0], force=True)
+        else: # Launch delayed timer to not apply search on every keypress
+            self.timers["diagram_find"] = wx.CallLater(500, self.on_diagram_find)
 
 
     def on_diagram_zoom_fit(self, event=None):
