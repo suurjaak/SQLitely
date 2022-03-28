@@ -87,7 +87,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    27.03.2022
+@modified    28.03.2022
 ------------------------------------------------------------------------------
 """
 import collections
@@ -770,7 +770,7 @@ class FormDialog(wx.Dialog):
                 sizer.Add(mysizer, border=5, pos=(self._rows, col), span=(1, colspan), flag=wx.TOP | wx.BOTTOM)
                 col += colspan
             self._comps[fpath].append(toggle)
-            self._toggles[tuple(field.get("path") or fpath)] = toggle
+            self._toggles[tuple(field.get("path") or ()) + fpath] = toggle
             self._BindHandler(self._OnToggleField, toggle, field, path, toggle)
 
         if callback: callback(self, field, parent, self._data)
