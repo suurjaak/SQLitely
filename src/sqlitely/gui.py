@@ -6120,6 +6120,10 @@ class DatabasePage(wx.Panel):
                 # tables/views used in view body and view triggers for view.
                 for name2 in util.getval(item, "meta", "__tables__"):
                     if util.lceq(name, name2): continue # for name2
+                    if name2 not in self.db.schema[category]:
+                        guibase.status("Warning: no item named %s in database to export.",
+                                       grammar.quote(name2, force=True), log=True)
+                        continue # for item
                     category2 = "table" if name2 in self.db.schema.get("table", ()) else "view"
                     requireds[name][name2] = category2
                     if name2 not in mynames and name2 not in eschema.get(category2, ()) \
