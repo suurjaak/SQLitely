@@ -4829,6 +4829,7 @@ class DatabasePage(wx.Panel):
         Stops worker threads, saves page last configuration
         like search text and results.
         """
+
         for worker in self.workers_search.values(): worker.stop()
         self.worker_analyzer.stop()
         self.worker_checksum.stop()
@@ -4879,6 +4880,7 @@ class DatabasePage(wx.Panel):
         # Save schema diagram state
         if not self.db.temporary:
             conf.SchemaDiagrams[self.db.filename] = self.diagram.GetOptions()
+        self.diagram.Disable() # Stop diagram workers
 
 
     def update_info_panel(self, reload=False):

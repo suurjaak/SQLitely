@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.03.2022
+@modified    29.03.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -11120,21 +11120,9 @@ class SchemaDiagram(wx.ScrolledWindow):
         @param   viewport  preferred viewport within bounds, as (x, y, width, height)
         """
 
-        """
-        @todo
-
-        inertia 0.5 pole paha
-
-        edge_weight 10 jätab kauem siplema, rohkem ülalt alla. aga koondab paremini kokku related.
-
-        attraction oli 10, aga 1 on päris hea
-
-        """
-
-
-        DEFAULT_EDGE_WEIGHT     =    1
-        MAX_ITERATIONS          =  100
-        MIN_COMPLETION_DISTANCE =    0.1
+        DEFAULT_EDGE_WEIGHT     =    1    # attraction for relations; 10 groups better but slower
+        MAX_ITERATIONS          =  100    # maximum number of steps to stop at
+        MIN_COMPLETION_DISTANCE =    0.1  # minimum change to stop at
         INERTIA                 =    0.1  # node speed inertia
         REPULSION               =  400    # repulsion between all nodes
         ATTRACTION              =    1    # attraction between connected nodes
@@ -11152,20 +11140,14 @@ class SchemaDiagram(wx.ScrolledWindow):
             (w1, h1), (w2, h2) = n1["size"], n2["size"]
             x1, y1 = max(n1["x"], n2["x"]), max(n1["y"], n2["y"])
             x2, y2 = min(n1["x"] + w1, n2["x"] + w2), min(n1["y"] + h1, n2["y"] + h2)
-            #logger.info("INTERSECT %r and %r: %s (xy1 %s xy2 %s)", n1["name"], n2["name"], (x1 < x2 and y1 < y2),(x1, y1), (x2, y2))
             return x1 < x2 and y1 < y2
 
 
         def repulsor(n1, n2, c):
             xdist, ydist = n1["x"] - n2["x"], n1["y"] - n2["y"]
             dist = math.sqrt(xdist ** 2 + ydist ** 2) - n1["span"] - n2["span"]
-            " @todo see vist on küll vale? et kui on üksteise peal täpselt, siis no repulse? "
-            #if not dist: return
 
-            #if not dist:  dist  = 0.0001 # Avoid division by zero
-            #if not xdist: xdist = 0.0001 # Avoid no movement
-            #if not ydist: ydist = 0.0001 # Avoid no movement
-            if False and not dist:
+            if not dist:
                 if not n1["fixed"]:
                     n1["dx"] += 0.01 * c
                     n1["dy"] += 0.01 * c
@@ -11199,9 +11181,7 @@ class SchemaDiagram(wx.ScrolledWindow):
 
 
         def step(nodes, links):
-            #logger.info("Starting step iteration.")
-            #for i, n in enumerate(nodes.values()):
-            #    logger.info("NODE #%s. %r, xy (%s, %s),  %s", i + 1, n["name"], n["x"], n["y"], n)
+            """Performs one iteration, returns maximum distance shifted."""
             result = 0
 
             for n, o in nodes.items():
@@ -11211,10 +11191,8 @@ class SchemaDiagram(wx.ScrolledWindow):
             # repulsion
             for i, n1 in enumerate(nodelist):
                 for j, n2 in enumerate(nodelist[i+1:]):
-                    n1_, n2_ = dict(n1), dict(n2)
                     c = REPULSION * (1 + n1["cardinality"]) * (1 + n2["cardinality"])
                     repulsor(n1, n2, c)
-                    #logger.info("repulsion between %r and %r for C %s: N1 %s, N2 %s", n1_["name"], n2_["name"], c, [n1[k] - n1_[k] for k in ("dx", "dy")], [n2[k] - n2_[k] for k in ("dx", "dy")])
 
             # attraction
             for name1, name2 in links:
@@ -11222,27 +11200,21 @@ class SchemaDiagram(wx.ScrolledWindow):
                 bonus = 100 if n1["fixed"] or n2["fixed"] else 1
                 bonus *= DEFAULT_EDGE_WEIGHT
                 c = bonus * ATTRACTION / (1. + n1["cardinality"] * DO_OUTBOUND_ATTRACTION)
-                n1_, n2_ = dict(n1), dict(n2)
                 attractor(n1, n2, c)
-                #logger.info("attraction between %r and %r for C %s: N1 %s, N2 %s", n1_["name"], n2_["name"], c, [n1[k] - n1_[k] for k in ("dx", "dy")], [n2[k] - n2_[k] for k in ("dx", "dy")])
 
             # gravity
             for n in nodelist:
                 if n["fixed"]: continue # for n
                 d = 0.0001 + math.sqrt(node["x"] ** 2 + node["y"] ** 2)
                 gf = 0.0001 * GRAVITY * d
-                n_ = dict(n)
                 n["dx"] -= gf * n["x"] / d
                 n["dy"] -= gf * n["y"] / d
-                #logger.info("gravity for %r for C %s: N %s", n_["name"], d, [n[k] - n_[k] for k in ("dx", "dy")])
 
             # speed
             for n in nodelist:
                 if n["fixed"]: continue # for n
-                n_ = dict(n)
                 n["dx"] *= SPEED * (10 if DO_FREEZE_BALANCE else 1)
                 n["dy"] *= SPEED * (10 if DO_FREEZE_BALANCE else 1)
-                #logger.info("speed for %r for C %s: N %s", n_["name"], (10 if DO_FREEZE_BALANCE else 1), [n[k] - n_[k] for k in ("dx", "dy")])
 
             # apply forces
             for n in nodelist:
@@ -11256,9 +11228,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                 else:
                     ratio = min(1, MAX_DISPLACE / d)
 
-                n_ = dict(n)
                 n["dx"], n["dy"] = n["dx"] * ratio / COOLING, n["dy"] * ratio / COOLING
-                #logger.info("forces for %r for C %s: N %s", n_["name"], ratio, [n[k] - n_[k] for k in ("dx", "dy")])
                 x, y = n["x"] + n["dx"], n["y"] + n["dy"]
 
                 # Bounce back from edges
