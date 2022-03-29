@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.03.2022
+@modified    29.03.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -6561,10 +6561,10 @@ class DatabasePage(wx.Panel):
         state, sel = state
         if not state and not sel: return have_selected
 
-        key_match = lambda x, y, k: x.get(k) and x[k] == y.get(k)
+        key_match = lambda x, y, k, n=False: (n or x.get(k)) and x.get(k) == y.get(k)
         parent_match = lambda x, y: x.get("parent") and y.get("parent") \
                                     and key_match(x["parent"], y["parent"], "type") \
-                                    and key_match(x["parent"], y["parent"], "category") \
+                                    and key_match(x["parent"], y["parent"], "category", True) \
                                     and (key_match(x["parent"], y["parent"], "name") or 
                                          key_match(x["parent"], y["parent"], "__id__"))
         has_match = lambda x, y: x == y or (
@@ -6655,7 +6655,7 @@ class DatabasePage(wx.Panel):
                     if (wx.YieldIfNeeded() or True) and not self: return
 
             tree.Expand(root)
-            for top in tops: tree.Expand(top)
+            for top in tops if not any(expandeds) else (): tree.Expand(top)
             tree.SetColumnWidth(1, 100)
             tree.SetColumnWidth(0, tree.Size[0] - 130)
             self.set_tree_state(tree, tree.RootItem, expandeds)
@@ -6827,7 +6827,7 @@ class DatabasePage(wx.Panel):
             tree.SetColumnWidth(0, tree.Size[0] - 180)
             tree.SetColumnWidth(1, 150)
             tree.Expand(root)
-            for top in tops: tree.Expand(top)
+            for top in tops if not any(expandeds) else (): tree.Expand(top)
             self.set_tree_state(tree, tree.RootItem, expandeds)
         finally:
             if not self: return
