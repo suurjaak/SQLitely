@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.03.2022
+@modified    30.03.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1808,9 +1808,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if err: raise Exception(err)
 
         try:
-            import wx
-            wx.MessageBox(altersql, conf.Title)
-            #self.executescript(altersql, name="DROP COLUMN")
+            self.executescript(altersql, name="DROP COLUMN")
         except Exception:
             _, e, tb = sys.exc_info()
             logger.exception("Error executing SQL.")
