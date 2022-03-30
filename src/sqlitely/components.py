@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.03.2022
+@modified    30.03.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10789,7 +10789,7 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         def after():
             if not self: return
-            for o in self._order if remake else ():
+            for o in self._order if remake or remakelines else ():
                 r = self._dc.GetIdBounds(o["id"])
                 self._dc.SetIdBounds(o["id"], wx.Rect(r.TopLeft, o["bmp"].Size))
             if not self._show_lines:
@@ -10858,9 +10858,6 @@ class SchemaDiagram(wx.ScrolledWindow):
         """
         if not self._enabled or not self._show_lines: return
         if remake or recalculate: self._CalculateLines(remake)
-
-        get_extent = lambda t, f=self._font: util.memoize(self.GetFullTextExtent, t, f,
-                                                          __key__="GetFullTextExtent")
 
         fadedcolour  = controls.ColourManager.Adjust(self.LineColour, self.BackgroundColour, 0.7)
         linepen      = controls.PEN(self.LineColour)
@@ -11100,7 +11097,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         """Calculates item positions using a force-directed graph."""
         if self._worker_graph.is_working(): return
 
-        nodes = [{"name": o["name"], "x": b.Left, "y": b.Top, "size": tuple(b.Size)}
+        nodes = [{"name": o["name"], "x": b.Left, "y": b.Top, "size": tuple(o["bmp"].Size)}
                  for o in self._objs.values() for b in [self._dc.GetIdBounds(o["id"])]]
         links = [(n1, n2) for n1, n2, opts in self._lines]
 
@@ -11147,7 +11144,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             xdist, ydist = n1["x"] - n2["x"], n1["y"] - n2["y"]
             dist = math.sqrt(xdist ** 2 + ydist ** 2) - n1["span"] - n2["span"]
 
-            if not dist:
+            if not xdist and not ydist:
                 if not n1["fixed"]:
                     n1["dx"] += 0.01 * c
                     n1["dy"] += 0.01 * c
@@ -11248,7 +11245,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         nodes = util.CaselessDict() # {name: {id, size, dx, dy, freeze, fixed, cardinality}, }
 
         for o in items:
-            node = {"x": o["x"], "y": o["y"], "size": o["size"], "name": o["name"],
+            node = {"x": 0, "y": 0, "size": o["size"], "name": o["name"],
                     "dx": 0, "dy": 0, "freeze": 0, "cardinality": 0, "fixed": False}
             node["span"] = math.sqrt(o["size"][0] ** 2 + o["size"][1] ** 2) / 2.5
             nodes[o["name"]] = node
