@@ -28,7 +28,7 @@ import wx
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.0.dev240"
+Version = "2.0.dev241"
 VersionDate = "30.03.2022"
 
 if getattr(sys, "frozen", False):
@@ -90,7 +90,9 @@ launched instances if not AllowMultipleInstances.
 IPCPort = 59987
 
 """Identifier for inter-process communication."""
-IPCName = six.moves.urllib.parse.quote_plus("%s-%s" % (wx.GetUserId(), ApplicationFile))
+IPCName = six.moves.urllib.parse.quote_plus(
+    "%s-%s" % (wx.GetUserId(), ApplicationFile)
+).encode("latin1", "replace")
 
 """History of commands entered in console."""
 ConsoleHistoryCommands = []

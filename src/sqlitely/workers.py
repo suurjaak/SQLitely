@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.03.2022
+@modified    30.03.2022
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -575,6 +575,9 @@ class IPCListener(WorkerThread):
             try:    self._listener = multiprocessing.connection.Listener(**kwargs)
             except Exception: port, limit = port + 1, limit - 1
             else:   self._is_working = True
+        if not self._is_working:
+            self._is_running = False
+            return
         self._port = port
 
         while self._is_running:
