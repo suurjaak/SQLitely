@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.03.2022
+@modified    30.03.2022
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -759,6 +759,7 @@ HTML template for search result of data row; HTML table row.
 @param   search           {?case}
 """
 SEARCH_ROW_DATA_HTML = """<%
+import six
 from sqlitely import conf, searchparser, templates
 
 match_kw = lambda k, x: searchparser.match_words(x["name"], keywords[k], any, search.get("case"))
