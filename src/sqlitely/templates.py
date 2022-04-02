@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.03.2022
+@modified    02.04.2022
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -61,7 +61,7 @@ from sqlitely.lib import util
   <meta http-equiv='Content-Type' content='text/html;charset=utf-8' />
   <meta name="Author" content="{{ conf.Title }}">
   <title>{{ title }}</title>
-  <link rel="shortcut icon" type="image/png" href="data:image/ico;base64,{{! images.Icon16x16_8bit.data }}"/>
+  <link rel="shortcut icon" type="image/png" href="data:image/png;base64,{{! images.Icon16x16_8bit.data }}"/>
   <style>
     * { font-family: Tahoma, DejaVu Sans; color: black; font-size: 11px; }
     body {
@@ -1375,7 +1375,7 @@ def wrapclass(v):
   <meta http-equiv='Content-Type' content='text/html;charset=utf-8' />
   <meta name="Author" content="{{ conf.Title }}">
   <title>{{ title }}</title>
-  <link rel="shortcut icon" type="image/png" href="data:image/ico;base64,{{! images.Icon16x16_8bit.data }}"/>
+  <link rel="shortcut icon" type="image/png" href="data:image/png;base64,{{! images.Icon16x16_8bit.data }}"/>
   <style>
     body {
       background: #8CBEFF;
