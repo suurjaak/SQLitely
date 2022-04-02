@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.03.2022
+@modified    02.04.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2575,7 +2575,8 @@ class DatabasePage(wx.Panel):
         for i in range(1, self.notebook_sql.GetPageCount() - 1):
             self.notebook_sql.SetSelection(i)
         self.notebook_sql.SetSelection(0)
-        notebook.SetSelection(self.pageorder[self.page_search])
+        firstpage = self.page_schema if db.temporary else self.page_data
+        notebook.SetSelection(self.pageorder[firstpage])
         notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_change_page, notebook)
         # Restore last active page
         if db.filename in conf.LastActivePages \
