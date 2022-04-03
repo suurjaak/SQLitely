@@ -35,15 +35,16 @@
             <a href="#windows">Windows</a><br />
             <a href="#other">Linux/Mac/Other</a><br />
             <a href="#deps">Source Dependencies</a><br />
+            <a href="#docker">Docker</a><br />
           </span>
           <a href="screens.html">Screenshots</a><br />
           <a href="changelog.html">Changelog</a><br />
           <a href="https://github.com/suurjaak/SQLitely">View the Project on GitHub <small>suurjaak/SQLitely</small></a>
 
           <ul>
-            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_1.2_setup.exe">Download <strong>Setup</strong></a></li>
-            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_1.2_x64_setup.exe">Download <strong>64bit Setup</strong></a></li>
-            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_1.2-src.zip">Download <strong>Source</strong></a></li>
+            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.0_setup.exe">Download <strong>Setup</strong></a></li>
+            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.0_x64_setup.exe">Download <strong>64bit Setup</strong></a></li>
+            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.0-src.zip">Download <strong>Source</strong></a></li>
           </ul>
         </p>
         
@@ -60,7 +61,7 @@
 <h2 id="other">Linux/Mac/other</h2>
 
 
-Install Python2 and pip, run <code class="language-plaintext highlighter-rouge">pip install sqlitely</code>.</p>
+Install Python and pip, run <code class="language-plaintext highlighter-rouge">pip install sqlitely</code>.</p>
 
 <p>The pip installation will add the <code class="language-plaintext highlighter-rouge">sqlitely</code> command to path.</p>
 
@@ -71,16 +72,18 @@ elsewhere, same goes for the source code.</p>
 
 <h2 id="source-dependencies">Source Dependencies</h2>
 
-<p>If running from source code, SQLitely needs Python 2.7,
+<p>If running from source code, SQLitely needs Python 3.5+ or 2.7,
 and the following 3rd-party Python packages:</p>
 
 <ul>
-  <li>antlr4-python2-runtime (<a href="https://pypi.org/project/antlr4-python2-runtime">pypi.org/project/antlr4-python2-runtime</a>)</li>
+  <li>ANTLR Python runtime (<a href="https://antlr.org">https://antlr.org</a>)</li>
   <li>appdirs (<a href="https://pypi.org/project/appdirs">pypi.org/project/appdirs</a>)</li>
   <li>openpyxl (<a href="https://pypi.org/project/openpyxl">pypi.org/project/openpyxl</a>)</li>
   <li>Pillow (<a href="https://pypi.org/project/Pillow">pypi.org/project/Pillow</a>)</li>
   <li>pyparsing (<a href="https://pypi.org/project/pyparsing">pypi.org/project/pyparsing</a>)</li>
   <li>pytz (<a href="https://pythonhosted.org/pytz/">pythonhosted.org/pytz/</a>)</li>
+  <li>PyYAML (<a href="https://pypi.org/project/PyYAML">pypi.org/project/PyYAML</a>)</li>
+  <li>six (<a href="https://pypi.org/project/six">pypi.org/project/six</a>)</li>
   <li>wxPython 4.0+ (<a href="https://wxpython.org">wxpython.org</a>)</li>
   <li>xlrd (<a href="https://pypi.org/project/xlrd">pypi.org/project/xlrd</a>)</li>
   <li>XlsxWriter (<a href="https://pypi.org/project/XlsxWriter">pypi.org/project/XlsxWriter</a>)</li>
@@ -89,11 +92,50 @@ and the following 3rd-party Python packages:</p>
 <p>All dependencies can be installed by running <code class="language-plaintext highlighter-rouge">pip install -r requirements.txt</code>
 in SQLitely source distribution folder.</p>
 
-<p>If openpyxl or pyparsing or xlrd or XlsxWriter are not available,
-the program will function regardless, only with lesser service - 
-lacking Excel import-export or full search syntax.</p>
+<p>Installing the required wxPython on Linux can be faster via one of their
+prepared Python wheels. Example for Ubuntu 20:</p>
 
-<p>Python 3 is yet unsupported.</p>
+<ul>
+  <li>run <code class="language-plaintext highlighter-rouge">sudo apt-get install libgtk-3-0 libsdl2-2.0 libwebkit2gtk-4.0</code></li>
+  <li>run <code class="language-plaintext highlighter-rouge">pip install wxPython --find-links https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-20.04</code></li>
+</ul>
+
+<p>If openpyxl or pyparsing or PyYAML or xlrd or XlsxWriter are not available,
+the program will function regardless, only with lesser service - 
+like lacking Excel import-export or full search syntax.</p>
+
+
+<h2 id="docker">Docker</h2>
+
+        <p>Pre-requisites:</p>
+        <ul>
+        <li><a href="https://www.docker.com/">Docker</a></li>
+        </ul>
+
+        Download the <a href="https://raw.githubusercontent.com/suurjaak/SQLitely/master/build/Dockerfile">Dockerfile</a> for SQLitely,
+        build and run the Docker image:
+
+        <pre>
+<code class="language-plaintext highlighter-rouge">wget https://raw.githubusercontent.com/suurjaak/SQLitely/master/build/Dockerfile
+docker build . -t sqlitely
+
+xhost +
+
+docker run -it --rm --mount src=/,target=/mnt/host,type=bind -e \
+       DISPLAY -v /tmp/.X11-unix/:/tmp/.X11-unix/ sqlitely</code>
+        </pre>
+
+        <p><code class="language-plaintext highlighter-rouge">docker build . -t sqlitely</code> will prepare an Ubuntu 20.04 Docker image
+        and install SQLitely and its dependencies within the container.</p>
+
+        <p><code class="language-plaintext highlighter-rouge">xhost +</code> will allow the container to access the X Window System display.</p>
+
+        <p>Add <code class="language-plaintext highlighter-rouge">sudo</code> before docker commands if current user does not have rights for Docker.</p>
+
+        <p>Add <code class="language-plaintext highlighter-rouge">--mount src="path to host directory",target=/etc/sqlitely</code> after <code>docker run</code>
+        to retain SQLitely configuration in a host directory between runs.</p>
+
+        <p>Host filesystem is made available under <code class="language-plaintext highlighter-rouge">/mnt/host</code>.</p>
 
 
       </section>
