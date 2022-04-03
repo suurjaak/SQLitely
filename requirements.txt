@@ -1,9 +1,12 @@
-antlr4-python2-runtime==4.8
+antlr4-python2-runtime==4.9; python_version<"3"
+antlr4-python3-runtime==4.9; python_version>"3"
 appdirs
-openpyxl<=3.0.0
-Pillow<=6.2.2
+openpyxl
+Pillow
 pyparsing
 pytz
+pyyaml
+six
 wxPython>=4.0
 xlrd
 XlsxWriter

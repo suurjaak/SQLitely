@@ -8,11 +8,12 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  17.06.2020
+@modified  27.03.2022
 ------------------------------------------------------------------------------
 """
 import base64
 import datetime
+import io
 import os
 import shutil
 import wx.tools.img2py
@@ -37,6 +38,8 @@ IMAGES = {
         "Small icon for export button on start page.",
     "ButtonHome.png":
         "Large icon for home on start page.",
+    "ButtonImport.png":
+        "Large icon for import button on start page.",
     "ButtonListDatabase.png":
         "Button for databases in database list.",
     "ButtonNew.png":
@@ -53,6 +56,10 @@ IMAGES = {
         "Small icon for remove by type button on start page.",
     "ButtonSaveAs.png":
         "Small icon for save as button on start page.",
+    "DiagramFK.png":
+        "Foreign key icon for schema diagram tables.",
+    "DiagramPK.png":
+        "Primary key icon for schema diagram tables.",
     "HelpData.png":
         "Help image on default search page for data page.",
     "HelpInfo.png":
@@ -67,6 +74,8 @@ IMAGES = {
         "Help image on default search page for SQL window page.",
     "PageData.png":
         "Icon for the Data page in a database tab.",
+    "PageDiagram.png":
+        "Icon for the Diagram page in a database tab.",
     "PageInfo.png":
         "Icon for the Info page in a database tab.",
     "PagePragma.png":
@@ -81,6 +90,8 @@ IMAGES = {
         "Toolbar icon for case-insensitive toggle button in data grids.",
     "ToolbarClear.png":
         "Toolbar icon for reset sort/filter button in data grids.",
+    "ToolbarColumnForm.png":
+        "Toolbar icon for column form button in data grids.",
     "ToolbarCommit.png":
         "Toolbar icon for commit button in database table grids.",
     "ToolbarDelete.png":
@@ -91,6 +102,10 @@ IMAGES = {
         "Toolbar icon for goto button in data grids.",
     "ToolbarInsert.png":
         "Toolbar icon for insert button in database table grids.",
+    "ToolbarLayoutGraph.png":
+        "Toolbar icon for graph layout in schema diagram.",
+    "ToolbarLayoutGrid.png":
+        "Toolbar icon for grid layout in schema diagram.",
     "ToolbarRefresh.png":
         "Toolbar icon for refresh button.",
     "ToolbarRollback.png":
@@ -101,16 +116,32 @@ IMAGES = {
         "Toolbar icon for inactive stop button on search page.",
     "ToolbarData.png":
         "Toolbar icon for data button on search page.",
+    "ToolbarNumbered.png":
+        "Toolbar icon for line numbers button on schema STCs.",
     "ToolbarTabs.png":
         "Toolbar icon for tabs toggle button on search page.",
+    "ToolbarTick.png":
+        "Toolbar icon for enable button on diagram page.",
     "ToolbarTitle.png":
         "Toolbar icon for title toggle button on search page.",
+    "ToolbarWordWrap.png":
+        "Toolbar icon for word-wrap buttons on schema STCs.",
+    "ToolbarZoom100.png":
+        "Toolbar icon for zoom 100% button on diagram page.",
+    "ToolbarZoomFit.png":
+        "Toolbar icon for zoom to fit button on diagram page.",
+    "ToolbarZoomIn.png":
+        "Toolbar icon for zoom in button on diagram page.",
+    "ToolbarZoomOut.png":
+        "Toolbar icon for zoom out button on diagram page.",
     "TransparentPixel.gif":
         "Transparent 1x1 GIF.",
     "TreeTrigger.png":
         "TreeListCtrl icon for triggers.",
+    "WizardImport.png":
+        "Bitmap for data import wizard.",
 }
-HEADER = """%s
+HEADER = u"""%s
 Contains embedded image and icon resources for SQLitely. Auto-generated.
 
 ------------------------------------------------------------------------------
@@ -135,34 +166,34 @@ except ImportError:
 
 def create_py(target):
     global HEADER, APPICONS, IMAGES
-    f = open(target, "w")
+    f = io.open(target, "w", encoding="utf-8")
     f.write(HEADER)
     icons = [os.path.splitext(x)[0] for x, _ in APPICONS]
     icon_parts = [", ".join(icons[4*i:4*i+4]) for i in range(len(icons) / 4)]
     iconstr = ",\n        ".join(icon_parts)
-    f.write("\n\n%s%s%s\ndef get_appicons():\n    icons = wx.IconBundle()\n"
-            "    [icons.AddIcon(i.Icon) "
-            "for i in [\n        %s\n    ]]\n    return icons\n" % (Q3,
+    f.write(u"\n\n%s%s%s\ndef get_appicons():\n    icons = wx.IconBundle()\n"
+            u"    [icons.AddIcon(i.Icon) "
+            u"for i in [\n        %s\n    ]]\n    return icons\n" % (Q3,
         "Returns the application icon bundle, "
         "for several sizes and colour depths.",
         Q3, iconstr.replace("'", "").replace("[", "").replace("]", "")
     ))
     for filename, desc in APPICONS:
         name, extension = os.path.splitext(filename)
-        f.write("\n\n%s%s%s\n%s = PyEmbeddedImage(\n" % (Q3, desc, Q3, name))
-        data = base64.b64encode(open(filename, "rb").read())
+        f.write(u"\n\n%s%s%s\n%s = PyEmbeddedImage(\n" % (Q3, desc, Q3, name))
+        data = base64.b64encode(open(filename, "rb").read()).decode("latin1")
         while data:
-            f.write("    \"%s\"\n" % data[:72])
+            f.write(u"    \"%s\"\n" % data[:72])
             data = data[72:]
         f.write(")\n")
     for filename, desc in sorted(IMAGES.items()):
         name, extension = os.path.splitext(filename)
-        f.write("\n\n%s%s%s\n%s = PyEmbeddedImage(\n" % (Q3, desc, Q3, name))
-        data = base64.b64encode(open(filename, "rb").read())
+        f.write(u"\n\n%s%s%s\n%s = PyEmbeddedImage(\n" % (Q3, desc, Q3, name))
+        data = base64.b64encode(open(filename, "rb").read()).decode("latin1")
         while data:
-            f.write("    \"%s\"\n" % data[:72])
+            f.write(u"    \"%s\"\n" % data[:72])
             data = data[72:]
-        f.write(")\n")
+        f.write(u")\n")
     f.close()
 
 

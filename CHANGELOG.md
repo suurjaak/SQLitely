@@ -1,17 +1,30 @@
 CHANGELOG
 =========
 
-1.2, 2020-09-22
+2.0, 2022-04-02
 ---------------
-- added option to have only single instance running;
-- added support for single-user install;
-- minor fixes and UI tweaks.
+- add schema diagram, exportable as bitmap or vector;
+- add data import wizard;
+- add option to create database from spreadsheet or JSON;
+- add option to have only single instance running;
+- add option to clone a table or view;
+- add option to drop entire schema;
+- add support for single-user install;
+- add easy rename options to data & schema tree;
+- add easy drop column options to data & schema tree;
+- add spreadsheet file drag-drop support to database page;
+- add YAML support;
+- add Dockerfile;
+- full Python2 / Python3 compatibility;
+- improve auto-altering related items;
+- move to src-layout;
+- many fixes and UI tweaks.
 
 
 1.1, 2020-08-08
 ---------------
-- added value editor tool;
-- added transform and date options to column value editor;
+- add value editor tool;
+- add transform and date options to column value editor;
 - use OS- and user-specific config directory where necessary;
 - bugfixes and UI tweaks.
 

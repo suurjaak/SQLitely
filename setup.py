@@ -8,46 +8,20 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.08.2020
+@modified    27.03.2022
 ------------------------------------------------------------------------------
 """
-import atexit
 import os
 import re
-import stat
 import sys
 import setuptools
-from setuptools.command.install import install
+
+ROOTPATH  = os.path.abspath(os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(ROOTPATH, "src"))
 
 from sqlitely import conf
 
-
-class CustomInstall(install):
-    """Sets executable bits on sqlite_analyzer binaries after installation."""
-
-    def __init__(self, *args, **kwargs):
-        install.__init__(self, *args, **kwargs)
-        if "nt" != os.name: atexit.register(self._post_install)
-
-    def _post_install(self):
-
-        def find_module_path(name):
-            paths = list(sys.path)
-            if getattr(self, "install_purelib", None):
-                paths.insert(0, self.install_purelib)
-            for p in paths:
-                try:
-                    if os.path.isdir(p) and name in os.listdir(p):
-                        return os.path.join(p, name)
-                except Exception: pass
-
-        install_path = find_module_path(conf.Title.lower())
-        bin_path = os.path.join(install_path, "bin") if install_path else None
-        mask = stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH
-        for f in os.listdir(bin_path) if bin_path else ():
-            p = os.path.join(bin_path, f)
-            try: os.chmod(p, mask)
-            except Exception: pass
+PACKAGE = conf.Title.lower()
 
 
 def readfile(path):
@@ -65,8 +39,7 @@ def readfile(path):
 
 
 setuptools.setup(
-    cmdclass={"install": CustomInstall},
-    name=conf.Title,
+    name=PACKAGE,
     version=conf.Version,
     description="SQLite database tool",
     url="https://github.com/suurjaak/SQLitely",
@@ -77,12 +50,16 @@ setuptools.setup(
     platforms=["any"],
     keywords="sqlite database",
 
-    install_requires=["antlr4-python2-runtime==4.8", "appdirs", "openpyxl<=3.0.0",
-                      "Pillow<=6.2.2", "pyparsing", "pytz", "wxPython>=4.0",
-                      "xlrd", "XlsxWriter"],
-    entry_points={"gui_scripts": ["sqlitely = sqlitely.main:run"]},
+    install_requires=["appdirs", "openpyxl", "Pillow", "pyparsing", "pytz", "six",
+                      "wxPython>=4.0", "xlrd", "XlsxWriter"],
+    extras_require={
+        ':python_version < "3"': ["antlr4-python2-runtime==4.9"],
+        ':python_version > "3"': ["antlr4-python3-runtime==4.9"],
+    },
+    entry_points={"gui_scripts": ["{0} = {0}.main:run".format(PACKAGE)]},
 
-    packages=setuptools.find_packages(),
+    package_dir={"": "src"},
+    packages=[PACKAGE],
     include_package_data=True, # Use MANIFEST.in for data files
     classifiers=[
         "Development Status :: 5 - Production/Stable",
@@ -96,6 +73,7 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 2",
         "Programming Language :: Python :: 2.7",
+        "Programming Language :: Python :: 3",
     ],
 
     long_description_content_type="text/markdown",
