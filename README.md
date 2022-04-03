@@ -74,7 +74,7 @@ Installing the required wxPython on Linux can be faster via one of their
 prepared Python wheels. Example for Ubuntu 20:
 
 * run `sudo apt-get install libgtk-3-0 libsdl2-2.0 libwebkit2gtk-4.0`
-* run `sudo pip install wxPython --find-links \`
+* run `pip install wxPython --find-links \` 
       `https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-20.04`
 
 SQLitely has a [Dockerfile](Dockerfile), see
@@ -109,7 +109,7 @@ in SQLitely source distribution folder.
 
 If openpyxl or pyparsing or PyYAML or xlrd or XlsxWriter are not available,
 the program will function regardless, only with lesser service - 
-lacking Excel import-export or full search syntax.
+like lacking Excel import-export or full search syntax.
 
 
 Attribution
@@ -124,7 +124,7 @@ Includes a modified version of step, Simple Template Engine for Python,
 Includes a modified version of SQLite.g4 from sqlite-parser,
 (c) 2013, Bart Kiers, https://github.com/bkiers/sqlite-parser.
 
-SQL lexer and parser generated with ANTLR v4.9,
+SQL lexer and parser generated with ANTLR,
 (c) 2012 The ANTLR Project, https://github.com/antlr/antlr4.
 
 Includes several icons from Fugue Icons,
