@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.03.2022
+@modified    15.04.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -6294,7 +6294,8 @@ class ExportProgressPanel(wx.Panel):
         else: # User cancel
             ctrls["title"].Label = 'Export to "%s".' % opts["filename"]
             ctrls["text"].Label = "Cancelled"
-            if ctrls["subtitle"].Label: ctrls["subtitle"].Label += ". cancelled"
+            if opts.get("multi") and ctrls["subtitle"].Label:
+                ctrls["subtitle"].Label += ". cancelled"
             if index == self._current:
                 self._worker.stop_work()
                 self._current = None

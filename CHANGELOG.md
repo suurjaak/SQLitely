@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+2.1, 2022-04-15
+---------------
+- fix error on canceling a single grid export.
+
+
 2.0, 2022-04-02
 ---------------
 - add schema diagram, exportable as bitmap or vector;

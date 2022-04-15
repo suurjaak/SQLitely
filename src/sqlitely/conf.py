@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.04.2022
+@modified    15.04.2022
 ------------------------------------------------------------------------------
 """
 try: from ConfigParser import RawConfigParser                 # Py2
@@ -28,8 +28,8 @@ import wx
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.0.dev247"
-VersionDate = "02.04.2022"
+Version = "2.1.dev0"
+VersionDate = "15.04.2022"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -333,9 +333,8 @@ def load():
     global Defaults, ConfigFile
 
     configpaths = [ConfigFile]
-    if not Defaults:
-        # Instantiate OS- and user-specific path
-        try:
+    if not Defaults:  # First load
+        try:  # Instantiate OS- and user-specific path
             p = appdirs.user_config_dir(Title, appauthor=False)
             # Try user-specific path first, then path under application folder
             configpaths.insert(0, os.path.join(p, "%s.ini" % Title.lower()))
