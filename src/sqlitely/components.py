@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.04.2022
+@modified    21.04.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10693,7 +10693,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         itemposes = util.CaselessDict(opts.get("items") or {})
         makeitems = []
         reset = any(o["__id__"] not in (x["__id__"] for x in self._db.schema.get(o["type"], {}).values())
-                    for o in objs0)
+                    for o in objs0) if self.LAYOUT_GRID == self.Layout else False
         keys = {} # {table: (pks, fks)}
         for name1 in self._db.schema.get("table", {}):
             keys[name1] = self._db.get_keys(name1, pks_only=True)
@@ -10734,7 +10734,7 @@ class SchemaDiagram(wx.ScrolledWindow):
                     else: fullbounds = wx.Rect(rects[name])
                 else:
                     makeitems.append(self._objs[name])
-                    reset = True
+                    if not o0 and self.Layout: reset = True
 
         # Nuke cache for objects no longer in schema
         for o0 in objs0:
