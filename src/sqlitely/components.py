@@ -10687,9 +10687,19 @@ class SchemaDiagram(wx.ScrolledWindow):
         for l0 in lines0.values(): self._dc.RemoveId(l0["id"])
 
         self.SetOptions(opts, refresh=False)
+        " @todo siin on nüüd häda. kui me alles loadime kõike stuffi, "
+        " siis objekte veel pole. ehk siis SetOptions ignob items-it. "
+        " samas optionse on vaja siin asjade rehkendamisel. "
+
+        " otototototot. vaata allapoole."
+
+        " tjah. seal on häda selles et pole suuruseid. "
+        " rangelt pole vaja. saaks siin vaadata ja vajadusel bmp teha. "
+
+
         if not self._enabled: return
 
-        opts, rects, fullbounds = opts or {}, {}, None
+        opts, rects, fullbounds = opts or {}, {}, wx.Rect()
         itemposes = util.CaselessDict(opts.get("items") or {})
         makeitems = []
         reset = any(o["__id__"] not in (x["__id__"] for x in self._db.schema.get(o["type"], {}).values())
@@ -10730,11 +10740,10 @@ class SchemaDiagram(wx.ScrolledWindow):
                 self._order.append(self._objs[name])
                 if name in rects:
                     self._dc.SetIdBounds(oid, rects[name])
-                    if fullbounds: fullbounds.Union(rects[name])
-                    else: fullbounds = wx.Rect(rects[name])
+                    fullbounds.Union(rects[name])
                 else:
                     makeitems.append(self._objs[name])
-                    if not o0 and self.Layout: reset = True
+                    if not o0 and self.Layout and name not in itemposes: reset = True
 
         # Nuke cache for objects no longer in schema
         for o0 in objs0:
@@ -10752,7 +10761,13 @@ class SchemaDiagram(wx.ScrolledWindow):
                     area += (o["bmp"].Width + self.GPAD) * (o["bmp"].Height + self.GPAD)
                 while area > vsize[0] * vsize[1]:
                     vsize = vsize[0], vsize[1] + 100
-            elif fullbounds:
+            for o in self._objs.values() if not reset else ():
+                if o["name"] not in itemposes: continue  # for o
+                rect = rects[o["name"]] = wx.Rect(wx.Point(itemposes[o["name"]]), o["bmp"].Size)
+                self._dc.SetIdBounds(o["id"], rect)
+                fullbounds.Union(rect)
+
+            if not reset and fullbounds:
                 vsize = fullbounds.Right + self.MOVE_STEP, fullbounds.Bottom + self.MOVE_STEP
             if vsize[0] > self.VIRTUALSZ[0] or vsize[1] > self.VIRTUALSZ[1]:
                 self.VirtualSize = self.VIRTUALSZ = vsize

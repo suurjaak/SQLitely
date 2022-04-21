@@ -4,6 +4,7 @@ CHANGELOG
 2.1, 2022-04-21
 ---------------
 - retain schema diagram custom layout on schema change;
+- fix schema diagram not loading entity positions from last config;
 - fix schema diagram adopting custom layout on clicking an entity;
 - fix error on canceling a single grid export.
 
