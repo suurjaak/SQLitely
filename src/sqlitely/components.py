@@ -11806,7 +11806,6 @@ class SchemaDiagram(wx.ScrolledWindow):
 
             if not self._dragpos \
             or self._sels and not event.Dragging() and self._dragrect is None:
-                if self._sels: self._PostEvent(layout=False)
                 return
 
             if event.Dragging() and not self.HasCapture(): self.CaptureMouse()
@@ -11843,8 +11842,10 @@ class SchemaDiagram(wx.ScrolledWindow):
                 r.Inflate(2 * self.BRADIUS, 2 * self.BRADIUS)
                 refrect.Union(r)
 
+            is_moved = False
             # First pass: constrain dx-dy so that all dragged items remain within diagram bounds
             for name, oid in self._sels.items() if not self._dragrect else ():
+                is_moved = dx or dy
                 r = self._dc.GetIdBounds(oid)
                 r0 = wx.Rect(r)
                 r.Offset(dx, dy)
@@ -11868,7 +11869,8 @@ class SchemaDiagram(wx.ScrolledWindow):
                 if self._dragrect:
                     self._dc.RemoveId(self._dragrectid)
                     self._dragrectid = self._dragrect = self._dragrectabs = None
-                if self._sels: self._PostEvent(layout=False)
+            if is_moved and self._sels:
+                self._PostEvent(layout=False)
 
             if self._show_lines: self.Redraw(recalculate=event.Dragging() and self._sels)
             else:
