@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.03.2022
+@modified    26.04.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1913,11 +1913,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 cnstr_dirty = False
                 if cnstr["type"] in (grammar.SQL.PRIMARY_KEY, grammar.SQL.UNIQUE) \
                 and util.lceq(item2["name"], item["name"]):
-                    for j, keycol in list(enumerate(cnstr["key"]))[::-1]:
+                    for j, keycol in list(enumerate(cnstr.get("key", [])))[::-1]:
                         if keycol.get("name", "").lower() in drops:
                             del cnstr["key"][j]
                             cnstr_dirty = dirty = True
-                    if not cnstr["key"]:
+                    if not cnstr.get("key"):
                         del item["meta"]["constraints"][i]
                         continue # for i, cnstr
 
@@ -1927,17 +1927,17 @@ WARNING: misuse can easily result in a corrupt database file.""",
                         if column.lower() in drops:
                             del cnstr["key"][j]; del cnstr["columns"][j]
                             cnstr_dirty = dirty = True
-                    if not cnstr["key"]:
+                    if not cnstr.get("key"):
                         del item["meta"]["constraints"][i]
                         continue # for i, cnstr
 
                 if grammar.SQL.FOREIGN_KEY == cnstr["type"] \
                 and util.lceq(name1, cnstr["table"]):
-                    for j, keycol in list(enumerate(cnstr["key"]))[::-1]:
+                    for j, keycol in list(enumerate(cnstr.get("key", [])))[::-1]:
                         if keycol.lower() in drops:
                             del cnstr["key"][j]; del cnstr["columns"][j]
                             cnstr_dirty = dirty = True
-                    if not cnstr["key"]:
+                    if not cnstr.get("key", []):
                         del item["meta"]["constraints"][i]
                         continue # for i, cnstr
 

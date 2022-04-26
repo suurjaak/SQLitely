@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.04.2022
+@modified    26.04.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -4723,7 +4723,7 @@ class SchemaObjectPage(wx.Panel):
         """Populates FormDialog with primary key / unique constraints."""
 
         def on_add(event=None):
-            data["key"].append({"name": ""})
+            data.setdefault("key", []).append({"name": ""})
             populate_rows(focus=True)
 
         def on_move(index, direction, event=None):
@@ -4790,7 +4790,7 @@ class SchemaObjectPage(wx.Panel):
 
         def add_row(i, col, focus=False):
             """Adds a new row of controls for key column."""
-            first, last = not i, (i == len(data["key"]) - 1)
+            first, last = not i, (i == len(data.get("key", [])) - 1)
 
             sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
 
@@ -5313,7 +5313,7 @@ class SchemaObjectPage(wx.Panel):
                                 cnstr["columns"][j:j+1] = []
                                 changed = keychanged = True
                         if util.lceq(cnstr.get("table"), self._item["meta"].get("name")):
-                            for j, keycol in list(enumerate(cnstr["key"]))[::-1]:
+                            for j, keycol in list(enumerate(cnstr.get("key", [])))[::-1]:
                                 if util.lceq(keycol, name):
                                     cnstr["key"    ][j:j+1] = []
                                     cnstr["columns"][j:j+1] = []
@@ -5352,7 +5352,7 @@ class SchemaObjectPage(wx.Panel):
                             if util.lceq(mycol, name):
                                 cnstr["columns"][j] = opts["rename"]
                         if util.lceq(cnstr.get("table"), self.Name):
-                            for j, keycol in list(enumerate(cnstr["key"])):
+                            for j, keycol in list(enumerate(cnstr.get("key", []))):
                                 if util.lceq(keycol, name):
                                     cnstr["key"][j] = opts["rename"]
 
