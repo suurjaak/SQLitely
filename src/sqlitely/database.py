@@ -1193,7 +1193,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             skip.update({v: True for v in vv})
         for mycategory, items in result.items() if data else ():
             if mycategory not in SUBCATEGORIES: continue # for mycategory, items
-            for myitem in items:
+            for myitem in items.values():
                 if myitem["name"] in visited: continue # for myitem
                 visited[myitem["name"]] = True
                 subresult = self.get_related(mycategory, myitem["name"], own, data, skip, clone)
