@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.04.2022
+@modified    11.05.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2730,6 +2730,30 @@ class DatabasePage(wx.Panel):
         try: nb._pages.GetSingleLineBorderColour = nb.GetActiveTabColour
         except Exception: pass # Hack to get uniform background colour
 
+        startpanel = wx.Panel(nb)
+        nb.SetCustomPage(startpanel)
+        ColourManager.Manage(startpanel, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
+
+        BUTTONS = [("data",     "&Open data",          "Open table or view\ndata"),             
+                   ("export",   "Export to fi&le",     "Export table or view\ndata to file"),    
+                   ("exportdb", "Export to &database", "Export data\nto another database"),
+                   ("import",   "Import f&rom file",   "Import data\nfrom file to table"), ]
+        buttons, bsize, isize = [], (180, 180), (32, 32)
+        i1 = images.ButtonTable.Bitmap
+        i2 = images.ButtonExportToFile.Bitmap
+        i3 = images.ButtonExportToDatabase.Bitmap
+        i4 = images.ButtonImport.Bitmap
+        for i, (a, l, n) in enumerate(BUTTONS):
+            buttons.append(controls.NoteButton(startpanel, l, n, size=bsize, style=wx.ALIGN_CENTER,
+                                               bmp=(i1, i2, i3, i4)[i]))
+
+        startpanel.Sizer = wx.BoxSizer(wx.VERTICAL)
+        buttonsizer = wx.GridBagSizer(hgap=5, vgap=5)
+        for i, b in enumerate(buttons): buttonsizer.Add(b, pos=divmod(i, 2))
+        startpanel.Sizer.AddStretchSpacer()
+        startpanel.Sizer.Add(buttonsizer, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        startpanel.Sizer.AddStretchSpacer()
+
         sizer2.Add(nb, proportion=1, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
@@ -2744,6 +2768,8 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
                   self.on_notebook_menu, nb)
         self.Bind(wx.EVT_CONTEXT_MENU, self.on_notebook_menu, nb.GetTabArea())
+        for b, (a, _, _) in zip(buttons, BUTTONS):
+            b.Bind(wx.EVT_BUTTON, functools.partial(self.on_datapage_button, a, b))
         self.register_notebook_hotkeys(nb)
 
 
@@ -2778,10 +2804,10 @@ class DatabasePage(wx.Panel):
         isize = (16, 16)
         il = wx.ImageList(*isize)
         self.tree_schema_images = {
-            "table":    il.Add(wx.ArtProvider.GetBitmap(wx.ART_REPORT_VIEW,     wx.ART_TOOLBAR, isize)),
-            "index":    il.Add(wx.ArtProvider.GetBitmap(wx.ART_NORMAL_FILE,     wx.ART_TOOLBAR, isize)),
+            "table":    il.Add(images.TreeTable.Bitmap),
+            "index":    il.Add(images.TreeIndex.Bitmap),
             "trigger":  il.Add(images.TreeTrigger.Bitmap),
-            "view":     il.Add(wx.ArtProvider.GetBitmap(wx.ART_HELP_PAGE,       wx.ART_TOOLBAR, isize)),
+            "view":     il.Add(images.TreeView.Bitmap),
             "columns":  il.Add(wx.ArtProvider.GetBitmap(wx.ART_FOLDER,          wx.ART_TOOLBAR, isize)),
         }
         tree.AssignImageList(il)
@@ -2813,6 +2839,30 @@ class DatabasePage(wx.Panel):
         try: nb._pages.GetSingleLineBorderColour = nb.GetActiveTabColour
         except Exception: pass # Hack to get uniform background colour
 
+        startpanel = wx.Panel(nb)
+        nb.SetCustomPage(startpanel)
+        ColourManager.Manage(startpanel, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
+
+        BUTTONS = [("table",   "Create ta&ble",   "Add new table to database"),
+                   ("index",   "Create in&dex",   "Add index on table\n"),
+                   ("trigger", "Create t&rigger", "Add trigger on table or view"),
+                   ("view",    "Cre&ate view",    "Add new view to database"), ]
+        buttons, bsize = [], (180, 180)
+        i1 = images.ButtonTable.Bitmap
+        i2 = images.ButtonIndex.Bitmap
+        i3 = images.ButtonTrigger.Bitmap
+        i4 = images.ButtonView.Bitmap
+        for i, (c, l, n) in enumerate(BUTTONS):
+            buttons.append(controls.NoteButton(startpanel, l, n, size=bsize, style=wx.ALIGN_CENTER,
+                                               bmp=(i1, i2, i3, i4)[i]))
+
+        startpanel.Sizer = wx.BoxSizer(wx.VERTICAL)
+        buttonsizer = wx.GridBagSizer(hgap=5, vgap=5)
+        for i, b in enumerate(buttons): buttonsizer.Add(b, pos=divmod(i, 2))
+        startpanel.Sizer.AddStretchSpacer()
+        startpanel.Sizer.Add(buttonsizer, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        startpanel.Sizer.AddStretchSpacer()
+
         sizer2.Add(nb, proportion=1, border=5, flag=wx.GROW | wx.LEFT | wx.TOP)
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
@@ -2833,6 +2883,8 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.lib.agw.flatnotebook.EVT_FLATNOTEBOOK_PAGE_CONTEXT_MENU,
                   self.on_notebook_menu, nb)
         self.Bind(wx.EVT_CONTEXT_MENU, self.on_notebook_menu, nb.GetTabArea())
+        for b, (c, _, _) in zip(buttons, BUTTONS):
+            b.Bind(wx.EVT_BUTTON, functools.partial(self.handle_command, "create", c))
         self.register_notebook_hotkeys(nb)
 
 
@@ -3962,9 +4014,9 @@ class DatabasePage(wx.Panel):
                 self.notebook.SetSelection(self.pageorder[self.page_data])
                 self.on_export_singlefile("table")
             elif "data" == arg:
-                self.on_export_to_db("table", category=list(self.db.schema["table"]))
+                self.on_export_to_db("table", names=list(self.db.schema["table"]))
             elif "structure" == arg:
-                self.on_export_to_db("table", category=list(self.db.schema["table"]), data=False)
+                self.on_export_to_db("table", names=list(self.db.schema["table"]), data=False)
             elif "pragma" == arg:
                 template = step.Template(templates.PRAGMA_SQL, strip=False)
                 sql = template.expand(pragma=self.pragma)
@@ -4940,6 +4992,58 @@ class DatabasePage(wx.Panel):
         self.load_tree_data(refresh=True)
 
 
+    def on_datapage_button(self, action, button, event):
+        """Handler for clicking a button on data index page."""
+        if "import" == action:
+            return self.handle_command(action)
+
+        CATEGORIES  = ["table", "view"]
+        MULTILABELS = ["&All tables", "A&ll views", "All tables an&d views"]
+        schemaflags = {c: bool(self.db.schema[c]) for c in CATEGORIES}
+        schemaflags[None] = all(schemaflags.values())
+        menu = wx.Menu()
+
+        for category, names in ((c, self.db.schema[c]) for c in CATEGORIES):
+            menu_parent = wx.Menu()
+            for name in names:
+                item = wx.MenuItem(menu_parent, -1, name)
+                if "data" == action:
+                    handler = functools.partial(lambda n, e: self.handle_command("data", None, n), name)
+                elif "export" == action:
+                    handler = functools.partial(self.on_export_data_file, category, name)
+                elif "exportdb" == action:
+                    handler = functools.partial(self.on_export_to_db, category=category, names=[name])
+                menu_parent.Append(item)
+                menu.Bind(wx.EVT_MENU, handler, item)
+            item_category = menu.AppendSubMenu(menu_parent, "&" + category.capitalize())
+            item_category.Enable(schemaflags[category])
+
+        if "data" != action:
+            menu.AppendSeparator()
+            for category, label in zip(CATEGORIES + [None], MULTILABELS):
+                names = sum((list(self.db.schema[c]) for c in ([category] if category else CATEGORIES)), [])
+                if "export" == action:
+                    menu_types = wx.Menu()
+                    item_choices = menu.AppendSubMenu(menu_types, label)
+                    item_choices.Enable(schemaflags[category])
+                    for i, typelabel in enumerate(["To &file", "To single &spreadsheet"]):
+                        item = wx.MenuItem(menu_types, -1, typelabel)
+                        if i:
+                            handler = functools.partial(self.on_export_singlefile, category)
+                        else:
+                            handler = functools.partial(self.on_export_data_file, category, names)
+                        menu_types.Append(item)
+                        menu.Bind(wx.EVT_MENU, handler, item)
+                else:
+                    item = wx.MenuItem(menu, -1, label)
+                    handler = functools.partial(self.on_export_to_db, category=category)
+                    menu.Append(item)
+                    menu.Bind(wx.EVT_MENU, handler, item)
+                    item.Enable(schemaflags[category])
+
+        button.PopupMenu(menu, (button.Size.Width // 2, button.Size.Height))
+
+
     def on_rightclick_searchall(self, event):
         """
         Handler for right-clicking in HtmlWindow, sets up a temporary flag for
@@ -5433,10 +5537,13 @@ class DatabasePage(wx.Panel):
         Handler for saving database category item data to file,
         opens file dialog, saves content.
         """
+        categories    = [category] if category else ["table", "view"]
+        categorylabel = " and ".join(map(util.plural, categories))
+
         title = os.path.splitext(os.path.basename(self.db.name))[0]
-        title += " %s" % util.plural(category)
+        title += " %s" % categorylabel
         dialog = wx.FileDialog(
-            self, message="Save %s as" % util.plural(category),
+            self, message="Save %s as" % categorylabel,
             defaultFile=title,
             wildcard="|".join(filter(bool, (importexport.XLSX_WILDCARD, "All files|*.*"))),
             style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE |
@@ -5447,14 +5554,14 @@ class DatabasePage(wx.Panel):
         filename = controls.get_dialog_path(dialog)
         args = {"filename": filename, "db": self.db, "title": title,
                 "category": category}
-        opts = {"filename": filename, "multi": True, "category": category,
-                "name": "all %s to single spreadsheet" % util.plural(category),
+        opts = {"filename": filename, "multi": True,
+                "name": "all %s to single spreadsheet" % categorylabel,
                 "callable": functools.partial(importexport.export_data_multiple, **args)}
-        if "table" == category:
+        if "table" in categories:
             opts["subtotals"] = {t: {
                     "total": topts.get("count"),
                     "is_total_estimated": topts.get("is_count_estimated")
-                } for t, topts in self.db.schema[category].items()}
+                } for t, topts in self.db.schema["table"].items()}
             opts["total"] = sum(x["total"] or 0 for x in opts["subtotals"].values())
             if any(x["is_total_estimated"] for x in opts["subtotals"].values()):
                 opts["is_total_estimated"] = True
@@ -5466,7 +5573,7 @@ class DatabasePage(wx.Panel):
             self.panel_data_export.Run(opts)
             self.Layout()
         except Exception as e:
-            msg = "Error saving %s to %s." % (util.plural(category), filename)
+            msg = "Error saving %s to %s." % (categorylabel, filename)
             logger.exception(msg); guibase.status(msg)
             error = msg[:-1] + (":\n\n%s" % util.format_exc(e))
             wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
@@ -5964,17 +6071,25 @@ class DatabasePage(wx.Panel):
         """
         Handler for exporting one or more tables/views to file, opens file dialog
         and performs export.
+
+        @param   category  "table" or "view" or None for both
+        @param   item      "name" or ["name", ]
         """
         items = [item] if isinstance(item, six.string_types) else item
 
-        exporting = [x for x in items if category in self.data_pages
-                     and x in self.data_pages[category]
-                     and self.data_pages[category][x].IsExporting()]
+        categories = [category] if category else ["table", "view"]
+        exporting = [x for c in categories for x in items
+                     if c in self.data_pages and x in self.data_pages[c]
+                     and self.data_pages[c][x].IsExporting()]
         if exporting:
             return wx.MessageBox("Export is already underway for %s." % util.join(", ", exporting),
                                  conf.Title, wx.OK | wx.ICON_INFORMATION)
 
+        def get_category(name):
+            return next(c for c in ("table", "view") if name in self.db.schema[c])
+
         if len(items) == 1:
+            category = get_category(items[0])
             dialog = self.dialog_savefile
             filename = "%s %s" % (category.capitalize(), items[0])
             dialog.Filename = util.safe_filename(filename)
@@ -5995,7 +6110,7 @@ class DatabasePage(wx.Panel):
             path, _ = os.path.split(path)
             filenames, names_unique = [], []
             for t in items:
-                name = util.safe_filename("%s %s" % (category.capitalize(), t))
+                name = util.safe_filename("%s %s" % (get_category(t).capitalize(), t))
                 name = util.make_unique(name, names_unique, suffix=" (%s)")
                 filenames.append(os.path.join(path, name + "." + extname))
                 names_unique.append(name)
@@ -6012,17 +6127,18 @@ class DatabasePage(wx.Panel):
         for name, filename in zip(items, filenames):
             if not filename.lower().endswith(".%s" % extname):
                 filename += ".%s" % extname
-            data = self.db.get_category(category, name)
+            mycategory = get_category(name)
+            data = self.db.get_category(mycategory, name)
             sql = "SELECT * FROM %s" % grammar.quote(name)
             make_iterable = functools.partial(self.db.execute, sql)
             args = {"make_iterable": make_iterable, "filename": filename,
-                    "title": "%s %s" % (category.capitalize(),
+                    "title": "%s %s" % (mycategory.capitalize(),
                                         grammar.quote(name, force=True)),
                     "db": self.db, "columns": data["columns"],
-                    "category": category, "name": name}
+                    "category": mycategory, "name": name}
             exports.append({
-                "filename": filename, "category": category,
-                "name": "all %s to file" % util.plural(category),
+                "filename": filename, "category": mycategory,
+                "name": "all %s to file" % util.plural(mycategory),
                 "callable": functools.partial(importexport.export_data, **args),
                 "total": data.get("count"),
                 "is_total_estimated": data.get("is_count_estimated")

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  27.03.2022
+@modified  03.05.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -19,7 +19,7 @@ import shutil
 import wx.tools.img2py
 
 """Target Python script to write."""
-TARGET = os.path.join("..", "sqlitely", "images.py")
+TARGET = os.path.join("..", "src", "sqlitely", "images.py")
 
 Q3 = '"""'
 
@@ -36,10 +36,16 @@ IMAGES = {
         "Large icon for import folder button on start page.",
     "ButtonExport.png":
         "Small icon for export button on start page.",
+    "ButtonExportToDatabase.png":
+        "Large icon for export to database button on data page.",
+    "ButtonExportToFile.png":
+        "Large icon for export to file button on data page.",
     "ButtonHome.png":
         "Large icon for home on start page.",
     "ButtonImport.png":
-        "Large icon for import button on start page.",
+        "Large icon for import button on start page and data page.",
+    "ButtonIndex.png":
+        "Button for create index on data page.",
     "ButtonListDatabase.png":
         "Button for databases in database list.",
     "ButtonNew.png":
@@ -56,6 +62,12 @@ IMAGES = {
         "Small icon for remove by type button on start page.",
     "ButtonSaveAs.png":
         "Small icon for save as button on start page.",
+    "ButtonTable.png":
+        "Button for create table on data page.",
+    "ButtonTrigger.png":
+        "Button for create trigger on data page.",
+    "ButtonView.png":
+        "Button for create view on data page.",
     "DiagramFK.png":
         "Foreign key icon for schema diagram tables.",
     "DiagramPK.png":
@@ -136,8 +148,14 @@ IMAGES = {
         "Toolbar icon for zoom out button on diagram page.",
     "TransparentPixel.gif":
         "Transparent 1x1 GIF.",
+    "TreeIndex.png":
+        "TreeListCtrl icon for indexes.",
+    "TreeTable.png":
+        "TreeListCtrl icon for tables.",
     "TreeTrigger.png":
         "TreeListCtrl icon for triggers.",
+    "TreeView.png":
+        "TreeListCtrl icon for views.",
     "WizardImport.png":
         "Bitmap for data import wizard.",
 }
@@ -169,7 +187,7 @@ def create_py(target):
     f = io.open(target, "w", encoding="utf-8")
     f.write(HEADER)
     icons = [os.path.splitext(x)[0] for x, _ in APPICONS]
-    icon_parts = [", ".join(icons[4*i:4*i+4]) for i in range(len(icons) / 4)]
+    icon_parts = [", ".join(icons[4*i:4*i+4]) for i in range(len(icons) // 4)]
     iconstr = ",\n        ".join(icon_parts)
     f.write(u"\n\n%s%s%s\ndef get_appicons():\n    icons = wx.IconBundle()\n"
             u"    [icons.AddIcon(i.Icon) "
@@ -185,7 +203,7 @@ def create_py(target):
         while data:
             f.write(u"    \"%s\"\n" % data[:72])
             data = data[72:]
-        f.write(")\n")
+        f.write(u")\n")
     for filename, desc in sorted(IMAGES.items()):
         name, extension = os.path.splitext(filename)
         f.write(u"\n\n%s%s%s\n%s = PyEmbeddedImage(\n" % (Q3, desc, Q3, name))

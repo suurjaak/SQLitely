@@ -1,8 +1,10 @@
 CHANGELOG
 =========
 
-2.1, 2022-04-21
+2.1, 2022-05-11
 ---------------
+- add button panels to data and schema tabs;
+- use uniform icons for schema tree items;
 - retain schema diagram custom layout on schema change;
 - fix schema diagram not loading entity positions from last config;
 - fix schema diagram adopting custom layout on clicking an entity;
