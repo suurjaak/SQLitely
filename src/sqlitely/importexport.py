@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.03.2022
+@modified    05.05.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -21,7 +21,6 @@ import json
 import logging
 import os
 import re
-import sys
 import warnings
 
 # ImageFont for calculating column widths in Excel export, not required.
@@ -109,6 +108,7 @@ def export_data(make_iterable, filename, title, db, columns,
     @param   name            name of the table or view producing the data, if any
     @param   progress        callback(count) to report progress,
                              returning false if export should cancel
+    @return                  True on success, False on failure, None on cancel
     """
     result = False
     f, writer, cursor = None, None, None
@@ -145,8 +145,7 @@ def export_data(make_iterable, filename, title, db, columns,
                 for i, row in enumerate(cursor, 1):
                     writer.writerow(["" if row[c] is None else row[c] for c in colnames])
                     count = i
-                    if not i % 100 and progress and not progress(count=i):
-                        break # for i, row
+                    if not i % 100 and progress and not progress(count=i): return None
                 writer.close()
                 writer = None
             else:
@@ -176,11 +175,11 @@ def export_data(make_iterable, filename, title, db, columns,
                                     else v if isinstance(v, six.string_types) else str(v)
                                 v = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, six.text_type(v))
                                 widths[col] = max(widths[col], len(v))
-                            if not i % 100 and progress and not progress(): return
+                            if not i % 100 and progress and not progress(): return None
                     finally: util.try_until(lambda: cursor2.close())
                     namespace["columnwidths"] = widths # {col: char length}
                     namespace["columnjusts"]  = justs  # {col: True if ljust}
-                if progress and not progress(): return
+                if progress and not progress(): return None
 
                 # Write out data to temporary file first, to populate row count.
                 tmpname = util.unique_path("%s.rows" % filename)
@@ -192,7 +191,7 @@ def export_data(make_iterable, filename, title, db, columns,
                            strip=False, escape=is_html)
                 template.stream(tmpfile, namespace)
 
-                if progress and not progress(): return
+                if progress and not progress(): return None
 
                 if is_sql and "table" != category:
                     # Add CREATE statement for saving view AS table
@@ -234,59 +233,66 @@ def export_data_multiple(filename, title, db, category, progress=None):
     @param   filename        full path and filename of resulting file
     @param   title           spreadsheet title
     @param   db              Database instance
-    @param   category        category producing the data, "table" or "view"
+    @param   category        category producing the data, "table" or "view", or None for both
     @param   progress        callback(name, count) to report progress,
                              returning false if export should cancel
     """
     result = True
-    items, cursor = db.schema[category], None
+    cursor = None
+    categories = [category] if category else ["table", "view"]
+    items = {c: db.schema[c].copy() for c in categories}
+    for category, name in ((c, n) for c, x in items.items() for n in x):
+        db.lock(category, name, filename, label="export")
     try:
         props = {"title": title, "comments": templates.export_comment()}
         writer = xlsx_writer(filename, props=props)
 
-        for n in items: db.lock(category, n, filename, label="export")
-        for name, item in items.items():
-            count = 0
-            if progress and not progress(name=name, count=count):
-                result = False
-                break # for name, item
-
-            try:
-                cursor = db.execute("SELECT * FROM %s" % grammar.quote(name))
-                row = next(cursor, None)
-                iterable = itertools.chain([] if row is None else [row], cursor)
-
-                writer.add_sheet(name)
-                colnames = [x["name"] for x in item["columns"]]
-                writer.set_header(True)
-                writer.writerow(colnames, "bold")
-                writer.set_header(False)
-
-                for i, row in enumerate(iterable, 1):
-                    count = i
-                    writer.writerow([row[c] for c in colnames])
-                    if not i % 100 and progress and not progress(name=name, count=i):
-                        result = False
-                        break # for i, row
-            except Exception as e:
-                logger.exception("Error exporting %s %s from %s.", category, grammar.quote(name), db)
-                if progress and not progress(name=name, error=util.format_exc(e)):
+        for category in categories:
+            for name, item in items[category].items():
+                count = 0
+                if progress and not progress(name=name, count=count):
                     result = False
-            finally: util.try_until(lambda: cursor.close())
+                    break # for name, item
 
-            if not result: break # for name, item
-            if progress and not progress(name=name, count=count):
-                result = False
-                break # for name, item
+                try:
+                    cursor = db.execute("SELECT * FROM %s" % grammar.quote(name))
+                    row = next(cursor, None)
+                    iterable = itertools.chain([] if row is None else [row], cursor)
+
+                    writer.add_sheet(name)
+                    colnames = [x["name"] for x in item["columns"]]
+                    writer.set_header(True)
+                    writer.writerow(colnames, "bold")
+                    writer.set_header(False)
+
+                    for i, row in enumerate(iterable, 1):
+                        count = i
+                        writer.writerow([row[c] for c in colnames])
+                        if not i % 100 and progress and not progress(name=name, count=i):
+                            result = False
+                            break # for i, row
+                except Exception as e:
+                    logger.exception("Error exporting %s %s from %s.",
+                                     category, grammar.quote(name), db)
+                    if progress and not progress(name=name, error=util.format_exc(e)):
+                        result = False
+                finally: util.try_until(lambda: cursor.close())
+
+                if not result: break # for name, item
+                if progress and not progress(name=name, count=count):
+                    result = False
+                    break # for name, item
+            if not result: break  # for category
         writer.close()
         if progress: progress(done=True)
     except Exception as e:
         logger.exception("Error exporting %s from %s to %s.",
-                         util.plural(category), db, filename)
+                         " and ".join(map(util.plural, categories)), db, filename)
         if progress: progress(error=util.format_exc(e), done=True)
         result = False
     finally:
-        for n in items: db.unlock(category, n, filename)
+        for category, name in ((c, n) for c, x in items.items() for n in x):
+            db.unlock(category, name, filename)
         util.try_until(lambda: cursor.close())
         if not result: util.try_until(lambda: os.unlink(filename))
 
@@ -549,6 +555,7 @@ def get_import_file_data(filename, progress=None):
     ]}.
 
     @param   progress  callback() returning false if function should cancel
+    @return  metadata dict, or None if cancelled
     """
     logger.info("Getting import data from %s.", filename)
     sheets, size = [], os.path.getsize(filename)
@@ -572,14 +579,14 @@ def get_import_file_data(filename, progress=None):
                     firstline = firstline.encode("latin1", errors="xmlcharrefreplace")
             iterable = itertools.chain([firstline], f)
             csvfile = csv.reader(iterable, csv.Sniffer().sniff(firstline, ",;\t"))
-            if progress and not progress(): return
+            if progress and not progress(): return None
             rows, columns = -1, next(csvfile)
             if not columns: rows = 0
             elif 0 < size <= conf.MaxImportFilesizeForCount:
                 rows = 1 if firstline else 0
                 for _ in csvfile:
                     rows += 1
-                    if progress and not progress(): return
+                    if progress and not progress(): return None
         sheets.append({"rows": rows, "columns": columns, "name": "<no name>"})
     elif is_json:
         rows, columns, buffer, started = 0, {}, "", False
@@ -591,7 +598,7 @@ def get_import_file_data(filename, progress=None):
                     buffer = re.sub("^//[^\n]*$", "", buffer.lstrip(), flags=re.M).lstrip()
                     if buffer[:1] == "[": buffer, started = buffer[1:].lstrip(), True
                 while started and buffer:
-                    if progress and not progress(): return
+                    if progress and not progress(): return None
                     # Strip whitespace and interleaving commas from between dicts
                     buffer = re.sub(r"^\s*[,]?\s*", "", buffer)
                     try:
@@ -608,7 +615,7 @@ def get_import_file_data(filename, progress=None):
     elif is_xls:
         with xlrd.open_workbook(filename, on_demand=True) as wb:
             for sheet in wb.sheets():
-                if progress and not progress(): return
+                if progress and not progress(): return None
                 columns = [x.value for x in next(sheet.get_rows(), [])]
                 while columns and columns[-1] is None: columns.pop(-1)
                 columns = [x.strip() if isinstance(x, six.string_types)
@@ -624,7 +631,7 @@ def get_import_file_data(filename, progress=None):
 
                 wb = openpyxl.load_workbook(filename, data_only=True, read_only=True)
                 for sheet in wb.worksheets:
-                    if progress and not progress(): return
+                    if progress and not progress(): return None
                     columns = list(next(sheet.values, []))
                     while columns and columns[-1] is None: columns.pop(-1)
                     columns = [x.strip() if isinstance(x, six.string_types)
@@ -666,7 +673,7 @@ def get_import_file_data(filename, progress=None):
                 if columns and size > conf.MaxImportFilesizeForCount:
                     rows = -1
                     break # for chunk
-                if progress and not progress(): return
+                if progress and not progress(): return None
         sheets.append({"rows": rows, "columns": columns, "name": "<YAML data>"})
     else:
         raise ValueError("File type not recognized.")
@@ -746,7 +753,7 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
                     try:
                         cursor.execute(sql, row)
                         count += 1
-                    except Exception:
+                    except Exception as e:
                         errorcount += 1
                         if not progress: raise
 
