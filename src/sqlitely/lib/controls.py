@@ -87,7 +87,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    28.03.2022
+@modified    23.04.2022
 ------------------------------------------------------------------------------
 """
 import collections
@@ -1557,6 +1557,21 @@ class NoteButton(wx.Panel, wx.Button):
     def __init__(self, parent, label=wx.EmptyString, note=wx.EmptyString,
                  bmp=wx.NullBitmap, id=-1, pos=wx.DefaultPosition,
                  size=wx.DefaultSize, style=0, name=wx.PanelNameStr):
+        """
+        Constructor.
+
+        @param   parent  parent window
+        @param   label   button label
+        @param   note    button note text
+        @param   bmp     button icon
+        @param   id      button wx identifier
+        @param   pos     button position
+        @param   size    button default size
+        @param   style   alignment flags for button content
+                         (left-right for horizontal, center for vertical)
+                         plus any flags for wx.Panel
+        @param   name    control name
+        """
         wx.Panel.__init__(self, parent, id, pos, size,
                           style | wx.FULL_REPAINT_ON_RESIZE, name)
         self._label = label
@@ -1568,7 +1583,7 @@ class NoteButton(wx.Panel, wx.Button):
             self._bmp_disabled = wx.Bitmap(img) if img.IsOk() else bmp
         self._hover = False # Whether button is being mouse hovered
         self._press = False # Whether button is being mouse pressed
-        self._align = style & (wx.ALIGN_RIGHT | wx.ALIGN_CENTER)
+        self._align = style
         self._enabled = True
         self._size = self.Size
 
@@ -1627,8 +1642,12 @@ class NoteButton(wx.Panel, wx.Button):
         x, y = 10, 10
         if (self._align & wx.ALIGN_RIGHT):
             x = width - 10 - self._bmp.Size.width
-        elif (self._align & wx.ALIGN_CENTER):
+        elif (self._align & wx.ALIGN_CENTER_HORIZONTAL):
             x = 10 + (width - self.DoGetBestSize().width) // 2
+        if (self._align & wx.ALIGN_BOTTOM):
+            y = height - self.DoGetBestSize().height + 10
+        elif (self._align & wx.ALIGN_CENTER_VERTICAL):
+            y = (height - self.DoGetBestSize().height + 10) // 2
 
         dc.Font = self.Font
         dc.Brush = BRUSH(self.BackgroundColour)
@@ -1695,7 +1714,7 @@ class NoteButton(wx.Panel, wx.Button):
 
         if self._bmp:
             bmp = self._bmp if self.IsThisEnabled() else self._bmp_disabled
-            dc.DrawBitmap(bmp, x, y)
+            dc.DrawBitmap(bmp, x, y, useMask=True)
 
         if self._align & wx.ALIGN_RIGHT:
             x -= 10 + max(self._extent_label[0], self._extent_note[0])
@@ -1724,7 +1743,7 @@ class NoteButton(wx.Panel, wx.Button):
                     if i < len(line):
                         chars += line[i]
                     i += 1
-                h += self._extent_label[1]
+                h += dc.GetTextExtent(line)[1]
                 text_label += chars + "\n"
         dc.DrawText(text_label, x, y)
 
