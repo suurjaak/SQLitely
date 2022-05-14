@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.04.2022
+@modified    14.05.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -11467,7 +11467,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             clines.append((ptd1, ptd2))
 
             # Make foreign key label
-            if self._show_labels and opts["name"]:
+            if opts["name"]:
                 textent = get_extent(util.ellipsize(util.unprint(opts["name"]), self.MAX_TEXT))
                 tw, th = textent[0] + textent[3], textent[1] + textent[2]
                 tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)

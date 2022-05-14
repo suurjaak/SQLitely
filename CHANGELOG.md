@@ -1,14 +1,15 @@
 CHANGELOG
 =========
 
-2.1, 2022-05-11
+2.1, 2022-05-15
 ---------------
 - add button panels to data and schema tabs;
 - use uniform icons for schema tree items;
 - retain schema diagram custom layout on schema change;
 - fix schema diagram not loading entity positions from last config;
 - fix schema diagram adopting custom layout on clicking an entity;
-- fix error on canceling a single grid export.
+- fix error on canceling a single grid export;
+- fix error on toggling diagram foreign labels on.
 
 
 2.0, 2022-04-02
