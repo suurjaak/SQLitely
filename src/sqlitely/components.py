@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.05.2022
+@modified    23.05.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -370,7 +370,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                         col_value = float(valc) if ("." in valc) else util.to_long(val)
                     except Exception:
                         col_value = val
-            elif "BLOB" == self.db.get_affinity(self.columns[col]) and val:
+            elif "BLOB" == self.db.get_affinity(self.columns[col]) and hasattr(val, "decode"):
                 # Text editor does not support control characters or null bytes.
                 try: col_value = val.decode("unicode-escape")
                 except UnicodeError: pass # Text is not valid escaped Unicode
