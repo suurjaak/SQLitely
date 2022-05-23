@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.04.2022
+@modified    23.05.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1392,20 +1392,23 @@ WARNING: misuse can easily result in a corrupt database file.""",
     def make_args(self, cols, data, existing=None):
         """
         Returns ordered params dictionary, with column names made safe to use
-        as ":name" parameters.
+        as ":name" parameters, and BLOB types converted to sqlite3.Binary.
 
-        @param   cols      ["col", ] or [{"name": "col"}, ]
+        @param   cols      ["col", ] or [{"name": "col", ?"type": "coltype"}, ]
         @param   data      {"col": val}
-        @param   existing  already existing params dictionary,
-                           for unique
+        @param   existing  already existing params dictionary, if any,
+                           for ensuring name uniqueness
         """
         result = OrderedDict()
         existing = dict(existing or {})
         for c in cols:
-            if isinstance(c, dict): c = c["name"]
-            name = re.sub(r"\W", "", c, flags=re.I)
+            c, t = (c["name"], c.get("type")) if isinstance(c, dict) else (c, None)
+            name, v = re.sub(r"\W", "", c, flags=re.I), data[c]
             name = util.make_unique(name, existing, counter=1, case=True)
-            result[name] = existing[name] = data[c]
+            if None not in (t, v) and not isinstance(v, sqlite3.Binary) \
+            and "BLOB" == self.get_affinity(t):
+                v = sqlite3.Binary(str(v).encode("latin1", errors="backslashreplace"))
+            result[name] = existing[name] = v
         return result
 
 
