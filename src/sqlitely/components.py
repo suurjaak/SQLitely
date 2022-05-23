@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.05.2022
+@modified    22.05.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -9996,7 +9996,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         # {(name1, name2, (cols)): {id, pts, waylines, cardlines, cornerpts, textrect}}
         self._lines = util.CaselessDict()
         self._sels  = util.CaselessDict(insertorder=True) # {name selected: DC ops ID}
-        # Bitmap cache, as {zoom: {item.__id__: {(sql, hasmeta, stats, dragrect): (wx.Bitmap, wx.Bitmap) or wx.Bitmap}}}
+        # Bitmap cache, as {zoom: {item.__id__: {(sql, hasmeta, showcols, showkeys, stats, dragrect):
+        #                                        (wx.Bitmap, wx.Bitmap) or wx.Bitmap}}}
         # or {zoom: {PyEmdeddedImage: wx.Bitmap}} for scaled static images
         self._cache = defaultdict(lambda: defaultdict(dict))
         self._order = []   # Draw order [{obj dict}, ] selected items at end
@@ -10010,6 +10011,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         self._dragrectid  = None # DC ops ID for selection rect
         self._use_cache   = True # Use self._cache for item bitmaps
         self._enabled     = True
+        self._show_cols   = True
+        self._show_keys   = False
         self._show_lines  = True
         self._show_labels = True
         self._show_stats  = False
@@ -10131,7 +10134,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             for o in self._order:
                 r = self._dc.GetIdBounds(o["id"])
                 pt = [v * zoom / zoom0 for v in r.TopLeft]
-                sz, _, _, _ = self._CalculateItemSize(o)
+                sz, _, _, _ = self._CalculateItemSize(o, self._show_stats and o.get("stats"))
                 self._dc.SetIdBounds(o["id"], wx.Rect(wx.Point(pt), wx.Size(sz)))
             if not self._enabled or not refresh: return
 
@@ -10220,6 +10223,38 @@ class SchemaDiagram(wx.ScrolledWindow):
     Enabled = property(IsEnabled, Enable)
 
 
+    def GetShowColumns(self):
+        """Returns whether columns are shown."""
+        return self._show_cols
+    def SetShowColumns(self, show=True):
+        """Sets showing columns on or off. Setting on will set ShowKeyColumns off."""
+        show = bool(show)
+        if show == self._show_cols: return
+        self._show_cols = show
+        if show: self._show_keys = False
+        if not self._enabled: return self._PostEvent()
+
+        self.Redraw(remake=True)
+        self._PostEvent()
+    ShowColumns = property(GetShowColumns, SetShowColumns)
+
+
+    def GetShowKeyColumns(self):
+        """Returns whether only key columns are shown."""
+        return self._show_keys
+    def SetShowKeyColumns(self, show=True):
+        """Sets showing only key columns on or off. Setting on will set ShowColumns off."""
+        show = bool(show)
+        if show == self._show_keys: return
+        self._show_keys = show
+        if show: self._show_cols = False
+        if not self._enabled: return self._PostEvent()
+
+        self.Redraw(remake=True)
+        self._PostEvent()
+    ShowKeyColumns = property(GetShowKeyColumns, SetShowKeyColumns)
+
+
     def GetShowLines(self):
         """Returns whether foreign relation lines are shown."""
         return self._show_lines
@@ -10272,14 +10307,15 @@ class SchemaDiagram(wx.ScrolledWindow):
     def GetOptions(self):
         """
         Returns all current diagram options,
-        as {zoom: float, fks: bool, fklabels: bool, layout: {},
-            scroll: [x, y], items: {name: [x, y]}}.
+        as {zoom: float, cols: bool, keys: bool, fks: bool, fklabels: bool,
+            layout: {}, scroll: [x, y], items: {name: [x, y]}}.
         """
         pp = {o["name"]: list(self._dc.GetIdBounds(o["id"]).TopLeft) for o in self._order}
         return {
             "zoom":     self._zoom, "fks": self._show_lines, "items": pp,
-            "fklabels": self._show_labels, "stats": self._show_stats,
-            "enabled":  self._enabled,    "layout": copy.deepcopy(self._layout),
+            "cols":     self._show_cols,   "keys":   self._show_keys,
+            "fklabels": self._show_labels, "stats":  self._show_stats,
+            "enabled":  self._enabled,     "layout": copy.deepcopy(self._layout),
             "scroll":   [self.GetScrollPos(x) for x in (wx.HORIZONTAL, wx.VERTICAL)],
         }
     def SetOptions(self, opts, refresh=True):
@@ -10292,6 +10328,14 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         remake, remakelines = False, False
         if "enabled"  in opts: self._enabled     = bool(opts["enabled"])
+        if "cols"     in opts and self._show_cols != bool(opts["cols"]):
+            self._show_cols = not self._show_cols
+            if self._show_cols: self._show_keys = False
+            remake = True
+        if "keys"     in opts and self._show_keys != bool(opts["keys"]):
+            self._show_keys = not self._show_keys
+            if self._show_keys: self._show_cols = False
+            remake = True
         if "fks"      in opts:
             self._show_lines = bool(opts["fks"])
             if not self._show_lines:
@@ -10487,7 +10531,7 @@ class SchemaDiagram(wx.ScrolledWindow):
             self.SetZoom(self.ZOOM_DEFAULT, remake=False, refresh=False)
             itembounds0 = {} # Remember current bounds, calculate for default zoom
             for name, o in self._objs.items():
-                size, _, _, _ = self._CalculateItemSize(o)
+                size, _, _, _ = self._CalculateItemSize(o, statistics and o.get("stats"))
                 ibounds = itembounds0[name] = self._dc.GetIdBounds(o["id"])
                 self._dc.SetIdBounds(o["id"], wx.Rect(ibounds.Position, wx.Size(size)))
             self._CalculateLines(remake=True)
@@ -10500,10 +10544,12 @@ class SchemaDiagram(wx.ScrolledWindow):
             title = os.path.splitext(os.path.basename(self._db.name))[0] + " schema"
         ns = {"title": title, "items": [], "lines": self._lines if self._show_lines else {},
               "show_labels": self._show_labels, "get_extent": get_extent,
+              "get_stats_texts": self._GetStatsTexts,
               "embed": embed, "fonts": {"normal": self.Font, "bold": self.Font.Bold()}}
         for o in self._objs.values():
             item = dict(o, bounds=self._dc.GetIdBounds(o["id"]))
             if not self._show_stats: item.pop("stats")
+            item["columns"] = [c for c in item.get("columns", []) if self._GetShowColumn(item, c)]
             ns["items"].append(item)
         result = tpl.expand(ns)
 
@@ -10687,16 +10733,6 @@ class SchemaDiagram(wx.ScrolledWindow):
         for l0 in lines0.values(): self._dc.RemoveId(l0["id"])
 
         self.SetOptions(opts, refresh=False)
-        " @todo siin on nüüd häda. kui me alles loadime kõike stuffi, "
-        " siis objekte veel pole. ehk siis SetOptions ignob items-it. "
-        " samas optionse on vaja siin asjade rehkendamisel. "
-
-        " otototototot. vaata allapoole."
-
-        " tjah. seal on häda selles et pole suuruseid. "
-        " rangelt pole vaja. saaks siin vaadata ja vajadusel bmp teha. "
-
-
         if not self._enabled: return
 
         opts, rects, fullbounds = opts or {}, {}, wx.Rect()
@@ -10739,6 +10775,8 @@ class SchemaDiagram(wx.ScrolledWindow):
                                     "bmp": bmp, "bmpsel": bmpsel, "bmparea": None}
                 self._order.append(self._objs[name])
                 if name in rects:
+                    if o0 and not o0.get("meta"):
+                        makeitems.append(self._objs[name])  # Remake for fk icons
                     self._dc.SetIdBounds(oid, rects[name])
                     fullbounds.Union(rects[name])
                 else:
@@ -10762,8 +10800,10 @@ class SchemaDiagram(wx.ScrolledWindow):
                 while area > vsize[0] * vsize[1]:
                     vsize = vsize[0], vsize[1] + 100
             for o in self._objs.values() if not reset else ():
-                if o["name"] not in itemposes: continue  # for o
-                rect = rects[o["name"]] = wx.Rect(wx.Point(itemposes[o["name"]]), o["bmp"].Size)
+                pos = itemposes.get(o["name"]) \
+                      or next((r.TopLeft for r in [self._dc.GetIdBounds(o["id"])] if r), None)
+                if not pos: continue  # for o
+                rect = rects[o["name"]] = wx.Rect(wx.Point(pos), o["bmp"].Size)
                 self._dc.SetIdBounds(o["id"], rect)
                 fullbounds.Union(rect)
 
@@ -11122,7 +11162,6 @@ class SchemaDiagram(wx.ScrolledWindow):
                                                   bounds, self.GetViewPort()))
 
 
-
     def _GraphWorker(self, items, links, bounds, viewport):
         """
         Calculates item positions using a force-directed graph.
@@ -11334,15 +11373,23 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         # {name2: {False: [(name1, cols) at top], True: [(name1, cols) at bottom]}}
         vertslots = defaultdict(lambda: defaultdict(list))
+        # {table name: {col name: col index on diagram with current settings}}
+        tablecols = util.CaselessDict()
+        for name, topts in self._db.schema["table"].items():
+            tablecols[name] = util.CaselessDict()
+            for c in topts["columns"]:
+                if self._GetShowColumn(self._objs[name], c):
+                    tablecols[name][c["name"]] = len(tablecols[name])
 
         # First pass: determine starting and ending Y
         for (name1, name2, cols), opts in lines.items():
             b1, b2 = (self._dc.GetIdBounds(o["id"])
                       for o in map(self._objs.get, (name1, name2)))
-            idx = next((i  for i, c in enumerate(self._db.schema["table"][name1]["columns"])
-                        if c["name"].lower() in cols), 0) # Column index in table
 
-            y1 = b1.Top + self.HEADERH + self.HEADERP + (idx + 0.5) * self.LINEH
+            idx = next((tablecols[name1].get(c, -1) for c in cols), -1)  # Column index in diagram item
+
+            y1 = b1.Top + self.HEADERH // 2 + 2 if idx < 0 else \
+                 b1.Top + self.HEADERH + self.HEADERP + (idx + 0.5) * self.LINEH
             y2 = b2.Top if y1 < b2.Top else b2.Bottom
 
             if b1.Contains(b2.Left + b2.Width // 2, y2):
@@ -11511,7 +11558,8 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         key1 = opts["__id__"]
         key2 = (opts["sql0"], bool(opts.get("meta") or opts.get("hasmeta")),
-                str(stats) if stats else None, bool(dragrect))
+                self._show_cols, self._show_keys, str(stats) if stats else None,
+                bool(dragrect))
         mycache = self._cache[self._zoom][key1]
         if key2 not in mycache:
             for cc in self._cache.values(): # Nuke any outdated bitmaps
@@ -11526,7 +11574,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         """Returns whether schema item has cached bitmap for current view."""
         key1 = opts["__id__"]
         key2 = (opts["sql0"], bool(opts.get("meta") or opts.get("hasmeta")),
-                str(stats) if stats else None, False)
+                self._show_cols, self._show_keys, str(stats) if stats else None, False)
         return key1 in self._cache[self._zoom] and key2 in self._cache[self._zoom][key1]
 
 
@@ -11534,6 +11582,7 @@ class SchemaDiagram(wx.ScrolledWindow):
         """
         Returns wx.Bitmaps representing a schema item like table.
 
+        @param    stats     stats to use for item
         @param    dragrect  if True, returns a single bitmap 
                             for item inside drag rectangle
         @return   (default bitmap, focused bitmap) or bitmap inside drag rectangle
@@ -11544,12 +11593,14 @@ class SchemaDiagram(wx.ScrolledWindow):
         get_extent = lambda t, f=self._font: util.memoize(self.GetFullTextExtent, t, f,
                                                           __key__="GetFullTextExtent")
 
-        (w, h), title, coltexts, colmax = self._CalculateItemSize(opts)
+        (w, h), title, coltexts, colmax = self._CalculateItemSize(opts, stats)
         collists, statslists = [[], []], [[], [], [], []] # [[text, ], [(x, y), ]]
         pks, fks = (sum((list(c["name"]) for c in v), []) for v in opts["keys"])
 
         # Populate column texts and coordinates
         for i, col in enumerate(opts.get("columns") or []):
+            if not self._GetShowColumn(opts, col):
+                continue  # for i, col
             for j, k in enumerate(["name", "type"]):
                 text = coltexts[i][j]
                 if not text: continue # for j, k
@@ -11562,17 +11613,11 @@ class SchemaDiagram(wx.ScrolledWindow):
             stats_font = util.memoize(wx.Font, self._font.PointSize + self.FONT_STEP_STATS, wx.FONTFAMILY_MODERN,
                                       wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE)
             dx, dy = self.BRADIUS, h - self.STATSH + 1
-
-            text1, text2 = stats.get("rows"), stats.get("size")
-
-            w1 = next(d[0] + d[3] for d in [get_extent(text1, stats_font)]) if text1 else 0
-            w2 = next(d[0] + d[3] for d in [get_extent(text2, stats_font)]) if text2 else 0
-            if w1 + w2 + 2 * self.BRADIUS > w:
-                text1 = stats["rows_maxunits"] # Exact number does not fit: draw as "6.1M rows"
-
+            text1, text2 = self._GetStatsTexts(stats, w)
             if text1:
                 statslists[0].append(text1); statslists[1].append((dx, dy))
             if text2:
+                w2 = next(d[0] + d[3] for d in [get_extent(text2, stats_font)])
                 dx = w - w2 - self.BRADIUS
                 statslists[2].append(text2); statslists[3].append((dx, dy))
 
@@ -11593,12 +11638,13 @@ class SchemaDiagram(wx.ScrolledWindow):
         dc.Pen, dc.Brush = controls.PEN(self.BorderColour), wx.TRANSPARENT_BRUSH
         dc.DrawRoundedRectangle(0, 0, w, h, CRADIUS)
 
-        # Empty out columns middle, draw header separator
-        dc.Pen   = controls.PEN(bg)
-        dc.Brush = controls.BRUSH(bg)
-        dc.DrawRectangle(1, self.HEADERH, w - 2, self.HEADERP + self.LINEH * len(opts.get("columns") or []))
-        dc.Pen, dc.Brush = controls.PEN(self.BorderColour), wx.TRANSPARENT_BRUSH
-        dc.DrawLine(0, self.HEADERH, w, self.HEADERH)
+        if any(collists):
+            # Empty out columns middle, draw header separator
+            dc.Pen   = controls.PEN(bg)
+            dc.Brush = controls.BRUSH(bg)
+            dc.DrawRectangle(1, self.HEADERH, w - 2, self.HEADERP + self.LINEH * len(coltexts))
+            dc.Pen, dc.Brush = controls.PEN(self.BorderColour), wx.TRANSPARENT_BRUSH
+            dc.DrawLine(0, self.HEADERH, w, self.HEADERH)
 
         # Draw title
         dc.SetFont(self._font_bold)
@@ -11609,6 +11655,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         dc.SetFont(self._font)
         dc.DrawTextList(collists[0], collists[1])
         for i, col in enumerate(opts.get("columns") or []):
+            if not self._GetShowColumn(opts, col):
+                continue  # for i, col
             dy = self.HEADERH + self.HEADERP + i * self.LINEH
             if col["name"] in pks:
                 dc.DrawBitmap(pkbmp, 3 * max(self._zoom, 1), dy + 1, useMask=True)
@@ -11618,7 +11666,8 @@ class SchemaDiagram(wx.ScrolledWindow):
 
         # Draw statistics texts and separator
         if stats:
-            dc.DrawLine(0, h - self.STATSH, w, h - self.STATSH)
+            if any(collists):
+                dc.DrawLine(0, h - self.STATSH, w, h - self.STATSH)
             dc.SetFont(stats_font)
         if statslists[0]:
             dc.DrawTextList(statslists[0], statslists[1])
@@ -11663,9 +11712,13 @@ class SchemaDiagram(wx.ScrolledWindow):
         return bmpsel if dragrect else (bmp, bmpsel)
 
 
-    def _CalculateItemSize(self, opts):
-        """Returns ((w, h), title, coltexts, colmax) for schema item with current settings."""
-        w, h = self.MINW, self.HEADERH + self.HEADERP + self.FOOTERH
+    def _CalculateItemSize(self, opts, stats=None):
+        """
+        Returns ((w, h), title, coltexts, colmax) for schema item with current settings.
+
+        @param   stats  stats to use for item
+        """
+        w, h = self.MINW, self.HEADERH + self.FOOTERH
 
         get_extent = lambda t, f=self._font: util.memoize(self.GetFullTextExtent, t, f,
                                                           __key__="GetFullTextExtent")
@@ -11679,6 +11732,8 @@ class SchemaDiagram(wx.ScrolledWindow):
         colmax = {"name": 0, "type": 0}
         coltexts = [] # [[name, type]]
         for i, c in enumerate(opts.get("columns") or []):
+            if not self._GetShowColumn(opts, c):
+                continue  # for i, c
             coltexts.append([])
             for k in ["name", "type"]:
                 v = c.get(k)
@@ -11687,10 +11742,47 @@ class SchemaDiagram(wx.ScrolledWindow):
                 if t: extent = get_extent(t)
                 if t: colmax[k] = max(colmax[k], extent[0] + extent[3])
         w = max(w, self.LPAD + 2 * self.HPAD + sum(colmax.values()))
-        h += self.LINEH * len(opts.get("columns") or [])
-        if self._show_stats and opts["stats"]: h += self.STATSH - self.FOOTERH
+        h += self.LINEH * len(coltexts) + self.HEADERP * bool(coltexts)
+        if self._show_stats and opts["stats"]:
+            h += self.STATSH - self.FOOTERH
+            if not coltexts: h += self.FOOTERH
+
+        # Measure statistics text widths
+        if stats:
+            text1, text2 = self._GetStatsTexts(stats, w)
+            statswidth = sum(get_extent(t)[0] for t in (text1, text2))
+            if w - 2 * self.BRADIUS < statswidth:  # Add the difference rounded to upper 10
+                w += int(math.ceil((statswidth - (w - 2 * self.BRADIUS)) / 10.) * 10)
 
         return (w, h), title, coltexts, colmax
+
+
+    def _GetStatsTexts(self, stats, width):
+        """
+        Returns final stats texts to show for item stats, as (rowstext, sizetext).
+
+        @param   stats  item statistics dictionary
+        @param   width  item width in pixels
+        """
+        stats = stats or {}
+        get_extent = lambda t, f=self._font: util.memoize(self.GetFullTextExtent, t, f,
+                                                          __key__="GetFullTextExtent")
+        stats_font = util.memoize(wx.Font, self._font.PointSize + self.FONT_STEP_STATS, wx.FONTFAMILY_MODERN,
+                                  wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL, faceName=self.FONT_FACE)
+        text1, text2 = stats.get("rows", ""), stats.get("size", "")
+
+        w1 = next(d[0] + d[3] for d in [get_extent(text1, stats_font)]) if text1 else 0
+        w2 = next(d[0] + d[3] for d in [get_extent(text2, stats_font)]) if text2 else 0
+        if w1 + w2 + 2 * self.BRADIUS > width:
+            text1 = stats.get("rows_maxunits", text1) # Exact number does not fit: draw as "6.1M rows"
+        return text1, text2
+
+
+    def _GetShowColumn(self, opts, col):
+        """Returns whether item column should be shown with current settings."""
+        if self._show_keys:
+            return any(col.get("name") in c["name"] for cc in opts["keys"] for c in cc)
+        else: return self._show_cols
 
 
     def _UpdateColours(self, defaults=False):
