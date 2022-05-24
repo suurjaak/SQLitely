@@ -1,16 +1,19 @@
 CHANGELOG
 =========
 
-2.1, 2022-05-22
+2.1, 2022-05-24
 ---------------
 - add button panels to data and schema tabs;
 - add column and key toggles to schema diagram;
+- add option to hide data grid columns;
+- add filter and hide column options in grid row context menu;
 - use uniform icons for schema tree items;
 - retain schema diagram custom layout on schema change;
 - fix schema diagram not loading entity positions from last config;
 - fix schema diagram adopting custom layout on clicking an entity;
 - fix error on canceling a single grid export;
-- fix error on toggling diagram foreign labels on.
+- fix error on toggling diagram foreign labels on;
+- fix operating on key columns of BLOB affinity in data grids.
 
 
 2.0, 2022-04-02

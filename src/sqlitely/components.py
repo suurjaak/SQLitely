@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.05.2022
+@modified    24.05.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -146,6 +146,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         self.sort_column = None # Index of column currently sorted by
         self.sort_ascending = None
         self.complete = False
+        self.hiddens = {} # {col index: bool, }
         self.filters = {} # {col index: value, }
         self.attrs = {}   # {("default", "null"): wx.grid.GridCellAttr, }
 
@@ -283,6 +284,29 @@ class SQLiteGridBase(wx.grid.GridTableBase):
     def GetColumns(self):
         """Returns columns list, as [{name, type, ..}]."""
         return copy.deepcopy(self.columns)
+
+
+    def IsColumnShown(self, col):
+        """Returns whether the column at specified index is currently shown or hidden."""
+        if isinstance(col, six.integer_types) and 0 <= col < len(self.columns):
+            return not self.hiddens.get(col)
+        raise ValueError("Invalid column index: %s" % col)
+
+
+    def ShowColumn(self, col, show=True):
+        """
+        Shows or hides the column at specified index.
+
+        @return   whether column state was changed
+        """
+        if isinstance(col, six.integer_types) and 0 <= col < len(self.columns):
+            hide = not show
+            if col not in self.hiddens or self.hiddens[col] != hide:
+                self.hiddens[col] = hide
+                (self.View.HideCol if hide else self.View.ShowCol)(col)
+                return True
+            return False
+        raise ValueError("Invalid column index: %s" % col)
 
 
     def GetRowData(self, row, original=False):
@@ -895,6 +919,28 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         wx.PostEvent(self.View, GridBaseEvent(wx.ID_ANY, refresh=True))
 
 
+    def OnFilter(self, col):
+        """Opens popup dialog for changing column filter."""
+        current_filter = six.text_type(self.filters[col]) if col in self.filters else ""
+        name = fmt_entity(self.columns[col]["name"])
+        dlg = wx.TextEntryDialog(self.View,
+                  "Filter column %s by:" % name, "Filter", value=current_filter,
+                  style=wx.OK | wx.CANCEL)
+        dlg.CenterOnParent()
+        if wx.ID_OK != dlg.ShowModal(): return
+
+        new_filter = dlg.GetValue()
+        if new_filter and new_filter != current_filter:
+            busy = controls.BusyPanel(self.View, 'Filtering column %s by "%s".' %
+                                      (name, new_filter))
+            try: self.AddFilter(col, new_filter)
+            finally: busy.Close()
+            self.View.Layout() # React to grid size change
+        elif not new_filter and current_filter:
+            self.RemoveFilter(col)
+            self.View.Layout() # React to grid size change
+
+
     def OnGoto(self, event):
         """
         Handler for opening row index popup dialog 
@@ -1050,6 +1096,13 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         def on_col_goto(col, event=None):
             self.View.GoToCell(max(0, self.View.GridCursorRow), col)
 
+        def on_col_fltr(col, event=None):
+            self.OnFilter(col)
+
+        def on_col_hide(col, event=None):
+            hide = self.hiddens[col] = not self.hiddens.get(col)
+            (self.View.HideCol if hide else self.View.ShowCol)(col)
+
 
         lks, fks = self.db.get_keys(self.name)
         pks = [{"name": y} for x in lks if "pk" in x for y in x["name"]]
@@ -1100,11 +1153,7 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             item_goto   = wx.MenuItem(menu, -1, "&Go to row ..\t%s-G" % controls.KEYS.NAME_CTRL)
 
         if rowdatas:
-            boldfont = item_caption.Font
-            boldfont.SetWeight(wx.FONTWEIGHT_BOLD)
-            boldfont.SetFaceName(self.View.Font.FaceName)
-            boldfont.SetPointSize(self.View.Font.PointSize)
-            item_caption.Font = boldfont
+            item_caption.Font = self.View.Font.Bold()
 
         if rowdatas:
             menu.Append(item_caption)
@@ -1165,16 +1214,26 @@ class SQLiteGridBase(wx.grid.GridTableBase):
                 label += u"\t\u1d18\u1d0b" # Unicode small caps "PK"
             elif any(label in x["name"] for x in fks):
                 label += u"\t\u1da0\u1d4f" # Unicode small "fk"
+            current_filter = six.text_type(self.filters[col]) if col in self.filters else ""
+            fltrval = '"%s"' % util.ellipsize(current_filter, 10) if current_filter else ".."
             menu_cols.Append(wx.ID_ANY, label, submenu, tip)
-            item_col_copy = wx.MenuItem(submenu, -1, "&Copy column")
+            item_col_copy = wx.MenuItem(submenu, -1, "&Copy column value")
             item_col_name = wx.MenuItem(submenu, -1, "Copy column &name")
             item_col_goto = wx.MenuItem(submenu, -1, "&Go to column")
+            item_col_fltr = wx.MenuItem(submenu, -1, "&Filter by %s" % fltrval, kind=wx.ITEM_CHECK)
+            item_col_hide = wx.MenuItem(submenu, -1, "&Hide column", kind=wx.ITEM_CHECK)
             submenu.Append(item_col_copy)
             submenu.Append(item_col_name)
             submenu.Append(item_col_goto)
+            submenu.Append(item_col_fltr)
+            submenu.Append(item_col_hide)
+            item_col_fltr.Check(bool(current_filter))
+            item_col_hide.Check(bool(self.hiddens.get(col)))
             menu.Bind(wx.EVT_MENU, functools.partial(on_col_copy, col), item_col_copy)
             menu.Bind(wx.EVT_MENU, functools.partial(on_col_name, col), item_col_name)
             menu.Bind(wx.EVT_MENU, functools.partial(on_col_goto, col), item_col_goto)
+            menu.Bind(wx.EVT_MENU, functools.partial(on_col_fltr, col), item_col_fltr)
+            menu.Bind(wx.EVT_MENU, functools.partial(on_col_hide, col), item_col_hide)
 
 
         if is_table and rowdatas:
@@ -1353,7 +1412,7 @@ class SQLiteGridBaseMixin(object):
         ColourManager.Manage(grid, "LabelTextColour",             wx.SYS_COLOUR_WINDOWTEXT)
 
         grid.Bind(wx.grid.EVT_GRID_LABEL_LEFT_DCLICK, self._OnGridLabel)
-        grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK, self._OnFilter)
+        grid.Bind(wx.grid.EVT_GRID_LABEL_RIGHT_CLICK, self._OnGridColumnRClick)
         grid.Bind(wx.grid.EVT_GRID_SELECT_CELL,       self._OnGridSelectCell)
         grid.Bind(wx.grid.EVT_GRID_RANGE_SELECT,      self._OnGridSelectRange)
         grid.Bind(wx.EVT_SCROLLWIN,                   self._OnGridScroll)
@@ -1391,35 +1450,41 @@ class SQLiteGridBaseMixin(object):
         self._grid.Scroll(scroll_hor, scroll_ver)
 
 
-    def _OnFilter(self, event):
+    def _OnGridColumnRClick(self, event):
         """
-        Handler for right-clicking a table grid column, lets the user
-        change the column filter.
+        Handler for right-clicking a table grid column, shows popup menu
+        for changing column filter or hiding column.
         """
         if not isinstance(self._grid.Table, SQLiteGridBase): return
         row, col = event.GetRow(), event.GetCol()
         grid_data = self._grid.Table
-        if not grid_data.columns: return
-        if row >= 0 or col < 0: return self._grid.Table.OnMenu(event)
+        if not grid_data.GetColumns(): return
+        if row >= 0 or col < 0: return grid_data.OnMenu(event)
+
+        def on_filter(evt):
+            grid_data.OnFilter(col)
+        def on_hide(evt):
+            grid_data.ShowColumn(col, not grid_data.IsColumnShown(col))
 
         current_filter = six.text_type(grid_data.filters[col]) \
                          if col in grid_data.filters else ""
-        name = fmt_entity(grid_data.columns[col]["name"])
-        dlg = wx.TextEntryDialog(self,
-                  "Filter column %s by:" % name, "Filter", value=current_filter,
-                  style=wx.OK | wx.CANCEL)
-        dlg.CenterOnParent()
-        if wx.ID_OK != dlg.ShowModal(): return
+        name  = fmt_entity(grid_data.GetColumns()[col]["name"])
+        value = '"%s"' % util.ellipsize(current_filter, 10) if current_filter else ".."
 
-        new_filter = dlg.GetValue()
-        if new_filter:
-            busy = controls.BusyPanel(self, 'Filtering column %s by "%s".' %
-                                      (name, new_filter))
-            try: grid_data.AddFilter(col, new_filter)
-            finally: busy.Close()
-        else:
-            grid_data.RemoveFilter(col)
-        self.Layout() # React to grid size change
+        menu = wx.Menu()
+        item_name   = wx.MenuItem(menu, -1, "Column %s" % name)
+        item_filter = wx.MenuItem(menu, -1, "&Filter by %s" % value, kind=wx.ITEM_CHECK)
+        item_hide   = wx.MenuItem(menu, -1, "&Hide column", kind=wx.ITEM_CHECK)
+        item_name.Font = self._grid.Font.Bold()
+        menu.Append(item_name)
+        menu.AppendSeparator()
+        menu.Append(item_filter)
+        menu.Append(item_hide)
+        item_filter.Check(bool(current_filter))
+        item_hide  .Check(not grid_data.IsColumnShown(col))
+        menu.Bind(wx.EVT_MENU, on_filter, item_filter)
+        menu.Bind(wx.EVT_MENU, on_hide,   item_hide)
+        self._grid.PopupMenu(menu)
 
 
     def _OnGridScroll(self, event):
@@ -2084,6 +2149,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         """
         self._grid.Table.ClearFilter()
         self._grid.Table.ClearSort()
+        for c, _ in enumerate(self._grid.Table.columns): self._grid.Table.ShowColumn(c)
         self.Layout() # React to grid size change
         self._PopulateCount()
 
@@ -2839,6 +2905,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         """
         self._grid.Table.ClearFilter()
         self._grid.Table.ClearSort()
+        for c, _ in enumerate(self._grid.Table.columns): self._grid.Table.ShowColumn(c)
         self.Layout() # React to grid size change
         self._PopulateCount()
 
@@ -9512,8 +9579,7 @@ class ColumnDialog(wx.Dialog):
         tedit.SetTime(0, 0, 0)
         uedit.SetRange(0, 999999)
         dcb.Value = tcb.Value = ucb.Value = False
-        font_normal, font_bold = dtlabel.Font, dtlabel.Font
-        font_bold.SetWeight(wx.FONTWEIGHT_BOLD)
+        font_normal, font_bold = dtlabel.Font, dtlabel.Font.Bold()
         tslabel.Font = font_bold
         dtlabel.MinSize = tslabel.MinSize = tslabel.Size
         tslabel.Font = font_normal

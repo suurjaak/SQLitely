@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.05.2022
+@modified    24.05.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -863,10 +863,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                                   text="Show value &editor")
         item_exit = wx.MenuItem(menu, -1, "E&xit %s" % conf.Title)
 
-        boldfont = wx.Font(item_toggle.Font)
-        boldfont.SetWeight(wx.FONTWEIGHT_BOLD)
-        boldfont.SetFaceName(self.Font.FaceName)
-        boldfont.SetPointSize(self.Font.PointSize)
+        boldfont = self.Font.Bold()
 
         curpage = self.notebook.GetCurrentPage()
         curfile = curpage.db.name if isinstance(curpage, DatabasePage) else None
@@ -1285,11 +1282,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         item_copy    = wx.MenuItem(menu, -1, "&Copy file path")
         item_folder  = wx.MenuItem(menu, -1, "Show in &folder")
 
-        boldfont = wx.Font(item_name.Font)
-        boldfont.SetWeight(wx.FONTWEIGHT_BOLD)
-        boldfont.SetFaceName(self.Font.FaceName)
-        boldfont.SetPointSize(self.Font.PointSize)
-        item_name.Font = boldfont
+        item_name.Font = self.Font.Bold()
 
         item_open    = wx.MenuItem(menu, -1, "&Open")
         item_save    = wx.MenuItem(menu, -1, "&Save as")
@@ -7356,10 +7349,7 @@ class DatabasePage(wx.Panel):
             self.handle_command("copy", "related", data["type"], data["name"])
 
         menu = wx.Menu()
-        boldfont = self.Font
-        boldfont.SetWeight(wx.FONTWEIGHT_BOLD)
-        boldfont.SetFaceName(self.Font.FaceName)
-        boldfont.SetPointSize(self.Font.PointSize)
+        boldfont = self.Font.Bold()
 
         if "schema" == data["type"]:
             submenu, keys = wx.Menu(), []
