@@ -7,6 +7,7 @@ CHANGELOG
 - add column and key toggles to schema diagram;
 - add option to hide data grid columns;
 - add filter and hide column options in grid row context menu;
+- add command-line flag --config-file;
 - use uniform icons for schema tree items;
 - retain schema diagram custom layout on schema change;
 - fix loading user-specific configuration file;
