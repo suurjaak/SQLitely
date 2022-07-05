@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.1, 2022-05-24
+2.1, 2022-07-05
 ---------------
 - add button panels to data and schema tabs;
 - add column and key toggles to schema diagram;
@@ -9,6 +9,7 @@ CHANGELOG
 - add filter and hide column options in grid row context menu;
 - use uniform icons for schema tree items;
 - retain schema diagram custom layout on schema change;
+- fix loading user-specific configuration file;
 - fix schema diagram not loading entity positions from last config;
 - fix schema diagram adopting custom layout on clicking an entity;
 - fix error on canceling a single grid export;
