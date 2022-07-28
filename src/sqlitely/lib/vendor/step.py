@@ -30,7 +30,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ------------------------------------------------------------------------------
 
 Supplemented with escape and collapse and newline and unbuffered options,
-and caching compiled code objects,
+and caching compiled code objects, and get()-function in template,
 by Erki Suurjaak.
 """
 
@@ -72,6 +72,7 @@ class Template(object):
         output = []
         namespace.update(kw, **self.builtins)
         namespace["echo"]  = lambda s: output.append(s)
+        namespace["get"]   = lambda v, default=None: namespace.get(v, default)
         namespace["isdef"] = lambda v: v in namespace
 
         eval(self.code, namespace)
@@ -98,6 +99,7 @@ class Template(object):
 
         namespace.update(kw, **self.builtins)
         namespace["echo"]  = write_buffer
+        namespace["get"]   = lambda v, default=None: namespace.get(v, default)
         namespace["isdef"] = lambda v: v in namespace
 
         eval(self.code, namespace)
