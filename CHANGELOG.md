@@ -1,12 +1,13 @@
 CHANGELOG
 =========
 
-2.1, 2022-07-05
+2.1, 2022-07-28
 ---------------
 - add button panels to data and schema tabs
 - add column and key toggles to schema diagram
 - add option to hide data grid columns
 - add filter and hide column options in grid row context menu
+- add support for multiple item export into any supported output format
 - add command-line flag --config-file
 - use uniform icons for schema tree items
 - retain schema diagram custom layout on schema change

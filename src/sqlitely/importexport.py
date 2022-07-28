@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.05.2022
+@modified    28.07.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -87,13 +87,18 @@ EXPORT_WILDCARD = "|".join(filter(bool, [
 EXPORT_EXTS = list(filter(bool, [
     "csv", xlsxwriter and "xlsx", "html", "json", "sql", "txt", yaml and "yaml"
 ]))
+EXPORT_HELP = ("CSV spreadsheets, HTML files, JSON data files, "
+               "SQL INSERT statement files (default), text files%s%s") % (
+    ", YAML data files" if yaml else "",
+    ", Excel workbooks, or a single Excel workbook with separate sheets" if xlsxwriter else "",
+)
 
 logger = logging.getLogger(__name__)
 
 
 
 def export_data(make_iterable, filename, title, db, columns,
-                query="", category="", name="", progress=None):
+                query="", category="", name="", multiple=False, progress=None):
     """
     Exports database data to file.
 
@@ -106,7 +111,8 @@ def export_data(make_iterable, filename, title, db, columns,
     @param   query           the SQL query producing the data, if any
     @param   category        category producing the data, if any, "table" or "view"
     @param   name            name of the table or view producing the data, if any
-    @param   progress        callback(count) to report progress,
+    @param   multiple        whether to use multi-item template
+    @param   progress        callback(name, count) to report progress,
                              returning false if export should cancel
     @return                  True on success, False on failure, None on cancel
     """
@@ -119,6 +125,24 @@ def export_data(make_iterable, filename, title, db, columns,
     is_txt  = filename.lower().endswith(".txt")
     is_xlsx = filename.lower().endswith(".xlsx")
     is_yaml = any(n.endswith("." + x) for n in [filename.lower()] for x in YAML_EXTS)
+    format  = "yaml" if is_yaml else os.path.splitext(filename.lower())[-1].strip(".")
+    TEMPLATES = {
+        "root": {
+            "html": templates.DATA_HTML_MULTIPLE_PART if multiple else templates.DATA_HTML,
+            "json": templates.DATA_JSON_MULTIPLE_PART if multiple else templates.DATA_JSON,
+            "sql":  templates.DATA_SQL_MULTIPLE_PART  if multiple else templates.DATA_SQL,
+            "txt":  templates.DATA_TXT_MULTIPLE_PART  if multiple else templates.DATA_TXT,
+            "yaml": templates.DATA_YAML_MULTIPLE_PART if multiple else templates.DATA_YAML,
+        },
+        "rows": {
+            "html": templates.DATA_ROWS_HTML,
+            "json": templates.DATA_ROWS_JSON,
+            "sql":  templates.DATA_ROWS_SQL,
+            "txt":  templates.DATA_ROWS_TXT,
+            "yaml": templates.DATA_ROWS_YAML,
+        },
+    }
+
     columns = [{"name": c} if isinstance(c, six.string_types) else c for c in columns]
     colnames = [c["name"] for c in columns]
     tmpfile, tmpname = None, None # Temporary file for exported rows
@@ -145,7 +169,7 @@ def export_data(make_iterable, filename, title, db, columns,
                 for i, row in enumerate(cursor, 1):
                     writer.writerow(["" if row[c] is None else row[c] for c in colnames])
                     count = i
-                    if not i % 100 and progress and not progress(count=i): return None
+                    if not i % 100 and progress and not progress(name=name, count=i): return None
                 writer.close()
                 writer = None
             else:
@@ -158,6 +182,7 @@ def export_data(make_iterable, filename, title, db, columns,
                     "sql":         query,
                     "category":    category,
                     "name":        name,
+                    "multiple":    multiple,
                     "progress":    progress,
                 }
                 namespace["namespace"] = namespace # To update row_count
@@ -184,11 +209,7 @@ def export_data(make_iterable, filename, title, db, columns,
                 # Write out data to temporary file first, to populate row count.
                 tmpname = util.unique_path("%s.rows" % filename)
                 tmpfile = open(tmpname, "wb+")
-                template = step.Template(templates.DATA_ROWS_HTML if is_html else
-                           templates.DATA_ROWS_SQL if is_sql else templates.DATA_ROWS_JSON
-                           if is_json else templates.DATA_ROWS_YAML if is_yaml 
-                           else templates.DATA_ROWS_TXT,
-                           strip=False, escape=is_html)
+                template = step.Template(TEMPLATES["rows"][format], strip=False, escape=is_html)
                 template.stream(tmpfile, namespace)
 
                 if progress and not progress(): return None
@@ -206,15 +227,11 @@ def export_data(make_iterable, filename, title, db, columns,
 
                 tmpfile.flush(), tmpfile.seek(0)
                 namespace["data_buffer"] = iter(lambda: tmpfile.read(65536), b"")
-                template = step.Template(templates.DATA_HTML if is_html else
-                           templates.DATA_SQL if is_sql else templates.DATA_JSON
-                           if is_json else templates.DATA_YAML if is_yaml
-                           else templates.DATA_TXT,
-                           strip=False, escape=is_html)
+                template = step.Template(TEMPLATES["root"][format], strip=False, escape=is_html)
                 template.stream(f, namespace)
                 count = namespace["row_count"]
 
-            result = progress(count=count) if progress else True
+            result = progress(name=name, count=count) if progress else True
     finally:
         if writer:     util.try_until(writer.close)
         if tmpfile:    util.try_until(tmpfile.close)
@@ -226,75 +243,127 @@ def export_data(make_iterable, filename, title, db, columns,
     return result
 
 
-def export_data_multiple(filename, title, db, category, progress=None):
+
+def export_data_multiple(filename, title, db, category=None,
+                         make_iterables=None, progress=None):
     """
-    Exports database data from multiple tables/views to a single spreadsheet.
+    Exports database data from multiple tables/views to a single output file.
 
     @param   filename        full path and filename of resulting file
-    @param   title           spreadsheet title
+    @param   title           export title
     @param   db              Database instance
-    @param   category        category producing the data, "table" or "view", or None for both
+    @param   category        category to produce the data from, "table" or "view", or None for both
+    @param   make_iterables  function returning pairs of ({info}, function returning iterable sequence)
+                             if not using category
     @param   progress        callback(name, count) to report progress,
                              returning false if export should cancel
+    @return                  True on success, False on failure, None on cancel
     """
     result = True
-    cursor = None
-    categories = [category] if category else ["table", "view"]
+    f, writer = None, None
+    is_csv  = filename.lower().endswith(".csv")
+    is_html = filename.lower().endswith(".html")
+    is_json = filename.lower().endswith(".json")
+    is_sql  = filename.lower().endswith(".sql")
+    is_txt  = filename.lower().endswith(".txt")
+    is_xlsx = filename.lower().endswith(".xlsx")
+    is_yaml = any(n.endswith("." + x) for n in [filename.lower()] for x in YAML_EXTS)
+    itemfiles = collections.OrderedDict() # {data name: path to partial file containing item data}
+
+    categories = [] if make_iterables else [category] if category else ["table", "view"]
     items = {c: db.schema[c].copy() for c in categories}
     for category, name in ((c, n) for c, x in items.items() for n in x):
         db.lock(category, name, filename, label="export")
-    try:
-        props = {"title": title, "comments": templates.export_comment()}
-        writer = xlsx_writer(filename, props=props)
-
-        for category in categories:
-            for name, item in items[category].items():
-                count = 0
-                if progress and not progress(name=name, count=count):
-                    result = False
-                    break # for name, item
-
+    if not make_iterables:
+        def make_item_iterables():
+            """Yields pairs of ({item}, callable yielding iterable cursor)."""
+            def make_iterable(name):
+                """Generator yielding rows from table, closing cursor on exhaustion or close()."""
+                cursor = db.execute("SELECT * FROM %s" % grammar.quote(name))
                 try:
-                    cursor = db.execute("SELECT * FROM %s" % grammar.quote(name))
-                    row = next(cursor, None)
-                    iterable = itertools.chain([] if row is None else [row], cursor)
+                    for x in cursor: yield x
+                finally:
+                    util.try_until(lambda: cursor.close)
+            for category, item in ((c, x) for c, d in items.items() for x in d.values()):
+                title = "%s %s" % (category.capitalize(), grammar.quote(item["name"], force=True))
+                yield dict(item, title=title), functools.partial(make_iterable, item["name"])
 
-                    writer.add_sheet(name)
+        make_iterables = make_item_iterables
+    try:
+        with open(filename, "wb") as f:
+            if is_csv or is_xlsx:
+                f.close()
+                if is_csv:
+                    writer = csv_writer(filename)
+                else:
+                    props = {"title": title, "comments": templates.export_comment()}
+                    writer = xlsx_writer(filename, props=props)
+
+            for item_i, (item, make_iterable) in enumerate(make_iterables()):
+                name, count = item["name"], None
+
+                if is_csv or is_xlsx:
                     colnames = [x["name"] for x in item["columns"]]
-                    writer.set_header(True)
-                    writer.writerow(colnames, "bold")
-                    writer.set_header(False)
-
-                    for i, row in enumerate(iterable, 1):
+                    for i, row in enumerate(make_iterable(), 1):
                         count = i
-                        writer.writerow([row[c] for c in colnames])
+                        if i == 1:
+                            if is_csv:
+                                if item_i: writer.writerow([])   # Blank row between items
+                                writer.writerow([name])          # Item name on separate line
+                                writer.writerow([""] + colnames) # Start item data from 2nd col
+                            else:
+                                writer.add_sheet(name)
+                                writer.set_header(True)
+                                writer.writerow(colnames, "bold")
+                                writer.set_header(False)
+
+                        writer.writerow(([""] if is_csv else []) +
+                                        ["" if row[c] is None else row[c] for c in colnames])
                         if not i % 100 and progress and not progress(name=name, count=i):
                             result = False
                             break # for i, row
-                except Exception as e:
-                    logger.exception("Error exporting %s %s from %s.",
-                                     category, grammar.quote(name), db)
-                    if progress and not progress(name=name, error=util.format_exc(e)):
-                        result = False
-                finally: util.try_until(lambda: cursor.close())
+                else:
+                    # Write item data to temporary file, later inserted into main file
+                    tmpname = util.unique_path("{0}_{2}{1}".format(*os.path.splitext(filename) + 
+                                                                    (util.safe_filename(name), )))
+                    itemtitle = "%s %s" % (item["type"].capitalize(),
+                                           grammar.quote(name, force=True))
+                    result = export_data(make_iterable, tmpname, itemtitle, db, item["columns"],
+                                         category=item["type"], name=name, multiple=True,
+                                         progress=progress)
+                    itemfiles[tmpname] = item
 
-                if not result: break # for name, item
+                if not result: break # for item_i
                 if progress and not progress(name=name, count=count):
                     result = False
-                    break # for name, item
-            if not result: break  # for category
-        writer.close()
-        if progress: progress(done=True)
+                    break # for item_i
+
+            if result and not is_csv and not is_xlsx:
+                # Produce main export file, combined from partial files
+                template = step.Template(templates.DATA_HTML_MULTIPLE if is_html else 
+                                         templates.DATA_JSON_MULTIPLE if is_json else 
+                                         templates.DATA_SQL_MULTIPLE  if is_sql  else 
+                                         templates.DATA_TXT_MULTIPLE  if is_txt  else 
+                                         templates.DATA_YAML_MULTIPLE, strip=False, escape=is_html)
+                namespace = {
+                    "db_filename": db.name,
+                    "title":       title,
+                    "files":       itemfiles,
+                    "progress":    progress,
+                }
+                template.stream(f, namespace)
+            result = progress() if progress else True
     except Exception as e:
-        logger.exception("Error exporting %s from %s to %s.",
-                         " and ".join(map(util.plural, categories)), db, filename)
+        logger.exception("Error exporting from %s to %s.", db, filename)
         if progress: progress(error=util.format_exc(e), done=True)
         result = False
     finally:
+        if writer:     util.try_until(writer.close)
+        if not result: util.try_until(lambda: os.unlink(filename))
+        for n in itemfiles:
+            util.try_until(lambda: os.unlink(n))
         for category, name in ((c, n) for c, x in items.items() for n in x):
             db.unlock(category, name, filename)
-        util.try_until(lambda: cursor.close())
-        if not result: util.try_until(lambda: os.unlink(filename))
 
     return result
 

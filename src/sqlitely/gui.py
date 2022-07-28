@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.05.2022
+@modified    28.07.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -546,10 +546,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_tools_export_tables = self.menu_tools_export_tables = menu_tools_export.Append(
             wx.ID_ANY, "All tables to &file",
             "Export all tables to individual files")
-        menu_tools_export_spreadsheet = self.menu_tools_export_spreadsheet = menu_tools_export.Append(
-            wx.ID_ANY, "All tables to single spreads&heet",
-            "Export all tables to a single Excel spreadsheet, "
-            "each table in separate worksheet")
+        menu_tools_export_multiitem = self.menu_tools_export_multiitem = menu_tools_export.Append(
+            wx.ID_ANY, "All tables to sing&le file",
+            "Export all tables to a single file, "
+            "each table in separate section")
         menu_tools_export_data = self.menu_tools_export_data = menu_tools_export.Append(
             wx.ID_ANY, "All tables to another data&base",
             "Export table schemas and data to another SQLite database")
@@ -605,7 +605,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             menu_tray.Check(conf.TrayIconEnabled)
         menu_autoupdate_check.Check(conf.UpdateCheckAutomatic)
         menu_allow_multi.Check(conf.AllowMultipleInstances)
-        menu_tools_export_spreadsheet.Enabled = bool(importexport.xlsxwriter)
 
         menu.Bind(wx.EVT_MENU_OPEN, self.on_menu_open)
         self.Bind(wx.EVT_MENU, self.on_new_database,            menu_new_database)
@@ -647,7 +646,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["import"]),    menu_tools_import)
 
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "tables"]),     menu_tools_export_tables)
-        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "single"]),     menu_tools_export_spreadsheet)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "multiitem"]),  menu_tools_export_multiitem)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "data"]),       menu_tools_export_data)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "structure"]),  menu_tools_export_structure)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "pragma"]),     menu_tools_export_pragma)
@@ -4000,11 +3999,11 @@ class DatabasePage(wx.Panel):
 
         elif "export" == cmd:
             arg = args[0]
-            if arg in ("tables", "single", "data", "structure") \
+            if arg in ("tables", "multiitem", "data", "structure") \
             and not self.db.schema["table"]: return wx.MessageBox(
                 "No tables to save.", conf.Title, wx.ICON_NONE
             )
-            if arg in ("tables", "single", "dump") \
+            if arg in ("tables", "multiitem", "dump") \
             and self.panel_data_export.IsRunning(): return wx.MessageBox(
                 "A global export is already underway.", conf.Title, wx.ICON_NONE
             )
@@ -4012,9 +4011,9 @@ class DatabasePage(wx.Panel):
             if "tables" == arg:
                 self.notebook.SetSelection(self.pageorder[self.page_data])
                 self.on_export_data_file("table", list(self.db.schema["table"]))
-            elif "single" == arg:
+            elif "multiitem" == arg:
                 self.notebook.SetSelection(self.pageorder[self.page_data])
-                self.on_export_singlefile("table")
+                self.on_export_multiitem("table")
             elif "data" == arg:
                 self.on_export_to_db("table", names=list(self.db.schema["table"]))
             elif "structure" == arg:
@@ -5041,10 +5040,10 @@ class DatabasePage(wx.Panel):
                     menu_types = wx.Menu()
                     item_choices = menu.AppendSubMenu(menu_types, label)
                     item_choices.Enable(schemaflags[category])
-                    for i, typelabel in enumerate(["To &file", "To single &spreadsheet"]):
+                    for i, typelabel in enumerate(["To &file", "To a sing&le file"]):
                         item = wx.MenuItem(menu_types, -1, typelabel)
                         if i:
-                            handler = functools.partial(self.on_export_singlefile, category)
+                            handler = functools.partial(self.on_export_multiitem, category)
                         else:
                             handler = functools.partial(self.on_export_data_file, category, names)
                         menu_types.Append(item)
@@ -5547,10 +5546,12 @@ class DatabasePage(wx.Panel):
         finally: self.Thaw()
 
 
-    def on_export_singlefile(self, category, event=None):
+    def on_export_multiitem(self, category, event=None):
         """
-        Handler for saving database category item data to file,
+        Handler for saving database category data from multiple items to a single file,
         opens file dialog, saves content.
+
+        @param   category  specific category to export entirely, or `None` for all categories
         """
         categories    = [category] if category else ["table", "view"]
         categorylabel = " and ".join(map(util.plural, categories))
@@ -5560,17 +5561,23 @@ class DatabasePage(wx.Panel):
         dialog = wx.FileDialog(
             self, message="Save %s as" % categorylabel,
             defaultFile=title,
-            wildcard="|".join(filter(bool, (importexport.XLSX_WILDCARD, "All files|*.*"))),
+            wildcard=importexport.EXPORT_WILDCARD,
             style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE |
                   wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
+        if conf.LastExportType in importexport.EXPORT_EXTS:
+            dialog.SetFilterIndex(importexport.EXPORT_EXTS.index(conf.LastExportType))
         if wx.ID_OK != dialog.ShowModal(): return
+
+        wx.YieldIfNeeded() # Allow dialog to disappear
+        extname = importexport.EXPORT_EXTS[dialog.FilterIndex]
+        conf.LastExportType = extname
 
         filename = controls.get_dialog_path(dialog)
         args = {"filename": filename, "db": self.db, "title": title,
                 "category": category}
         opts = {"filename": filename, "multi": True,
-                "name": "all %s to single spreadsheet" % categorylabel,
+                "name": "all %s to single file" % categorylabel,
                 "callable": functools.partial(importexport.export_data_multiple, **args)}
         if "table" in categories:
             opts["subtotals"] = {t: {
@@ -7104,7 +7111,7 @@ class DatabasePage(wx.Panel):
             wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
 
         menu = wx.Menu()
-        item_file = item_file_single = item_database = item_import = None
+        item_file = item_file_multi = item_database = item_import = None
         item_reindex = item_reindex_all = item_truncate = None
         item_rename = item_clone = item_create = None
         item_drop = item_drop_all = item_drop_col = None
@@ -7192,7 +7199,7 @@ class DatabasePage(wx.Panel):
         elif "category" == data.get("type"): # Category list
             item_copy = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
             item_file = wx.MenuItem(menu, -1, "Export all %s to &file" % util.plural(data["category"]))
-            item_file_single = wx.MenuItem(menu, -1, "Export all %s to single spreads&heet" % util.plural(data["category"]))
+            item_file_multi = wx.MenuItem(menu, -1, "Export all %s to sing&le file" % util.plural(data["category"]))
 
             menu.Append(item_copy)
 
@@ -7229,7 +7236,7 @@ class DatabasePage(wx.Panel):
         if item_file:
             menu.AppendSeparator()
             menu.Append(item_file)
-            if item_file_single: menu.Append(item_file_single)
+            if item_file_multi: menu.Append(item_file_multi)
             if item_database: menu.Append(item_database)
             if item_import: menu.Append(item_import)
             if item_reindex:
@@ -7253,9 +7260,9 @@ class DatabasePage(wx.Panel):
             category = data["category"] if "category" == data["type"] else data["type"]
             menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, category, names),
                       item_file)
-            if item_file_single:
-                menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_singlefile, category),
-                          item_file_single)
+            if item_file_multi:
+                menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_multiitem, category),
+                          item_file_multi)
             if item_database:
                 menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_to_db, category=category, names=names),
                           item_database)
@@ -7284,14 +7291,13 @@ class DatabasePage(wx.Panel):
         if item_create:
             menu.Bind(wx.EVT_MENU, functools.partial(create_object, data["category"]),
                       item_create)
-        if item_file_single:
+        if item_file_multi:
             if not data["items"]:
                 item_copy.Enable(False)
                 item_file.Enable(False)
-                item_file_single.Enable(False)
+                item_file_multi.Enable(False)
                 if item_database: item_database.Enable(False)
                 item_drop_all.Enable(False)
-            if not importexport.xlsxwriter: item_file_single.Enable(False)
 
         if tree.HasChildren(item):
             item_expand   = wx.MenuItem(menu, -1, "&Toggle expanded/collapsed")
