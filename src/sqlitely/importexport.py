@@ -395,30 +395,54 @@ def export_stats(filename, db, data, diagram=None):
     return True
 
 
-def export_dump(filename, db, progress=None):
+def export_dump(filename, db, items=None, progress=None):
     """
     Exports full database dump to SQL file.
 
-    @param   progress        callback(name, count) to report progress,
-                             returning false if export should cancel
+    @param   db        Database instance
+    @param   items     names of database entities to dump if not all,
+                       supports * wildcards
+    @param   progress  callback(name, count) to report progress,
+                       returning false if export should cancel
     """
     result = False
-    tables, namespace, cursors = db.schema["table"], {}, []
+    entities, namespace, cursors = db.schema, {}, []
 
     def gen(func, *a, **kw):
         cursor = func(*a, **kw)
         cursors.append(cursor)
         for x in cursor: yield x
 
+    if items:
+        entities = collections.defaultdict(util.CaselessDict)
+        rgx = util.wildcards_to_regex(items)
+
+        # First pass: select all entities matching by name
+        for category in db.schema:
+            for name, item in db.schema[category].items():
+                if rgx.match(name):
+                    entities[category][name] = item
+        # Second pass: select all owned or required related entities, recursively
+        for category, name in ((c, n) for c in entities for n in entities[c]):
+            for relcategory, rels in db.get_related(category, name, data=True).items():
+                for relname, relitem in rels.items():
+                    entities[relcategory][relname] = relitem
+
+        ORDER = ["table", "index", "view", "trigger"]
+        sql = "\n\n".join("\n\n".join(v["sql"] for v in vv)
+                                      for c in ORDER for vv in entities[c].values())
+    else:
+        sql = db.get_sql()
+
     try:
         with open(filename, "wb") as f:
             db.lock(None, None, filename, label="database dump")
             namespace = {
                 "db":       db,
-                "sql":      db.get_sql(),
+                "sql":      sql,
                 "data":     [{"name": t, "columns": opts["columns"],
                               "rows": gen(db.execute, "SELECT * FROM %s" % grammar.quote(t))}
-                             for t, opts in tables.items()],
+                             for t, opts in entities["table"].items()],
                 "pragma":   db.get_pragma_values(dump=True),
                 "progress": progress,
                 "buffer":   f,
