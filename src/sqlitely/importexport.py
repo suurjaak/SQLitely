@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.07.2022
+@modified    31.07.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -468,6 +468,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, p
     Exports selected tables and views to another database, structure only or
     structure plus data, auto-creating table and view indexes and triggers.
 
+    @param   db        Database instance
     @param   filename  database filename to export to
     @param   schema    {category: [name, ]} to export
     @param   renames   {category: {name1: name2}}
@@ -630,8 +631,68 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, p
                             params=None if is_samefile else filename)
 
     if progress: progress(**finalargs)
+    return result    
+
+
+def export_query_to_db(db, filename, query, table, progress=None):
+    """
+    Exports query results to another database.
+
+    @param   db        Database instance
+    @param   filename  database filename to export to
+    @param   query     SQL query text
+    @param   table     target table name, expected to be unique in target database
+    @param   progress  callback(?done, ?error) to report export progress,
+                       returning false if export should cancel
+    """
+    result = True
+    is_samefile = util.lceq(db.filename, filename)
+    file_existed = is_samefile or os.path.isfile(filename)
+    schema2, finalargs, logs = "main2", {"done": True}, []  # [(sql, params), ]
+
+    db.lock(None, None, filename, label="query export")
+    try:
+        sql = "ATTACH DATABASE ? AS %s" % schema2
+        db.execute(sql, [filename])
+        logs.append((sql, None if is_samefile else filename))
+
+        if grammar.SQL.SELECT == grammar.get_type(query):
+            sql = "CREATE TABLE %s.%s AS %s" % (schema2, grammar.quote(table), query)
+            db.executescript(sql)
+            logs.append((sql, None))
+        else:
+            cursor = db.execute(query)
+            cols = [c[0] for c in cursor.description] if cursor.description else ["rowcount"]
+            sql = "CREATE TABLE %s.%s (%s)" % (schema2, grammar.quote(table),
+                                               ", ".join(map(grammar.quote, cols)))
+            insert_sql = "INSERT INTO %s.%s VALUES (%s)" % (schema2, grammar.quote(table),
+                                                            ", ".join(["?"] * len(cols))) 
+            db.executescript(sql)
+            logs.append((sql, None))
+            for row in cursor if cursor.description else [{"rowcount": cursor.rowcount}]:
+                params = list(row.values())
+                db.execute(insert_sql, params)
+                logs.append((sql, params))
+
+    except Exception as e:
+        result = False
+        logger.exception("Error exporting query %r from %s to %s.", query, db, filename)
+        finalargs["error"] = util.format_exc(e)
+        if not file_existed:
+            util.try_until(lambda: os.unlink(filename))
+    finally:
+        try: 
+            sql = "DETACH DATABASE %s" % schema2
+            db.execute(sql)
+            logs.append((sql, None))
+        except Exception: pass
+        db.unlock(None, None, filename)
+
+    if result:
+        sqls, params = zip(*logs)
+        db.log_query("EXPORT QUERY TO DB", [x + ";" for x in sqls], params)
+    if progress: progress(**finalargs)
     return result
-    
 
 
 def get_import_file_data(filename, progress=None):

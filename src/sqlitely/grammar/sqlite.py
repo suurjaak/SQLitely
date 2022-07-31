@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    26.03.2022
+@modified    31.07.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -79,6 +79,33 @@ def generate(data, indent="  ", category=None):
         logger.exception("Error generating SQL for %s.", data)
         err = util.format_exc(e)
     return result, err
+
+
+@util.memoize
+def get_type(sql):
+    """
+    Returns SQL statement type.
+
+    @param  sql  SQL statement like "SELECT * FROM foo"
+    @return      one of (SQL.DELETE, SQL.INSERT, SQL.SELECT, SQL.UPDATE), or None
+    """
+    result = None
+    try:
+        parser = SQLiteParser(CommonTokenStream(SQLiteLexer(InputStream(sql))))
+        tree = parser.parse().children[0].children[0].children[0]
+        ctx = tree.children[0].children[0].children[0]
+        if isinstance(ctx, (CTX.DELETE, CTX.DELETE_LIMITED)):
+            result = SQL.DELETE
+        elif isinstance(ctx, CTX.INSERT):
+            result = SQL.INSERT
+        elif isinstance(ctx, (CTX.SELECT, CTX.SELECT_COMPOUND,
+                              CTX.SELECT_FACTORED, CTX.SELECT_SIMPLE)):
+            result = SQL.SELECT
+        elif isinstance(ctx, (CTX.UPDATE, CTX.UPDATE_LIMITED)):
+            result = SQL.UPDATE
+    except Exception:
+        logger.exception("Error determining type of SQL %r.", sql)
+    return result
 
 
 @util.memoize(__nohash__=True)
@@ -225,9 +252,14 @@ class CTX(object):
     CREATE_VIEW          = SQLiteParser.Create_view_stmtContext
     CREATE_VIRTUAL_TABLE = SQLiteParser.Create_virtual_table_stmtContext
     DELETE               = SQLiteParser.Delete_stmtContext
+    DELETE_LIMITED       = SQLiteParser.Delete_stmt_limitedContext
     INSERT               = SQLiteParser.Insert_stmtContext
     SELECT               = SQLiteParser.Select_stmtContext
+    SELECT_COMPOUND      = SQLiteParser.Compound_select_stmtContext
+    SELECT_FACTORED      = SQLiteParser.Factored_select_stmtContext
+    SELECT_SIMPLE        = SQLiteParser.Simple_select_stmtContext
     UPDATE               = SQLiteParser.Update_stmtContext
+    UPDATE_LIMITED       = SQLiteParser.Update_stmt_limitedContext
     COLUMN_NAME          = SQLiteParser.Column_nameContext
     INDEX_NAME           = SQLiteParser.Index_nameContext
     SCHEMA_NAME          = SQLiteParser.Database_nameContext
@@ -300,7 +332,9 @@ class Parser(object):
     CATEGORIES = {"index":   SQL.CREATE_INDEX,   "table": SQL.CREATE_TABLE,
                   "trigger": SQL.CREATE_TRIGGER, "view":  SQL.CREATE_VIEW,
                   "virtual table":  SQL.CREATE_VIRTUAL_TABLE}
-    TRIGGER_BODY_CTXS = [CTX.DELETE, CTX.INSERT, CTX.SELECT, CTX.UPDATE]
+    TRIGGER_BODY_CTXS = [CTX.DELETE, CTX.DELETE_LIMITED, CTX.INSERT,
+                         CTX.SELECT, CTX.SELECT_COMPOUND, CTX.SELECT_FACTORED, CTX.SELECT_SIMPLE,
+                         CTX.UPDATE, CTX.UPDATE_LIMITED]
 
     class ReparseException(Exception): pass
 
