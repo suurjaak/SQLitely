@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.07.2022
+@modified    01.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -395,11 +395,13 @@ def export_stats(filename, db, data, diagram=None):
     return True
 
 
-def export_dump(filename, db, items=None, progress=None):
+def export_dump(filename, db, data=True, pragma=True, items=None, progress=None):
     """
     Exports full database dump to SQL file.
 
     @param   db        Database instance
+    @param   data      whether to dump table data
+    @param   pragma    whether to dump PRAGMA settings
     @param   items     names of database entities to dump if not all,
                        supports * wildcards
     @param   progress  callback(name, count) to report progress,
@@ -423,7 +425,7 @@ def export_dump(filename, db, items=None, progress=None):
                 if rgx.match(name):
                     entities[category][name] = item
         # Second pass: select all owned or required related entities, recursively
-        for category, name in ((c, n) for c in entities for n in entities[c]):
+        for category, name in [(c, n) for c in entities for n in entities[c]]:
             for relcategory, rels in db.get_related(category, name, data=True).items():
                 for relname, relitem in rels.items():
                     entities[relcategory][relname] = relitem
@@ -442,8 +444,8 @@ def export_dump(filename, db, items=None, progress=None):
                 "sql":      sql,
                 "data":     [{"name": t, "columns": opts["columns"],
                               "rows": gen(db.execute, "SELECT * FROM %s" % grammar.quote(t))}
-                             for t, opts in entities["table"].items()],
-                "pragma":   db.get_pragma_values(dump=True),
+                             for t, opts in entities["table"].items()] if data else [],
+                "pragma":   db.get_pragma_values(dump=True) if pragma else [],
                 "progress": progress,
                 "buffer":   f,
             }
@@ -648,7 +650,11 @@ def export_query_to_db(db, filename, query, table, progress=None):
     result = True
     is_samefile = util.lceq(db.filename, filename)
     file_existed = is_samefile or os.path.isfile(filename)
-    schema2, finalargs, logs = "main2", {"done": True}, []  # [(sql, params), ]
+    finalargs, logs = {"done": True}, []  # [(sql, params), ]
+
+    schemas = [list(x.values())[1] for x in
+               db.execute("PRAGMA database_list").fetchall()]
+    schema2 = util.make_unique("main", schemas, suffix="%s")
 
     db.lock(None, None, filename, label="query export")
     try:
