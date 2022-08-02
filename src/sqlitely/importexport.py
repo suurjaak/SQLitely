@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.08.2022
+@modified    02.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -245,7 +245,7 @@ def export_data(make_iterable, filename, title, db, columns,
 
 
 def export_data_multiple(filename, title, db, category=None,
-                         make_iterables=None, progress=None):
+                         make_iterables=None, limit=None, progress=None):
     """
     Exports database data from multiple tables/views to a single output file.
 
@@ -255,6 +255,7 @@ def export_data_multiple(filename, title, db, category=None,
     @param   category        category to produce the data from, "table" or "view", or None for both
     @param   make_iterables  function returning pairs of ({info}, function returning iterable sequence)
                              if not using category
+    @param   limit           query limits if using category, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
     @param   progress        callback(name, count) to report progress,
                              returning false if export should cancel
     @return                  True on success, False on failure, None on cancel
@@ -275,11 +276,13 @@ def export_data_multiple(filename, title, db, category=None,
     for category, name in ((c, n) for c, x in items.items() for n in x):
         db.lock(category, name, filename, label="export")
     if not make_iterables:
+        limit = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
+        limit_sql = (" " + " ".join(zip(("LIMIT", "OFFSET"), map(str, limit)))) if limit else ""
         def make_item_iterables():
             """Yields pairs of ({item}, callable yielding iterable cursor)."""
             def make_iterable(name):
                 """Generator yielding rows from table, closing cursor on exhaustion or close()."""
-                cursor = db.execute("SELECT * FROM %s" % grammar.quote(name))
+                cursor = db.execute("SELECT * FROM %s%s" % (grammar.quote(name), limit_sql))
                 try:
                     for x in cursor: yield x
                 finally:
@@ -395,7 +398,7 @@ def export_stats(filename, db, data, diagram=None):
     return True
 
 
-def export_dump(filename, db, data=True, pragma=True, items=None, progress=None):
+def export_dump(filename, db, data=True, pragma=True, items=None, limit=None, progress=None):
     """
     Exports full database dump to SQL file.
 
@@ -404,11 +407,14 @@ def export_dump(filename, db, data=True, pragma=True, items=None, progress=None)
     @param   pragma    whether to dump PRAGMA settings
     @param   items     names of database entities to dump if not all,
                        supports * wildcards
+    @param   limit     query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
     @param   progress  callback(name, count) to report progress,
                        returning false if export should cancel
     """
     result = False
     entities, namespace, cursors = db.schema, {}, []
+    limit = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
+    limit_sql = (" " + " ".join(zip(("LIMIT", "OFFSET"), map(str, limit)))) if limit else ""
 
     def gen(func, *a, **kw):
         cursor = func(*a, **kw)
@@ -443,7 +449,8 @@ def export_dump(filename, db, data=True, pragma=True, items=None, progress=None)
                 "db":       db,
                 "sql":      sql,
                 "data":     [{"name": t, "columns": opts["columns"],
-                              "rows": gen(db.execute, "SELECT * FROM %s" % grammar.quote(t))}
+                              "rows": gen(db.execute, "SELECT * FROM %s%s" % 
+                                                      (grammar.quote(t), limit_sql))}
                              for t, opts in entities["table"].items()] if data else [],
                 "pragma":   db.get_pragma_values(dump=True) if pragma else [],
                 "progress": progress,
@@ -465,7 +472,8 @@ def export_dump(filename, db, data=True, pragma=True, items=None, progress=None)
     return result
 
 
-def export_to_db(db, filename, schema, renames=None, data=False, selects=None, progress=None):
+def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
+                 limit=None, progress=None):
     """
     Exports selected tables and views to another database, structure only or
     structure plus data, auto-creating table and view indexes and triggers.
@@ -476,6 +484,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, p
     @param   renames   {category: {name1: name2}}
     @param   data      whether to export table data
     @param   selects   {table name: SELECT SQL if not using default}
+    @param   limit     query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
     @param   progress  callback(?name, ?error) to report export progress,
                        returning false if export should cancel
     """
@@ -483,10 +492,12 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, p
     CATEGORIES = "table", "view"
     sqls0, sqls1, actionsqls = [], [], []
     requireds, processeds, exporteds = {}, set(), set()
+    limit = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
 
     is_samefile = util.lceq(db.filename, filename)
     file_existed = is_samefile or os.path.isfile(filename)
     insert_sql = "INSERT INTO %s.%s SELECT * FROM main.%s;"
+    limit_sql = (" " + " ".join(zip(("LIMIT", "OFFSET"), map(str, limit)))) if limit else ""
 
     for category, name in ((c, n) for c, nn in schema.items() for n in nn):
         items = [db.schema[category][name]]
@@ -574,6 +585,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, p
                     else:
                         sql = insert_sql % (schema2, grammar.quote(name2),
                                             grammar.quote(name))
+                    sql += limit_sql
                     logger.info("Copying data to %s in %s.", label, filename)
                     db.execute(sql)
                     db.connection.commit()
@@ -636,7 +648,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, p
     return result    
 
 
-def export_query_to_db(db, filename, query, table, progress=None):
+def export_query_to_db(db, filename, query, table, limit=None, progress=None):
     """
     Exports query results to another database.
 
@@ -644,6 +656,7 @@ def export_query_to_db(db, filename, query, table, progress=None):
     @param   filename  database filename to export to
     @param   query     SQL query text
     @param   table     target table name, expected to be unique in target database
+    @param   limit     query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
     @param   progress  callback(?done, ?error) to report export progress,
                        returning false if export should cancel
     """
@@ -655,6 +668,7 @@ def export_query_to_db(db, filename, query, table, progress=None):
     schemas = [list(x.values())[1] for x in
                db.execute("PRAGMA database_list").fetchall()]
     schema2 = util.make_unique("main", schemas, suffix="%s")
+    limit   = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
 
     db.lock(None, None, filename, label="query export")
     try:
@@ -664,6 +678,8 @@ def export_query_to_db(db, filename, query, table, progress=None):
 
         if grammar.SQL.SELECT == grammar.get_type(query):
             sql = "CREATE TABLE %s.%s AS %s" % (schema2, grammar.quote(table), query)
+            if limit:
+                sql += " ".join(zip(("LIMIT", "OFFSET"), map(str, limit)))
             db.executescript(sql)
             logs.append((sql, None))
         else:
@@ -675,7 +691,12 @@ def export_query_to_db(db, filename, query, table, progress=None):
                                                             ", ".join(["?"] * len(cols))) 
             db.executescript(sql)
             logs.append((sql, None))
-            for row in cursor if cursor.description else [{"rowcount": cursor.rowcount}]:
+            rows = cursor if cursor.description else [{"rowcount": cursor.rowcount}]
+            qrange = (0, limit[0]) if limit else None
+            qrange = (limit[1], limit[1] + qrange[0]) if len(limit) > 1 else qrange
+            for i, row in enumerate(rows):
+                if qrange and not (qrange[0] <= i < qrange[1]): continue # for
+
                 params = list(row.values())
                 db.execute(insert_sql, params)
                 logs.append((sql, params))
