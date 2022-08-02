@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.03.2022
+@modified    02.08.2022
 ------------------------------------------------------------------------------
 """
 try: import __builtin__ as builtins  # Py2
@@ -891,7 +891,7 @@ def to_unicode(value, encoding=None):
     """
     result = value
     if isinstance(result, six.binary_type):
-        try: result = six.text_type(result, encoding, errors)
+        try: result = six.text_type(result, encoding)
         except Exception:
             result = six.text_type(result, "utf-8", errors="backslashreplace")
     elif not isinstance(result, six.text_type):
@@ -956,6 +956,19 @@ def shortpath(path):
     buf = ctypes.create_unicode_buffer(4 * len(path))
     ctypes.windll.kernel32.GetShortPathNameW(path, buf, len(buf))
     return buf.value
+
+
+def wildcards_to_regex(texts, end=False):
+    """
+    Returns one or plain wildcards like "foo*bar" "xyz" as re.Pattern("(foo.*bar)|(xyz)", re.I).
+
+    @param   texts  one or more texts to match, regex matches if any text matches
+    @param   end    whether pattern should match until end (adds $)
+    """
+    suff, texts = ("$" if end else ""), tuplefy(texts)
+    patterns = [re.compile(".*".join(map(re.escape, t.split("*"))) + suff, re.I) for t in texts]
+    if len(patterns) == 1: return patterns[0]
+    return re.compile("|".join("(%s)" % p.pattern for p in patterns))
 
 
 def win32_unicode_argv():
