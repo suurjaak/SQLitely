@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.05.2022
+@modified    02.08.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -96,7 +96,7 @@ class Database(object):
         "description": """  FULL: truncate deleted rows on every commit.
   INCREMENTAL: truncate on PRAGMA incremental_vacuum.
 
-  Must be turned on before any tables are created, not possible to change afterwards.""",
+Must be turned on before any tables are created, not possible to change afterwards.""",
       },
       "automatic_index": {
         "name": "automatic_index",
