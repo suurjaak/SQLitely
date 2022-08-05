@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.08.2022
+@modified    05.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -90,8 +90,9 @@ EXPORT_EXTS = list(filter(bool, [
 EXPORT_HELP = ("CSV spreadsheets, HTML files, JSON data files, "
                "SQL INSERT statement files (default), text files%s%s") % (
     ", YAML data files" if yaml else "",
-    ", Excel workbooks, or a single Excel workbook with separate sheets" if xlsxwriter else "",
+    ", Excel workbooks" if xlsxwriter else "",
 )
+PRINTABLE_EXTS = [x for x in EXPORT_EXTS if x not in ("xlsx", )]
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +278,7 @@ def export_data_multiple(filename, title, db, category=None,
         db.lock(category, name, filename, label="export")
     if not make_iterables:
         limit = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
-        limit_sql = (" " + " ".join(zip(("LIMIT", "OFFSET"), map(str, limit)))) if limit else ""
+        limit_sql = (" " + " ".join(" ".join(x) for  x in zip(("LIMIT", "OFFSET"), map(str, limit)))) if limit else ""
         def make_item_iterables():
             """Yields pairs of ({item}, callable yielding iterable cursor)."""
             def make_iterable(name):
@@ -303,12 +304,11 @@ def export_data_multiple(filename, title, db, category=None,
                     writer = xlsx_writer(filename, props=props)
 
             for item_i, (item, make_iterable) in enumerate(make_iterables()):
-                name, count = item["name"], None
+                name = item["name"]
 
                 if is_csv or is_xlsx:
                     colnames = [x["name"] for x in item["columns"]]
                     for i, row in enumerate(make_iterable(), 1):
-                        count = i
                         if i == 1:
                             if is_csv:
                                 if item_i: writer.writerow([])   # Blank row between items
@@ -337,7 +337,7 @@ def export_data_multiple(filename, title, db, category=None,
                     itemfiles[tmpname] = item
 
                 if not result: break # for item_i
-                if progress and not progress(name=name, count=count):
+                if progress and not progress():
                     result = False
                     break # for item_i
 
@@ -773,7 +773,7 @@ def get_import_file_data(filename, progress=None):
         rows, columns, buffer, started = 0, {}, "", False
         decoder = json.JSONDecoder(object_pairs_hook=collections.OrderedDict)
         with open(filename, "rbU") as f:
-            for chunk in iter(functools.partial(f.read, 2**16), ""):
+            for chunk in iter(functools.partial(f.read, 2**16), b""):
                 buffer += chunk
                 if not started: # Strip line comments and list start from beginning
                     buffer = re.sub("^//[^\n]*$", "", buffer.lstrip(), flags=re.M).lstrip()
@@ -1038,7 +1038,7 @@ def iter_file_rows(filename, columns, sheet=None):
         started, buffer = False, ""
         decoder = json.JSONDecoder(object_pairs_hook=collections.OrderedDict)
         with open(filename, "rbU") as f:
-            for chunk in iter(functools.partial(f.read, 2**16), ""):
+            for chunk in iter(functools.partial(f.read, 2**16), b""):
                 buffer += chunk
                 if not started: # Strip line comments and list start from beginning
                     buffer = re.sub("^//[^\n]*$", "", buffer.lstrip(), flags=re.M).lstrip()
