@@ -479,7 +479,7 @@ from sqlitely import templates
 margin = 2 if get("multiple") else 0
 progress = get("progress")
 rows = iter(rows)
-i, row, nextrow = 1, next(rows, None), next(rows, None)
+i, row, nextrow = 0, next(rows, None), next(rows, None)
 while row:
     if get("namespace"): namespace["row_count"] += 1
     data = collections.OrderedDict(((c["name"], row[c["name"]]) for c in columns))
