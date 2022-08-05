@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.08.2022
+@modified    05.08.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -50,6 +50,9 @@ class Database(object):
 
     """Schema object categories."""
     CATEGORIES = ["table", "index", "trigger", "view"]
+
+    """Schema data object categories."""
+    DATA_CATEGORIES = ["table", "index", "trigger", "view"]
 
 
     """
@@ -1070,30 +1073,33 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if progress: progress(done=True)
 
 
-    def get_count(self, table):
+    def get_count(self, table, key="count"):
         """
         Returns {"count": int, ?"is_count_estimated": bool}.
         Uses MAX(ROWID) to estimate row count and skips COUNT(*) if likely
         to take too long (file over half a gigabyte).
         Estimated count is rounded upwards to 100.
+
+        @param   key  name of item key to use for count (also changes key for estimate)
         """
-        result, do_full = {"count": None}, False
+        result, do_full = {key: None}, False
         tpl = "SELECT %%s AS count FROM %s LIMIT 1" % grammar.quote(table)
         try:
             rowidname = self.get_rowid(table)
             if rowidname:
-                result = self.execute(tpl % "MAX(%s)" % rowidname, log=False).fetchone()
-                result["count"] = int(math.ceil(result["count"] / 100.) * 100)
-                result["is_count_estimated"] = True
+                row = self.execute(tpl % "MAX(%s)" % rowidname, log=False).fetchone()
+                result[key] = int(math.ceil(row["count"] / 100.) * 100) # Round to upper 100
+                result["is_%s_estimated" % key] = True
             if self.filesize < conf.MaxDBSizeForFullCount \
-            or result and result["count"] < conf.MaxTableRowIDForFullCount:
+            or result and result[key] < conf.MaxTableRowIDForFullCount:
                 do_full = True
         except Exception:
             do_full = (self.filesize < conf.MaxDBSizeForFullCount)
 
         try:
             if do_full:
-                result = self.execute(tpl % "COUNT(*)", log=False).fetchone()
+                row = self.execute(tpl % "COUNT(*)", log=False).fetchone()
+                result = {key: row["count"]}
         except Exception:
             logger.exception("Error fetching COUNT for table %s.",
                              util.unprint(grammar.quote(table)))
