@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.08.2022
+@modified    07.08.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -531,7 +531,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             try: self.connection.close()
             except Exception: pass
             self.connection = None
-            raise six.rerase(type(e), e, tb)
+            raise six.reraise(type(e), e, tb)
 
 
     def close(self):
