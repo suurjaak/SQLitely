@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.03.2022
+@modified    08.08.2022
 """
 import calendar
 import collections
@@ -60,8 +60,10 @@ ESCAPE_LIKE = "\\" # Character used to escape SQLite LIKE special characters _%
 
 class SearchQueryParser(object):
 
+    KEYWORDS = ["table", "index", "trigger", "view", "column", "date"]
+
     # For naive identification of "table:xyz", "date:xyz" etc keywords
-    PATTERN_KEYWORD = re.compile("^(-?)(table|view|column|date)\\:([^\\s]+)$", re.I)
+    PATTERN_KEYWORD = re.compile("^(-?)(%s)\\:([^\\s]+)$" % "|".join(KEYWORDS), re.I)
 
 
     def __init__(self):
@@ -181,8 +183,8 @@ class SearchQueryParser(object):
         if "KEYWORD" == name:
             key, word = elements[0].split(":", 1)
             key, word = key.lower(), (word if case else word.lower())
-            if key in ["table",  "-table",  "view", "-view",
-                       "column", "-column", "date", "-date"]:
+            if key in self.KEYWORDS \
+            or key.startswith("-") and key[1:] in self.KEYWORDS:
                 if getattr(elements, "QUOTES", None): word = (word, )
                 keywords[key].append(word)
                 return words, keywords

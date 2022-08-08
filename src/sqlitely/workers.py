@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.03.2022
+@modified    08.08.2022
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -200,6 +200,8 @@ class SearchThread(WorkerThread):
         """Searches database data, yielding (infotext, result)."""
         infotext, case = "", search.get("case")
         _, _, words, kws = self.parser.Parse(search["text"], case)
+        kws = {k: v for k, v in kws.items() if k in database.Database.DATA_CATEGORIES
+               or k.startswith("-") and k[1:] in database.Database.DATA_CATEGORIES}
         pattern_replace = self.make_replacer(words, case)
         tpl_item = step.Template(templates.SEARCH_ROW_DATA_HEADER_HTML, escape=True)
         tpl_row  = step.Template(templates.SEARCH_ROW_DATA_HTML, escape=True)
