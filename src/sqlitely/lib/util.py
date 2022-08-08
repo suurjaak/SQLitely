@@ -8,9 +8,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.08.2022
+@modified    05.08.2022
 ------------------------------------------------------------------------------
 """
+from __future__ import print_function
 try: import __builtin__ as builtins  # Py2
 except ImportError: import builtins  # Py3
 import collections
@@ -36,7 +37,8 @@ from PIL import Image
 import six
 from six.moves import html_entities
 import pytz
-import wx
+try: import wx
+except ImportError: wx = None
 
 
 class CaselessDict(dict):

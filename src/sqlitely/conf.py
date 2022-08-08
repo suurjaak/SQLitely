@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.08.2022
+@modified    07.08.2022
 ------------------------------------------------------------------------------
 """
 try: from ConfigParser import RawConfigParser                 # Py2
@@ -23,13 +23,14 @@ import sys
 
 import appdirs
 import six
-import wx
+try: import wx
+except ImportError: wx = None
 
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.1.dev24"
-VersionDate = "05.08.2022"
+Version = "2.1.dev25"
+VersionDate = "07.08.2022"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -95,7 +96,7 @@ IPCPort = 59987
 """Identifier for inter-process communication."""
 IPCName = six.moves.urllib.parse.quote_plus(
     "%s-%s" % (wx.GetUserId(), ApplicationFile)
-).encode("latin1", "replace")
+).encode("latin1", "replace") if wx else ""
 
 """History of commands entered in console."""
 ConsoleHistoryCommands = []
