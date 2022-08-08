@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.08.2022
+@modified    08.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -68,31 +68,27 @@ IMPORT_WILDCARD = "|".join(filter(bool, [
     if YAML_EXTS else None,
 ]))
 
-"""FileDialog wildcard strings, matching extensions lists and default names."""
-XLSX_WILDCARD = "Excel workbook (*.xlsx)|*.xlsx" if xlsxwriter else ""
 
-"""FileDialog wildcard strings, matching extensions lists and default names."""
-YAML_WILDCARD = "YAML data ({0})|{0}".format(";".join("*." + x for x in YAML_EXTS)) if yaml else ""
-
-"""Wildcards for export file dialog."""
-EXPORT_WILDCARD = "|".join(filter(bool, [
-    "CSV spreadsheet (*.csv)|*.csv",
-    XLSX_WILDCARD,
-    "HTML document (*.html)|*.html",
-    "JSON data (*.json)|*.json",
-    "SQL INSERT statements (*.sql)|*.sql",
-    "Text document (*.txt)|*.txt",
-    YAML_WILDCARD,
-]))
+"""All supported export formats."""
 EXPORT_EXTS = list(filter(bool, [
     "csv", xlsxwriter and "xlsx", "html", "json", "sql", "txt", yaml and "yaml"
 ]))
-EXPORT_HELP = ("CSV spreadsheets, HTML files, JSON data files, "
-               "SQL INSERT statement files (default), text files%s%s") % (
-    ", YAML data files" if yaml else "",
-    ", Excel workbooks" if xlsxwriter else "",
-)
-PRINTABLE_EXTS = [x for x in EXPORT_EXTS if x not in ("xlsx", )]
+"""All export formats printable to console in CLI mode."""
+PRINTABLE_EXTS = [x for x in EXPORT_EXTS if x not in ("html", "xlsx")]
+"""Readable names for export formats."""
+EXT_NAMES = {
+    "csv":  "CSV spreadsheet",
+    "db":   "SQLite database",
+    "html": "HTML document",
+    "json": "JSON data",
+    "sql":  "SQL statements",
+    "txt":  "text document",
+    "xlsx": "Excel workbook",
+    "yaml": "YAML data",
+}
+"""Wildcards for export file dialog."""
+EXPORT_WILDCARD = "|".join("%s (*.%s)|*.%s" % (x, EXT_NAMES[x], x) for x in EXPORT_EXTS)
+
 
 logger = logging.getLogger(__name__)
 
