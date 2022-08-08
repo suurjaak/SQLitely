@@ -278,7 +278,8 @@ def export_data_multiple(filename, title, db, category=None,
         db.lock(category, name, filename, label="export")
     if not make_iterables:
         limit = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
-        limit_sql = (" " + " ".join(" ".join(x) for  x in zip(("LIMIT", "OFFSET"), map(str, limit)))) if limit else ""
+        limit_sql = (" " + " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"),
+                                                             map(str, limit)))) if limit else ""
         def make_item_iterables():
             """Yields pairs of ({item}, callable yielding iterable cursor)."""
             def make_iterable(name):
@@ -414,7 +415,8 @@ def export_dump(filename, db, data=True, pragma=True, items=None, limit=None, pr
     result = False
     entities, namespace, cursors = db.schema, {}, []
     limit = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
-    limit_sql = (" " + " ".join(zip(("LIMIT", "OFFSET"), map(str, limit)))) if limit else ""
+    limit_sql = (" " + " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"),
+                                                         map(str, limit)))) if limit else ""
 
     def gen(func, *a, **kw):
         cursor = func(*a, **kw)
@@ -493,11 +495,12 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
     sqls0, sqls1, actionsqls = [], [], []
     requireds, processeds, exporteds = {}, set(), set()
     limit = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
+    limit_sql = (" " + " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"),
+                                                         map(str, limit)))) if limit else ""
 
     is_samefile = util.lceq(db.filename, filename)
     file_existed = is_samefile or os.path.isfile(filename)
     insert_sql = "INSERT INTO %s.%s SELECT * FROM main.%s;"
-    limit_sql = (" " + " ".join(zip(("LIMIT", "OFFSET"), map(str, limit)))) if limit else ""
 
     for category, name in ((c, n) for c, nn in schema.items() for n in nn):
         items = [db.schema[category][name]]
