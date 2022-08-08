@@ -126,7 +126,7 @@ def export_data(make_iterable, filename, title, db, columns,
     TEMPLATES = {
         "root": {
             "html": templates.DATA_HTML_MULTIPLE_PART if multiple else templates.DATA_HTML,
-            "json": templates.DATA_JSON_MULTIPLE_PART if multiple else templates.DATA_JSON,
+            "json": templates.DATA_JSON,
             "sql":  templates.DATA_SQL_MULTIPLE_PART  if multiple else templates.DATA_SQL,
             "txt":  templates.DATA_TXT_MULTIPLE_PART  if multiple else templates.DATA_TXT,
             "yaml": templates.DATA_YAML_MULTIPLE_PART if multiple else templates.DATA_YAML,

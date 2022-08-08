@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.07.2022
+@modified    08.08.2022
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -421,12 +421,7 @@ from sqlitely import conf, templates
 """
 JSON export template.
 
-@param   title        export title
-@param   db_filename  database path or temporary name
-@param   row_count    number of rows
 @param   data_buffer  iterable yielding rows data in text chunks
-@param   ?sql         SQL query giving export data, if any
-@param   ?create_sql  CREATE SQL statement for export object, if any
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_JSON = """<%
@@ -434,22 +429,7 @@ from sqlitely.lib import util
 from sqlitely import conf, templates
 
 progress = get("progress")
-%>// {{ title }}.
-// Source: {{ db_filename }}.
-// {{ templates.export_comment() }}
-// {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
-%if get("sql"):
-//
-// SQL: {{ sql.replace("\\n", "\\n//      ") }};
-//
-%endif
-%if get("create_sql"):
-//
-// {{ create_sql.rstrip(";").replace("\\n", "\\n// ") }};
-//
-%endif
-
-[
+%>[
 <%
 for i, chunk in enumerate(data_buffer):
     if progress and not i % 100 and not progress():
@@ -523,25 +503,6 @@ for i, (filename, item) in enumerate(files.items()):
     echo("  ]%s\\n" % ("," if i < len(files) - 1 else ""))
 %>
 }
-"""
-
-
-
-"""
-JSON export template for item partial file in multiple item export.
-
-@param   data_buffer  iterable yielding rows data in text chunks
-@param   ?progress  callback() returning whether to cancel, if any
-"""
-DATA_JSON_MULTIPLE_PART = """<%
-progress = get("progress")
-
-for i, chunk in enumerate(data_buffer):
-    if progress and not i % 100 and not progress():
-        break # for i, chunk
-
-    echo(chunk)
-%>
 """
 
 

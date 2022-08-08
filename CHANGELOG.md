@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.1, 2022-07-28
+2.1, 2022-08-08
 ---------------
 - add button panels to data and schema tabs
 - add column and key toggles to schema diagram
@@ -11,6 +11,8 @@ CHANGELOG
 - add command-line flag --config-file
 - use uniform icons for schema tree items
 - retain schema diagram custom layout on schema change
+- support index and trigger keywords in meta search
+- omit comments from JSON export
 - fix loading user-specific configuration file
 - fix schema diagram not loading entity positions from last config
 - fix schema diagram adopting custom layout on clicking an entity
