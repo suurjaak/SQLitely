@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.07.2022
+@modified    09.08.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2228,7 +2228,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         ongoing = page.get_ongoing()
         if ongoing:
             infos = []
-            for category in "table", "view":
+            for category in database.Database.DATA_CATEGORIES:
                 if category in ongoing:
                     info = ", ".join(sorted(ongoing[category], key=lambda x: x.lower()))
                     title = util.plural(category, ongoing[category], numbers=False)
@@ -5553,7 +5553,7 @@ class DatabasePage(wx.Panel):
 
         @param   category  specific category to export entirely, or `None` for all categories
         """
-        categories    = [category] if category else ["table", "view"]
+        categories    = [category] if category else database.Database.DATA_CATEGORIES
         categorylabel = " and ".join(map(util.plural, categories))
 
         title = os.path.splitext(os.path.basename(self.db.name))[0]
@@ -6099,7 +6099,7 @@ class DatabasePage(wx.Panel):
         """
         items = [item] if isinstance(item, six.string_types) else item
 
-        categories = [category] if category else ["table", "view"]
+        categories = [category] if category else database.Database.DATA_CATEGORIES
         exporting = [x for c in categories for x in items
                      if c in self.data_pages and x in self.data_pages[c]
                      and self.data_pages[c][x].IsExporting()]
@@ -6108,7 +6108,7 @@ class DatabasePage(wx.Panel):
                                  conf.Title, wx.OK | wx.ICON_INFORMATION)
 
         def get_category(name):
-            return next(c for c in ("table", "view") if name in self.db.schema[c])
+            return next(c for c in database.Database.DATA_CATEGORIES if name in self.db.schema[c])
 
         if len(items) == 1:
             category = get_category(items[0])
@@ -6199,7 +6199,7 @@ class DatabasePage(wx.Panel):
         names = [names] if isinstance(names, six.string_types) else names or []
         if not names and category: names = list(self.db.schema[category])
         elif not names: names = sum((list(self.db.schema.get(x) or [])
-                                     for x in ("table", "view")), [])
+                                     for x in database.Database.DATA_CATEGORIES), [])
         if not names: return
 
         exts = ";".join("*" + x for x in conf.DBExtensions)
@@ -6594,7 +6594,7 @@ class DatabasePage(wx.Panel):
         if not self.db.temporary: self.on_diagram_event()
         if (wx.YieldIfNeeded() or True) and not self: return
         if self.diagram.Enabled \
-        and not any(self.diagram.IsVisible(n) for c in ("table", "view")
+        and not any(self.diagram.IsVisible(n) for c in database.Database.DATA_CATEGORIES
                     for n in self.db.schema[c]):
             self.diagram.Scroll(0, 0)
 
@@ -6672,7 +6672,7 @@ class DatabasePage(wx.Panel):
         combo = self.combo_diagram_find
         combo.Disable() # So that combo event handler knows to disregard change
         combo.Clear()
-        for name in (x for c in ("table", "view") for x in self.db.schema[c]):
+        for name in (x for c in database.Database.DATA_CATEGORIES for x in self.db.schema[c]):
             combo.Append(util.unprint(name))
             combo.SetClientData(combo.Count - 1, name)
         combo.Enable(self.diagram.Enabled)
@@ -6756,8 +6756,8 @@ class DatabasePage(wx.Panel):
             tree.SetItemPyData(root, {"type": "data"})
 
             tops, index = [], 0
-            total = sum(len(self.db.schema.get(c, {})) for c in ("table", "view"))
-            for category in "table", "view":
+            total = sum(len(self.db.schema.get(c, {})) for c in database.Database.DATA_CATEGORIES)
+            for category in database.Database.DATA_CATEGORIES:
                 # Fill data tree with information on row counts and columns
                 items = list(self.db.get_category(category).values())
                 if not items and "view" == category: continue # for category
@@ -7115,7 +7115,7 @@ class DatabasePage(wx.Panel):
         item_reindex = item_reindex_all = item_truncate = None
         item_rename = item_clone = item_create = None
         item_drop = item_drop_all = item_drop_col = None
-        if data.get("type") in ("table", "view"): # Single table/view
+        if data.get("type") in database.Database.DATA_CATEGORIES: # Single table/view
             item_name = wx.MenuItem(menu, -1, "%s %s" % (
                         data["type"].capitalize(), fmt_entity(data["name"])))
             item_open = wx.MenuItem(menu, -1, "&Open %s data" % data["type"])

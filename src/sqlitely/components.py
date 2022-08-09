@@ -6012,7 +6012,7 @@ class SchemaObjectPage(wx.Panel):
             menu.Append(item_export_data)
             menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(export=True, data=True), item_export_data)
         if self._category in ("table", "view", ):
-            item_export      = wx.MenuItem(menu, -1, "Export %s structure to another database" % self._category)
+            item_export = wx.MenuItem(menu, -1, "Export %s structure to another database" % self._category)
             menu.Append(item_export)
             menu.Bind(wx.EVT_MENU, lambda e: self._PostEvent(export=True), item_export)
         if self._category in ("table", "index"):

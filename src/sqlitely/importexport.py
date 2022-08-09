@@ -270,7 +270,7 @@ def export_data_multiple(filename, title, db, category=None,
     is_yaml = any(n.endswith("." + x) for n in [filename.lower()] for x in YAML_EXTS)
     itemfiles = collections.OrderedDict() # {data name: path to partial file containing item data}
 
-    categories = [] if make_iterables else [category] if category else ["table", "view"]
+    categories = [] if make_iterables else [category] if category else db.DATA_CATEGORIES
     items = {c: db.schema[c].copy() for c in categories}
     for category, name in ((c, n) for c, x in items.items() for n in x):
         db.lock(category, name, filename, label="export")
@@ -497,7 +497,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                        returning false if export should cancel
     """
     result = True
-    CATEGORIES = "table", "view"
+    CATEGORIES = db.DATA_CATEGORIES
     sqls0, sqls1, actionsqls = [], [], []
     requireds, processeds, exporteds = {}, set(), set()
     limit = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)

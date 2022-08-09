@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.08.2022
+@modified    09.08.2022
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -207,7 +207,7 @@ class SearchThread(WorkerThread):
         tpl_row  = step.Template(templates.SEARCH_ROW_DATA_HTML, escape=True)
         result = {"output": "", "map": {}, "search": search, "count": 0}
 
-        for category in "table", "view":
+        for category in database.Database.DATA_CATEGORIES:
             if category not in kws \
             and ("table" if "view" == category else "view") in kws \
             or not search["db"].schema.get(category):
