@@ -87,7 +87,8 @@ EXT_NAMES = {
     "yaml": "YAML data",
 }
 """Wildcards for export file dialog."""
-EXPORT_WILDCARD = "|".join("%s (*.%s)|*.%s" % (x, EXT_NAMES[x], x) for x in EXPORT_EXTS)
+EXPORT_WILDCARD = "|".join("%s%s (*.%s)|*.%s" % (EXT_NAMES[x][:1].upper(), EXT_NAMES[x][1:], x, x)
+                           for x in EXPORT_EXTS)
 
 
 logger = logging.getLogger(__name__)
