@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.08.2022
+@modified    09.08.2022
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -396,18 +396,20 @@ if progress: progress(name=name, count=i)
 TXT SQL create statements export template.
 
 @param   sql           SQL statements string
-@param   ?title        SQL export title
-@param   ?db_filename  database path or temporary name
+@param   ?headers      list of comment header lines
+@param   ?db           database.Database instance
 """
 CREATE_SQL = """<%
+import os
+from sqlitely.lib import util
 from sqlitely import conf, templates
 
 %>--
-%if get("title"):
--- {{ title }}
-%endif
-%if get("db_filename"):
--- Source: {{ db_filename }}.
+%for line in get("headers", []):
+-- {{ "\\n-- ".join(line.splitlines()) }}
+%endfor
+%if get("db"):
+-- Source: {{ db }} ({{ util.format_bytes(os.path.getsize(db.filename)) }}).
 %endif
 -- {{ templates.export_comment() }}
 --

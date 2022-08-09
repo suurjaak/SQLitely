@@ -377,10 +377,10 @@ def export_data_multiple(filename, title, db, category=None,
     return result
 
 
-def export_sql(filename, db, sql, title=None):
+def export_sql(filename, db, sql, headers=()):
     """Exports arbitrary SQL to file."""
     template = step.Template(templates.CREATE_SQL, strip=False)
-    ns = {"title": title, "db_filename": db.name, "sql": sql}
+    ns = {"headers": util.tuplefy(headers) if headers else (), "db": db, "sql": sql}
     with open(filename, "wb") as f: template.stream(f, ns)
     return True
 
