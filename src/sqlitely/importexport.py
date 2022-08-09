@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.08.2022
+@modified    09.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -242,7 +242,7 @@ def export_data(make_iterable, filename, title, db, columns,
 
 
 def export_data_multiple(filename, title, db, category=None,
-                         make_iterables=None, limit=None, progress=None):
+                         make_iterables=None, limit=None, empty=True, progress=None):
     """
     Exports database data from multiple tables/views to a single output file.
 
@@ -253,12 +253,13 @@ def export_data_multiple(filename, title, db, category=None,
     @param   make_iterables  function returning pairs of ({info}, function returning iterable sequence)
                              if not using category
     @param   limit           query limits if using category, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
+    @param   empty           do not skip tables and views with no output rows
     @param   progress        callback(name, count) to report progress,
                              returning false if export should cancel
     @return                  True on success, False on failure, None on cancel
     """
     result = True
-    f, writer = None, None
+    f, writer, cursor = None, None, None
     is_csv  = filename.lower().endswith(".csv")
     is_html = filename.lower().endswith(".html")
     is_json = filename.lower().endswith(".json")
@@ -304,8 +305,9 @@ def export_data_multiple(filename, title, db, category=None,
                 name = item["name"]
 
                 if is_csv or is_xlsx:
-                    colnames = [x["name"] for x in item["columns"]]
-                    for i, row in enumerate(make_iterable(), 1):
+                    colnames, cursor = [x["name"] for x in item["columns"]], make_iterable()
+
+                    for i, row in enumerate(cursor, 1):
                         if i == 1:
                             if is_csv:
                                 if item_i: writer.writerow([])   # Blank row between items
@@ -322,7 +324,13 @@ def export_data_multiple(filename, title, db, category=None,
                         if not i % 100 and progress and not progress(name=name, count=i):
                             result = False
                             break # for i, row
+                    util.try_until(lambda: cursor.close())
                 else:
+                    if not empty:
+                        cursor = make_iterable()
+                        is_empty, _ = any(cursor), util.try_until(lambda: cursor.close())
+                        if is_empty: continue # for item_i
+
                     # Write item data to temporary file, later inserted into main file
                     tmpname = util.unique_path("{0}_{2}{1}".format(*os.path.splitext(filename) + 
                                                                     (util.safe_filename(name), )))
@@ -359,6 +367,7 @@ def export_data_multiple(filename, title, db, category=None,
         result = False
     finally:
         if writer:     util.try_until(writer.close)
+        if cursor:     util.try_until(lambda: cursor.close())
         if not result: util.try_until(lambda: os.unlink(filename))
         for n in itemfiles:
             util.try_until(lambda: os.unlink(n))
