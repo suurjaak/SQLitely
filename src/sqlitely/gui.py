@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.08.2022
+@modified    10.08.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4199,7 +4199,7 @@ class DatabasePage(wx.Panel):
                 bmp = self.diagram.MakeBitmap(zoom=1, defaultcolours=True, **args)
                 svg = self.diagram.MakeTemplate("SVG", title="", embed=True, **args)
                 diagram = {"bmp": bmp, "svg": svg}
-            importexport.export_stats(filename, self.db, data, diagram)
+            importexport.export_stats(filename, extname, self.db, data, diagram)
             guibase.status('Exported to "%s".', filename, log=True)
             util.start_file(filename)
         except Exception as e:
@@ -5574,7 +5574,7 @@ class DatabasePage(wx.Panel):
         conf.LastExportType = extname
 
         filename = controls.get_dialog_path(dialog)
-        args = {"filename": filename, "db": self.db, "title": title,
+        args = {"filename": filename, "format": extname, "db": self.db, "title": title,
                 "category": category}
         opts = {"filename": filename, "multi": True,
                 "name": "all %s to single file" % categorylabel,
@@ -6153,7 +6153,7 @@ class DatabasePage(wx.Panel):
             data = self.db.get_category(mycategory, name)
             sql = "SELECT * FROM %s" % grammar.quote(name)
             make_iterable = functools.partial(self.db.execute, sql)
-            args = {"make_iterable": make_iterable, "filename": filename,
+            args = {"make_iterable": make_iterable, "filename": filename, "format": extname,
                     "title": "%s %s" % (mycategory.capitalize(),
                                         grammar.quote(name, force=True)),
                     "db": self.db, "columns": data["columns"],

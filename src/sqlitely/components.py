@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.05.2022
+@modified    10.08.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -2106,7 +2106,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                 if wx.ID_OK != dlg.ShowModal(): return
                 name = dlg.GetValue().strip()
                 if not name: return
-            args = {"make_iterable": make_iterable, "filename": filename,
+            args = {"make_iterable": make_iterable, "filename": filename, "format": extname,
                     "db": self._db, "columns": self._grid.Table.columns,
                     "query": self._grid.Table.sql, "name": name, "title": title}
             self.Freeze()
@@ -2735,7 +2735,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         if extname in importexport.EXPORT_EXTS: conf.LastExportType = extname
         try:
             grid = self._grid.Table
-            args = {"make_iterable": grid.GetRowIterator, "filename": filename,
+            args = {"make_iterable": grid.GetRowIterator, "filename": filename, "format": extname,
                     "title": util.unprint(title), "db": self._db, "columns": grid.columns,
                     "category": self._category, "name": self._item["name"]}
             opts = {"filename": filename,

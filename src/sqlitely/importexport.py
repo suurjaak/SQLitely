@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.08.2022
+@modified    10.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -95,14 +95,14 @@ logger = logging.getLogger(__name__)
 
 
 
-def export_data(make_iterable, filename, title, db, columns,
+def export_data(make_iterable, filename, format, title, db, columns,
                 query="", category="", name="", multiple=False, progress=None):
     """
     Exports database data to file.
 
     @param   make_iterable   function returning iterable sequence yielding rows
-    @param   filename        full path and filename of resulting file, file extension
-                             .html|.csv|.sql|.xslx determines file format
+    @param   filename        full path and filename of resulting file
+    @param   format          file format like "csv"
     @param   title           title used in HTML and spreadsheet
     @param   db              Database instance
     @param   columns         iterable columns, as [name, ] or [{"name": name}, ]
@@ -116,14 +116,6 @@ def export_data(make_iterable, filename, title, db, columns,
     """
     result = False
     f, writer, cursor = None, None, None
-    is_csv  = filename.lower().endswith(".csv")
-    is_html = filename.lower().endswith(".html")
-    is_json = filename.lower().endswith(".json")
-    is_sql  = filename.lower().endswith(".sql")
-    is_txt  = filename.lower().endswith(".txt")
-    is_xlsx = filename.lower().endswith(".xlsx")
-    is_yaml = any(n.endswith("." + x) for n in [filename.lower()] for x in YAML_EXTS)
-    format  = "yaml" if is_yaml else os.path.splitext(filename.lower())[-1].strip(".")
     TEMPLATES = {
         "root": {
             "html": templates.DATA_HTML_MULTIPLE_PART if multiple else templates.DATA_HTML,
@@ -150,9 +142,9 @@ def export_data(make_iterable, filename, title, db, columns,
             count = 0
             cursor = make_iterable()
 
-            if is_csv or is_xlsx:
+            if format in ("csv", "xlsx"):
                 f.close()
-                if is_csv:
+                if "csv" == format:
                     writer = csv_writer(filename)
                     if query: query = query.replace("\r", " ").replace("\n", " ")
                 else:
@@ -160,10 +152,10 @@ def export_data(make_iterable, filename, title, db, columns,
                     writer = xlsx_writer(filename, name or "SQL Query", props=props)
                     writer.set_header(True)
                 if query:
-                    a = [[query]] + (["bold", 0, False] if is_xlsx else [])
+                    a = [[query]] + (["bold", 0, False] if "xlsx" == format else [])
                     writer.writerow(*a)
-                writer.writerow(*([colnames, "bold"] if is_xlsx else [colnames]))
-                writer.set_header(False) if is_xlsx else 0
+                writer.writerow(*([colnames, "bold"] if "xlsx" == format else [colnames]))
+                writer.set_header(False) if "xlsx" == format else 0
                 for i, row in enumerate(cursor, 1):
                     writer.writerow(["" if row[c] is None else row[c] for c in colnames])
                     count = i
@@ -185,7 +177,7 @@ def export_data(make_iterable, filename, title, db, columns,
                 }
                 namespace["namespace"] = namespace # To update row_count
 
-                if is_txt: # Run through rows once, to populate text-justify options
+                if "txt" == format: # Run through rows once, to populate text-justify options
                     widths = {c: len(util.unprint(c)) for c in colnames}
                     justs  = {c: True   for c in colnames}
                     try:
@@ -207,25 +199,27 @@ def export_data(make_iterable, filename, title, db, columns,
                 # Write out data to temporary file first, to populate row count.
                 tmpname = util.unique_path("%s.rows" % filename)
                 tmpfile = open(tmpname, "wb+")
-                template = step.Template(TEMPLATES["rows"][format], strip=False, escape=is_html)
+                template = step.Template(TEMPLATES["rows"][format],
+                                         strip=False, escape="html" == format)
                 template.stream(tmpfile, namespace)
 
                 if progress and not progress(): return None
 
-                if is_sql and "table" != category:
+                if "sql" == format and "table" != category:
                     # Add CREATE statement for saving view AS table
                     meta = {"__type__": grammar.SQL.CREATE_TABLE, "name": name,
                             "columns": columns}
                     namespace["create_sql"], _ = grammar.generate(meta)
                 elif name:
                     # Add CREATE statement
-                    transform = {"flags": {"exists": True}} if is_sql else None
+                    transform = {"flags": {"exists": True}} if "sql" == format else None
                     create_sql = db.get_sql(category, name, transform=transform)
                     namespace["create_sql"] = create_sql
 
                 tmpfile.flush(), tmpfile.seek(0)
                 namespace["data_buffer"] = iter(lambda: tmpfile.read(65536), b"")
-                template = step.Template(TEMPLATES["root"][format], strip=False, escape=is_html)
+                template = step.Template(TEMPLATES["root"][format],
+                                         strip=False, escape="html" == format)
                 template.stream(f, namespace)
                 count = namespace["row_count"]
 
@@ -242,12 +236,13 @@ def export_data(make_iterable, filename, title, db, columns,
 
 
 
-def export_data_multiple(filename, title, db, category=None,
+def export_data_multiple(filename, format, title, db, category=None,
                          make_iterables=None, limit=None, empty=True, progress=None):
     """
     Exports database data from multiple tables/views to a single output file.
 
     @param   filename        full path and filename of resulting file
+    @param   format          file format like "csv"
     @param   title           export title
     @param   db              Database instance
     @param   category        category to produce the data from, "table" or "view", or None for both
@@ -261,15 +256,13 @@ def export_data_multiple(filename, title, db, category=None,
     """
     result = True
     f, writer, cursor = None, None, None
-    is_csv  = filename.lower().endswith(".csv")
-    is_html = filename.lower().endswith(".html")
-    is_json = filename.lower().endswith(".json")
-    is_sql  = filename.lower().endswith(".sql")
-    is_txt  = filename.lower().endswith(".txt")
-    is_xlsx = filename.lower().endswith(".xlsx")
-    is_yaml = any(n.endswith("." + x) for n in [filename.lower()] for x in YAML_EXTS)
-    itemfiles = collections.OrderedDict() # {data name: path to partial file containing item data}
+    TEMPLATES = {"html": templates.DATA_HTML_MULTIPLE,
+                 "json": templates.DATA_JSON_MULTIPLE,
+                 "sql":  templates.DATA_SQL_MULTIPLE,
+                 "txt":  templates.DATA_TXT_MULTIPLE,
+                 "yaml": templates.DATA_YAML_MULTIPLE}
 
+    itemfiles = collections.OrderedDict() # {data name: path to partial file containing item data}
     categories = [] if make_iterables else [category] if category else db.DATA_CATEGORIES
     items = {c: db.schema[c].copy() for c in categories}
     for category, name in ((c, n) for c, x in items.items() for n in x):
@@ -294,9 +287,9 @@ def export_data_multiple(filename, title, db, category=None,
         make_iterables = make_item_iterables
     try:
         with open(filename, "wb") as f:
-            if is_csv or is_xlsx:
+            if format in ("csv", "xlsx"):
                 f.close()
-                if is_csv:
+                if "csv" == format:
                     writer = csv_writer(filename)
                 else:
                     props = {"title": title, "comments": templates.export_comment()}
@@ -305,12 +298,12 @@ def export_data_multiple(filename, title, db, category=None,
             for item_i, (item, make_iterable) in enumerate(make_iterables()):
                 name = item["name"]
 
-                if is_csv or is_xlsx:
+                if format in ("csv", "xlsx"):
                     colnames, cursor = [x["name"] for x in item["columns"]], make_iterable()
 
                     for i, row in enumerate(cursor, 1):
                         if i == 1:
-                            if is_csv:
+                            if "csv" == format:
                                 if item_i: writer.writerow([])   # Blank row between items
                                 writer.writerow([name])          # Item name on separate line
                                 writer.writerow([""] + colnames) # Start item data from 2nd col
@@ -320,7 +313,7 @@ def export_data_multiple(filename, title, db, category=None,
                                 writer.writerow(colnames, "bold")
                                 writer.set_header(False)
 
-                        writer.writerow(([""] if is_csv else []) +
+                        writer.writerow(([""] if "csv" == format else []) +
                                         ["" if row[c] is None else row[c] for c in colnames])
                         if not i % 100 and progress and not progress(name=name, count=i):
                             result = False
@@ -337,9 +330,9 @@ def export_data_multiple(filename, title, db, category=None,
                                                                     (util.safe_filename(name), )))
                     itemtitle = "%s %s" % (item["type"].capitalize(),
                                            grammar.quote(name, force=True))
-                    result = export_data(make_iterable, tmpname, itemtitle, db, item["columns"],
-                                         category=item["type"], name=name, multiple=True,
-                                         progress=progress)
+                    result = export_data(make_iterable, tmpname, format, itemtitle, db,
+                                         item["columns"], category=item["type"], name=name,
+                                         multiple=True, progress=progress)
                     itemfiles[tmpname] = item
 
                 if not result: break # for item_i
@@ -347,13 +340,9 @@ def export_data_multiple(filename, title, db, category=None,
                     result = False
                     break # for item_i
 
-            if result and not is_csv and not is_xlsx:
+            if result and format not in ("csv", "xlsx"):
                 # Produce main export file, combined from partial files
-                template = step.Template(templates.DATA_HTML_MULTIPLE if is_html else 
-                                         templates.DATA_JSON_MULTIPLE if is_json else 
-                                         templates.DATA_SQL_MULTIPLE  if is_sql  else 
-                                         templates.DATA_TXT_MULTIPLE  if is_txt  else 
-                                         templates.DATA_YAML_MULTIPLE, strip=False, escape=is_html)
+                template = step.Template(TEMPLATES[format], strip=False, escape="html" == format)
                 namespace = {
                     "db_filename": db.name,
                     "title":       title,
@@ -386,13 +375,12 @@ def export_sql(filename, db, sql, headers=()):
     return True
 
 
-def export_stats(filename, db, data, diagram=None):
-    """Exports statistics to HTML or SQL file."""
-    filetype  = os.path.splitext(filename)[1][1:].lower()
-    TPLARGS = {"html": (templates.DATA_STATISTICS_HTML, dict(escape=True, strip=False)),
-               "sql":  (templates.DATA_STATISTICS_SQL,  dict(strip=False)),
-               "txt":  (templates.DATA_STATISTICS_TXT,  dict(strip=False))}
-    template = step.Template(TPLARGS[filetype][0], **TPLARGS[filetype][1])
+def export_stats(filename, format, db, data, diagram=None):
+    """Exports statistics to HTML or SQL or TXT file."""
+    TEMPLATES = {"html": templates.DATA_STATISTICS_HTML,
+                 "sql":  templates.DATA_STATISTICS_SQL,
+                 "txt":  templates.DATA_STATISTICS_TXT}
+    template = step.Template(TEMPLATES[format], strip=False, escape="html" == format)
     ns = {
         "title":  "Database statistics",
         "db":     db,
