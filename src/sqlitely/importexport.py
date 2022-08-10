@@ -673,8 +673,9 @@ def export_query_to_db(db, filename, query, table, limit=None, progress=None):
         db.execute(sql, [filename])
         logs.append((sql, None if is_samefile else filename))
 
+        fullname = "%s.%s" % (schema2, grammar.quote(table))
         if grammar.SQL.SELECT == grammar.get_type(query):
-            sql = "CREATE TABLE %s.%s AS %s" % (schema2, grammar.quote(table), query)
+            sql = "CREATE TABLE %s AS %s" % (fullname, query)
             if limit:
                 sql += " ".join(zip(("LIMIT", "OFFSET"), map(str, limit)))
             db.executescript(sql)
@@ -682,10 +683,8 @@ def export_query_to_db(db, filename, query, table, limit=None, progress=None):
         else:
             cursor = db.execute(query)
             cols = [c[0] for c in cursor.description] if cursor.description else ["rowcount"]
-            sql = "CREATE TABLE %s.%s (%s)" % (schema2, grammar.quote(table),
-                                               ", ".join(map(grammar.quote, cols)))
-            insert_sql = "INSERT INTO %s.%s VALUES (%s)" % (schema2, grammar.quote(table),
-                                                            ", ".join(["?"] * len(cols))) 
+            sql = "CREATE TABLE %s (%s)" % (fullname, ", ".join(map(grammar.quote, cols)))
+            insert_sql = "INSERT INTO %s VALUES (%s)" % (fullname, ", ".join(["?"] * len(cols)))
             db.executescript(sql)
             logs.append((sql, None))
             rows = cursor if cursor.description else [{"rowcount": cursor.rowcount}]
@@ -1093,13 +1092,19 @@ def iter_file_rows(filename, columns, sheet=None):
 class csv_writer(object):
     """Convenience wrapper for csv.Writer, with Python2/3 compatbility."""
 
-    def __init__(self, filename):
-        self._file = open(filename, "wb") if six.PY2 else codecs.open(filename, "w", "utf-8")
+    def __init__(self, file_or_name):
+        if isinstance(file_or_name, six.string_types):
+            self._name = file_or_name
+            self._file = open(self._name, "wb") if six.PY2 else \
+                         codecs.open(self._name, "w", "utf-8")
+        else:
+            self._name = None
+            self._file = file_or_name
         # csv.excel.delimiter default "," is not actually used by Excel.
         self._writer = csv.writer(self._file, csv.excel, delimiter=";")
 
 
-    def writerow(self, sequence):
+    def writerow(self, sequence=()):
         """Writes a CSV record from a sequence of fields."""
         values = []
         for v in sequence:
@@ -1113,7 +1118,7 @@ class csv_writer(object):
 
     def close(self):
         """Closes CSV file writer."""
-        self._file.close()
+        if self._name: self._file.close()
 
 
 class xlsx_writer(object):
