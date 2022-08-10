@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.08.2022
+@modified    10.08.2022
 """
 import calendar
 import collections
@@ -60,7 +60,9 @@ ESCAPE_LIKE = "\\" # Character used to escape SQLite LIKE special characters _%
 
 class SearchQueryParser(object):
 
-    KEYWORDS = ["table", "index", "trigger", "view", "column", "date"]
+    ITEM_CATEGORIES = ["table", "index", "trigger", "view"]
+
+    KEYWORDS = ITEM_CATEGORIES + ["column", "date"]
 
     # For naive identification of "table:xyz", "date:xyz" etc keywords
     PATTERN_KEYWORD = re.compile("^(-?)(%s)\\:([^\\s]+)$" % "|".join(KEYWORDS), re.I)
@@ -155,6 +157,9 @@ class SearchQueryParser(object):
                 or ("-" + item["type"] == kw and match_kw("-" + item["type"], item)):
                     skip_item = True
                     break # for kw
+            if not skip_item and item["type"] not in keywords \
+            and any(map(keywords.get, self.ITEM_CATEGORIES)):
+                skip_item = True
             if skip_item:
                 result = ""
             else:
