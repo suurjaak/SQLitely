@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.08.2022
+@modified    10.08.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1241,8 +1241,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
                               for c in item.get("columns", []) if "pk" in c)
         for c in item.get("meta", {}).get("constraints", []):
             if grammar.SQL.PRIMARY_KEY == c["type"]:
-                names = tuple(x["name"] for x in c["key"])
-                mykeys[names] = {"name": names, "pk": {}}
+                names  = tuple(x["name"] for x in c["key"])
+                orders = tuple(x.get("order") for x in c["key"])
+                mykeys[names] = {"name": names, "pk": {"order": orders} if any(orders) else {}}
         relateds = {} if pks_only else self.get_related("table", table, own=False, clone=False)
         for name2, item2 in relateds.get("table", {}).items():
             for fk in [x for x in get_fks(item2) if table in x["table"]]:
