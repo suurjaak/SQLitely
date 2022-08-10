@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.08.2022
+@modified    09.08.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -52,7 +52,7 @@ class Database(object):
     CATEGORIES = ["table", "index", "trigger", "view"]
 
     """Schema data object categories."""
-    DATA_CATEGORIES = ["table", "index", "trigger", "view"]
+    DATA_CATEGORIES = ["table", "view"]
 
 
     """
