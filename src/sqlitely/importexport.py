@@ -322,7 +322,7 @@ def export_data_multiple(filename, format, title, db, category=None,
                 else:
                     if not empty:
                         cursor = make_iterable()
-                        is_empty, _ = any(cursor), util.try_until(lambda: cursor.close())
+                        is_empty, _ = not any(cursor), util.try_until(lambda: cursor.close())
                         if is_empty: continue # for item_i
 
                     # Write item data to temporary file, later inserted into main file
