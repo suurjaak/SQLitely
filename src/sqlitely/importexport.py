@@ -645,7 +645,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
     return result    
 
 
-def export_query_to_db(db, filename, query, table, limit=None, progress=None):
+def export_query_to_db(db, filename, query, table, empty=True, limit=None, progress=None):
     """
     Exports query results to another database.
 
@@ -653,6 +653,7 @@ def export_query_to_db(db, filename, query, table, limit=None, progress=None):
     @param   filename  database filename to export to
     @param   query     SQL query text
     @param   table     target table name, expected to be unique in target database
+    @param   empty     create target table even if query returns nothing
     @param   limit     query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
     @param   progress  callback(?done, ?error) to report export progress,
                        returning false if export should cancel
@@ -680,6 +681,13 @@ def export_query_to_db(db, filename, query, table, limit=None, progress=None):
                 sql += " ".join(zip(("LIMIT", "OFFSET"), map(str, limit)))
             db.executescript(sql)
             logs.append((sql, None))
+            if not empty:
+                sql = "SELECT 1 FROM %s LIMIT 1" % fullname
+                logs.append((sql, None))
+                if not any(db.execute(sql)):
+                    sql = "DROP TABLE %s" % fullname
+                    db.executescript(sql)
+                    logs.append((sql, None))
         else:
             cursor = db.execute(query)
             cols = [c[0] for c in cursor.description] if cursor.description else ["rowcount"]
