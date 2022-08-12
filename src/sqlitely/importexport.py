@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.08.2022
+@modified    12.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -645,18 +645,20 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
     return result    
 
 
-def export_query_to_db(db, filename, query, table, empty=True, limit=None, progress=None):
+def export_query_to_db(db, filename, query, table, create_sql=None,
+                       empty=True, limit=None, progress=None):
     """
     Exports query results to another database.
 
-    @param   db        Database instance
-    @param   filename  database filename to export to
-    @param   query     SQL query text
-    @param   table     target table name, expected to be unique in target database
-    @param   empty     create target table even if query returns nothing
-    @param   limit     query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
-    @param   progress  callback(?done, ?error) to report export progress,
-                       returning false if export should cancel
+    @param   db          Database instance
+    @param   filename    database filename to export to
+    @param   query       SQL query text
+    @param   table       target table name, expected to be unique in target database
+    @param   create_sql  CREATE TABLE statement if not auto-generating from query columns
+    @param   empty       create target table even if query returns nothing
+    @param   limit       query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
+    @param   progress    callback(?done, ?error) to report export progress,
+                         returning false if export should cancel
     """
     result = True
     is_samefile = util.lceq(db.filename, filename)
@@ -673,25 +675,25 @@ def export_query_to_db(db, filename, query, table, empty=True, limit=None, progr
         sql = "ATTACH DATABASE ? AS %s" % schema2
         db.execute(sql, [filename])
         logs.append((sql, None if is_samefile else filename))
+        is_select = (grammar.SQL.SELECT == grammar.get_type(query))
 
         fullname = "%s.%s" % (schema2, grammar.quote(table))
-        if grammar.SQL.SELECT == grammar.get_type(query):
-            sql = "CREATE TABLE %s AS %s" % (fullname, query)
+        if is_select:
+            if create_sql:
+                db.executescript(create_sql)
+                logs.append((create_sql, None))
+                sql = "INSERT INTO %s %s" % (fullname, query)
+            else:
+                sql = "CREATE TABLE %s AS %s" % (fullname, query)
             if limit:
                 sql += " ".join(zip(("LIMIT", "OFFSET"), map(str, limit)))
             db.executescript(sql)
             logs.append((sql, None))
-            if not empty:
-                sql = "SELECT 1 FROM %s LIMIT 1" % fullname
-                logs.append((sql, None))
-                if not any(db.execute(sql)):
-                    sql = "DROP TABLE %s" % fullname
-                    db.executescript(sql)
-                    logs.append((sql, None))
         else:
             cursor = db.execute(query)
             cols = [c[0] for c in cursor.description] if cursor.description else ["rowcount"]
-            sql = "CREATE TABLE %s (%s)" % (fullname, ", ".join(map(grammar.quote, cols)))
+            sql = create_sql
+            sql = sql or "CREATE TABLE %s (%s)" % (fullname, ", ".join(map(grammar.quote, cols)))
             insert_sql = "INSERT INTO %s VALUES (%s)" % (fullname, ", ".join(["?"] * len(cols)))
             db.executescript(sql)
             logs.append((sql, None))
@@ -704,6 +706,10 @@ def export_query_to_db(db, filename, query, table, empty=True, limit=None, progr
                 params = list(row.values())
                 db.execute(insert_sql, params)
                 logs.append((sql, params))
+        if not empty and not any(db.execute("SELECT 1 FROM %s LIMIT 1" % fullname)):
+            sql = "DROP TABLE %s" % fullname
+            db.executescript(sql)
+            logs.append((sql, None))
 
     except Exception as e:
         result = False
