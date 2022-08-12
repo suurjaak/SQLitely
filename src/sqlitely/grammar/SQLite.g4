@@ -28,15 +28,21 @@
  *                https://github.com/bkiers/sqlite-parser
  * Developed by : Bart Kiers, bart@big-o.nl
  *
- * Updates:       unicode identifiers; added column_name to CREATE VIEW;
- *                added table_function_name; dropped cte_table_name;
- *                fixed multi-word column type; dropped keywords in table_alias;
- *                more use of with_clause; dropped Java-specific exception;
- *                double quotes allowed in string_literal; fixed module arguments;
- *                only ROWID allowed after WITHOUT; disallowed certain keywords in
- *                column types and constraint names; added TRUE/FALSE literals;
- *                added support for INDEX expressions;
- *                added support for NULLS FIRST|LAST in ORDER BY.
+ * Updates:       unicode identifiers;
+ *                add column_name to CREATE VIEW;
+ *                add table_function_name;
+ *                drop cte_table_name;
+ *                fix multi-word column type;
+ *                drop keywords in table_alias;
+ *                more use of with_clause;
+ *                drop Java-specific exception;
+ *                double quotes allowed in string_literal;
+ *                fix module arguments;
+ *                only ROWID allowed after WITHOUT;
+ *                disallow certain keywords in column types and constraint names;
+ *                add TRUE/FALSE literals;
+ *                add support for INDEX expressions;
+ *                add support for NULLS FIRST|LAST in ORDER BY.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2022
