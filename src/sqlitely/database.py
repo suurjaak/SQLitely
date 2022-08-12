@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.08.2022
+@modified    12.08.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -807,12 +807,40 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Returns ROWID name for table, or None if table is WITHOUT ROWID
         or has columns shadowing all ROWID aliases (ROWID, _ROWID_, OID).
         """
-        if util.getval(self.schema["table"], table, "meta", "without"): return
+        if util.getval(self.schema["table"], table, "meta", "without"): return None
         sql = self.schema["table"].get(table, {}).get("sql")
-        if re.search("WITHOUT\s+ROWID[\s;]*$", sql, re.I): return
+        if re.search("WITHOUT\s+ROWID[\s;]*$", sql, re.I): return None
         ALIASES = ("_rowid_", "rowid", "oid")
         cols = [c["name"].lower() for c in self.schema["table"][table]["columns"]]
         return next((x for x in ALIASES if x not in cols), None)
+
+
+    def get_order(self, category, name, reverse=False):
+        """
+        Returns ORDER BY columns for table or view.
+
+        @param   category  "table" or "view"
+        @param   name      table or view name
+        @param   reverse   whether to reverse order
+        @return            [("ROWID", ?"DESC")] or [(pkcol1, ?"DESC"), ] if table,
+                           ["row_number() OVER () DESC"] if reverse view else []
+                           
+        """
+        if "view" == category:
+            result = ["row_number() OVER () DESC"] if reverse else []
+        else:
+            if not util.getval(self.schema, category, name, "meta"):
+                self.populate_schema(category, name=name, parse=True, generate=False)
+            rowid = self.get_rowid(name)
+            names, orders = ([rowid], [None]) if rowid else ([], [])
+            if not names:
+                pks, _ = self.get_keys(name, pks_only=True)
+                if pks:
+                    names, orders = pks[0]["name"], (pks[0]["pk"].get("order") or [])
+                    orders = orders or [None] * len(names)
+            orders2 = [None if "DESC" == x else "DESC" for x in orders] if reverse else orders
+            result = [(n, o) if o else (n, ) for n, o in zip(names, orders2)]
+        return result
 
 
     def has_view_columns(self):
