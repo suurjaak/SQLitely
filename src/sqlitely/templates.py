@@ -1002,6 +1002,7 @@ YAML export template for multiple items.
 """
 DATA_YAML_MULTIPLE = """<%
 import os
+from sqlitely.lib import util
 from sqlitely import templates
 
 _, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
@@ -1039,6 +1040,7 @@ YAML export template for item partial file in multiple item export.
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_YAML_MULTIPLE_PART = """<%
+import yaml
 from sqlitely.lib import util
 
 progress = get("progress")
