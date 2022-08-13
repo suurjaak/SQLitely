@@ -664,8 +664,9 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
     @param   limit       query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
     @param   progress    callback(?done, ?error) to report export progress,
                          returning false if export should cancel
+    @return              True if table was created, False otherwise
     """
-    result = True
+    result, err = True, False
     is_samefile = util.lceq(db.filename, filename)
     file_existed = is_samefile or os.path.isfile(filename)
     finalargs, logs = {"done": True}, []  # [(sql, params), ]
@@ -716,9 +717,10 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
             sql = "DROP TABLE %s" % fullname
             db.executescript(sql)
             logs.append((sql, None))
+            result = False
 
     except Exception as e:
-        result = False
+        result, err = False, True
         logger.exception("Error exporting query %r from %s to %s.", query, db, filename)
         finalargs["error"] = util.format_exc(e)
         if not file_existed:
@@ -731,7 +733,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
         except Exception: pass
         db.unlock(None, None, filename)
 
-    if result:
+    if not err:
         sqls, params = zip(*logs)
         db.log_query("EXPORT QUERY TO DB", [x + ";" for x in sqls], params)
     if progress: progress(**finalargs)
