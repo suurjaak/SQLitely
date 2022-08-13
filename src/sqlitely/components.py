@@ -12270,9 +12270,9 @@ class ImportWizard(wx.adv.Wizard):
 
         def UpdateButtons(self):
             """Enables Next-button if ready."""
-            enabled = bool(self.filename) and (self.cb_all.Value or
-                       any(self.listbox.IsChecked(i) for i in range(self.listbox.Count))) and \
-                      any(x["columns"] and x["rows"] for x in self.filedata.get("sheets", []))
+            enabled = bool(self.filename) and (self.cb_all.Value
+                          or any(self.listbox.IsChecked(i) for i in range(self.listbox.Count))
+                      ) and any(x["columns"] and x["rows"] for x in self.filedata.get("sheets", []))
             self.FindWindowById(wx.ID_FORWARD).Enable(enabled)
 
 
