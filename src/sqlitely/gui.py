@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.08.2022
+@modified    13.08.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3007,8 +3007,9 @@ class DatabasePage(wx.Panel):
         try: nb._pages.GetSingleLineBorderColour = nb.GetActiveTabColour
         except Exception: pass # Hack to get uniform background colour
 
-        for name, text in conf.SQLWindowTexts.get(self.db.filename, [])[::-1]:
-            self.add_sql_page(name, text)
+        oldpages = conf.SQLWindowTexts.get(self.db.filename, [])
+        for i, (name, text) in enumerate(oldpages[::-1]):
+            self.add_sql_page(name, text, console=(i == len(oldpages) - 1))
         if self.sql_pages:
             self.sql_page_counter = max(
                 int(re.sub(r"[^\d]", "", x) or 0) for x in self.sql_pages
@@ -5807,8 +5808,12 @@ class DatabasePage(wx.Panel):
         return p
 
 
-    def add_sql_page(self, name="", text=""):
-        """Opens and returns an SQL page with specified text."""
+    def add_sql_page(self, name="", text="", console=True):
+        """
+        Opens and returns an SQL page with specified text.
+
+        @param  console  add "sqlpage" variable to Python console
+        """
         if not name or name in self.sql_pages:
             name = "SQL"
             if not self.sql_pages: self.sql_page_counter = 1
@@ -5819,7 +5824,7 @@ class DatabasePage(wx.Panel):
         p.Text = text
         self.sql_pages[name] = p
         self.notebook_sql.InsertPage(0, page=p, text=name, select=True)
-        self.TopLevelParent.run_console(
+        if console: self.TopLevelParent.run_console(
             "sqlpage = page.notebook_sql.GetPage(0) # SQL window subtab")
         return p
 
