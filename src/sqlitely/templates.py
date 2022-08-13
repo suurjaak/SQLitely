@@ -430,23 +430,23 @@ _, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filenam
 JSON export template.
 
 @param   data_buffer  iterable yielding rows data in text chunks
+@param   ?multiple    whether doing multiple item export (skips list brackets)
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_JSON = """<%
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
-progress = get("progress")
-%>[
-<%
+multiple, progress = get("multiple"), get("progress")
+
+if not multiple: echo("[\\n")
 for i, chunk in enumerate(data_buffer):
     if progress and not i % 100 and not progress():
         break # for i, chunk
 
     echo(chunk)
-%>
-]
-"""
+if not multiple: echo("\\n]\\n")
+%>"""
 
 
 
