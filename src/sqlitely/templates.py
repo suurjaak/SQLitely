@@ -386,7 +386,7 @@ namespace["row_count"] += 1
 %endfor
 </tr>
 <%
-if not i % 100 and not progress(name=name, count=i):
+if not i % 100 and progress and not progress(name=name, count=i):
     break # for i, row
 %>
 %endfor
