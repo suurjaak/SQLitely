@@ -8,13 +8,12 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.08.2022
+@modified    13.08.2022
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
 import hashlib
 import logging
-import math
 import multiprocessing.connection
 import os
 import re
@@ -253,7 +252,7 @@ class SearchThread(WorkerThread):
                     logger.exception("Error searching %s %s.", category,
                                      grammar.quote(item["name"], force=True))
                     continue # for item
-                finally: util.try_until(lambda: cursor.close())
+                finally: cursor and util.try_ignore(cursor.close)
 
                 if not self._drop_results:
                     result["output"] += "</table></font>"
@@ -400,7 +399,7 @@ class AnalyzerThread(WorkerThread):
         """Stops the worker thread."""
         super(AnalyzerThread, self).stop(drop)
         p, self._process = self._process, None
-        p and util.try_until(p.kill)
+        p and util.try_ignore(p.kill)
 
 
     def stop_work(self, drop=True):
@@ -409,7 +408,7 @@ class AnalyzerThread(WorkerThread):
         """
         super(AnalyzerThread, self).stop_work(drop)
         p, self._process = self._process, None
-        p and util.try_until(p.kill)
+        p and util.try_ignore(p.kill)
 
 
     def run(self):
@@ -587,10 +586,10 @@ class IPCListener(WorkerThread):
             except Exception: logger.exception("Error on IPC port %s.", self._port)
         self._is_working = False
         l, self._listener = self._listener, None
-        l and util.try_until(l.close)
+        l and util.try_ignore(l.close)
 
 
     def stop(self, drop=True):
         super(IPCListener, self).stop(drop)
         l, self._listener = self._listener, None
-        l and util.try_until(l.close)
+        l and util.try_ignore(l.close)

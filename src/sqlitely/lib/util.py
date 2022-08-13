@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.08.2022
+@modified    13.08.2022
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -572,22 +572,23 @@ def count(items, unit=None, key="count", suf=""):
     return result
 
 
-def try_until(func, limit=1, sleep=0.5):
+def try_ignore(func, *args, **kwargs):
     """
     Tries to execute the specified function a number of times.
 
     @param    func   callable to execute
+    @param    args   positional arguments to callable
     @param    limit  number of times to try (default 1)
-    @param    sleep  seconds to sleep after failed attempts, if any
-                     (default 0.5)
+    @param    sleep  seconds to sleep after failed attempts, if any (default 0.5)
     @return          (True, func_result) if success else (False, None)
     """
     result, func_result, tries = False, None, 0
+    limit, sleep = kwargs.get("limit", 1), kwargs.get("sleep", 0.5)
     while tries < limit:
         tries += 1
-        try: result, func_result = True, func()
+        try: result, func_result = True, func(*args)
         except Exception:
-            time.sleep(sleep) if tries < limit and sleep else None
+            if sleep and tries < limit: time.sleep(sleep)
     return result, func_result
 
 

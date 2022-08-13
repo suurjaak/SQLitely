@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.08.2022
+@modified    13.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -191,7 +191,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
                                 v = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, six.text_type(v))
                                 widths[col] = max(widths[col], len(v))
                             if not i % 100 and progress and not progress(): return None
-                    finally: util.try_until(lambda: cursor2.close())
+                    finally: util.try_ignore(lambda: cursor2.close())
                     namespace["columnwidths"] = widths # {col: char length}
                     namespace["columnjusts"]  = justs  # {col: True if ljust}
                 if progress and not progress(): return None
@@ -225,11 +225,11 @@ def export_data(make_iterable, filename, format, title, db, columns,
 
             result = progress(name=name, count=count) if progress else True
     finally:
-        if writer:     util.try_until(writer.close)
-        if tmpfile:    util.try_until(tmpfile.close)
-        if tmpname:    util.try_until(lambda: os.unlink(tmpname))
-        if not result: util.try_until(lambda: os.unlink(filename))
-        if cursor:     util.try_until(lambda: cursor.close())
+        if writer:     util.try_ignore(writer.close)
+        if tmpfile:    util.try_ignore(tmpfile.close)
+        if tmpname:    util.try_ignore(os.unlink, tmpname)
+        if not result: util.try_ignore(os.unlink, filename)
+        if cursor:     util.try_ignore(lambda: cursor.close())
         if category and name: db.unlock(category, name, make_iterable)
 
     return result
@@ -279,7 +279,7 @@ def export_data_multiple(filename, format, title, db, category=None,
                 try:
                     for x in cursor: yield x
                 finally:
-                    util.try_until(lambda: cursor.close)
+                    util.try_ignore(cursor.close)
             for category, item in ((c, x) for c, d in items.items() for x in d.values()):
                 title = "%s %s" % (category.capitalize(), grammar.quote(item["name"], force=True))
                 yield dict(item, title=title), functools.partial(make_iterable, item["name"])
@@ -318,11 +318,11 @@ def export_data_multiple(filename, format, title, db, category=None,
                         if not i % 100 and progress and not progress(name=name, count=i):
                             result = False
                             break # for i, row
-                    util.try_until(lambda: cursor.close())
+                    util.try_ignore(lambda: cursor.close())
                 else:
                     if not empty:
                         cursor = make_iterable()
-                        is_empty, _ = not any(cursor), util.try_until(lambda: cursor.close())
+                        is_empty, _ = not any(cursor), util.try_ignore(lambda: cursor.close())
                         if is_empty: continue # for item_i
 
                     # Write item data to temporary file, later inserted into main file
@@ -356,11 +356,11 @@ def export_data_multiple(filename, format, title, db, category=None,
         if progress: progress(error=util.format_exc(e), done=True)
         result = False
     finally:
-        if writer:     util.try_until(writer.close)
-        if cursor:     util.try_until(lambda: cursor.close())
-        if not result: util.try_until(lambda: os.unlink(filename))
+        if writer:     util.try_ignore(writer.close)
+        if cursor:     util.try_ignore(lambda: cursor.close())
+        if not result: util.try_ignore(os.unlink, filename)
         for n in itemfiles:
-            util.try_until(lambda: os.unlink(n))
+            util.try_ignore(os.unlink, n)
         for category, name in ((c, n) for c, x in items.items() for n in x):
             db.unlock(category, name, filename)
 
@@ -462,8 +462,8 @@ def export_dump(filename, db, data=True, pragma=True, items=None, limit=None, pr
         result = False
     finally:
         db.unlock(None, None, filename)
-        for x in cursors: util.try_until(x.close)
-        if not result: util.try_until(lambda: os.unlink(filename))
+        for x in cursors: util.try_ignore(x.close)
+        if not result: util.try_ignore(os.unlink, filename)
 
     return result
 
@@ -634,7 +634,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
             sqls1.append("DETACH DATABASE %s;" % schema2)
         except Exception: pass
         if not file_existed and (not actionsqls or not result):
-            util.try_until(lambda: os.unlink(filename))
+            util.try_ignore(os.unlink, filename)
         db.unlock(None, None, filename)
 
     result = bool(actionsqls)
@@ -716,7 +716,7 @@ def export_query_to_db(db, filename, query, table, create_sql=None,
         logger.exception("Error exporting query %r from %s to %s.", query, db, filename)
         finalargs["error"] = util.format_exc(e)
         if not file_existed:
-            util.try_until(lambda: os.unlink(filename))
+            util.try_ignore(os.unlink, filename)
     finally:
         try: 
             sql = "DETACH DATABASE %s" % schema2
@@ -981,7 +981,7 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
                 mytable = table
                 if i == len(tables) - 1:
                     if result: cursor.execute("COMMIT")
-                    util.try_until(cursor.close)
+                    util.try_ignore(cursor.close)
                     cursor = table = sheet = None
                 if result and progress:
                     result = progress(table=mytable, count=count, errorcount=errorcount, done=True)
@@ -996,7 +996,7 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
                          (" to table %s " % grammar.quote(table, force=True) if table else ""),
                          db.filename)
         result = False
-        if cursor: util.try_until(lambda: cursor.execute("ROLLBACK"))
+        if cursor: util.try_ignore(cursor.execute, "ROLLBACK")
         if progress:
             kwargs = dict(error=util.format_exc(e), done=True)
             if table: kwargs.update(table=table)
@@ -1004,11 +1004,11 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
     finally:
         if db.is_open():
             if isolevel is not None: db.connection.isolation_level = isolevel
-            if cursor: util.try_until(cursor.close)
+            if cursor: util.try_ignore(cursor.close)
             if table: db.unlock("table", table, filename)
             if not was_open: db.close()
         if result is None and not file_existed:
-            util.try_until(lambda: os.unlink(db.filename))
+            util.try_ignore(os.unlink, db.filename)
 
     return result
 

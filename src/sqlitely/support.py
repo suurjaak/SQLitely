@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.03.2022
+@modified    13.08.2022
 ------------------------------------------------------------------------------
 """
 import logging
@@ -141,8 +141,8 @@ def download_and_install(url):
         update_window = None
         if is_cancelled:
             logger.info("Upgrade cancelled, erasing temporary file %s.", filepath)
-            util.try_until(lambda: os.unlink(filepath))
-            util.try_until(lambda: os.rmdir(tmp_dir))
+            util.try_ignore(os.unlink, filepath)
+            util.try_ignore(os.rmdir, tmp_dir)
         else:
             logger.info("Successfully downloaded %s of %s.",
                      util.format_bytes(filesize), filename)
