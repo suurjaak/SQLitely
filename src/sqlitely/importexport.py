@@ -649,15 +649,16 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
     return result    
 
 
-def export_query_to_db(db, filename, query, table, create_sql=None,
+def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
                        empty=True, limit=None, progress=None):
     """
     Exports query results to another database.
 
     @param   db          Database instance
     @param   filename    database filename to export to
-    @param   query       SQL query text
     @param   table       target table name, expected to be unique in target database
+    @param   query       SQL query text
+    @param   params      SQL query parameters
     @param   create_sql  CREATE TABLE statement if not auto-generating from query columns
     @param   empty       create target table even if query returns nothing
     @param   limit       query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
@@ -689,12 +690,13 @@ def export_query_to_db(db, filename, query, table, create_sql=None,
                 sql = "INSERT INTO %s %s" % (fullname, query)
             else:
                 sql = "CREATE TABLE %s AS %s" % (fullname, query)
-            if limit:
-                sql += " ".join(zip(("LIMIT", "OFFSET"), map(str, limit)))
-            db.executescript(sql)
+            if limit: sql += (" " +
+                " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, limit)))
+            )
+            db.execute(sql, params)
             logs.append((sql, None))
         else:
-            cursor = db.execute(query)
+            cursor = db.execute(query, params)
             cols = [c[0] for c in cursor.description] if cursor.description else ["rowcount"]
             sql = create_sql
             sql = sql or "CREATE TABLE %s (%s)" % (fullname, ", ".join(map(grammar.quote, cols)))
@@ -703,7 +705,7 @@ def export_query_to_db(db, filename, query, table, create_sql=None,
             logs.append((sql, None))
             rows = cursor if cursor.description else [{"rowcount": cursor.rowcount}]
             qrange = (0, limit[0]) if limit else None
-            qrange = (limit[1], limit[1] + qrange[0]) if len(limit) > 1 else qrange
+            qrange = (limit[1], limit[1] + qrange[0]) if qrange and len(limit) > 1 else qrange
             for i, row in enumerate(rows):
                 if qrange and not (qrange[0] <= i < qrange[1]): continue # for
 
