@@ -681,10 +681,9 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
         sql = "ATTACH DATABASE ? AS %s" % schema2
         db.execute(sql, [filename])
         logs.append((sql, None if is_samefile else filename))
-        is_select = (grammar.SQL.SELECT == grammar.get_type(query))
 
         fullname = "%s.%s" % (schema2, grammar.quote(table))
-        if is_select:
+        if "SELECT" == query.strip()[:6].upper():
             if create_sql:
                 db.executescript(create_sql)
                 logs.append((create_sql, None))
@@ -708,7 +707,8 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
             qrange = (0, limit[0]) if limit else None
             qrange = (limit[1], limit[1] + qrange[0]) if qrange and len(limit) > 1 else qrange
             for i, row in enumerate(rows):
-                if qrange and not (qrange[0] <= i < qrange[1]): continue # for
+                if qrange and i >= qrange[1]: break # for
+                if qrange and i < qrange[0]: continue # for
 
                 params = list(row.values())
                 db.execute(insert_sql, params)
