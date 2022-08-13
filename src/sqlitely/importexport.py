@@ -164,7 +164,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
                 writer = None
             else:
                 namespace = {
-                    "db_filename": db.name,
+                    "db":          db,
                     "title":       title,
                     "columns":     columns,
                     "rows":        cursor,
@@ -344,10 +344,10 @@ def export_data_multiple(filename, format, title, db, category=None,
                 # Produce main export file, combined from partial files
                 template = step.Template(TEMPLATES[format], strip=False, escape="html" == format)
                 namespace = {
-                    "db_filename": db.name,
-                    "title":       title,
-                    "files":       itemfiles,
-                    "progress":    progress,
+                    "db":       db,
+                    "title":    title,
+                    "files":    itemfiles,
+                    "progress": progress,
                 }
                 template.stream(f, namespace)
             result = progress() if progress else True

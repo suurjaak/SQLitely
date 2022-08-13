@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.08.2022
+@modified    13.08.2022
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -221,7 +221,7 @@ from sqlitely import conf, images
 """
 HTML data export template.
 
-@param   db_filename  database path or temporary name
+@param   db           database.Database instance
 @param   title        export title
 @param   columns      [{name}, ]
 @param   data_buffer  iterable yielding rows data in text chunks
@@ -249,16 +249,19 @@ from sqlitely import templates
 """
 HTML export template for multiple items.
 
-@param   db_filename  database path or temporary name
+@param   db           database.Database instance
 @param   title        export title
 @param   files        files to embed content from, as {file name: {name, title}}
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_HTML_MULTIPLE = """<%
+import os
 from sqlitely.lib.vendor.step import Template
+from sqlitely.lib import util
 from sqlitely import templates
 
 progress = get("progress")
+_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
 %>{{! Template(templates.DATA_HTML_HEADER).expand(title=title) }}
 <body>
 <div id="root">
@@ -267,7 +270,7 @@ progress = get("progress")
 <table class="body_table">
 <tr><td>
   <div class="title">{{ title }}</div><br />
-  Source: <b>{{ db_filename }}</b>.<br />
+  Source: <b>{{ db }}</b>{{ " (%s)" % dbsize if dbsize else "" }}.<br />
   <ol class="title">
 %for item in files.values():
     <li><a href="#{{ "item__%s" % hash(item["title"]) }}" title="{{ item["title"] }} content">{{ item["title"] }}</a></li>
@@ -296,7 +299,7 @@ for filename in files:
 """
 HTML export template for item partial file.
 
-@param   db_filename  database path or temporary name, if any
+@param   db           database.Database instance
 @param   title        export title
 @param   columns      [{name}, ]
 @param   data_buffer  iterable yielding rows data in text chunks
@@ -307,9 +310,11 @@ HTML export template for item partial file.
 @param   ?progress    callback(name, count) returning whether to cancel, if any
 """
 DATA_HTML_MULTIPLE_PART = """<%
+import os
 from sqlitely.lib import util
 from sqlitely import grammar
 
+_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
 item_id = "item__%s" % hash(title)
 progress = get("progress")
 %>
@@ -324,7 +329,7 @@ progress = get("progress")
       <a class="toggle" title="Toggle full SQL" onclick="onToggle(this, '{{ item_id }}__shortsql', '{{ item_id }}__sql')"> </a>
       <br />
 %if not get("multiple"):
-      Source: <b>{{ db_filename }}</b>.<br />
+      Source: <b>{{ db }}</b>{{ " (%s)" % dbsize if dbsize else "" }}.<br />
 %endif
       <b>{{ row_count }}</b> {{ util.plural("row", row_count, numbers=False) }}{{ " in results" if sql else "" }}.
       <a class="toggle down open" title="Toggle rows" onclick="onToggle(this, '{{ item_id }}__rows')"> </a>
@@ -393,7 +398,7 @@ if progress: progress(name=name, count=i)
 
 
 """
-TXT SQL create statements export template.
+SQL create statements export template.
 
 @param   sql           SQL statements string
 @param   ?headers      list of comment header lines
@@ -404,12 +409,13 @@ import os
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
+_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
 %>--
 %for line in get("headers", []):
 -- {{ "\\n-- ".join(line.splitlines()) }}
 %endfor
 %if get("db"):
--- Source: {{ db }} ({{ util.format_bytes(os.path.getsize(db.filename)) }}).
+-- Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
 %endif
 -- {{ templates.export_comment() }}
 --
@@ -510,10 +516,10 @@ for i, (filename, item) in enumerate(files.items()):
 
 
 """
-TXT SQL insert statements export template.
+SQL insert statements export template.
 
 @param   title        export title
-@param   db_filename  database path or temporary name
+@param   db           database.Database instance
 @param   row_count    number of rows
 @param   data_buffer  iterable yielding rows data in text chunks
 @param   ?sql         SQL query giving export data, if any
@@ -521,12 +527,14 @@ TXT SQL insert statements export template.
 @param   ?progress    callback(name, count) returning whether to cancel, if any
 """
 DATA_SQL = """<%
+import os
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
+_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
 progress = get("progress")
 %>-- {{ title }}.
--- Source: {{ db_filename }}.
+-- Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
 -- {{ templates.export_comment() }}
 -- {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
 %if get("sql"):
@@ -554,18 +562,20 @@ for i, chunk in enumerate(data_buffer):
 """
 TXT SQL insert statements export template for multiple items.
 
-@param   title        export title
-@param   db_filename  database path or temporary name
-@param   row_count    number of rows
+@param   title       export title
+@param   db          database.Database instance
+@param   row_count   number of rows
 @param   files       files to embed content from, as {file name: {name, title}}
 @param   ?progress   callback() returning whether to cancel, if any
 """
 DATA_SQL_MULTIPLE = """<%
+import os
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
+_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
 progress = get("progress")
-%>-- Source: {{ db_filename }}.
+%>-- Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
 -- {{ templates.export_comment() }}
 
 
@@ -590,7 +600,6 @@ for i, (filename, item) in enumerate(files.items()):
 TXT SQL insert statements export template for item partial file in multiple item export.
 
 @param   title        export title
-@param   db_filename  database path or temporary name
 @param   row_count    number of rows
 @param   data_buffer  iterable yielding rows data in text chunks
 @param   ?sql         SQL query giving export data, if any
@@ -690,7 +699,7 @@ UPDATE {{ name }} SET {{ setstr }}{{ (" WHERE " + wherestr) if wherestr else "" 
 """
 TXT data export template.
 
-@param   db_filename   database path or temporary name
+@param   db            database.Database instance
 @param   title         export title
 @param   columns       [{name}, ]
 @param   data_buffer   iterable yielding rows data in text chunks
@@ -702,12 +711,14 @@ TXT data export template.
 @param   ?progress     callback() returning whether to cancel, if any
 """
 DATA_TXT = """<%
+import os
 from sqlitely.lib import util
 from sqlitely import templates
 
+_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
 progress = get("progress")
 %>{{ title }}.
-Source: {{ db_filename }}.
+Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
 {{ templates.export_comment() }}
 {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
 %if get("sql"):
@@ -747,16 +758,19 @@ for i, chunk in enumerate(data_buffer):
 """
 TXT export template for multiple items.
 
-@param   db_filename  database path or temporary name
+@param   db           database.Database instance
 @param   title        export title
 @param   files        files to embed content from, as {file name: {..}}
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_TXT_MULTIPLE = """<%
+import os
+from sqlitely.lib import util
 from sqlitely import templates
 
+_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
 progress = get("progress")
-%>Source: {{ db_filename }}.
+%>Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
 {{ templates.export_comment() }}
 
 
@@ -910,7 +924,7 @@ value = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, six.text_type(value)
 YAML export template.
 
 @param   title        export title
-@param   db_filename  database path or temporary name
+@param   db           database.Database instance
 @param   row_count    number of rows
 @param   data_buffer  iterable yielding rows data in text chunks
 @param   ?sql         SQL query giving export data, if any
@@ -918,12 +932,14 @@ YAML export template.
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_YAML = """<%
+import os
 from sqlitely.lib import util
 from sqlitely import templates
 
+_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
 progress = get("progress")
 %># {{ title }}.
-# Source: {{ db_filename }}.
+# Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
 # {{ templates.export_comment() }}
 # {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
 %if get("sql"):
@@ -979,17 +995,19 @@ if progress: progress(name=name, count=i)
 """
 YAML export template for multiple items.
 
-@param   db_filename  database path or temporary name
+@param   db           database.Database instance
 @param   title        export title
 @param   files        files to embed content from, as {file name: {..}}
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_YAML_MULTIPLE = """<%
+import os
 from sqlitely import templates
 
+_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
 progress = get("progress")
 %># {{ title }}.
-# Source: {{ db_filename }}.
+# Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
 # {{ templates.export_comment() }}
 
 <%
@@ -2016,7 +2034,7 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
   <tr>
     <td>
       <div id="title">{{ title }}</div><br />
-      Source: <b>{{ db.name }}</b>.<br />
+      Source: <b>{{ db }}</b>.<br />
       Size: <b title="{{ stats.get("size", db.filesize) }}">{{ util.format_bytes(stats.get("size", db.filesize)) }}</b> (<span title="{{ stats.get("size", db.filesize) }}">{{ util.format_bytes(stats.get("size", db.filesize), max_units=False) }}</span>).<br />
 %if dt_created and dt_modified and dt_created != dt_modified:
       Date: <b>{{ dt_modified }}</b> (created <b>{{ dt_created }}</b>).<br />
@@ -2520,7 +2538,7 @@ if db.schema.get("trigger"):
 if db.schema.get("view"):
       othrtext += util.plural("view", db.schema["view"]) + "."
 %>
-Source: {{ db.name }}.
+Source: {{ db }}.
 Size: {{ util.format_bytes(db.filesize) }} ({{ util.format_bytes(db.filesize, max_units=False) }}).
 %if dt_created and dt_modified and dt_created != dt_modified:
 Date: {{ dt_modified }} (created {{ dt_created }}).
@@ -2781,7 +2799,7 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
                            for dt in (db.date_created, db.last_modified))
 
 %>-- Output from sqlite3_analyzer.
--- Source: {{ db.name }}.
+-- Source: {{ db }}.
 -- Size: {{ util.format_bytes(filesize) }} ({{ util.format_bytes(filesize, max_units=False) }}).
 %if dt_created and dt_modified and dt_created != dt_modified:
 -- Date: {{ dt_modified }} (created {{ dt_created }}).
@@ -2809,20 +2827,21 @@ Database dump SQL template.
 @param   ?progress  callback(name, count) returning whether to cancel, if any
 """
 DUMP_SQL = """<%
-import itertools, logging
+import itertools, logging, os
 from sqlitely.lib import util
 from sqlitely.lib.vendor.step import Template
 from sqlitely import grammar, templates
 
 logger = logging.getLogger("sqlitely")
 
+_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
 is_initial = lambda o, v: o["initial"](db, v) if callable(o.get("initial")) else o.get("initial")
 pragma_first = {k: v for k, v in pragma.items() if is_initial(db.PRAGMA[k], v)}
 pragma_last  = {k: v for k, v in pragma.items() if not is_initial(db.PRAGMA[k], v)}
 progress = get("progress")
 %>
 -- Database dump.
--- Source: {{ db.name }}.
+-- Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
 -- {{ templates.export_comment() }}
 %if pragma_first:
 
