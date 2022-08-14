@@ -498,7 +498,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
 
     is_samefile = util.lceq(db.filename, filename)
     file_existed = is_samefile or os.path.isfile(filename)
-    insert_sql = "INSERT INTO %s.%s SELECT * FROM main.%s;"
+    insert_sql = "INSERT INTO %s.%s SELECT * FROM main.%s"
 
     for category, name in ((c, n) for c, nn in schema.items() for n in nn):
         items = [db.schema[category][name]]
@@ -518,8 +518,8 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
             schemas = [list(x.values())[1] for x in
                        db.execute("PRAGMA database_list").fetchall()]
             schema2 = util.make_unique("main", schemas, suffix="%s")
-            db.execute("ATTACH DATABASE ? AS %s;" % schema2, [filename])
-            sqls0.append("ATTACH DATABASE ? AS %s;" % schema2)
+            sql = "ATTACH DATABASE ? AS %s" % schema2
+            db.execute(sql, [filename]), sqls0.append(sql)
         myrenames = dict(renames or {}, schema=schema2)
 
         allnames2 = util.CaselessDict({x["name"]: x["type"] for x in db.execute(
@@ -528,8 +528,8 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
 
         fks_on = db.execute("PRAGMA foreign_keys").fetchone()["foreign_keys"]
         if fks_on:
-            db.execute("PRAGMA foreign_keys = off;")
-            sqls0.append("PRAGMA foreign_keys = off;")
+            sql = "PRAGMA foreign_keys = off"
+            db.execute(sql), sqls0.append(sql)
 
 
         for category, name in ((c, x) for c in CATEGORIES for x in schema.get(c, ())):
@@ -561,10 +561,11 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                 if name != name2: label += " as %s" % grammar.quote(name2, force=True)
 
                 if name2 in allnames2:
-                    logger.info("Dropping %s %s in %s.", allnames2[name2], grammar.quote(name2, force=True), filename)
-                    sql = "DROP %s %s.%s;" % (allnames2[name2].upper(), schema2, grammar.quote(name2))
-                    db.execute(sql)
-                    actionsqls.append(sql)
+                    logger.info("Dropping %s %s in %s.",
+                                allnames2[name2], grammar.quote(name2, force=True), filename)
+                    sql = "DROP %s %s.%s" % (allnames2[name2].upper(),
+                                             schema2, grammar.quote(name2))
+                    db.execute(sql), actionsqls.append(sql)
 
                 logger.info("Creating %s in %s.", label, filename)
                 sql, err = grammar.transform(db.schema[category][name]["sql"], renames=myrenames)
@@ -573,15 +574,14 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                         result = False
                         break # for category, name
                     else: continue # for category, name
-                db.execute(sql)
-                actionsqls.append(sql)
+                db.execute(sql), actionsqls.append(sql)
                 if not data or "table" != category: exporteds.add(name)
                 allnames2[name2] = category
 
                 # Copy table data
                 if data and "table" == category:
                     if selects and name in selects:
-                        sql = "INSERT INTO %s.%s %s;" % (
+                        sql = "INSERT INTO %s.%s %s" % (
                               schema2, grammar.quote(name2), selects[name])
                     else:
                         sql = insert_sql % (schema2, grammar.quote(name2),
@@ -633,19 +633,19 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
     finally:
         if fks_on:
             try:
-                db.execute("PRAGMA foreign_keys = on;")
-                sqls1.append("PRAGMA foreign_keys = on;")
+                sql = "PRAGMA foreign_keys = on"
+                db.execute(sql), sqls1.append(sql)
             except Exception: pass
         try: 
-            db.execute("DETACH DATABASE %s;" % schema2)
-            sqls1.append("DETACH DATABASE %s;" % schema2)
+            sql = "DETACH DATABASE %s" % schema2
+            db.execute(sql), sqls1.append(sql)
         except Exception: pass
         if not file_existed and (not actionsqls or not result):
             util.try_ignore(os.unlink, filename)
         db.unlock(None, None, filename)
 
     result = bool(actionsqls)
-    if result: db.log_query("EXPORT TO DB", sqls0 + actionsqls + sqls1,
+    if result: db.log_query("EXPORT TO DB", [x + ";" for x in sqls0 + actionsqls + sqls1],
                             params=None if is_samefile else filename)
 
     if progress: progress(**finalargs)
