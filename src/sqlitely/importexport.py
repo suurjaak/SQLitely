@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.08.2022
+@modified    14.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -588,10 +588,13 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                                             grammar.quote(name))
                     sql += limit_sql
                     logger.info("Copying data to %s in %s.", label, filename)
-                    db.execute(sql)
+                    count = db.execute(sql).rowcount
                     db.connection.commit()
                     actionsqls.append(sql)
                     exporteds.add(name)
+                    if progress and not progress(name=name, count=count):
+                        result = False
+                        break # for category, name
 
                 # Create indexes and triggers for tables, triggers for views
                 relateds = db.get_related(category, name, own=True)
@@ -669,7 +672,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
     result, err = True, False
     is_samefile = util.lceq(db.filename, filename)
     file_existed = is_samefile or os.path.isfile(filename)
-    finalargs, logs = {"done": True}, []  # [(sql, params), ]
+    finalargs, logs = {"name": table, "done": True}, []  # [(sql, params), ]
 
     schemas = [list(x.values())[1] for x in
                db.execute("PRAGMA database_list").fetchall()]
@@ -682,31 +685,32 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
         db.execute(sql, [filename])
         logs.append((sql, None if is_samefile else filename))
 
+        count = 0
         fullname = "%s.%s" % (schema2, grammar.quote(table))
         if "SELECT" == query.strip()[:6].upper():
             if create_sql:
-                create_sql = grammar.transform(create_sql, renames={"schema": schema2})[0]
-                db.executescript(create_sql)
-                logs.append((create_sql, None))
+                sql = grammar.transform(create_sql, renames={"schema": schema2})[0]
+                db.executescript(sql)
+                logs.append((sql, None))
                 sql = "INSERT INTO %s %s" % (fullname, query)
             else:
                 sql = "CREATE TABLE %s AS %s" % (fullname, query)
             if limit: sql += (" " +
                 " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, limit)))
             )
-            db.execute(sql, params)
+            count = db.execute(sql, params).rowcount
             logs.append((sql, None))
         else:
             cursor = db.execute(query, params)
             cols = [c[0] for c in cursor.description] if cursor.description else ["rowcount"]
             sql = create_sql
             sql = sql or "CREATE TABLE %s (%s)" % (fullname, ", ".join(map(grammar.quote, cols)))
-            insert_sql = "INSERT INTO %s VALUES (%s)" % (fullname, ", ".join(["?"] * len(cols)))
             db.executescript(sql)
             logs.append((sql, None))
             rows = cursor if cursor.description else [{"rowcount": cursor.rowcount}]
             qrange = (0, limit[0]) if limit else None
             qrange = (limit[1], limit[1] + qrange[0]) if qrange and len(limit) > 1 else qrange
+            insert_sql = "INSERT INTO %s VALUES (%s)" % (fullname, ", ".join(["?"] * len(cols)))
             for i, row in enumerate(rows):
                 if qrange and i >= qrange[1]: break # for
                 if qrange and i < qrange[0]: continue # for
@@ -714,7 +718,12 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
                 params = list(row.values())
                 db.execute(insert_sql, params)
                 logs.append((sql, params))
-        if not empty and not any(db.execute("SELECT 1 FROM %s LIMIT 1" % fullname)):
+                count += 1
+        if count is None and (progress or not empty): # If CREATE TABLE AS query
+            count = db.execute("SELECT COUNT(*) AS count FROM %s" % fullname).fetchone()["count"]
+        if progress and not progress(name=table, count=count):
+            count = None
+        if not empty and not count:
             sql = "DROP TABLE %s" % fullname
             db.executescript(sql)
             logs.append((sql, None))
