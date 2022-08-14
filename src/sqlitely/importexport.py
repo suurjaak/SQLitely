@@ -719,6 +719,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
                 db.execute(insert_sql, params)
                 logs.append((sql, params))
                 count += 1
+        db.connection.commit()
         if count is None and (progress or not empty): # If CREATE TABLE AS query
             count = db.execute("SELECT COUNT(*) AS count FROM %s" % fullname).fetchone()["count"]
         if progress and not progress(name=table, count=count):
