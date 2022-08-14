@@ -685,6 +685,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
         fullname = "%s.%s" % (schema2, grammar.quote(table))
         if "SELECT" == query.strip()[:6].upper():
             if create_sql:
+                create_sql = grammar.transform(create_sql, renames={"schema": schema2})[0]
                 db.executescript(create_sql)
                 logs.append((create_sql, None))
                 sql = "INSERT INTO %s %s" % (fullname, query)
