@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.08.2022
+@modified    15.08.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -682,10 +682,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def lock(self, category, name, key, label=None):
         """
-        Locks a schema object for altering or deleting. For tables, cascades
-        lock to views that query the table; and for views, cascades lock to
-        tables the view queries, also to other views that the view queries
-        or that query the view; recursively.
+        Locks a schema object for altering or deleting.
+        
+        For views, cascades lock to tables and views the view queries, recursively.
 
         @param   key       any hashable to identify lock by
         @param   label     an informational label for lock
@@ -694,7 +693,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if name and name not in self.schema.get(category, {}): return            
         self.locks[category][name].add(key)
         self.locklabels[key] = label
-        if category and name:
+        if "view" == category and name:
             relateds = self.get_related(category, name, data=True, clone=False)
             if not relateds: return
             subkey = (hash(key), category, name)
@@ -711,7 +710,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         category, name = (x.lower() if x else x for x in (category, name))
         self.locks[category][name].discard(key)
         self.locklabels.pop(key, None)
-        if category and name:
+        if "view" == category and name:
             subkey = (hash(key), category, name)
             relateds = self.get_related(category, name, data=True, clone=False)
             for subcategory, itemmap in relateds.items():
@@ -1186,10 +1185,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
                         like tables and views and triggers for tables and views
                         that query them in view or trigger body,
                         also foreign tables for tables;
-                        if None, returns all relations
-        @param   data   whether to return cascading data dependency
-                        relations: for views, the tables and views they query,
-                        recursively
+                        if None, returns all relations.
+                        Ignored if data=True.
+        @param   data   return cascading data dependency relations:
+                        for views, the tables and views they query,
+                        and for tables, the views that query them, all recursively
         @param   skip   CaselessDict{name: True} to skip (internal recursion helper)
         @param   clone  whether to return copies of data
         """
@@ -1199,8 +1199,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                          "index":   ["table"],
                          "trigger": ["table", "view"],
                          "view":    ["table", "view", "trigger"]}
-        if data: SUBCATEGORIES = {"view": ["table", "view"]}
-            
+        if data: SUBCATEGORIES = {"table": ["view"], "view": ["table", "view"]}
+
         item = self.schema.get(category, {}).get(name)
         if not item or category not in SUBCATEGORIES or "meta" not in item:
             return result
@@ -1215,8 +1215,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
                               or "trigger" == subcategory and is_own
                 is_rel_to   = subname.lower() in item["meta"]["__tables__"] \
                               or "trigger" == category and is_own
-                if not is_rel_to and not is_rel_from or data and not is_rel_to \
-                or own is not None and bool(own) is not is_own:
+                if not is_rel_to and not is_rel_from \
+                or data and "view" == category and is_rel_from \
+                or not data and own is not None and bool(own) is not is_own:
                     continue # for subname, subitem
 
                 if subcategory not in result: result[subcategory] = CaselessDict()
@@ -1754,7 +1755,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     if "view" != mycategory: continue # for myitem
 
                     # Re-create view triggers
-                    for subitem in self.get_related("view", myitem["name"], own=True, clone=False).get("trigger", {}).values():
+                    for subitem in self.get_related("view", myitem["name"], own=True, clone=False
+                    ).get("trigger", {}).values():
                         if subitem["name"] in used: continue # for subitem
                         sql, _ = grammar.transform(subitem["sql"], renames=renames)
                         data.setdefault(subitem["type"], []).append(dict(subitem, sql=sql))
@@ -1778,7 +1780,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
             raise six.reraise(type(e), e, tb)
         else:
             resets  = defaultdict(dict) # {category: {name: SQL}}
-            if "table" == category and (name2 == grammar.quote(name2) or not self.has_full_rename_table()):
+            if "table" == category \
+            and (name2 == grammar.quote(name2) or not self.has_full_rename_table()):
                 # Modify sqlite_master directly, as "ALTER TABLE x RENAME TO y"
                 # sets a quoted name "y" to CREATE statements, including related objects,
                 # regardless of whether the name required quoting.
@@ -1807,7 +1810,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 name=table, name2=table, columns=[(name, name2)]
             ), category="ALTER TABLE")
         else:
-            args = self.get_complex_alter_args(item, item, {"column": {table: {name: name2}}}, clone=False)
+            args = self.get_complex_alter_args(item, item, {"column": {table: {name: name2}}},
+                                               clone=False)
             altersql, err = grammar.generate(args)
         if err: raise Exception(err)
 
