@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.08.2022
+@modified    16.08.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3693,7 +3693,7 @@ class DatabasePage(wx.Panel):
                 lock = self.db.get_lock("table")
             if not indexes: return wx.MessageBox("No indexes to re-create.",
                                                  conf.Title, wx.ICON_INFORMATION)
-                
+
             if wx.YES != controls.YesNoMessageBox(
                 "Are you sure you want to re-create %s?" % label,
                 conf.Title, wx.ICON_INFORMATION, default=wx.NO
@@ -3977,24 +3977,14 @@ class DatabasePage(wx.Panel):
         elif "copy" == cmd:
             target = args[0]
             if "related" == target:
-
                 sqls = defaultdict(OrderedDict) # {category: {name: sql}}
-
-                def collect(relateds):
-                    for category, item in ((c, v) for c, vv in relateds.items() for v in vv.values()):
-                        sqls[category][item["name"]] = item["sql"]
-                        if category not in ("table", "view"): continue # for category, item
-                        subrelateds = self.db.get_related("table", item["name"], own=True)
-                        for subcategory, subitemmap in subrelateds.items():
-                            for subitem in subitemmap.values():
-                                sqls[subcategory][subitem["name"]] = subitem["sql"]
-
                 names = args[2:]
-                for name in names:
+                for name in args[2:]:
                     category = next(c for c, xx in self.db.schema.items() if name in xx)
                     sqls[category][name] = self.db.get_sql(category, name)
-                    collect(self.db.get_related(category, name, own=True))
-                    collect(self.db.get_related(category, name))
+                    for category2, items2 in self.db.get_full_related(category, name)[0].items():
+                        for name2, item2 in items2.items():
+                            sqls[category2][name2] = item2["sql"]
                 clipboard_copy("\n\n".join(x.rstrip(";") + ";" for c in sqls for x in sqls[c].values()) + "\n\n")
                 guibase.status("Copied SQL to clipboard.")
 
@@ -5843,7 +5833,7 @@ class DatabasePage(wx.Panel):
                 relateds.setdefault(c, set()).update(m)
 
         for c, n, page in ((c, n, p) for c, nn in relateds.items()
-                     for n, p in self.data_pages.get(c, {}).items() if n in nn):
+                           for n, p in self.data_pages.get(c, {}).items() if n in nn):
             if close: page.CloseCursor()
             else: page.Reload(force=True, item=self.db.get_category(c, n))
 
@@ -6222,6 +6212,7 @@ class DatabasePage(wx.Panel):
 
         renames = defaultdict(util.CaselessDict) # {category: {name1: name2}}
         eschema = defaultdict(util.CaselessDict) # {category: {name: True}}
+        schema2 = {}
         mynames, requireds = names[:], defaultdict(dict) # {name: {name2: category}}
         names1_all = util.CaselessDict({x: True for xx in self.db.schema.values() for x in xx})
         names2_all = util.CaselessDict()
@@ -6257,25 +6248,20 @@ class DatabasePage(wx.Panel):
                     except Exception: pass
 
         def add_requireds(name):
-            """Adds tables and views that the specified item depends on."""
-            category = "table" if name in self.db.schema.get("table", ()) else "view"
-            items = [self.db.schema[category][name]]
-            items.extend(self.db.get_related(category, name, own=True).get("trigger", {}).values())
-            for item in items:
-                # Foreign tables and tables/views used in triggers for table,
-                # tables/views used in view body and view triggers for view.
-                for name2 in util.getval(item, "meta", "__tables__"):
+            """Adds entities that the specified item owns or depends on, recursively."""
+            category = next((c for c in self.db.schema if name in self.db.schema[c]), None)
+            if not category:
+                guibase.status("Warning: no item named %s in database to export.",
+                               grammar.quote(name, force=True), log=True)
+                return
+            for category2, items2 in self.db.get_full_related(category, name)[0].items():
+                for name2, item2 in items2.items():
                     if util.lceq(name, name2): continue # for name2
-                    if name2 not in self.db.schema[category]:
-                        guibase.status("Warning: no item named %s in database to export.",
-                                       grammar.quote(name2, force=True), log=True)
-                        continue # for item
-                    category2 = "table" if name2 in self.db.schema.get("table", ()) else "view"
-                    requireds[name][name2] = category2
-                    if name2 not in mynames and name2 not in eschema.get(category2, ()) \
+                    if name.lower() in util.getval(item2, "meta", "__tables__", default=[]):
+                        requireds[name][name2] = category2
+                    if name2 not in mynames and name2 not in eschema.get(category2, {}) \
                     and self.db.is_valid_name(name2): # Skip sqlite_* specials
                         mynames.append(name2)
-
 
         def fmt_schema_items(dct):
             """Returns schema information string as "tables A, B and views C, D"."""
@@ -6302,7 +6288,7 @@ class DatabasePage(wx.Panel):
                     "- or set blank to skip %(category)s %(name)s.")
         while mynames:
             name = mynames.pop(0)
-            category = "table" if name in self.db.schema.get("table", ()) else "view"
+            category = next(c for c in self.db.schema if name in self.db.schema[c])
             if name not in names2_all:
                 add_requireds(name)
                 names2_all[name] = True

@@ -17,6 +17,7 @@ CHANGELOG
 - fix loading user-specific configuration file
 - fix schema diagram not loading entity positions from last config
 - fix schema diagram adopting custom layout on clicking an entity
+- fix collecting related entities on getting all related SQL or exporting to another database
 - fix error on canceling a single grid export
 - fix error on toggling diagram foreign labels on
 - fix operating on key columns of BLOB affinity in data grids
