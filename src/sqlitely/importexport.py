@@ -13,6 +13,7 @@ Released under the MIT License.
 """
 import codecs
 import collections
+import copy
 import csv
 import datetime
 import functools
@@ -164,16 +165,16 @@ def export_data(make_iterable, filename, format, title, db, columns,
                 writer = None
             else:
                 namespace = {
-                    "db":          db,
-                    "title":       title,
-                    "columns":     columns,
-                    "rows":        cursor,
-                    "row_count":   0,
-                    "sql":         query,
-                    "category":    category,
-                    "name":        name,
-                    "multiple":    multiple,
-                    "progress":    progress,
+                    "db":         db,
+                    "title":      title,
+                    "columns":    columns,
+                    "rows":       cursor,
+                    "row_count":  0,
+                    "sql":        query,
+                    "category":   category,
+                    "name":       name,
+                    "multiple":   multiple,
+                    "progress":   progress,
                 }
                 namespace["namespace"] = namespace # To update row_count
 
@@ -237,7 +238,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
 
 
 def export_data_multiple(filename, format, title, db, category=None,
-                         make_iterables=None, limit=None, empty=True, progress=None):
+                         make_iterables=None, limit=None, maxcount=None, empty=True, progress=None):
     """
     Exports database data from multiple tables/views to a single output file.
 
@@ -246,9 +247,10 @@ def export_data_multiple(filename, format, title, db, category=None,
     @param   title           export title
     @param   db              Database instance
     @param   category        category to produce the data from, "table" or "view", or None for both
-    @param   make_iterables  function returning pairs of ({info}, function returning iterable sequence)
+    @param   make_iterables  function yielding pairs of ({info}, function yielding rows)
                              if not using category
-    @param   limit           query limits if using category, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
+    @param   limit           query limits if any, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
+    @param   maxcount        maximum total number of rows to export over all entities
     @param   empty           do not skip tables and views with no output rows
     @param   progress        callback(name, count) to report progress,
                              returning false if export should cancel
@@ -262,31 +264,80 @@ def export_data_multiple(filename, format, title, db, category=None,
                  "txt":  templates.DATA_TXT_MULTIPLE,
                  "yaml": templates.DATA_YAML_MULTIPLE}
 
+    limit = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
     itemfiles = collections.OrderedDict() # {data name: path to partial file containing item data}
     categories = [] if make_iterables else [category] if category else db.DATA_CATEGORIES
     items = {c: db.schema[c].copy() for c in categories}
+    counts = collections.defaultdict(int) # {name: number of rows yielded}
     for category, name in ((c, n) for c, x in items.items() for n in x):
         db.lock(category, name, filename, label="export")
     if not make_iterables:
-        limit = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
-        limit_sql = (" " +
-            " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, limit)))
-        ) if limit else ""
 
         def make_item_iterables():
             """Yields pairs of ({item}, callable yielding iterable cursor)."""
-            def make_iterable(name):
-                """Generator yielding rows from table, closing cursor on exhaustion or close()."""
-                cursor = db.execute("SELECT * FROM %s%s" % (grammar.quote(name), limit_sql))
+
+            def make_item_iterable(name):
+                """Generator yielding rows from entity, closing cursor on exhaustion or close()."""
+                mylimit = limit
+                if maxcount is not None:
+                    mymax = min(maxcount, limit[0] if limit and limit[0] >= 0 else maxcount)
+                    mylimit = [max(0, mymax - sum(counts.values()))] + list(limit[1:])
+                limit_sql = (" " +
+                    " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
+                ) if mylimit else ""
+
+                cursor = None
                 try:
-                    for x in cursor: yield x
+                    cursor = db.execute("SELECT * FROM %s%s" % (grammar.quote(name), limit_sql))
+                    for x in cursor:
+                        yield x
+                        counts[name] += 1
+                except Exception:
+                    category = next((c for c in db.schema if name in db.schema[c]), "")
+                    logger.warning("Error selecting from %s %s.",
+                                   category, grammar.quote(name, force=True), exc_info=True)
                 finally:
                     util.try_ignore(cursor.close)
+
             for category, item in ((c, x) for c, d in items.items() for x in d.values()):
                 title = "%s %s" % (category.capitalize(), grammar.quote(item["name"], force=True))
-                yield dict(item, title=title), functools.partial(make_iterable, item["name"])
+                yield dict(item, title=title), functools.partial(make_item_iterable, item["name"])
+    else:
 
-        make_iterables = make_item_iterables
+        def make_item_iterable(item, func):
+            """Returns function returning generator yielding rows from func, using limits."""
+            def inner():
+                mylimit = limit
+                if maxcount is not None:
+                    mymax = min(maxcount, limit[0] if limit and limit[0] >= 0 else maxcount)
+                    mylimit = [max(0, mymax - sum(counts.values()))] + list(limit[1:])
+                qrange = (0, mylimit[0]) if mylimit else None
+                qrange = (mylimit[1], (mylimit[1] + mylimit[0]) if mylimit[0] > 0 else -1) \
+                         if mylimit and len(mylimit) > 1 else qrange
+
+                cursor = None
+                try:
+                    cursor = func()
+                    for i, x in enumerate(cursor):
+                        if qrange and qrange[1] >= 0 and i >= qrange[1]: break # for
+                        if qrange and i < qrange[0]: continue # for
+
+                        yield x
+                        counts[name] += 1
+                except Exception:
+                    logger.warning("Error selecting from %s %s.",
+                                   item["type"], grammar.quote(item["name"], force=True),
+                                   exc_info=True)
+                finally:
+                    util.try_ignore(lambda: cursor.close())
+
+            return inner
+
+        def make_item_iterables():
+            """Yields pairs of ({item}, callable yielding iterable cursor)."""
+            for item, make_iterable in make_iterables():
+                yield item, make_item_iterable(item, make_iterable)
+
     try:
         with open(filename, "wb") as f:
             if format in ("csv", "xlsx"):
@@ -297,7 +348,7 @@ def export_data_multiple(filename, format, title, db, category=None,
                     props = {"title": title, "comments": templates.export_comment()}
                     writer = xlsx_writer(filename, props=props)
 
-            for item_i, (item, make_iterable) in enumerate(make_iterables()):
+            for item_i, (item, make_iterable) in enumerate(make_item_iterables()):
                 name = item["name"]
 
                 if format in ("csv", "xlsx"):
@@ -395,49 +446,97 @@ def export_stats(filename, format, db, data, diagram=None):
     return True
 
 
-def export_dump(filename, db, data=True, pragma=True, items=None, limit=None, progress=None):
+def export_dump(filename, db, data=True, pragma=True, filters=None, related=False,
+                limit=None, maxcount=None, empty=True, progress=None):
     """
     Exports full database dump to SQL file.
 
     @param   db        Database instance
     @param   data      whether to dump table data
     @param   pragma    whether to dump PRAGMA settings
-    @param   items     names of database entities to dump if not all,
+    @param   filters   names of database entities to dump if not all,
                        supports * wildcards
+    @param   related   auto-include related items if using filters, recursively
+                       (for tables: indexes and triggers, and referenced foreign tables;
+                        for views: triggers, and tables and views referenced in view body;
+                        for indexes: parent tables;
+                        for triggers: parent tables or views, and referenced tables and views)
     @param   limit     query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
+    @param   maxcount  maximum total number of rows to export over all tables
+    @param   empty     do not skip items with no output rows
+                       (accounting for limit)
     @param   progress  callback(name, count) to report progress,
                        returning false if export should cancel
     """
     result = False
-    entities, namespace, cursors = db.schema, {}, []
+    entities, namespace, cursors = copy.deepcopy(db.schema), {}, []
     limit = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
-    limit_sql = (" " +
-        " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, limit)))
-    ) if limit else ""
+    related_includes = collections.defaultdict(list) # {name: [name of owned or required entity, ]}
+    counts = collections.defaultdict(int) # {name: number of rows yielded}
 
-    def gen(func, *a, **kw):
-        cursor = func(*a, **kw)
+    def gen(name):
+        """Yields rows from table or view, using limit and maxcount."""
+        mylimit = limit
+        if maxcount is not None:
+            mymax = min(maxcount, limit[0] if limit and limit[0] >= 0 else maxcount)
+            mylimit = [max(0, mymax - sum(counts.values()))] + list(limit[1:])
+        limit_sql = (" " +
+            " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
+        ) if mylimit else ""
+
+        cursor = db.execute("SELECT * FROM %s%s" % (grammar.quote(name), limit_sql))
         cursors.append(cursor)
-        for x in cursor: yield x
+        try:
+            for x in cursor:
+                yield x
+                counts[name] += 1
+        finally: cursor.close()
 
-    if items:
-        entities = collections.defaultdict(util.CaselessDict)
-        rgx = util.wildcards_to_regex(items)
-
-        # First pass: select all entities matching by name
+    if filters:
+        entities.clear()
+        rgx = util.wildcards_to_regex(filters)
+        # Select all entities matching by name
+        default_includes = util.CaselessDict()
         for category in db.schema:
             for name, item in db.schema[category].items():
                 if rgx.match(name):
                     entities[category][name] = item
-        # Second pass: select all owned or required related entities, recursively
-        for category, name in [(c, n) for c in entities for n in entities[c]]:
-            for relcategory, rels in db.get_related(category, name, data=True).items():
-                for relname, relitem in rels.items():
-                    entities[relcategory][relname] = relitem
+                    default_includes[name] = True
+        # Select all owned or referred entities
+        for item in [x for d in entities.values() for x in d.values()] if related else ():
+            rels, related_includes = db.get_full_related(item["type"], item["name"])
+            for category2, items2 in rels.items():
+                for name2, item2 in items2.items():
+                    if name2 not in default_includes:
+                        entities[category2][name2] = item2
+                        related_includes[item["name"]].append(name2)
 
-        ORDER = ["table", "index", "view", "trigger"]
-        sql = "\n\n".join("\n\n".join(v["sql"] for v in vv)
-                                      for c in ORDER for vv in entities[c].values())
+    if not empty:
+        empties = []
+        offsetsql = " OFFSET %s" % limit[1] if len(limit) > 1 else ""
+        for category, name in [(c, n) for c in db.DATA_CATEGORIES for n in entities.get(c, {})]:
+            sql = "SELECT 1 FROM %s LIMIT 1%s" % (grammar.quote(name), offsetsql)
+            try:
+                if not any(db.execute(sql)):
+                    empties.append(name)
+            except Exception:
+                logger.warning("Error checking count in %s %s.",
+                               category, grammar.quote(name, force=True), exc_info=True)
+
+        while empties:
+            name = empties.pop(0)
+            item = next(d[name] for d in db.schema.values() if name in d)
+            if item["name"] not in entities.get(item["type"], {}): continue # while
+
+            entities[item["type"]].pop(item["name"])
+            if item["type"] in ("table", "view"):
+                for rels in db.get_related(item["type"], item["name"], own=True).values():
+                    empties.extend(rels)
+            empties.extend(related_includes.get(item["name"], []))
+
+    if filters or not empty:
+        ORDER = ["table", "view", "index", "trigger"]
+        sql = "\n\n".join("\n\n".join(v["sql"] for v in entities[c].values()) for c in ORDER)
     else:
         sql = db.get_sql()
 
@@ -447,11 +546,9 @@ def export_dump(filename, db, data=True, pragma=True, items=None, limit=None, pr
             namespace = {
                 "db":       db,
                 "sql":      sql,
-                "data":     [{"name": t, "columns": opts["columns"],
-                              "rows": gen(db.execute, "SELECT * FROM %s%s" % 
-                                                      (grammar.quote(t), limit_sql))}
-                             for t, opts in entities["table"].items()] if data else [],
-                "pragma":   db.get_pragma_values(dump=True) if pragma else [],
+                "data":     [{"name": n, "columns": item["columns"], "rows": gen(n)}
+                             for n, item in entities["table"].items()] if data else [],
+                "pragma":   db.get_pragma_values(dump=True) if pragma else {},
                 "progress": progress,
                 "buffer":   f,
             }
@@ -472,7 +569,7 @@ def export_dump(filename, db, data=True, pragma=True, items=None, limit=None, pr
 
 
 def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
-                 limit=None, progress=None):
+                 limit=None, maxcount=None, empty=True, progress=None):
     """
     Exports selected tables and views to another database, structure only or
     structure plus data, auto-creating table and view indexes and triggers.
@@ -484,6 +581,8 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
     @param   data      whether to export table data
     @param   selects   {table name: SELECT SQL if not using default}
     @param   limit     query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
+    @param   maxcount  maximum total number of rows to export over all entities
+    @param   empty     do not skip tables with no output rows
     @param   progress  callback(?name, ?error) to report export progress,
                        returning false if export should cancel
     """
@@ -492,9 +591,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
     sqls0, sqls1, actionsqls = [], [], []
     requireds, processeds, exporteds = {}, set(), set()
     limit = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
-    limit_sql = (" " +
-        " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, limit)))
-    ) if limit else ""
+    totalcount = 0
 
     is_samefile = util.lceq(db.filename, filename)
     file_existed = is_samefile or os.path.isfile(filename)
@@ -506,7 +603,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
         for item in items:
             # Foreign tables and tables/views used in triggers for table,
             # tables/views used in view body and view triggers for view.
-            for name2 in util.getval(item, "meta", "__tables__"):
+            for name2 in util.getval(item, "meta", "__tables__", default=[]):
                 if util.lceq(name, name2): continue # for name2
                 requireds.setdefault(name, []).append(name2)
 
@@ -533,7 +630,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
 
 
         for category, name in ((c, x) for c in CATEGORIES for x in schema.get(c, ())):
-            name2 = renames.get(category, {}).get(name, name)
+            name2 = myrenames.get(category, {}).get(name, name)
             processeds.add(name)
 
             if requireds.get(name) \
@@ -586,12 +683,30 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                     else:
                         sql = insert_sql % (schema2, grammar.quote(name2),
                                             grammar.quote(name))
+
+                    mylimit = limit
+                    if maxcount is not None:
+                        mymax = min(maxcount, limit[0] if limit and limit[0] >= 0 else maxcount)
+                        mylimit = [max(0, mymax - totalcount)] + list(limit[1:])
+                    limit_sql = (" " +
+                        " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
+                    ) if mylimit else ""
                     sql += limit_sql
+
                     logger.info("Copying data to %s in %s.", label, filename)
                     count = db.execute(sql).rowcount
                     db.connection.commit()
                     actionsqls.append(sql)
                     exporteds.add(name)
+                    totalcount += count
+
+                    if not empty and not count:
+                        logger.info("Dropping empty %s from %s.", label, filename)
+                        sql = "DROP TABLE %s.%s" % (schema2, grammar.quote(name2))
+                        db.execute(sql), actionsqls.append(sql)
+                        db.connection.commit()
+                        exporteds.discard(name)
+                        continue # for category, name
                     if progress and not progress(name=name, count=count):
                         result = False
                         break # for category, name
@@ -616,6 +731,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                         if sql:
                             db.execute(sql)
                             actionsqls.append(sql)
+
             except Exception as e:
                 logger.exception("Error exporting %s %s from %s to %s.",
                                  category, grammar.quote(name, force=True),
@@ -680,6 +796,12 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
     limit   = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
 
     db.lock(None, None, filename, label="query export")
+
+    if progress and not progress(name=table):
+        db.unlock(None, None, filename)
+        progress(**finalargs)
+        return result
+
     try:
         sql = "ATTACH DATABASE ? AS %s" % schema2
         db.execute(sql, [filename])
@@ -708,11 +830,12 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
             db.executescript(sql)
             logs.append((sql, None))
             rows = cursor if cursor.description else [{"rowcount": cursor.rowcount}]
-            qrange = (0, limit[0]) if limit else None
-            qrange = (limit[1], limit[1] + qrange[0]) if qrange and len(limit) > 1 else qrange
+            qrange = (0, limit[0]) if limit else None # (fromindex, toindex)
+            qrange = (limit[1], (limit[1] + limit[0]) if limit[0] > 0 else -1) \
+                     if limit and len(limit) > 1 else qrange
             insert_sql = "INSERT INTO %s VALUES (%s)" % (fullname, ", ".join(["?"] * len(cols)))
             for i, row in enumerate(rows):
-                if qrange and i >= qrange[1]: break # for
+                if qrange and qrange[1] >= 0 and i >= qrange[1]: break # for
                 if qrange and i < qrange[0]: continue # for
 
                 params = list(row.values())
