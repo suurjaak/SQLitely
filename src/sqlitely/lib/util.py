@@ -20,6 +20,7 @@ import copy
 import ctypes
 import datetime
 import io
+import itertools
 import locale
 import math
 import os
@@ -152,6 +153,118 @@ class CaselessDict(dict):
 
     def __repr__(self): return "%s(%s)" % (type(self).__name__, list(self.items()))
 
+
+
+class ProgressBar(threading.Thread):
+    """
+    A simple ASCII progress bar with a ticker thread, drawn like
+    '[---------\   36%            ] Progressing text..'.
+    or for pulse mode
+    '[    ----                    ] Progressing text..'.
+    """
+
+    def __init__(self, max=100, value=0, min=0, width=30, forechar="-",
+                 backchar=" ", foreword="", afterword="", interval=1,
+                 pulse=False, static=False, echo=print):
+        """
+        Creates a new progress bar, without drawing it yet.
+
+        @param   max        progress bar maximum value, 100%
+        @param   value      progress bar initial value
+        @param   min        progress bar minimum value, for 0%
+        @param   width      progress bar width (in characters)
+        @param   forechar   character used for filling the progress bar
+        @param   backchar   character used for filling the background
+        @param   foreword   text in front of progress bar
+        @param   afterword  text after progress bar
+        @param   interval   ticker thread interval, in seconds
+        @param   pulse      ignore value-min-max, use constant pulse instead
+        @param   static     print stripped afterword only, on explicit update()
+        @param   echo       print function
+        """
+        threading.Thread.__init__(self)
+        for k, v in locals().items(): setattr(self, k, v) if "self" != k else 0
+        self.daemon = True # Daemon threads do not keep application running
+        self.percent = None        # Current progress ratio in per cent
+        self.value = None          # Current progress bar value
+        self.pause = False         # Whether drawing is currently paused
+        self.pulse_pos = 0         # Current pulse position
+        self.bar = "%s[%s%s]%s" % (foreword,
+                                   " ", #backchar if pulse else forechar,
+                                   backchar * (width - 2),
+                                   afterword)
+        self.printbar = self.bar   # Printable text, with padding to clear previous
+        self.progresschar = itertools.cycle("-\\|/")
+        self.is_running = False
+        if static or not pulse: self.update(value, draw=static)
+
+
+    def update(self, value=None, draw=True):
+        """Updates the progress bar value, and refreshes by default."""
+        if self.static:
+            if self.afterword.strip(): self.echo(self.afterword.strip())
+            return
+
+        if value is not None: self.value = min(self.max, max(self.min, value))
+        w_full = self.width - 2
+        if self.pulse:
+            if self.pulse_pos is None:
+                bartext = "%s[%s]%s" % (self.foreword,
+                                        self.forechar * (self.width - 2),
+                                        self.afterword)
+            else:
+                dash = self.forechar * max(1, (self.width - 2) // 7)
+                pos = self.pulse_pos
+                if pos < len(dash):
+                    dash = dash[:pos]
+                elif pos >= self.width - 1:
+                    dash = dash[:-(pos - self.width - 2)]
+
+                bar = "[%s]" % (self.backchar * w_full)
+                # Write pulse dash into the middle of the bar
+                pos1 = min(self.width - 1, pos + 1)
+                bar = bar[:pos1 - len(dash)] + dash + bar[pos1:]
+                bartext = "%s%s%s" % (self.foreword, bar, self.afterword)
+                self.pulse_pos = (self.pulse_pos + 1) % (self.width + 2)
+        else:
+            percent = int(round(100.0 * self.value / (self.max or 1)))
+            percent = 99 if percent == 100 and self.value < self.max else percent
+            w_done = max(1, int(round((percent / 100.0) * w_full)))
+            # Build bar outline, animate by cycling last char from progress chars
+            char_last = self.forechar if self.value else self.backchar
+            if draw and self.value and w_done < w_full: char_last = next(self.progresschar)
+            bartext = "%s[%s%s%s]%s" % (
+                       self.foreword, self.forechar * (w_done - 1), char_last,
+                       self.backchar * (w_full - w_done), self.afterword)
+            # Write percentage into the middle of the bar
+            centertxt = " %2d%% " % percent
+            pos = len(self.foreword) + self.width // 2 - len(centertxt) // 2
+            bartext = bartext[:pos] + centertxt + bartext[pos + len(centertxt):]
+            self.percent = percent
+        self.printbar = bartext + " " * max(0, len(self.bar) - len(bartext))
+        self.bar, prevbar = bartext, self.bar
+        if draw and prevbar != self.bar: self.draw()
+
+
+    def draw(self):
+        """Prints the progress bar, from the beginning of the current line."""
+        if self.static: return
+        self.echo("\r" + self.printbar, end=" ")
+        if len(self.printbar) != len(self.bar):
+            self.printbar = self.bar # Discard padding to clear previous
+            self.echo("\r" + self.printbar, end=" ")
+
+
+    def run(self):
+        if self.static: return # No running progress
+        self.is_running = True
+        while self.is_running:
+            if not self.pause: self.update(self.value)
+            time.sleep(self.interval)
+
+
+    def stop(self):
+        self.is_running = False
 
 
 class tzinfo_utc(datetime.tzinfo):
