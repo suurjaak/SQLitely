@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.08.2022
+@modified    21.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -104,7 +104,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
     @param   make_iterable   function returning iterable sequence yielding rows
     @param   filename        full path and filename of resulting file
     @param   format          file format like "csv"
-    @param   title           title used in HTML and spreadsheet
+    @param   title           export title, as string or a sequence of strings
     @param   db              Database instance
     @param   columns         iterable columns, as [name, ] or [{"name": name}, ]
     @param   query           the SQL query producing the data, if any
@@ -149,7 +149,8 @@ def export_data(make_iterable, filename, format, title, db, columns,
                     writer = csv_writer(filename)
                     if query: query = query.replace("\r", " ").replace("\n", " ")
                 else:
-                    props = {"title": title, "comments": templates.export_comment()}
+                    props = {"title": "; ".join(util.tuplefy(title)),
+                             "comments": templates.export_comment()}
                     writer = xlsx_writer(filename, name or "SQL Query", props=props)
                     writer.set_header(True)
                 if query:
@@ -244,7 +245,7 @@ def export_data_multiple(filename, format, title, db, category=None,
 
     @param   filename        full path and filename of resulting file
     @param   format          file format like "csv"
-    @param   title           export title
+    @param   title           export title, as string or a sequence of strings
     @param   db              Database instance
     @param   category        category to produce the data from, "table" or "view", or None for both
     @param   make_iterables  function yielding pairs of ({info}, function yielding rows)
@@ -345,7 +346,8 @@ def export_data_multiple(filename, format, title, db, category=None,
                 if "csv" == format:
                     writer = csv_writer(filename)
                 else:
-                    props = {"title": title, "comments": templates.export_comment()}
+                    props = {"title": "; ".join(util.tuplefy(title)),
+                             "comments": templates.export_comment()}
                     writer = xlsx_writer(filename, props=props)
 
             for item_i, (item, make_iterable) in enumerate(make_item_iterables()):
