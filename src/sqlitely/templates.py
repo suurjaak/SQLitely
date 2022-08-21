@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.08.2022
+@modified    20.08.2022
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -425,6 +425,30 @@ _, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filenam
 """
 
 
+"""
+SQL create statement template for saving view as table.
+
+@param   name      view name
+@param   columns   list of column definitions, as [{name, ?type}]
+@param   ?sql      original CREATE VIEW statement
+@param   ?format   output format like "html", affects layout order
+"""
+CREATE_VIEW_TABLE_SQL = """<%
+from sqlitely import grammar, templates
+
+meta = {"__type__": grammar.SQL.CREATE_TABLE, "name": name, "columns": columns}
+create_sql, _ = grammar.generate(meta)
+%>
+%if get("sql"):
+-- Original definition:
+%for line in sql.splitlines():
+-- {{ line }}
+%endfor
+%endif
+{{ create_sql.rstrip(";\\n") }};
+"""
+
+
 
 """
 JSON export template.
@@ -544,7 +568,7 @@ progress = get("progress")
 %endif
 %if get("create_sql"):
 
-{{ create_sql.rstrip(";") }};
+{{ create_sql.rstrip(";\\n") }};
 %endif
 
 
@@ -620,7 +644,7 @@ progress = get("progress")
 %endif
 %if get("create_sql"):
 
-{{ create_sql.rstrip(";") }};
+{{ create_sql.rstrip(";\\n") }};
 %endif
 
 
@@ -727,7 +751,7 @@ SQL: {{ sql }}
 %endif
 %if name and get("create_sql"):
 
-{{ create_sql.rstrip(";") }};
+{{ create_sql.rstrip(";\\n") }};
 %endif
 
 <%
@@ -816,7 +840,7 @@ SQL: {{ sql }}
 %endif
 %if name and get("create_sql"):
 
-{{ create_sql.rstrip(";") }};
+{{ create_sql.rstrip(";\\n") }};
 %endif
 <%
 
@@ -949,7 +973,7 @@ progress = get("progress")
 %endif
 %if get("create_sql"):
 #
-# {{ create_sql.rstrip(";").replace("\\n", "\\n#  ") }};
+# {{ create_sql.rstrip(";\\n").replace("\\n", "\\n#  ") }};
 #
 %endif
 
@@ -1054,7 +1078,7 @@ progress = get("progress")
 %endif
 %if get("create_sql"):
 #
-# {{ create_sql.rstrip(";").replace("\\n", "\\n# ") }};
+# {{ create_sql.rstrip(";\\n").replace("\\n", "\\n# ") }};
 #
 %endif
 <%
@@ -2861,9 +2885,10 @@ if progress and not progress(): break # for table
 try:
     row = next(table["rows"], None)
     if not row: continue # for table
+
     rows = itertools.chain([row], table["rows"])
 except Exception as e:
-    logger.exception("Error exporting table %s from %s.", grammar.quote(table["name"]), db)
+    logger.exception("Error exporting table %s from %s.", grammar.quote(table["name"], force=True), db)
     if progress and not progress(name=table["name"], error=util.format_exc(e)):
         break # for table
     else: continue # for table
@@ -2874,7 +2899,7 @@ except Exception as e:
 try:
     Template(templates.DATA_ROWS_SQL).stream(buffer, dict(table, progress=progress, rows=rows))
 except Exception as e:
-    logger.exception("Error exporting table %s from %s.", grammar.quote(table["name"]), db)
+    logger.exception("Error exporting table %s from %s.", grammar.quote(table["name"], force=True), db)
     if progress and not progress(name=table["name"], error=util.format_exc(e)):
         break # for table
 %>

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.08.2022
+@modified    20.08.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3985,7 +3985,8 @@ class DatabasePage(wx.Panel):
                     for category2, items2 in self.db.get_full_related(category, name)[0].items():
                         for name2, item2 in items2.items():
                             sqls[category2][name2] = item2["sql"]
-                clipboard_copy("\n\n".join(x.rstrip(";") + ";" for c in sqls for x in sqls[c].values()) + "\n\n")
+                clipboard_copy("\n\n".join(x.rstrip(";\n") + ";" for c in sqls
+                                           for x in sqls[c].values()) + "\n\n")
                 guibase.status("Copied SQL to clipboard.")
 
         elif "export" == cmd:

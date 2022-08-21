@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.08.2022
+@modified    20.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -206,11 +206,11 @@ def export_data(make_iterable, filename, format, title, db, columns,
 
                 if progress and not progress(): return None
 
-                if "sql" == format and "table" != category:
+                if "sql" == format and "view" == category:
                     # Add CREATE statement for saving view AS table
-                    meta = {"__type__": grammar.SQL.CREATE_TABLE, "name": name,
-                            "columns": columns}
-                    namespace["create_sql"], _ = grammar.generate(meta)
+                    meta = {"name": name, "columns": columns, "sql": db.get_sql(category, name)}
+                    tpl = step.Template(templates.CREATE_VIEW_TABLE_SQL, strip=False)
+                    namespace["create_sql"] = tpl.expand(**meta).strip()
                 elif name:
                     # Add CREATE statement
                     transform = {"flags": {"exists": True}} if "sql" == format else None

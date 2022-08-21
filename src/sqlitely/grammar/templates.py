@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    01.01.2022
+@modified    20.08.2022
 ------------------------------------------------------------------------------
 """
 
@@ -357,7 +357,7 @@ PRAGMA writable_SCHEMA = ON;{{ LF() }}
 
 %for category in CATEGORIES:
     %for name, sql in data.get(category, {}).items():
-UPDATE sqlite_master {{ WS("SET sql = ") }}{{ Q(sql.rstrip(";"), force=True) }}{{ LF() }}
+UPDATE sqlite_master {{ WS("SET sql = ") }}{{ Q(sql.rstrip(";\\n"), force=True) }}{{ LF() }}
 WHERE {{ WS("type = ") }}{{ Q(category, force=True) }} {{ WS(" AND name = ") }}{{ Q(name, force=True) }};{{ LF() }}
 {{ LF() }}
     %endfor
