@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    31.07.2022
+@modified    21.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -791,7 +791,7 @@ class Parser(object):
                 fkctx = c.foreign_key_clause()
                 result[key] = self.build_fk_extra(fkctx)
                 result[key]["table"] = self.u(fkctx.foreign_table)
-                result[key]["key"] = self.u(fkctx.column_name(0))
+                result[key]["key"] = self.u(fkctx.column_name(0) or "")
 
             if key and c.constraint_name(): result[key]["name"] = self.u(c.constraint_name)
 
