@@ -537,8 +537,8 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
             empties.extend(related_includes.get(item["name"], []))
 
     if filters or not empty:
-        ORDER = ["table", "view", "index", "trigger"]
-        sql = "\n\n".join("\n\n".join(v["sql"] for v in entities[c].values()) for c in ORDER)
+        sql = "\n\n".join("\n\n".join(v["sql"] for v in entities[c].values())
+                          for c in db.CATEGORIES)
     else:
         sql = db.get_sql()
 

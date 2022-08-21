@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.08.2022
+@modified    21.08.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -485,16 +485,16 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_edit = self.menu_edit = wx.Menu()
         menu.Append(menu_edit, "&Edit")
         menu_edit_table    = wx.Menu()
+        menu_edit_view     = wx.Menu()
         menu_edit_index    = wx.Menu()
         menu_edit_trigger  = wx.Menu()
-        menu_edit_view     = wx.Menu()
         menu_edit_clone    = wx.Menu()
         menu_edit_drop     = wx.Menu()
         menu_edit_truncate = wx.Menu()
         self.menu_edit_table   = menu_edit.AppendSubMenu(menu_edit_table,   "&Table")
+        self.menu_edit_view    = menu_edit.AppendSubMenu(menu_edit_view,    "&View")
         self.menu_edit_index   = menu_edit.AppendSubMenu(menu_edit_index,   "&Index")
         self.menu_edit_trigger = menu_edit.AppendSubMenu(menu_edit_trigger, "T&rigger")
-        self.menu_edit_view    = menu_edit.AppendSubMenu(menu_edit_view,    "&View")
         menu_edit.AppendSeparator()
         menu_edit_save = self.menu_edit_save = menu_edit.Append(
             wx.ID_ANY, "&Save unsaved changes", "Save all unsaved changes")
@@ -507,15 +507,15 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_edit_clone_table   = wx.Menu()
         menu_edit_clone_view    = wx.Menu()
         menu_edit_drop_table    = wx.Menu()
+        menu_edit_drop_view     = wx.Menu()
         menu_edit_drop_index    = wx.Menu()
         menu_edit_drop_trigger  = wx.Menu()
-        menu_edit_drop_view     = wx.Menu()
         self.menu_edit_clone_table  = menu_edit_clone.AppendSubMenu(menu_edit_clone_table, "&Table")
         self.menu_edit_clone_view   = menu_edit_clone.AppendSubMenu(menu_edit_clone_view,  "&View")
         self.menu_edit_drop_table   = menu_edit_drop .AppendSubMenu(menu_edit_drop_table,   "&Table")
+        self.menu_edit_drop_view    = menu_edit_drop .AppendSubMenu(menu_edit_drop_view,    "&View")
         self.menu_edit_drop_index   = menu_edit_drop .AppendSubMenu(menu_edit_drop_index,   "&Index")
         self.menu_edit_drop_trigger = menu_edit_drop .AppendSubMenu(menu_edit_drop_trigger, "T&rigger")
-        self.menu_edit_drop_view    = menu_edit_drop .AppendSubMenu(menu_edit_drop_view,    "&View")
         menu_edit_drop.AppendSeparator()
         menu_edit_drop_schema       = self.menu_edit_drop_schema = menu_edit_drop.Append(
             wx.ID_ANY, "Drop everything", "Drop all entities in the database")
@@ -2836,14 +2836,14 @@ class DatabasePage(wx.Panel):
         ColourManager.Manage(startpanel, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
 
         BUTTONS = [("table",   "Create ta&ble",   "Add new table to database"),
+                   ("view",    "Cre&ate view",    "Add new view to database"),
                    ("index",   "Create in&dex",   "Add index on table\n"),
-                   ("trigger", "Create t&rigger", "Add trigger on table or view"),
-                   ("view",    "Cre&ate view",    "Add new view to database"), ]
+                   ("trigger", "Create t&rigger", "Add trigger on table or view"), ]
         buttons, bsize = [], (180, 180)
         i1 = images.ButtonTable.Bitmap
-        i2 = images.ButtonIndex.Bitmap
-        i3 = images.ButtonTrigger.Bitmap
-        i4 = images.ButtonView.Bitmap
+        i2 = images.ButtonView.Bitmap
+        i3 = images.ButtonIndex.Bitmap
+        i4 = images.ButtonTrigger.Bitmap
         for i, (c, l, n) in enumerate(BUTTONS):
             buttons.append(controls.NoteButton(startpanel, l, n, size=bsize, style=wx.ALIGN_CENTER,
                                                bmp=(i1, i2, i3, i4)[i]))
@@ -3449,8 +3449,6 @@ class DatabasePage(wx.Panel):
                        self.add_schema_page(self.db.get_category(category, name))
                 self.notebook_schema.SetSelection(self.notebook_schema.GetPageIndex(page))
         elif "drop schema" == cmd:
-            CATEGORY_ORDER = ["table", "view", "index", "trigger"]
-
             categories = {c: list(vv) for c, vv in self.db.schema.items() if vv}
             if wx.YES != controls.YesNoMessageBox(
                 "Are you sure you want to drop everything in the database?",
@@ -3460,7 +3458,7 @@ class DatabasePage(wx.Panel):
             if wx.YES != controls.YesNoMessageBox(
                 "Are you REALLY sure you want to drop everything in the database?\n\n"
                 "This will delete: %s." % util.join(", ", 
-                    (util.plural(c, categories[c]) for c in CATEGORY_ORDER if c in categories)
+                    (util.plural(c, categories[c]) for c in self.db.CATEGORIES if c in categories)
                 ), conf.Title, wx.ICON_WARNING, default=wx.NO
             ): return
 
@@ -3485,7 +3483,7 @@ class DatabasePage(wx.Panel):
 
             deleteds = []
             try:
-                for category, names in ((c, categories.get(c)) for c in CATEGORY_ORDER):
+                for category, names in ((c, categories.get(c)) for c in self.db.CATEGORIES):
                     for name in names or ():
                         self.db.executeaction("DROP %s IF EXISTS %s" % (category.upper(),
                                               grammar.quote(name)), name="DROP")
@@ -3509,10 +3507,9 @@ class DatabasePage(wx.Panel):
             if lock: return wx.MessageBox("%s, cannot drop." % lock,
                                           conf.Title, wx.OK | wx.ICON_WARNING)
 
-            CATEGORY_ORDER = ["table", "view", "index", "trigger"]
             categories = {category: names} if category else \
                          OrderedDict((c, [n for n in names if n in d])
-                                     for c in CATEGORY_ORDER
+                                     for c in self.db.CATEGORIES
                                      for d in [self.db.schema.get(c, {})]
                                      if set(names) & set(d))
             extra = "\n\nAll data, and any associated indexes and triggers will be lost." \
@@ -3583,7 +3580,7 @@ class DatabasePage(wx.Panel):
                 if notdeleteds: wx.CallAfter(after_err) if deleteds else after_err()
                 if deleteds:
                     guibase.status("Dropped %s." % util.join(", ", (
-                        util.plural(c, deleteds[c]) for c in CATEGORY_ORDER if c in deleteds
+                        util.plural(c, deleteds[c]) for c in self.db.CATEGORIES if c in deleteds
                     )), log=True)
                     def after():
                         if not self: return
@@ -5003,13 +5000,12 @@ class DatabasePage(wx.Panel):
         if "import" == action:
             return self.handle_command(action)
 
-        CATEGORIES  = ["table", "view"]
         MULTILABELS = ["&All tables", "A&ll views", "All tables an&d views"]
-        schemaflags = {c: bool(self.db.schema[c]) for c in CATEGORIES}
+        schemaflags = {c: bool(self.db.schema[c]) for c in self.db.DATA_CATEGORIES}
         schemaflags[None] = all(schemaflags.values())
         menu = wx.Menu()
 
-        for category, names in ((c, self.db.schema[c]) for c in CATEGORIES):
+        for category, names in ((c, self.db.schema[c]) for c in self.db.DATA_CATEGORIES):
             menu_parent = wx.Menu()
             for name in names:
                 item = wx.MenuItem(menu_parent, -1, name)
@@ -5026,8 +5022,8 @@ class DatabasePage(wx.Panel):
 
         if "data" != action:
             menu.AppendSeparator()
-            for category, label in zip(CATEGORIES + [None], MULTILABELS):
-                names = sum((list(self.db.schema[c]) for c in ([category] if category else CATEGORIES)), [])
+            for category, label in zip(self.db.DATA_CATEGORIES + [None], MULTILABELS):
+                names = sum((list(self.db.schema[c]) for c in ([category] if category else self.db.DATA_CATEGORIES)), [])
                 if "export" == action:
                     menu_types = wx.Menu()
                     item_choices = menu.AppendSubMenu(menu_types, label)
@@ -6858,7 +6854,7 @@ class DatabasePage(wx.Panel):
 
                     if "table" == category:
                         columns = item.get("columns") or []
-                        subcategories, emptysubs = ["table", "index", "trigger", "view"], True
+                        subcategories, emptysubs = ["table", "view", "index", "trigger"], True
                         childtext = util.plural("column", columns)
                     elif "index" == category:
                         childtext = "ON " + util.unprint(grammar.quote(item["tbl_name"]))

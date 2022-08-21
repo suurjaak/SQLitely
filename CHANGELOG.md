@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.1, 2022-08-12
+2.1, 2022-08-21
 ---------------
 - add button panels to data and schema tabs
 - add column and key toggles to schema diagram
@@ -10,6 +10,7 @@ CHANGELOG
 - add support for multiple item export into any supported output format
 - add command-line flag --config-file
 - add NULLS FIRST|LAST to SQLite grammar ORDER BY clause
+- order database categories as table-view-index-trigger
 - use uniform icons for schema tree items
 - retain schema diagram custom layout on schema change
 - support index and trigger keywords in meta search

@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.08.2022
+@modified    21.08.2022
 """
 import calendar
 import collections
@@ -60,7 +60,7 @@ ESCAPE_LIKE = "\\" # Character used to escape SQLite LIKE special characters _%
 
 class SearchQueryParser(object):
 
-    ITEM_CATEGORIES = ["table", "index", "trigger", "view"]
+    ITEM_CATEGORIES = ["table", "view", "index", "trigger"]
 
     KEYWORDS = ITEM_CATEGORIES + ["column", "date"]
 

@@ -22,7 +22,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    20.08.2022
+@modified    21.08.2022
 ------------------------------------------------------------------------------
 """
 
@@ -343,7 +343,7 @@ Alter sqlite_master directly.
          }
 """
 ALTER_MASTER = """<%
-CATEGORIES = ["table", "index", "view", "trigger"]
+CATEGORIES = ["table", "view", "index", "trigger"]
 %>
 {{ WS("-- Overwrite CREATE statements in sqlite_master directly,") }}{{ LF() }}
 {{ WS("-- to avoid table names being force-quoted by SQLite") }}{{ LF() }}

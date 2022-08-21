@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.08.2022
+@modified    21.08.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -49,7 +49,7 @@ class Database(object):
     }
 
     """Schema object categories."""
-    CATEGORIES = ["table", "index", "trigger", "view"]
+    CATEGORIES = ["table", "view", "index", "trigger"]
 
     """Schema data object categories."""
     DATA_CATEGORIES = ["table", "view"]
@@ -1195,7 +1195,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         category, name = category.lower(), name.lower()
         result, skip = CaselessDict(), (skip or CaselessDict({name: True}))
-        SUBCATEGORIES = {"table":   ["table", "index", "view", "trigger"],
+        SUBCATEGORIES = {"table":   ["table", "view", "index", "trigger"],
                          "index":   ["table"],
                          "trigger": ["table", "view"],
                          "view":    ["table", "view", "trigger"]}
