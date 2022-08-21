@@ -46,7 +46,8 @@ HTML data export template header.
 
 Opens <html> tag.
 
-@param   title  export title, as string or a sequence of strings
+@param   title      export title, as string or a sequence of strings
+@param   ?multiple  whether not doing single item export
 """
 DATA_HTML_HEADER = """<%
 from sqlitely.lib import util
@@ -97,6 +98,14 @@ from sqlitely import conf, images
       border-radius: 10px;
       padding: 10px;
     }
+%if get("multiple"):
+    table.body_table.multiple > tbody > tr:nth-child(1) > td {
+      border-radius: 10px 10px 0 0;
+    }
+    table.body_table.multiple > tbody > tr:nth-child(2) > td {
+      border-radius: 0 0 10px 10px;
+    }
+%endif
     table.content_table {
       empty-cells: show;
       border-spacing: 2px;
@@ -235,7 +244,7 @@ HTML data export template.
 DATA_HTML = """<%
 from sqlitely.lib.vendor.step import Template
 from sqlitely import templates
-%>{{! Template(templates.DATA_HTML_HEADER).expand(title=title) }}
+%>{{! Template(templates.DATA_HTML_HEADER).expand(title=title, multiple=get("multiple")) }}
 <body>
 <div id="root">
 {{! Template(templates.DATA_HTML_MULTIPLE_PART).expand(locals()) }}
@@ -263,7 +272,7 @@ from sqlitely import templates
 
 progress = get("progress")
 _, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
-%>{{! Template(templates.DATA_HTML_HEADER).expand(title=title) }}
+%>{{! Template(templates.DATA_HTML_HEADER).expand(title=title, multiple=True) }}
 <body>
 <div id="root">
 %if len(files) > 1:
@@ -319,7 +328,7 @@ _, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filenam
 item_id = "item__%s" % hash(util.tuplefy(title))
 progress = get("progress")
 %>
-<table class="body_table" id="{{ item_id }}">
+<table class="body_table{{ " multiple" if get("multiple") else "" }}" id="{{ item_id }}">
 <tr><td><table class="header_table">
   <tr>
     <td>
