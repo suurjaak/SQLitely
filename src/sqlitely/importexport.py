@@ -88,7 +88,7 @@ EXT_NAMES = {
     "yaml": "YAML data",
 }
 """Wildcards for export file dialog."""
-EXPORT_WILDCARD = "|".join("%s%s (*.%s)|*.%s" % (util.cap(EXT_NAMES[x]), x, x) for x in EXPORT_EXTS)
+EXPORT_WILDCARD = "|".join("%s (*.%s)|*.%s" % (util.cap(EXT_NAMES[x]), x, x) for x in EXPORT_EXTS)
 
 
 logger = logging.getLogger(__name__)
@@ -273,39 +273,32 @@ def export_data_multiple(filename, format, title, db, category=None,
         db.lock(category, name, filename, label="export")
     if not make_iterables:
 
+        def make_item_iterable(name):
+            """Returns cursor yielding rows from entity, auto-closed on error."""
+            mylimit = limit
+            if maxcount is not None:
+                mymax = min(maxcount, limit[0] if limit and limit[0] >= 0 else maxcount)
+                mylimit = [max(0, mymax - sum(counts.values()))] + list(limit[1:])
+            limit_sql = (" " +
+                " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
+            ) if mylimit else ""
+            sql = "SELECT * FROM %s%s" % (grammar.quote(name), limit_sql)
+
+            category = next((c for c in db.schema if name in db.schema[c]), "")
+            error = "Error querying %s %s." % (category, grammar.quote(name, force=True))
+            tick = lambda n: counts.update({name: n})
+            return db.select(sql, error=msg, tick=tick)
+
         def make_item_iterables():
             """Yields pairs of ({item}, callable yielding iterable cursor)."""
-
-            def make_item_iterable(name):
-                """Generator yielding rows from entity, closing cursor on exhaustion or close()."""
-                mylimit = limit
-                if maxcount is not None:
-                    mymax = min(maxcount, limit[0] if limit and limit[0] >= 0 else maxcount)
-                    mylimit = [max(0, mymax - sum(counts.values()))] + list(limit[1:])
-                limit_sql = (" " +
-                    " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
-                ) if mylimit else ""
-
-                cursor = None
-                try:
-                    cursor = db.execute("SELECT * FROM %s%s" % (grammar.quote(name), limit_sql))
-                    for x in cursor:
-                        yield x
-                        counts[name] += 1
-                except Exception:
-                    category = next((c for c in db.schema if name in db.schema[c]), "")
-                    logger.warning("Error selecting from %s %s.",
-                                   category, grammar.quote(name, force=True), exc_info=True)
-                finally:
-                    util.try_ignore(cursor.close)
-
             for category, item in ((c, x) for c, d in items.items() for x in d.values()):
                 title = "%s %s" % (category.capitalize(), grammar.quote(item["name"], force=True))
                 yield dict(item, title=title), functools.partial(make_item_iterable, item["name"])
-    else:
 
-        def make_item_iterable(item, func):
-            """Returns function returning generator yielding rows from func, using limits."""
+    elif limit or maxcount is not None:
+
+        def make_item_iterable(item, make_iterable):
+            """Returns function returning generator yielding rows, using limits."""
             def inner():
                 mylimit = limit
                 if maxcount is not None:
@@ -317,15 +310,18 @@ def export_data_multiple(filename, format, title, db, category=None,
 
                 cursor = None
                 try:
-                    cursor = func()
-                    for i, x in enumerate(cursor):
-                        if qrange and qrange[1] >= 0 and i >= qrange[1]: break # for
-                        if qrange and i < qrange[0]: continue # for
+                    cursor = make_iterable()
+                    for i, x in enumerate(cursor) if not qrange else ():
+                        yield x
+                        counts[name] += 1
+                    for i, x in enumerate(cursor) if qrange else ():
+                        if i < qrange[0]: continue # for
+                        if qrange[1] >= 0 and i >= qrange[1]: break # for
 
                         yield x
                         counts[name] += 1
                 except Exception:
-                    logger.warning("Error selecting from %s %s.",
+                    logger.warning("Error querying %s %s.",
                                    item["type"], grammar.quote(item["name"], force=True),
                                    exc_info=True)
                 finally:
@@ -337,6 +333,8 @@ def export_data_multiple(filename, format, title, db, category=None,
             """Yields pairs of ({item}, callable yielding iterable cursor)."""
             for item, make_iterable in make_iterables():
                 yield item, make_item_iterable(item, make_iterable)
+    else:
+        make_item_iterables = make_iterables
 
     try:
         with open(filename, "wb") as f:
@@ -475,7 +473,7 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
     related_includes = collections.defaultdict(list) # {name: [name of owned or required entity, ]}
     counts = collections.defaultdict(int) # {name: number of rows yielded}
 
-    def gen(name):
+    def make_iterable(name):
         """Yields rows from table or view, using limit and maxcount."""
         mylimit = limit
         if maxcount is not None:
@@ -484,14 +482,12 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
         limit_sql = (" " +
             " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
         ) if mylimit else ""
+        sql = "SELECT * FROM %s%s" % (grammar.quote(name), limit_sql)
 
-        cursor = db.execute("SELECT * FROM %s%s" % (grammar.quote(name), limit_sql))
-        cursors.append(cursor)
-        try:
-            for x in cursor:
-                yield x
-                counts[name] += 1
-        finally: cursor.close()
+        error = "Error querying table %s." % grammar.quote(name, force=True)
+        tick = lambda n: counts.update({name: n})
+        cursors.append(db.select(sql, error=msg, tick=tick))
+        return cursors[-1]
 
     if filters:
         entities.clear()
@@ -514,15 +510,12 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
 
     if not empty:
         empties = []
-        offsetsql = " OFFSET %s" % limit[1] if len(limit) > 1 else ""
+        offset_sql = " OFFSET %s" % limit[1] if len(limit) > 1 else ""
         for category, name in [(c, n) for c in db.DATA_CATEGORIES for n in entities.get(c, {})]:
-            sql = "SELECT 1 FROM %s LIMIT 1%s" % (grammar.quote(name), offsetsql)
-            try:
-                if not any(db.execute(sql)):
-                    empties.append(name)
-            except Exception:
-                logger.warning("Error checking count in %s %s.",
-                               category, grammar.quote(name, force=True), exc_info=True)
+            sql = "SELECT 1 FROM %s LIMIT 1%s" % (grammar.quote(name), offset_sql)
+            if not any(db.select(sql, error="Error checking count in %s %s." %
+                       (category, grammar.quote(name, force=True)))):
+                empties.append(name)
 
         while empties:
             name = empties.pop(0)
@@ -547,7 +540,7 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
             namespace = {
                 "db":       db,
                 "sql":      sql,
-                "data":     [{"name": n, "columns": item["columns"], "rows": gen(n)}
+                "data":     [{"name": n, "columns": item["columns"], "rows": make_iterable(n)}
                              for n, item in entities["table"].items()] if data else [],
                 "pragma":   db.get_pragma_values(dump=True) if pragma else {},
                 "progress": progress,
@@ -830,14 +823,15 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
             sql = sql or "CREATE TABLE %s (%s)" % (fullname, ", ".join(map(grammar.quote, cols)))
             db.executescript(sql)
             logs.append((sql, None))
+
+            insert_sql = "INSERT INTO %s VALUES (%s)" % (fullname, ", ".join(["?"] * len(cols)))
             rows = cursor if cursor.description else [{"rowcount": cursor.rowcount}]
             qrange = (0, limit[0]) if limit else None # (fromindex, toindex)
             qrange = (limit[1], (limit[1] + limit[0]) if limit[0] > 0 else -1) \
                      if limit and len(limit) > 1 else qrange
-            insert_sql = "INSERT INTO %s VALUES (%s)" % (fullname, ", ".join(["?"] * len(cols)))
             for i, row in enumerate(rows):
-                if qrange and qrange[1] >= 0 and i >= qrange[1]: break # for
                 if qrange and i < qrange[0]: continue # for
+                if qrange and qrange[1] >= 0 and i >= qrange[1]: break # for
 
                 params = list(row.values())
                 db.execute(insert_sql, params)

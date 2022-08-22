@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.08.2022
+@modified    22.08.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1089,8 +1089,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                             returning false if generate should cancel
         """
         index, total = 0, sum(len(vv) for vv in self.schema.values())
-        for category, itemmap in self.schema.items():
-            for name, opts in itemmap.items():
+        for itemmap in self.schema.values():
+            for opts in itemmap.values():
                 meta = opts.get("meta")
                 if opts["sql"] == opts["sql0"] and meta and not meta.get("__comments__"):
                     sql, _ = grammar.generate(meta)
@@ -1499,6 +1499,27 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
+    def select(self, sql, params=(), error=None, tick=None):
+        """
+        Yields rows from query; auto-closes cursor on error, never raises.
+
+        @param   error  message to use when logging error, if not assembling with SQL and params
+        @param   tick   function(index) invoked after yielding each row, index is 1-based
+        """
+        cursor = None
+        try:
+            cursor = self.execute(sql, params)
+            for i, x in enumerate(cursor, 1):
+                yield x
+                tick and tick(i)
+        except Exception:
+            msg = error or "Error running %r%s." % (sql, " (%s)" % (params, ) if params else "")
+            logger.warning(msg, exc_info=True)
+        finally:
+            try: cursor.close()
+            except Exception: pass
+
+
     def select_row(self, table, row, rowid=None):
         """
         Fetches the table row from the database, identified by the given ROWID,
@@ -1765,7 +1786,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         category, reloads = category.lower(), defaultdict(set) # {category: [name, ]}
         reloads[category].add(newname)
         for subcategory, submap in self.get_related(category, oldname, clone=False).items():
-            for subname, subitem in submap.items():
+            for subname in submap:
                 reloads[subcategory].add(subname)
 
         opts = self.schema[category].pop(oldname)
@@ -1893,7 +1914,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         item["meta"]["columns"] = [c for c in item["meta"]["columns"]
                                    if not util.lceq(c["name"], column)]
-        sql2, err = grammar.generate(item["meta"])
+        _, err = grammar.generate(item["meta"])
         if err: raise Exception(err)
 
         args = self.get_complex_alter_args(item, item, drops=[column], clone=False)
