@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.08.2022
+@modified    22.08.2022
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1016,6 +1016,13 @@ def to_unicode(value, encoding=None):
     if not isinstance(result, six.text_type):
         result = six.text_type(result)
     return result
+
+
+@memoize
+def cap(val, reverse=False):
+    """Returns value with the first letter capitalized (or uncapitalized if reverse)."""
+    val = val if isinstance(val, (six.binary_type, six.text_type)) else str(val)
+    return (val[0].lower() if reverse else val[0].upper()) + val[1:]
 
 
 @memoize

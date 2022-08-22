@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.08.2022
+@modified    22.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -88,8 +88,7 @@ EXT_NAMES = {
     "yaml": "YAML data",
 }
 """Wildcards for export file dialog."""
-EXPORT_WILDCARD = "|".join("%s%s (*.%s)|*.%s" % (EXT_NAMES[x][:1].upper(), EXT_NAMES[x][1:], x, x)
-                           for x in EXPORT_EXTS)
+EXPORT_WILDCARD = "|".join("%s%s (*.%s)|*.%s" % (util.cap(EXT_NAMES[x]), x, x) for x in EXPORT_EXTS)
 
 
 logger = logging.getLogger(__name__)

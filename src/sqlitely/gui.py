@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.08.2022
+@modified    22.08.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5430,7 +5430,7 @@ class DatabasePage(wx.Panel):
             vv = tuple(item.get(x) for x in ("type", "name"))
             if nb is self.notebook_search: t = "%s search: %s" % vv
             else: t = "%s %s" % (vv[0], fmt_entity(vv[1])) if all(vv) else vv[-1]
-            return "%s%s" % (t[0].capitalize(), t[1:]) if cap else t
+            return util.cap(t) if cap else t
 
         def on_take(event=None):
             text, source, case = (page["info"].get(x) for x in ["text", "source", "case"])
