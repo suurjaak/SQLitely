@@ -483,7 +483,7 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
 
     if filters:
         entities.clear()
-        rgx = util.wildcards_to_regex(filters)
+        rgx = util.filters_to_regex(filters)
         # Select all entities matching by name
         default_includes = util.CaselessDict()
         for category in db.schema:

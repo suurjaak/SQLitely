@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.08.2022
+@modified    23.08.2022
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1081,17 +1081,24 @@ def shortpath(path):
     return buf.value
 
 
-def wildcards_to_regex(texts, end=False):
+def filters_to_regex(texts, end=False):
     """
-    Returns one or plain wildcards like "foo*bar" "xyz" as re.Pattern("(foo.*bar)|(xyz)", re.I).
+    Returns one or more simple filters as a single re.Pattern.
 
-    @param   texts  one or more texts to match, regex matches if any text matches
-    @param   end    whether pattern should match until end (adds $)
+    Simple asterisk wildcards ('*') will match anything.
+    A dash ('-') at the beginning of a word will omit matches containing the word.
+
+    @param   texts  one or more text filters, regex matches if any text matches and no skip matches
+    @param   end    whether pattern should match until end (adds '$')
+    @return         re.Pattern for input values, like re.Pattern("(?!.*(xyz))(foo.*bar)", re.I)
+                    for filters_to_regex(["foo*bar", "-xyz"])
     """
-    suff, texts = ("$" if end else ""), tuplefy(texts)
-    patterns = [re.compile(".*".join(map(re.escape, t.split("*"))) + suff, re.I) for t in texts]
-    if len(patterns) == 1: return patterns[0]
-    return re.compile("|".join("(%s)" % p.pattern for p in patterns))
+    wildify = lambda t: ".*".join(map(re.escape, t.split("*")))
+    suff, texts = ("$" if end else ""), util.tuplefy(texts)
+    includes, excludes = ([t[skip:] for t in texts if skip == t.startswith('-')] for skip in (0, 1))
+    matchstr = "|".join("(%s%s)" % (wildify(t), suff) for t in includes)
+    skipstr = "(?!.*(%s)%s)" % ("|".join(map(wildify, excludes)), suff) if excludes else ""
+    return re.compile(skipstr + ("(%s)" if skipstr else "%s") % matchstr, re.I)
 
 
 def win32_unicode_argv():
