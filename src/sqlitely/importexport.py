@@ -265,7 +265,7 @@ def export_data_multiple(filename, format, title, db, category=None, make_iterab
                  "txt":  templates.DATA_TXT_MULTIPLE,
                  "yaml": templates.DATA_YAML_MULTIPLE}
 
-    limit = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
+    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else util.tuplefy(limit)
     itemfiles = collections.OrderedDict() # {data name: path to partial file containing item data}
     categories = [] if make_iterables else [category] if category else db.DATA_CATEGORIES
     items = {c: db.schema[c].copy() for c in categories}
@@ -276,22 +276,8 @@ def export_data_multiple(filename, format, title, db, category=None, make_iterab
 
         def make_item_iterable(name):
             """Returns cursor yielding rows from entity, auto-closed on error."""
-            mylimit, order_sql = limit, ""
-            if maxcount is not None:
-                mymax = min(maxcount, limit[0] if limit and limit[0] >= 0 else maxcount)
-                mylimit = [max(0, mymax - sum(counts.values()))] + list(limit[1:])
-            limit_sql = (" " +
-                " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
-            ) if mylimit else ""
-
-            if reverse:
-                ordercols = db.get_order(name, reverse=True)
-                order_sql = (" ORDER BY %s" % ", ".join(
-                    x if isinstance(x, str) else " ".join(y if i else grammar.quote(y)
-                                                          for i, y in enumerate(x))
-                    for x in ordercols
-                )) if ordercols else ""
-
+            order_sql = db.get_order_sql(name, reverse=True) if reverse else ""
+            limit_sql = db.get_limit_sql(*limit, maxcount=maxcount, totals=counts)
             sql = "SELECT * FROM %s%s%s" % (grammar.quote(name), order_sql, limit_sql)
 
             category = next((c for c in db.schema if name in db.schema[c]), "")
@@ -480,28 +466,14 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
     """
     result = False
     entities, namespace, cursors = copy.deepcopy(db.schema), {}, []
-    limit = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
+    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else util.tuplefy(limit)
     related_includes = collections.defaultdict(list) # {name: [name of owned or required entity, ]}
     counts = collections.defaultdict(int) # {name: number of rows yielded}
 
     def make_iterable(name):
         """Yields rows from table or view, using limit and maxcount."""
-        mylimit, order_sql = limit, ""
-        if maxcount is not None:
-            mymax = min(maxcount, limit[0] if limit and limit[0] >= 0 else maxcount)
-            mylimit = [max(0, mymax - sum(counts.values()))] + list(limit[1:])
-        limit_sql = (" " +
-            " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
-        ) if mylimit else ""
-
-        if reverse:
-            ordercols = db.get_order(name, reverse=True)
-            order_sql = (" ORDER BY %s" % ", ".join(
-                x if isinstance(x, str) else " ".join(y if i else grammar.quote(y)
-                                                      for i, y in enumerate(x))
-                for x in ordercols
-            )) if ordercols else ""
-
+        order_sql = db.get_order_sql(name, reverse=True) if reverse else ""
+        limit_sql = db.get_limit_sql(*limit, maxcount=maxcount, totals=counts)
         sql = "SELECT * FROM %s%s%s" % (grammar.quote(name), order_sql, limit_sql)
 
         msg = "Error querying table %s." % grammar.quote(name, force=True)
@@ -605,7 +577,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
     CATEGORIES = db.DATA_CATEGORIES
     sqls0, sqls1, actionsqls = [], [], []
     requireds, processeds, exporteds = {}, set(), set()
-    limit = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
+    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else util.tuplefy(limit)
     totalcount = 0
 
     is_samefile = util.lceq(db.filename, filename)
@@ -699,22 +671,8 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                         sql = insert_sql % (schema2, grammar.quote(name2),
                                             grammar.quote(name))
 
-                    mylimit, order_sql = limit, ""
-                    if maxcount is not None:
-                        mymax = min(maxcount, limit[0] if limit and limit[0] >= 0 else maxcount)
-                        mylimit = [max(0, mymax - totalcount)] + list(limit[1:])
-                    limit_sql = (" " +
-                        " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
-                    ) if mylimit else ""
-
-                    if reverse:
-                        ordercols = db.get_order(name, reverse=True)
-                        order_sql = (" ORDER BY %s" % ", ".join(
-                            x if isinstance(x, str) else " ".join(y if i else grammar.quote(y)
-                                                                  for i, y in enumerate(x))
-                            for x in ordercols
-                        )) if ordercols else ""
-
+                    order_sql = db.get_order_sql(name, reverse=True) if reverse else ""
+                    limit_sql = db.get_limit_sql(*limit, maxcount=maxcount, totals=totalcount)
                     sql += order_sql + limit_sql
 
                     logger.info("Copying data to %s in %s.", label, filename)
@@ -817,7 +775,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
     schemas = [list(x.values())[1] for x in
                db.execute("PRAGMA database_list").fetchall()]
     schema2 = util.make_unique("main", schemas, suffix="%s")
-    limit   = limit if isinstance(limit, (list, tuple, type(None))) else util.tuplefy(limit)
+    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else util.tuplefy(limit)
 
     db.lock(None, None, filename, label="query export")
 

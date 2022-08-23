@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.08.2022
+@modified    23.08.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -840,6 +840,44 @@ WARNING: misuse can easily result in a corrupt database file.""",
             orders2 = [None if "DESC" == x else "DESC" for x in orders] if reverse else orders
             result = [(n, o) if o else (n, ) for n, o in zip(names, orders2)]
         return result
+
+
+    def get_order_sql(self, name, reverse=False):
+        """
+        Returns ORDER BY clause, table in ROWID/PK order,
+        view in reverse row_number() order if reverse.
+
+        @return  " ORDER BY ..", or "" if nothing to order by
+        """
+        ordercols = self.get_order(name, reverse=reverse)
+        return (" ORDER BY %s" % ", ".join(
+            x if isinstance(x, str) else " ".join(y if i else grammar.quote(y)
+                                                  for i, y in enumerate(x))
+            for x in ordercols
+        )) if ordercols else ""
+
+
+    def get_limit_sql(self, limit, offset=None, maxcount=None, totals=()):
+        """
+        Returns LIMIT clause.
+
+        @param   limit     basic row limit, None or <0 disables
+        @param   offset    index to start from, None or <=0 disables
+        @param   maxcount  maximum number of rows over multiple items
+        @param   totals    number or {name: number} or iterable of {"count": number}
+                           for item counts so far
+        @return            " LIMIT x" or " LIMIT x OFFSET y", or "" if no limit
+        """
+        limit, offset = (-1 if limit is None else limit), (-1 if not offset else offset)
+        mylimit = [limit, offset] if offset > 0 else [limit] if limit >= 0 else []
+        if maxcount is not None:
+            mymax = min(maxcount, limit if limit >= 0 else maxcount)
+            counts = [totals] if isinstance(totals, six.integer_types) else totals.values() \
+                     if isinstance(totals, dict) else (x.get("count", 0) for x in totals)
+            mylimit = [max(0, mymax - sum(counts))] + ([offset] if offset > 0 else [])
+        return (" " +
+            " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
+        ) if mylimit else ""
 
 
     def has_view_columns(self):
