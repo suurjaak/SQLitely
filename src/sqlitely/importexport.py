@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.08.2022
+@modified    23.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -237,8 +237,8 @@ def export_data(make_iterable, filename, format, title, db, columns,
 
 
 
-def export_data_multiple(filename, format, title, db, category=None,
-                         make_iterables=None, limit=None, maxcount=None, empty=True, progress=None):
+def export_data_multiple(filename, format, title, db, category=None, make_iterables=None,
+                         limit=None, maxcount=None, empty=True, reverse=False, progress=None):
     """
     Exports database data from multiple tables/views to a single output file.
 
@@ -249,9 +249,10 @@ def export_data_multiple(filename, format, title, db, category=None,
     @param   category        category to produce the data from, "table" or "view", or None for both
     @param   make_iterables  function yielding pairs of ({info}, function yielding rows)
                              if not using category
-    @param   limit           query limits if any, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
+    @param   limit           export limits per entity if any, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
     @param   maxcount        maximum total number of rows to export over all entities
     @param   empty           do not skip tables and views with no output rows
+    @param   reverse         query rows in reverse order if using category
     @param   progress        callback(name, count) to report progress,
                              returning false if export should cancel
     @return                  True on success, False on failure, None on cancel
@@ -275,17 +276,26 @@ def export_data_multiple(filename, format, title, db, category=None,
 
         def make_item_iterable(name):
             """Returns cursor yielding rows from entity, auto-closed on error."""
-            mylimit = limit
+            mylimit, order_sql = limit, ""
             if maxcount is not None:
                 mymax = min(maxcount, limit[0] if limit and limit[0] >= 0 else maxcount)
                 mylimit = [max(0, mymax - sum(counts.values()))] + list(limit[1:])
             limit_sql = (" " +
                 " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
             ) if mylimit else ""
-            sql = "SELECT * FROM %s%s" % (grammar.quote(name), limit_sql)
+
+            if reverse:
+                ordercols = db.get_order(name, reverse=True)
+                order_sql = (" ORDER BY %s" % ", ".join(
+                    x if isinstance(x, str) else " ".join(y if i else grammar.quote(y)
+                                                          for i, y in enumerate(x))
+                    for x in ordercols
+                )) if ordercols else ""
+
+            sql = "SELECT * FROM %s%s%s" % (grammar.quote(name), order_sql, limit_sql)
 
             category = next((c for c in db.schema if name in db.schema[c]), "")
-            error = "Error querying %s %s." % (category, grammar.quote(name, force=True))
+            msg = "Error querying %s %s." % (category, grammar.quote(name, force=True))
             tick = lambda n: counts.update({name: n})
             return db.select(sql, error=msg, tick=tick)
 
@@ -446,7 +456,7 @@ def export_stats(filename, format, db, data, diagram=None):
 
 
 def export_dump(filename, db, data=True, pragma=True, filters=None, related=False,
-                limit=None, maxcount=None, empty=True, progress=None):
+                limit=None, maxcount=None, empty=True, reverse=False, progress=None):
     """
     Exports full database dump to SQL file.
 
@@ -464,6 +474,7 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
     @param   maxcount  maximum total number of rows to export over all tables
     @param   empty     do not skip items with no output rows
                        (accounting for limit)
+    @param   reverse   query rows in reverse order
     @param   progress  callback(name, count) to report progress,
                        returning false if export should cancel
     """
@@ -475,16 +486,25 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
 
     def make_iterable(name):
         """Yields rows from table or view, using limit and maxcount."""
-        mylimit = limit
+        mylimit, order_sql = limit, ""
         if maxcount is not None:
             mymax = min(maxcount, limit[0] if limit and limit[0] >= 0 else maxcount)
             mylimit = [max(0, mymax - sum(counts.values()))] + list(limit[1:])
         limit_sql = (" " +
             " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
         ) if mylimit else ""
-        sql = "SELECT * FROM %s%s" % (grammar.quote(name), limit_sql)
 
-        error = "Error querying table %s." % grammar.quote(name, force=True)
+        if reverse:
+            ordercols = db.get_order(name, reverse=True)
+            order_sql = (" ORDER BY %s" % ", ".join(
+                x if isinstance(x, str) else " ".join(y if i else grammar.quote(y)
+                                                      for i, y in enumerate(x))
+                for x in ordercols
+            )) if ordercols else ""
+
+        sql = "SELECT * FROM %s%s%s" % (grammar.quote(name), order_sql, limit_sql)
+
+        msg = "Error querying table %s." % grammar.quote(name, force=True)
         tick = lambda n: counts.update({name: n})
         cursors.append(db.select(sql, error=msg, tick=tick))
         return cursors[-1]
@@ -563,7 +583,7 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
 
 
 def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
-                 limit=None, maxcount=None, empty=True, progress=None):
+                 limit=None, maxcount=None, empty=True, reverse=False, progress=None):
     """
     Exports selected tables and views to another database, structure only or
     structure plus data, auto-creating table and view indexes and triggers.
@@ -577,6 +597,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
     @param   limit     query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
     @param   maxcount  maximum total number of rows to export over all entities
     @param   empty     do not skip tables with no output rows
+    @param   reverse   query rows in reverse order
     @param   progress  callback(?name, ?error) to report export progress,
                        returning false if export should cancel
     """
@@ -678,14 +699,23 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                         sql = insert_sql % (schema2, grammar.quote(name2),
                                             grammar.quote(name))
 
-                    mylimit = limit
+                    mylimit, order_sql = limit, ""
                     if maxcount is not None:
                         mymax = min(maxcount, limit[0] if limit and limit[0] >= 0 else maxcount)
                         mylimit = [max(0, mymax - totalcount)] + list(limit[1:])
                     limit_sql = (" " +
                         " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
                     ) if mylimit else ""
-                    sql += limit_sql
+
+                    if reverse:
+                        ordercols = db.get_order(name, reverse=True)
+                        order_sql = (" ORDER BY %s" % ", ".join(
+                            x if isinstance(x, str) else " ".join(y if i else grammar.quote(y)
+                                                                  for i, y in enumerate(x))
+                            for x in ordercols
+                        )) if ordercols else ""
+
+                    sql += order_sql + limit_sql
 
                     logger.info("Copying data to %s in %s.", label, filename)
                     count = db.execute(sql).rowcount
