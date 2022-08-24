@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.08.2022
+@modified    24.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -347,7 +347,7 @@ def export_data_multiple(filename, format, title, db, category=None, make_iterab
                 name = item["name"]
 
                 if format in ("csv", "xlsx"):
-                    colnames, cursor = [x["name"] for x in item["columns"]], make_iterable()
+                    colnames, cursor, i = [x["name"] for x in item["columns"]], make_iterable(), 0
 
                     for i, row in enumerate(cursor, 1):
                         if i == 1:
@@ -365,8 +365,11 @@ def export_data_multiple(filename, format, title, db, category=None, make_iterab
                                         ["" if row[c] is None else row[c] for c in colnames])
                         if not i % 100 and progress and not progress(name=name, count=i):
                             result = False
+                            util.try_ignore(lambda: cursor.close())
                             break # for i, row
-                    util.try_ignore(lambda: cursor.close())
+                    if progress and not progress(name=name, count=i):
+                        result = False
+                        break # for i, row
                 else:
                     if not empty:
                         cursor = make_iterable()
