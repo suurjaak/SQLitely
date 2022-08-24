@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.08.2022
+@modified    24.08.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -857,7 +857,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         )) if ordercols else ""
 
 
-    def get_limit_sql(self, limit, offset=None, maxcount=None, totals=()):
+    def get_limit_sql(self, limit=None, offset=None, maxcount=None, totals=()):
         """
         Returns LIMIT clause.
 
