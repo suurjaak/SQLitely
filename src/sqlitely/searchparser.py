@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.08.2022
+@modified    24.08.2022
 """
 import calendar
 import collections
@@ -216,7 +216,7 @@ class SearchQueryParser(object):
 
         if isinstance(parseresult, six.string_types):
             op, wild = ("GLOB", "*") if case else ("LIKE", "%")
-            safe = escape(parseresult, "QUOTES" == parent_name)
+            safe = escape(parseresult, exact="QUOTES" == parent_name)
 
             i = len(params)
             for col in item["columns"]:
@@ -357,17 +357,17 @@ def escape(item, op="LIKE", exact=False):
     """
     Prepares string as parameter for SQLite LIKE/GLOB operator.
 
+    @param   item       string to process
     @param   op         target SQL operator, "LIKE" or "GLOB"
     @param   exact      whether to do exact match, or to escape
                         LIKE/GLOB special characters %_ and *?
-    @param   wildcards  characters to replace with SQL LIKE wildcard %
     """
     if "GLOB" == op: # Replace GLOB specials ?[ with single-char classes [?] [[]
         result = item.replace("[", "[[]").replace("?", "[?]")
         if exact: result = result.replace("*", "[*]")
     else: # Escape LIKE specials %_ with \% \_
         result = item.replace("%", ESCAPE_LIKE + "%").replace("_", ESCAPE_LIKE + "_")
-        if exact: result = result.replace("*", "%") # Swap user-entered * with %
+        if not exact: result = result.replace("*", "%") # Swap user-entered * with %
     return result
 
 
