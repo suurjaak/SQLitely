@@ -871,10 +871,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
         limit, offset = (-1 if limit is None else limit), (-1 if not offset else offset)
         mylimit = [limit, offset] if offset > 0 else [limit] if limit >= 0 else []
         if maxcount is not None:
-            mymax = min(maxcount, limit if limit >= 0 else maxcount)
             counts = [totals] if isinstance(totals, six.integer_types) else totals.values() \
-                     if isinstance(totals, dict) else (x.get("count", 0) for x in totals)
-            mylimit = [max(0, mymax - sum(counts))] + ([offset] if offset > 0 else [])
+                     if isinstance(totals, dict) else [x.get("count", 0) for x in totals]
+            mylimit = [max(0, min(limit if limit > 0 else maxcount, maxcount - sum(counts)))] + \
+                      ([offset] if offset > 0 else [])
         return (" " +
             " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
         ) if mylimit else ""
