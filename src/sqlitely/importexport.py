@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.08.2022
+@modified    25.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import re
+import tempfile
 import warnings
 
 # ImageFont for calculating column widths in Excel export, not required.
@@ -198,8 +199,8 @@ def export_data(make_iterable, filename, format, title, db, columns,
                 if progress and not progress(): return None
 
                 # Write out data to temporary file first, to populate row count.
-                tmpname = util.unique_path("%s.rows" % filename)
-                tmpfile = open(tmpname, "wb+")
+                fh, tmpname = tempfile.mkstemp(prefix="%s.rows." % os.path.basename(filename))
+                tmpfile = open(fh, "wb+")
                 template = step.Template(TEMPLATES["rows"][format],
                                          strip=False, escape="html" == format)
                 template.stream(tmpfile, namespace)
