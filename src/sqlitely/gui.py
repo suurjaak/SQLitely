@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.08.2022
+@modified    26.08.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1701,22 +1701,26 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
     def on_remove_missing(self, event, selecteds=None):
         """Handler to remove nonexistent files from the database list."""
-        selecteds = selecteds or list(range(1, self.list_db.GetItemCount()))
+        file_indexes = selecteds or list(range(1, self.list_db.GetItemCount()))
         filter_func = lambda i: not os.path.exists(self.list_db.GetItemText(i))
-        selecteds = list(filter(filter_func, selecteds))
-        filenames = list(map(self.list_db.GetItemText, selecteds))
-        for i in range(len(selecteds)):
+        file_indexes = list(filter(filter_func, file_indexes))
+        if not file_indexes: return
+
+        for i in range(len(file_indexes)):
             # - i, as item count is getting smaller one by one
-            selected = selecteds[i] - i
+            selected = file_indexes[i] - i
             filename = self.list_db.GetItemText(selected)
             self.clear_database_data(filename, recent=True)
             self.db_datas.get(filename, {}).pop("name", None)
             self.list_db.DeleteItem(selected)
+
         self.update_database_list()
         if self.dbs_selected: self.update_database_detail()
         else: self.list_db.Select(0)
 
-        if selecteds: util.run_once(conf.save)
+        util.run_once(conf.save)
+        guibase.status("Removed %s from the database list.",
+                       util.plural("missing file", file_indexes), log=True)
 
 
     def on_delete_database(self, event=None):
