@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.08.2022
+@modified    26.08.2022
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -536,8 +536,8 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
             namespace = {
                 "db":       db,
                 "sql":      sql,
-                "data":     [{"name": n, "columns": item["columns"], "rows": make_iterable(n)}
-                             for n, item in entities["table"].items()] if data else [],
+                "data":     ({"name": n, "columns": item["columns"], "rows": make_iterable(n)}
+                             for n, item in entities["table"].items()) if data else [],
                 "pragma":   db.get_pragma_values(dump=True) if pragma else {},
                 "progress": progress,
                 "buffer":   f,

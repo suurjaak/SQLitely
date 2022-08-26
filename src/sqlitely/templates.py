@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.08.2022
+@modified    26.08.2022
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -2854,7 +2854,7 @@ Database dump SQL template.
 
 @param   db         database.Database instance
 @param   sql        schema SQL
-@param   data       [{name, columns, rows}]
+@param   data       iterable yielding {name, columns, rows}
 @param   pragma     PRAGMA values as {name: value}
 @param   buffer     file or file-like buffer being written to
 @param   ?progress  callback(name, count) returning whether to cancel, if any
