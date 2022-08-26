@@ -300,7 +300,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             ("button_new", "&New database", images.ButtonNew,
              "Create a blank SQLite database."),
             ("button_import", "Import from &data file", images.ButtonImport,
-             "Import spreadsheet or JSON to a new or existing database."),
+             "Import spreadsheet or JSON/YAML to a new or existing database."),
             ("button_opena", "&Open a database..", images.ButtonOpenA,
              "Choose a database from your computer to open."),
             ("button_folder", "&Import from folder", images.ButtonFolder,
@@ -422,7 +422,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             wx.ID_ANY, "&New database\t%s-N" % controls.KEYS.NAME_CTRL, "Create a blank SQLite database"
         )
         menu_import_data = self.menu_import_data = menu_file.Append(
-            wx.ID_ANY, "Import from &data file", "Import spreadsheet or JSON to a new or existing database"
+            wx.ID_ANY, "Import from &data file", "Import spreadsheet or JSON/YAML to a new or existing database"
         )
         menu_open_database = self.menu_open_database = menu_file.Append(
             wx.ID_ANY, "&Open database...\t%s-O" % controls.KEYS.NAME_CTRL, "Choose a database file to open"
@@ -540,7 +540,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_tools.AppendSeparator()
         menu_tools_import = self.menu_tools_import = menu_tools.Append(
             wx.ID_ANY, "&Import data",
-            "Import data into table from spreadsheet or JSON file")
+            "Import data into table from spreadsheet or JSON/YAML file")
         menu_tools_export = wx.Menu()
         self.menu_tools_export = menu_tools.AppendSubMenu(menu_tools_export, "&Export")
         menu_tools_export_tables = self.menu_tools_export_tables = menu_tools_export.Append(

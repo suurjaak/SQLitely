@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.08.2022
+@modified    26.08.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -6397,7 +6397,7 @@ class ExportProgressPanel(wx.Panel):
 
 class ImportDialog(wx.Dialog):
     """
-    Dialog for importing table data from a spreadsheet or JSON file.
+    Dialog for importing table data from a spreadsheet or JSON/YAML file.
     """
 
     ACTIVE_SEP  = -1 # ListCtrl item data value for active-section separator
@@ -12191,7 +12191,7 @@ class SchemaDiagram(wx.ScrolledWindow):
 
 class ImportWizard(wx.adv.Wizard):
     """
-    Wizard dialog for creating a database from a spreadsheet or JSON file.
+    Wizard dialog for creating a database from a spreadsheet or JSON/YAML file.
     """
 
 
