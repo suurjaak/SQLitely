@@ -8,9 +8,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2022
+@modified    28.08.2022
 ------------------------------------------------------------------------------
 """
+from __future__ import print_function
 import codecs
 import collections
 import copy
@@ -22,6 +23,7 @@ import json
 import logging
 import os
 import re
+import sys
 import tempfile
 import warnings
 
@@ -287,7 +289,7 @@ def export_data_multiple(filename, format, title, db, category=None, make_iterab
             return db.select(sql, error=msg, tick=tick)
 
         def make_item_iterables():
-            """Yields pairs of ({item}, callable yielding iterable cursor)."""
+            """Yields pairs of ({item}, callable returning iterable cursor)."""
             for category, item in ((c, x) for c, d in items.items() for x in d.values()):
                 title = "%s %s" % (category.capitalize(), grammar.quote(item["name"], force=True))
                 yield dict(item, title=title), functools.partial(make_item_iterable, item["name"])
@@ -327,7 +329,7 @@ def export_data_multiple(filename, format, title, db, category=None, make_iterab
             return inner
 
         def make_item_iterables():
-            """Yields pairs of ({item}, callable yielding iterable cursor)."""
+            """Yields pairs of ({item}, callable returning iterable cursor)."""
             for item, make_iterable in make_iterables():
                 yield item, make_item_iterable(item, make_iterable)
     else:
@@ -859,6 +861,146 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
         db.log_query("EXPORT QUERY TO DB", [x + ";" for x in sqls], params)
     if progress: progress(**finalargs)
     return result
+
+
+def export_to_console(make_iterables, format, title=None,
+                      output=None, multiple=False, progress=None):
+    """
+    Prints entity rows to console.
+
+    @param   db              Database instance
+    @param   format          file format like "csv"
+    @param   title           export title if any, as string or a sequence of strings
+    @param   make_iterables  function yielding pairs of ({info}, function yielding rows)
+    @param   output          print-function to use if not print()
+    @param   multiple        whether to output as multi-item
+    @param   progress        callback(?done, ?error) to report export progress,
+                             returning false if export should cancel
+    """
+    ITEM_TEMPLATES = {"json": templates.DATA_ROWS_JSON,
+                      "sql":  templates.DATA_ROWS_SQL,
+                      "txt":  templates.DATA_ROWS_TXT,
+                      "yaml": templates.DATA_ROWS_YAML}
+    output = output or print
+    writer, started, hr, allnames = None, False, "", set()
+    ns = {"multiple": multiple}
+
+    output()
+    for line in util.tuplefy(title) if title else ():
+        output(line, file=sys.stderr)
+    title and output(file=sys.stderr)
+
+    for item, make_iterable in make_iterables():
+        name = item["name"]
+        if progress and not progress(name=name): break # for item
+
+        if "view" == item["type"]:
+            name = util.make_unique(name, allnames)
+
+        ns.update({"columns": item["columns"], "name": name})
+
+        # Run through rows once for txt output, to populate text-justify options
+        colnames = [c["name"] for c in item["columns"]]
+        widths   = {c: len(util.unprint(c)) for c in colnames}
+        justs    = {c: True   for c in colnames}
+        do_break = False
+        for i, row in enumerate(make_iterable()) if "txt" == format else ():
+            for col in colnames:
+                v = row[col]
+                if isinstance(v, six.integer_types + (float, )): justs[col] = False
+                v = "" if v is None \
+                    else v if isinstance(v, six.string_types) else str(v)
+                v = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, six.text_type(v))
+                widths[col] = max(widths[col], len(v))
+                if not i % 100 and progress and not progress():
+                    do_break = True
+                    break # for i, row
+            ns.update({"columnjusts": justs, "columnwidths": widths})
+        if do_break:
+            break # for item
+
+        rows = make_iterable()
+        i, row, nextrow = 0, next(rows, None), next(rows, None)
+        while row:
+
+            if not started:
+                allnames.add(name)
+                if   "csv"  == format:
+                    writer = csv_writer(sys.stdout)
+                elif "json" == format:
+                    if multiple: output("{")
+
+            if not i:
+                if   "csv"  == format:
+                    if multiple:
+                        writer.writerow()
+                        writer.writerow([item["name"]])
+                    writer.writerow(([""] if multiple else []) + colnames)
+                elif "json" == format:
+                    output("[" if multiple else "  %s: [" % json.dumps(item["name"]))
+                elif "sql"  == format:
+                    if started:
+                        output("\n")
+
+                    sql = item["sql"]
+                    if "view" == item["type"]:
+                        tpl = step.Template(templates.CREATE_VIEW_TABLE_SQL, strip=False)
+                        sql = tpl.expand(**item).strip()
+                    output(sql)
+                    output()
+                elif "txt"  == format:
+                    if started:
+                        output(hr)
+                        output("\n\n")
+
+                    headers = []
+                    for c in colnames:
+                        fc = util.unprint(c)
+                        headers.append((fc.ljust if justs[c] else fc.rjust)(widths[c]))
+                    hr = "|-%s-|" % "-|-".join("".ljust(widths[c], "-") for c in colnames)
+                    header = "| " + " | ".join(headers) + " |"
+
+                    output(item["sql"])
+                    output()
+                    output(hr)
+                    output(header)
+                    output(hr)
+                elif "yaml" == format:
+                    if started: output()
+                    if multiple:
+                        key = yaml.safe_dump({name: None})
+                        output("%s:" % key[:key.rindex(":")])
+
+            do_break = not i % 100 and progress and not progress(name=name, count=i + 1)
+            if "csv" == format:
+                writer.writerow(([""] if multiple else []) + list(row.values()))
+            else:
+                ns.update({"rows": [row]})
+                tpl = step.Template(ITEM_TEMPLATES[format], strip=False)
+                content = tpl.expand(ns).rstrip()
+                if "json" == format and nextrow and not do_break:
+                    content += ","
+                output(content)
+
+            started = True
+            i, row, nextrow = i + 1, nextrow, next(rows, None)
+            if do_break:
+                break # while row
+
+        if progress and not progress(name=name, count=i, done=True):
+            break # for item
+
+    if started:
+        if "json" == format:
+            if multiple:
+                output("  ]")
+                output("}")
+            else:
+                output("]")
+        elif "txt" == format:
+            output(hr)
+
+
 
 
 def get_import_file_data(filename, progress=None):
