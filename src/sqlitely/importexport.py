@@ -151,7 +151,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
                     writer = csv_writer(filename)
                     if query: query = query.replace("\r", " ").replace("\n", " ")
                 else:
-                    props = {"title": "; ".join(util.tuplefy(title)),
+                    props = {"title": "; ".join(("Source: %s" % db, ) + util.tuplefy(title)),
                              "comments": templates.export_comment()}
                     writer = xlsx_writer(filename, name or "SQL Query", props=props)
                     writer.set_header(True)
@@ -342,7 +342,7 @@ def export_data_multiple(filename, format, title, db, category=None, make_iterab
                 if "csv" == format:
                     writer = csv_writer(filename)
                 else:
-                    props = {"title": "; ".join(util.tuplefy(title)),
+                    props = {"title": "; ".join(("Source: %s" % db, ) + util.tuplefy(title)),
                              "comments": templates.export_comment()}
                     writer = xlsx_writer(filename, props=props)
 
