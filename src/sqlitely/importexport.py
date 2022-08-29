@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.08.2022
+@modified    29.08.2022
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -469,6 +469,7 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
     @param   reverse   query rows in reverse order
     @param   progress  callback(name, count) to report progress,
                        returning false if export should cancel
+    @return            True on success, False on failure, None on cancel
     """
     result = False
     entities, namespace, cursors = copy.deepcopy(db.schema), {}, []
@@ -486,6 +487,14 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
         tick = lambda n: counts.update({name: n})
         cursors.append(db.select(sql, error=msg, tick=tick))
         return cursors[-1]
+
+    def make_datas():
+        """Yields {name, columns, rows} for each table to export."""
+        for n, item in entities["table"].items():
+            if progress and not progress(name=n): break # for n, item
+
+            yield {"name": n, "columns": item["columns"], "rows": make_iterable(n)}
+            if progress and not progress(name=n, done=True): break # for n, item
 
     if filters:
         entities.clear()
@@ -538,15 +547,14 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
             namespace = {
                 "db":       db,
                 "sql":      sql,
-                "data":     ({"name": n, "columns": item["columns"], "rows": make_iterable(n)}
-                             for n, item in entities["table"].items()) if data else [],
+                "data":     make_datas() if data else [],
                 "pragma":   db.get_pragma_values(dump=True) if pragma else {},
                 "progress": progress,
                 "buffer":   f,
             }
             template = step.Template(templates.DUMP_SQL, strip=False)
             template.stream(f, namespace, unbuffered=True)
-            result = progress() if progress else True
+            result = None if progress and not progress(done=True) else True
     except Exception as e:
         logger.exception("Error exporting database dump from %s to %s.",
                          db, filename)
@@ -578,6 +586,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
     @param   reverse   query rows in reverse order
     @param   progress  callback(?name, ?error) to report export progress,
                        returning false if export should cancel
+    @return            True on success, False on failure, None on cancel
     """
     result = True
     CATEGORIES = db.DATA_CATEGORIES
@@ -641,7 +650,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                     for c, vv in sorted(reqs.items())
                 )
                 if progress and not progress(name=name, error=err):
-                    result = False
+                    result = None
                     break # for category, name
                 else: continue # for category, name
 
@@ -661,7 +670,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                 sql, err = grammar.transform(db.schema[category][name]["sql"], renames=myrenames)
                 if err:
                     if progress and not progress(name=name, error=err):
-                        result = False
+                        result = None
                         break # for category, name
                     else: continue # for category, name
                 db.execute(sql), actionsqls.append(sql)
@@ -696,7 +705,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                         exporteds.discard(name)
                         continue # for category, name
                     if progress and not progress(name=name, count=count):
-                        result = False
+                        result = None
                         break # for category, name
 
                 # Create indexes and triggers for tables, triggers for views
@@ -725,15 +734,16 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                                  category, grammar.quote(name, force=True),
                                  db, filename)
                 if progress and not progress(name=name, error=util.format_exc(e)):
-                    result = False
+                    result = None
                     break # for category, name
             else:
                 if progress and not progress(name=name):
-                    result = False
+                    result = None
                     break # for category, name
     except Exception as e:
         logger.exception("Error exporting from %s to %s.", db, filename)
         finalargs["error"] = util.format_exc(e)
+        result = False
     finally:
         if fks_on:
             try:
@@ -748,7 +758,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
             util.try_ignore(os.unlink, filename)
         db.unlock(None, None, filename)
 
-    result = bool(actionsqls)
+    result = result and bool(actionsqls)
     if result: db.log_query("EXPORT TO DB", [x + ";" for x in sqls0 + actionsqls + sqls1],
                             params=None if is_samefile else filename)
 
@@ -771,7 +781,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
     @param   limit       query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
     @param   progress    callback(?done, ?error) to report export progress,
                          returning false if export should cancel
-    @return              True if table was created, False otherwise
+    @return              True if table was created, None on cancel, False otherwise
     """
     result, err = True, False
     is_samefile = util.lceq(db.filename, filename)
@@ -788,6 +798,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
     if progress and not progress(name=table):
         db.unlock(None, None, filename)
         progress(**finalargs)
+        result = None
         return result
 
     try:
@@ -835,12 +846,12 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
         if count is None and (progress or not empty): # If CREATE TABLE AS query
             count = db.execute("SELECT COUNT(*) AS count FROM %s" % fullname).fetchone()["count"]
         if progress and not progress(name=table, count=count):
-            count = None
+            result, count = None, None
         if not empty and not count:
             sql = "DROP TABLE %s" % fullname
             db.executescript(sql)
             logs.append((sql, None))
-            result = False
+            result = False if result else result
 
     except Exception as e:
         result, err = False, True
@@ -876,13 +887,14 @@ def export_to_console(make_iterables, format, title=None,
     @param   multiple        whether to output as multi-item
     @param   progress        callback(?done, ?error) to report export progress,
                              returning false if export should cancel
+    @return                  True on success, None on cancel
     """
     ITEM_TEMPLATES = {"json": templates.DATA_ROWS_JSON,
                       "sql":  templates.DATA_ROWS_SQL,
                       "txt":  templates.DATA_ROWS_TXT,
                       "yaml": templates.DATA_ROWS_YAML}
     output = output or print
-    writer, started, hr, allnames = None, False, "", set()
+    result, writer, started, hr, allnames = True, None, False, "", set()
     ns = {"multiple": multiple}
 
     output()
@@ -892,7 +904,9 @@ def export_to_console(make_iterables, format, title=None,
 
     for item, make_iterable in make_iterables():
         name = item["name"]
-        if progress and not progress(name=name): break # for item
+        if progress and not progress(name=name):
+            result = None
+            break # for item
 
         if "view" == item["type"]:
             name = util.make_unique(name, allnames)
@@ -913,7 +927,7 @@ def export_to_console(make_iterables, format, title=None,
                 v = templates.SAFEBYTE_RGX.sub(templates.SAFEBYTE_REPL, six.text_type(v))
                 widths[col] = max(widths[col], len(v))
                 if not i % 100 and progress and not progress():
-                    do_break = True
+                    do_break, result = True, None
                     break # for i, row
             ns.update({"columnjusts": justs, "columnwidths": widths})
         if do_break:
@@ -985,9 +999,11 @@ def export_to_console(make_iterables, format, title=None,
             started = True
             i, row, nextrow = i + 1, nextrow, next(rows, None)
             if do_break:
+                result = None
                 break # while row
 
         if progress and not progress(name=name, count=i, done=True):
+            result = None
             break # for item
 
     if started:
@@ -1000,6 +1016,7 @@ def export_to_console(make_iterables, format, title=None,
         elif "txt" == format:
             output(hr)
 
+    return result
 
 
 
