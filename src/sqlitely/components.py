@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2022
+@modified    06.09.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -9723,7 +9723,7 @@ class ColumnDialog(wx.Dialog):
                 stream, img = io.BytesIO(), state["image"]
                 if "GIF" == name and not (0 < img.GetPalette().ColoursCount <= 256):
                     # wxPython does not auto-decrease palette size, need to use PIL
-                    pimg = util.wx_image_to_pil(img)
+                    pimg = util.img_wx_to_pil(img)
                     pimg2 = pimg.convert("P", palette=PIL.Image.ADAPTIVE)
                     pimg2.save(stream, name.lower())
                 else:
