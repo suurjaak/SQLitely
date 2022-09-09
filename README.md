@@ -133,6 +133,9 @@ Includes several icons from Fugue Icons,
 Includes fonts Carlito Regular and Carlito Bold,
 https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts.
 
+Includes fonts Open Sans Regular and Open Sans Bold,
+https://fonts.google.com/specimen/Open+Sans.
+
 Binaries compiled with PyInstaller, https://www.pyinstaller.org.
 
 Installers created with Nullsoft Scriptable Install System,

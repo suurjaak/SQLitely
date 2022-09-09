@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2022
+@modified    06.09.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2900,7 +2900,7 @@ class DatabasePage(wx.Panel):
         statusgauge = self.diagram_gauge  = wx.Gauge(page)
         button_export = self.button_diagram_export = wx.Button(page, label="Export &diagram")
         button_action = self.button_diagram_action = wx.Button(page, label="Other &actions ..")
-        diagram = self.diagram = components.SchemaDiagram(page, self.db)
+        diagram = self.diagram = components.SchemaDiagramWindow(page, self.db)
         cb_cols  = self.cb_diagram_cols   = wx.CheckBox(page, label="&Columns")
         cb_keys  = self.cb_diagram_keys  = wx.CheckBox(page, label="&Keys only")
         cb_rels  = self.cb_diagram_rels   = wx.CheckBox(page, label="Foreign &relations")
@@ -4187,8 +4187,7 @@ class DatabasePage(wx.Panel):
         try:
             data, diagram = self.statistics.get("data") or {}, None
             if "HTML" == extname.upper():
-                args = dict(selections=False, statistics=True,
-                            show_lines=True, show_labels=True)
+                args = dict(selections=False, statistics=True, lines=True, labels=True)
                 bmp = self.diagram.MakeBitmap(zoom=1, defaultcolours=True, **args)
                 svg = self.diagram.MakeTemplate("SVG", title="", embed=True, **args)
                 diagram = {"bmp": bmp, "svg": svg}

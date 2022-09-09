@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2022
+@modified    09.09.2022
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -59,7 +59,7 @@ from sqlitely import conf, images
   <title>{{ util.tuplefy(title)[0] }}</title>
   <link rel="shortcut icon" type="image/png" href="data:image/png;base64,{{! images.Icon16x16_8bit.data }}"/>
   <style>
-    * { font-family: Tahoma, DejaVu Sans; color: black; font-size: 11px; }
+    * { font-family: Tahoma, "DejaVu Sans"; color: black; font-size: 11px; }
     body {
       background: #8CBEFF;
       margin: 0;
@@ -1299,7 +1299,9 @@ Several icons from Fugue Icons, &copy; 2010 Yusuke Kamiyamane<br />
 <a href="https://p.yusukekamiyamane.com/"><font color="{{ conf.LinkColour }}">p.yusukekamiyamane.com</font></a>
 <br /><br />
 Includes fonts Carlito Regular and Carlito bold,
-<a href="https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts"><font color="{{ conf.LinkColour }}">fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts</font></a>
+<a href="https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts"><font color="{{ conf.LinkColour }}">fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts</font></a><br /><br />
+Includes fonts Open Sans Regular and Open Sans Bold,
+<a href="https://fonts.google.com/specimen/Open+Sans"><font color="{{ conf.LinkColour }}">fonts.google.com/specimen/Open+Sans</font></a>
 %if getattr(sys, 'frozen', False):
 <br /><br />
 Installer created with Nullsoft Scriptable Install System,
@@ -1819,7 +1821,7 @@ def wrapclass(v):
     body {
       background: #8CBEFF;
       color: black;
-      font-family: Tahoma, DejaVu Sans;
+      font-family: Tahoma, "DejaVu Sans";
       font-size: 11px;
       margin: 0;
     }
@@ -2038,10 +2040,10 @@ def wrapclass(v):
       var a2 = document.getElementById(aid2);
       var e1 = document.getElementById(id1);
       var e2 = document.getElementById(id2);
-      a1.classList.toggle("open");
-      a2.classList.toggle("open");
-      e1.classList.toggle("hidden");
-      e2.classList.toggle("hidden");
+      a1.classList.add("open");
+      a2 && a2.classList.remove("open");
+      e1.classList.remove("hidden");
+      e2 && e2.classList.add("hidden");
       return false;
     };
 
@@ -2121,8 +2123,12 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
 
     %if diagram.get("bmp") and diagram.get("svg"):
     <div class="diagram-format">
-      <a id="diagram-png-link" title="Show schema diagram as PNG" onclick="onSwitch(this, 'diagram-png', 'diagram-svg-link', 'diagram-svg')" class="open">PNG</a>
-      <a id="diagram-svg-link" title="Show schema diagram as SVG" onclick="onSwitch(this, 'diagram-svg', 'diagram-png-link', 'diagram-png')">SVG</a>
+        %if diagram.get("bmp"):
+      <a id="diagram-png-link" title="Show schema diagram as PNG"{{! " onclick=\\"onSwitch(this, 'diagram-png', 'diagram-svg-link', 'diagram-svg')\\"" if diagram.get("svg") else "" }} class="open">PNG</a>
+        %endif
+        %if diagram.get("svg"):
+      <a id="diagram-svg-link" title="Show schema diagram as SVG"{{! " onclick=\\"onSwitch(this, 'diagram-svg', 'diagram-png-link', 'diagram-png')\\"" if diagram.get("bmp") else ' class="open"' }}>SVG</a>
+        %endif
     </div>
     %endif
 
@@ -2130,7 +2136,7 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
     <img id="diagram-png" class="img" title="Schema diagram" alt="Schema diagram" src="data:image/png;base64,{{! base64.b64encode(util.img_wx_to_raw(diagram["bmp"])) }}" />
     %endif
     %if diagram.get("svg"):
-    <div id="diagram-svg" class="img hidden">
+    <div id="diagram-svg" class="img{{ " hidden" if diagram.get("bmp") else "" }}">
 {{! diagram["svg"] }}
     </div>
     %endif
@@ -2978,8 +2984,9 @@ count += 1
 """
 Database schema diagram SVG template.
 
-@param   fonts            {"normal": wx.Font, "bold": wx.Font}
-@param   get_extent       function(text, font=current dc font) returning full text extent
+@param   fonts            {"normal": font object, "bold": font object}
+@param   font_faces       {name: {size}} for populating SVG font family
+@param   get_extent       function(text, font=default font) returning full text extent
 @param   get_stats_texts  function(stats, width) returning stats texts for item
 @param   items            diagram objects as [{"name", "type", "bounds", "columns", "stats"}]
 @param   lines            diagram relations as {("item1", "item2", ("col1", )): {"name", "pts"}}
@@ -2990,30 +2997,29 @@ Database schema diagram SVG template.
 DIAGRAM_SVG = """<%
 import math, wx
 from sqlitely.lib import util
-from sqlitely.lib.controls import ColourManager
-from sqlitely.components   import SchemaDiagram
+from sqlitely.diagram import SchemaPlacement, Point, Rect, Size
 from sqlitely import grammar, images, templates
 from sqlitely.templates import urlquote
 
 CRADIUS     = 1
 MARGIN      = 10
-wincolour   = SchemaDiagram.DEFAULT_COLOURS[wx.SYS_COLOUR_WINDOW]
-wtextcolour = SchemaDiagram.DEFAULT_COLOURS[wx.SYS_COLOUR_WINDOWTEXT]
-gtextcolour = SchemaDiagram.DEFAULT_COLOURS[wx.SYS_COLOUR_GRAYTEXT]
-btextcolour = SchemaDiagram.DEFAULT_COLOURS[wx.SYS_COLOUR_BTNTEXT]
-gradcolour  = SchemaDiagram.COLOUR_GRAD_TO
-fontsize    = SchemaDiagram.FONT_SIZE + 3
-texth       = SchemaDiagram.FONT_SIZE + 2
+wincolour   = SchemaPlacement.DEFAULT_COLOURS["Background"]
+wtextcolour = SchemaPlacement.DEFAULT_COLOURS["Foreground"]
+gtextcolour = SchemaPlacement.DEFAULT_COLOURS["Border"]
+btextcolour = SchemaPlacement.DEFAULT_COLOURS["Line"]
+gradcolour  = SchemaPlacement.DEFAULT_COLOURS["GradientEnd"]
+fontsize    = SchemaPlacement.FONT_SIZE + 3
+texth       = SchemaPlacement.FONT_SIZE + 2
 
 bounds = None
 # Calculate item widths and heights
-MINW, MINH = SchemaDiagram.MINW, SchemaDiagram.HEADERH
+MINW, MINH = SchemaPlacement.MINW, SchemaPlacement.HEADERH
 itemcoltexts, itemcolmax = {}, {} # {item name: [[name, type], ]}, {item name: {"name", "type"}}
 for item in items:
     # Measure title width
-    ititle = util.ellipsize(util.unprint(item["name"]), SchemaDiagram.MAX_TITLE)
+    ititle = util.ellipsize(util.unprint(item["name"]), SchemaPlacement.MAX_TITLE)
     extent = get_extent(ititle, fonts["bold"]) # (w, h, descent, lead)
-    w, h = max(MINW, extent[0] + extent[3] + 2 * SchemaDiagram.HPAD), MINH
+    w, h = max(MINW, extent[0] + extent[3] + 2 * SchemaPlacement.HPAD), MINH
 
     cols = item.get("columns") or []
     colmax = itemcolmax[item["name"]] = {"name": 0, "type": 0}
@@ -3022,49 +3028,48 @@ for item in items:
         coltexts.append([])
         for k in ["name", "type"]:
             v = c.get(k)
-            t = util.ellipsize(util.unprint(c.get(k, "")), SchemaDiagram.MAX_TEXT)
+            t = util.ellipsize(util.unprint(c.get(k, "")), SchemaPlacement.MAX_TEXT)
             coltexts[-1].append(t)
             if t: extent = get_extent(t)
             if t: colmax[k] = max(colmax[k], extent[0] + extent[3])
-    w = max(w, SchemaDiagram.LPAD + 2 * SchemaDiagram.HPAD + sum(colmax.values()))
+    w = max(w, SchemaPlacement.LPAD + 2 * SchemaPlacement.HPAD + sum(colmax.values()))
 
     statswidth = sum(get_extent(t or "")[0] for t in get_stats_texts(item.get("stats", {}), w))
-    if w - 2 * SchemaDiagram.BRADIUS < statswidth:
-        w += int(math.ceil((statswidth - (w - 2 * SchemaDiagram.BRADIUS)) / 10.) * 10)
+    if w - 2 * SchemaPlacement.BRADIUS < statswidth:
+        w += int(math.ceil((statswidth - (w - 2 * SchemaPlacement.BRADIUS)) / 10.) * 10)
     if not cols: h += 3
-    else: h += SchemaDiagram.LINEH * len(cols) + (SchemaDiagram.HEADERP + SchemaDiagram.FOOTERH)
+    else: h += SchemaPlacement.LINEH * len(cols) + (SchemaPlacement.HEADERP + SchemaPlacement.FOOTERH)
 
-    if item.get("stats"): h += SchemaDiagram.STATSH - SchemaDiagram.FOOTERH
+    if item.get("stats"): h += SchemaPlacement.STATSH - SchemaPlacement.FOOTERH
 
-    item["bounds"] = wx.Rect(item["bounds"].TopLeft, wx.Size(w, h))
-    bounds = bounds.Union(item["bounds"]) if bounds else wx.Rect(item["bounds"])
+    item["bounds"] = Rect(item["bounds"].TopLeft, Size(w, h))
+    bounds = bounds.Union(item["bounds"]) if bounds else Rect(item["bounds"])
     if item["bounds"].Right > bounds.Right:
-        bounds.Right = item["bounds"].Right + SchemaDiagram.HPAD
+        bounds.Right = item["bounds"].Right + SchemaPlacement.HPAD
     if item["bounds"].Bottom > bounds.Bottom:
-        bounds.Bottom = item["bounds"].Bottom + SchemaDiagram.HPAD
+        bounds.Bottom = item["bounds"].Bottom + SchemaPlacement.HPAD
 
 
 # Enlarge bounds by foreign lines/labels
 for line in lines.values():
     pts = line["pts"]
-    lbounds = wx.Rect(*map(wx.Point, sorted(pts[:2])))
+    lbounds = Rect(*map(Point, sorted(pts[:2])))
     for i, pt in enumerate(pts[2:-1:2], 2):
-        lbounds.Union(wx.Rect(*map(wx.Point, sorted(pts[i:i+2]))))
+        lbounds.Union(Rect(*map(Point, sorted(pts[i:i+2]))))
     bounds.Union(lbounds)
     if not show_labels: continue # for line
 
-    extent = get_extent(util.ellipsize(util.unprint(line["name"]), SchemaDiagram.MAX_TEXT))
+    extent = get_extent(util.ellipsize(util.unprint(line["name"]), SchemaPlacement.MAX_TEXT))
     tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
                       if pts[i][0] == pts[i+1][0])
     tx = tpt1[0]
     ty = min(tpt1[1], tpt2[1]) + abs(tpt1[1] - tpt2[1]) // 2
     tw, th = sum(extent[::4]), sum(extent[1:3])
-    bounds.Union(wx.Rect(wx.Point(tx - tw // 2, ty - th), wx.Size(tw, th)))
+    bounds.Union(Rect(Point(tx - tw // 2, ty - th), Size(tw, th)))
 
 bounds.Width += 2 * MARGIN; bounds.Height += 2 * MARGIN
 shift = [MARGIN - v for v in bounds.TopLeft]
 adjust = (lambda *a: tuple(a + b for a, b in zip(a, shift))) if shift else lambda *a: a
-
 
 %>
 %if get("embed"):
@@ -3083,8 +3088,8 @@ adjust = (lambda *a: tuple(a + b for a, b in zip(a, shift))) if shift else lambd
   <defs>
 
     <linearGradient id="item-background">
-      <stop style="stop-color: {{ ColourManager.ColourHex(wincolour) }}; stop-opacity: 1;" offset="0" />
-      <stop style="stop-color: {{ ColourManager.ColourHex(gradcolour) }}; stop-opacity: 1;" offset="1" />
+      <stop style="stop-color: {{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }}; stop-opacity: 1;" offset="0" />
+      <stop style="stop-color: {{ gradcolour.GetAsString(wx.C2S_HTML_SYNTAX) }}; stop-opacity: 1;" offset="1" />
     </linearGradient>
 
     <image id="pk" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramPK.data }}" />
@@ -3092,7 +3097,7 @@ adjust = (lambda *a: tuple(a + b for a, b in zip(a, shift))) if shift else lambd
     <image id="fk" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramFK.data }}" />
 
     <filter x="0" y="0" width="1" height="1" id="clearbg">
-       <feFlood flood-color="{{ ColourManager.ColourHex(wincolour) }}" />
+       <feFlood flood-color="{{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }}" />
        <feComposite in="SourceGraphic" in2="" />
     </filter>
 
@@ -3102,31 +3107,31 @@ adjust = (lambda *a: tuple(a + b for a, b in zip(a, shift))) if shift else lambd
     <![CDATA[
 
       svg {
-        background:      {{ ColourManager.ColourHex(wincolour) }};
+        background:      {{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
         shape-rendering: crispEdges;
       }
 
       path {
         fill:            none;
-        stroke:          {{ ColourManager.ColourHex(gtextcolour) }};
+        stroke:          {{ gtextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
         stroke-width:    1px;
       }
 
       text {
-        fill:            {{ ColourManager.ColourHex(wtextcolour) }};
+        fill:            {{ wtextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
         font-size:       {{ fontsize }}px;
-        font-family:     {{ SchemaDiagram.FONT_FACE }};
+        font-family:     {{ ", ".join(('"%s"' if " " in n else '%s') % n for n in font_faces) }};
         white-space:     pre;
       }
 
       .item .box {
          fill:           url(#item-background);
-         stroke:         {{ ColourManager.ColourHex(gtextcolour) }};
+         stroke:         {{ gtextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
          stroke-width:   1px;
       }
 
       .item .content {
-        fill:            {{ ColourManager.ColourHex(wincolour) }};
+        fill:            {{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
         fill-opacity:    1;
       }
 
@@ -3136,26 +3141,26 @@ adjust = (lambda *a: tuple(a + b for a, b in zip(a, shift))) if shift else lambd
       }
 
       .item .stats text {
-        font-size:       {{ fontsize + SchemaDiagram.FONT_STEP_STATS }}px;
+        font-size:       {{ fontsize + SchemaPlacement.FONT_STEP_STATS }}px;
       }
 
       .item .stats .size {
-        fill:            {{ ColourManager.ColourHex(wincolour) }};
+        fill:            {{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
         text-anchor:     end;
       }
 
       .item .separator {
-        stroke:          {{ ColourManager.ColourHex(gtextcolour) }};
+        stroke:          {{ gtextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
         stroke-width:    1px;
       }
 
       .relation path {
-        stroke:          {{ ColourManager.ColourHex(btextcolour) }};
+        stroke:          {{ btextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
         stroke-width:    1px;
       }
 
       .relation .label {
-        fill:            {{ ColourManager.ColourHex(btextcolour) }};
+        fill:            {{ btextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
         filter:          url(#clearbg);
         text-anchor:     middle;
       }
@@ -3203,22 +3208,21 @@ for i, pt in enumerate(pts):
         y2 = +R if pt[1] == pt0[1] and pt[1] < pt2[1] or pt0[1] < pt[1] and pt[1] == pt2[1] else -R
         path += " a %s,%s 0 0,%s %s,%s" % (R, R, 1 if clockwise else 0, x2, y2)
 
-
 # Assemble crowfoot path in segments for consistent rendering
 to_right = pts[0][0] < pts[1][0]
 ptc1 = [pts[0][0] + 0.5, pts[0][1]]
-ptc2 = [ptc1[0] + 0.5 + SchemaDiagram.CARDINALW * (1 if to_right else -1), ptc1[1]]
+ptc2 = [ptc1[0] + 0.5 + SchemaPlacement.CARDINALW * (1 if to_right else -1), ptc1[1]]
 ptc1, ptc2 = [ptc1, ptc2][::1 if to_right else -1]
 crow1, crow2 = "", ""
-for i in range(SchemaDiagram.CARDINALW // 2):
-    pt1 = [ptc1[0] + i * 2 + (not to_right), ptc1[1] - (SchemaDiagram.CARDINALW // 2 - i if to_right else i + 1)]
+for i in range(SchemaPlacement.CARDINALW // 2):
+    pt1 = [ptc1[0] + i * 2 + (not to_right), ptc1[1] - (SchemaPlacement.CARDINALW // 2 - i if to_right else i + 1)]
     crow1 += "%sM %s,%s h2" % (("  " if i else "", ) + adjust(pt1[0], pt1[1]))
-    pt2 = [ptc1[0] + i * 2 + (not to_right), ptc1[1] + (SchemaDiagram.CARDINALW // 2 - i if to_right else i + 1)]
+    pt2 = [ptc1[0] + i * 2 + (not to_right), ptc1[1] + (SchemaPlacement.CARDINALW // 2 - i if to_right else i + 1)]
     crow2 += "%sM %s,%s h2" % (("  " if i else "", ) + adjust(pt2[0], pt2[1]))
 
 # Assemble parent-item dash
-ptd1 = [mypts[-1][0] - SchemaDiagram.DASHSIDEW - 0.5, mypts[-1][1]]
-ptd2 = [mypts[-1][0] + SchemaDiagram.DASHSIDEW + 0.5, ptd1[1]]
+ptd1 = [mypts[-1][0] - SchemaPlacement.DASHSIDEW - 0.5, mypts[-1][1]]
+ptd2 = [mypts[-1][0] + SchemaPlacement.DASHSIDEW + 0.5, ptd1[1]]
 dash = "M %s,%s L %s,%s" % (adjust(*ptd1) + adjust(*ptd2))
 
 %>
@@ -3228,7 +3232,7 @@ dash = "M %s,%s L %s,%s" % (adjust(*ptd1) + adjust(*ptd2))
       <path d="{{ crow2 }}" />
       <path d="{{ dash }}" />
     %if show_labels:
-      <text x="{{ tx }}" y="{{ ty }}" class="label">{{ util.ellipsize(util.unprint(line["name"]), SchemaDiagram.MAX_TEXT) }}</text>
+      <text x="{{ tx }}" y="{{ ty }}" class="label">{{ util.ellipsize(util.unprint(line["name"]), SchemaPlacement.MAX_TEXT) }}</text>
     %endif
     </g>
 %endfor
@@ -3247,37 +3251,37 @@ cols = item.get("columns") or []
 itemx, itemy = adjust(*item["bounds"].TopLeft)
 
 istats = item.get("stats")
-cheight = (SchemaDiagram.HEADERP + len(cols) * SchemaDiagram.LINEH) if cols else 0
-height = SchemaDiagram.HEADERH + cheight + SchemaDiagram.FOOTERH
-if istats: height += SchemaDiagram.STATSH - SchemaDiagram.FOOTERH
-if not cols and not istats: height = SchemaDiagram.HEADERH + 3
+cheight = (SchemaPlacement.HEADERP + len(cols) * SchemaPlacement.LINEH) if cols else 0
+height = SchemaPlacement.HEADERH + cheight + SchemaPlacement.FOOTERH
+if istats: height += SchemaPlacement.STATSH - SchemaPlacement.FOOTERH
+if not cols and not istats: height = SchemaPlacement.HEADERH + 3
 %>
 
     <g id="{{ util.unprint(item["name"]) }}" class="item {{ item["type"] }}">
-      <rect x="{{ itemx }}" y="{{ itemy }}" width="{{ item["bounds"].Width }}" height="{{ height }}" {{ 'rx="%s" ry="%s" ' % ((SchemaDiagram.BRADIUS, ) * 2) if "table" == item["type"] else "" }}class="box" />
+      <rect x="{{ itemx }}" y="{{ itemy }}" width="{{ item["bounds"].Width }}" height="{{ height }}" {{ 'rx="%s" ry="%s" ' % ((SchemaPlacement.BRADIUS, ) * 2) if "table" == item["type"] else "" }}class="box" />
     %if cols:
-      <rect x="{{ itemx + 1 }}" y="{{ itemy + SchemaDiagram.HEADERH }}" width="{{ item["bounds"].Width - 1.5 }}" height="{{ cheight }}" class="content" />
-      <path d="M {{ itemx }},{{ itemy + SchemaDiagram.HEADERH }} h{{ item["bounds"].Width }}" class="separator" />
+      <rect x="{{ itemx + 1 }}" y="{{ itemy + SchemaPlacement.HEADERH }}" width="{{ item["bounds"].Width - 1.5 }}" height="{{ cheight }}" class="content" />
+      <path d="M {{ itemx }},{{ itemy + SchemaPlacement.HEADERH }} h{{ item["bounds"].Width }}" class="separator" />
     %endif
 
     %if get("embed"):
       <a xlink:title="Go to {{ item["type"] }} {{ escape(grammar.quote(item["name"], force=True)) }}" xlink:href="#{{ item["type"] }}/{{! urlquote(item["name"]) }}">
     %endif
-      <text x="{{ itemx + item["bounds"].Width // 2 }}" y="{{ itemy + SchemaDiagram.HEADERH - SchemaDiagram.HEADERP }}" class="title">{{ util.ellipsize(util.unprint(item["name"]), SchemaDiagram.MAX_TEXT) }}</text>
+      <text x="{{ itemx + item["bounds"].Width // 2 }}" y="{{ itemy + SchemaPlacement.HEADERH - SchemaPlacement.HEADERP }}" class="title">{{ util.ellipsize(util.unprint(item["name"]), SchemaPlacement.MAX_TEXT) }}</text>
     %if get("embed"):
       </a>
     %endif
 
     %if cols:
-      <text x="{{ itemx }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth }}" class="columns">
+      <text x="{{ itemx }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + texth }}" class="columns">
       %for i, col in enumerate(cols):
-        <tspan x="{{ itemx + SchemaDiagram.LPAD }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth + i * SchemaDiagram.LINEH }}px">{{ itemcoltexts[item["name"]][i][0] }}</tspan>
+        <tspan x="{{ itemx + SchemaPlacement.LPAD }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + texth + i * SchemaPlacement.LINEH }}px">{{ itemcoltexts[item["name"]][i][0] }}</tspan>
       %endfor
       </text>
 
-      <text x="{{ itemx }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth }}" class="types">
+      <text x="{{ itemx }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + texth }}" class="types">
       %for i, col in enumerate(cols):
-        <tspan x="{{ itemx + SchemaDiagram.LPAD + itemcolmax[item["name"]]["name"] + SchemaDiagram.HPAD }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + texth + i * SchemaDiagram.LINEH }}px">{{ itemcoltexts[item["name"]][i][1] }}</tspan>
+        <tspan x="{{ itemx + SchemaPlacement.LPAD + itemcolmax[item["name"]]["name"] + SchemaPlacement.HPAD }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + texth + i * SchemaPlacement.LINEH }}px">{{ itemcoltexts[item["name"]][i][1] }}</tspan>
       %endfor
       </text>
     %endif
@@ -3287,23 +3291,23 @@ if not cols and not istats: height = SchemaDiagram.HEADERH + 3
 
 text1, text2 = get_stats_texts(istats, item["bounds"].Width)
 
-ty = itemy + height - SchemaDiagram.STATSH + texth - SchemaDiagram.FONT_STEP_STATS
+ty = itemy + height - SchemaPlacement.STATSH + texth - SchemaPlacement.FONT_STEP_STATS
 w1 = next(d[0] + d[3] for d in [get_extent(text1)]) if text1 else 0
 w2 = next(d[0] + d[3] for d in [get_extent(text2)]) if text2 else 0
-if w1 + w2 + 2 * SchemaDiagram.BRADIUS > item["bounds"].Width and item.get("count"):
+if w1 + w2 + 2 * SchemaPlacement.BRADIUS > item["bounds"].Width and item.get("count"):
     text1 = istats["size_maxunits"]
 
 %>
 
       <g class="stats">
         %if cols:
-        <path d="M {{ itemx }},{{ itemy + height - SchemaDiagram.STATSH }} h{{ item["bounds"].Width }}" class="separator" />
+        <path d="M {{ itemx }},{{ itemy + height - SchemaPlacement.STATSH }} h{{ item["bounds"].Width }}" class="separator" />
         %endif
         %if istats.get("rows"):
-          <text x="{{ itemx + SchemaDiagram.BRADIUS }}" y="{{ ty }}" class="rows">{{ text1 }}</text>
+          <text x="{{ itemx + SchemaPlacement.BRADIUS }}" y="{{ ty }}" class="rows">{{ text1 }}</text>
         %endif
         %if istats.get("size"):
-          <text x="{{ itemx + item["bounds"].Width - SchemaDiagram.BRADIUS }}" y="{{ ty }}" class="size">{{ text2 }}</text>
+          <text x="{{ itemx + item["bounds"].Width - SchemaPlacement.BRADIUS }}" y="{{ ty }}" class="size">{{ text2 }}</text>
         %endif
       </g>
     %endif
@@ -3311,10 +3315,10 @@ if w1 + w2 + 2 * SchemaDiagram.BRADIUS > item["bounds"].Width and item.get("coun
 
         %for i, col in enumerate(cols):
             %if any(col["name"] in x.get("name", ()) for x in pks):
-      <use xlink:href="#pk" x="{{ itemx + 3 }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + i * SchemaDiagram.LINEH }}" />
+      <use xlink:href="#pk" x="{{ itemx + 3 }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
             %endif
             %if any(col["name"] in x.get("name", ()) for x in fks):
-      <use xlink:href="#fk" x="{{ itemx + item["bounds"].Width - 5 - images.DiagramFK.Bitmap.Width }}" y="{{ itemy + SchemaDiagram.HEADERH + SchemaDiagram.HEADERP + i * SchemaDiagram.LINEH }}" />
+      <use xlink:href="#fk" x="{{ itemx + item["bounds"].Width - 5 - images.DiagramFK.Bitmap.Width }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
             %endif
         %endfor
     %endif
