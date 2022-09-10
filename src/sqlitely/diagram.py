@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    09.09.2022
+@modified    10.09.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -404,7 +404,7 @@ class SchemaPlacement(object):
         self._colour_line   = self.DEFAULT_COLOURS["Line"]
         self._colour_grad1  = self.DEFAULT_COLOURS["Background"]
         self._colour_grad2  = self.DEFAULT_COLOURS["GradientEnd"]
-        self._colour_shadow = Colour(None)
+        self._colour_select = Colour(None)
         self._colour_dragfg = Colour(None)
         self._colour_dragbg = Colour(None)
 
@@ -1601,7 +1601,7 @@ class SchemaPlacement(object):
         # Make "selected" bitmap, with a surrounding shadow
         bmpsel = wx.Bitmap(w + 2 * self.FMARGIN, h + 2 * self.FMARGIN)
         fdc = wx.MemoryDC(bmpsel)
-        fdc.Background = controls.BRUSH(self.ShadowColour)
+        fdc.Background = controls.BRUSH(self.SelectionColour)
         fdc.Clear()
         fdc.DrawBitmap(bmp, self.FMARGIN, self.FMARGIN, useMask=True)
         fdc.SelectObject(wx.NullBitmap)
@@ -1913,10 +1913,10 @@ class SchemaPlacement(object):
     """Line colour of entity relations.""")
 
 
-    def GetShadowColour(self):         return self._colour_shadow
-    def SetShadowColour(self, colour): self._colour_shadow = Colour(colour)
-    ShadowColour = property(GetShadowColour, SetShadowColour, doc=
-    """Colour of shadow around selected entity box.""")
+    def GetSelectionColour(self):         return self._colour_select
+    def SetSelectionColour(self, colour): self._colour_select = Colour(colour)
+    SelectionColour = property(GetSelectionColour, SetSelectionColour, doc=
+    """Colour of highlight border around selected entity box.""")
 
 
     def GetGradientStartColour(self):         return self._colour_grad1

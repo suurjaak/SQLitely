@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.09.2022
+@modified    10.09.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10076,9 +10076,9 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
     LineColour = property(GetLineColour, SetLineColour)
 
 
-    def GetShadowColour(self):         return self._layout.ShadowColour
-    def SetShadowColour(self, colour): self._layout.ShadowColour = colour
-    ShadowColour = property(GetShadowColour, SetShadowColour)
+    def GetSelectionColour(self):         return self._layout.SelectionColour
+    def SetSelectionColour(self, colour): self._layout.SelectionColour = colour
+    SelectionColour = property(GetSelectionColour, SetSelectionColour)
 
 
     def GetGradientStartColour(self):         return self._layout.GradientStartColour
@@ -10752,7 +10752,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             hotcolour     = self._layout.DEFAULT_COLOURS["DragForeground"]
 
         dragbgcolour  = controls.ColourManager.Adjust(hotcolour,   wincolour, 0.6)
-        shadowcolour  = controls.ColourManager.Adjust(gtextcolour, wincolour, 0.6)
+        selectcolour  = controls.ColourManager.Adjust(gtextcolour, wincolour, 0.6)
 
         self.BackgroundColour = wincolour
         self.ForegroundColour = wtextcolour
@@ -10765,7 +10765,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         self._layout.GradientStartColour  = wincolour
         self._layout.GradientEndColour    = gradendcolour
         self._layout.LineColour           = btextcolour
-        self._layout.ShadowColour         = shadowcolour
+        self._layout.SelectionColour      = selectcolour
 
 
     def _IsDefaultColours(self):
