@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.1, 2022-08-21
+2.1, 2022-09-10
 ---------------
 - add button panels to data and schema tabs
 - add column and key toggles to schema diagram
@@ -21,6 +21,7 @@ CHANGELOG
 - fix collecting related entities on getting all related SQL or exporting to another database
 - fix error on canceling a single grid export
 - fix error on toggling diagram foreign labels on
+- fix diagram in statistics HTML export using current view settings
 - fix operating on key columns of BLOB affinity in data grids
 
 
