@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.09.2022
+@modified    11.09.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10668,12 +10668,12 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         self._worker_bmp.stop_work()
         if callback: self._work_finalizers[callback[0]] = callback[1]
 
-        items, stats = items or self._layout.Order, self.ShowStatistics or None
+        items, stats = (items or self._layout.Order), (self.ShowStatistics or None)
         if all(self._layout.HasItemBitmaps(o, stats and o["stats"]) for o in items):
             for o in items:
                 bmp, bmpsel = self._layout.GetItemBitmaps(o, o["stats"] if self.ShowStatistics
                                                              else None)
-                o.update(bmp=bmp, bmpsel=bmpsel, bmparea=None)
+                self._layout.SetItemBitmaps(o["name"], bmp=bmp, bmpsel=bmpsel, bmparea=None)
             return self._OnBitmapWorkerProgress(done=True, immediate=True)
 
         self._worker_bmp.work(functools.partial(self._BitmapWorker, items))
@@ -10706,7 +10706,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         for i, o in enumerate(items):
             if not self or not self._worker_bmp.is_working(): break # for i, o
             bmp, bmpsel = self._layout.GetItemBitmaps(o, o["stats"] if self.ShowStatistics else None)
-            o.update(bmp=bmp, bmpsel=bmpsel, bmparea=None)
+            self._layout.SetItemBitmaps(o["name"], bmp=bmp, bmpsel=bmpsel, bmparea=None)
             self._OnBitmapWorkerProgress(index=i, count=len(items))
         if self: self._OnBitmapWorkerProgress(done=True)
 

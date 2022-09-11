@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    10.09.2022
+@modified    11.09.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -715,17 +715,6 @@ class SchemaPlacement(object):
         """
         oid = next((k for k, v in self._ids.items() if v == name), -1)
         return self._dc.GetIdBounds(oid)
-
-
-    def SetObjectBounds(self, name, bounds):
-        """
-        Sets object bounds.
-
-        @param   name    entity name, or relation (childname, parentname, (fkname1, ))
-        @param   bounds  Rect or (x, y, w, h)
-        """
-        oid = next((k for k, v in self._ids.items() if v == name), -1)
-        self._dc.SetIdBounds(oid, bounds)
 
 
     def MakeBitmap(self, zoom=None, selections=True, columns=None, keycolumns=None,
@@ -1497,6 +1486,18 @@ class SchemaPlacement(object):
         return mycache[key2]
 
 
+    def SetItemBitmaps(self, name, **kwargs):
+        """
+        Sets item bitmaps.
+
+        @param   name    item name
+        @param   kwargs  supported keys: "bmp", "bmpsel" and "bmparea"
+        """
+        o = self._objs[name]
+        for k in ("bmp", "bmpsel", "bmparea"):
+            if k in kwargs: o[k] = kwargs[k]
+
+
     def MakeItemBitmaps(self, opts, statistics=None, dragrect=False):
         """
         Returns bitmaps representing a schema item like table.
@@ -1756,15 +1757,15 @@ class SchemaPlacement(object):
         return self.CalculateItemSize(o, self._show_stats and o.get("stats"))[0]
 
 
-    def GetItems(self): return self._objs.copy()
+    def GetItems(self): return type(self._objs)((k, v.copy()) for k, v in self._objs.items())
     Items = property(GetItems)
 
 
-    def GetLines(self): return self._lines.copy()
+    def GetLines(self): return type(self._lines)((k, v.copy()) for k, v in self._lines.items())
     Lines = property(GetLines)
 
 
-    def GetOrder(self): return self._order[:]
+    def GetOrder(self): return [o.copy() for o in self._order]
     Order = property(GetOrder)
 
 
