@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.09.2022
+@modified    11.09.2022
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1933,6 +1933,8 @@ def wrapclass(v):
     table.content > tbody > tr > td.index { text-align: right; white-space: nowrap; }
     table.subtable { border-collapse: collapse; width: 100%; }
     table.subtable > tbody > tr > td:last-child { text-align: right; vertical-align: top; }
+    table.columns { width: 100%; }
+    table.columns tr::after { content: attr(data-content); display: table-cell; opacity: 0.2; text-align: right; width: 99%; }
     a, a.visited { color: #3399FF; text-decoration: none; }
     a:hover, a.visited:hover { text-decoration: underline; }
     div.sql { font-family: monospace; text-align: left; white-space: pre-wrap; word-break: break-all; overflow-wrap: anywhere; }
@@ -2284,9 +2286,9 @@ countstr = util.count(item)
 %>
     <td>
       <a class="toggle right" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urlquote(item["name"]) }}/cols')">{{ len(item["columns"]) }}</a>
-      <table class="hidden" id="{{ category }}/{{! urlquote(item["name"]) }}/cols">
-                %for c in item["columns"]:
-        <tr><td {{! wrapclass(c["name"]) }}>{{ util.unprint(c["name"]) }}</td><td {{! wrapclass(c.get("type")) }}>{{ util.unprint(c.get("type", "")) }}</td></tr>
+      <table class="columns hidden" id="{{ category }}/{{! urlquote(item["name"]) }}/cols">
+                %for i, c in enumerate(item["columns"]):
+        <tr data-content="{{ i + 1 }}"><td {{! wrapclass(c["name"]) }}>{{ util.unprint(c["name"]) }}</td><td {{! wrapclass(c.get("type")) }}>{{ util.unprint(c.get("type", "")) }}</td></tr>
                 %endfor
       </table>
     </td>
@@ -2425,10 +2427,10 @@ mycategory = "view" if item["tbl_name"] in db.schema["view"] else "table"
 
             %if "view" == category:
     <td>
-      <a class="toggle" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urlquote(item["name"]) }}/cols')">{{ len(item["columns"]) }}</a>
-      <table class="hidden" id="{{ category }}/{{! urlquote(item["name"]) }}/cols">
-                %for col in item["columns"]:
-        <tr><td {{! wrapclass(col["name"]) }}>{{ util.unprint(col["name"]) }}</td><td {{! wrapclass(col.get("type")) }}>{{ util.unprint(col.get("type", "")) }}</td></tr>
+      <a class="toggle right" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urlquote(item["name"]) }}/cols')">{{ len(item["columns"]) }}</a>
+      <table class="columns hidden" id="{{ category }}/{{! urlquote(item["name"]) }}/cols">
+                %for i, col in enumerate(item["columns"]):
+        <tr data-content="{{ i + 1 }}"><td {{! wrapclass(col["name"]) }}>{{ util.unprint(col["name"]) }}</td><td {{! wrapclass(col.get("type")) }}>{{ util.unprint(col.get("type", "")) }}</td></tr>
                 %endfor
       </table>
     </td>
