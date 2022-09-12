@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.09.2022
+@modified    12.09.2022
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -3073,9 +3073,15 @@ bounds.Width += 2 * MARGIN; bounds.Height += 2 * MARGIN
 shift = [MARGIN - v for v in bounds.TopLeft]
 adjust = (lambda *a: tuple(a + b for a, b in zip(a, shift))) if shift else lambda *a: a
 
+# Grandparent width - grandparent padding - parent padding - parent border
+DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
 %>
 %if get("embed"):
-<svg viewBox="0 0 {{ bounds.Width }} {{ bounds.height }}" version="1.1">
+<svg viewBox="0 0 {{ bounds.Width }} {{ bounds.height }}"
+    %if bounds.Width <= DIAGRAM_WIDTH:
+  width="{{ bounds.Width }}" height="{{ bounds.height }}"
+    %endif
+  version="1.1">
 %else:
 <?xml version="1.0" encoding="UTF-8" ?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
