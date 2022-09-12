@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.1, 2022-09-10
+2.1, 2022-09-12
 ---------------
 - add button panels to data and schema tabs
 - add column and key toggles to schema diagram
@@ -23,6 +23,7 @@ CHANGELOG
 - fix error on toggling diagram foreign labels on
 - fix diagram in statistics HTML export using current view settings
 - fix operating on key columns of BLOB affinity in data grids
+- fix encoding errors in running disk usage analyzer
 
 
 2.0, 2022-04-02

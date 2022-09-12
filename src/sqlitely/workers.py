@@ -8,11 +8,12 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.08.2022
+@modified    12.09.2022
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
 import hashlib
+import locale
 import logging
 import multiprocessing.connection
 import os
@@ -426,7 +427,7 @@ class AnalyzerThread(WorkerThread):
 
             try:
                 pargs = dict(stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT, universal_newlines=True)
+                             stderr=subprocess.STDOUT)
                 if hasattr(subprocess, "STARTUPINFO"):
                     startupinfo = subprocess.STARTUPINFO()
                     startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
@@ -451,6 +452,8 @@ class AnalyzerThread(WorkerThread):
                             except Exception: pass
                             if mypath == paths[-1]: six.reraise(type(e), e, tb)
                         else:
+                            output, error = (x and util.to_unicode(x, locale.getpreferredencoding())
+                                             for x in (output, error))
                             if not self._process \
                             or output and output.strip().startswith("/**"): break # for mypath
             except Exception as e:
