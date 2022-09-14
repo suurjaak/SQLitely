@@ -4057,7 +4057,7 @@ class DatabasePage(wx.Panel):
             wx.PostEvent(self, OpenDatabaseEvent(self.Id, file=dbfile))
         if importfiles:
             dlg = components.ImportDialog(self, self.db)
-            wx.CallAfter(lambda: dlg and dlg._OnFile(filename=importfiles[0]))
+            wx.CallAfter(lambda: dlg and dlg.LoadFile(importfiles[0]))
             dlg.ShowModal()
 
 

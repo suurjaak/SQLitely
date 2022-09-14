@@ -6786,6 +6786,29 @@ class ImportDialog(wx.Dialog):
         wx.CallLater(1, button_file.SetFocus)
 
 
+    def LoadFile(self, filename=None):
+        """Starts loading source file data overview."""
+        SKIP = (self._gauge, self._info_gauge, self._info_file,
+                self._button_cancel, self._splitter, self._l1, self._l2)
+        for c in sum((list(x.Children) for x in [self] + list(self._splitter.Children)), []):
+            if not isinstance(c, wx.StaticText) and c not in SKIP: c.Disable()
+
+        self._info_file.Label = ""
+        self._info_help.Hide()
+        self._l1.ReadOnly = self._l2.ReadOnly = True
+        self._gauge.Show()
+        self._info_gauge.Show()
+        self._info_gauge.Label = "Reading file.."
+
+        self.Layout()
+        self._gauge.Pulse()
+
+        progress = lambda *_, **__: bool(self) and self._worker_read.is_working()
+        callable = functools.partial(importexport.get_import_file_data,
+                                     filename, progress)
+        self._worker_read.work(callable, filename=filename)
+
+
     def SetFile(self, data):
         """
         Sets the file data to import from, refreshes controls.
@@ -7532,36 +7555,16 @@ class ImportDialog(wx.Dialog):
 
     def _OnDropFiles(self, filenames):
         """Handler for dropping files onto dialog, selects first as source."""
-        self._OnFile(filename=filenames[0])
+        self.LoadFile(filename=filenames[0])
 
 
-    def _OnFile(self, event=None, filename=None):
+    def _OnFile(self, event=None):
         """Handler for clicking to choose source file, opens file dialog."""
-        if filename is None:
-            if wx.ID_OK != self._dialog_file.ShowModal(): return
+        if wx.ID_OK != self._dialog_file.ShowModal(): return
 
-            filename = self._dialog_file.GetPath()
-            if self._data and filename == self._data["name"]: return
-
-        SKIP = (self._gauge, self._info_gauge, self._info_file,
-                self._button_cancel, self._splitter, self._l1, self._l2)
-        for c in sum((list(x.Children) for x in [self] + list(self._splitter.Children)), []):
-            if not isinstance(c, wx.StaticText) and c not in SKIP: c.Disable()
-
-        self._info_file.Label = ""
-        self._info_help.Hide()
-        self._l1.ReadOnly = self._l2.ReadOnly = True
-        self._gauge.Show()
-        self._info_gauge.Show()
-        self._info_gauge.Label = "Reading file.."
-
-        self.Layout()
-        self._gauge.Pulse()
-
-        progress = lambda *_, **__: bool(self) and self._worker_read.is_working()
-        callable = functools.partial(importexport.get_import_file_data,
-                                     filename, progress)
-        self._worker_read.work(callable, filename=filename)
+        filename = self._dialog_file.GetPath()
+        if self._data and filename == self._data["name"]: return
+        self.LoadFile(filename)
 
 
     def _OnWorkerRead(self, result, filename, **kwargs):
