@@ -495,7 +495,7 @@ class SchemaPlacement(object):
         area, vsize = self.GPAD * self.GPAD, self._size
         if reset: # Do a very rough calculation based on accumulated area
             for o in self._objs.values():
-                osize = self.CalculateItemSize(o, self._show_stats and o.get("stats"))[0]
+                osize = self.CalculateItemSize(o)[0]
                 area += (osize.Width + self.GPAD) * (osize.Height + self.GPAD)
             while area > vsize[0] * vsize[1]:
                 vsize = vsize[0], vsize[1] + 100
@@ -503,7 +503,7 @@ class SchemaPlacement(object):
             pos = itemposes.get(o["name"]) \
                   or next((r.TopLeft for r in [self._dc.GetIdBounds(o["id"])] if r), None)
             if not pos: continue  # for o
-            size = self.CalculateItemSize(o, self._show_stats and o.get("stats"))[0]
+            size = self.CalculateItemSize(o)[0]
             rect = rects[o["name"]] = Rect(Point(pos), size)
             self._dc.SetIdBounds(o["id"], rect)
             fullbounds.Union(rect)
@@ -621,7 +621,7 @@ class SchemaPlacement(object):
         for o in self._order: # Scale all item bounds to new zoom
             r = self._dc.GetIdBounds(o["id"])
             pt = [v * zoom / zoom0 for v in r.TopLeft]
-            sz, _, _, _ = self.CalculateItemSize(o, self._show_stats and o.get("stats"))
+            sz, _, _, _ = self.CalculateItemSize(o)
             self._dc.SetIdBounds(o["id"], Rect(Point(pt), Size(sz)))
 
         return True
@@ -767,13 +767,13 @@ class SchemaPlacement(object):
             self.RecordLines(dc=dc, shift=shift)
             for o in (o for o in self._order if o["name"] not in self._sels):
                 pos = [a + b for a, b in zip(self._dc.GetIdBounds(o["id"])[:2], shift)]
-                obmp, _ = self.GetItemBitmaps(o, self._show_stats and o["stats"])
+                obmp, _ = self.GetItemBitmaps(o)
                 dc.DrawBitmap(obmp, pos, useMask=True)
             for name in self._sels:
                 o = self._objs[name]
                 pos = [a + b - 2 * self._zoom
                        for a, b in zip(self._dc.GetIdBounds(o["id"])[:2], shift)]
-                _, obmp = self.GetItemBitmaps(o, self._show_stats and o["stats"])
+                _, obmp = self.GetItemBitmaps(o)
                 dc.DrawBitmap(obmp, pos, useMask=True)
             dc.SelectObject(wx.NullBitmap)
             del dc
@@ -808,7 +808,7 @@ class SchemaPlacement(object):
             self.SetZoom(self.ZOOM_DEFAULT)
             itembounds0 = {} # Remember current bounds, calculate for default zoom
             for name, o in self._objs.items():
-                size, _, _, _ = self.CalculateItemSize(o, o.get("stats") if self._show_stats else None)
+                size, _, _, _ = self.CalculateItemSize(o)
                 ibounds = itembounds0[name] = self._dc.GetIdBounds(o["id"])
                 self._dc.SetIdBounds(o["id"], Rect(ibounds.Position, Size(size)))
             self.CalculateLines(remake=True)
@@ -841,8 +841,9 @@ class SchemaPlacement(object):
         """
         Returns ((w, h), title, coltexts, colmax) for schema item with current settings.
 
-        @param   statistics  statistics to use for item
+        @param   statistics  {?size, ?rows, ?rows_maxunits} to use if not item current
         """
+        statistics = (statistics or self.MakeItemStatistics(opts)) if self._show_stats else None
         w, h = self.MINW, self.HEADERH + self.FOOTERH
 
         # Measure title width
@@ -1174,7 +1175,7 @@ class SchemaPlacement(object):
 
 
     def MakeItemStatistics(self, opts):
-        """Returns {?size, ?rows} for schema item if stats enabled and information available."""
+        """Returns {?size, ?rows, ?rows_maxunits} for schema item if stats enabled and available."""
         stats = {}
         if opts.get("size_total") is not None:
             stats["size"] = util.format_bytes(opts["size_total"])
@@ -1209,7 +1210,7 @@ class SchemaPlacement(object):
         """
         self.UpdateStatistics()
         for o in self._order:
-            bmps = self.GetItemBitmaps(o, self._show_stats and o["stats"])
+            bmps = self.GetItemBitmaps(o)
             if bmps: o["bmp"], o["bmpsel"] = bmps
         self.Layout = layout
         wrk = self.PositionItemsGrid if self.LAYOUT_GRID == self.Layout else self.PositionItemsGraph
@@ -1240,7 +1241,7 @@ class SchemaPlacement(object):
         bmpname = ("bmparea" if self._dragrect else "bmpsel") if o["name"] in self._sels else "bmp"
         bmp = o[bmpname]
         if bmp is None:
-            bmp = self.GetItemBitmaps(o, self._show_stats and o["stats"], dragrect=True)
+            bmp = self.GetItemBitmaps(o, dragrect=name in self._sels)
             o.update({bmpname: bmp})
         pos = [a - (o["name"] in self._sels) * 2 * self._zoom for a in bounds[:2]]
         self._dc.DrawBitmap(bmp, pos, useMask=True)
@@ -1399,7 +1400,12 @@ class SchemaPlacement(object):
 
 
     def HasItemBitmaps(self, opts, statistics=None):
-        """Returns whether schema item has cached bitmap for current view."""
+        """
+        Returns whether schema item has cached bitmap for current view.
+
+        @param   statistics  {?size, ?rows, ?rows_maxunits} to use if not item current
+        """
+        statistics = (statistics or self.MakeItemStatistics(opts)) if self._show_stats else None
         key1 = opts["__id__"]
         key2 = (opts["sql0"], bool(opts.get("meta") or opts.get("hasmeta")),
                 self._show_cols, self._show_keys, str(statistics) if statistics else None, False)
@@ -1407,8 +1413,14 @@ class SchemaPlacement(object):
 
 
     def GetItemBitmaps(self, opts, statistics=None, dragrect=False):
-        """Wrapper for MakeItemBitmaps(), using cache if possible."""
+        """
+        Wrapper for MakeItemBitmaps(), using cache if possible.
+
+        @param   statistics  {?size, ?rows, ?rows_maxunits} to use if not item current
+        @param   dragrect    whether to return a single bitmap for drag rectangle highlight
+        """
         if not self._use_cache: return self.MakeItemBitmaps(opts, statistics, dragrect)
+        statistics = (statistics or self.MakeItemStatistics(opts)) if self._show_stats else None
 
         key1 = opts["__id__"]
         key2 = (opts["sql0"], bool(opts.get("meta") or opts.get("hasmeta")),
@@ -1440,11 +1452,10 @@ class SchemaPlacement(object):
         """
         Returns bitmaps representing a schema item like table.
 
-        @param    opts           schema item
-        @param    statistics     statistics to use for item
-        @param    dragrect       if True, returns a single bitmap
-                                 for item inside drag rectangle
-        @return   (default bitmap, focused bitmap) or bitmap inside drag rectangle
+        @param    opts        schema item
+        @param    statistics  item statistics {?size, ?rows, ?rows_maxunits} if any
+        @param    dragrect    whether to return a single bitmap for drag rectangle highlight
+        @return               (default bitmap, focused bitmap) or bitmap inside drag rectangle
         """
         if wx: return self.MakeItemBitmaps_wx(opts, statistics, dragrect)
 
@@ -1453,11 +1464,10 @@ class SchemaPlacement(object):
         """
         Returns wx.Bitmaps representing a schema item like table.
 
-        @param    opts           schema item
-        @param    statistics     statistics to use for item
-        @param    dragrect       if True, returns a single bitmap
-                                 for item inside drag rectangle
-        @return   (default bitmap, focused bitmap) or bitmap inside drag rectangle
+        @param    opts         schema item
+        @param    statistics  item statistics {?size, ?rows, ?rows_maxunits} if any
+        @param    dragrect    whether to return a single bitmap for drag rectangle highlight
+        @return               (default bitmap, focused bitmap) or bitmap inside drag rectangle
         """
         CRADIUS = self.BRADIUS if "table" == opts["type"] else 0
 
@@ -1691,8 +1701,8 @@ class SchemaPlacement(object):
     def GetItemSize(self, name):
         """Returns item bitmap size, calculated if bitmap not available."""
         o = self._objs[name]
-        if o.get("bmp"): return self.GetImageSize(o["bmp"])
-        return self.CalculateItemSize(o, self._show_stats and o.get("stats"))[0]
+        if self.HasItemBitmaps(o): return self.GetImageSize(self.GetItemBitmaps(o)[0])
+        return self.CalculateItemSize(o)[0]
 
 
     def GetItems(self): return type(self._objs)((k, v.copy()) for k, v in self._objs.items())
