@@ -47,11 +47,11 @@ from . lib.vendor import step
 from . import components
 from . import conf
 from . import database
-from . import diagram
 from . import grammar
 from . import guibase
 from . import images
 from . import importexport
+from . import scheme
 from . import support
 from . import templates
 from . import workers
@@ -4188,7 +4188,7 @@ class DatabasePage(wx.Panel):
         try:
             data, diagrams = self.statistics.get("data") or {}, None
             if "HTML" == extname.upper():
-                layout = diagram.SchemaPlacement(self.db)
+                layout = scheme.SchemaPlacement(self.db)
                 layout.SetFonts("Verdana",
                                 ("Open Sans", conf.FontDiagramSize,
                                  conf.FontDiagramFile, conf.FontDiagramBoldFile))

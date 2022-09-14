@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.09.2022
+@modified    15.09.2022
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -2999,7 +2999,7 @@ Database schema diagram SVG template.
 DIAGRAM_SVG = """<%
 import math, wx
 from sqlitely.lib import util
-from sqlitely.diagram import SchemaPlacement, Point, Rect, Size
+from sqlitely.scheme import SchemaPlacement, Point, Rect, Size
 from sqlitely import grammar, images, templates
 from sqlitely.templates import urlquote
 

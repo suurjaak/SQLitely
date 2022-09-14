@@ -54,11 +54,11 @@ from . lib.vendor import step
 
 from . import conf
 from . import database
-from . import diagram
 from . import grammar
 from . import guibase
 from . import images
 from . import importexport
+from . import scheme
 from . import templates
 from . import workers
 from . database import fmt_entity
@@ -10007,8 +10007,8 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         0xFFFF:              "SVG",
     }
 
-    LAYOUT_GRID  = diagram.SchemaPlacement.LAYOUT_GRID
-    LAYOUT_GRAPH = diagram.SchemaPlacement.LAYOUT_GRAPH
+    LAYOUT_GRID  = scheme.SchemaPlacement.LAYOUT_GRID
+    LAYOUT_GRAPH = scheme.SchemaPlacement.LAYOUT_GRAPH
 
     VIRTUALSZ = 2000, 2000 # Default virtual size
 
@@ -10020,16 +10020,16 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
     TOOLTIP_DELAY = 500 # Milliseconds before showing hover tooltip
 
-    ZOOM_STEP    = diagram.SchemaPlacement.ZOOM_STEP
-    ZOOM_MIN     = diagram.SchemaPlacement.ZOOM_MIN
-    ZOOM_MAX     = diagram.SchemaPlacement.ZOOM_MAX
-    ZOOM_DEFAULT = diagram.SchemaPlacement.ZOOM_DEFAULT
+    ZOOM_STEP    = scheme.SchemaPlacement.ZOOM_STEP
+    ZOOM_MIN     = scheme.SchemaPlacement.ZOOM_MIN
+    ZOOM_MAX     = scheme.SchemaPlacement.ZOOM_MAX
+    ZOOM_DEFAULT = scheme.SchemaPlacement.ZOOM_DEFAULT
 
     def __init__(self, parent, db, *args, **kwargs):
         super(SchemaDiagramWindow, self).__init__(parent, *args, **kwargs)
         self._db     = db   # database.Database instance
         self._page   = None # gui.DatabasePage instance
-        self._layout = diagram.SchemaPlacement(db, self.VIRTUALSZ)
+        self._layout = scheme.SchemaPlacement(db, self.VIRTUALSZ)
         self._layout.SetFonts("Verdana",
                               ("Open Sans", 9, conf.FontDiagramFile, conf.FontDiagramBoldFile))
 

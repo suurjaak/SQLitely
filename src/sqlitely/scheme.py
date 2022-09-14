@@ -1242,7 +1242,10 @@ class SchemaPlacement(object):
         bmp = o[bmpname]
         if bmp is None:
             bmp = self.GetItemBitmaps(o, dragrect=name in self._sels)
-            o.update({bmpname: bmp})
+            if isinstance(bmp, tuple):
+                o["bmp"], o["bmpsel"] = bmp
+                bmp = o[bmpname]
+            else: o.update({bmpname: bmp})
         pos = [a - (o["name"] in self._sels) * 2 * self._zoom for a in bounds[:2]]
         self._dc.DrawBitmap(bmp, pos, useMask=True)
         self._dc.SetIdBounds(o["id"], wx.Rect(bounds.TopLeft, bounds.BottomRight))
