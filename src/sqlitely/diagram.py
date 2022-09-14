@@ -631,36 +631,35 @@ class SchemaPlacement(object):
     def GetOptions(self):
         """
         Returns all current diagram options, as
-        {zoom: float, cols: bool, keys: bool, fks: bool, fklabels: bool, stats: bool,
-         layout: {}, items: {name: [x, y]}}.
+        {zoom: float, columns: bool, keycolumns: bool, lines: bool, labels: bool, statistics: bool,
+         layout: {layout, active, ?grid: {order, reverse, vertical}}, items: {name: [x, y]}}.
         """
         pp = {o["name"]: list(self._dc.GetIdBounds(o["id"]).TopLeft) for o in self.Order}
         return {
-            "zoom":     self._zoom,        "fks":   self._show_lines,
-            "cols":     self._show_cols,   "keys":  self._show_keys,
-            "fklabels": self._show_labels, "stats": self._show_stats,
-            "items":    pp,                "layout": copy.deepcopy(self._layout),
+            "zoom":    self._zoom,        "lines":      self._show_lines,
+            "columns": self._show_cols,   "keycolumns": self._show_keys,
+            "labels":  self._show_labels, "statistics": self._show_stats,
+            "items":   pp,                "layout": copy.deepcopy(self._layout),
         }
     def SetOptions(self, opts):
         """Sets all diagram options."""
         if not opts: return
 
         remake = False
-        if "cols"     in opts and self._show_cols != bool(opts["cols"]):
+        if "columns"    in opts and self._show_cols != bool(opts["columns"]):
             self._show_cols = not self._show_cols
             if self._show_cols: self._show_keys = False
             remake = True
-        if "keys"     in opts and self._show_keys != bool(opts["keys"]):
+        if "keycolumns" in opts and self._show_keys != bool(opts["keycolumns"]):
             self._show_keys = not self._show_keys
             if self._show_keys: self._show_cols = False
             remake = True
-        if "fks"      in opts:
-            self._show_lines = bool(opts["fks"])
+        if "lines"      in opts:
+            self._show_lines = bool(opts["lines"])
             if not self._show_lines:
                 for opts in self._lines.values(): self._dc.ClearId(opts["id"])
-        if "fklabels" in opts: self._show_labels = bool(opts["fklabels"])
-
-        if "stats"    in opts and bool(opts["stats"]) != self._show_stats:
+        if "labels" in opts: self._show_labels = bool(opts["labels"])
+        if "statistics" in opts and bool(opts["statistics"]) != self._show_stats:
             self._show_stats = not self._show_stats
             remake = True
         if "zoom"     in opts:
@@ -718,8 +717,7 @@ class SchemaPlacement(object):
         return self._dc.GetIdBounds(oid)
 
 
-    def MakeBitmap(self, zoom=None, selections=True, columns=None, keycolumns=None,
-                   statistics=None, lines=None, labels=None, use_cache=True):
+    def MakeBitmap(self, zoom=None, selections=True, use_cache=True):
         """
         Returns diagram as image.
 

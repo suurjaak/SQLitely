@@ -10287,8 +10287,9 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
     def GetOptions(self):
         """
         Returns all current diagram options,
-        as {zoom: float, cols: bool, keys: bool, fks: bool, fklabels: bool, stats: bool,
-            enabled: bool, layout: {}, scroll: [x, y], items: {name: [x, y]}}.
+        {zoom: float, columns: bool, keycolumns: bool, lines: bool, labels: bool, statistics: bool,
+         layout: {layout, active, ?grid: {order, reverse, vertical}}, items: {name: [x, y]},
+         enabled: bool, scroll: [x, y]}.
         """
         return dict({"scroll": [self.GetScrollPos(x) for x in (wx.HORIZONTAL, wx.VERTICAL)],
                      "enabled": self._enabled}, **self._layout.Options)
