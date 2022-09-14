@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.09.2022
+@modified    13.09.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -47,6 +47,7 @@ from . lib.vendor import step
 from . import components
 from . import conf
 from . import database
+from . import diagram
 from . import grammar
 from . import guibase
 from . import images
@@ -4185,14 +4186,17 @@ class DatabasePage(wx.Panel):
 
         busy = controls.BusyPanel(self, "Exporting statistics.")
         try:
-            data, diagram = self.statistics.get("data") or {}, None
+            data, diagrams = self.statistics.get("data") or {}, None
             if "HTML" == extname.upper():
-                args = dict(selections=False, columns=True, keycolumns=False,
-                            statistics=True, lines=True, labels=True)
-                bmp = self.diagram.MakeBitmap(zoom=1, defaultcolours=True, **args)
-                svg = self.diagram.MakeTemplate("SVG", title="", embed=True, **args)
-                diagram = {"bmp": bmp, "svg": svg}
-            importexport.export_stats(filename, extname, self.db, data, diagram)
+                layout = diagram.SchemaPlacement(self.db)
+                layout.SetFonts("Verdana",
+                                ("Open Sans", conf.FontDiagramSize,
+                                 conf.FontDiagramFile, conf.FontDiagramBoldFile))
+                layout.Populate({"stats": True})
+                layout.Redraw(wx.Rect(0, 0, *conf.Defaults["WindowSize"]), layout.LAYOUT_GRID)
+                diagrams = {"bmp": layout.MakeBitmap(),
+                            "svg": layout.MakeTemplate("SVG", embed=True)}
+            importexport.export_stats(filename, extname, self.db, data, diagrams)
             guibase.status('Exported to "%s".', filename, log=True)
             util.start_file(filename)
         except Exception as e:
@@ -6794,11 +6798,11 @@ class DatabasePage(wx.Panel):
             tree.SetColumnWidth(0, tree.Size[0] - 130)
             self.set_tree_state(tree, tree.RootItem, expandeds)
         finally:
-            if not self: return
-            self.button_refresh_data.Enable()
-            gauge.Hide()
-            gauge.ContainingSizer.Layout()
-            tree.Thaw()
+            if self:
+                self.button_refresh_data.Enable()
+                gauge.Hide()
+                gauge.ContainingSizer.Layout()
+                tree.Thaw()
 
 
     def load_tree_schema(self, refresh=False):
@@ -6964,11 +6968,11 @@ class DatabasePage(wx.Panel):
             for top in tops if not any(expandeds) else (): tree.Expand(top)
             self.set_tree_state(tree, tree.RootItem, expandeds)
         finally:
-            if not self: return
-            self.button_refresh_schema.Enable()
-            gauge.Hide()
-            gauge.ContainingSizer.Layout()
-            tree.Thaw()
+            if self:
+                self.button_refresh_schema.Enable()
+                gauge.Hide()
+                gauge.ContainingSizer.Layout()
+                tree.Thaw()
 
 
     def on_change_tree_data(self, event):

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.09.2022
+@modified    13.09.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10354,59 +10354,27 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         guibase.status('Exported schema diagram to "%s".', filename, log=True)
 
 
-    def MakeBitmap(self, zoom=None, defaultcolours=False, selections=True,
-                   columns=None, keycolumns=None, statistics=None, lines=None, labels=None):
+    def MakeBitmap(self, zoom=None):
         """
         Returns diagram as wx.Bitmap.
 
-        @param   zoom             zoom level to use if not current
-        @param   defaultcolours   whether bitmap should use default colours instead of system theme
-        @param   selections       whether currently selected items should be drawn as selected
-        @param   columns          whether result should include all columns,
-                                  overrides current columns setting
-        @param   keycolumns       whether result should include key columns only,
-                                  overrides current key columns setting
-        @param   statistics       whether bitmap should include statistics,
-                                  overrides current statistics setting
-        @param   lines            whether bitmap should include relation lines,
-                                  overrides current lines setting
-        @param   labels           whether bitmap should include relation labels,
-                                  overrides current labels setting
+        @param   zoom  zoom level to use if not current
         """
         if not self or not self._enabled: return None
 
-        change_colours = defaultcolours and not self._IsDefaultColours()
-        if change_colours: self._UpdateColours(defaults=True)
-        try:
-            return self._layout.MakeBitmap(zoom, selections, columns, keycolumns, statistics,
-                                           lines, labels, use_cache=not change_colours)
-        finally:
-            if change_colours: self._UpdateColours()
+        return self._layout.MakeBitmap(zoom)
 
 
-    def MakeTemplate(self, filetype, title=None, embed=False, selections=True,
-                     columns=None, keycolumns=None, statistics=None, lines=None, labels=None):
+    def MakeTemplate(self, filetype, title=None, embed=False):
         """
         Returns diagram as template content.
 
-        @param   filetype    template type like "SVG"
-        @param   title       specific title to set if not from database filename
-        @param   embed       whether to omit full XML headers for embedding in HTML
-        @param   selections  whether currently selected items should be drawn as selected
-        @param   columns     whether result should include all columns,
-                             overrides current columns setting
-        @param   keycolumns  whether result should include key columns only,
-                             overrides current key columns setting
-        @param   statistics  whether result should include statistics,
-                             overrides current statistics setting
-        @param   lines       whether result should include relation lines,
-                             overrides current lines setting
-        @param   labels      whether result should include relation labels,
-                             overrides current labels setting
+        @param   filetype  template type like "SVG"
+        @param   title     specific title to set if not from database filename
+        @param   embed     whether to omit full XML headers for embedding in HTML
         """
         if not self or not self._enabled or "SVG" != filetype: return
-        return self._layout.MakeTemplate(filetype, title, embed, selections,
-                                         columns, keycolumns, statistics, lines, labels)
+        return self._layout.MakeTemplate(filetype, title, embed)
 
 
     def EnsureVisible(self, name, force=False):

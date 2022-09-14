@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    11.09.2022
+@modified    13.09.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -659,6 +659,7 @@ class SchemaPlacement(object):
             if not self._show_lines:
                 for opts in self._lines.values(): self._dc.ClearId(opts["id"])
         if "fklabels" in opts: self._show_labels = bool(opts["fklabels"])
+
         if "stats"    in opts and bool(opts["stats"]) != self._show_stats:
             self._show_stats = not self._show_stats
             remake = True
@@ -724,64 +725,33 @@ class SchemaPlacement(object):
 
         @param   zoom        zoom level to use if not current
         @param   selections  whether currently selected items should be drawn as selected
-        @param   columns     whether result should include all columns,
-                             overrides current columns setting
-        @param   keycolumns  whether result should include key columns only,
-                             overrides current key columns setting
-        @param   statistics  whether bitmap should include statistics,
-                             overrides current statistics setting
-        @param   lines       whether bitmap should include relation lines,
-                             overrides current lines setting
-        @param   labels      whether bitmap should include relation labels,
-                             overrides current labels setting
         @param   use_cache   use bitmap caching
         """
-        if wx: return self.MakeBitmap_wx(zoom, selections, columns, keycolumns,
-                                         statistics, lines, labels, use_cache)
+        if wx: return self.MakeBitmap_wx(zoom, selections, use_cache)
 
 
-    def MakeBitmap_wx(self, zoom=None, selections=True, columns=None, keycolumns=None,
-                      statistics=None, lines=None, labels=None, use_cache=True):
+    def MakeBitmap_wx(self, zoom=None, selections=True, use_cache=True):
         """
         Returns diagram as wx.Bitmap.
 
         @param   zoom        zoom level to use if not current
         @param   selections  whether currently selected items should be drawn as selected
-        @param   columns     whether result should include all columns,
-                             overrides current columns setting
-        @param   keycolumns  whether result should include key columns only,
-                             overrides current key columns setting
-        @param   statistics  whether bitmap should include statistics,
-                             overrides current statistics setting
-        @param   lines       whether bitmap should include relation lines,
-                             overrides current lines setting
-        @param   labels      whether bitmap should include relation labels,
-                             overrides current labels setting
         @param   use_cache   use bitmap caching
         """
-        zoom0, showstats0 = self._zoom, self._show_stats
-        showcols0, showkeys0    = self._show_cols,  self._show_keys
-        showlines0, showlabels0 = self._show_lines, self._show_labels
+        zoom0 = self._zoom
         lines0, sels0 = copy.deepcopy(self._lines), copy.deepcopy(self._sels)
+        ids, bounder = list(self._ids), self._dc.GetIdBounds
+        boundsmap0 = {myid: bounder(myid) for myid in ids}
+
 
         self._use_cache, use_cache0 = bool(use_cache), self._use_cache
         try:
-            if columns    is not None: self._show_cols   = bool(columns)
-            if keycolumns is not None: self._show_keys   = bool(keycolumns)
-            if statistics is not None: self._show_stats  = bool(statistics)
-            if lines      is not None: self._show_lines  = bool(lines)
-            if labels     is not None: self._show_labels = bool(labels)
-            if self._show_cols: self._show_keys = False
-            if self._show_keys: self._show_cols = False
             if not selections: self._sels.clear()
 
             if zoom is not None:
                 zoom = float(zoom) - zoom % self.ZOOM_STEP # Even out to allowed step
                 zoom = max(self.ZOOM_MIN, min(self.ZOOM_MAX, zoom))
                 if self._zoom == zoom: zoom = None
-
-            ids, bounder = list(self._ids), self._dc.GetIdBounds
-            boundsmap = {myid: bounder(myid) for myid in ids}
 
             if zoom is not None: self.Zoom = zoom
             self.CalculateLines(remake=True)
@@ -810,23 +780,17 @@ class SchemaPlacement(object):
             dc.SelectObject(wx.NullBitmap)
             del dc
 
-            if self._show_cols   != showcols0:   self._show_cols   = showcols0
-            if self._show_keys   != showkeys0:   self._show_keys   = showkeys0
-            if self._show_stats  != showstats0:  self._show_stats  = showstats0
-            if self._show_lines  != showlines0:  self._show_lines  = showlines0
-            if self._show_labels != showlabels0: self._show_labels = showlabels0
+        finally:
+            self._use_cache = use_cache0
             if zoom is not None: self.Zoom = zoom0
             self._lines.update(lines0)
             self._sels .update(sels0)
-            for myid, mybounds in boundsmap.items(): self._dc.SetIdBounds(myid, mybounds)
-        finally:
-            self._use_cache = use_cache0
+            for myid, mybounds in boundsmap0.items(): self._dc.SetIdBounds(myid, mybounds)
 
         return bmp
 
 
-    def MakeTemplate(self, filetype, title=None, embed=False, selections=True,
-                     columns=None, keycolumns=None, statistics=None, lines=None, labels=None):
+    def MakeTemplate(self, filetype, title=None, embed=False, selections=True):
         """
         Returns diagram as template content.
 
@@ -834,38 +798,19 @@ class SchemaPlacement(object):
         @param   title       specific title to set if not from database filename
         @param   embed       whether to omit full XML headers for embedding in HTML
         @param   selections  whether currently selected items should be drawn as selected
-        @param   columns     whether result should include all columns,
-                             overrides current columns setting
-        @param   keycolumns  whether result should include key columns only,
-                             overrides current key columns setting
-        @param   statistics  whether result should include statistics,
-                             overrides current statistics setting
-        @param   lines       whether result should include relation lines,
-                             overrides current lines setting
-        @param   labels      whether result should include relation labels,
-                             overrides current labels setting
         """
         if "SVG" != filetype or not self._objs: return
 
-        zoom0, showstats0 = self._zoom, self._show_stats
-        showcols0, showkeys0    = self._show_cols,  self._show_keys
-        showlines0, showlabels0 = self._show_lines, self._show_labels
+        zoom0 = self._zoom
         lines0, sels0 = copy.deepcopy(self._lines), copy.deepcopy(self._sels)
 
-        if columns    is not None: self._show_cols   = bool(columns)
-        if keycolumns is not None: self._show_keys   = bool(keycolumns)
-        if statistics is not None: self._show_stats  = bool(statistics)
-        if lines      is not None: self._show_lines  = bool(lines)
-        if labels     is not None: self._show_labels = bool(labels)
-        if self._show_cols: self._show_keys = False
-        if self._show_keys: self._show_cols = False
         if not selections: self._sels.clear()
 
         if self._zoom != self.ZOOM_DEFAULT:
             self.SetZoom(self.ZOOM_DEFAULT)
             itembounds0 = {} # Remember current bounds, calculate for default zoom
             for name, o in self._objs.items():
-                size, _, _, _ = self.CalculateItemSize(o, o.get("stats") if statistics else None)
+                size, _, _, _ = self.CalculateItemSize(o, o.get("stats") if self._show_stats else None)
                 ibounds = itembounds0[name] = self._dc.GetIdBounds(o["id"])
                 self._dc.SetIdBounds(o["id"], Rect(ibounds.Position, Size(size)))
             self.CalculateLines(remake=True)
@@ -884,11 +829,6 @@ class SchemaPlacement(object):
             ns["items"].append(item)
         result = tpl.expand(ns)
 
-        if self._show_cols   != showcols0:   self._show_cols   = showcols0
-        if self._show_keys   != showkeys0:   self._show_keys   = showkeys0
-        if self._show_stats  != showstats0:  self._show_stats  = showstats0
-        if self._show_lines  != showlines0:  self._show_lines  = showlines0
-        if self._show_labels != showlabels0: self._show_labels = showlabels0
         if zoom0 != self._zoom:
             for name, ibounds in itembounds0.items():
                 self._dc.SetIdBounds(self._objs[name]["id"], ibounds)
@@ -1275,7 +1215,7 @@ class SchemaPlacement(object):
             if bmps: o["bmp"], o["bmpsel"] = bmps
         self.Layout = layout
         wrk = self.PositionItemsGrid if self.LAYOUT_GRID == self.Layout else self.PositionItemsGraph
-        wrk(viewport) 
+        wrk(viewport)
         self.CalculateLines(remake=True)
         self.Draw()
 
@@ -1781,10 +1721,10 @@ class SchemaPlacement(object):
                           {"order": "name", "reverse": False, "vertical": True},
                           updates current options
         """
-        if layout not in (self.LAYOUT_GRID, self.LAYOUT_GRAPH): return
-        self._layout["layout"] = layout
-        self._layout["active"] = True
-        if self.LAYOUT_GRID == layout and options:
+        if layout in (self.LAYOUT_GRID, self.LAYOUT_GRAPH):
+            self._layout["layout"] = layout
+            self._layout["active"] = True
+        if self.LAYOUT_GRID == self.Layout and options:
             self._layout[layout].update(options)
     Layout = property(GetLayout, SetLayout)
 

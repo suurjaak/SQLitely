@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.09.2022
+@modified    13.09.2022
 ------------------------------------------------------------------------------
 """
 try: from ConfigParser import RawConfigParser                 # Py2
@@ -29,8 +29,8 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.1.dev72"
-VersionDate = "12.09.2022"
+Version = "2.1.dev73"
+VersionDate = "13.09.2022"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -334,6 +334,7 @@ FontXlsxBoldFile = os.path.join(ResourceDirectory, "CarlitoBold.ttf")
 """Font files used for schema daigram."""
 FontDiagramFile     = os.path.join(ResourceDirectory, "OpenSans.ttf")
 FontDiagramBoldFile = os.path.join(ResourceDirectory, "OpenSansBold.ttf")
+FontDiagramSize     = 9
 
 
 def load(configfile=None):
