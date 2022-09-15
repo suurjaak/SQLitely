@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.09.2022
+@modified    15.09.2022
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1153,11 +1153,11 @@ SEARCH_ROW_META_HTML = """<%
 from sqlitely.lib import util
 from sqlitely import conf, grammar
 
-wrap_b = lambda x: "<b>%s</b>" % x.group(0)
+wrap_hl = lambda x: "<b><u>%s</u></b>" % x.group(0)
 %>
 <a name="{{ category }}">{{ category.capitalize() }}</a>
-<a href="{{ category }}:{{ item["name"] }}"><font color="{{ conf.LinkColour }}">{{! pattern_replace.sub(wrap_b, escape(util.unprint(grammar.quote(item["name"])))) }}</font></a>:
-<pre><font size="2">{{! pattern_replace.sub(wrap_b, escape(item["sql"])).replace(" ", "&nbsp;") }}</font></pre>
+<a href="{{ category }}:{{ item["name"] }}"><font color="{{ conf.LinkColour }}">{{! pattern_replace.sub(wrap_hl, escape(util.unprint(grammar.quote(item["name"])))) }}</font></a>:
+<pre><font size="2">{{! pattern_replace.sub(wrap_hl, escape(item["sql"])).replace(" ", "&nbsp;") }}</font></pre>
 <br /><br />
 """
 
@@ -1202,7 +1202,7 @@ import six
 from sqlitely import conf, searchparser, templates
 
 match_kw = lambda k, x: searchparser.match_words(x["name"], keywords[k], any, search.get("case"))
-wrap_b   = lambda x: "<b>%s</b>" % x.group(0)
+wrap_hl = lambda x: "<b>%s</b>" % x.group(0)
 %>
 <tr>
 <td align="right" valign="top">
@@ -1219,7 +1219,7 @@ value = escape(value)
 
 if not (keywords.get("column") and not match_kw("column", c)) \
 and not (keywords.get("-column") and match_kw("-column", c)):
-    value = pattern_replace.sub(wrap_b, value)
+    value = pattern_replace.sub(wrap_hl, value)
 %>
 <td valign="top"><font color="{{ conf.FgColour }}">{{! value }}</font></td>
 %endfor
