@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.09.2022
+@modified    02.10.2022
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1034,7 +1034,7 @@ def to_unicode(value, encoding=None):
         except Exception:
             result = six.text_type(result, "utf-8", errors="backslashreplace")
     elif not isinstance(result, six.text_type):
-        try: result = str(result)
+        try: result = six.text_type(result)
         except Exception: result = repr(result)
     if not isinstance(result, six.text_type):
         result = six.text_type(result)
