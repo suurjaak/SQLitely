@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.09.2022
+@modified    01.11.2022
 ------------------------------------------------------------------------------
 """
 import base64
@@ -11755,7 +11755,7 @@ class ImportWizard(wx.adv.Wizard):
                     else "aborted and rolled back"
                 )
                 filesize2 = 0
-                try: filesize2 = os.path.getsize(self.page2.filename)
+                try: filesize2 = database.get_size(self.page2.filename)
                 except Exception: pass
                 rows_total   = sum(x.get("count", 0) for x in self.page2.progress.values())
                 tables_total = sum(1 for x in self.page2.progress.values() if x.get("count"))

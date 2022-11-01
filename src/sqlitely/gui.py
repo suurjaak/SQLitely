@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.09.2022
+@modified    01.11.2022
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1188,10 +1188,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 if os.path.exists(filename):
                     if filename in self.dbs:
                         self.dbs[filename].update_fileinfo()
-                        data["size"] = self.dbs[filename].filesize
+                        data["size"] = self.dbs[filename].get_size()
                         data["last_modified"] = self.dbs[filename].last_modified
                     else:
-                        data["size"] = os.path.getsize(filename)
+                        data["size"] = database.get_size(filename)
                         data["last_modified"] = datetime.datetime.fromtimestamp(
                                                 os.path.getmtime(filename))
                 self.db_datas[filename].update(data)
@@ -1415,7 +1415,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             filename = util.to_unicode(filename)
             data = defaultdict(lambda: None, name=filename)
             if os.path.exists(filename):
-                data["size"] = os.path.getsize(filename)
+                data["size"] = database.get_size(filename)
                 data["last_modified"] = datetime.datetime.fromtimestamp(
                                         os.path.getmtime(filename))
             self.db_datas[filename] = data
@@ -1469,10 +1469,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if os.path.exists(filename):
                 if filename in self.dbs:
                     self.dbs[filename].update_fileinfo()
-                    data["size"] = self.dbs[filename].filesize
+                    data["size"] = self.dbs[filename].get_size()
                     data["last_modified"] = self.dbs[filename].last_modified
                 else:
-                    data["size"] = os.path.getsize(filename)
+                    data["size"] = database.get_size(filename)
                     data["last_modified"] = datetime.datetime.fromtimestamp(
                                             os.path.getmtime(filename))
             data_old = self.db_datas.get(filename)
@@ -1521,7 +1521,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         size = None
         for filename in self.dbs_selected:
-            sz = os.path.getsize(filename) if os.path.exists(filename) else None
+            sz = database.get_size(filename) if os.path.exists(filename) else None
             if sz: size = (size or 0) + sz
 
             if len(self.dbs_selected) > 1:
@@ -2339,7 +2339,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                             "Not a valid SQLite database?" % filename,
                             conf.Title, wx.OK | wx.ICON_ERROR)
                 if db:
-                    logger.info("Opened %s (%s).", db, util.format_bytes(db.filesize))
+                    logger.info("Opened %s (%s).", db, util.format_bytes(db.get_size()))
                     guibase.status("Reading database %s.", db)
                     self.dbs[db.name] = db
                     # Add filename to Recent Files menu and conf, if needed
@@ -4863,7 +4863,7 @@ class DatabasePage(wx.Panel):
         for page in (v for vv in self.data_pages.values() for v in vv.values()):
             if page.IsOpen(): pages.append(page); page.CloseCursor()
 
-        size1 = self.db.filesize
+        size1 = self.db.get_size()
         msg = "Vacuuming %s." % self.db.name
         guibase.status(msg, log=True)
         busy = controls.BusyPanel(self, msg)
@@ -4884,7 +4884,7 @@ class DatabasePage(wx.Panel):
             self.update_info_panel()
             self.on_update_statistics()
             wx.MessageBox("VACUUM complete.\n\nSize before: %s.\nSize after:    %s." %
-                tuple(util.format_bytes(x, max_units=False) for x in (size1, self.db.filesize)),
+                tuple(util.format_bytes(x, max_units=False) for x in (size1, self.db.get_size())),
                 conf.Title, wx.OK | wx.ICON_INFORMATION)
 
 
@@ -4959,10 +4959,13 @@ class DatabasePage(wx.Panel):
 
         self.edit_info_path.Value = "<temporary file>" if self.db.temporary \
                                     else self.db.filename
-        if self.db.filesize:
+        if self.db.get_size():
             self.edit_info_size.Value = "%s (%s)" % \
                 (util.format_bytes(self.db.filesize),
                  util.format_bytes(self.db.filesize, max_units=False))
+            journals = "".join(", %s from %s-file" % (util.format_bytes(s, max_units=False), n)
+                               for n, s in self.db.journalsizes.items() if s)
+            if journals: self.edit_info_size.Value += journals
         else:
             self.edit_info_size.Value = "0 bytes"
         self.edit_info_created.Value = \

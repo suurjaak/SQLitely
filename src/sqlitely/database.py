@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.08.2022
+@modified    01.11.2022
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -492,6 +492,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             Database.temp_counter += 1
         self.id_counter = itertools.count(1)
         self.filesize = None
+        self.journalsizes = {} # {"wal" or "journal": size in bytes}
         self.date_created = None
         self.last_modified = None
         self.log = [] # [{timestamp, action, sql: "" or [""], ?params: x or [x]}]
@@ -1476,9 +1477,15 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
+    def get_size(self):
+        """Updates and returns database file size (size includes journal files)."""
+        self.filesize = get_size(self.filename, self.journalsizes)
+        return self.filesize
+
+
     def update_fileinfo(self):
         """Updates database file size and modification information."""
-        self.filesize = os.path.getsize(self.filename)
+        self.get_size()
         self.date_created  = datetime.datetime.fromtimestamp(
                              os.path.getctime(self.filename))
         self.last_modified = datetime.datetime.fromtimestamp(
@@ -2317,3 +2324,15 @@ def fmt_entity(name, force=True, limit=None):
     v = util.unprint(grammar.quote(name, force=force))
     if limit is None: limit = 50
     return util.ellipsize(v, limit) if limit else v
+
+
+def get_size(filepath, journalsizes=None):
+    """
+    Returns SQLite database size in bytes, including temporary journaling files.
+
+    @param   journalsizes  dictionary to populate with journal sizes, if any
+    """
+    sizes = {n: os.path.getsize(f) for n in ("journal", "wal")
+             for f in ["%s-%s" % (filepath, n)] if os.path.isfile(f)}
+    if isinstance(journalsizes, dict): journalsizes.clear(), journalsizes.update(sizes)
+    return os.path.getsize(filepath) + sum(sizes.values())

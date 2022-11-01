@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.09.2022
+@modified    01.11.2022
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -271,7 +271,7 @@ from sqlitely.lib import util
 from sqlitely import templates
 
 progress = get("progress")
-_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
+_, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 %>{{! Template(templates.DATA_HTML_HEADER).expand(title=title, multiple=True) }}
 <body>
 <div id="root">
@@ -324,7 +324,7 @@ import os
 from sqlitely.lib import util
 from sqlitely import grammar
 
-_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
+_, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 item_id = "item__%s" % hash(util.tuplefy(title))
 progress = get("progress")
 %>
@@ -419,7 +419,7 @@ import os
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
-_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
+_, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 %>--
 %for line in get("headers", []):
 -- {{ "\\n-- ".join(line.splitlines()) }}
@@ -565,7 +565,7 @@ import os
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
-_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
+_, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %>-- {{ "\\n-- ".join(util.tuplefy(title)) }}.
 -- Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
@@ -605,7 +605,7 @@ import os
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
-_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
+_, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %>-- Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
 -- {{ templates.export_comment() }}
@@ -747,7 +747,7 @@ import os
 from sqlitely.lib import util
 from sqlitely import templates
 
-_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
+_, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %>{{ "\\n".join(util.tuplefy(title)) }}.
 Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
@@ -799,7 +799,7 @@ import os
 from sqlitely.lib import util
 from sqlitely import templates
 
-_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
+_, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %>Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
 {{ templates.export_comment() }}
@@ -967,7 +967,7 @@ import os
 from sqlitely.lib import util
 from sqlitely import templates
 
-_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
+_, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %># {{ "\\n# ".join(util.tuplefy(title)) }}
 # Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
@@ -1036,7 +1036,7 @@ import os
 from sqlitely.lib import util
 from sqlitely import templates
 
-_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
+_, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %># {{ "\\n# ".join(util.tuplefy(title)) }}
 # Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
@@ -2875,7 +2875,7 @@ from sqlitely import grammar, templates
 
 logger = logging.getLogger("sqlitely")
 
-_, dbsize = util.try_ignore(lambda: util.format_bytes(os.path.getsize(db.filename)))
+_, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 is_initial = lambda o, v: o["initial"](db, v) if callable(o.get("initial")) else o.get("initial")
 pragma_first = {k: v for k, v in pragma.items() if is_initial(db.PRAGMA[k], v)}
 pragma_last  = {k: v for k, v in pragma.items() if not is_initial(db.PRAGMA[k], v)}
