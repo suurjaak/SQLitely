@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.11.2022
+@modified    25.02.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -161,7 +161,6 @@ from sqlitely import conf, images
       };
       var sort_col = col;
       var sort_direction = (sort_col == prev_col) ? !prev_direction : prev_direction;
-      var table = link.closest("table");
       var rowlist = table.getElementsByTagName("tr");
       var rows = [];
       for (var i = 1, ll = rowlist.length; i != ll; rows.push(rowlist[i++]));
@@ -200,12 +199,14 @@ from sqlitely import conf, images
       table.classList.add("hidden");
       var rowlist = table.getElementsByTagName("tr");
       for (var i = 1, ll = rowlist.length; i < ll; i++) {
-        var show = !search_state[table_id].text;
+        var matches = {};  // {regex index: bool}
+        var show = !words.length;
         var tr = rowlist[i];
         for (var j = 0, cc = tr.childElementCount; j < cc && !show; j++) {
           var text = tr.children[j].innerText;
-          if (regexes.every(function(rgx) { return text.match(rgx); })) { show = true; break; };
+          regexes.forEach(function(rgx, k) { if (text.match(rgx)) matches[k] = true; });
         };
+        show = show || regexes.every(function(_, k) { return matches[k]; });
         tr.classList[show ? "remove" : "add"]("hidden");
       };
       table.classList.remove("hidden");
