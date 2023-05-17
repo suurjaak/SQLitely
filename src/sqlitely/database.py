@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.11.2022
+@modified    17.05.2023
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -907,8 +907,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         result = None
         if cursor or self.connection:
             if log and conf.LogSQL:
-                logger.info("SQL: %s%s", sql,
-                            ("\nParameters: %s" % params) if params else "")
+                logger.info("SQL: %s%s", sql, "\nParameters: %s" % (params, ) if params else "")
             result = (cursor or self.connection).execute(sql, params)
         return result
 
