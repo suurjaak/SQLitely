@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.11.2022
+@modified    21.05.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -28,6 +28,7 @@ import re
 import string
 import sys
 import time
+import types
 import warnings
 
 import PIL
@@ -58,6 +59,7 @@ from . import grammar
 from . import guibase
 from . import images
 from . import importexport
+from . import plugins
 from . import scheme
 from . import templates
 from . import workers
@@ -8460,6 +8462,10 @@ class ColumnDialog(wx.Dialog):
         wx.BITMAP_TYPE_TIFF: "TIFF",
     }
 
+    # Global controls.CallableManagerDialog instance
+    FUNCTION_DIALOG = None
+
+
     def __init__(self, parent, gridbase, row, col, rowdata=None, columnlabel="column",
                  id=wx.ID_ANY, title="Column Editor", pos=wx.DefaultPosition, size=(750, 450),
                  style=wx.CAPTION | wx.CLOSE_BOX | wx.MAXIMIZE_BOX | wx.RESIZE_BORDER,
@@ -8495,7 +8501,7 @@ class ColumnDialog(wx.Dialog):
         list_cols    = wx.Choice(self)
         button_next  = wx.Button(self, label="&Next %s" % columnlabel)
 
-        nb = wx.Notebook(self)
+        nb = self.notebook = wx.Notebook(self)
 
         label_meta    = wx.StaticText(self)
         button_ok     = wx.Button(self, label="&OK",     id=wx.ID_OK)
@@ -8547,14 +8553,15 @@ class ColumnDialog(wx.Dialog):
         self._label_meta   = label_meta
 
 
-        self.Bind(wx.EVT_BUTTON, functools.partial(self._OnColumn, direction=-1), button_prev)
-        self.Bind(wx.EVT_BUTTON, functools.partial(self._OnColumn, direction=+1), button_next)
-        self.Bind(wx.EVT_BUTTON, self._OnReset,  button_reset)
-        self.Bind(wx.EVT_BUTTON, self._OnClose,  id=wx.ID_OK)
-        self.Bind(wx.EVT_BUTTON, self._OnClose,  id=wx.ID_CANCEL)
-        self.Bind(wx.EVT_CHOICE, self._OnColumn, list_cols)
-        self.Bind(wx.EVT_SIZE,   lambda e: (e.Skip(), self._SetLabel()))
-        self.Bind(wx.EVT_CLOSE,  self._OnClose, id=wx.ID_CANCEL)
+        self.Bind(wx.EVT_BUTTON,    functools.partial(self._OnColumn, direction=-1), button_prev)
+        self.Bind(wx.EVT_BUTTON,    functools.partial(self._OnColumn, direction=+1), button_next)
+        self.Bind(wx.EVT_BUTTON,    self._OnReset,  button_reset)
+        self.Bind(wx.EVT_BUTTON,    self._OnClose,  id=wx.ID_OK)
+        self.Bind(wx.EVT_BUTTON,    self._OnClose,  id=wx.ID_CANCEL)
+        self.Bind(wx.EVT_CHOICE,    self._OnColumn, list_cols)
+        self.Bind(wx.EVT_SIZE,      lambda e: (e.Skip(), self._SetLabel()))
+        self.Bind(wx.EVT_CLOSE,     self._OnClose, id=wx.ID_CANCEL)
+        self.Bind(controls.EVT_CALLABLE_MANAGER, self._OnUserFunctionsChanged)
 
         self.MinSize = 500, 350
         self.Layout()
@@ -8583,6 +8590,7 @@ class ColumnDialog(wx.Dialog):
         bmp4 = wx.ArtProvider.GetBitmap(wx.ART_PASTE,        wx.ART_TOOLBAR, (16, 16))
         bmp5 = wx.ArtProvider.GetBitmap(wx.ART_UNDO,         wx.ART_TOOLBAR, (16, 16))
         bmp6 = wx.ArtProvider.GetBitmap(wx.ART_REDO,         wx.ART_TOOLBAR, (16, 16))
+        bmp7 = images.ToolbarFunction.Bitmap
 
         tb.SetToolBitmapSize(bmp1.Size)
 
@@ -8600,6 +8608,8 @@ class ColumnDialog(wx.Dialog):
             tb.AddTool(wx.ID_UNDO,  "", bmp5, shortHelp="Undo")
         if redo:
             tb.AddTool(wx.ID_REDO,  "", bmp6, shortHelp="Redo")
+        tb.AddSeparator()
+        tb.AddTool(wx.ID_MORE, "", bmp7, shortHelp="User-defined functions\t(Alt-F)")
         tb.Realize()
 
         tb.Bind(wx.EVT_TOOL, functools.partial(self._OnLoad,  name=name, handler=load  if callable(load)  else None), id=wx.ID_OPEN)
@@ -8608,6 +8618,7 @@ class ColumnDialog(wx.Dialog):
         tb.Bind(wx.EVT_TOOL, functools.partial(self._OnPaste, name=name, handler=paste if callable(paste) else None), id=wx.ID_PASTE)
         tb.Bind(wx.EVT_TOOL, functools.partial(self._OnUndo,  name=name, handler=undo  if callable(undo)  else None), id=wx.ID_UNDO)
         tb.Bind(wx.EVT_TOOL, functools.partial(self._OnRedo,  name=name, handler=redo  if callable(redo)  else None), id=wx.ID_REDO)
+        tb.Bind(wx.EVT_TOOL, handler=self._OnUserFunctions, id=wx.ID_MORE)
 
         return tb
 
@@ -8937,7 +8948,7 @@ class ColumnDialog(wx.Dialog):
             wx.CallAfter(state.update, {"changing": False})
 
 
-        tb   = self._MakeToolBar(page, NAME, label="", filelabel="", undo=False, redo=False)
+        tb    = self._MakeToolBar(page, NAME, label="", filelabel="", undo=False, redo=False)
         tedit = wx.stc.StyledTextCtrl(page)
         nedit = controls.HintedTextCtrl(page, escape=False, size=(350, -1))
         button_set   = wx.Button(page, label="S&et ..")
@@ -9844,6 +9855,7 @@ class ColumnDialog(wx.Dialog):
 
 
     def _OnChar(self, event, name=None, handler=None, mask=None, delay=1000, skip=None):
+        """Handler for pressing a key in an edit control."""
         if isinstance(event, wx.KeyEvent) and mask and not event.HasModifiers() \
         and six.unichr(event.UnicodeKey) not in mask \
         and event.KeyCode not in controls.KEYS.NAVIGATION + controls.KEYS.COMMAND:
@@ -9994,6 +10006,81 @@ class ColumnDialog(wx.Dialog):
     def _OnRedo(self, event, name, handler=None):
         """Handler for redoing value change."""
         if handler: handler()
+
+
+    def _OnUserFunctions(self, event):
+        """Handler user functions menu, opens popup menu from event toolbar."""
+
+        def tester(target, dialog):
+            """External tester function for callable manager, asks value and displays result."""
+            dlg = wx.TextEntryDialog(dialog, "Enter value to invoke function with:", "Test",
+                                     value="\n" * 6, style=wx.OK | wx.CANCEL | wx.TE_MULTILINE)
+            dlg.SetValue("")
+            dlg.CenterOnParent()
+            if wx.ID_OK != dlg.ShowModal(): return
+            args = dlg.GetValue(), copy.deepcopy(self._coldata), self._rowdata, self
+            try:
+                arity = util.get_arity(target)
+                result = target(*args[:None if arity < 0 else arity])
+                value = str(result) if not isinstance(result, six.text_type) else result
+                dlg = wx.TextEntryDialog(dialog, "Function call result:", "Test", value="\n" * 6,
+                                         style=wx.OK | wx.TE_MULTILINE)
+                dlg.SetValue(value)
+                dlg.CenterOnParent()
+                dlg.ShowModal()
+            except Exception as e:
+                wx.MessageBox("Error running user function:\n\n%s" % e, "Error",
+                              wx.ICON_WARNING | wx.OK)
+
+        def on_edit(evt):
+            """Handler for choosing to edit user functions, opens callable manager dialog."""
+            if ColumnDialog.FUNCTION_DIALOG:
+                ColumnDialog.FUNCTION_DIALOG.SetFocus()
+                return
+
+            entries = [x for x in plugins.get_plugins("ValueEditorFunctions") if x.get("title")]
+            ftypes = (types.FunctionType, types.BuiltinFunctionType, types.MethodType)
+            validator = functools.partial(plugins.validate_callable, arity=1, cls=ftypes)
+            defaultbody = "# Callable returning value to set,\n" \
+                          "# taking 1..4 arguments from\n" \
+                          "# (value, coldata, rowdata, dialog)"
+            title, alias = "User-defined functions", "user function"
+            dlg = controls.CallableManagerDialog(self, title, entries, validator, tester, alias, defaultbody)
+            dlg.SetIcons(images.get_appicons())
+            wx_accel.accelerate(dlg)
+            ColumnDialog.FUNCTION_DIALOG = dlg
+            try: dlg.ShowModal()
+            finally: ColumnDialog.FUNCTION_DIALOG = None
+
+        def on_call(item, evt):
+            """Handler for invoking a user function with current value, sets result as new value."""
+            args = self._value, copy.deepcopy(self._coldata), self._rowdata, self
+            logger.info("Invoking user function '%s(..)' in value editor.", item["name"])
+            arity = util.get_arity(item["target"])
+            value = item["target"](*args[:None if arity < 0 else arity])
+            self._Populate(value)
+
+        menu = wx.Menu()
+        for entry in plugins.get_plugins("ValueEditorFunctions"):
+            if entry.get("active") is False or not entry.get("title"): continue
+            item_entry = wx.MenuItem(menu, -1, entry["title"])
+            menu.Append(item_entry)
+            menu.Bind(wx.EVT_MENU, functools.partial(on_call, entry), item_entry)
+            if "target" not in entry: item_entry.Enable(False)
+
+        item_edit = wx.MenuItem(menu, -1, "Edit user functions")
+        menu.AppendSeparator()
+        menu.Append(item_edit)
+
+        menu.Bind(wx.EVT_MENU, on_edit, item_edit)
+
+        rect = controls.get_tool_rect(event.EventObject, event.Id)
+        wx.CallAfter(event.EventObject.PopupMenu, menu, rect.Left, rect.Height)
+
+
+    def _OnUserFunctionsChanged(self, event):
+        """Handler for updated user functions from callable manager, forwards to plugins."""
+        plugins.set_plugins("ValueEditorFunctions", event.GetClientObject())
 
 
 class SchemaDiagramWindow(wx.ScrolledWindow):
@@ -10729,6 +10816,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             gradendcolour = self._layout.DEFAULT_COLOURS["GradientEnd"]
             gtextcolour   = self._layout.DEFAULT_COLOURS["Border"]
             hotcolour     = self._layout.DEFAULT_COLOURS["DragForeground"]
+            
 
         dragbgcolour  = controls.ColourManager.Adjust(hotcolour,   wincolour, 0.6)
         selectcolour  = controls.ColourManager.Adjust(gtextcolour, wincolour, 0.6)

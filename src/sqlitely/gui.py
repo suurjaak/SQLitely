@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.11.2022
+@modified    05.05.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -51,6 +51,7 @@ from . import grammar
 from . import guibase
 from . import images
 from . import importexport
+from . import plugins
 from . import scheme
 from . import support
 from . import templates
@@ -240,6 +241,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             wx.CallAfter(self.on_toggle_to_tray)
         else:
             self.Show(True)
+        plugins.init_plugins("ValueEditorFunctions")
         wx.CallLater(20000, self.update_check)
         wx.CallLater(1, self.populate_database_list)
         logger.info("Started application.")

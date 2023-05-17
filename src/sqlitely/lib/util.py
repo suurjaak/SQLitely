@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.10.2022
+@modified    05.05.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -19,6 +19,7 @@ import contextlib
 import copy
 import ctypes
 import datetime
+import inspect
 import io
 import itertools
 import locale
@@ -199,8 +200,9 @@ class ProgressBar(threading.Thread):
         if static or not pulse: self.update(value, draw=static)
 
 
-    def update(self, value=None, draw=True):
-        """Updates the progress bar value, and refreshes by default."""
+    def update(self, value=None, afterword=None, draw=True):
+        """Updates the progress bar value / afterword, and refreshes by default."""
+        if afterword is not None: self.afterword = afterword
         if self.static:
             if self.afterword.strip(): self.echo(self.afterword.strip())
             return
@@ -492,6 +494,33 @@ def parse_time(s):
                 z._utcoffset, z._tzname, z.zone = delta, offset, offset
                 result = z.localize(result)
         except ValueError: pass
+    return result
+
+
+def get_arity(func, positional=True, keyword=False):
+    """
+    Returns the maximum number of arguments the function takes, -1 if variable number.
+
+    @param   positional  count positional-only and positional/keyword arguments
+    @param   keyword     count keyword-only and positional/keyword arguments
+    """
+    if six.PY2:
+        spec = inspect.getargspec(func)
+        if positional and spec.varargs or keyword and spec.keywords: return -1
+        else: return len(spec.args)
+
+    POSITIONALS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.POSITIONAL_ONLY)
+    KEYWORDALS  = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    result, params = 0, inspect.signature(func).parameters
+    if positional and any(x.kind == inspect.Parameter.VAR_POSITIONAL for x in params.values()) \
+    or keyword    and any(x.kind == inspect.Parameter.VAR_KEYWORD    for x in params.values()):
+        result = -1
+    elif positional and keyword:
+        result += sum(x.kind in POSITIONALS + KEYWORDALS for x in params.values())
+    elif positional:
+        result += sum(x.kind in POSITIONALS for x in params.values())
+    elif keyword:
+        result += sum(x.kind in KEYWORDALS  for x in params.values())
     return result
 
 

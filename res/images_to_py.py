@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  03.05.2022
+@modified  05.05.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -110,6 +110,8 @@ IMAGES = {
         "Toolbar icon for delete button in database table grids.",
     "ToolbarForm.png":
         "Toolbar icon for form button in data grids.",
+    "ToolbarFunction.png":
+        "Toolbar icon for user-defined functions button in value editor.",
     "ToolbarGoto.png":
         "Toolbar icon for goto button in data grids.",
     "ToolbarInsert.png":

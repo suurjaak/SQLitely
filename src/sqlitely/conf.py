@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.11.2022
+@modified    17.05.2023
 ------------------------------------------------------------------------------
 """
 try: from ConfigParser import RawConfigParser                 # Py2
@@ -29,8 +29,8 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.1.dev81"
-VersionDate = "01.11.2022"
+Version = "2.1.dev82"
+VersionDate = "17.05.2023"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -55,7 +55,7 @@ ConfigFileStatic = False
 """List of attribute names that can be saved to and loaded from ConfigFile."""
 FileDirectives = ["AllowMultipleInstances", "ConsoleHistoryCommands", "DBFiles",
     "DBSort", "LastActivePages", "LastExportType", "LastSearchResults",
-    "LastSelectedFiles", "LastUpdateCheck", "ParseCache", "RecentFiles",
+    "LastSelectedFiles", "LastUpdateCheck", "ParseCache", "Plugins", "RecentFiles",
     "SchemaDiagrams", "SearchHistory", "SearchInMeta", "SearchInData",
     "SearchUseNewTab", "SearchCaseSensitive", "SQLWindowTexts", "TrayIconEnabled",
     "UpdateCheckAutomatic", "WindowMaximized", "WindowMinimizedToTray",
@@ -130,6 +130,13 @@ SeekLeapLength = 10000
 
 """Cached parse results, as {CREATE SQL: {meta}}."""
 ParseCache = {}
+
+"""
+User-defined plugins, as {category: [{..}]}.
+
+E.g. {"ValueEditorFunctions": [{title, body, name, ?active}]} for column value editor.
+"""
+Plugins = {}
 
 """Contents of Recent Files menu."""
 RecentFiles = []

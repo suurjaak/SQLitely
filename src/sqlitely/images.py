@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.05.2022
+@modified    05.05.2023
 ------------------------------------------------------------------------------
 """
 try:
@@ -2054,6 +2054,18 @@ ToolbarForm = PyEmbeddedImage(
     "P/UTVyRJws9qlYblcgnb7baWbNs2DAYDIC4JlBl0u13Y7/fQ7/eh2Wz+mwFxSwee58mi4zjS"
     "jWmaf2ZAtbMAF7hECmMMcB8qTa1W62IGxJFcwzBeOedPtywSuvhmeOvnjySu5FPqB3bvd/4R"
     "YAB0Lucj40EubAAAAABJRU5ErkJggg=="
+)
+
+
+"""Toolbar icon for user-defined functions button in value editor."""
+ToolbarFunction = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGXRFWHRTb2Z0d2FyZQBBZG9i"
+    "ZSBJbWFnZVJlYWR5ccllPAAAARZJREFUeNpi/P//PwMlgBEIsImHQTEIrIJiDPDv3z+wCejY"
+    "BIjXAbETEOtA2djUMYBcz4LFYCMg/gvEF4H4LRAH4fMCExYxLSB+BtVMECAb0AXE24FYHYjV"
+    "oGw9KA3CMVB14ih8NH9ZAvFuKA3ix0HpCKg4KFyWALEbrjAwBWJQvN6B8hdB6UdADFJbC8SO"
+    "yBrQDdAH4sdA/BpNXBCIWYG4AF8YiAKxKhBfw5ImaqGWCeMzQBOIeYD4NIgDTaHlQFwBxBZA"
+    "zAbEYlC157DFSC007sWh/BwgvoEkD+ODsDeSJWBgCcRHgXgLgWjngWIGmAGgjPASygclnhQg"
+    "fghK5kj4Lxr/P4wGAVDAGCILkpwbKc3OAAEGAOsaUbKinMktAAAAAElFTkSuQmCC"
 )
 
 
