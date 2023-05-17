@@ -8,15 +8,13 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  05.05.2023
+@modified  17.05.2023
 ------------------------------------------------------------------------------
 """
 import base64
 import datetime
 import io
 import os
-import shutil
-import wx.tools.img2py
 
 """Target Python script to write."""
 TARGET = os.path.join("..", "src", "sqlitely", "images.py")
