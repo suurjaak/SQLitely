@@ -68,6 +68,8 @@ IMAGES = {
         "Button for create view on data page.",
     "DiagramFK.png":
         "Foreign key icon for schema diagram tables.",
+    "DiagramNull.png":
+        "NULL column icon for schema diagram tables.",
     "DiagramPK.png":
         "Primary key icon for schema diagram tables.",
     "HelpData.png":

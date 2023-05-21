@@ -1,10 +1,11 @@
 CHANGELOG
 =========
 
-2.1, 2023-05-17
+2.1, 2023-05-23
 ---------------
 - add user-defined functions to value editor
 - add button panels to data and schema tabs
+- add NULL column icons to schema diagram
 - add column and key toggles to schema diagram
 - add option to hide data grid columns
 - add filter and hide column options in grid row context menu

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    13.09.2022
+@modified    21.05.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1499,7 +1499,7 @@ class SchemaPlacement(object):
                 dx = w - w2 - self.BRADIUS
                 statslists[2].append(text2); statslists[3].append((dx, dy))
 
-        pkbmp, fkbmp = None, None
+        pkbmp, fkbmp, nbmp = None, None, self.GetStaticBitmap(images.DiagramNull)
         if pks: pkbmp = self.GetStaticBitmap(images.DiagramPK)
         if fks: fkbmp = self.GetStaticBitmap(images.DiagramFK)
 
@@ -1538,6 +1538,8 @@ class SchemaPlacement(object):
             dy = self.HEADERH + self.HEADERP + i * self.LINEH
             if col["name"] in pks:
                 dc.DrawBitmap(pkbmp, 3 * max(self._zoom, 1), dy + 1, useMask=True)
+            elif "notnull" not in col:
+                dc.DrawBitmap(nbmp, 3 * max(self._zoom, 1), dy + 1, useMask=True)
             if col["name"] in fks:
                 b, bw = fkbmp, fkbmp.Width
                 dc.DrawBitmap(b, w - bw - 6 * self._zoom, dy + 1, useMask=True)

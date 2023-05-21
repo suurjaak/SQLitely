@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.05.2023
+@modified    21.05.2023
 ------------------------------------------------------------------------------
 """
 try:
@@ -761,6 +761,14 @@ DiagramFK = PyEmbeddedImage(
     "KX8xUUhk0Gi1kCjiCxB8A56C7sgmm9lJhGLwBbTQeYVLwA1H1rPdcnfCgb+T11JeSwBePyjo"
     "3vTfwrWD/QqyzOzykGxTSkU4C2bgHBzucErArcHbRnA8Aw2w+5hPwAfFi4YgnRuqm0Q4rX1N"
     "328YAfwyK7ymXJVhAAAAAElFTkSuQmCC"
+)
+
+
+"""NULL column icon for schema diagram tables."""
+DiagramNull = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAAAkAAAAJCAYAAADgkQYQAAAAaElEQVQY02NgGHyAEavgdAYu"
+    "BkaGAAYGBj4GBoZtLFi1fmUIUDdUaWNmZOG9f/u+PnZFHxn43r18z/vj90+u32//iDBjtU6Z"
+    "4d3P5z/Ff7349fzvlX+LGXG4lZmBgYGbgYGBiYGB4RcAfzwc6lvu1scAAAAASUVORK5CYII="
 )
 
 
