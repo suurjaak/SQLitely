@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.02.2023
+@modified    23.05.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -2993,6 +2993,7 @@ Database schema diagram SVG template.
 @param   get_stats_texts  function(stats, width) returning stats texts for item
 @param   items            diagram objects as [{"name", "type", "bounds", "columns", "stats"}]
 @param   lines            diagram relations as {("item1", "item2", ("col1", )): {"name", "pts"}}
+@param   show_nulls       whether to show NULL column markers
 @param   show_labels      whether to show foreign relation labels
 @param   ?title           diagram title
 @param   ?embed           whether to omit full XML headers and provide links for embedding in HTML
@@ -3104,6 +3105,8 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
     <image id="pk" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramPK.data }}" />
 
     <image id="fk" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramFK.data }}" />
+
+    <image id="null" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramNull.data }}" />
 
     <filter x="0" y="0" width="1" height="1" id="clearbg">
        <feFlood flood-color="{{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }}" />
@@ -3320,17 +3323,18 @@ if w1 + w2 + 2 * SchemaPlacement.BRADIUS > item["bounds"].Width and item.get("co
         %endif
       </g>
     %endif
-    %if pks or fks:
+    %for i, col in enumerate(cols):
 
-        %for i, col in enumerate(cols):
-            %if any(col["name"] in x.get("name", ()) for x in pks):
+        %if any(col["name"] in x.get("name", ()) for x in pks):
       <use xlink:href="#pk" x="{{ itemx + 3 }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
-            %endif
-            %if any(col["name"] in x.get("name", ()) for x in fks):
+        %endif
+        %if any(col["name"] in x.get("name", ()) for x in fks):
       <use xlink:href="#fk" x="{{ itemx + item["bounds"].Width - 5 - images.DiagramFK.Bitmap.Width }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
-            %endif
-        %endfor
-    %endif
+        %endif
+        %if "notnull" not in col and show_nulls:
+      <use xlink:href="#null" x="{{ itemx + 3 }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
+        %endif
+    %endfor
     </g>
 
 %endfor

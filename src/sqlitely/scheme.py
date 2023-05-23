@@ -822,9 +822,10 @@ class SchemaPlacement(object):
         if title is None:
             title = os.path.splitext(os.path.basename(self._db.name))[0] + " schema"
         ns = {"title": title, "items": [], "lines": self._lines if self._show_lines else {},
-              "show_labels": self._show_labels, "get_extent": self.GetTextExtent,
-              "get_stats_texts": self.GetStatisticsTexts, "font_faces": copy.deepcopy(self.FONTS),
-              "embed": embed, "fonts": {"normal": self._font, "bold": self._font_bold}}
+              "show_nulls": self._show_nulls, "show_labels": self._show_labels,
+              "get_extent": self.GetTextExtent, "get_stats_texts": self.GetStatisticsTexts,
+              "font_faces": copy.deepcopy(self.FONTS), "embed": embed,
+              "fonts": {"normal": self._font, "bold": self._font_bold}}
         for o in self._objs.values():
             item = dict(o, bounds=self._dc.GetIdBounds(o["id"]))
             if not self._show_stats: item.pop("stats")
