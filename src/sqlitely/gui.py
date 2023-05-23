@@ -2903,12 +2903,9 @@ class DatabasePage(wx.Panel):
         button_export = self.button_diagram_export = wx.Button(page, label="Export &diagram")
         button_action = self.button_diagram_action = wx.Button(page, label="Other &actions ..")
         diagram = self.diagram = components.SchemaDiagramWindow(page, self.db)
-        cb_cols  = self.cb_diagram_cols   = wx.CheckBox(page, label="&Columns")
-        cb_keys  = self.cb_diagram_keys   = wx.CheckBox(page, label="&Keys only")
-        cb_nulls = self.cb_diagram_nulls  = wx.CheckBox(page, label="&NULL markers")
-        cb_rels  = self.cb_diagram_rels   = wx.CheckBox(page, label="Foreign &relations")
-        cb_lbls  = self.cb_diagram_labels = wx.CheckBox(page, label="Foreign &labels")
-        cb_stats = self.cb_diagram_stats  = wx.CheckBox(page, label="&Statistics")
+
+        tb_opts = self.tb_diagram_opts = wx.ToolBar(page, style=wx.TB_FLAT | wx.TB_NODIVIDER |
+                                                                wx.TB_NOICONS | wx.TB_HORZ_TEXT)
         label_find = self.label_diagram_find = wx.StaticText(page, label="&Quickfind:")
         combo_find = self.combo_diagram_find = wx.ComboBox(page, size=(100 * WIDTH_FACTOR, -1), style=wx.CB_DROPDOWN)
 
@@ -2944,17 +2941,17 @@ class DatabasePage(wx.Panel):
         tb.ToggleTool(wx.ID_STATIC,   True)
         tb.Realize()
         diagram.DatabasePage = self
-        cb_cols.Value = True
-        cb_keys.Enabled = cb_rels.Enabled = cb_lbls.Enabled = cb_stats.Enabled = False
-        cb_nulls.Value = False
-        cb_rels.Value = True
-        cb_lbls.Value = True
-        cb_cols.ToolTip  = "Show all columns"
-        cb_keys.ToolTip  = "Show primary and foreign key columns only"
-        cb_nulls.ToolTip = "Show markers for NULL columns"
-        cb_rels.ToolTip  = "Show foreign relations between tables"
-        cb_lbls.ToolTip  = "Show labels on foreign relations between tables"
-        cb_stats.ToolTip = "Show table size information"
+        tb_opts.AddCheckTool(wx.ID_FILE1, "&Columns",           wx.NullBitmap, shortHelp="Show all columns")
+        tb_opts.AddCheckTool(wx.ID_FILE2, "&Keys only",         wx.NullBitmap, shortHelp="Show primary and foreign key columns only")
+        tb_opts.AddCheckTool(wx.ID_FILE3, "&NULL markers",      wx.NullBitmap, shortHelp="Show markers for NULL columns")
+        tb_opts.AddCheckTool(wx.ID_FILE4, "Foreign &relations", wx.NullBitmap, shortHelp="Show foreign relations between tables")
+        tb_opts.AddCheckTool(wx.ID_FILE5, "Foreign &labels",    wx.NullBitmap, shortHelp="Show labels on foreign relations between tables")
+        tb_opts.AddCheckTool(wx.ID_FILE6, "&Statistics",        wx.NullBitmap, shortHelp="Show table size information")
+        tb_opts.ToggleTool(wx.ID_FILE1, True)
+        for x in (wx.ID_FILE2, wx.ID_FILE4, wx.ID_FILE5, wx.ID_FILE6): tb_opts.EnableTool(x, False)
+        tb_opts.ToggleTool(wx.ID_FILE4, True)
+        tb_opts.ToggleTool(wx.ID_FILE5, True)
+        tb_opts.Realize()
         label_find.ToolTip = "Select schema items as you type (* is wildcard)"
         combo_find.ToolTip = label_find.ToolTip.Tip
         statusgauge.Hide()
@@ -2965,12 +2962,7 @@ class DatabasePage(wx.Panel):
         sizer_top.Add(button_export, border=5,  flag=wx.RIGHT | wx.BOTTOM)
         sizer_top.Add(button_action, border=5,  flag=wx.RIGHT | wx.BOTTOM)
         sizer_middle.Add(diagram,     proportion=1, flag=wx.GROW)
-        sizer_bottom.Add(cb_cols,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
-        sizer_bottom.Add(cb_keys,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
-        sizer_bottom.Add(cb_nulls,    border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
-        sizer_bottom.Add(cb_rels,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
-        sizer_bottom.Add(cb_lbls,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
-        sizer_bottom.Add(cb_stats,    border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
+        sizer_bottom.Add(tb_opts,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_BOTTOM)
         sizer_bottom.AddStretchSpacer()
         sizer_bottom.Add(label_find,  border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
         sizer_bottom.Add(combo_find,  border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
@@ -2986,15 +2978,10 @@ class DatabasePage(wx.Panel):
         tb.Bind(wx.EVT_TOOL, self.on_diagram_zoom_fit, id=wx.ID_ZOOM_FIT)
         tb.Bind(wx.EVT_TOOL, self.on_diagram_grid,     id=wx.ID_STATIC)
         tb.Bind(wx.EVT_TOOL, self.on_diagram_graph,    id=wx.ID_NETWORK)
+        tb_opts.Bind(wx.EVT_TOOL, self.on_diagram_opt)
 
         self.Bind(wx.EVT_COMBOBOX,  self.on_diagram_zoom_combo, combo_zoom)
         self.Bind(wx.EVT_TEXT,      self.on_diagram_zoom_combo, combo_zoom)
-        self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_columns,    cb_cols)
-        self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_keys,       cb_keys)
-        self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_nulls,      cb_nulls)
-        self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_relations,  cb_rels)
-        self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_labels,     cb_lbls)
-        self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_stats,      cb_stats)
         self.Bind(wx.EVT_BUTTON,    self.on_diagram_export,     button_export)
         self.Bind(wx.EVT_BUTTON,    self.on_diagram_action,     button_action)
         self.Bind(wx.EVT_COMBOBOX,  self.on_diagram_find,       combo_find)
@@ -4241,7 +4228,7 @@ class DatabasePage(wx.Panel):
                     guibase.status("Statistics analysis complete.")
                     self.diagram.UpdateStatistics(redraw=False)
                     if self.diagram.ShowStatistics: self.diagram.Redraw(remake=True)
-                self.cb_diagram_stats.Enable(self.diagram.Enabled)
+                self.tb_diagram_opts.EnableTool(wx.ID_FILE6, self.diagram.Enabled)
                 self.populate_statistics()
                 self.update_page_header(updated="error" not in result)
         wx.CallAfter(after)
@@ -4297,23 +4284,22 @@ class DatabasePage(wx.Panel):
         self.tb_diagram.ToggleTool(wx.ID_APPLY,   self.diagram.Enabled)
         self.tb_diagram.ToggleTool(wx.ID_STATIC,  self.diagram.LAYOUT_GRID  == self.diagram.Layout)
         self.tb_diagram.ToggleTool(wx.ID_NETWORK, self.diagram.LAYOUT_GRAPH == self.diagram.Layout)
-        self.cb_diagram_cols  .Value = self.diagram.ShowColumns
-        self.cb_diagram_keys  .Value = self.diagram.ShowKeyColumns
-        self.cb_diagram_nulls .Value = self.diagram.ShowNulls
-        self.cb_diagram_rels  .Value = self.diagram.ShowLines
-        self.cb_diagram_labels.Value = self.diagram.ShowLineLabels
-        self.cb_diagram_stats .Value = self.diagram.ShowStatistics
+        self.tb_diagram_opts.ToggleTool(wx.ID_FILE1, self.diagram.ShowColumns)
+        self.tb_diagram_opts.ToggleTool(wx.ID_FILE2, self.diagram.ShowKeyColumns)
+        self.tb_diagram_opts.ToggleTool(wx.ID_FILE3, self.diagram.ShowNulls)
+        self.tb_diagram_opts.ToggleTool(wx.ID_FILE4, self.diagram.ShowLines)
+        self.tb_diagram_opts.ToggleTool(wx.ID_FILE5, self.diagram.ShowLineLabels)
+        self.tb_diagram_opts.ToggleTool(wx.ID_FILE6, self.diagram.ShowStatistics)
 
         for myid in wx.ID_ZOOM_FIT, wx.ID_STATIC, wx.ID_NETWORK:
             self.tb_diagram.EnableTool(myid, self.diagram.Enabled)
-
         schema_parsed = any(v.get("__parsed__") for vv in self.db.schema.values() for v in vv.values())
         self.combo_diagram_zoom.Enable(self.diagram.Enabled)
-        self.cb_diagram_keys  .Enable(self.diagram.Enabled and schema_parsed)
-        self.cb_diagram_nulls .Enable(self.diagram.Enabled)
-        self.cb_diagram_rels  .Enable(self.diagram.Enabled and schema_parsed)
-        self.cb_diagram_labels.Enable(self.diagram.Enabled and schema_parsed)
-        self.cb_diagram_stats .Enable(self.diagram.Enabled and "data" in self.statistics)
+        self.tb_diagram_opts.EnableTool(wx.ID_FILE2, self.diagram.Enabled and schema_parsed)
+        self.tb_diagram_opts.EnableTool(wx.ID_FILE3, self.diagram.Enabled)
+        self.tb_diagram_opts.EnableTool(wx.ID_FILE4, self.diagram.Enabled and schema_parsed)
+        self.tb_diagram_opts.EnableTool(wx.ID_FILE5, self.diagram.Enabled and schema_parsed)
+        self.tb_diagram_opts.EnableTool(wx.ID_FILE6, self.diagram.Enabled and "data" in self.statistics)
         self.label_diagram_find.Enable(self.diagram.Enabled)
         self.combo_diagram_find.Enable(self.diagram.Enabled)
         self.button_diagram_export.Enable(self.diagram.Enabled)
@@ -4348,37 +4334,22 @@ class DatabasePage(wx.Panel):
         conf.SchemaDiagramEnabled = event.IsChecked()
         util.run_once(conf.save)
 
-
-    def on_diagram_stats(self, event):
-        """Handler for toggling statistics checkbox, shows or hides stats on diagram."""
-        self.diagram.ShowStatistics = self.cb_diagram_stats.Value
-
-
-    def on_diagram_columns(self, event):
-        """Handler for toggling columns checkbox, shows or hides entity columns."""
-        self.diagram.ShowColumns = self.cb_diagram_cols.Value
-
-
-    def on_diagram_keys(self, event):
-        """Handler for toggling keys checkbox, shows key columns only or not."""
-        self.diagram.ShowKeyColumns = self.cb_diagram_keys.Value
-
-
-    def on_diagram_nulls(self, event):
-        """Handler for toggling nulls checkbox, shows or hides NULL column markers."""
-        self.diagram.ShowNulls = self.cb_diagram_nulls.Value
-
-
-    def on_diagram_relations(self, event):
-        """Handler for toggling foreign relations checkbox, shows or hides diagram lines."""
-        self.diagram.ShowLines = self.cb_diagram_rels.Value
-
-
-    def on_diagram_labels(self, event):
-        """Handler for toggling foreign labels checkbox, shows or hides diagram line labels."""
-        self.diagram.ShowLineLabels = self.cb_diagram_labels.Value
-        if self.cb_diagram_labels.Value: self.diagram.ShowLines = True
-
+    def on_diagram_opt(self, event):
+        """Handler for toggling a diagram display option, changes diagram display."""
+        if   wx.ID_FILE1 == event.Id:
+            self.diagram.ShowColumns    = event.Selection
+        elif wx.ID_FILE2 == event.Id:
+            self.diagram.ShowKeyColumns = event.Selection
+        elif wx.ID_FILE3 == event.Id:
+            self.diagram.ShowNulls      = event.Selection
+        elif wx.ID_FILE4 == event.Id:
+            self.diagram.ShowLines      = event.Selection
+        elif wx.ID_FILE5 == event.Id:
+            self.diagram.ShowLineLabels = event.Selection
+            if event.Selection: self.diagram.ShowLines = True
+        elif wx.ID_FILE6 == event.Id:
+            self.diagram.ShowStatistics = event.Selection
+        
 
     def on_diagram_export(self, event):
         """Handler for exporting diagram, opens file dialog."""
@@ -6643,9 +6614,9 @@ class DatabasePage(wx.Panel):
             if (wx.YieldIfNeeded() or True) and not self: return
             self.diagram.Populate()
             self.populate_diagram_finder()
-            self.cb_diagram_keys.Enable(self.diagram.Enabled)
-            self.cb_diagram_rels.Enable(self.diagram.Enabled)
-            self.cb_diagram_labels.Enable(self.diagram.Enabled and self.cb_diagram_rels.Value)
+            self.tb_diagram_opts.EnableTool(wx.ID_FILE2, self.diagram.Enabled)
+            self.tb_diagram_opts.EnableTool(wx.ID_FILE4, self.diagram.Enabled)
+            self.tb_diagram_opts.EnableTool(wx.ID_FILE5, self.diagram.Enabled and self.diagram.ShowLines)
             self.update_autocomp()
             if (wx.YieldIfNeeded() or True) and not self: return
             self.db.generate_schema(progress=lambda *_, **__: (wx.YieldIfNeeded() or True) and bool(self))

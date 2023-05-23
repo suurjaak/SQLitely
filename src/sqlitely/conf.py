@@ -29,7 +29,7 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.1.dev86"
+Version = "2.1.dev87"
 VersionDate = "23.05.2023"
 
 if getattr(sys, "frozen", False):
