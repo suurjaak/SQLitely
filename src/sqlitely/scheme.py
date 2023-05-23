@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    21.05.2023
+@modified    23.05.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -391,6 +391,7 @@ class SchemaPlacement(object):
         self._use_cache   = True # Use self._cache for item bitmaps
         self._show_cols   = True
         self._show_keys   = False
+        self._show_nulls  = False
         self._show_lines  = True
         self._show_labels = True
         self._show_stats  = False
@@ -636,9 +637,10 @@ class SchemaPlacement(object):
         """
         pp = {o["name"]: list(self._dc.GetIdBounds(o["id"]).TopLeft) for o in self.Order}
         return {
-            "zoom":    self._zoom,        "lines":      self._show_lines,
+            "zoom":    self._zoom,        
+            "lines":   self._show_lines,  "labels":     self._show_labels, 
             "columns": self._show_cols,   "keycolumns": self._show_keys,
-            "labels":  self._show_labels, "statistics": self._show_stats,
+            "nulls":   self._show_nulls,  "statistics": self._show_stats,
             "items":   pp,                "layout": copy.deepcopy(self._layout),
         }
     def SetOptions(self, opts):
@@ -653,6 +655,9 @@ class SchemaPlacement(object):
         if "keycolumns" in opts and self._show_keys != bool(opts["keycolumns"]):
             self._show_keys = not self._show_keys
             if self._show_keys: self._show_cols = False
+            remake = True
+        if "nulls" in opts and self._show_nulls != bool(opts["nulls"]):
+            self._show_nulls = not self._show_nulls
             remake = True
         if "lines"      in opts:
             self._show_lines = bool(opts["lines"])
@@ -1411,7 +1416,8 @@ class SchemaPlacement(object):
         statistics = (statistics or self.MakeItemStatistics(opts)) if self._show_stats else None
         key1 = opts["__id__"]
         key2 = (opts["sql0"], bool(opts.get("meta") or opts.get("hasmeta")),
-                self._show_cols, self._show_keys, str(statistics) if statistics else None, False)
+                self._show_cols, self._show_keys, self._show_nulls,
+                str(statistics) if statistics else None, False)
         return key1 in self._cache[self._zoom] and key2 in self._cache[self._zoom][key1]
 
 
@@ -1427,8 +1433,8 @@ class SchemaPlacement(object):
 
         key1 = opts["__id__"]
         key2 = (opts["sql0"], bool(opts.get("meta") or opts.get("hasmeta")),
-                self._show_cols, self._show_keys, str(statistics) if statistics else None,
-                bool(dragrect))
+                self._show_cols, self._show_keys, self._show_nulls,
+                str(statistics) if statistics else None, bool(dragrect))
         mycache = self._cache[self._zoom][key1]
         if key2 not in mycache:
             for cc in self._cache.values(): # Nuke any outdated bitmaps
@@ -1538,7 +1544,7 @@ class SchemaPlacement(object):
             dy = self.HEADERH + self.HEADERP + i * self.LINEH
             if col["name"] in pks:
                 dc.DrawBitmap(pkbmp, 3 * max(self._zoom, 1), dy + 1, useMask=True)
-            elif "notnull" not in col:
+            elif "notnull" not in col and self._show_nulls:
                 dc.DrawBitmap(nbmp, 3 * max(self._zoom, 1), dy + 1, useMask=True)
             if col["name"] in fks:
                 b, bw = fkbmp, fkbmp.Width
@@ -1793,6 +1799,15 @@ class SchemaPlacement(object):
         self._show_keys = show
         if show: self._show_cols = False
     ShowKeyColumns = property(GetShowKeyColumns, SetShowKeyColumns)
+
+
+    def GetShowNulls(self):
+        """Returns whether NULL column markers are shown."""
+        return self._show_nulls
+    def SetShowNulls(self, show=True):
+        """Sets showing NULL column markers on or off."""
+        self._show_nulls = bool(show)
+    ShowNulls = property(GetShowNulls, SetShowNulls)
 
 
     def GetShowLines(self):

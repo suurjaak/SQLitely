@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.05.2023
+@modified    23.05.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2904,7 +2904,8 @@ class DatabasePage(wx.Panel):
         button_action = self.button_diagram_action = wx.Button(page, label="Other &actions ..")
         diagram = self.diagram = components.SchemaDiagramWindow(page, self.db)
         cb_cols  = self.cb_diagram_cols   = wx.CheckBox(page, label="&Columns")
-        cb_keys  = self.cb_diagram_keys  = wx.CheckBox(page, label="&Keys only")
+        cb_keys  = self.cb_diagram_keys   = wx.CheckBox(page, label="&Keys only")
+        cb_nulls = self.cb_diagram_nulls  = wx.CheckBox(page, label="&NULL markers")
         cb_rels  = self.cb_diagram_rels   = wx.CheckBox(page, label="Foreign &relations")
         cb_lbls  = self.cb_diagram_labels = wx.CheckBox(page, label="Foreign &labels")
         cb_stats = self.cb_diagram_stats  = wx.CheckBox(page, label="&Statistics")
@@ -2945,10 +2946,12 @@ class DatabasePage(wx.Panel):
         diagram.DatabasePage = self
         cb_cols.Value = True
         cb_keys.Enabled = cb_rels.Enabled = cb_lbls.Enabled = cb_stats.Enabled = False
+        cb_nulls.Value = False
         cb_rels.Value = True
         cb_lbls.Value = True
         cb_cols.ToolTip  = "Show all columns"
         cb_keys.ToolTip  = "Show primary and foreign key columns only"
+        cb_nulls.ToolTip = "Show markers for NULL columns"
         cb_rels.ToolTip  = "Show foreign relations between tables"
         cb_lbls.ToolTip  = "Show labels on foreign relations between tables"
         cb_stats.ToolTip = "Show table size information"
@@ -2964,6 +2967,7 @@ class DatabasePage(wx.Panel):
         sizer_middle.Add(diagram,     proportion=1, flag=wx.GROW)
         sizer_bottom.Add(cb_cols,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
         sizer_bottom.Add(cb_keys,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
+        sizer_bottom.Add(cb_nulls,    border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
         sizer_bottom.Add(cb_rels,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
         sizer_bottom.Add(cb_lbls,     border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
         sizer_bottom.Add(cb_stats,    border=5, flag=wx.LEFT | wx.BOTTOM | wx.ALIGN_CENTER_VERTICAL)
@@ -2987,6 +2991,7 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_TEXT,      self.on_diagram_zoom_combo, combo_zoom)
         self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_columns,    cb_cols)
         self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_keys,       cb_keys)
+        self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_nulls,      cb_nulls)
         self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_relations,  cb_rels)
         self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_labels,     cb_lbls)
         self.Bind(wx.EVT_CHECKBOX,  self.on_diagram_stats,      cb_stats)
@@ -4294,6 +4299,7 @@ class DatabasePage(wx.Panel):
         self.tb_diagram.ToggleTool(wx.ID_NETWORK, self.diagram.LAYOUT_GRAPH == self.diagram.Layout)
         self.cb_diagram_cols  .Value = self.diagram.ShowColumns
         self.cb_diagram_keys  .Value = self.diagram.ShowKeyColumns
+        self.cb_diagram_nulls .Value = self.diagram.ShowNulls
         self.cb_diagram_rels  .Value = self.diagram.ShowLines
         self.cb_diagram_labels.Value = self.diagram.ShowLineLabels
         self.cb_diagram_stats .Value = self.diagram.ShowStatistics
@@ -4304,6 +4310,7 @@ class DatabasePage(wx.Panel):
         schema_parsed = any(v.get("__parsed__") for vv in self.db.schema.values() for v in vv.values())
         self.combo_diagram_zoom.Enable(self.diagram.Enabled)
         self.cb_diagram_keys  .Enable(self.diagram.Enabled and schema_parsed)
+        self.cb_diagram_nulls .Enable(self.diagram.Enabled)
         self.cb_diagram_rels  .Enable(self.diagram.Enabled and schema_parsed)
         self.cb_diagram_labels.Enable(self.diagram.Enabled and schema_parsed)
         self.cb_diagram_stats .Enable(self.diagram.Enabled and "data" in self.statistics)
@@ -4355,6 +4362,11 @@ class DatabasePage(wx.Panel):
     def on_diagram_keys(self, event):
         """Handler for toggling keys checkbox, shows key columns only or not."""
         self.diagram.ShowKeyColumns = self.cb_diagram_keys.Value
+
+
+    def on_diagram_nulls(self, event):
+        """Handler for toggling nulls checkbox, shows or hides NULL column markers."""
+        self.diagram.ShowNulls = self.cb_diagram_nulls.Value
 
 
     def on_diagram_relations(self, event):

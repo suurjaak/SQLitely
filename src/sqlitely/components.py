@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.05.2023
+@modified    23.05.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10321,6 +10321,21 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         self.Redraw(remake=True)
         self._PostEvent()
     ShowKeyColumns = property(GetShowKeyColumns, SetShowKeyColumns)
+
+
+    def GetShowNulls(self):
+        """Returns whether NULL column markers are shown."""
+        return self._layout.ShowNulls
+    def SetShowNulls(self, show=True):
+        """Sets showing NULL column markers on or off."""
+        show = bool(show)
+        if show == self._layout.ShowNulls: return
+        self._layout.ShowNulls = show
+        if not self._enabled: return self._PostEvent()
+
+        self.Redraw(remake=True)
+        self._PostEvent()
+    ShowNulls = property(GetShowNulls, SetShowNulls)
 
 
     def GetShowLines(self):
