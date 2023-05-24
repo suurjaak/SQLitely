@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.05.2023
+@modified    24.05.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10831,6 +10831,8 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             gradendcolour = self._layout.DEFAULT_COLOURS["GradientEnd"]
             gtextcolour   = self._layout.DEFAULT_COLOURS["Border"]
             hotcolour     = self._layout.DEFAULT_COLOURS["DragForeground"]
+        elif wx.WHITE == wincolour:  # Prefer default header-footer colour if visibility ensured
+            gradendcolour = self._layout.DEFAULT_COLOURS["GradientEnd"]
             
 
         dragbgcolour  = controls.ColourManager.Adjust(hotcolour,   wincolour, 0.6)
