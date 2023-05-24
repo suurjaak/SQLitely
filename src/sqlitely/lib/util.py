@@ -8,14 +8,13 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.05.2023
+@modified    24.05.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
 try: import __builtin__ as builtins  # Py2
 except ImportError: import builtins  # Py3
 import collections
-import contextlib
 import copy
 import ctypes
 import datetime
@@ -568,25 +567,6 @@ def img_pil_resize(img, size, aspect_ratio=True, bg=(255, 255, 255)):
             result, result0 = Image.new(img.mode, size, bg), result
             result.paste(result0, tuple(map(int, align_pos)))
     return result
-
-
-def ctx(enter, exit, *a, **kw):
-    """
-    Creates a context manager for callable result. Example usage:
-
-        with ctx(wx.TextCtrl, wx.TextCtrl.Destroy, parent=self) as x:
-            defaultfont = x.Font.FaceName
-
-    @param   enter  function returning the value,
-                    invoked with positional and keyword arguments
-    @param   exit   cleanup function, invoked with result of enter()
-    @return         context-managed result of enter(*a, **kw)
-    """
-    def yielder():
-        result = enter(*a, **kw)
-        yield result
-        exit(result)
-    return contextlib.GeneratorContextManager(yielder())
 
 
 def m(o, name, case_insensitive=True):
