@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    23.05.2023
+@modified    24.05.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1252,7 +1252,9 @@ class SchemaPlacement(object):
                 o["bmp"], o["bmpsel"] = bmp
                 bmp = o[bmpname]
             else: o.update({bmpname: bmp})
-        pos = [a - (o["name"] in self._sels) * 2 * self._zoom for a in bounds[:2]]
+        if not bounds:  # wx.Rect(0, 0, 0, 0): item not in DC yet
+            bounds = wx.Rect(0, 0, *bmp.Size)
+        pos = [a - (o["name"] in self._sels) * 2 * self._zoom for a in bounds.TopLeft]
         self._dc.DrawBitmap(bmp, pos, useMask=True)
         self._dc.SetIdBounds(o["id"], wx.Rect(bounds.TopLeft, bounds.BottomRight))
         self._dc.SetId(-1)
