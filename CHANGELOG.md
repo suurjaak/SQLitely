@@ -28,6 +28,7 @@ CHANGELOG
 - fix diagram in statistics HTML export using current view settings
 - fix operating on key columns of BLOB affinity in data grids
 - fix encoding errors in running disk usage analyzer
+- fix complex alter ignoring related triggers (SQLite 3.25+ compatibility)
 
 
 2.0, 2022-04-02

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.05.2023
+@modified    24.05.2023
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -2176,10 +2176,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
                             if not err: rel_sql = sql2
 
                 sql0, _ = grammar.transform(rel_sql, renames=renames)
-                if sql0 == relitem["sql"] and not is_our_item and "view" != category:
-                    # Views need recreating, as SQLite can raise "no such table" error
-                    # otherwise when dropping the old table. Triggers that simply
-                    # use this table but otherwise need no changes, can remain as is.
+                if sql0 == relitem["sql"] and not is_our_item \
+                and category not in ("trigger", "view"):
+                    # Triggers and views need recreating, as SQLite can raise
+                    # "no such table" error otherwise when dropping the old table.
                     continue # for relitem
 
                 myitem = dict(relitem, sql=sql0, sql0=sql0)
@@ -2195,7 +2195,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     myitem.update(sql=sql)
 
                 args.setdefault(category, []).append(myitem)
-                if category not in ("table", "view"): continue # for relitem
+                if category not in ("table", "trigger", "view"): continue # for relitem
 
                 subrelateds = self.get_related(category, relitem["name"], own=True, clone=clone)
                 if "table" == category:
