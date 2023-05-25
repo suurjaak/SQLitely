@@ -43,6 +43,9 @@ Stand-alone GUI components for wx:
   Inspired by wx.CommandLinkButton, which does not support custom icons
   (at least not of wx 2.9.4).
 
+- Patch(object):
+  Monkey-patches wx API for general compatibility over different versions.
+
 - ProgressWindow(wx.Dialog):
   A simple non-modal ProgressDialog, stays on top of parent frame.
 
@@ -90,7 +93,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    17.05.2023
+@modified    25.05.2023
 ------------------------------------------------------------------------------
 """
 import collections
@@ -328,6 +331,8 @@ class ColourManager(object):
         """Returns wx.Colour or system colour as HTML colour hex string."""
         colour = idx if isinstance(idx, wx.Colour) \
                  else wx.SystemSettings.GetColour(idx)
+        if colour.Alpha() != wx.ALPHA_OPAQUE:
+            colour = wx.Colour(colour[:3])  # GetAsString(C2S_HTML_SYNTAX) can raise if transparent
         return colour.GetAsString(wx.C2S_HTML_SYNTAX)
 
 
@@ -354,7 +359,7 @@ class ColourManager(object):
                   if isinstance(colour2, integer_types) else wx.Colour(colour2)
         rgb1, rgb2 = tuple(colour1)[:3], tuple(colour2)[:3]
         delta  = tuple(a - b for a, b in zip(rgb1, rgb2))
-        result = tuple(a - (d * ratio) for a, d in zip(rgb1, delta))
+        result = tuple(a - int(d * ratio) for a, d in zip(rgb1, delta))
         result = tuple(min(255, max(0, x)) for x in result)
         return wx.Colour(result)
 
@@ -1696,7 +1701,7 @@ class NoteButton(wx.Panel, wx.Button):
                 dc.DrawRectangle(5, 5, width - 10, height - 10)
             dc.Pen = PEN(dc.TextForeground)
 
-        if self._press or (is_focused and any(wx.GetKeyState(x) for x in KEYS.SPACE)):
+        if self._press or (is_focused and any(get_key_state(x) for x in KEYS.SPACE)):
             # Button is being clicked with mouse: create sunken effect
             colours = [(128, 128, 128)] * 2
             lines   = [(1, 1, width - 2, 1), (1, 1, 1, height - 2)]
@@ -1923,6 +1928,59 @@ class NoteButton(wx.Panel, wx.Button):
     def GetNote(self):
         return self._note
     Note = property(GetNote, SetNote)
+
+
+
+class Patch(object):
+    """Monkey-patches wx API for general compatibility over different versions."""
+
+    _PATCHED = False
+
+    @staticmethod
+    def patch_wx():
+        """
+        Patches wx object methods to smooth over version and setup differences.
+
+        In wheel-built wxPython in Ubuntu22, floats are no longer auto-converted to ints
+        in core wx object method calls like wx.Colour().
+        """
+        if Patch._PATCHED: return
+
+        if not hasattr(wx.stc.StyledTextCtrl, "SetMarginCount"):  # Since wx 3.1.1
+            wx.stc.StyledTextCtrl.SetMarginCount = lambda *a, **kw: None
+
+        # Some versions have StartStyling(start), others StartStyling(start, mask)
+        STC__StartStyling = wx.stc.StyledTextCtrl.StartStyling
+        def StartStyling__Patched(self, *args, **kwargs):
+            try: return STC__StartStyling(self, *args, **kwargs)
+            except TypeError: return STC__StartStyling(self, *(args + [255]), **kwargs)
+        wx.stc.StyledTextCtrl.StartStyling = StartStyling__Patched
+        Patch._PATCHED = True
+
+        # In some setups, float->int autoconversion is not done for Python/C sip objects
+        try: wx.Rect(1.1, 2.2, 3.3, 4.4)
+        except Exception: pass
+        else: return
+
+        def defloatify(func):
+            """Returns function pass-through wrapper, converting any float arguments to int."""
+            def inner(*args, **kwargs):
+                args = [int(v) if isinstance(v, float) else v for v in args]
+                kwargs = {k: int(v) if isinstance(v, float) else v for k, v in kwargs.items()}
+                return func(*args, **kwargs)
+            return functools.update_wrapper(inner, func)
+
+        wx.Colour.__init__              = defloatify(wx.Colour.__init__)
+        wx.Point.__init__               = defloatify(wx.Point.__init__)
+        wx.Rect.__init__                = defloatify(wx.Rect.__init__)
+        wx.ImageList.Draw               = defloatify(wx.ImageList.Draw)
+        wx.BufferedPaintDC.DrawText     = defloatify(wx.BufferedPaintDC.DrawText)
+        wx.BufferedPaintDC.DrawBitmap   = defloatify(wx.BufferedPaintDC.DrawBitmap)
+        wx.PaintDC.DrawText             = defloatify(wx.PaintDC.DrawText)
+        wx.PaintDC.DrawBitmap           = defloatify(wx.PaintDC.DrawBitmap)
+        wx.MemoryDC.DrawText            = defloatify(wx.MemoryDC.DrawText)
+        wx.MemoryDC.DrawBitmap          = defloatify(wx.MemoryDC.DrawBitmap)
+        wx.ScrolledWindow.SetScrollbars = defloatify(wx.ScrolledWindow.SetScrollbars)
 
 
 
@@ -3021,11 +3079,9 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
     def SetStyleSpecs(self):
         """Sets STC style colours."""
-        fgcolour, bgcolour, highcolour = (
-            wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
-            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
-                      if self.Enabled else wx.SYS_COLOUR_BTNFACE,
-                      wx.SYS_COLOUR_HOTLIGHT)
+        fgcolour, bgcolour, highcolour = (ColourManager.ColourHex(x) for x in
+            (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW if self.Enabled else wx.SYS_COLOUR_BTNFACE,
+             wx.SYS_COLOUR_HOTLIGHT)
         )
 
 
@@ -3421,11 +3477,8 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     def SetStyleSpecs(self):
         """Sets STC style colours."""
         if not self: return
-        fgcolour, bgcolour, mbgcolour = (
-            wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
-            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
-                      if self.Enabled else wx.SYS_COLOUR_BTNFACE,
-                      wx.SYS_COLOUR_BTNFACE)
+        fgcolour, bgcolour = (ColourManager.ColourHex(x) for x in
+            (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW if self.Enabled else wx.SYS_COLOUR_BTNFACE)
         )
 
         self.SetCaretForeground(fgcolour)
@@ -3435,7 +3488,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         self.StyleClearAll() # Apply the new default style to all styles
 
         self.StyleSetSpec(self.STYLE_CHANGED, "fore:%s" % self.COLOUR_CHANGED)
-        self.StyleSetSpec(self.STYLE_MARGIN,  "back:%s" % mbgcolour)
+        self.StyleSetSpec(self.STYLE_MARGIN,  "back:%s" % bgcolour)
 
 
     def Enable(self, enable=True):
@@ -3942,10 +3995,8 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
     def SetStyleSpecs(self):
         """Sets STC style colours."""
         if not self: return
-        fgcolour, bgcolour = (
-            wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
-            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
-                      if self.Enabled else wx.SYS_COLOUR_BTNFACE)
+        fgcolour, bgcolour = (ColourManager.ColourHex(x) for x in
+            (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW if self.Enabled else wx.SYS_COLOUR_BTNFACE)
         )
 
         self.SetCaretForeground(fgcolour)
@@ -4410,11 +4461,9 @@ class JSONTextCtrl(wx.stc.StyledTextCtrl):
 
     def SetStyleSpecs(self):
         """Sets STC style colours."""
-        fgcolour, bgcolour, highcolour = (
-            wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
-            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
-                      if self.Enabled else wx.SYS_COLOUR_BTNFACE,
-                      wx.SYS_COLOUR_HOTLIGHT)
+        fgcolour, bgcolour, highcolour = (ColourManager.ColourHex(x) for x in
+            (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW if self.Enabled else wx.SYS_COLOUR_BTNFACE,
+             wx.SYS_COLOUR_HOTLIGHT)
         )
 
         self.SetCaretForeground(fgcolour)
@@ -5466,11 +5515,9 @@ class YAMLTextCtrl(wx.stc.StyledTextCtrl):
 
     def SetStyleSpecs(self):
         """Sets STC style colours."""
-        fgcolour, bgcolour, highcolour, graycolour = (
-            wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
-            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
-                      if self.Enabled else wx.SYS_COLOUR_BTNFACE,
-                      wx.SYS_COLOUR_HOTLIGHT, wx.SYS_COLOUR_GRAYTEXT)
+        fgcolour, bgcolour, highcolour, graycolour = (ColourManager.ColourHex(x) for x in
+            (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW if self.Enabled else wx.SYS_COLOUR_BTNFACE,
+             wx.SYS_COLOUR_HOTLIGHT, wx.SYS_COLOUR_GRAYTEXT)
         )
 
         self.SetCaretForeground(fgcolour)
@@ -6147,3 +6194,9 @@ class CallableManagerDialog(wx.Dialog):
         """Handler for closing dialog, confirms unsaved changes."""
         if self._CheckUnsaved(): return
         self.EndModal(wx.ID_OK) if self.IsModal() else self.Hide()
+
+
+def get_key_state(keycode):
+    """Returns true if specified key is currently down."""
+    try: return wx.GetKeyState(keycode)
+    except Exception: return False  # wx3 can raise for non-modifier keys in non-X11 backends

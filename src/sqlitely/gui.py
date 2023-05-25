@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.05.2023
+@modified    25.05.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -76,6 +76,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                  else images.Icon24x24_32bit)
 
     def __init__(self):
+        controls.Patch.patch_wx()
         wx.Frame.__init__(self, parent=None, title=conf.Title, size=conf.WindowSize)
         guibase.TemplateFrameMixIn.__init__(self)
 
@@ -7283,7 +7284,7 @@ class DatabasePage(wx.Panel):
                 item_drop_all.Enable(False)
 
         if tree.HasChildren(item):
-            item_expand   = wx.MenuItem(menu, -1, "&Toggle expanded/collapsed")
+            item_expand = wx.MenuItem(menu, -1, "&Toggle expanded/collapsed")
             menu.Bind(wx.EVT_MENU, functools.partial(toggle_items, item), item_expand)
             if menu.MenuItemCount: menu.AppendSeparator()
             menu.Append(item_expand)
@@ -7621,7 +7622,8 @@ class AboutDialog(wx.Dialog):
         self.Bind(wx.EVT_BUTTON, lambda e: self.Destroy(), id=wx.ID_OK)
 
         self.Layout()
-        self.Size = (self.Size[0], html.VirtualSize[1] + 70)
+        if "win32" != sys.platform: self.MinSize = (550, -1)
+        self.Size = (self.Size[0], html.VirtualSize[1] + (10 if "win32" != sys.platform else 70))
         self.CenterOnParent()
 
 

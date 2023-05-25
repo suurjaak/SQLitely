@@ -19,6 +19,7 @@ CHANGELOG
 - omit comments from JSON export
 - underline matched texts in meta search results
 - include journal file sizes in database size
+- improve compatibility with GTK and Python 3.8+ on Linux.
 - fix loading user-specific configuration file
 - fix schema diagram not loading entity positions from last config
 - fix schema diagram adopting custom layout on clicking an entity

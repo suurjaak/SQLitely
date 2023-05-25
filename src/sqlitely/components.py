@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.05.2023
+@modified    25.05.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1408,7 +1408,8 @@ class SQLiteGridBaseMixin(object):
         grid = self._grid
         grid.SetDefaultEditor(wx.grid.GridCellAutoWrapStringEditor())
         grid.SetRowLabelAlignment(wx.ALIGN_RIGHT, wx.ALIGN_CENTER)
-        grid.SetDefaultCellFitMode(wx.grid.GridFitMode.Clip())
+        if hasattr(grid, "SetDefaultCellFitMode"):
+            grid.SetDefaultCellFitMode(wx.grid.GridFitMode.Clip())  # Since wx 3.1.4
         ColourManager.Manage(grid, "DefaultCellBackgroundColour", wx.SYS_COLOUR_WINDOW)
         ColourManager.Manage(grid, "DefaultCellTextColour",       wx.SYS_COLOUR_WINDOWTEXT)
         ColourManager.Manage(grid, "LabelBackgroundColour",       wx.SYS_COLOUR_BTNFACE)
@@ -10891,11 +10892,12 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             self._dragpos = x, y
             if item and event.LeftDown() and 1 == len(self._layout.Selection) \
             and item["name"] in self._layout.Selection \
-            and not (wx.GetKeyState(wx.WXK_SHIFT) or wx.GetKeyState(wx.WXK_COMMAND)): return
+            and not (controls.get_key_state(wx.WXK_SHIFT) or
+                     controls.get_key_state(wx.WXK_COMMAND)): return
 
             fullbounds, sels0 = wx.Rect(), self._layout.Selection
             if item:
-                if wx.GetKeyState(wx.WXK_SHIFT) or wx.GetKeyState(wx.WXK_COMMAND):
+                if controls.get_key_state(wx.WXK_SHIFT) or controls.get_key_state(wx.WXK_COMMAND):
                     if item["name"] in sels0: self._layout.SelectItem(item["name"], False)
                     else: self._layout.SelectItem(item["name"])
                 else:
