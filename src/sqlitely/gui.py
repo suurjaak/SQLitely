@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.05.2023
+@modified    28.05.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2743,7 +2743,8 @@ class DatabasePage(wx.Panel):
         i3 = images.ButtonExportToDatabase.Bitmap
         i4 = images.ButtonImport.Bitmap
         for i, (a, l, n) in enumerate(BUTTONS):
-            buttons.append(controls.NoteButton(startpanel, l, n, size=bsize, style=wx.ALIGN_CENTER,
+            buttons.append(controls.NoteButton(startpanel, l, n, size=bsize,
+                                               style=wx.ALIGN_CENTER_VERTICAL,
                                                bmp=(i1, i2, i3, i4)[i]))
 
         startpanel.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2852,7 +2853,8 @@ class DatabasePage(wx.Panel):
         i3 = images.ButtonIndex.Bitmap
         i4 = images.ButtonTrigger.Bitmap
         for i, (c, l, n) in enumerate(BUTTONS):
-            buttons.append(controls.NoteButton(startpanel, l, n, size=bsize, style=wx.ALIGN_CENTER,
+            buttons.append(controls.NoteButton(startpanel, l, n, size=bsize,
+                                               style=wx.ALIGN_CENTER_VERTICAL,
                                                bmp=(i1, i2, i3, i4)[i]))
 
         startpanel.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -3265,6 +3267,13 @@ class DatabasePage(wx.Panel):
 
         self.Bind(wx.EVT_BUTTON, self.on_checksum_stop, button_checksum_stop)
 
+        button_stats = controls.NoteButton(panel1c, "Export &statistics",
+            note="Save database statistics to file", style=wx.BORDER_RAISED,
+            bmp=images.ButtonStatistics.Bitmap
+        )
+        button_stats.Wrapped = False
+        self.Bind(wx.EVT_BUTTON, self.on_save_statistics, button_stats)
+
         button_fks      = self.button_check_fks       = wx.Button(panel1c, label="Check foreign keys")
         button_check    = self.button_check_integrity = wx.Button(panel1c, label="Check for corruption")
         button_optimize = self.button_optimize        = wx.Button(panel1c, label="Optimize")
@@ -3309,6 +3318,9 @@ class DatabasePage(wx.Panel):
 
         sizer_info.AddGrowableCol(1, proportion=1)
         sizer_file.Add(sizer_info, proportion=1, border=10, flag=wx.LEFT | wx.GROW)
+        sizer_file.AddStretchSpacer()
+        sizer_file.Add(button_stats, border=10, flag=wx.ALIGN_CENTER_HORIZONTAL)
+        sizer_file.AddStretchSpacer()
         sizer_file.Add(sizer_buttons, border=10, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer1.Add(label_file, border=5, flag=wx.ALL)
         sizer1.Add(panel1c, border=6, proportion=1, flag=wx.TOP | wx.GROW)

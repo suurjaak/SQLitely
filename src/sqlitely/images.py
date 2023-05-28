@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.05.2023
+@modified    25.05.2023
 ------------------------------------------------------------------------------
 """
 try:
@@ -688,6 +688,23 @@ ButtonSaveAs = PyEmbeddedImage(
     "q10hTiTgg1u6rquiRoMhlUqpYnpXMxJGTIB2hjiU6/TwhDv1eGzmVXXje40xoYophGhGeNcq"
     "wMSfpAxoNLRz+k154Q7Kjby/ZM7ldxqiw4f6YkOFVpDHDe1fU98r/gowAMaC+CTtivcaAAAA"
     "AElFTkSuQmCC"
+)
+
+
+"""Large icon for save statistics button."""
+ButtonStatistics = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAGXRFWHRTb2Z0d2FyZQBBZG9i"
+    "ZSBJbWFnZVJlYWR5ccllPAAAAiBJREFUeNq0Vs1Kw0AQ3l1rSyw91LZqROnNgpbWiigo3jyq"
+    "F/Ed9CFKK+IzqK+geNGrNw+9+gP1rB6qxoNQJFaarDNJNrZNajaKC8OXLPPNzLeT3Q3lnJP/"
+    "HBHxsFWpWEgpXQdQwc7B1kNgA4rFZ3Kyu+smYL0ZwWn8uFo90jRtIwwiz08BFUu0WS6Lue3T"
+    "vb0DbmdDSYFIbf4OwCHSgO9dIm6a7qQJRLc3EgjL2sX37YH57UC5k0R2MEgAfCqdAIOjXV5f"
+    "k7F0mjy9vrq4Uix6o6B/YALD8Cgo5HLWxEgq5aKfMmrz5RVwuyJydXdHRqHyZ6i8Hy4XCoQx"
+    "FqzA6FCAVRpg+akpayIzPNwX0Y+hf6CCngSWgno9UMES9MTyD0rQpQDfgTTj9CDt9MAP0W/A"
+    "5odTYICCG1AwApW+QKX9cPEXCphIMO30IO2suR+in2n3gIVqMpqlIJMhL5rWFxdmZ0UC+R5w"
+    "oUD0oKNiJRYjk6pqvSOiHw/9FTkb7dZHwTxU3DtMmY3W2wP8TOdgE+GYcCpGNH0ONbketNvd"
+    "OznEYWctUbv9swJd1925sKcpt/kR35NWPDzWauS92USLYPCheJyEQeQhH+N45InLZTCRIMlS"
+    "af+p1eJKPl95aDalEP2Rh/zOmGjulQm3UhJP5Fg2u8YUJfPZaFxEVXVVFk1d11r392cQQ4OY"
+    "b547GRIoAHGw6B/+Ulpg7xDzQ0x8CTAAcJwZIyE3izkAAAAASUVORK5CYII="
 )
 
 
