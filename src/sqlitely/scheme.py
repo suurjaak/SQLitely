@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    24.05.2023
+@modified    25.05.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -512,7 +512,7 @@ class SchemaPlacement(object):
         if not reset and fullbounds:
             vsize = fullbounds.Right + 2 * self.BRADIUS, fullbounds.Bottom + 2 * self.BRADIUS
         if vsize[0] > self._size[0] or vsize[1] > self._size[1]:
-            self._size = vsize
+            self._size = Size(vsize)
 
         if reset: self._dc.RemoveAll()
         self.CalculateLines(remake=True)
