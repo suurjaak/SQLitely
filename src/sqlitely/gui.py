@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.05.2023
+@modified    08.06.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5936,6 +5936,12 @@ class DatabasePage(wx.Panel):
             self.load_tree_schema()
             self.diagram.Populate()
             self.populate_diagram_finder()
+
+            relnames = {n: n for c, xx in self.db.get_related(category, name).items() for n in xx} \
+                       if category in ("table", "view") else {}
+            if relnames:
+                for n, p in ((n, p) for pp in self.schema_pages.values() for n, p in pp.items()):
+                    if n in relnames: p.Reload()
             for n, p in self.schema_pages[category].items():
                 if p is event.source and name != n:
                     name0 = n
@@ -5943,8 +5949,6 @@ class DatabasePage(wx.Panel):
                     self.schema_pages[category][name] = p
                     for item in self.pages_closed.get(self.notebook_data, []):
                         if item["name"] == n: item["name"] = name
-                        break # for item
-                    break # for n, p
         if updated and not self.flags.get("save_underway"):
             self.on_pragma_refresh(reload=True)
             self.update_autocomp()
