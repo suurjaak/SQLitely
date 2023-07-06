@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  25.05.2023
+@modified  06.07.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -60,8 +60,6 @@ IMAGES = {
         "Small icon for remove by type button on start page.",
     "ButtonSaveAs.png":
         "Small icon for save as button on start page.",
-    "ButtonStatistics.png":
-        "Large icon for save statistics button.",
     "ButtonTable.png":
         "Button for create table on data page.",
     "ButtonTrigger.png":

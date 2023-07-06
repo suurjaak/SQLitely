@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.06.2023
+@modified    06.07.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3267,13 +3267,6 @@ class DatabasePage(wx.Panel):
 
         self.Bind(wx.EVT_BUTTON, self.on_checksum_stop, button_checksum_stop)
 
-        button_stats = controls.NoteButton(panel1c, "Export &statistics",
-            note="Save database statistics to file", style=wx.BORDER_RAISED,
-            bmp=images.ButtonStatistics.Bitmap
-        )
-        button_stats.Wrapped = False
-        self.Bind(wx.EVT_BUTTON, self.on_save_statistics, button_stats)
-
         button_fks      = self.button_check_fks       = wx.Button(panel1c, label="Check foreign keys")
         button_check    = self.button_check_integrity = wx.Button(panel1c, label="Check for corruption")
         button_optimize = self.button_optimize        = wx.Button(panel1c, label="Optimize")
@@ -3319,8 +3312,6 @@ class DatabasePage(wx.Panel):
         sizer_info.AddGrowableCol(1, proportion=1)
         sizer_file.Add(sizer_info, proportion=1, border=10, flag=wx.LEFT | wx.GROW)
         sizer_file.AddStretchSpacer()
-        sizer_file.Add(button_stats, border=10, flag=wx.ALIGN_CENTER_HORIZONTAL)
-        sizer_file.AddStretchSpacer()
         sizer_file.Add(sizer_buttons, border=10, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM | wx.GROW)
         sizer1.Add(label_file, border=5, flag=wx.ALL)
         sizer1.Add(panel1c, border=6, proportion=1, flag=wx.TOP | wx.GROW)
@@ -3339,13 +3330,13 @@ class DatabasePage(wx.Panel):
         bmp5 = images.ToolbarNumbered.Bitmap
         bmp6 = images.ToolbarWordWrap.Bitmap
         tb_stats = self.tb_stats = wx.ToolBar(panel_stats,
-                                      style=wx.TB_FLAT | wx.TB_NODIVIDER)
+                                      style=wx.TB_FLAT | wx.TB_NODIVIDER | wx.TB_HORZ_TEXT)
         tb_stats.SetToolBitmapSize(bmp1.Size)
         tb_stats.AddTool(wx.ID_REFRESH, "", bmp1, shortHelp="Refresh statistics")
         tb_stats.AddTool(wx.ID_STOP,    "", bmp2, shortHelp="Stop statistics analysis")
         tb_stats.AddSeparator()
         tb_stats.AddTool(wx.ID_COPY,    "", bmp3, shortHelp="Copy statistics to clipboard as text")
-        tb_stats.AddTool(wx.ID_SAVE,    "", bmp4, shortHelp="Save statistics to file")
+        tb_stats.AddTool(wx.ID_SAVE,    " Save statistics", bmp4, shortHelp="Save statistics to file")
         tb_stats.Realize()
         tb_stats.Bind(wx.EVT_TOOL, self.on_update_statistics, id=wx.ID_REFRESH)
         tb_stats.Bind(wx.EVT_TOOL, self.on_stop_statistics,   id=wx.ID_STOP)
