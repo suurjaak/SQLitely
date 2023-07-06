@@ -256,14 +256,18 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         notebook.AddPage(page, "Databases")
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        sizer_list = wx.BoxSizer(wx.VERTICAL)
+        splitter = wx.SplitterWindow(page, style=wx.BORDER_NONE)
+        splitter.SetMinimumPaneSize(400)
+
+        panel_left = wx.Panel(splitter)
+        panel_left.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_header = wx.BoxSizer(wx.HORIZONTAL)
 
-        label_count = self.label_count = wx.StaticText(page)
-        edit_filter = self.edit_filter = controls.HintedTextCtrl(page, "Filter list",
+        label_count = self.label_count = wx.StaticText(panel_left)
+        edit_filter = self.edit_filter = controls.HintedTextCtrl(panel_left, "Filter list",
                                                                  style=wx.TE_PROCESS_ENTER)
         edit_filter.ToolTip = "Filter database list (%s-F)" % controls.KEYS.NAME_CTRL
-        list_db = self.list_db = controls.SortableUltimateListCtrl(page,
+        list_db = self.list_db = controls.SortableUltimateListCtrl(panel_left,
             agwStyle=wx.LC_REPORT | wx.BORDER_NONE)
         list_db.MinSize = 400, -1 # Maximize-restore would resize width to 100
 
@@ -282,7 +286,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         list_db.SetTopRow(topdata, [0])
         list_db.Select(0)
 
-        panel_right = wx.ScrolledWindow(page)
+        panel_right = wx.ScrolledWindow(splitter)
         panel_right.Sizer = wx.BoxSizer(wx.HORIZONTAL)
         panel_right.SetScrollRate(0, 20)
 
@@ -384,6 +388,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.button_remove.Bind(wx.EVT_BUTTON,    self.on_remove_database)
         self.button_delete.Bind(wx.EVT_BUTTON,    self.on_delete_database)
 
+        splitter.Bind(wx.EVT_SPLITTER_SASH_POS_CHANGED, lambda e: self.list_db.ResetColumnWidths())
+
         panel_main.Sizer.Add(label_main, border=10, flag=wx.ALL)
         panel_main.Sizer.Add((0, 10))
         panel_main.Sizer.Add(self.button_new,    flag=wx.GROW)
@@ -407,10 +413,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         sizer_header.Add(label_count, flag=wx.ALIGN_BOTTOM)
         sizer_header.AddStretchSpacer()
         sizer_header.Add(edit_filter)
-        sizer_list.Add(sizer_header, border=5, flag=wx.BOTTOM | wx.GROW)
-        sizer_list.Add(list_db, proportion=1, flag=wx.GROW)
-        sizer.Add(sizer_list,  border=10, proportion=6, flag=wx.ALL | wx.GROW)
-        sizer.Add(panel_right, border=10, proportion=4, flag=wx.ALL | wx.GROW)
+        panel_left.Sizer.Add(sizer_header, border=5, flag=wx.BOTTOM | wx.RIGHT | wx.GROW)
+        panel_left.Sizer.Add(list_db, border=5, proportion=1, flag=wx.RIGHT | wx.GROW)
+        sizer.Add(splitter, border=10, proportion=1, flag=wx.ALL | wx.GROW)
+        splitter.SplitVertically(panel_left, panel_right, sashPosition=self.Size[0] * 4 // 7)
 
 
     def create_menu(self):

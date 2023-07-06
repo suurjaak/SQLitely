@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.1, 2023-05-23
+2.1, 2023-07-06
 ---------------
 - add user-defined functions to value editor
 - add button panels to data and schema tabs
@@ -12,6 +12,7 @@ CHANGELOG
 - add support for multiple item export into any supported output format
 - add command-line flag --config-file
 - add NULLS FIRST|LAST to SQLite grammar ORDER BY clause
+- add splitter to program main page
 - order database categories as table-view-index-trigger
 - use uniform icons for schema tree items
 - retain schema diagram custom layout on schema change
