@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.05.2023
+@modified    22.07.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -31,10 +31,15 @@ import time
 import types
 import warnings
 
+try: import html.unescape as html_unescape  # Py3
+except ImportError:                         # Py2
+    from six.moves import html_parser
+    html_unescape = html_parser.HTMLParser().unescape
+
 import PIL
 import pytz
 import six
-from six.moves import html_parser, queue, urllib
+from six.moves import queue, urllib
 import wx
 import wx.adv
 import wx.grid
@@ -8080,7 +8085,7 @@ class DataDialog(wx.Dialog):
             v = datetime.datetime.now().isoformat()[:19].replace("T", " ")
             self._SetValue(col, v)
         def on_stamp(event=None):
-            v = datetime.datetime.utcnow().replace(tzinfo=util.UTC).isoformat()
+            v = datetime.datetime.now(util.UTC).isoformat()
             self._SetValue(col, v)
         def on_dialog(event=None):
             ColumnDialog(self, self._gridbase, self._row, col, self._data).ShowModal()
@@ -8736,7 +8741,7 @@ class ColumnDialog(wx.Dialog):
                 elif "htmlescape" == category:
                     value = util.html_escape(value)
                 elif "htmlunescape" == category:
-                    value = html_parser.HTMLParser().unescape(value)
+                    value = html_unescape(value)
                 elif "strip" == category:
                     value = re.sub("\s+", "", value)
                 elif "punctuation" == category:
@@ -8772,7 +8777,7 @@ class ColumnDialog(wx.Dialog):
             def on_datetime(event=None):
                 self._Populate(datetime.datetime.now().isoformat()[:19].replace("T", " "))
             def on_stamp(event=None):
-                self._Populate(datetime.datetime.utcnow().replace(tzinfo=util.UTC).isoformat())
+                self._Populate(datetime.datetime.now(util.UTC).isoformat())
 
             item_null     = wx.MenuItem(menu, -1, "Set &NULL")
             item_default  = wx.MenuItem(menu, -1, "Set D&EFAULT")
@@ -9402,7 +9407,7 @@ class ColumnDialog(wx.Dialog):
         page = wx.Panel(notebook)
 
 
-        EPOCH = datetime.datetime.utcfromtimestamp(0)
+        EPOCH = datetime.datetime.fromtimestamp(0, util.UTC)
         def on_change_part(event):
             if state["ignore_change"]: return
             if isinstance(event.EventObject, wx.adv.CalendarCtrl):
@@ -9516,7 +9521,7 @@ class ColumnDialog(wx.Dialog):
                 if database.Database.get_affinity(self._coldata) in ("INTEGER", "REAL"):
                     state["numeric"] = True
                     dtlabel.Font, tslabel.Font = font_normal, font_bold
-                    try: x = datetime.datetime.utcfromtimestamp(float(value))
+                    try: x = datetime.datetime.fromtimestamp(float(value), util.UTC)
                     except Exception: x = None
                     else:
                         ts = float(value)

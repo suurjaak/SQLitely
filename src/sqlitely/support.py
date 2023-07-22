@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.08.2022
+@modified    12.07.2022
 ------------------------------------------------------------------------------
 """
 import logging
@@ -19,7 +19,12 @@ import ssl
 import sys
 import tempfile
 
-from six.moves import html_parser, urllib
+try: from html import unescape as html_unescape  # Py3
+except ImportError:                              # Py2
+    from six.moves import html_parser
+    html_unescape = html_parser.HTMLParser().unescape
+
+from six.moves import urllib
 import wx
 
 from . lib import controls
@@ -87,7 +92,7 @@ def check_newest_version(callback=None):
                         ul = html[match.end(0):html.find("</ul", match.end(0))]
                         lis = re.findall(r"(<li[^>]*>(.+)</li\s*>)+", ul, re.I)
                         items = [re.sub("<[^>]+>", "", x[1]) for x in lis]
-                        items = list(map(html_parser.HTMLParser().unescape, items))
+                        items = list(map(html_unescape, items))
                         changes = "\n".join("- " + i.strip() for i in items)
                         if changes:
                             title = match.group(1)
