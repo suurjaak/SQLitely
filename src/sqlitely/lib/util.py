@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.05.2023
+@modified    22.07.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -36,6 +36,7 @@ import warnings
 
 from PIL import Image
 import six
+from six.moves import collections_abc
 from six.moves import html_entities
 import pytz
 try: import wx
@@ -912,12 +913,12 @@ def getval(collection, *path, **kwargs):
     result = collection if path else default
     if len(path) == 1 and isinstance(path[0], list): path = path[0]
     for p in path:
-        if isinstance(result, collections.Sequence):  # Iterable with index
+        if isinstance(result, collections_abc.Sequence):  # Iterable with index
             if isinstance(p, six.integer_types) and p < len(result):
                 result = result[p]
             else:
                 result = default
-        elif isinstance(result, collections.Mapping): # Container with lookup
+        elif isinstance(result, collections_abc.Mapping): # Container with lookup
             result = result.get(p, default)
         elif isinstance(p, six.string_types) and hasattr(result, p): # Object attribute
             result = getattr(result, p)
@@ -936,13 +937,13 @@ def setval(collection, value, *path):
     if len(path) == 1 and isinstance(path[0], list): path = path[0]
     ptr = collection
     for p in path[:-1]:
-        if isinstance(ptr, collections.Sequence):  # Iterable with index
+        if isinstance(ptr, collections_abc.Sequence):  # Iterable with index
             if isinstance(p, six.integer_types) and p < len(ptr):
                 ptr = ptr[p]
             else:
                 ptr.append({})
                 ptr = ptr[-1]
-        elif isinstance(ptr, collections.Mapping): # Container with lookup
+        elif isinstance(ptr, collections_abc.Mapping): # Container with lookup
             if p not in ptr: ptr[p] = {}
             ptr = ptr[p]
     ptr[path[-1]] = value
@@ -954,9 +955,9 @@ def walk(data, callback):
     Walks through the collection of nested dicts or lists or tuples, invoking
     callback(child, key, parent) for each element, recursively.
     """
-    if isinstance(data, collections.Iterable) and not isinstance(data, six.string_types):
+    if isinstance(data, collections_abc.Iterable) and not isinstance(data, six.string_types):
         for k, v in enumerate(data):
-            if isinstance(data, collections.Mapping): k, v = v, data[v]
+            if isinstance(data, collections_abc.Mapping): k, v = v, data[v]
             callback(k, v, data)
             walk(v, callback)
 

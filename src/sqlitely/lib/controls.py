@@ -93,7 +93,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    28.05.2023
+@modified    22.07.2023
 ------------------------------------------------------------------------------
 """
 import collections
@@ -125,6 +125,8 @@ import wx.lib.wordwrap
 import wx.stc
 
 
+try: import collections.abc as collections_abc             # Py3
+except ImportError: import collections as collections_abc  # Py3
 try:
     integer_types, string_types, text_type = (int, long), (basestring, ), unicode  # Py2
 except NameError:
@@ -614,9 +616,9 @@ class FormDialog(wx.Dialog):
             Walks through the collection of nested dicts or lists or tuples, invoking
             callback(child) for each element, recursively.
             """
-            if isinstance(x, collections.Iterable) and not isinstance(x, string_types):
+            if isinstance(x, collections_abc.Iterable) and not isinstance(x, string_types):
                 for k, v in enumerate(x):
-                    if isinstance(x, collections.Mapping): k, v = v, x[v]
+                    if isinstance(x, collections_abc.Mapping): k, v = v, x[v]
                     callback(v)
                     walk(v, callback)
 
