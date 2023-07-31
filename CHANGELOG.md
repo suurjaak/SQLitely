@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.1, 2023-07-06
+2.1, 2023-07-31
 ---------------
 - add user-defined functions to value editor
 - add button panels to data and schema tabs
@@ -30,6 +30,7 @@ CHANGELOG
 - fix diagram in statistics HTML export using current view settings
 - fix operating on key columns of BLOB affinity in data grids
 - fix encoding errors in running disk usage analyzer
+- fix escaping special characters for regex in exported HTML search functions
 - fix complex alter ignoring related triggers (SQLite 3.25+ compatibility)
 
 
