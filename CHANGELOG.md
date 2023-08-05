@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.1, 2023-07-31
+2.1, 2023-08-05
 ---------------
 - add user-defined functions to value editor
 - add button panels to data and schema tabs
@@ -21,6 +21,7 @@ CHANGELOG
 - underline matched texts in meta search results
 - include journal file sizes in database size
 - improve compatibility with GTK and Python 3.8+ on Linux.
+- update step, the vendored template library
 - fix loading user-specific configuration file
 - fix schema diagram not loading entity positions from last config
 - fix schema diagram adopting custom layout on clicking an entity

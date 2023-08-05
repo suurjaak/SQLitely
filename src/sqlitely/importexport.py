@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.08.2022
+@modified    05.08.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -203,7 +203,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
                 # Write out data to temporary file first, to populate row count.
                 fh, tmpname = tempfile.mkstemp(prefix="%s.rows." % os.path.basename(filename))
                 tmpfile = open(fh, "wb+")
-                template = step.Template(TEMPLATES["rows"][format],
+                template = step.Template(TEMPLATES["rows"][format], postprocess=convert_lf,
                                          strip=False, escape="html" == format)
                 template.stream(tmpfile, namespace)
 
@@ -222,7 +222,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
 
                 tmpfile.flush(), tmpfile.seek(0)
                 namespace["data_buffer"] = iter(lambda: tmpfile.read(65536), b"")
-                template = step.Template(TEMPLATES["root"][format],
+                template = step.Template(TEMPLATES["root"][format], postprocess=convert_lf,
                                          strip=False, escape="html" == format)
                 template.stream(f, namespace)
                 count = namespace["row_count"]
@@ -396,7 +396,8 @@ def export_data_multiple(filename, format, title, db, category=None, make_iterab
 
             if result and format not in ("csv", "xlsx"):
                 # Produce main export file, combined from partial files
-                template = step.Template(TEMPLATES[format], strip=False, escape="html" == format)
+                template = step.Template(TEMPLATES[format], postprocess=convert_lf,
+                                         strip=False, escape="html" == format)
                 namespace = {
                     "db":       db,
                     "title":    title,
@@ -423,7 +424,7 @@ def export_data_multiple(filename, format, title, db, category=None, make_iterab
 
 def export_sql(filename, db, sql, headers=()):
     """Exports arbitrary SQL to file."""
-    template = step.Template(templates.CREATE_SQL, strip=False)
+    template = step.Template(templates.CREATE_SQL, strip=False, postprocess=convert_lf)
     ns = {"headers": util.tuplefy(headers) if headers else (), "db": db, "sql": sql}
     with open(filename, "wb") as f: template.stream(f, ns)
     return True
@@ -434,7 +435,8 @@ def export_stats(filename, format, db, data, diagram=None):
     TEMPLATES = {"html": templates.DATA_STATISTICS_HTML,
                  "sql":  templates.DATA_STATISTICS_SQL,
                  "txt":  templates.DATA_STATISTICS_TXT}
-    template = step.Template(TEMPLATES[format], strip=False, escape="html" == format)
+    template = step.Template(TEMPLATES[format], postprocess=convert_lf,
+                             strip=False, escape="html" == format)
     ns = {
         "title":  "Database statistics",
         "db":     db,
@@ -552,8 +554,8 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
                 "progress": progress,
                 "buffer":   f,
             }
-            template = step.Template(templates.DUMP_SQL, strip=False)
-            template.stream(f, namespace, unbuffered=True)
+            template = step.Template(templates.DUMP_SQL, strip=False, postprocess=convert_lf)
+            template.stream(f, namespace, buffer_size=0)
             result = None if progress and not progress(done=True) else True
     except Exception as e:
         logger.exception("Error exporting database dump from %s to %s.",
@@ -1388,6 +1390,11 @@ def iter_file_rows(filename, columns, sheet=None):
                         data = yaml.safe_load(yaml.emit(START_STACK + item_stack))
                         del item_stack[:]
                         yield [data.get(x) for x in columns]
+
+
+def convert_lf(s, newline=os.linesep):
+    r"""Returns string with \r \n \r\n linefeeds replaced with given."""
+    return re.sub("(\r(?!\n))|((?<!\r)\n)|(\r\n)", newline, s)
 
 
 

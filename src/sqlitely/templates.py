@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.07.2023
+@modified    05.08.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -131,8 +131,8 @@ from sqlitely import conf, images
     .sqlintro { font-family: monospace; white-space: pre-wrap; }
     .sql { font-family: monospace; white-space: pre-wrap; }
     a.toggle:hover { cursor: pointer; text-decoration: none; }
-    a.toggle::after { content: ".. \\\\25b6"; font-size: 1.2em; }
-    a.toggle.open::after { content: " \\\\25b2"; font-size: 0.7em; }
+    a.toggle::after { content: ".. \\25b6"; font-size: 1.2em; }
+    a.toggle.open::after { content: " \\25b2"; font-size: 0.7em; }
     a.sort { display: block; }
     a.sort:hover { cursor: pointer; text-decoration: none; }
     a.sort::after      { content: ""; display: inline-block; min-width: 6px; position: relative; left: 3px; top: -1px; }
@@ -214,7 +214,7 @@ from sqlitely import conf, images
 
     /** Escapes special characters in a string for RegExp. */
     var escapeRegExp = function(string) {
-      return string.replace(/[\\\\\\^$.|?*+()[{]/g, "\\\\\\$&");
+      return string.replace(/[\\\^$.|?*+()[{]/g, "\\\$&");
     };
 
     var sortfn = function(sort_col, sort_direction, a, b) {
@@ -1941,8 +1941,8 @@ def wrapclass(v):
     div.sql { font-family: monospace; text-align: left; white-space: pre-wrap; word-break: break-all; overflow-wrap: anywhere; }
     a.sort:hover, a.toggle:hover { cursor: pointer; text-decoration: none; }
     a.toggle { display: inline-block; white-space: nowrap; }
-    a.toggle::after { content: " \\\\25b6"; }
-    a.toggle.open::after { content: " \\\\25bc"; }
+    a.toggle::after { content: " \\25b6"; }
+    a.toggle.open::after { content: " \\25bc"; }
     a.toggle.right { display: block; text-align: right; }
     .hidden { display: none; }
     div.toggle.header { text-align: right; }

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    25.05.2023
+@modified    05.08.2023
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -200,6 +200,11 @@ def uni(x, encoding="utf-8"):
     """Convert anything to Unicode, except None."""
     if x is None or isinstance(x, six.text_type): return x
     return six.text_type(str(x), encoding, errors="replace")
+
+
+def collapse_whitespace(s):
+    """Collapse all whitespace into a single space, and strip if between non-alphanumerics."""
+    return re.sub(r"(\W)\s+(\W)", r"\1\2", re.sub(r"\s+", " ", s), re.U)
 
 
 
@@ -1076,12 +1081,12 @@ class Generator(object):
         REPLACE_ORDER = ["Q", "GLUE", "CM", "LF", "PRE", "PAD", "WS"]
         ns = {"Q":    self.quote,   "LF": self.linefeed, "PRE": self.indentation,
               "PAD":  self.padding, "CM": self.comma,    "WS":  self.token,
-              "GLUE": self.glue, "data": data, "root": data,
+              "GLUE": self.glue, "data": data, "root": data, "collapse": collapse_whitespace,
               "Template": step.Template, "templates": templates}
 
         # Generate SQL, using unique tokens for whitespace-sensitive parts,
         # replaced after stripping down whitespace in template result.
-        tpl = step.Template(self.TEMPLATES[category], strip=True, collapse=True)
+        tpl = step.Template(self.TEMPLATES[category], strip=True, postprocess=collapse_whitespace)
         while True:
             self._tokens.clear(); self._tokendata.clear(); self._data = data
             result = tpl.expand(ns)
