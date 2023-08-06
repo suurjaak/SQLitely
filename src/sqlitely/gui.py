@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.07.2023
+@modified    06.08.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -206,10 +206,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 notebook.SetSelection(number)
                 self.on_change_page(None)
 
-        id_close = wx.NewIdRef().Id
+        id_close = controls.NewId()
         accelerators = [(wx.ACCEL_CMD, k, id_close) for k in [wx.WXK_F4]]
         for i in range(9):
-            id_tab = wx.NewIdRef().Id
+            id_tab = controls.NewId()
             accelerators += [(wx.ACCEL_CMD, ord(str(i + 1)), id_tab)]
             notebook.Bind(wx.EVT_MENU, functools.partial(on_tab_hotkey, i), id=id_tab)
 
@@ -1856,7 +1856,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             dlg._button_reset.Show()
             dlg._label_meta.Hide()
             dlg.Size = 640, 390
-            d = wx.Display(self)
+            d = wx.Display(self if six.PY3 else 0)
             dlg.Position = [d.ClientArea[i] + a - b
                             for i, (a, b) in enumerate(zip(d.ClientArea[2:], dlg.Size))]
             self.columndlg = dlg
@@ -4091,7 +4091,7 @@ class DatabasePage(wx.Panel):
             if not notebook: return
             self.reopen_page(notebook, -1)
 
-        id_close, id_reopen = wx.NewIdRef().Id, wx.NewIdRef().Id
+        id_close, id_reopen = controls.NewId(), controls.NewId()
         accelerators = [(wx.ACCEL_CMD,                  ord("W"), id_close),
                         (wx.ACCEL_CMD | wx.ACCEL_SHIFT, ord("T"), id_reopen)]
         notebook.Bind(wx.EVT_MENU, on_close_hotkey,  id=id_close)
@@ -5307,7 +5307,7 @@ class DatabasePage(wx.Panel):
             guibase.status('Searching for "%s" in %s.',
                            text, self.db)
             nb = self.notebook_search
-            data = {"id": wx.NewIdRef().Id, "db": self.db, "text": text,
+            data = {"id": controls.NewId(), "db": self.db, "text": text,
                     "map": {}, "width": nb.Size.width * 5//9, "partial_html": "",
                     "case": conf.SearchCaseSensitive}
             if "meta" == source or conf.SearchInMeta:
@@ -6566,7 +6566,7 @@ class DatabasePage(wx.Panel):
             title = last_search.get("title", "")
             html = last_search.get("content", "")
             info = last_search.get("info")
-            tabid = wx.NewIdRef().Id if 0 != last_search.get("id") else 0
+            tabid = controls.NewId() if 0 != last_search.get("id") else 0
             self.notebook_search.InsertPage(0, html, title, tabid, info)
 
         dopts = conf.SchemaDiagrams.get(self.db.filename) or {}

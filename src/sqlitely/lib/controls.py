@@ -93,7 +93,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    22.07.2023
+@modified    06.08.2023
 ------------------------------------------------------------------------------
 """
 import collections
@@ -144,6 +144,9 @@ BUTTON_MIN_WIDTH = 35 if "linux" in sys.platform else 20
 
 # Multiplier for wx.ComboBox width ~100px ranges
 COMBO_WIDTH_FACTOR = 1.5 if "linux" in sys.platform else 1
+
+# wx.NewId() deprecated from around wxPython 4
+NewId = (lambda: wx.NewIdRef().Id) if hasattr(wx, "NewIdRef") else wx.NewId
 
 
 class KEYS(object):
@@ -805,7 +808,7 @@ class FormDialog(wx.Dialog):
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         label, tb, ctrl = None, None, None
-        accname = "footer_%s" % wx.NewIdRef().Id
+        accname = "footer_%s" % NewId()
 
         if footer.get("label"):
             label = wx.StaticText(panel, label=footer["label"], name=accname + "_label")
@@ -2005,7 +2008,7 @@ class Patch(object):
         STC__StartStyling = wx.stc.StyledTextCtrl.StartStyling
         def StartStyling__Patched(self, *args, **kwargs):
             try: return STC__StartStyling(self, *args, **kwargs)
-            except TypeError: return STC__StartStyling(self, *(args + [255]), **kwargs)
+            except TypeError: return STC__StartStyling(self, *(args + (255, )), **kwargs)
         wx.stc.StyledTextCtrl.StartStyling = StartStyling__Patched
         Patch._PATCHED = True
 
@@ -2329,7 +2332,8 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
             # DoGetBorderSize() appears not implemented under Gtk
             borderw, borderh = (x / 2. for x in self.ManagedChild.GetWindowBorderSize())
         else:
-            while self.ManagedChild.GetLineLength(linesmax + 1) >= 0:
+            truelinesmax = self.ManagedChild.GetNumberOfLines()
+            while self.ManagedChild.GetLineLength(linesmax + 1) >= 0 and linesmax < truelinesmax - 1:
                 linesmax += 1
                 t = self.ManagedChild.GetLineText(linesmax)
                 widthmax = max(widthmax, self.ManagedChild.GetTextExtent(t)[0])
@@ -2476,7 +2480,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         # Default row column formatter function
         frmt = lambda: lambda r, c: "" if r.get(c) is None else text_type(r[c])
         self._formatters = collections.defaultdict(frmt)
-        id_copy = wx.NewIdRef().Id
+        id_copy = NewId()
         entries = [(wx.ACCEL_CMD, x, id_copy) for x in KEYS.INSERT + (ord("C"), )]
         self.SetAcceleratorTable(wx.AcceleratorTable(entries))
         self.Bind(wx.EVT_MENU, self.OnCopy, id=id_copy)
@@ -3522,7 +3526,8 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.EVT_MOUSE_EVENTS,            self.OnMouse)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED,      self.OnSysColourChange)
         self.Bind(wx.stc.EVT_STC_ZOOM,            self.OnZoom)
-        self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste)
+        self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste) \
+        if hasattr(wx.stc, "EVT_STC_CLIPBOARD_PASTE") else None
         self.Bind(wx.stc.EVT_STC_START_DRAG,      lambda e: e.SetString(""))
 
 
@@ -4040,7 +4045,8 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.EVT_MOUSE_EVENTS,            self.OnMouse)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED,      self.OnSysColourChange)
         self.Bind(wx.stc.EVT_STC_ZOOM,            self.OnZoom)
-        self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste)
+        self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste) \
+        if hasattr(wx.stc, "EVT_STC_CLIPBOARD_PASTE") else None
         self.Bind(wx.stc.EVT_STC_START_DRAG,      lambda e: e.SetString(""))
 
 
@@ -4469,7 +4475,7 @@ class JSONTextCtrl(wx.stc.StyledTextCtrl):
     def __init__(self, *args, **kwargs):
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
 
-        self.SetLexer(wx.stc.STC_LEX_JSON)
+        self.SetLexer(wx.stc.STC_LEX_JSON) if hasattr(wx.stc, "STC_LEX_JSON") else None
         self.SetTabWidth(2)
         # Keywords must be lowercase, required by StyledTextCtrl
         self.SetKeyWords(0, u" ".join(self.KEYWORDS).lower())
@@ -4525,6 +4531,7 @@ class JSONTextCtrl(wx.stc.StyledTextCtrl):
         self.StyleSetSpec(wx.stc.STC_STYLE_BRACELIGHT, "fore:%s" % highcolour)
         self.StyleSetSpec(wx.stc.STC_STYLE_BRACEBAD, "fore:#FF0000")
         self.StyleClearAll() # Apply the new default style to all styles
+        if not hasattr(wx.stc, "STC_JSON_DEFAULT"): return # Py2
 
         self.StyleSetSpec(wx.stc.STC_JSON_DEFAULT,   "face:%s" % self.FONT_FACE)
         self.StyleSetSpec(wx.stc.STC_JSON_STRING,    "fore:#FF007F") # "
@@ -4566,6 +4573,8 @@ class JSONTextCtrl(wx.stc.StyledTextCtrl):
 
     def OnUpdateUI(self, evt):
         # check for matching braces
+        if not hasattr(wx.stc, "STC_JSON_OPERATOR"): return # Py2
+
         braceAtCaret = -1
         braceOpposite = -1
         charBefore = None

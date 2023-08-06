@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.07.2023
+@modified    06.08.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1040,9 +1040,12 @@ def to_unicode(value, encoding=None):
     """
     result = value
     if isinstance(result, six.binary_type):
+        encoding = encoding or locale.getpreferredencoding()
         try: result = six.text_type(result, encoding)
         except Exception:
-            result = six.text_type(result, "utf-8", errors="backslashreplace")
+            try: result = six.text_type(result, "utf-8", errors="backslashreplace")
+            except Exception:
+                result = six.text_type(result, "utf-8", errors="ignore")
     elif not isinstance(result, six.text_type):
         try: result = six.text_type(result)
         except Exception: result = repr(result)

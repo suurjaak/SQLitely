@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.07.2023
+@modified    06.08.2023
 ------------------------------------------------------------------------------
 """
 try:
@@ -2062,6 +2062,22 @@ ToolbarForm = PyEmbeddedImage(
     "P/UTVyRJws9qlYblcgnb7baWbNs2DAYDIC4JlBl0u13Y7/fQ7/eh2Wz+mwFxSwee58mi4zjS"
     "jWmaf2ZAtbMAF7hECmMMcB8qTa1W62IGxJFcwzBeOedPtywSuvhmeOvnjySu5FPqB3bvd/4R"
     "YAB0Lucj40EubAAAAABJRU5ErkJggg=="
+)
+
+
+"""Toolbar icon for full screen button in row editor."""
+ToolbarFullScreen = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAdpJ"
+    "REFUOI2dkjtok2EUhp/3+7+oqUibLkGKN4hDQBAEoVSxU6F4gypOXgaHDlapLg6Cg0Pkb4Kj"
+    "ghkEB0EptIPXWkXRQcU1tCiWtFgUqTVNVWwT29/hzz2NQ1848ME55/nOTW48dhPoZXVK4sZj"
+    "3mrlxmOeLaJ2996pQj8d6AZAMoBH18XHVf73yeMAmNqajFE5GZBAEs8S+zFGdT2Y2uQNwQAX"
+    "brz1f5ZBBTvlvqRprcU6WhkgwYjbzcbWIJG2Zu6/mULyy7j74hM7trYSDgUZTRzEqaikNIPR"
+    "+AEArvfvZfj1JOFQkA+f57HWEGlrYY11uHRiFx7i+bVD9QDJ71pAz75tjE1miG5pwcjwcXqO"
+    "9mikFOdVdF4CWFt8+pBAwGKdADJifdM6HGtBQnjglVuomIFBEkaG5MMxZuYWmPiSZXrmF9nf"
+    "OYZeTRS2YorlVgM6zw8jGY5decL4VIZU+gfbN4XYHG4mlZ7l3fg3jlx+BMCes4P1AM+Dzv4h"
+    "Mj8XSX+d59zRnUhCEie7oqTSs3zP/qGjr5xcBQBY9mAxv8QD97A/iQJAEiOJHpaWPWpVd4kA"
+    "HX2DGCOMfEOG9jP3Vgotb6F4243UyG/zf/O3BhJXT/83u4FyC7nb/wCOUrmcBOAjBwAAAABJ"
+    "RU5ErkJggg=="
 )
 
 

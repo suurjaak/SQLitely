@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.07.2023
+@modified    06.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -50,7 +50,8 @@ import wx.lib.newevent
 import wx.lib.resizewidget
 import wx.lib.wordwrap
 import wx.stc
-import wx.svg
+try: import wx.svg
+except ImportError: wx.svg = None
 
 from . lib import controls
 from . lib.controls import ColourManager
@@ -3902,7 +3903,7 @@ class SchemaObjectPage(wx.Panel):
 
     def _AddRowTable(self, path, i, col, insert=False, focus=False):
         """Adds a new row of controls for table columns."""
-        rowkey = wx.NewIdRef().Id
+        rowkey = controls.NewId()
         panel = self._panel_columns
 
         sizer_flags = wx.BoxSizer(wx.HORIZONTAL)
@@ -3992,7 +3993,7 @@ class SchemaObjectPage(wx.Panel):
 
     def _AddRowTableConstraint(self, path, i, cnstr, insert=False, focus=False):
         """Adds a new row of controls for table constraints."""
-        meta, rowkey = self._item.get("meta") or {}, wx.NewIdRef().Id
+        meta, rowkey = self._item.get("meta") or {}, controls.NewId()
         panel = self._panel_constraints
 
         mycolumns = [x["name"] for x in meta.get("columns") or () if x["name"]]
@@ -4130,7 +4131,7 @@ class SchemaObjectPage(wx.Panel):
 
     def _AddRowIndex(self, path, i, col, insert=False, focus=False):
         """Adds a new row of controls for index columns."""
-        meta, rowkey = self._item.get("meta") or {}, wx.NewIdRef().Id
+        meta, rowkey = self._item.get("meta") or {}, controls.NewId()
         table = self._db.schema.get("table", {}).get(meta["table"]) or {} \
                 if meta.get("table") else {}
         tablecols = [x["name"] for x in table.get("columns") or ()]
@@ -4192,7 +4193,7 @@ class SchemaObjectPage(wx.Panel):
 
     def _AddRowTrigger(self, path, i, col, insert=False, focus=False):
         """Adds a new row of controls for trigger columns."""
-        meta, rowkey = self._item.get("meta") or {}, wx.NewIdRef().Id
+        meta, rowkey = self._item.get("meta") or {}, controls.NewId()
         category = "view" if grammar.SQL.INSTEAD_OF == meta.get("upon") else "table"
         table = self._db.schema.get(category, {}).get(meta["table"]) or {} \
                 if meta.get("table") else {}
@@ -5059,7 +5060,7 @@ class SchemaObjectPage(wx.Panel):
             if ptr is None: ptr = parent[p] = {} if i < len(path) - 1 else []
             parent = ptr
         if self._category in ("table", "view") and ["columns"] == path:
-            value = dict(value, __id__=str(wx.NewIdRef().Id))
+            value = dict(value, __id__=str(controls.NewId()))
         ptr.append(copy.deepcopy(value))
 
         self.Freeze()
@@ -7689,7 +7690,7 @@ class DataDialog(wx.Dialog):
         bmp1  = wx.ArtProvider.GetBitmap(wx.ART_GO_BACK,     wx.ART_TOOLBAR, (16, 16))
         bmp2  = wx.ArtProvider.GetBitmap(wx.ART_COPY,        wx.ART_TOOLBAR, (16, 16))
         bmp3  = images.ToolbarRefresh.Bitmap
-        bmp4  = wx.ArtProvider.GetBitmap(wx.ART_FULL_SCREEN, wx.ART_TOOLBAR, (16, 16))
+        bmp4  = images.ToolbarFullScreen.Bitmap
         bmp5  = images.ToolbarColumnForm.Bitmap
         bmp6  = images.ToolbarCommit.Bitmap
         bmp7  = images.ToolbarRollback.Bitmap
@@ -8464,9 +8465,11 @@ class ColumnDialog(wx.Dialog):
         wx.BITMAP_TYPE_PCX:  "PCX",
         wx.BITMAP_TYPE_PNG:  "PNG",
         wx.BITMAP_TYPE_PNM:  "PNM",
-        0xFFFF:              "SVG",
         wx.BITMAP_TYPE_TIFF: "TIFF",
     }
+    if wx.svg: IMAGE_FORMATS.update({
+        0xFFFF:              "SVG",
+    })
 
     # Global controls.CallableManagerDialog instance
     FUNCTION_DIALOG = None
@@ -9779,7 +9782,7 @@ class ColumnDialog(wx.Dialog):
                         img = wx.Image(io.BytesIO(x))
                         if not img: raise Exception()
                     except Exception:
-                        if "<svg" in x: img = load_svg(x)
+                        if "<svg" in x and wx.svg: img = load_svg(x)
                     if img: v = x
             except Exception as e:
                 status.Label = str(e)
@@ -9847,7 +9850,8 @@ class ColumnDialog(wx.Dialog):
         page.Sizer.Add(panel, flag=wx.GROW, proportion=1)
         page.Sizer.Add(sizer_footer, flag=wx.GROW)
 
-        wx.Image.SetDefaultLoadFlags(0) # Avoid error popup
+        if hasattr(wx.Image, "SetDefaultLoadFlags"):
+            wx.Image.SetDefaultLoadFlags(0) # Avoid error popup
         errbmp = wx.NullBitmap
 
         self.Bind(wx.EVT_CHECKBOX, on_toggle_show, cb)
