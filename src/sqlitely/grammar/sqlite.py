@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    05.08.2023
+@modified    07.08.2023
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -172,27 +172,29 @@ def unquote(val):
 
 def format(value, coldata=None):
     """Formats a value for use in an SQL statement like INSERT."""
-    if isinstance(value, six.string_types):
-        success = False
+    result = None
+    if value is None: result = "NULL"
+    elif isinstance(value, six.integer_types + (float, )): result = str(value)
+    elif not isinstance(value, six.string_types): value = str(value)
+
+    if result is None:
         if isinstance(coldata, dict) \
         and isinstance(coldata.get("type"), six.string_types) \
         and "JSON" == coldata["type"].upper():
-            try: result, success = "'%s'" % json.dumps(json.loads(value)), True
+            try: result = "'%s'" % json.dumps(json.loads(value))
             except Exception: pass
 
-        if not success and SAFEBYTE_RGX.search(value):
+        if result is None and SAFEBYTE_RGX.search(value):
             if isinstance(value, six.text_type):
                 try:
                     value = value.encode("latin1")
                 except UnicodeError:
                     value = value.encode("utf-8", errors="backslashreplace")
             result = "X'%s'" % codecs.encode(value, "hex").decode("latin1").upper()
-        elif not success:
+        elif result is None:
             if isinstance(value, six.text_type):
                 value = value.encode("utf-8").decode("latin1")
             result = "'%s'" % value.replace("'", "''")
-    else:
-        result = "NULL" if value is None else str(value)
     return result
 
 
