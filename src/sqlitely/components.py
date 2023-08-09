@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.08.2023
+@modified    09.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -8069,7 +8069,7 @@ class DataDialog(wx.Dialog):
             text = util.to_unicode(coldata["name"])
             mycopy(text, "Copied column name to clipboard")
         def on_copy_sql(event=None):
-            text = "%s = %s" % (grammar.quote(coldata["name"]).encode("utf-8"),
+            text = "%s = %s" % (grammar.quote(coldata["name"]),
                                 grammar.format(self._data[coldata["name"]], coldata))
             mycopy(text, "Copied column UPDATE SQL to clipboard")
         def on_reset(event=None):
@@ -8906,7 +8906,7 @@ class ColumnDialog(wx.Dialog):
                 text = util.to_unicode(self._name)
                 mycopy(text, "Copied %s name to clipboard" % self._collabel)
             def on_copy_sql(event=None):
-                text = "%s = %s" % (grammar.quote(self._name).encode("utf-8"),
+                text = "%s = %s" % (grammar.quote(self._name),
                                     grammar.format(self._value, self._coldata))
                 mycopy(text, "Copied %s UPDATE SQL to clipboard" % self._collabel)
 
