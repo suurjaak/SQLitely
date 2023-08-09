@@ -8086,7 +8086,7 @@ class DataDialog(wx.Dialog):
             v = datetime.datetime.now().isoformat()[:19].replace("T", " ")
             self._SetValue(col, v)
         def on_stamp(event=None):
-            v = datetime.datetime.now(util.UTC).isoformat()
+            v = datetime.datetime.now(pytz.UTC).isoformat()
             self._SetValue(col, v)
         def on_dialog(event=None):
             ColumnDialog(self, self._gridbase, self._row, col, self._data).ShowModal()
@@ -8780,7 +8780,7 @@ class ColumnDialog(wx.Dialog):
             def on_datetime(event=None):
                 self._Populate(datetime.datetime.now().isoformat()[:19].replace("T", " "))
             def on_stamp(event=None):
-                self._Populate(datetime.datetime.now(util.UTC).isoformat())
+                self._Populate(datetime.datetime.now(pytz.UTC).isoformat())
 
             item_null     = wx.MenuItem(menu, -1, "Set &NULL")
             item_default  = wx.MenuItem(menu, -1, "Set D&EFAULT")
@@ -9410,7 +9410,7 @@ class ColumnDialog(wx.Dialog):
         page = wx.Panel(notebook)
 
 
-        EPOCH = datetime.datetime.fromtimestamp(0, util.UTC)
+        EPOCH = datetime.datetime.fromtimestamp(0, pytz.UTC)
         def on_change_part(event):
             if state["ignore_change"]: return
             if isinstance(event.EventObject, wx.adv.CalendarCtrl):
@@ -9524,7 +9524,7 @@ class ColumnDialog(wx.Dialog):
                 if database.Database.get_affinity(self._coldata) in ("INTEGER", "REAL"):
                     state["numeric"] = True
                     dtlabel.Font, tslabel.Font = font_normal, font_bold
-                    try: x = datetime.datetime.fromtimestamp(float(value), util.UTC)
+                    try: x = datetime.datetime.fromtimestamp(float(value), pytz.UTC)
                     except Exception: x = None
                     else:
                         ts = float(value)

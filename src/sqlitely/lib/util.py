@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.08.2023
+@modified    09.08.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -267,20 +267,6 @@ class ProgressBar(threading.Thread):
 
     def stop(self):
         self.is_running = False
-
-
-class tzinfo_utc(datetime.tzinfo):
-    """datetime.tzinfo class representing UTC timezone."""
-    ZERO = datetime.timedelta(0)
-    __reduce__ = object.__reduce__
-
-    def utcoffset(self, dt): return self.ZERO
-    def dst(self, dt):       return self.ZERO
-    def tzname(self, dt):    return "UTC"
-    def __ne__(self, other): return not self.__eq__(other)
-    def __repr__(self):      return "%s()" % self.__class__.__name__
-    def __eq__(self, other): return isinstance(other, self.__class__)
-UTC = tzinfo_utc() # UTC timezone singleton
 
 
 
