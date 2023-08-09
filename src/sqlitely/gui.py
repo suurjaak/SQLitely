@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.08.2023
+@modified    09.08.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -257,7 +257,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         sizer = page.Sizer = wx.BoxSizer(wx.HORIZONTAL)
 
         splitter = wx.SplitterWindow(page, style=wx.BORDER_NONE)
-        splitter.SetMinimumPaneSize(400)
+        splitter.SetMinimumPaneSize(300)
 
         panel_left = wx.Panel(splitter)
         panel_left.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -292,8 +292,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         panel_main   = self.panel_db_main   = wx.Panel(panel_right)
         panel_detail = self.panel_db_detail = wx.Panel(panel_right)
-        panel_main.MinSize   = 400, -1
-        panel_detail.MinSize = 400, -1
+        panel_main.MinSize   = 300, -1
+        panel_detail.MinSize = panel_detail.VirtualSize = 300, -1
         panel_main.Sizer   = wx.BoxSizer(wx.VERTICAL)
         panel_detail.Sizer = wx.BoxSizer(wx.VERTICAL)
 

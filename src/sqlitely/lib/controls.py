@@ -93,7 +93,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    06.08.2023
+@modified    09.08.2023
 ------------------------------------------------------------------------------
 """
 import collections
@@ -1646,14 +1646,12 @@ class NoteButton(wx.Panel, wx.Button):
 
 
     def DoGetBestSize(self):
-        w = 40 if self.Size.width  < 40 else self.Size.width
-        h = 40 if self.Size.height < 40 else self.Size.height
-        if not self._wrapped and (self._extent_label or self._extent_note):
-            w = 20 + max(ext[0] for ext in (self._extent_label, self._extent_note) if ext)
+        w, h = 10, 10
+        if self._extent_label or self._extent_note:
+            w += 10 + max(ext[0] for ext in (self._extent_label, self._extent_note) if ext)
         if self._bmp:
-            bw, bh = (x + 20 for x in self._bmp.Size)
-            w = bw if w < bw else (w + bw)
-            h = bh if h < bh else (h + bh)
+            bw, bh = (x + 10 for x in self._bmp.Size)
+            w, h = w + bw, h + bh
         if self._extent_label:
             h1 = 10 + self._bmp.Size.height + 10
             h2 = 10 + self._extent_label[1] + 10 + self._extent_note[1] + 10
