@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.08.2023
+@modified    10.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -11216,13 +11216,14 @@ class ImportWizard(wx.adv.Wizard):
             self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
 
 
-        def Reset(self):
+        def Reset(self, keepfile=False):
             """Sets page to clean state."""
-            self.filename = ""
-            self.filedata.clear()
             self.use_header = True
 
-            self.button_file.SetValue("", callBack=False)
+            if not keepfile:
+                self.filename = ""
+                self.filedata.clear()
+                self.button_file.SetValue(u"", callBack=False)
             self.label_info.Label  = ""
             self.label_count.Label = ""
             self.cb_all.Value = self.cb_header.Value = True
@@ -11240,7 +11241,7 @@ class ImportWizard(wx.adv.Wizard):
 
 
         def OnFile(self, event=None, filename=None):
-            """Handler for choosing spreadsheet, loads file data."""
+            """Handler for choosing input file, loads file data."""
             filename = filename or event.String
             filename = filename and os.path.abspath(filename)
             if not filename or not os.path.exists(filename): return
@@ -11249,7 +11250,9 @@ class ImportWizard(wx.adv.Wizard):
                 modified = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
                 if size == self.filedata["size"] and modified == self.filedata["modified"]:
                     return
-            self.Reset()
+            self.filename = ""
+            self.filedata.clear()
+            self.Reset(keepfile=True)
 
             for c in self.gauge, self.label_gauge: c.Show()
             self.gauge.Pulse()
@@ -11488,7 +11491,12 @@ class ImportWizard(wx.adv.Wizard):
                 modified = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
                 if size == self.filedata.get("size") and modified == self.filedata.get("modified"):
                     return
-            self.Reset()
+            self.filename     = ""
+            self.add_pk       = True
+            self.file_existed = False
+            self.filedata.clear()
+            self.label_finfo.Label = ""
+            self.Reset(keepfile=True)
 
             filename = os.path.abspath(filename)
             try:
