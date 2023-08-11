@@ -1072,8 +1072,8 @@ def get_import_file_data(filename, progress=None):
     elif is_json:
         rows, columns, buffer, started = 0, {}, "", False
         decoder = json.JSONDecoder(object_pairs_hook=collections.OrderedDict)
-        with open(filename, "rbU") as f:
-            for chunk in iter(functools.partial(f.read, 2**16), b""):
+        with open(filename) as f:
+            for chunk in iter(functools.partial(f.read, 2**16), ""):
                 buffer += chunk
                 if not started: # Strip line comments and list start from beginning
                     buffer = re.sub("^//[^\n]*$", "", buffer.lstrip(), flags=re.M).lstrip()
@@ -1338,8 +1338,8 @@ def iter_file_rows(filename, columns, sheet=None):
     elif is_json:
         started, buffer = False, ""
         decoder = json.JSONDecoder(object_pairs_hook=collections.OrderedDict)
-        with open(filename, "rbU") as f:
-            for chunk in iter(functools.partial(f.read, 2**16), b""):
+        with open(filename) as f:
+            for chunk in iter(functools.partial(f.read, 2**16), ""):
                 buffer += chunk
                 if not started: # Strip line comments and list start from beginning
                     buffer = re.sub("^//[^\n]*$", "", buffer.lstrip(), flags=re.M).lstrip()
