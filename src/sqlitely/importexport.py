@@ -1173,7 +1173,7 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
     @param   filename       file path to import from
     @param   db             database.Database instance
     @param   tables         tables to import to and sheets to import from, as [(table, sheet)]
-                            (sheet is None if file is CSV/JSON/YAML)
+                            (sheet can be None if file is CSV/JSON/YAML)
     @param   tablecolumns   mapping of file columns to table columns,
                             as {table: OrderedDict(file column key: table columm name)},
                             where key is column index if spreadsheet else column name

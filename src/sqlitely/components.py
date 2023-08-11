@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.08.2023
+@modified    11.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -11713,6 +11713,7 @@ class ImportWizard(wx.adv.Wizard):
         """Starts import."""
 
         itemnames = sum((list(x) for x in self.db.schema.values()), [])
+        has_names = self.page1.filedata["format"] in ("json", "yaml")
         for i, sheet in enumerate(self.page1.filedata["sheets"]):
             if not sheet["rows"] or not sheet["columns"] \
             or not self.page1.listbox.IsChecked(i):
@@ -11720,7 +11721,7 @@ class ImportWizard(wx.adv.Wizard):
             item = sheet.copy()
             table = sheet["name"].strip()
             if self.page1.filedata["format"] in ("csv", "json", "yaml"):
-                table = os.path.split(os.path.basename(self.page1.filename))[0].strip()
+                table = os.path.splitext(os.path.basename(self.page1.filename))[0].strip()
                 if not table: table = "import_data"
             if not self.db.is_valid_name(table=table):
                 table = "import_data_" + table
@@ -11729,7 +11730,8 @@ class ImportWizard(wx.adv.Wizard):
 
             colnames = item["tcolumns"] = []
             for j, col in enumerate(sheet["columns"]):
-                if not col or not self.page1.use_header: col = util.make_spreadsheet_column(j)
+                if not col or not self.page1.use_header and not has_names:
+                    col = util.make_spreadsheet_column(j)
                 col = util.make_unique(col, colnames)
                 colnames.append(col)
             if self.page2.add_pk:
@@ -11739,12 +11741,10 @@ class ImportWizard(wx.adv.Wizard):
 
         self.index = 1
 
-        has_names = self.page1.filedata["format"] in ("json", "yaml")
         tables  = [(x["tname"], x["name"]) for _, x in sorted(self.items.items())]
         pks     = {x["tname"]:  x["pk"]    for x in self.items.values() if "pk" in x}
         columns = {x["tname"]:  OrderedDict(
-            (a if has_names else i, b) for i, (a, b) in
-            enumerate(zip(item["columns"], item["tcolumns"]))
+            (a if has_names else i, b) for i, (a, b) in enumerate(zip(x["columns"], x["tcolumns"]))
         ) for x in self.items.values()}
         callable = functools.partial(importexport.import_data, self.page1.filename,
                                      self.db, tables, columns, pks,

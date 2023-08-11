@@ -34,6 +34,8 @@ CHANGELOG
 - fix encoding errors in running disk usage analyzer
 - fix escaping special characters for regex in exported HTML search functions
 - fix complex alter ignoring related triggers (SQLite 3.25+ compatibility)
+- fix JSON/YAML import not using column names from data
+- fix spreadsheet import using same columns for all sheets
 
 
 2.0, 2022-04-02
