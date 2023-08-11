@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.1, 2023-08-05
+2.1, 2023-08-11
 ---------------
 - add user-defined functions to value editor
 - add button panels to data and schema tabs
@@ -17,6 +17,7 @@ CHANGELOG
 - use uniform icons for schema tree items
 - retain schema diagram custom layout on schema change
 - support index and trigger keywords in meta search
+- support importing structured data from YAML to database
 - omit comments from JSON export
 - underline matched texts in meta search results
 - include journal file sizes in database size

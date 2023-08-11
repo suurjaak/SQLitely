@@ -15,6 +15,7 @@ from collections import defaultdict, OrderedDict
 import copy
 import datetime
 import itertools
+import json
 import logging
 import math
 import os
@@ -2335,3 +2336,8 @@ def get_size(filepath, journalsizes=None):
              for f in ["%s-%s" % (filepath, n)] if os.path.isfile(f)}
     if isinstance(journalsizes, dict): journalsizes.clear(), journalsizes.update(sizes)
     return os.path.getsize(filepath) + sum(sizes.values())
+
+
+def register_types():
+    """Registers adapters to auto-convert Python types given in query parameters."""
+    for t in (dict, list, tuple): sqlite3.register_adapter(t, json.dumps)

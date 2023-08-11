@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.08.2023
+@modified    11.08.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1124,7 +1124,7 @@ def get_import_file_data(filename, progress=None):
     elif is_yaml:
         extname = "yaml"
         rows, columns = 0, {}
-        with open(filename, "rbU") as f:
+        with open(filename, "rbU" if six.PY2 else "rb") as f:
             parser = yaml.parse(f, yaml.SafeLoader)
             stack, collections_stack, mappings_stack, mapping_items = [], [], [], []
             for event in parser:
@@ -1147,10 +1147,11 @@ def get_import_file_data(filename, progress=None):
                     if not mappings_stack and len(collections_stack) < 2:  # Root level dictionary
                         rows += 1
                         if not columns:
-                            keys = mapping_items[::2]
+                            keys = [x for x in mapping_items if isinstance(x, yaml.ScalarEvent)]
                             data = yaml.safe_load(yaml.emit(stack))
                             if isinstance(data, list): data = data[0]
-                            columns = collections.OrderedDict((k.value, data[k.value]) for k in keys)
+                            columns = collections.OrderedDict((k.value, data[k.value])
+                                                              for k in keys if k.value in data)
                 if columns and size > conf.MaxImportFilesizeForCount:
                     rows = -1
                     break # for chunk
@@ -1369,7 +1370,7 @@ def iter_file_rows(filename, columns, sheet=None):
                     yield [row[i] if i < len(row) else None for i in columns]
         finally: wb and wb.close()
     elif is_yaml:
-        with open(filename, "rbU") as f:
+        with open(filename, "rbU" if six.PY2 else "rb") as f:
             parser = yaml.parse(f, yaml.SafeLoader)
             START_STACK = [yaml.StreamStartEvent(), yaml.DocumentStartEvent()]
             item_stack, collections_stack, mappings_stack = [], [], []

@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.07.2022
+@modified    11.08.2022
 ------------------------------------------------------------------------------
 """
 import argparse
@@ -28,6 +28,7 @@ import wx
 
 from . lib import util
 from . import conf
+from . import database
 from . import guibase
 from . import gui
 
@@ -191,6 +192,7 @@ def run():
         arguments.FILE = list(map(util.longpath, arguments.FILE))
 
     conf.load(arguments.config_file)
+    database.register_types()
     run_gui(arguments.FILE)
 
 
