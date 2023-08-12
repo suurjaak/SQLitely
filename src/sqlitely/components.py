@@ -9163,7 +9163,7 @@ class ColumnDialog(wx.Dialog):
             value = None
             try: value = json.dumps(json.loads(stc.Text), indent=indent)
             except Exception: pass
-            if value and value != stc.Text: update(value)
+            if value and value != stc.Text: update(value, propagate=True)
 
         def on_format(event):
             menu = wx.Menu()
@@ -9188,11 +9188,11 @@ class ColumnDialog(wx.Dialog):
         def on_undo(*a, **kw): stc.Undo()
         def on_redo(*a, **kw): stc.Redo()
 
-        def update(value, reset=False):
+        def update(value, reset=False, propagate=False):
             state["changing"] = True
             stc.Text = "" if value is None else util.to_unicode(value)
             if reset: stc.EmptyUndoBuffer()
-            validate(stc.Text, propagate=False)
+            validate(stc.Text, propagate=propagate)
             wx.CallLater(1, state.update, {"changing": False})
 
 
