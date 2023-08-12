@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.08.2023
+@modified    12.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -11575,10 +11575,10 @@ class ImportWizard(wx.adv.Wizard):
                  pos=wx.DefaultPosition, style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER):
         super(ImportWizard, self).__init__(parent, id, title, bitmap, pos, style)
 
-        self.items  = {} # [sheet index: {name, columns, rows, tname, tcolumns, ?pk}]
-        self.index  = -1 # Current sheet being imported
-        self.db     = None
-        self.worker = workers.WorkerThread()
+        self.items   = {}   # [sheet index: {name, columns, rows, tname, tcolumns, ?pk}]
+        self.started = None # None: pristine, True: import started, False: other
+        self.db      = None
+        self.worker  = workers.WorkerThread()
         self.dlg_cancel = None # controls.MessageDialog if any
 
         page1 = self.page1 = self.InputPage(self)
@@ -11601,7 +11601,7 @@ class ImportWizard(wx.adv.Wizard):
     def RunWizard(self):
         """Runs the wizard from the first page."""
         self.items.clear()
-        self.index      = -1
+        self.started = None
         self.dlg_cancel = None
         self.page1.Reset()
         self.page2.Reset()
@@ -11611,7 +11611,7 @@ class ImportWizard(wx.adv.Wizard):
     def OnDrop(self, files):
         """Handler for drag-dropping files onto wizard, loads file in current page."""
         files = [files] if isinstance(files, six.string_types) else files
-        if files and self.index < 0: self.CurrentPage.OnFile(filename=files[0])
+        if files and not self.started: self.CurrentPage.OnFile(filename=files[0])
 
 
     def OnOpenData(self, event):
@@ -11625,9 +11625,9 @@ class ImportWizard(wx.adv.Wizard):
         if self.CurrentPage is self.page1 and not self.page1.filename:
             self.page1.worker.stop()
             return # Nothing set yet, close wizard
-        if self.index >= 0 and not self.page2.importing:
+        if self.started is not None and not self.page2.importing:
             return # Import finished
-        if self.index < 0:
+        if self.started is None:
             if wx.OK != wx.MessageBox(
                 "Are you sure you want to cancel data import?",
                 conf.Title, wx.OK | wx.CANCEL
@@ -11690,7 +11690,7 @@ class ImportWizard(wx.adv.Wizard):
             self.page1.UpdateFile()
             if self.items:
                 self.items.clear()
-                self.index = -1
+                self.started = False
                 self.page2.Reset(keepfile=True)
         elif event.Page is self.page2 and event.Direction and self.page2.filename:
             if self.page2.progress: return
@@ -11739,7 +11739,6 @@ class ImportWizard(wx.adv.Wizard):
 
             self.items[i] = item
 
-        self.index = 1
 
         tables  = [(x["tname"], x["name"]) for _, x in sorted(self.items.items())]
         pks     = {x["tname"]:  x["pk"]    for x in self.items.values() if "pk" in x}
@@ -11752,6 +11751,7 @@ class ImportWizard(wx.adv.Wizard):
         self.db.close()
         try: not self.page2.file_existed and os.unlink(self.db.filename)
         except Exception: pass
+        self.started = True
         self.worker.work(callable)
 
         if len(self.items) > 1:
@@ -11821,6 +11821,7 @@ class ImportWizard(wx.adv.Wizard):
 
             self.page2.gauge.ContainingSizer.Layout()
             wx.YieldIfNeeded()
+        if not self: return
 
         if error and done: # Top-level error in import, nothing to cancel, all rolled back
             finished = True
@@ -11899,7 +11900,7 @@ class ImportWizard(wx.adv.Wizard):
                 if success and errors_total: info += "\nFailed to insert %s (%s %s)." % (
                     util.plural("row", errors_total),
                     util.plural("table", len([1 for x in self.page2.progress.values() if x.get("errorcount")])),
-                    ", ".join(fmt_entity(x["tname"], limit=0)
+                    ", ".join(fmt_entity(x["table"], limit=0)
                               for x in self.page2.progress.values() if x.get("errorcount"))
                 )
                 if not success:
