@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.08.2023
+@modified    13.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -2885,7 +2885,9 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         if item: self._item = copy.deepcopy(item)
         else:
             self._db.populate_schema(category=self._category, name=self.Name, parse=True)
-            self._item = self._db.get_category(self._category, self.Name)
+            item = self._db.get_category(self._category, self.Name)
+            if not item: return
+            self._item = item
 
         scrollpos = list(map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL]))
         cursorpos = [self._grid.GridCursorRow, self._grid.GridCursorCol]
