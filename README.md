@@ -94,6 +94,7 @@ and the following 3rd-party Python packages:
 
 - ANTLR Python runtime (https://antlr.org)
 - appdirs (https://pypi.org/project/appdirs)
+- chardet (https://pypi.org/project/chardet)
 - openpyxl (https://pypi.org/project/openpyxl)
 - Pillow (https://pypi.org/project/Pillow)
 - pyparsing (https://pypi.org/project/pyparsing)
@@ -107,7 +108,7 @@ and the following 3rd-party Python packages:
 All dependencies can be installed by running `pip install -r requirements.txt`
 in SQLitely source distribution folder.
 
-If openpyxl or pyparsing or PyYAML or xlrd or XlsxWriter are not available,
+If chardet or openpyxl or pyparsing or PyYAML or xlrd or XlsxWriter are not available,
 the program will function regardless, only with lesser service - 
 like lacking Excel import-export or full search syntax.
 

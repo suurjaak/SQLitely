@@ -80,6 +80,8 @@ Attribution
 Built using the following open-source software:
 
 - ANTLR Python runtime (https://antlr.org)
+- appdirs (https://pypi.org/project/appdirs)
+- chardet (https://pypi.org/project/chardet)
 - openpyxl (https://pypi.org/project/openpyxl)
 - Pillow (https://pypi.org/project/Pillow)
 - pyparsing (https://pypi.org/project/pyparsing)

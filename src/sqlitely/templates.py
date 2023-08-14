@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.08.2023
+@modified    13.08.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1256,6 +1256,8 @@ under the MIT License.
       <a href="https://www.antlr.org/"><font color="{{ conf.LinkColour }}">antlr.org</font></a></li>
   <li>appdirs,
       <a href="https://pypi.org/project/appdirs/"><font color="{{ conf.LinkColour }}">pypi.org/project/appdirs</font></a></li>
+  <li>chardet,
+      <a href="https://pypi.org/project/chardet/"><font color="{{ conf.LinkColour }}">pypi.org/project/chardet</font></a></li>
   <li>openpyxl,
       <a href="https://pypi.org/project/openpyxl"><font color="{{ conf.LinkColour }}">
           pypi.org/project/openpyxl</font></a></li>
