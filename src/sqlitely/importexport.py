@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.08.2023
+@modified    14.08.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -18,7 +18,6 @@ import copy
 import csv
 import datetime
 import functools
-import itertools
 import json
 import logging
 import os
@@ -30,6 +29,8 @@ import warnings
 # ImageFont for calculating column widths in Excel export, not required.
 try: from PIL import ImageFont
 except ImportError: ImageFont = None
+try: import chardet
+except ImportError: chardet = None
 try: import openpyxl
 except ImportError: openpyxl = None
 try: import yaml
@@ -654,7 +655,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                 if progress and not progress(name=name, error=err):
                     result = None
                     break # for category, name
-                else: continue # for category, name
+                continue # for category, name
 
             try:
                 # Create table or view structure
@@ -674,7 +675,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                     if progress and not progress(name=name, error=err):
                         result = None
                         break # for category, name
-                    else: continue # for category, name
+                    continue # for category, name
                 db.execute(sql), actionsqls.append(sql)
                 if not data or "table" != category: exporteds.add(name)
                 allnames2[name2] = category
@@ -1048,26 +1049,19 @@ def get_import_file_data(filename, progress=None):
         (extname == x for x in ("csv", "json", "xls", "xlsx"))
     is_yaml = extname in YAML_EXTS
     if is_csv:
-        with open(filename, "rbU") as f:
-            firstline = next(f, "")
-
-            if firstline.startswith("\xFF\xFE"): # Unicode little endian header
-                try:
-                    firstline = firstline.decode("utf-16") # GMail CSVs can be in UTF-16
-                except UnicodeDecodeError:
-                    firstline = firstline[2:].replace("\x00", "")
-                else: # CSV has trouble with Unicode: turn back to str
-                    firstline = firstline.encode("latin1", errors="xmlcharrefreplace")
-            iterable = itertools.chain([firstline], f)
-            csvfile = csv.reader(iterable, csv.Sniffer().sniff(firstline, ",;\t"))
-            if progress and not progress(): return None
-            rows, columns = -1, next(csvfile)
-            if not columns: rows = 0
-            elif 0 < size <= conf.MaxImportFilesizeForCount:
-                rows = 1 if firstline else 0
-                for _ in csvfile:
-                    rows += 1
-                    if progress and not progress(): return None
+        rows, columns = 0, []
+        with csv_reader(filename) as f:
+            iterer = enumerate(f)
+            for i, row in iterer:
+                if row: # Skip any initial blank rows
+                    rows, columns = 1, row
+                    break # for i, row
+                if progress and not i % 100 and not progress(): break # for i, row
+            if rows and size > conf.MaxImportFilesizeForCount: rows = -1
+            elif rows and size:
+                for i, row in iterer:
+                    rows += bool(row)
+                    if progress and not i % 100 and not progress(): break # for i, row
         sheets.append({"rows": rows, "columns": columns, "name": "<no name>"})
     elif is_json:
         rows, columns, buffer, started = 0, {}, "", False
@@ -1321,19 +1315,8 @@ def iter_file_rows(filename, columns, sheet=None):
     is_xlsx = filename.lower().endswith(".xlsx")
     is_yaml = any(n.endswith("." + x) for n in [filename.lower()] for x in YAML_EXTS)
     if is_csv:
-        with open(filename, "rbU") as f:
-            firstline = next(f, "")
-
-            if firstline.startswith("\xFF\xFE"): # Unicode little endian header
-                try:
-                    firstline = firstline.decode("utf-16") # GMail CSVs can be in UTF-16
-                except UnicodeDecodeError:
-                    firstline = firstline[2:].replace("\x00", "")
-                else: # CSV has trouble with Unicode: turn back to string
-                    firstline = firstline.encode("latin1", errors="xmlcharrefreplace")
-            iterable = itertools.chain([firstline], f)
-            csvfile = csv.reader(iterable, csv.Sniffer().sniff(firstline, ",;\t"))
-            for row in csvfile:
+        with csv_reader(filename) as f:
+            for row in f:
                 yield [row[i] if i < len(row) else None for i in columns]
     elif is_json:
         started, buffer = False, ""
@@ -1398,9 +1381,89 @@ def convert_lf(s, newline=os.linesep):
     return re.sub("(\r(?!\n))|((?<!\r)\n)|(\r\n)", newline, s)
 
 
+class csv_reader(object):
+    """
+    Convenience wrapper for csv.reader, with Python2/3 compatibility and encoding/dialect detection.
+
+    Usable as a context manager.
+    """
+
+    def __init__(self, filename, peek_size=65536):
+        self.filename = filename
+        self.encoding = None
+        self.dialect  = None
+        self._file    = None
+        self._reader  = None
+        self._peek    = peek_size
+
+        self._detect()
+
+
+    def _detect(self):
+        """Auto-detects file character encoding and CSV dialect."""
+        encoding, dialect = None, csv.excel
+        with open(self.filename, "rb") as f:
+            preview = f.read(self._peek)
+            if   preview.startswith(b"\xFE\xFF"): encoding = "utf-16be"
+            elif preview.startswith(b"\xFF\xFE"): encoding = "utf-16le"
+            elif chardet: encoding = chardet.detect_all(preview)[0]["encoding"]
+            if "ascii" == encoding: encoding = "utf-8" # Failsafe: ASCII as UTF-8 is valid anyway
+
+            if "utf-16" in (encoding or "").lower() and len(preview) / 2: preview += b"\x00"
+            try: dialect = csv.Sniffer().sniff(preview.decode(encoding or "utf-8"), ",;\t")
+            except UnicodeError: # chardet is not very reliable, try UTF-8 as fallback
+                try: encoding, dialect = "utf-8", csv.Sniffer().sniff(preview.decode("utf-8"), ",;\t")
+                except Exception: dialect = csv.excel # Try default as fallback
+
+            if six.PY2: # Sniffer in Py2 sets delimiters as Unicode but reader raises error on them
+                for k, v in vars(dialect).items():
+                    if isinstance(v, six.text_type) and not k.startswith("_"):
+                        setattr(dialect, k, v.encode())
+        self.encoding, self.dialect = encoding, dialect
+
+
+    def open(self):
+        """Opens file if not already open."""
+        if not self._file:
+            self._file   = codecs.open(self.filename, encoding=self.encoding)
+            self._reader = csv.reader(self._reencoder() if six.PY2 else self._file, self.dialect)
+
+
+    def _reencoder(self):
+        """Yields lines from file re-encoded as UTF-8; Py2 workaround."""
+        if "utf-16" in (self.encoding or "").lower(): # Strip byte order mark if any
+            line = next(self._file)
+            if line.startswith((u"\uFEFF", u"\uFFFE")): line = line[1:]
+            yield line.encode("utf-8")
+        for line in self._file: yield line.encode("utf-8")
+
+
+    def close(self):
+        """Closes file if open."""
+        if self._file:
+            f, self._file, self._reader = self._file, None, None
+            f.close()
+
+
+    def __enter__(self):
+        """Context manager entry, opens file if not already open, returns self."""
+        self.open()
+        return self
+
+
+    def __exit__(self, exc_type, exc_val, exc_trace):
+        """Context manager exit, closes file if open."""
+        self.close()
+        return exc_type is None
+
+
+    def __iter__(self):
+        """Yields rows from CSV file as lists of column values."""
+        for x in self._reader: yield x
+
 
 class csv_writer(object):
-    """Convenience wrapper for csv.Writer, with Python2/3 compatbility."""
+    """Convenience wrapper for csv.writer, with Python2/3 compatbility."""
 
     def __init__(self, file_or_name):
         if isinstance(file_or_name, six.string_types):

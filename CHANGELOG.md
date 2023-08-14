@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.1, 2023-08-11
+2.1, 2023-08-14
 ---------------
 - add user-defined functions to value editor
 - add button panels to data and schema tabs
@@ -13,6 +13,7 @@ CHANGELOG
 - add command-line flag --config-file
 - add NULLS FIRST|LAST to SQLite grammar ORDER BY clause
 - add splitter to program main page
+- add file encoding detection in CSV import, improve CSV dialect detection
 - order database categories as table-view-index-trigger
 - use uniform icons for schema tree items
 - retain schema diagram custom layout on schema change
