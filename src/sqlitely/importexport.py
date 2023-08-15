@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.08.2023
+@modified    15.08.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1071,7 +1071,8 @@ def get_import_file_data(filename, progress=None):
                 buffer += chunk
                 if not started: # Strip line comments and list start from beginning
                     buffer = re.sub("^//[^\n]*$", "", buffer.lstrip(), flags=re.M).lstrip()
-                    if buffer[:1] == "[": buffer, started = buffer[1:].lstrip(), True
+                    if buffer.startswith("["): buffer, started = buffer[1:].lstrip(), True
+                    else: started = buffer.startswith("{") # Support files containing a single dict
                 while started and buffer:
                     if progress and not progress(): return None
                     # Strip whitespace and interleaving commas from between dicts
@@ -1326,7 +1327,8 @@ def iter_file_rows(filename, columns, sheet=None):
                 buffer += chunk
                 if not started: # Strip line comments and list start from beginning
                     buffer = re.sub("^//[^\n]*$", "", buffer.lstrip(), flags=re.M).lstrip()
-                    if buffer[:1] == "[": buffer, started = buffer[1:].lstrip(), True
+                    if buffer.startswith("["): buffer, started = buffer[1:].lstrip(), True
+                    else: started = buffer.startswith("{") # Support files containing a single dict
                 while started and buffer:
                     # Strip whitespace and interleaving commas from between dicts
                     buffer = re.sub(r"^\s*[,]?\s*", "", buffer)
