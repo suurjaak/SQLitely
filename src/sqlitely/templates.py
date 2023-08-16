@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.08.2023
+@modified    16.08.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1408,7 +1408,7 @@ except ImportError:
 %if not pyparsing:
 <b><font color="red">Search syntax currently limited:</font></b>&nbsp;&nbsp;pyparsing not installed.<br /><br /><br />
 %endif
-{{ conf.Title }} supports a simple syntax for searching the database:<br /><br />
+{{ conf.Title }} supports a simple query syntax for searching the database:<br /><br />
 <table><tr><td width="500">
   <table border="0" cellpadding="5" cellspacing="1" bgcolor="{{ conf.HelpBorderColour }}"
    valign="top" width="500">
@@ -1565,28 +1565,29 @@ except ImportError:
   <b><font size="3">Examples</font></b><br /><br />
 
   <ul>
-    <li>search for "domain.com" in columns named "url":
+    <li>search for "domain.com" in columns where name contains "url":
         <br /><br />
         <font color="{{ conf.HelpCodeColour }}">
         <code>domain.com column:url</code></font><br />
     </li>
-    <li>search for "foo bar" up to 2011:<br /><br />
+    <li>search for "foo bar" from rows where date column values predate 2012:<br /><br />
         <font color="{{ conf.HelpCodeColour }}"><code>"foo bar" date:..2011</code></font>
         <br />
     </li>
-    <li>search for either "John" and "my side" or "Stark" and "your side":
+    <li>search for either "john" and "my side" or "stark" and "your side":
         <br /><br />
         <font color="{{ conf.HelpCodeColour }}">
         <code>(john "my side") OR (stark "your side")</code></font><br />
     </li>
-    <li>search for either "birthday" or "cake" in 2012,
-        except from June to August:<br /><br />
+    <li>search for either "birthday" or "cake" from columns where column name contains "message",
+        except where table name contains "log":<br /><br />
         <font color="{{ conf.HelpCodeColour }}">
-        <code>birthday OR cake date:2012 -date:2012-06..2012-08</code>
+        <code>birthday OR cake column:message -table:log</code>
         </font><br />
     </li>
     <li>search for "TPS report" but not "my TPS report"
-        on the first day of the month in 2012:
+        from rows where date column values are
+        the first day of the month in 2012:
         <br /><br />
         <font color="{{ conf.HelpCodeColour }}">
         <code>"tps report" -"my tps report" date:2012-*-1</code>
