@@ -1544,7 +1544,7 @@ except ImportError:
     </td>
     <td bgcolor="{{ conf.BgColour }}">
       <br /><br />
-      To find rows from specific time periods (where source has DATE/DATETIME columns), use the keyword
+      To find rows from specific time periods (where source has DATE/DATETIME/TIMESTAMP columns), use the keyword
       <font color="{{ conf.HelpCodeColour }}"><code>date:period</code></font> or
       <font color="{{ conf.HelpCodeColour }}"><code>date:periodstart..periodend</code></font>.
       For the latter, either start or end can be omitted.<br /><br />

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Parses a Google-like search grammar into SQL for querying a database.
+Parses a simple query grammar into SQL for querying a database.
 
 - words can consist of any non-whitespace characters including all Unicode,
   excluding round brackets and quotes ()"
@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.08.2022
+@modified    16.08.2023
 """
 import calendar
 import collections
@@ -268,7 +268,7 @@ class SearchQueryParser(object):
             if not keyword.endswith("date"): continue # Only dates go into SQL
 
             datecols = [c for c in (item or {}).get("columns", [])
-                if c.get("type") in ("DATE", "DATETIME")
+                if c.get("type") in ("DATE", "DATETIME", "TIMESTAMP")
                 and (not keywords.get("column")  or     match_kw( "column", c))
                 and (not keywords.get("-column") or not match_kw("-column", c))
             ]
