@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.08.2023
+@modified    17.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -7753,8 +7753,9 @@ class DataDialog(wx.Dialog):
             edit.SetMargins(5, -1)
             self._edits[coldata["name"]] = edit
             if resizable:
-                _, (ch, bh) = zip(edit.GetTextExtent("X"), edit.DoGetBorderSize())
-                if "posix" == os.name: bh = edit.GetWindowBorderSize()[1] // 2.
+                _, (ch, bh) = zip(edit.GetTextExtent("X"),
+                                  getattr(edit, "DoGetBorderSize", edit.GetWindowBorderSize)())
+                if not hasattr(edit, "DoGetBorderSize"): bh //= 2.
                 edit.Size = edit.MinSize = (-1, ch + 2 * bh)
                 rw = controls.ResizeWidget(panel, direction=wx.VERTICAL)
                 rw.SetManagedChild(edit)

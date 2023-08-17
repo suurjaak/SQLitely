@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    25.05.2023
+@modified    17.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -409,7 +409,7 @@ class SchemaPlacement(object):
         self._colour_dragfg = Colour(None)
         self._colour_dragbg = Colour(None)
 
-        self._measurewindow = wx.Window() if wx else None
+        self._measurer = wx.MemoryDC() if wx else None
 
         self._font      = self.MakeFont(self.FONT_FACE, self.FONT_SIZE)
         self._font_bold = self.MakeFont(self.FONT_FACE, self.FONT_SIZE, bold=True)
@@ -1624,7 +1624,7 @@ class SchemaPlacement(object):
         """
         font = font or self._font
         if wx and isinstance(font, wx.Font):
-            func, args = self._measurewindow.GetFullTextExtent, [text, font]
+            func, args = self._measurer.GetFullTextExtent, [text, font]
         else:
             func, args = font.getsize, [text]
         extent = util.memoize(func, *args, __key__="GetFullTextExtent")
