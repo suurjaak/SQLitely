@@ -93,7 +93,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    15.08.2023
+@modified    18.08.2023
 ------------------------------------------------------------------------------
 """
 import collections
@@ -5844,6 +5844,29 @@ def is_long_long(value):
     """Returns whether value is integer larger than 64 bits."""
     return isinstance(value, integer_types) and not (-2**63 <= value < 2**63)
 
+
+def set_dialog_filter(dialog, idx=-1, ext=None, exts=()):
+    """
+    Sets filter index in FileDialog, replaces extension in current filename.
+
+    Smooths over issue in Linux where setting filter index
+    retains previous extension in default filename.
+
+    @param   dialog      FileDialog instance
+    @param   idx         index to set
+    @param   ext         alternative to idx: file extension to set index at.
+                         If exts not given, tries to detect index from dialog wildcard.
+    @param   exts        list of file extensions to get index for `ext` from
+    """
+    # Wildcard is like "JSON data (*.json)|*.json|YAML data (*.yaml)|*.yaml|"
+    exts = exts or [x[2:] for x in dialog.Wildcard.split("|")[1::2] if x.startswith("*.")]
+    idx = exts.index(ext) if ext and ext in exts else idx
+    if idx >= 0:
+        dialog.SetFilterIndex(idx)
+        ext = exts[idx] if not ext and idx < len(exts) else ext or ""
+        base, extnow = os.path.splitext(dialog.Filename)
+        if extnow != "." + ext:
+            dialog.Filename = "%s.%s" % (base, ext)
 
 
 CallableManagerEvent, EVT_CALLABLE_MANAGER = wx.lib.newevent.NewCommandEvent()

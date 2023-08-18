@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.08.2023
+@modified    18.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -2097,8 +2097,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         title = "SQL query"
         self._dialog_export.Filename = util.safe_filename(title)
-        if conf.LastExportType in importexport.EXPORT_EXTS:
-            self._dialog_export.SetFilterIndex(importexport.EXPORT_EXTS.index(conf.LastExportType))
+        controls.set_dialog_filter(self._dialog_export, ext=conf.LastExportType,
+                                   exts=importexport.EXPORT_EXTS)
         if wx.ID_OK != self._dialog_export.ShowModal(): return
 
         filename = controls.get_dialog_path(self._dialog_export)
@@ -2736,8 +2736,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         title = "%s %s" % (self._category.capitalize(),
                            grammar.quote(self._item["name"], force=True))
         self._dialog_export.Filename = util.safe_filename(title)
-        if conf.LastExportType in importexport.EXPORT_EXTS:
-            self._dialog_export.SetFilterIndex(importexport.EXPORT_EXTS.index(conf.LastExportType))
+        controls.set_dialog_filter(self._dialog_export, ext=conf.LastExportType,
+                                   exts=importexport.EXPORT_EXTS)
         if wx.ID_OK != self._dialog_export.ShowModal(): return
 
         filename = controls.get_dialog_path(self._dialog_export)
@@ -9709,7 +9709,7 @@ class ColumnDialog(wx.Dialog):
                 style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT |
                       wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
             )
-            if filteridx >= 0: dlg.SetFilterIndex(filteridx)
+            controls.set_dialog_filter(dlg, filteridx, exts=fmts)
             if wx.ID_OK != dlg.ShowModal(): return
 
             filename = controls.get_dialog_path(dlg)
@@ -9976,7 +9976,7 @@ class ColumnDialog(wx.Dialog):
 
     def _OnLoad(self, event, name, handler=None):
         """Handler for loading view value from file."""
-        wildcard, filteridx = "All files|*.*", -1
+        wildcard, filteridx, fmts = "All files|*.*", -1, ()
         if "image" == name:
             fmts = sorted([x.lower() for x in self.IMAGE_FORMATS.values()])
             wildcard = "All images ({0})|{0}|".format(";".join("*." + x for x in fmts)) + \
@@ -9986,7 +9986,7 @@ class ColumnDialog(wx.Dialog):
         dlg = wx.FileDialog(self, message="Open", defaultFile="", wildcard=wildcard,
             style=wx.FD_FILE_MUST_EXIST | wx.FD_OPEN | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
-        if filteridx >= 0: dlg.SetFilterIndex(filteridx)
+        controls.set_dialog_filter(dlg, filteridx, exts=fmts)
         if wx.ID_OK != dlg.ShowModal(): return
         filename = dlg.GetPath()
         if handler: handler(filename, propagate=True)
@@ -10143,11 +10143,11 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                                         for x in a)
         self._dlg_save = wx.FileDialog(self, message="Save diagram as", wildcard=wildcarder(FMTS),
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
-        self._dlg_save.SetFilterIndex(FMTS.index("PNG") if "PNG" in FMTS else 0)
+        controls.set_dialog_filter(self._dlg_save, FMTS.index("PNG") if "PNG" in FMTS else 0)
         BMPFMTS = sorted(x for x in self.EXPORT_FORMATS.values() if "SVG" != x)
         self._dlg_savebmp = wx.FileDialog(self, message="Save diagram as", wildcard=wildcarder(BMPFMTS),
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
-        self._dlg_savebmp.SetFilterIndex(FMTS.index("PNG") if "PNG" in FMTS else 0)
+        controls.set_dialog_filter(self._dlg_savebmp, FMTS.index("PNG") if "PNG" in FMTS else 0)
 
         self._worker_graph = workers.WorkerThread()
         self._worker_bmp = workers.WorkerThread()

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.08.2023
+@modified    18.08.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5558,8 +5558,7 @@ class DatabasePage(wx.Panel):
             style=wx.FD_OVERWRITE_PROMPT | wx.FD_SAVE |
                   wx.FD_CHANGE_DIR | wx.RESIZE_BORDER
         )
-        if conf.LastExportType in importexport.EXPORT_EXTS:
-            dialog.SetFilterIndex(importexport.EXPORT_EXTS.index(conf.LastExportType))
+        controls.set_dialog_filter(dialog, ext=conf.LastExportType, exts=importexport.EXPORT_EXTS)
         if wx.ID_OK != dialog.ShowModal(): return
 
         wx.YieldIfNeeded() # Allow dialog to disappear
@@ -6120,8 +6119,7 @@ class DatabasePage(wx.Panel):
         else:
             dialog = self.dialog_savefile_ow
             dialog.Filename = "Filename will be ignored"
-        if conf.LastExportType in importexport.EXPORT_EXTS:
-            dialog.SetFilterIndex(importexport.EXPORT_EXTS.index(conf.LastExportType))
+        controls.set_dialog_filter(dialog, ext=conf.LastExportType, exts=importexport.EXPORT_EXTS)
         if wx.ID_OK != dialog.ShowModal(): return
 
         wx.YieldIfNeeded() # Allow dialog to disappear
