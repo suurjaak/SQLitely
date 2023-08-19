@@ -16,6 +16,9 @@ Stand-alone GUI components for wx:
 - ColourManager(object):
   Updates managed component colours on Windows system colour change.
 
+- FileBrowseButton(wx.lib.filebrowsebutton.FileBrowseButton):
+  FileBrowseButton using a cached file dialog.
+
 - FileDrop(wx.FileDropTarget):
   A simple file drag-and-drop handler.
 
@@ -93,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    18.08.2023
+@modified    19.08.2023
 ------------------------------------------------------------------------------
 """
 import collections
@@ -117,6 +120,7 @@ try: # ShapedButton requires PIL, might not be installed
 except Exception: pass
 import wx.lib.agw.ultimatelistctrl
 import wx.lib.embeddedimage
+import wx.lib.filebrowsebutton
 import wx.lib.gizmos
 import wx.lib.mixins.listctrl
 import wx.lib.newevent
@@ -476,6 +480,33 @@ class ColourManager(object):
 
         stc.CallTipSetBackground(faces['calltipbg'])
         stc.CallTipSetForeground(faces['calltipfg'])
+
+
+
+class FileBrowseButton(wx.lib.filebrowsebutton.FileBrowseButton):
+    """FileBrowseButton using a cached file dialog."""
+
+    def __init__ (self, parent, *args, **kwargs):
+        super(FileBrowseButton, self).__init__(parent, *args, **kwargs)
+        self.dialog = None
+
+    def OnBrowse (self, event=None):
+        """Opens file dialog, forwards selection to callback, if any."""
+        self.dialog = self.dialog or wx.FileDialog(self, message=self.dialogTitle, 
+                                                   wildcard=self.fileMask, style=self.fileMode)
+
+        dlg, current = self.dialog, self.GetValue()
+        if current != get_dialog_path(dlg):
+            root, tail = os.path.split(current)
+            if os.path.isdir(current):
+                dlg.Directory, dlg.Filename = current, ""
+            elif os.path.isdir(root):
+                dlg.Directory, dlg.Filename = root, tail
+            else:
+                dlg.Directory, dlg.Filename = self.startDirectory, ""
+
+        if dlg.ShowModal() == wx.ID_OK:
+            self.SetValue(get_dialog_path(dlg))
 
 
 

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.08.2023
+@modified    19.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -44,7 +44,6 @@ import wx
 import wx.adv
 import wx.grid
 import wx.lib
-import wx.lib.filebrowsebutton
 import wx.lib.mixins.listctrl
 import wx.lib.newevent
 import wx.lib.resizewidget
@@ -11172,7 +11171,7 @@ class ImportWizard(wx.adv.Wizard):
             self.use_header = True
             self.worker = workers.WorkerThread(self.OnWorkerRead)
 
-            filebutton = self.button_file = wx.lib.filebrowsebutton.FileBrowseButton(
+            filebutton = self.button_file = controls.FileBrowseButton(
                             self, labelText="Source file:",
                             buttonText="B&rowse", size=(500, -1),
                             changeCallback=self.OnFile, fileMask=importexport.IMPORT_WILDCARD,
@@ -11405,7 +11404,7 @@ class ImportWizard(wx.adv.Wizard):
 
             exts = ";".join("*" + x for x in conf.DBExtensions)
             wildcard = "SQLite database (%s)|%s|All files|*.*" % (exts, exts)
-            filebutton = self.button_file = wx.lib.filebrowsebutton.FileBrowseButton(
+            filebutton = self.button_file = controls.FileBrowseButton(
                             self, labelText="Target file:", buttonText="B&rowse",
                             dialogTitle="Choose existing or create new database",
                             size=(500, -1), changeCallback=self.OnFile, fileMask=wildcard,
