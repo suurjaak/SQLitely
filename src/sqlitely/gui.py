@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.08.2023
+@modified    21.08.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5033,7 +5033,7 @@ class DatabasePage(wx.Panel):
                     menu_types = wx.Menu()
                     item_choices = menu.AppendSubMenu(menu_types, label)
                     item_choices.Enable(schemaflags[category])
-                    for i, typelabel in enumerate(["To &file", "To a sing&le file"]):
+                    for i, typelabel in enumerate(["To &file", "To a &single file"]):
                         item = wx.MenuItem(menu_types, -1, typelabel)
                         if i:
                             handler = functools.partial(self.on_export_multiitem, category)
@@ -7194,7 +7194,7 @@ class DatabasePage(wx.Panel):
         elif "category" == data.get("type"): # Category list
             item_copy = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
             item_file = wx.MenuItem(menu, -1, "Export all %s to &file" % util.plural(data["category"]))
-            item_file_multi = wx.MenuItem(menu, -1, "Export all %s to sing&le file" % util.plural(data["category"]))
+            item_file_multi = wx.MenuItem(menu, -1, "Export all %s to &single file" % util.plural(data["category"]))
 
             menu.Append(item_copy)
 
