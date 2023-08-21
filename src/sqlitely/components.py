@@ -10066,7 +10066,7 @@ class ColumnDialog(wx.Dialog):
 
         def on_call(item, evt):
             """Handler for invoking a user function with current value, sets result as new value."""
-            args = self._value, copy.deepcopy(self._coldata), self._rowdata, self
+            args = self._getters["simple"](), copy.deepcopy(self._coldata), self._rowdata, self
             logger.info("Invoking user function '%s(..)' in value editor.", item["name"])
             arity = util.get_arity(item["target"])
             value = item["target"](*args[:None if arity < 0 else arity])
