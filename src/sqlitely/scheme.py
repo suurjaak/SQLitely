@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    17.08.2023
+@modified    21.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -694,8 +694,8 @@ class SchemaPlacement(object):
         for o in self._objs.values():
             opts = self._db.schema[o["type"]].get(o["name"])
             if opts:
-                if opts.get("size_total") is not None:
-                    o["size_total"] = opts["size_total"]
+                for key in ("count", "size_total"):
+                    if opts.get(key) is not None: o[key] = opts[key]
                 o["stats"] = self.MakeItemStatistics(opts)
 
 
