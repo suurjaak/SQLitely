@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.08.2023
+@modified    21.08.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -105,6 +105,22 @@ from sqlitely import conf, images
     table.body_table.multiple > tbody > tr:nth-child(2) > td {
       border-radius: 0 0 10px 10px;
     }
+    table.body_table:first-child div.title {
+      display: flex;
+      justify-content: space-between;
+    }
+    ol.title {
+      min-width: 200px;
+      width: fit-content;
+    }
+    ol.title li > div {
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+    }
+    ol.title li > div > span {
+      font-weight: normal;
+    }
 %endif
     table.content_table {
       empty-cells: show;
@@ -187,11 +203,21 @@ from sqlitely import conf, images
     };
 
     var onToggle = function(a, id1, id2) {
-        a.classList.toggle('open');
-        document.getElementById(id1).classList.toggle('hidden');
-        id2 && document.getElementById(id2).classList.toggle('hidden');
+      a.classList.toggle('open');
+      document.getElementById(id1).classList.toggle('hidden');
+      id2 && document.getElementById(id2).classList.toggle('hidden');
     };
 
+%if get("multiple"):
+    var onToggleAll = function(a) {
+      a.classList.toggle('open');
+      var on = !a.classList.contains('open');
+      document.querySelectorAll('table.header_table a.toggle.down').forEach(function(elem) {
+          if (on != !elem.classList.contains('open')) elem.click();
+      });
+    };
+
+%endif
     var doSearch = function(table_id) {
       var words = String(search_state[table_id].text).split(/\s/g).filter(Boolean);
       var regexes = words.map(function(word) { return new RegExp(escapeRegExp(word), "i"); });
@@ -280,11 +306,19 @@ _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 
 <table class="body_table">
 <tr><td>
-  <div class="title">{{! "<br />".join(util.tuplefy(title)) }}</div><br />
+  <div class="title">
+    {{! "<br />".join(util.tuplefy(title)) }}
+    <span class="toggle header">
+      <a class="toggle down open" title="Toggle all rows opened or closed" onclick="onToggleAll(this)">Toggle all</a>
+    </span>
+  </div><br />
   Source: <b>{{ db }}</b>{{ " (%s)" % dbsize if dbsize else "" }}.<br />
   <ol class="title">
 %for item in files.values():
-    <li><a href="#{{ "item__%s" % hash(util.tuplefy(item["title"])) }}" title="{{ item["title"] }} content">{{ item["title"] }}</a></li>
+    <li><div>
+        <a href="#{{ "item__%s" % hash(util.tuplefy(item["title"])) }}" title="{{ item["title"] }} content">{{ item["title"] }}</a>
+        <span>{{ util.plural("row", item["count"], sep=",") }}</span>
+    </div></li>
 %endfor
   </ol>
 </td></tr></table>
