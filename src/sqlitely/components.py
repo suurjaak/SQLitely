@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.08.2023
+@modified    21.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10132,10 +10132,13 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         self._layout.SetFonts("Verdana",
                               ("Open Sans", 9, conf.FontDiagramFile, conf.FontDiagramBoldFile))
 
-        self._dragpos     = None # (x, y) of last drag event
-        self._enabled     = True
+        self._enabled  = True
+        self._dragpos  = None  # (x, y) of last drag event, in viewport coodinates
+        self._movepos  = None  # (x, y) of last canvas drag event, in window coordinates
+        self._movecnvs = None  # True if canvas has been dragged in ongoing right-click event
         self._tooltip_last  = ()   # (type, name, tip)
         self._tooltip_timer = None # wx.Timer for setting delayed tooltip on hover
+
 
         FMTS = sorted(self.EXPORT_FORMATS.values())
         wildcarder = lambda a: "|".join("%s image (*.%s)|*.%s" % (x, x.lower(), x.lower())
@@ -10545,7 +10548,9 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
     def OpenContextMenu(self, position=None):
         """Opens context menu, for focused schema item if any."""
-        if not self._enabled or not self._page: return
+        if not self or not self._enabled or not self._page: return
+        moved, self._movecnvs = self._movecnvs, None
+        if moved is not None: return
         menu = wx.Menu()
 
         def cmd(*args):
@@ -10823,6 +10828,38 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         self._worker_graph.work(func)
 
 
+    def _UpdateSelection(self, item=None):
+        """Updates selected items, redraws if necessary."""
+        fullbounds, sels, sels0 = wx.Rect(), self._layout.Selection, self._layout.Selection
+        modkey_down = controls.get_key_state(wx.WXK_SHIFT) or controls.get_key_state(wx.WXK_COMMAND)
+        if item:
+            if modkey_down:
+                if item["name"] in sels0: self._layout.SelectItem(item["name"], False)
+                else: self._layout.SelectItem(item["name"])
+            else:
+                if item["name"] not in sels0: self._layout.Selection = []
+                self._layout.SelectItem(item["name"])
+            sels = [n for n in self._layout.Selection if n != item["name"]] + [item["name"]]
+        elif not modkey_down:
+            sels = self._layout.Selection = []
+
+        for myname in sels if sels != sels0 else ():
+            o = self._layout.GetItem(myname)
+            bounds = self._layout.GetObjectBounds(myname)
+            fullbounds.Union(bounds)
+            if set(sels0) == set(sels): continue # for myname
+
+            if myname in sels:
+                self._layout.ChangeOrder(myname, -1)
+            if not self._layout.ShowLines: # No need to redraw everything
+                self.RecordItem(o["name"])
+
+        if not self._layout.ShowLines:
+            fullbounds.Inflate(2 * self._layout.BRADIUS, 2 * self._layout.BRADIUS)
+            self.RefreshRect(fullbounds, eraseBackground=False)
+        elif set(sels0) != set(sels): self.Redraw()
+
+
     def _UpdateColours(self, defaults=False):
         """
         Adjusts shadow and drag and gradient colours according to system theme.
@@ -10898,49 +10935,41 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             if not tip: self.ToolTip = tip
             else: self._tooltip_timer = wx.CallLater(self.TOOLTIP_DELAY, self._SetToolTip, tip)
 
-        if event.LeftDown() or event.RightDown() or event.LeftDClick():
+        if event.LeftDown() or event.LeftDClick() or event.RightDown():
             event.Skip()
-            self._dragpos = x, y
+            if event.RightDown(): self._movepos = event.Position # Start canvas drag
+            else: self._dragpos = x, y # Start item/selection drag
             if item and event.LeftDown() and 1 == len(self._layout.Selection) \
             and item["name"] in self._layout.Selection \
             and not (controls.get_key_state(wx.WXK_SHIFT) or
                      controls.get_key_state(wx.WXK_COMMAND)): return
 
-            fullbounds, sels0 = wx.Rect(), self._layout.Selection
-            if item:
-                if controls.get_key_state(wx.WXK_SHIFT) or controls.get_key_state(wx.WXK_COMMAND):
-                    if item["name"] in sels0: self._layout.SelectItem(item["name"], False)
-                    else: self._layout.SelectItem(item["name"])
-                else:
-                    if item["name"] not in sels0: self._layout.Selection = []
-                    self._layout.SelectItem(item["name"])
-            else:
-                self._layout.Selection = []
-
-
-            sels = self._layout.Selection
-            forder = [n for n in sels0 if n not in sels] + sels
-            for myname in forder:
-                o = self._layout.GetItem(myname)
-                bounds = self._layout.GetObjectBounds(myname)
-                fullbounds.Union(bounds)
-                if set(sels0) == set(sels): continue # for myname
-
-                if myname in sels:
-                    self._layout.ChangeOrder(myname, -1)
-                if not self._layout.ShowLines: # No need to redraw everything
-                    self.RecordItem(o["name"])
-
-            if not self._layout.ShowLines:
-                fullbounds.Inflate(2 * self._layout.BRADIUS, 2 * self._layout.BRADIUS)
-                self.RefreshRect(fullbounds, eraseBackground=False)
-            elif set(sels0) != set(sels): self.Redraw()
-
-            if   event.RightDown():  self.OpenContextMenu(event.Position)
-            elif event.LeftDClick():
+            self._UpdateSelection(item)
+            self._movecnvs = False if event.RightDown() else None
+            if event.LeftDClick():
                 if item and self._page:
-                    self._page.handle_command("schema", o["type"], o["name"])
+                    self._page.handle_command("schema", item["type"], item["name"])
 
+        elif self._movepos and (event.Dragging() or event.RightUp()):
+            event.Skip()
+            if event.Dragging() and "win" in sys.platform:
+                # Windows produces intermediary events with a large jump when out of bounds
+                if not wx.Rect(self.Size).Contains(event.Position) \
+                and any(abs(v) > 50 for v in event.Position - self._movepos): return
+
+            dx, dy = (a - b for a, b in zip(event.Position, self._movepos))
+            sx, sy = self.GetScrollPos(wx.HORIZONTAL), self.GetScrollPos(wx.VERTICAL)
+            if dx or dy: self.Scroll(sx - dx, sy - dy)
+
+            self._movepos = None if event.RightUp() else event.Position
+            moved, self._movecnvs = self._movecnvs, event.Dragging()
+            if event.RightUp() and not moved:
+                self._UpdateSelection(item)
+                # Clear flag for opening context menu: event already fired on RightDown in Linux
+                if "linux" in sys.platform: self._movecnvs = None
+                wx.CallAfter(self.OpenContextMenu, event.Position)
+            if event.Dragging() and not self.HasCapture(): self.CaptureMouse()
+            if event.RightUp() and self.HasCapture(): self.ReleaseMouse()
 
         elif event.Dragging() or event.LeftUp():
             event.Skip()
@@ -11138,7 +11167,8 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
     def _OnScroll(self, event):
         """Handler for scroll, scrolls by SCROLL_STEP if single line scroll."""
-        if event.EventType in (wx.wxEVT_SCROLLWIN_LINEUP, wx.wxEVT_SCROLLWIN_LINEDOWN):
+        if wx.GetMouseState().RightIsDown(): pass # Dragging canvas with cursor out of bounds
+        elif event.EventType in (wx.wxEVT_SCROLLWIN_LINEUP, wx.wxEVT_SCROLLWIN_LINEDOWN):
             delta = (0, self.SCROLL_STEP) if wx.VERTICAL == event.Orientation else \
                     (self.SCROLL_STEP, 0)
             if wx.wxEVT_SCROLLWIN_LINEUP == event.EventType:
