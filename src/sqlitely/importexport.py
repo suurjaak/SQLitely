@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.08.2023
+@modified    21.08.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1355,6 +1355,8 @@ def iter_file_rows(filename, columns, sheet=None):
                     yield [row[i] if i < len(row) else None for i in columns]
         finally: wb and wb.close()
     elif is_yaml:
+        # Keep structures nested in values as YAML strings in database
+        cast = lambda x: yaml.safe_dump(x) if isinstance(x, (dict, list)) else x
         with open(filename, "rbU" if six.PY2 else "rb") as f:
             parser = yaml.parse(f, yaml.SafeLoader)
             START_STACK = [yaml.StreamStartEvent(), yaml.DocumentStartEvent()]
@@ -1375,7 +1377,7 @@ def iter_file_rows(filename, columns, sheet=None):
                     if not mappings_stack and len(collections_stack) < 2:  # Root level dictionary
                         data = yaml.safe_load(yaml.emit(START_STACK + item_stack))
                         del item_stack[:]
-                        yield [data.get(x) for x in columns]
+                        yield [cast(data.get(x)) for x in columns]
 
 
 def convert_lf(s, newline=os.linesep):
