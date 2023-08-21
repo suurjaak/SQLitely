@@ -6598,6 +6598,7 @@ class ImportDialog(wx.Dialog):
         sizer_header  = wx.BoxSizer(wx.HORIZONTAL)
         sizer_footer  = wx.BoxSizer(wx.VERTICAL)
         sizer_buttons = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_tbutton = wx.BoxSizer(wx.HORIZONTAL)
 
         sizer_b1     = wx.BoxSizer(wx.VERTICAL)
         sizer_b2     = wx.BoxSizer(wx.VERTICAL)
@@ -6672,9 +6673,11 @@ class ImportDialog(wx.Dialog):
         sizer_p1.Add(0, 0)
         sizer_p1.Add(check_header, border=5, flag=wx.RIGHT | wx.TOP | wx.BOTTOM | wx.GROW)
 
+        sizer_tbutton.Add((-1, button_table.Size[1]))
+        sizer_tbutton.Add(button_table)
         sizer_p2.Add(label_table,  border=10, flag=wx.GROW)
         sizer_p2.Add(combo_table,  border=10, flag=wx.GROW)
-        sizer_p2.Add(button_table, border=5, flag=wx.TOP | wx.BOTTOM | wx.ALIGN_RIGHT)
+        sizer_p2.Add(sizer_tbutton, border=5, flag=wx.TOP | wx.BOTTOM | wx.ALIGN_RIGHT)
 
         sizer_b1.Add(button_up1)
         sizer_b1.Add(button_down1)
@@ -7007,7 +7010,7 @@ class ImportDialog(wx.Dialog):
         if not indexes2: return
 
         indexes2 = sorted(indexes2)
-        visible = (indexes2[0] if index2 <= indexes2[0] else indexes2[-1]) + \
+        visible = (indexes2[0] if index2 is None or index2 <= indexes2[0] else indexes2[-1]) + \
                   (2 if skip else -2 if skip is False else 0)
         if visible > len(cc) - 3: visible = len(cc) + 3
         for l in self._l1, self._l2: l.EnsureVisible(min(visible, l.ItemCount - 1))
@@ -7188,12 +7191,6 @@ class ImportDialog(wx.Dialog):
         if lock: return wx.MessageBox("%s, cannot import." % lock,
                                       conf.Title, wx.OK | wx.ICON_WARNING)
 
-        if wx.YES != controls.YesNoMessageBox(
-            "Start import into %stable %s?" %
-            ("new " if self._table.get("new") else "", fmt_entity(self._table["name"])),
-            conf.Title, wx.ICON_INFORMATION
-        ): return
-
         self._importing = True
         self._progress.clear()
         SKIP = (self._gauge, self._info_gauge, self._info_file,
@@ -7247,6 +7244,7 @@ class ImportDialog(wx.Dialog):
         self._progress.update(kwargs)
         VARS = "count", "errorcount", "error", "index", "done"
         count, errorcount, error, index, done = (kwargs.get(x) for x in VARS)
+        aborted = False
 
         if count is not None:
             total = self._sheet["rows"]
@@ -7273,13 +7271,16 @@ class ImportDialog(wx.Dialog):
             )
             dlg.SetYesNoCancelLabels("&Abort", "Abort and &rollback", "&Ignore errors")
             res = dlg.ShowModal()
-            if wx.ID_CANCEL != res:
+            if wx.ID_CANCEL != res: # Ignore is handled on job side
+                aborted = True
                 self._importing = False if wx.ID_YES == res else None
+                error = "%s\n\nAborted further import%s." % (error,
+                        "" if wx.ID_YES == res else ", rolled back changes to database")
 
-        if done:
+        if done or aborted:
             success = self._importing
             if success: self._importing = False
-            if success is not None: self._PostEvent(count=True, parse=self._has_new)
+            if success is not None: self._PostEvent(count=bool(count), parse=self._has_new)
             SHOW = (self._button_restart, )
             HIDE = (self._button_ok, self._button_reset)
             if not isinstance(self.Parent, DataObjectPage): SHOW += (self._button_open, )
@@ -7293,8 +7294,10 @@ class ImportDialog(wx.Dialog):
             elif self._button_open.Shown: self._button_open.SetFocus()
             else: self._button_cancel.SetFocus()
 
-            if error: msg = "Error on data import:\n\n%s" % error
-            else: msg = "Data import %s.\n\n%s inserted into %stable %s.%s%s" % (
+            if error: msg, icon = "Error on data import:\n\n%s" % error, wx.ICON_ERROR
+            elif count and not errorcount: msg, icon = None, None
+            else:
+                msg, icon = "Data import %s.\n\n%s inserted into %stable %s.%s%s" % (
                 "complete" if success else "cancelled",
                 util.plural("row", count),
                 "new " if self._table.get("new") else "" ,
@@ -7302,9 +7305,8 @@ class ImportDialog(wx.Dialog):
                 ("\n%s failed." % util.plural("row", self._progress["errorcount"]))
                 if self._progress.get("errorcount") else "",
                 ("\n\nAll changes rolled back." if success is None else ""),
-            )
-            icon = wx.ICON_ERROR if error else wx.ICON_INFORMATION if success else wx.ICON_WARNING
-            wx.MessageBox(msg, conf.Title, wx.OK | icon)
+            ), wx.ICON_WARNING
+            wx.MessageBox(msg, conf.Title, wx.OK | icon) if msg else wx.Bell()
 
         if callable(callback): callback(self._importing)
 
