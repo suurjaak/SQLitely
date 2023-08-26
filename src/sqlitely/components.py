@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.08.2023
+@modified    25.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10833,33 +10833,29 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
     def _UpdateSelection(self, item=None):
         """Updates selected items, redraws if necessary."""
         fullbounds, sels, sels0 = wx.Rect(), self._layout.Selection, self._layout.Selection
-        modkey_down = controls.get_key_state(wx.WXK_SHIFT) or controls.get_key_state(wx.WXK_COMMAND)
+        shift, ctrl = (controls.get_key_state(x) for x in (wx.WXK_SHIFT, wx.WXK_COMMAND))
         if item:
-            if modkey_down:
-                if item["name"] in sels0: self._layout.SelectItem(item["name"], False)
-                else: self._layout.SelectItem(item["name"])
+            if not shift and ctrl and item["name"] in sels0:
+                self._layout.SelectItem(item["name"], False)
+                sels = self._layout.Selection
             else:
-                if item["name"] not in sels0: self._layout.Selection = []
+                if not shift and not ctrl and item["name"] not in sels0: self._layout.Selection = []
                 self._layout.SelectItem(item["name"])
-            sels = [n for n in self._layout.Selection if n != item["name"]] + [item["name"]]
-        elif not modkey_down:
+                self._layout.ChangeOrder(item["name"], -1)
+                sels = [n for n in self._layout.Selection if n != item["name"]] + [item["name"]]
+        elif not shift and not ctrl:
             sels = self._layout.Selection = []
 
         for myname in sels if sels != sels0 else ():
             o = self._layout.GetItem(myname)
             bounds = self._layout.GetObjectBounds(myname)
             fullbounds.Union(bounds)
-            if set(sels0) == set(sels): continue # for myname
-
-            if myname in sels:
-                self._layout.ChangeOrder(myname, -1)
             if not self._layout.ShowLines: # No need to redraw everything
                 self.RecordItem(o["name"])
-
         if not self._layout.ShowLines:
             fullbounds.Inflate(2 * self._layout.BRADIUS, 2 * self._layout.BRADIUS)
             self.RefreshRect(fullbounds, eraseBackground=False)
-        elif set(sels0) != set(sels): self.Redraw()
+        elif sels0 != sels: self.Redraw()
 
 
     def _UpdateColours(self, defaults=False):
@@ -10884,7 +10880,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             hotcolour     = self._layout.DEFAULT_COLOURS["DragForeground"]
         elif wx.WHITE == wincolour:  # Prefer default header-footer colour if visibility ensured
             gradendcolour = self._layout.DEFAULT_COLOURS["GradientEnd"]
-            
+
 
         dragbgcolour  = controls.ColourManager.Adjust(hotcolour,   wincolour, 0.6)
         selectcolour  = controls.ColourManager.Adjust(gtextcolour, wincolour, 0.6)
@@ -10941,10 +10937,10 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             event.Skip()
             if event.RightDown(): self._movepos = event.Position # Start canvas drag
             else: self._dragpos = x, y # Start item/selection drag
-            if item and event.LeftDown() and 1 == len(self._layout.Selection) \
-            and item["name"] in self._layout.Selection \
+            if item and event.LeftDown() and (1 == len(self._layout.Selection)
+            and item["name"] in self._layout.Selection  # Ignore left-clicks on single selected item
             and not (controls.get_key_state(wx.WXK_SHIFT) or
-                     controls.get_key_state(wx.WXK_COMMAND)): return
+                     controls.get_key_state(wx.WXK_COMMAND))): return
 
             self._UpdateSelection(item)
             self._movecnvs = False if event.RightDown() else None
@@ -11046,7 +11042,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             if self._layout.ShowLines: self.Redraw(recalculate=event.Dragging() and self._layout.Selection)
             else:
                 for name in refnames: self.RecordItem(name)
-                if self._dragrectid:  self.RecordDragRect()
+                if self._layout.DragRect: self.RecordDragRect()
                 refrect.Offset(*[-p for p in self.GetViewPort().TopLeft])
                 self.RefreshRect(refrect, eraseBackground=False)
 

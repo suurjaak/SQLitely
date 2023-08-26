@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    21.08.2023
+@modified    25.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1229,7 +1229,8 @@ class SchemaPlacement(object):
         """Records all schema items to DC."""
         for o in self._order:
             if o["name"] not in self._sels: self.RecordItem(o["name"])
-        for name in self._sels: self.RecordItem(name)
+        for o in self._order:
+            if o["name"] in self._sels: self.RecordItem(o["name"])
 
 
     def RecordItem(self, name, bounds=None):
@@ -1766,7 +1767,7 @@ class SchemaPlacement(object):
 
     def GetSelection(self):
         """Returns names of currently selected items."""
-        return list(self._sels)
+        return [o["name"] for o in self._order if o["name"] in self._sels]
     def SetSelection(self, names):
         """Sets current selection to specified names."""
         names = [] if names is None else names
