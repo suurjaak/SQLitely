@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    25.08.2023
+@modified    26.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -376,8 +376,9 @@ class SchemaPlacement(object):
         # {(name1, name2, (cols)): {id, pts, waylines, cardlines, cornerpts, textrect}}
         self._lines = util.CaselessDict()
         self._sels  = util.CaselessDict(insertorder=True) # {name selected: DC ops ID}
-        # Bitmap cache, as {zoom: {item.__id__: {(sql, hasmeta, showcols, showkeys, stats, dragrect):
-        #                                        (imageobject, imageobject) or imageobject}}}
+        # Bitmap cache, as {zoom: {item.__id__: {key: (imageobject, imageobject) or imageobject}},
+        # with key as (sql, hasmeta, showcols, showkeys, shownulls, stats, dragrect),
+        # image tuple as (standard bitmap, selected bitmap) and single image as dragrect highlight;
         # or {zoom: {PyEmdeddedImage: imageobject}} for scaled static images
         self._cache = defaultdict(lambda: defaultdict(dict))
         self._order = []   # Draw order [{obj dict}, ] selected items at end
@@ -473,6 +474,7 @@ class SchemaPlacement(object):
                 self._objs[name] = {"id": oid, "type": category, "name": name, "stats": stats,
                                     "__id__": opts["__id__"], "sql0": opts["sql0"],
                                     "hasmeta": bool(opts.get("meta")),
+                                    "size_total": opts.get("size_total"), "count": opts.get("count"),
                                     "keys": keys.get(name, ((), ())),
                                     "columns": [dict(c)  for c in opts["columns"]],
                                     "bmp": bmp, "bmpsel": bmpsel, "bmparea": None}
@@ -1441,7 +1443,7 @@ class SchemaPlacement(object):
                 str(statistics) if statistics else None, bool(dragrect))
         mycache = self._cache[self._zoom][key1]
         if key2 not in mycache:
-            for cc in self._cache.values(): # Nuke any outdated bitmaps
+            for cc in self._cache.values(): # Nuke any outdated bitmaps: SQL meta changed
                 for k in list(cc.get(key1) or {}):
                     if k[:2] != key2[:2]: cc[key1].pop(k)
 
