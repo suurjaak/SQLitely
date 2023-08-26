@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.09.2022
+@modified    26.08.2023
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -141,6 +141,7 @@ class SearchThread(WorkerThread):
 
     def make_replacer(self, words, case=False):
         """Returns word/phrase matcher regex."""
+        if not words: return re.compile("(?!)") # Match nothing
         words_re = [x if isinstance(w, tuple) else x.replace(r"\*", ".*")
                     for w in words
                     for x in [re.escape(step.escape_html(flatten(w)[0]))]]
