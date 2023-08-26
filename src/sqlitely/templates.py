@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.08.2023
+@modified    26.08.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1693,7 +1693,7 @@ total = index_total + sum(x["size"] for x in data["table"])
     %for item in sorted(data["table"], key=lambda x: (-x["size"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size"], total=total)) }}</td>
-    <td nowrap="">{{ util.unprint(item["name"]) }}</td>
+    <td nowrap="">{{ util.ellipsize(util.unprint(item["name"])) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
   </tr>
@@ -1714,7 +1714,7 @@ total = index_total + sum(x["size"] for x in data["table"])
         %for item in sorted(data["table"], key=lambda x: (-x["size_total"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size_total"], total=total)) }}</td>
-    <td nowrap="">{{ util.unprint(item["name"]) }}</td>
+    <td nowrap="">{{ util.ellipsize(util.unprint(item["name"])) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size_total"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size_total"], max_units=False, with_units=False) }}</td>
   </tr>
@@ -1734,7 +1734,7 @@ total = index_total + sum(x["size"] for x in data["table"])
         %for item in sorted([x for x in data["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size_index"], total=total)) }}</td>
-    <td nowrap="">{{ util.unprint(item["name"]) }} ({{ len(item["index"]) }})</td>
+    <td nowrap="">{{ util.ellipsize(util.unprint(item["name"])) }} ({{ len(item["index"]) }})</td>
     <td align="left" nowrap="">{{ util.format_bytes(item["size_index"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size_index"], max_units=False, with_units=False) }}</td>
     <td align="right">{{ int(round(100 * util.safedivf(item["size_index"], index_total))) }}%</td>
@@ -1756,8 +1756,8 @@ total = index_total + sum(x["size"] for x in data["table"])
         %for item in sorted(data["index"], key=lambda x: (-x["size"], x["name"].lower())):
   <tr>
     <td>{{! Template(templates.STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size"], total=total)) }}</td>
-    <td nowrap="">{{ util.unprint(item["name"]) }}</td>
-    <td nowrap="">{{ util.unprint(item["table"]) }}</td>
+    <td nowrap="">{{ util.ellipsize(util.unprint(item["name"])) }}</td>
+    <td nowrap="">{{ util.ellipsize(util.unprint(item["table"])) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size"]) }}</td>
     <td align="right" nowrap="">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
     <td align="right">{{ int(round(100 * util.safedivf(item["size"], index_total))) }}%</td>
