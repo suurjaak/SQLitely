@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    19.08.2023
+@modified    26.08.2023
 ------------------------------------------------------------------------------
 """
 import collections
@@ -1635,10 +1635,15 @@ class FormDialog(wx.Dialog):
             for c in self._comps.get(fpath + (field["togglename"]["name"], ), []):
                 if c not in (x for _, _, x in ctrls):
                     ctrls.append((field["togglename"], fpath, c))
-        for f in field.get("children", []):
-            for c in self._comps.get(fpath + (f["name"], ), []):
-                if c not in (x for _, _, x in ctrls):
-                    ctrls.append((f, fpath, c))
+        neststack = [(fpath, field["children"])] if field.get("children") else []
+        while neststack:
+            npath, children = neststack.pop(0)
+            for f in children:
+                for c in self._comps.get(npath + (f["name"], ), []):
+                    if c not in (x for _, _, x in ctrls):
+                        ctrls.append((f, npath, c))
+                if f.get("children"):
+                    neststack.append((npath + (f["name"], ), f["children"]))
 
         on = event.EventObject.Value if event else ctrl.Value
         for f, p, c in ctrls:
