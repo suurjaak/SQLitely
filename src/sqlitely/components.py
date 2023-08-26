@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.08.2023
+@modified    26.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10638,7 +10638,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                 rect = self._layout.GetObjectBounds(items[0]["name"])
                 viewport = self.GetViewPort()
                 corners = rect.BottomRight, rect.BottomLeft, rect.TopRight, rect.TopLeft
-                position = next((p for p in corners if viewport.Contains(p)), None)
+                position = next((p - viewport.TopLeft for p in corners if viewport.Contains(p)), None)
 
         self.PopupMenu(menu, pos=position or wx.DefaultPosition)
 
