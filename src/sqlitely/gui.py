@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.08.2023
+@modified    27.08.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4153,8 +4153,8 @@ class DatabasePage(wx.Panel):
         if not event and not conf.RunStatistics: return
 
         self.statistics = {}
-        self.worker_analyzer.work(self.db.filename)
         self.db.lock(None, None, self.db, label="statistics analysis")
+        self.worker_analyzer.work(self.db.filename)
         wx.CallAfter(self.populate_statistics)
 
 
