@@ -29,7 +29,7 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.1.dev136"
+Version = "2.1.dev137"
 VersionDate = "27.08.2023"
 
 if getattr(sys, "frozen", False):
@@ -350,7 +350,7 @@ def load(configfile=None):
 
     @param   configfile  name of configuration file to use from now if not module defaults
     """
-    global Defaults, VarDirectory, ConfigFile, ConfigFileStatic
+    global Defaults, ConfigFile, ConfigFileStatic
 
     try: VARTYPES = (basestring, bool, int, long, list, tuple, dict, type(None))         # Py2
     except Exception: VARTYPES = (bytes, str, bool, int, list, tuple, dict, type(None))  # Py3
@@ -365,8 +365,6 @@ def load(configfile=None):
             userpath = os.path.join(p, "%s.ini" % Title.lower())
             # Try user-specific path first, then path under application folder
             if userpath not in configpaths: configpaths.insert(0, userpath)
-        except Exception: pass
-        try: VarDirectory = appdirs.user_data_dir(Title, False)
         except Exception: pass
 
     section = "*"
