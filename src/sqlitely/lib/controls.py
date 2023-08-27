@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    26.08.2023
+@modified    27.08.2023
 ------------------------------------------------------------------------------
 """
 import collections
@@ -2448,6 +2448,12 @@ class Patch(object):
 
         if not hasattr(wx.stc.StyledTextCtrl, "SetMarginCount"):  # Since wx 3.1.1
             wx.stc.StyledTextCtrl.SetMarginCount = lambda *a, **kw: None
+
+        if not hasattr(wx.stc.StyledTextCtrl, "GetSelectionEmpty"):  # Not in Py2
+            def GetSelectionEmpty(self):
+                return all(self.GetSelectionNStart(i) == self.GetSelectionNEnd(i)
+                           for i in range(self.GetSelections()))
+            wx.stc.StyledTextCtrl.GetSelectionEmpty = GetSelectionEmpty
 
         # Some versions have StartStyling(start), others StartStyling(start, mask)
         STC__StartStyling = wx.stc.StyledTextCtrl.StartStyling
