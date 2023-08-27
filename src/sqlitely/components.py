@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2023
+@modified    27.08.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10934,6 +10934,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             else: self._tooltip_timer = wx.CallLater(self.TOOLTIP_DELAY, self._SetToolTip, tip)
 
         if event.LeftDown() or event.LeftDClick() or event.RightDown():
+            # Select, or activate, or start drag: items, canvas, or selection rectangle
             event.Skip()
             if event.RightDown(): self._movepos = event.Position # Start canvas drag
             else: self._dragpos = x, y # Start item/selection drag
@@ -10949,10 +10950,11 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                     self._page.handle_command("schema", item["type"], item["name"])
 
         elif self._movepos and (event.Dragging() or event.RightUp()):
+            # Continue or stop canvas drag
             event.Skip()
             if event.Dragging() and "win" in sys.platform:
                 # Windows produces intermediary events with a large jump when out of bounds
-                if not wx.Rect(self.Size).Contains(event.Position) \
+                if not all(map(wx.Rect(self.Size).Contains, (event.Position, self._movepos))) \
                 and any(abs(v) > 50 for v in event.Position - self._movepos): return
 
             dx, dy = (a - b for a, b in zip(event.Position, self._movepos))
@@ -10970,11 +10972,16 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             if event.RightUp() and self.HasCapture(): self.ReleaseMouse()
 
         elif event.Dragging() or event.LeftUp():
+            # Continue or stop item or selection rectangle drag
             event.Skip()
+            if event.Dragging() and "win" in sys.platform:
+                # Windows produces intermediary events with a large jump when out of bounds
+                dragpos = wx.Point(self._dragpos) - viewport.TopLeft
+                if not all(map(wx.Rect(self.Size).Contains, (event.Position, dragpos))) \
+                and any(abs(v) > 50 for v in event.Position - dragpos): return
             if event.LeftUp() and self.HasCapture(): self.ReleaseMouse()
 
-            if not self._dragpos \
-            or self._layout.Selection and not event.Dragging() and self._layout.DragRect is None:
+            if self._layout.Selection and not event.Dragging() and self._layout.DragRect is None:
                 return
 
             if event.Dragging() and not self.HasCapture(): self.CaptureMouse()
@@ -11046,8 +11053,9 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                 refrect.Offset(*[-p for p in self.GetViewPort().TopLeft])
                 self.RefreshRect(refrect, eraseBackground=False)
 
-            self._dragpos = x, y
+            self._dragpos = None if event.LeftUp() else (x, y)
         elif event.WheelRotation:
+            # Zoom in or out on Ctrl+Wheel
             if event.CmdDown():
                 zstep = self._layout.ZOOM_STEP * (1 if event.WheelRotation > 0 else -1)
                 focus = (x, y) if self.ClientRect.Contains(event.Position) else None
