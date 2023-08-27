@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2023
+@modified    27.08.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1371,7 +1371,8 @@ from sqlitely import conf
     <a href="page:data"><img src="memory:HelpData.png" /></a>
   </td><td valign="center">
     Browse, filter and change table data,<br />
-    export as HTML, SQL, text or spreadsheet.
+    export as HTML, SQL, JSON/YAML,<br />
+    text, or spreadsheet.
   </td>
 </tr>
 <tr>
@@ -1391,7 +1392,8 @@ from sqlitely import conf
     <a href="page:sql"><img src="memory:HelpSQL.png" /></a>
   </td><td valign="center">
     Make direct SQL queries in the database,<br />
-    export results as HTML, text or spreadsheet.
+    export results as HTML, SQL, JSON/YAML,<br />
+    text, or spreadsheet.
   </td>
 </tr>
 <tr>

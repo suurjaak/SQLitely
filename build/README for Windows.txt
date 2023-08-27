@@ -11,8 +11,8 @@ It can:
 - modify table data
 - free-form search over all database data and metadata
 - export data and metadata in various formats
-  (text, HTML, spreadsheet, JSON, SQL)
-- import data to tables from spreadsheet or JSON
+  (text, HTML, spreadsheet, JSON, YAML, SQL)
+- import data to tables from spreadsheet or JSON/YAML
 - view database table and index size statistics
 - copy tables from one database to another
 - execute direct SQL queries
