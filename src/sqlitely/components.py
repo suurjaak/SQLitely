@@ -9358,7 +9358,8 @@ class ColumnDialog(wx.Dialog):
         def update(value, reset=False):
             state["changing"] = True
             v = value.encode("utf-8") if isinstance(value, six.text_type) else \
-                b"" if value is None else str(value).encode("latin1")
+                b"" if value is None else value if isinstance(value, six.binary_type) else \
+                str(value).encode("latin1")
             stc.Text = base64.b64encode(v).decode("latin1").strip()
             if reset: stc.EmptyUndoBuffer()
             status.Label = "Raw size: %s, encoded %s" % (len(v), len(stc.Text))
@@ -9778,6 +9779,21 @@ class ColumnDialog(wx.Dialog):
             bmp.Bitmap = wx.Bitmap(img)
             page.Layout()
 
+        def is_known_format(bb):
+            """Returns whether bytestring appears to represent a known image format."""
+            def test_ico(h, f): return "ico" if h[:4] == b"\x00\x00\x01\x00" else None
+            def test_pcx(h, f):
+                match = h[:1] == b"\x0A" and set(h[64:65] + h[74:128]) == set(b"\x00")
+                return "pcx" if match else None
+            def test_pnm(h, f):
+                return "pnm" if h[:1] == b"P" and h[1:2] in b"123456" and b"\x0A" in h[2:4] else None
+            if not hasattr(is_known_format, "imghdr"):
+                import imghdr
+                imghdr.tests.extend((test_ico, test_pcx, test_pnm))
+                is_known_format.imghdr = imghdr
+            fmt = is_known_format.imghdr.what(None, bb)
+            return bool(fmt) and fmt.upper() in self.IMAGE_FORMATS.values()
+
         def update(value, reset=False, propagate=False):
             img, v = None, value
             try:
@@ -9786,6 +9802,8 @@ class ColumnDialog(wx.Dialog):
                 elif value and isinstance(value, (six.binary_type, six.text_type)):
                     x = v if isinstance(v, six.binary_type) else v.encode("latin1")
                     try:
+                        # Py2 workaround for wx.Image() raising uncatchable error for unknown format
+                        if six.PY2 and not is_known_format(x): raise Exception()
                         img = wx.Image(io.BytesIO(x))
                         if not img: raise Exception()
                     except Exception:
