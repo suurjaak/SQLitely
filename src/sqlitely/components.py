@@ -5889,9 +5889,9 @@ class SchemaObjectPage(wx.Panel):
         Handler for clicking to test schema SQL validity, tries
         executing CREATE or ALTER statement, shows success.
         """
-        errors, sql = [], self._item["sql"]
-        if self.IsChanged(): errors, _ = self._Validate()
-        if not errors and self.IsChanged():
+        errors, sql, modified = [], self._item["sql"], (self.IsChanged() or self._newmode)
+        if modified: errors, _ = self._Validate()
+        if modified and not errors:
             if not self._newmode: sql, _, _ = self._GetAlterSQL()
             sql2 = "SAVEPOINT test;\n\n" \
                    "%s\n\nROLLBACK TO SAVEPOINT test;" % sql.strip()
