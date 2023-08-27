@@ -1015,7 +1015,7 @@ progress = get("progress")
 %endif
 %if get("create_sql"):
 #
-# {{ create_sql.rstrip(";\\n").replace("\\n", "\\n#  ") }};
+# {{ create_sql.rstrip(";\\n").replace("\\n", "\\n# ") }};
 #
 %endif
 
