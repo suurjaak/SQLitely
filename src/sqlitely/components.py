@@ -5177,8 +5177,8 @@ class SchemaObjectPage(wx.Panel):
 
         value = src.Value
         if isinstance(value, six.string_types) \
-        and (not isinstance(src, wx.stc.StyledTextCtrl)
-        or not value.strip()): value = value.strip()
+        and (not isinstance(src, wx.stc.StyledTextCtrl) or
+             not value.strip()): value = value.strip()
         if isinstance(src, wx.ComboBox) and src.HasClientData():
             value = src.GetClientData(src.Selection)
         if isinstance(value0, list) and not isinstance(value, list):
@@ -5218,6 +5218,9 @@ class SchemaObjectPage(wx.Panel):
                     self._RemoveRow(path2, index)
                     self._AddRow(path2, index, data2, insert=True)
                 finally: self.Thaw()
+            elif "constraints" == path[0] and "key" == path[-1]:
+                if value and not isinstance(value, list): # value0 can be None if not set initially
+                    util.setval(meta, [value], path)
             elif "columns" == path[0] and "name" == path[-1]:
                 col = util.getval(meta, path[:-1])
                 if value0 and not value: col["name_last"] = value0
