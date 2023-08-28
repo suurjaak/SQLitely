@@ -17,17 +17,20 @@
 
 FROM ubuntu:20.04
 
-RUN apt-get update
+RUN apt-get update \
+ && apt-get install --assume-yes --no-install-recommends \
+    python3 \
+ && rm -rf /var/lib/apt/lists/*
 
 RUN DEBIAN_FRONTEND=noninteractive DEBCONF_NONINTERACTIVE_SEEN=true \
  apt-get update \
  && apt-get install --assume-yes --no-install-recommends \
     libgtk-3-0 \
+    libnotify4 \
     libsm6 \
     libsdl2-2.0 \
     libwebkit2gtk-4.0-37 \
     libxtst6 \
-    python3 \
     python3-pip \
  && rm -rf /var/lib/apt/lists/*
 
