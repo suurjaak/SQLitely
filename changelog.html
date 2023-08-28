@@ -38,9 +38,9 @@
           <a href="https://github.com/suurjaak/SQLitely">View the Project on GitHub <small>suurjaak/SQLitely</small></a>
 
           <ul>
-            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.0_setup.exe">Download <strong>Setup</strong></a></li>
-            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.0_x64_setup.exe">Download <strong>64bit Setup</strong></a></li>
-            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.0-src.zip">Download <strong>Source</strong></a></li>
+            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.1_setup.exe">Download <strong>Setup</strong></a></li>
+            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.1_x64_setup.exe">Download <strong>64bit Setup</strong></a></li>
+            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.1-src.zip">Download <strong>Source</strong></a></li>
           </ul>
         </p>
         
@@ -50,6 +50,46 @@
 
         <h2>Changelog</h2>
 
+        <h4>v2.1, 2023-08-27:</h4>
+        <ul>
+          <li>add user-defined functions to value editor</li>
+          <li>add button panels to data and schema tabs</li>
+          <li>add NULL column icons to schema diagram</li>
+          <li>add column and key toggles to schema diagram</li>
+          <li>add option to hide data grid columns</li>
+          <li>add filter and hide column options in grid row context menu</li>
+          <li>add support for multiple item export into any supported output format</li>
+          <li>add command-line flag --config-file</li>
+          <li>add NULLS FIRST|LAST to SQLite grammar ORDER BY clause</li>
+          <li>add splitter to program main page</li>
+          <li>add file encoding detection in CSV import, improve CSV dialect detection</li>
+          <li>order database categories as table-view-index-trigger</li>
+          <li>use uniform icons for schema tree items</li>
+          <li>retain schema diagram custom layout on schema change</li>
+          <li>support index and trigger keywords in meta search</li>
+          <li>support importing structured data from YAML to database</li>
+          <li>support importing JSON files containing a single dict</li>
+          <li>support TIMESTAMP as date column type in search</li>
+          <li>omit comments from JSON export</li>
+          <li>underline matched texts in meta search results</li>
+          <li>include journal file sizes in database size</li>
+          <li>improve compatibility with GTK and Python 3.8+ on Linux.</li>
+          <li>update step, the vendored template library</li>
+          <li>fix loading user-specific configuration file</li>
+          <li>fix schema diagram not loading entity positions from last config</li>
+          <li>fix schema diagram adopting custom layout on clicking an entity</li>
+          <li>fix collecting related entities on getting all related SQL or exporting to another database</li>
+          <li>fix error on canceling a single grid export</li>
+          <li>fix error on toggling diagram foreign labels on</li>
+          <li>fix diagram in statistics HTML export using current view settings</li>
+          <li>fix operating on key columns of BLOB affinity in data grids</li>
+          <li>fix encoding errors in running disk usage analyzer</li>
+          <li>fix escaping special characters for regex in exported HTML search functions</li>
+          <li>fix complex alter ignoring related triggers (SQLite 3.25+ compatibility)</li>
+          <li>fix JSON/YAML import not using column names from data</li>
+          <li>fix spreadsheet import using same columns for all sheets</li>
+        </ul>
+        <br />
 
         <h4>v2.0, 2022-04-02:</h4>
         <ul>
