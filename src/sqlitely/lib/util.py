@@ -8,17 +8,19 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.03.2022
+@modified    09.08.2023
 ------------------------------------------------------------------------------
 """
+from __future__ import print_function
 try: import __builtin__ as builtins  # Py2
 except ImportError: import builtins  # Py3
 import collections
-import contextlib
 import copy
 import ctypes
 import datetime
+import inspect
 import io
+import itertools
 import locale
 import math
 import os
@@ -34,9 +36,11 @@ import warnings
 
 from PIL import Image
 import six
+from six.moves import collections_abc
 from six.moves import html_entities
 import pytz
-import wx
+try: import wx
+except ImportError: wx = None
 
 
 class CaselessDict(dict):
@@ -152,18 +156,117 @@ class CaselessDict(dict):
 
 
 
-class tzinfo_utc(datetime.tzinfo):
-    """datetime.tzinfo class representing UTC timezone."""
-    ZERO = datetime.timedelta(0)
-    __reduce__ = object.__reduce__
+class ProgressBar(threading.Thread):
+    """
+    A simple ASCII progress bar with a ticker thread, drawn like
+    '[---------\   36%            ] Progressing text..'.
+    or for pulse mode
+    '[    ----                    ] Progressing text..'.
+    """
 
-    def utcoffset(self, dt): return self.ZERO
-    def dst(self, dt):       return self.ZERO
-    def tzname(self, dt):    return "UTC"
-    def __ne__(self, other): return not self.__eq__(other)
-    def __repr__(self):      return "%s()" % self.__class__.__name__
-    def __eq__(self, other): return isinstance(other, self.__class__)
-UTC = tzinfo_utc() # UTC timezone singleton
+    def __init__(self, max=100, value=0, min=0, width=30, forechar="-",
+                 backchar=" ", foreword="", afterword="", interval=1,
+                 pulse=False, static=False, echo=print):
+        """
+        Creates a new progress bar, without drawing it yet.
+
+        @param   max        progress bar maximum value, 100%
+        @param   value      progress bar initial value
+        @param   min        progress bar minimum value, for 0%
+        @param   width      progress bar width (in characters)
+        @param   forechar   character used for filling the progress bar
+        @param   backchar   character used for filling the background
+        @param   foreword   text in front of progress bar
+        @param   afterword  text after progress bar
+        @param   interval   ticker thread interval, in seconds
+        @param   pulse      ignore value-min-max, use constant pulse instead
+        @param   static     print stripped afterword only, on explicit update()
+        @param   echo       print function
+        """
+        threading.Thread.__init__(self)
+        for k, v in locals().items(): setattr(self, k, v) if "self" != k else 0
+        self.daemon = True # Daemon threads do not keep application running
+        self.percent = None        # Current progress ratio in per cent
+        self.value = None          # Current progress bar value
+        self.pause = False         # Whether drawing is currently paused
+        self.pulse_pos = 0         # Current pulse position
+        self.bar = "%s[%s%s]%s" % (foreword,
+                                   " ", #backchar if pulse else forechar,
+                                   backchar * (width - 2),
+                                   afterword)
+        self.printbar = self.bar   # Printable text, with padding to clear previous
+        self.progresschar = itertools.cycle("-\\|/")
+        self.is_running = False
+        if static or not pulse: self.update(value, draw=static)
+
+
+    def update(self, value=None, afterword=None, draw=True):
+        """Updates the progress bar value / afterword, and refreshes by default."""
+        if afterword is not None: self.afterword = afterword
+        if self.static:
+            if self.afterword.strip(): self.echo(self.afterword.strip())
+            return
+
+        if value is not None: self.value = min(self.max, max(self.min, value))
+        w_full = self.width - 2
+        if self.pulse:
+            if self.pulse_pos is None:
+                bartext = "%s[%s]%s" % (self.foreword,
+                                        self.forechar * (self.width - 2),
+                                        self.afterword)
+            else:
+                dash = self.forechar * max(1, (self.width - 2) // 7)
+                pos = self.pulse_pos
+                if pos < len(dash):
+                    dash = dash[:pos]
+                elif pos >= self.width - 1:
+                    dash = dash[:-(pos - self.width - 2)]
+
+                bar = "[%s]" % (self.backchar * w_full)
+                # Write pulse dash into the middle of the bar
+                pos1 = min(self.width - 1, pos + 1)
+                bar = bar[:pos1 - len(dash)] + dash + bar[pos1:]
+                bartext = "%s%s%s" % (self.foreword, bar, self.afterword)
+                self.pulse_pos = (self.pulse_pos + 1) % (self.width + 2)
+        else:
+            percent = int(round(100.0 * self.value / (self.max or 1)))
+            percent = 99 if percent == 100 and self.value < self.max else percent
+            w_done = max(1, int(round((percent / 100.0) * w_full)))
+            # Build bar outline, animate by cycling last char from progress chars
+            char_last = self.forechar if self.value else self.backchar
+            if draw and self.value and w_done < w_full: char_last = next(self.progresschar)
+            bartext = "%s[%s%s%s]%s" % (
+                       self.foreword, self.forechar * (w_done - 1), char_last,
+                       self.backchar * (w_full - w_done), self.afterword)
+            # Write percentage into the middle of the bar
+            centertxt = " %2d%% " % percent
+            pos = len(self.foreword) + self.width // 2 - len(centertxt) // 2
+            bartext = bartext[:pos] + centertxt + bartext[pos + len(centertxt):]
+            self.percent = percent
+        self.printbar = bartext + " " * max(0, len(self.bar) - len(bartext))
+        self.bar, prevbar = bartext, self.bar
+        if draw and prevbar != self.bar: self.draw()
+
+
+    def draw(self):
+        """Prints the progress bar, from the beginning of the current line."""
+        if self.static: return
+        self.echo("\r" + self.printbar, end=" ")
+        if len(self.printbar) != len(self.bar):
+            self.printbar = self.bar # Discard padding to clear previous
+            self.echo("\r" + self.printbar, end=" ")
+
+
+    def run(self):
+        if self.static: return # No running progress
+        self.is_running = True
+        while self.is_running:
+            if not self.pause: self.update(self.value)
+            time.sleep(self.interval)
+
+
+    def stop(self):
+        self.is_running = False
 
 
 
@@ -380,7 +483,34 @@ def parse_time(s):
     return result
 
 
-def wx_image_to_pil(image):
+def get_arity(func, positional=True, keyword=False):
+    """
+    Returns the maximum number of arguments the function takes, -1 if variable number.
+
+    @param   positional  count positional-only and positional/keyword arguments
+    @param   keyword     count keyword-only and positional/keyword arguments
+    """
+    if six.PY2:
+        spec = inspect.getargspec(func)
+        if positional and spec.varargs or keyword and spec.keywords: return -1
+        else: return len(spec.args)
+
+    POSITIONALS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.POSITIONAL_ONLY)
+    KEYWORDALS  = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    result, params = 0, inspect.signature(func).parameters
+    if positional and any(x.kind == inspect.Parameter.VAR_POSITIONAL for x in params.values()) \
+    or keyword    and any(x.kind == inspect.Parameter.VAR_KEYWORD    for x in params.values()):
+        result = -1
+    elif positional and keyword:
+        result += sum(x.kind in POSITIONALS + KEYWORDALS for x in params.values())
+    elif positional:
+        result += sum(x.kind in POSITIONALS for x in params.values())
+    elif keyword:
+        result += sum(x.kind in KEYWORDALS  for x in params.values())
+    return result
+
+
+def img_wx_to_pil(image):
     """Returns PIL.Image for wx.Image."""
     (w, h), data = image.GetSize(), image.GetData()
 
@@ -403,23 +533,27 @@ def img_wx_to_raw(img, format="PNG"):
     return result
 
 
-def ctx(enter, exit, *a, **kw):
+def img_pil_resize(img, size, aspect_ratio=True, bg=(255, 255, 255)):
     """
-    Creates a context manager for callable result. Example usage:
-
-        with ctx(wx.TextCtrl, wx.TextCtrl.Destroy, parent=self) as x:
-            defaultfont = x.Font.FaceName
-
-    @param   enter  function returning the value,
-                    invoked with positional and keyword arguments
-    @param   exit   cleanup function, invoked with result of enter()
-    @return         context-managed result of enter(*a, **kw)
+    Returns a resized PIL.Image, centered if aspect ratio rescale resulted in
+    free space on one axis.
     """
-    def yielder():
-        result = enter(*a, **kw)
-        yield result
-        exit(result)
-    return contextlib.GeneratorContextManager(yielder())
+    result = img
+    if size and list(size) != list(result.size):
+        size2, align_pos = list(size), None
+        if result.size[0] < size[0] and img.size[1] < size[1]:
+            size2 = result.size
+            align_pos = [(a - b) // 2 for a, b in zip(size, size2)]
+        elif aspect_ratio:
+            ratio = safedivf(*result.size[:2])
+            size2[ratio > 1] = int(size2[ratio > 1] * (ratio if ratio < 1 else 1 / ratio))
+            align_pos = [(a - b) // 2 for a, b in zip(size, size2)]
+        if result.size[0] > size[0] or result.size[1] > size[1]:
+            result.thumbnail(tuple(map(int, size2)), Image.ANTIALIAS)
+        if align_pos:
+            result, result0 = Image.new(img.mode, size, bg), result
+            result.paste(result0, tuple(map(int, align_pos)))
+    return result
 
 
 def m(o, name, case_insensitive=True):
@@ -513,9 +647,9 @@ def plural(word, items=None, numbers=True, single="1", sep="", pref="", suf="", 
     """
     count   = len(items) if hasattr(items, "__len__") else items or 0
     isupper = word[-1:].isupper()
-    suffix = "es" if word and word[-1:].lower() in "xyz" \
-             and not word[-2:].lower().endswith("ay") \
-             else "s" if word else ""
+    suffix = "s" if word else ""
+    if word and (word[-1:].lower() in "xyz" or word[-2:].lower() in ("ch", "sh", "ss")) \
+    and not word[-2:].lower().endswith("ay"): suffix = "es"
     if isupper: suffix = suffix.upper()
     if count != 1 and "es" == suffix and "y" == word[-1:].lower():
         word = word[:-1] + ("I" if isupper else "i")
@@ -570,22 +704,23 @@ def count(items, unit=None, key="count", suf=""):
     return result
 
 
-def try_until(func, limit=1, sleep=0.5):
+def try_ignore(func, *args, **kwargs):
     """
     Tries to execute the specified function a number of times.
 
     @param    func   callable to execute
+    @param    args   positional arguments to callable
     @param    limit  number of times to try (default 1)
-    @param    sleep  seconds to sleep after failed attempts, if any
-                     (default 0.5)
+    @param    sleep  seconds to sleep after failed attempts, if any (default 0.5)
     @return          (True, func_result) if success else (False, None)
     """
     result, func_result, tries = False, None, 0
+    limit, sleep = kwargs.get("limit", 1), kwargs.get("sleep", 0.5)
     while tries < limit:
         tries += 1
-        try: result, func_result = True, func()
+        try: result, func_result = True, func(*args)
         except Exception:
-            time.sleep(sleep) if tries < limit and sleep else None
+            if sleep and tries < limit: time.sleep(sleep)
     return result, func_result
 
 
@@ -764,12 +899,12 @@ def getval(collection, *path, **kwargs):
     result = collection if path else default
     if len(path) == 1 and isinstance(path[0], list): path = path[0]
     for p in path:
-        if isinstance(result, collections.Sequence):  # Iterable with index
+        if isinstance(result, collections_abc.Sequence):  # Iterable with index
             if isinstance(p, six.integer_types) and p < len(result):
                 result = result[p]
             else:
                 result = default
-        elif isinstance(result, collections.Mapping): # Container with lookup
+        elif isinstance(result, collections_abc.Mapping): # Container with lookup
             result = result.get(p, default)
         elif isinstance(p, six.string_types) and hasattr(result, p): # Object attribute
             result = getattr(result, p)
@@ -788,13 +923,13 @@ def setval(collection, value, *path):
     if len(path) == 1 and isinstance(path[0], list): path = path[0]
     ptr = collection
     for p in path[:-1]:
-        if isinstance(ptr, collections.Sequence):  # Iterable with index
+        if isinstance(ptr, collections_abc.Sequence):  # Iterable with index
             if isinstance(p, six.integer_types) and p < len(ptr):
                 ptr = ptr[p]
             else:
                 ptr.append({})
                 ptr = ptr[-1]
-        elif isinstance(ptr, collections.Mapping): # Container with lookup
+        elif isinstance(ptr, collections_abc.Mapping): # Container with lookup
             if p not in ptr: ptr[p] = {}
             ptr = ptr[p]
     ptr[path[-1]] = value
@@ -806,9 +941,9 @@ def walk(data, callback):
     Walks through the collection of nested dicts or lists or tuples, invoking
     callback(child, key, parent) for each element, recursively.
     """
-    if isinstance(data, collections.Iterable) and not isinstance(data, six.string_types):
+    if isinstance(data, collections_abc.Iterable) and not isinstance(data, six.string_types):
         for k, v in enumerate(data):
-            if isinstance(data, collections.Mapping): k, v = v, data[v]
+            if isinstance(data, collections_abc.Mapping): k, v = v, data[v]
             callback(k, v, data)
             walk(v, callback)
 
@@ -891,15 +1026,25 @@ def to_unicode(value, encoding=None):
     """
     result = value
     if isinstance(result, six.binary_type):
-        try: result = six.text_type(result, encoding, errors)
+        encoding = encoding or locale.getpreferredencoding()
+        try: result = six.text_type(result, encoding)
         except Exception:
-            result = six.text_type(result, "utf-8", errors="backslashreplace")
+            try: result = six.text_type(result, "utf-8", errors="backslashreplace")
+            except Exception:
+                result = six.text_type(result, "utf-8", errors="ignore")
     elif not isinstance(result, six.text_type):
-        try: result = str(result)
+        try: result = six.text_type(result)
         except Exception: result = repr(result)
     if not isinstance(result, six.text_type):
         result = six.text_type(result)
     return result
+
+
+@memoize
+def cap(val, reverse=False):
+    """Returns value with the first letter capitalized (or uncapitalized if reverse)."""
+    val = val if isinstance(val, (six.binary_type, six.text_type)) else str(val)
+    return (val[0].lower() if reverse else val[0].upper()) + val[1:]
 
 
 @memoize
@@ -956,6 +1101,26 @@ def shortpath(path):
     buf = ctypes.create_unicode_buffer(4 * len(path))
     ctypes.windll.kernel32.GetShortPathNameW(path, buf, len(buf))
     return buf.value
+
+
+def filters_to_regex(texts, end=False):
+    """
+    Returns one or more simple filters as a single re.Pattern.
+
+    Simple asterisk wildcards ('*') will match anything.
+    A dash ('-') at the beginning of a word will omit matches containing the word.
+
+    @param   texts  one or more text filters, regex matches if any text matches and no skip matches
+    @param   end    whether pattern should match until end (adds '$')
+    @return         re.Pattern for input values, like re.Pattern("(?!.*(xyz))(foo.*bar)", re.I)
+                    for filters_to_regex(["foo*bar", "-xyz"])
+    """
+    wildify = lambda t: ".*".join(map(re.escape, t.split("*")))
+    suff, texts = ("$" if end else ""), util.tuplefy(texts)
+    includes, excludes = ([t[skip:] for t in texts if skip == t.startswith('-')] for skip in (0, 1))
+    matchstr = "|".join("(%s%s)" % (wildify(t), suff) for t in includes)
+    skipstr = "(?!.*(%s)%s)" % ("|".join(map(wildify, excludes)), suff) if excludes else ""
+    return re.compile(skipstr + ("(%s)" if skipstr else "%s") % matchstr, re.I)
 
 
 def win32_unicode_argv():

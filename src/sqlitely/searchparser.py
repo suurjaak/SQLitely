@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Parses a Google-like search grammar into SQL for querying a database.
+Parses a simple query grammar into SQL for querying a database.
 
 - words can consist of any non-whitespace characters including all Unicode,
   excluding round brackets and quotes ()"
@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.03.2022
+@modified    16.08.2023
 """
 import calendar
 import collections
@@ -60,8 +60,12 @@ ESCAPE_LIKE = "\\" # Character used to escape SQLite LIKE special characters _%
 
 class SearchQueryParser(object):
 
+    ITEM_CATEGORIES = ["table", "view", "index", "trigger"]
+
+    KEYWORDS = ITEM_CATEGORIES + ["column", "date"]
+
     # For naive identification of "table:xyz", "date:xyz" etc keywords
-    PATTERN_KEYWORD = re.compile("^(-?)(table|view|column|date)\\:([^\\s]+)$", re.I)
+    PATTERN_KEYWORD = re.compile("^(-?)(%s)\\:([^\\s]+)$" % "|".join(KEYWORDS), re.I)
 
 
     def __init__(self):
@@ -153,6 +157,9 @@ class SearchQueryParser(object):
                 or ("-" + item["type"] == kw and match_kw("-" + item["type"], item)):
                     skip_item = True
                     break # for kw
+            if not skip_item and item["type"] not in keywords \
+            and any(map(keywords.get, self.ITEM_CATEGORIES)):
+                skip_item = True
             if skip_item:
                 result = ""
             else:
@@ -181,8 +188,8 @@ class SearchQueryParser(object):
         if "KEYWORD" == name:
             key, word = elements[0].split(":", 1)
             key, word = key.lower(), (word if case else word.lower())
-            if key in ["table",  "-table",  "view", "-view",
-                       "column", "-column", "date", "-date"]:
+            if key in self.KEYWORDS \
+            or key.startswith("-") and key[1:] in self.KEYWORDS:
                 if getattr(elements, "QUOTES", None): word = (word, )
                 keywords[key].append(word)
                 return words, keywords
@@ -209,7 +216,7 @@ class SearchQueryParser(object):
 
         if isinstance(parseresult, six.string_types):
             op, wild = ("GLOB", "*") if case else ("LIKE", "%")
-            safe = escape(parseresult, "QUOTES" == parent_name)
+            safe = escape(parseresult, exact="QUOTES" == parent_name)
 
             i = len(params)
             for col in item["columns"]:
@@ -261,7 +268,7 @@ class SearchQueryParser(object):
             if not keyword.endswith("date"): continue # Only dates go into SQL
 
             datecols = [c for c in (item or {}).get("columns", [])
-                if c.get("type") in ("DATE", "DATETIME")
+                if c.get("type") in ("DATE", "DATETIME", "TIMESTAMP")
                 and (not keywords.get("column")  or     match_kw( "column", c))
                 and (not keywords.get("-column") or not match_kw("-column", c))
             ]
@@ -350,17 +357,17 @@ def escape(item, op="LIKE", exact=False):
     """
     Prepares string as parameter for SQLite LIKE/GLOB operator.
 
+    @param   item       string to process
     @param   op         target SQL operator, "LIKE" or "GLOB"
     @param   exact      whether to do exact match, or to escape
                         LIKE/GLOB special characters %_ and *?
-    @param   wildcards  characters to replace with SQL LIKE wildcard %
     """
     if "GLOB" == op: # Replace GLOB specials ?[ with single-char classes [?] [[]
         result = item.replace("[", "[[]").replace("?", "[?]")
         if exact: result = result.replace("*", "[*]")
     else: # Escape LIKE specials %_ with \% \_
         result = item.replace("%", ESCAPE_LIKE + "%").replace("_", ESCAPE_LIKE + "_")
-        if exact: result = result.replace("*", "%") # Swap user-entered * with %
+        if not exact: result = result.replace("*", "%") # Swap user-entered * with %
     return result
 
 

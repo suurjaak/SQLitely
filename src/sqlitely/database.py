@@ -8,13 +8,14 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.03.2022
+@modified    24.05.2023
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
 import copy
 import datetime
 import itertools
+import json
 import logging
 import math
 import os
@@ -49,7 +50,10 @@ class Database(object):
     }
 
     """Schema object categories."""
-    CATEGORIES = ["table", "index", "trigger", "view"]
+    CATEGORIES = ["table", "view", "index", "trigger"]
+
+    """Schema data object categories."""
+    DATA_CATEGORIES = ["table", "view"]
 
 
     """
@@ -96,7 +100,7 @@ class Database(object):
         "description": """  FULL: truncate deleted rows on every commit.
   INCREMENTAL: truncate on PRAGMA incremental_vacuum.
 
-  Must be turned on before any tables are created, not possible to change afterwards.""",
+Must be turned on before any tables are created, not possible to change afterwards.""",
       },
       "automatic_index": {
         "name": "automatic_index",
@@ -489,6 +493,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             Database.temp_counter += 1
         self.id_counter = itertools.count(1)
         self.filesize = None
+        self.journalsizes = {} # {"wal" or "journal": size in bytes}
         self.date_created = None
         self.last_modified = None
         self.log = [] # [{timestamp, action, sql: "" or [""], ?params: x or [x]}]
@@ -528,7 +533,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             try: self.connection.close()
             except Exception: pass
             self.connection = None
-            raise six.rerase(type(e), e, tb)
+            raise six.reraise(type(e), e, tb)
 
 
     def close(self):
@@ -679,10 +684,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def lock(self, category, name, key, label=None):
         """
-        Locks a schema object for altering or deleting. For tables, cascades
-        lock to views that query the table; and for views, cascades lock to
-        tables the view queries, also to other views that the view queries
-        or that query the view; recursively.
+        Locks a schema object for altering or deleting.
+        
+        For views, cascades lock to tables and views the view queries, recursively.
 
         @param   key       any hashable to identify lock by
         @param   label     an informational label for lock
@@ -691,7 +695,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if name and name not in self.schema.get(category, {}): return            
         self.locks[category][name].add(key)
         self.locklabels[key] = label
-        if category and name:
+        if "view" == category and name:
             relateds = self.get_related(category, name, data=True, clone=False)
             if not relateds: return
             subkey = (hash(key), category, name)
@@ -708,7 +712,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         category, name = (x.lower() if x else x for x in (category, name))
         self.locks[category][name].discard(key)
         self.locklabels.pop(key, None)
-        if category and name:
+        if "view" == category and name:
             subkey = (hash(key), category, name)
             relateds = self.get_related(category, name, data=True, clone=False)
             for subcategory, itemmap in relateds.items():
@@ -804,12 +808,78 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Returns ROWID name for table, or None if table is WITHOUT ROWID
         or has columns shadowing all ROWID aliases (ROWID, _ROWID_, OID).
         """
-        if util.getval(self.schema["table"], table, "meta", "without"): return
+        if util.getval(self.schema["table"], table, "meta", "without"): return None
         sql = self.schema["table"].get(table, {}).get("sql")
-        if re.search("WITHOUT\s+ROWID[\s;]*$", sql, re.I): return
+        if not sql or re.search("WITHOUT\s+ROWID[\s;]*$", sql, re.I): return None
         ALIASES = ("_rowid_", "rowid", "oid")
         cols = [c["name"].lower() for c in self.schema["table"][table]["columns"]]
         return next((x for x in ALIASES if x not in cols), None)
+
+
+    def get_order(self, name, reverse=False):
+        """
+        Returns ORDER BY columns for table or view.
+
+        @param   name      table or view name
+        @param   reverse   whether to reverse order
+        @return            [(rowid, ?"DESC")] or [(pkcol1, ?"DESC"), ] if table,
+                           ["row_number() OVER () DESC"] if view in reverse else []
+                           
+        """
+        category = "table" if name in self.schema["table"] else "view"
+        if "view" == category:
+            result = ["row_number() OVER () DESC"] if reverse else []
+        else:
+            if not util.getval(self.schema, category, name, "meta"):
+                self.populate_schema(category, name=name, parse=True, generate=False)
+            rowid = self.get_rowid(name)
+            names, orders = ([rowid], [None]) if rowid else ([], [])
+            if not names:
+                pks, _ = self.get_keys(name, pks_only=True)
+                if pks:
+                    names, orders = pks[0]["name"], (pks[0]["pk"].get("order") or [])
+                    orders = [None if "ASC" == x else x for x in orders] or [None] * len(names)
+            orders2 = [None if "DESC" == x else "DESC" for x in orders] if reverse else orders
+            result = [(n, o) if o else (n, ) for n, o in zip(names, orders2)]
+        return result
+
+
+    def get_order_sql(self, name, reverse=False):
+        """
+        Returns ORDER BY clause, table in ROWID/PK order,
+        view in reverse row_number() order if reverse.
+
+        @return  " ORDER BY ..", or "" if nothing to order by
+        """
+        ordercols = self.get_order(name, reverse=reverse)
+        return (" ORDER BY %s" % ", ".join(
+            x if isinstance(x, str) else " ".join(y if i else grammar.quote(y)
+                                                  for i, y in enumerate(x))
+            for x in ordercols
+        )) if ordercols else ""
+
+
+    def get_limit_sql(self, limit=None, offset=None, maxcount=None, totals=()):
+        """
+        Returns LIMIT clause.
+
+        @param   limit     basic row limit, None or <0 disables
+        @param   offset    index to start from, None or <=0 disables
+        @param   maxcount  maximum number of rows over multiple items
+        @param   totals    number or {name: number} or iterable of {"count": number}
+                           for item counts so far
+        @return            " LIMIT x" or " LIMIT x OFFSET y", or "" if no limit
+        """
+        limit, offset = (-1 if limit is None else limit), (-1 if not offset else offset)
+        mylimit = [limit, offset] if offset > 0 else [limit] if limit >= 0 else []
+        if maxcount is not None:
+            counts = [totals] if isinstance(totals, six.integer_types) else totals.values() \
+                     if isinstance(totals, dict) else [x.get("count", 0) for x in totals]
+            mylimit = [max(0, min(limit if limit > 0 else maxcount, maxcount - sum(counts)))] + \
+                      ([offset] if offset > 0 else [])
+        return (" " +
+            " ".join(" ".join(x) for x in zip(("LIMIT", "OFFSET"), map(str, mylimit)))
+        ) if mylimit else ""
 
 
     def has_view_columns(self):
@@ -838,8 +908,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         result = None
         if cursor or self.connection:
             if log and conf.LogSQL:
-                logger.info("SQL: %s%s", sql,
-                            ("\nParameters: %s" % params) if params else "")
+                logger.info("SQL: %s%s", sql, "\nParameters: %s" % (params, ) if params else "")
             result = (cursor or self.connection).execute(sql, params)
         return result
 
@@ -1059,8 +1128,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                             returning false if generate should cancel
         """
         index, total = 0, sum(len(vv) for vv in self.schema.values())
-        for category, itemmap in self.schema.items():
-            for name, opts in itemmap.items():
+        for itemmap in self.schema.values():
+            for opts in itemmap.values():
                 meta = opts.get("meta")
                 if opts["sql"] == opts["sql0"] and meta and not meta.get("__comments__"):
                     sql, _ = grammar.generate(meta)
@@ -1070,30 +1139,33 @@ WARNING: misuse can easily result in a corrupt database file.""",
         if progress: progress(done=True)
 
 
-    def get_count(self, table):
+    def get_count(self, table, key="count"):
         """
         Returns {"count": int, ?"is_count_estimated": bool}.
         Uses MAX(ROWID) to estimate row count and skips COUNT(*) if likely
         to take too long (file over half a gigabyte).
         Estimated count is rounded upwards to 100.
+
+        @param   key  name of item key to use for count (also changes key for estimate)
         """
-        result, do_full = {"count": None}, False
+        result, do_full = {key: None}, False
         tpl = "SELECT %%s AS count FROM %s LIMIT 1" % grammar.quote(table)
         try:
             rowidname = self.get_rowid(table)
             if rowidname:
-                result = self.execute(tpl % "MAX(%s)" % rowidname, log=False).fetchone()
-                result["count"] = int(math.ceil(result["count"] / 100.) * 100)
-                result["is_count_estimated"] = True
+                row = self.execute(tpl % "MAX(%s)" % rowidname, log=False).fetchone()
+                result[key] = int(math.ceil(row["count"] / 100.) * 100) # Round to upper 100
+                result["is_%s_estimated" % key] = True
             if self.filesize < conf.MaxDBSizeForFullCount \
-            or result and result["count"] < conf.MaxTableRowIDForFullCount:
+            or result and result[key] < conf.MaxTableRowIDForFullCount:
                 do_full = True
         except Exception:
             do_full = (self.filesize < conf.MaxDBSizeForFullCount)
 
         try:
             if do_full:
-                result = self.execute(tpl % "COUNT(*)", log=False).fetchone()
+                row = self.execute(tpl % "COUNT(*)", log=False).fetchone()
+                result = {key: row["count"]}
         except Exception:
             logger.exception("Error fetching COUNT for table %s.",
                              util.unprint(grammar.quote(table)))
@@ -1152,21 +1224,22 @@ WARNING: misuse can easily result in a corrupt database file.""",
                         like tables and views and triggers for tables and views
                         that query them in view or trigger body,
                         also foreign tables for tables;
-                        if None, returns all relations
-        @param   data   whether to return cascading data dependency
-                        relations: for views, the tables and views they query,
-                        recursively
+                        if None, returns all relations.
+                        Ignored if data=True.
+        @param   data   return cascading data dependency relations:
+                        for views, the tables and views they query,
+                        and for tables, the views that query them, all recursively
         @param   skip   CaselessDict{name: True} to skip (internal recursion helper)
         @param   clone  whether to return copies of data
         """
         category, name = category.lower(), name.lower()
         result, skip = CaselessDict(), (skip or CaselessDict({name: True}))
-        SUBCATEGORIES = {"table":   ["table", "index", "view", "trigger"],
+        SUBCATEGORIES = {"table":   ["table", "view", "index", "trigger"],
                          "index":   ["table"],
                          "trigger": ["table", "view"],
                          "view":    ["table", "view", "trigger"]}
-        if data: SUBCATEGORIES = {"view": ["table", "view"]}
-            
+        if data: SUBCATEGORIES = {"table": ["view"], "view": ["table", "view"]}
+
         item = self.schema.get(category, {}).get(name)
         if not item or category not in SUBCATEGORIES or "meta" not in item:
             return result
@@ -1181,8 +1254,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
                               or "trigger" == subcategory and is_own
                 is_rel_to   = subname.lower() in item["meta"]["__tables__"] \
                               or "trigger" == category and is_own
-                if not is_rel_to and not is_rel_from or data and not is_rel_to \
-                or own is not None and bool(own) is not is_own:
+                if not is_rel_to and not is_rel_from \
+                or data and "view" == category and is_rel_from \
+                or not data and own is not None and bool(own) is not is_own:
                     continue # for subname, subitem
 
                 if subcategory not in result: result[subcategory] = CaselessDict()
@@ -1193,7 +1267,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             skip.update({v: True for v in vv})
         for mycategory, items in result.items() if data else ():
             if mycategory not in SUBCATEGORIES: continue # for mycategory, items
-            for myitem in items:
+            for myitem in items.values():
                 if myitem["name"] in visited: continue # for myitem
                 visited[myitem["name"]] = True
                 subresult = self.get_related(mycategory, myitem["name"], own, data, skip, clone)
@@ -1204,6 +1278,57 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     skip.update(visited)
 
         return result
+
+
+    def get_full_related(self, category, name):
+        """
+        Returns the full dependency tree of a database object: its own objects
+        like indexes and triggers, plus everything it and its own objects refer to, recursively.
+
+        @return   {category: CaselessDict({name: item, })}, {originating name: [related name]}
+        """
+        category, name = category.lower(), name.lower()
+        result, deps = defaultdict(CaselessDict), defaultdict(list)
+        item = self.schema[category][name]
+
+        # Take all tables and views the item refers to
+        for name2 in util.getval(item, "meta", "__tables__", default=[]):
+            category2 = next((c for c in self.schema if name2 in self.schema[c]), None)
+            if category2:
+                result[category2][name2] = self.schema[category2][name2]
+                if name2 not in deps[name]: deps[name].append(name2)
+        # Take all owned or required related entities
+        own = None if "trigger" == category else True
+        for relcategory, rels in self.get_related(category, name, own=own).items():
+            for relname, relitem in rels.items():
+                result[relcategory][relname] = relitem
+                if relname not in deps[name]: deps[name].append(relname)
+
+        processed = set()
+        while True:
+            processed0 = processed.copy()
+            # Take all owned or required related entities
+            for category2, name2 in [(c, n) for c in result for n in result[c]]:
+                if name2 in processed: continue # for category2
+                processed.add(name2)
+
+                own = None if "trigger" == category2 else True
+                for relcategory, rels in self.get_related(category2, name2, own=own).items():
+                    for relname, relitem in rels.items():
+                        result[relcategory][relname] = relitem
+                        if relname not in deps[name2]: deps[name2].append(relname)
+            # Take tables and views that views query, recursively
+            for name2 in [n for n in result.get("view", {})]:
+                if name2 in processed: continue # for name2
+                processed.add(name2)
+
+                for relcategory, rels in self.get_related("view", name2, data=True).items():
+                    for relname, relitem in rels.items():
+                        result[relcategory][relname] = relitem
+                        if relname not in deps[name2]: deps[name2].append(relname)
+            if processed0 == processed: break # while True
+
+        return result, deps
 
 
     def get_keys(self, table, pks_only=False):
@@ -1235,8 +1360,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
                               for c in item.get("columns", []) if "pk" in c)
         for c in item.get("meta", {}).get("constraints", []):
             if grammar.SQL.PRIMARY_KEY == c["type"]:
-                names = tuple(x["name"] for x in c["key"])
-                mykeys[names] = {"name": names, "pk": {}}
+                names  = tuple(x["name"] for x in c["key"])
+                orders = tuple(x.get("order") for x in c["key"])
+                mykeys[names] = {"name": names, "pk": {"order": orders} if any(orders) else {}}
         relateds = {} if pks_only else self.get_related("table", table, own=False, clone=False)
         for name2, item2 in relateds.get("table", {}).items():
             for fk in [x for x in get_fks(item2) if table in x["table"]]:
@@ -1351,9 +1477,15 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
+    def get_size(self):
+        """Updates and returns database file size (size includes journal files)."""
+        self.filesize = get_size(self.filename, self.journalsizes)
+        return self.filesize
+
+
     def update_fileinfo(self):
         """Updates database file size and modification information."""
-        self.filesize = os.path.getsize(self.filename)
+        self.get_size()
         self.date_created  = datetime.datetime.fromtimestamp(
                              os.path.getctime(self.filename))
         self.last_modified = datetime.datetime.fromtimestamp(
@@ -1392,21 +1524,45 @@ WARNING: misuse can easily result in a corrupt database file.""",
     def make_args(self, cols, data, existing=None):
         """
         Returns ordered params dictionary, with column names made safe to use
-        as ":name" parameters.
+        as ":name" parameters, and BLOB types converted to sqlite3.Binary.
 
-        @param   cols      ["col", ] or [{"name": "col"}, ]
+        @param   cols      ["col", ] or [{"name": "col", ?"type": "coltype"}, ]
         @param   data      {"col": val}
-        @param   existing  already existing params dictionary,
-                           for unique
+        @param   existing  already existing params dictionary, if any,
+                           for ensuring name uniqueness
         """
         result = OrderedDict()
         existing = dict(existing or {})
         for c in cols:
-            if isinstance(c, dict): c = c["name"]
-            name = re.sub(r"\W", "", c, flags=re.I)
+            c, t = (c["name"], c.get("type")) if isinstance(c, dict) else (c, None)
+            name, v = re.sub(r"\W", "", c, flags=re.I), data[c]
             name = util.make_unique(name, existing, counter=1, case=True)
-            result[name] = existing[name] = data[c]
+            if None not in (t, v) and not isinstance(v, sqlite3.Binary) \
+            and "BLOB" == self.get_affinity(t):
+                v = sqlite3.Binary(str(v).encode("latin1", errors="backslashreplace"))
+            result[name] = existing[name] = v
         return result
+
+
+    def select(self, sql, params=(), error=None, tick=None):
+        """
+        Yields rows from query; auto-closes cursor on error, never raises.
+
+        @param   error  message to use when logging error, if not assembling with SQL and params
+        @param   tick   function(index) invoked after yielding each row, index is 1-based
+        """
+        cursor = None
+        try:
+            cursor = self.execute(sql, params)
+            for i, x in enumerate(cursor, 1):
+                yield x
+                tick and tick(i)
+        except Exception:
+            msg = error or "Error running %r%s." % (sql, " (%s)" % (params, ) if params else "")
+            logger.warning(msg, exc_info=True)
+        finally:
+            try: cursor.close()
+            except Exception: pass
 
 
     def select_row(self, table, row, rowid=None):
@@ -1675,7 +1831,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         category, reloads = category.lower(), defaultdict(set) # {category: [name, ]}
         reloads[category].add(newname)
         for subcategory, submap in self.get_related(category, oldname, clone=False).items():
-            for subname, subitem in submap.items():
+            for subname in submap:
                 reloads[subcategory].add(subname)
 
         opts = self.schema[category].pop(oldname)
@@ -1716,7 +1872,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     if "view" != mycategory: continue # for myitem
 
                     # Re-create view triggers
-                    for subitem in self.get_related("view", myitem["name"], own=True, clone=False).get("trigger", {}).values():
+                    for subitem in self.get_related("view", myitem["name"], own=True, clone=False
+                    ).get("trigger", {}).values():
                         if subitem["name"] in used: continue # for subitem
                         sql, _ = grammar.transform(subitem["sql"], renames=renames)
                         data.setdefault(subitem["type"], []).append(dict(subitem, sql=sql))
@@ -1740,7 +1897,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
             raise six.reraise(type(e), e, tb)
         else:
             resets  = defaultdict(dict) # {category: {name: SQL}}
-            if "table" == category and (name2 == grammar.quote(name2) or not self.has_full_rename_table()):
+            if "table" == category \
+            and (name2 == grammar.quote(name2) or not self.has_full_rename_table()):
                 # Modify sqlite_master directly, as "ALTER TABLE x RENAME TO y"
                 # sets a quoted name "y" to CREATE statements, including related objects,
                 # regardless of whether the name required quoting.
@@ -1769,7 +1927,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 name=table, name2=table, columns=[(name, name2)]
             ), category="ALTER TABLE")
         else:
-            args = self.get_complex_alter_args(item, item, {"column": {table: {name: name2}}}, clone=False)
+            args = self.get_complex_alter_args(item, item, {"column": {table: {name: name2}}},
+                                               clone=False)
             altersql, err = grammar.generate(args)
         if err: raise Exception(err)
 
@@ -1800,7 +1959,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         item["meta"]["columns"] = [c for c in item["meta"]["columns"]
                                    if not util.lceq(c["name"], column)]
-        sql2, err = grammar.generate(item["meta"])
+        _, err = grammar.generate(item["meta"])
         if err: raise Exception(err)
 
         args = self.get_complex_alter_args(item, item, drops=[column], clone=False)
@@ -1913,11 +2072,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 cnstr_dirty = False
                 if cnstr["type"] in (grammar.SQL.PRIMARY_KEY, grammar.SQL.UNIQUE) \
                 and util.lceq(item2["name"], item["name"]):
-                    for j, keycol in list(enumerate(cnstr["key"]))[::-1]:
+                    for j, keycol in list(enumerate(cnstr.get("key", [])))[::-1]:
                         if keycol.get("name", "").lower() in drops:
                             del cnstr["key"][j]
                             cnstr_dirty = dirty = True
-                    if not cnstr["key"]:
+                    if not cnstr.get("key"):
                         del item["meta"]["constraints"][i]
                         continue # for i, cnstr
 
@@ -1927,17 +2086,17 @@ WARNING: misuse can easily result in a corrupt database file.""",
                         if column.lower() in drops:
                             del cnstr["key"][j]; del cnstr["columns"][j]
                             cnstr_dirty = dirty = True
-                    if not cnstr["key"]:
+                    if not cnstr.get("key"):
                         del item["meta"]["constraints"][i]
                         continue # for i, cnstr
 
                 if grammar.SQL.FOREIGN_KEY == cnstr["type"] \
                 and util.lceq(name1, cnstr["table"]):
-                    for j, keycol in list(enumerate(cnstr["key"]))[::-1]:
+                    for j, keycol in list(enumerate(cnstr.get("key", [])))[::-1]:
                         if keycol.lower() in drops:
                             del cnstr["key"][j]; del cnstr["columns"][j]
                             cnstr_dirty = dirty = True
-                    if not cnstr["key"]:
+                    if not cnstr.get("key", []):
                         del item["meta"]["constraints"][i]
                         continue # for i, cnstr
 
@@ -2018,10 +2177,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
                             if not err: rel_sql = sql2
 
                 sql0, _ = grammar.transform(rel_sql, renames=renames)
-                if sql0 == relitem["sql"] and not is_our_item and "view" != category:
-                    # Views need recreating, as SQLite can raise "no such table" error
-                    # otherwise when dropping the old table. Triggers that simply
-                    # use this table but otherwise need no changes, can remain as is.
+                if sql0 == relitem["sql"] and not is_our_item \
+                and category not in ("trigger", "view"):
+                    # Triggers and views need recreating, as SQLite can raise
+                    # "no such table" error otherwise when dropping the old table.
                     continue # for relitem
 
                 myitem = dict(relitem, sql=sql0, sql0=sql0)
@@ -2037,7 +2196,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     myitem.update(sql=sql)
 
                 args.setdefault(category, []).append(myitem)
-                if category not in ("table", "view"): continue # for relitem
+                if category not in ("table", "trigger", "view"): continue # for relitem
 
                 subrelateds = self.get_related(category, relitem["name"], own=True, clone=clone)
                 if "table" == category:
@@ -2165,3 +2324,20 @@ def fmt_entity(name, force=True, limit=None):
     v = util.unprint(grammar.quote(name, force=force))
     if limit is None: limit = 50
     return util.ellipsize(v, limit) if limit else v
+
+
+def get_size(filepath, journalsizes=None):
+    """
+    Returns SQLite database size in bytes, including temporary journaling files.
+
+    @param   journalsizes  dictionary to populate with journal sizes, if any
+    """
+    sizes = {n: os.path.getsize(f) for n in ("journal", "wal")
+             for f in ["%s-%s" % (filepath, n)] if os.path.isfile(f)}
+    if isinstance(journalsizes, dict): journalsizes.clear(), journalsizes.update(sizes)
+    return os.path.getsize(filepath) + sum(sizes.values())
+
+
+def register_types():
+    """Registers adapters to auto-convert Python types given in query parameters."""
+    for t in (dict, list, tuple): sqlite3.register_adapter(t, json.dumps)

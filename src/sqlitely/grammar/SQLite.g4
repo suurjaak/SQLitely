@@ -28,17 +28,24 @@
  *                https://github.com/bkiers/sqlite-parser
  * Developed by : Bart Kiers, bart@big-o.nl
  *
- * Updates:       unicode identifiers; added column_name to CREATE VIEW;
- *                added table_function_name; dropped cte_table_name;
- *                fixed multi-word column type; dropped keywords in table_alias;
- *                more use of with_clause; dropped Java-specific exception;
- *                double quotes allowed in string_literal; fixed module arguments;
- *                only ROWID allowed after WITHOUT; disallowed certain keywords in
- *                column types and constraint names; added TRUE/FALSE literals;
- *                added support for INDEX expressions.
+ * Updates:       unicode identifiers;
+ *                add column_name to CREATE VIEW;
+ *                add table_function_name;
+ *                drop cte_table_name;
+ *                fix multi-word column type;
+ *                drop keywords in table_alias;
+ *                more use of with_clause;
+ *                drop Java-specific exception;
+ *                double quotes allowed in string_literal;
+ *                fix module arguments;
+ *                only ROWID allowed after WITHOUT;
+ *                disallow certain keywords in column types and constraint names;
+ *                add TRUE/FALSE literals;
+ *                add support for INDEX expressions;
+ *                add support for NULLS FIRST|LAST in ORDER BY.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
- * Updated by   : Erki Suurjaak, 2019-2021
+ * Updated by   : Erki Suurjaak, 2019-2022
  */
 grammar SQLite;
 
@@ -406,7 +413,7 @@ qualified_table_name
  ;
 
 ordering_term
- : expr ( K_COLLATE collation_name )? ( K_ASC | K_DESC )?
+ : expr ( K_COLLATE collation_name )? ( K_ASC | K_DESC )? ( K_NULLS ( K_FIRST | K_LAST ) )?
  ;
 
 pragma_value
@@ -551,6 +558,7 @@ keyword
  | K_EXISTS
  | K_EXPLAIN
  | K_FAIL
+ | K_FIRST
  | K_FOR
  | K_FOREIGN
  | K_FROM
@@ -574,6 +582,7 @@ keyword
  | K_ISNULL
  | K_JOIN
  | K_KEY
+ | K_LAST
  | K_LEFT
  | K_LIKE
  | K_LIMIT
@@ -583,6 +592,7 @@ keyword
  | K_NOT
  | K_NOTNULL
  | K_NULL
+ | K_NULLS
  | K_OF
  | K_OFFSET
  | K_ON
@@ -787,6 +797,7 @@ K_EXISTS : E X I S T S;
 K_EXPLAIN : E X P L A I N;
 K_FAIL : F A I L;
 K_FALSE : F A L S E;
+K_FIRST : F I R S T;
 K_FOR : F O R;
 K_FOREIGN : F O R E I G N;
 K_FROM : F R O M;
@@ -810,6 +821,7 @@ K_IS : I S;
 K_ISNULL : I S N U L L;
 K_JOIN : J O I N;
 K_KEY : K E Y;
+K_LAST : L A S T;
 K_LEFT : L E F T;
 K_LIKE : L I K E;
 K_LIMIT : L I M I T;
@@ -819,6 +831,7 @@ K_NO : N O;
 K_NOT : N O T;
 K_NOTNULL : N O T N U L L;
 K_NULL : N U L L;
+K_NULLS : N U L L S;
 K_OF : O F;
 K_OFFSET : O F F S E T;
 K_ON : O N;

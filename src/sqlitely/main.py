@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.03.2022
+@modified    11.08.2022
 ------------------------------------------------------------------------------
 """
 import argparse
@@ -28,6 +28,7 @@ import wx
 
 from . lib import util
 from . import conf
+from . import database
 from . import guibase
 from . import gui
 
@@ -41,6 +42,8 @@ ARGUMENTS = {
          "version": "%s %s, %s." % (conf.Title, conf.Version, conf.VersionDate)},
         {"args": ["FILE"], "nargs": "*",
          "help": "SQLite database to open on startup, if any"},
+        {"args": ["--config-file"], "dest": "config_file", "nargs": 1,
+         "help": "path of configuration file to use"}
     ],
 }
 
@@ -173,7 +176,6 @@ def run_gui(filenames):
 def run():
     """Parses command-line arguments and runs GUI."""
     warnings.simplefilter("ignore", UnicodeWarning)
-    conf.load()
     argparser = argparse.ArgumentParser(description=ARGUMENTS["description"])
     for arg in ARGUMENTS["arguments"]:
         argparser.add_argument(*arg.pop("args"), **arg)
@@ -189,6 +191,8 @@ def run():
         arguments.FILE = sorted(set(util.to_unicode(f) for f in arguments.FILE))
         arguments.FILE = list(map(util.longpath, arguments.FILE))
 
+    conf.load(arguments.config_file)
+    database.register_types()
     run_gui(arguments.FILE)
 
 

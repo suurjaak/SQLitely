@@ -6,6 +6,7 @@ Parameters expected by templates:
 
     data       statement data structure
     root       root data structure
+    collapse   function to collapse all whitespace
     Template   Template-class
     templates  this module
     CM         comma setter(type, i, ?subtype, ?j, ?root=None)
@@ -22,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    01.01.2022
+@modified    05.08.2023
 ------------------------------------------------------------------------------
 """
 
@@ -60,7 +61,7 @@ ALTER TABLE {{ Q(data["name"]) }} RENAME COLUMN {{ Q(c1) }} TO {{ Q(c2) }};{{ LF
 {{ LF() }}
     %endif
 ALTER TABLE {{ Q(data["name"]) }} ADD COLUMN{{ WS(" ") }}
-  {{ Template(templates.COLUMN_DEFINITION, strip=True, collapse=True).expand(dict(locals(), data=c)) }};{{ LF() }}
+  {{ Template(templates.COLUMN_DEFINITION, strip=True, postprocess=collapse).expand(dict(locals(), data=c)) }};{{ LF() }}
 %endfor
 
 %if not data.get("no_tx"):
@@ -343,7 +344,7 @@ Alter sqlite_master directly.
          }
 """
 ALTER_MASTER = """<%
-CATEGORIES = ["table", "index", "view", "trigger"]
+CATEGORIES = ["table", "view", "index", "trigger"]
 %>
 {{ WS("-- Overwrite CREATE statements in sqlite_master directly,") }}{{ LF() }}
 {{ WS("-- to avoid table names being force-quoted by SQLite") }}{{ LF() }}
@@ -357,7 +358,7 @@ PRAGMA writable_SCHEMA = ON;{{ LF() }}
 
 %for category in CATEGORIES:
     %for name, sql in data.get(category, {}).items():
-UPDATE sqlite_master {{ WS("SET sql = ") }}{{ Q(sql.rstrip(";"), force=True) }}{{ LF() }}
+UPDATE sqlite_master {{ WS("SET sql = ") }}{{ Q(sql.rstrip(";\\n"), force=True) }}{{ LF() }}
 WHERE {{ WS("type = ") }}{{ Q(category, force=True) }} {{ WS(" AND name = ") }}{{ Q(name, force=True) }};{{ LF() }}
 {{ LF() }}
     %endfor
@@ -575,14 +576,14 @@ TABLE
 {{ LF() or GLUE() }}
 
 %for i, c in enumerate(data.get("columns") or []):
-  {{ PRE(Template(templates.COLUMN_DEFINITION, strip=True, collapse=True).expand(dict(locals(), data=c))) }}
+  {{ PRE(Template(templates.COLUMN_DEFINITION, strip=True, postprocess=collapse).expand(dict(locals(), data=c))) }}
   {{ CM("columns", i, root=root) }}
   {{ LF() }}
 %endfor
 
 %for i, c in enumerate(data.get("constraints") or []):
   {{ PRE() }}
-  {{ Template(templates.TABLE_CONSTRAINT, strip=True, collapse=True).expand(dict(locals(), data=c, i=i)) }}
+  {{ Template(templates.TABLE_CONSTRAINT, strip=True, postprocess=collapse).expand(dict(locals(), data=c, i=i)) }}
   {{ CM("constraints", i, root=root) }}
   {{ LF() }}
 %endfor

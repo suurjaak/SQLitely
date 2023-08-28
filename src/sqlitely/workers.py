@@ -8,13 +8,13 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.03.2022
+@modified    26.08.2023
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
 import hashlib
+import locale
 import logging
-import math
 import multiprocessing.connection
 import os
 import re
@@ -141,6 +141,7 @@ class SearchThread(WorkerThread):
 
     def make_replacer(self, words, case=False):
         """Returns word/phrase matcher regex."""
+        if not words: return re.compile("(?!)") # Match nothing
         words_re = [x if isinstance(w, tuple) else x.replace(r"\*", ".*")
                     for w in words
                     for x in [re.escape(step.escape_html(flatten(w)[0]))]]
@@ -200,12 +201,14 @@ class SearchThread(WorkerThread):
         """Searches database data, yielding (infotext, result)."""
         infotext, case = "", search.get("case")
         _, _, words, kws = self.parser.Parse(search["text"], case)
+        kws = {k: v for k, v in kws.items() if k in database.Database.DATA_CATEGORIES
+               or k.startswith("-") and k[1:] in database.Database.DATA_CATEGORIES}
         pattern_replace = self.make_replacer(words, case)
         tpl_item = step.Template(templates.SEARCH_ROW_DATA_HEADER_HTML, escape=True)
         tpl_row  = step.Template(templates.SEARCH_ROW_DATA_HTML, escape=True)
         result = {"output": "", "map": {}, "search": search, "count": 0}
 
-        for category in "table", "view":
+        for category in database.Database.DATA_CATEGORIES:
             if category not in kws \
             and ("table" if "view" == category else "view") in kws \
             or not search["db"].schema.get(category):
@@ -251,7 +254,7 @@ class SearchThread(WorkerThread):
                     logger.exception("Error searching %s %s.", category,
                                      grammar.quote(item["name"], force=True))
                     continue # for item
-                finally: util.try_until(lambda: cursor.close())
+                finally: cursor and util.try_ignore(cursor.close)
 
                 if not self._drop_results:
                     result["output"] += "</table></font>"
@@ -398,7 +401,7 @@ class AnalyzerThread(WorkerThread):
         """Stops the worker thread."""
         super(AnalyzerThread, self).stop(drop)
         p, self._process = self._process, None
-        p and util.try_until(p.kill)
+        p and util.try_ignore(p.kill)
 
 
     def stop_work(self, drop=True):
@@ -407,7 +410,7 @@ class AnalyzerThread(WorkerThread):
         """
         super(AnalyzerThread, self).stop_work(drop)
         p, self._process = self._process, None
-        p and util.try_until(p.kill)
+        p and util.try_ignore(p.kill)
 
 
     def run(self):
@@ -425,7 +428,7 @@ class AnalyzerThread(WorkerThread):
 
             try:
                 pargs = dict(stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT, universal_newlines=True)
+                             stderr=subprocess.STDOUT)
                 if hasattr(subprocess, "STARTUPINFO"):
                     startupinfo = subprocess.STARTUPINFO()
                     startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
@@ -450,6 +453,8 @@ class AnalyzerThread(WorkerThread):
                             except Exception: pass
                             if mypath == paths[-1]: six.reraise(type(e), e, tb)
                         else:
+                            output, error = (x and util.to_unicode(x, locale.getpreferredencoding())
+                                             for x in (output, error))
                             if not self._process \
                             or output and output.strip().startswith("/**"): break # for mypath
             except Exception as e:
@@ -585,10 +590,10 @@ class IPCListener(WorkerThread):
             except Exception: logger.exception("Error on IPC port %s.", self._port)
         self._is_working = False
         l, self._listener = self._listener, None
-        l and util.try_until(l.close)
+        l and util.try_ignore(l.close)
 
 
     def stop(self, drop=True):
         super(IPCListener, self).stop(drop)
         l, self._listener = self._listener, None
-        l and util.try_until(l.close)
+        l and util.try_ignore(l.close)

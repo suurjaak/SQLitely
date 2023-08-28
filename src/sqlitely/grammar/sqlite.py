@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    26.03.2022
+@modified    07.08.2023
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -81,6 +81,33 @@ def generate(data, indent="  ", category=None):
     return result, err
 
 
+@util.memoize
+def get_type(sql):
+    """
+    Returns SQL statement type.
+
+    @param  sql  SQL statement like "SELECT * FROM foo"
+    @return      one of (SQL.DELETE, SQL.INSERT, SQL.SELECT, SQL.UPDATE), or None
+    """
+    result = None
+    try:
+        parser = SQLiteParser(CommonTokenStream(SQLiteLexer(InputStream(sql))))
+        tree = parser.parse().children[0].children[0].children[0]
+        ctx = tree.children[0].children[0].children[0]
+        if isinstance(ctx, (CTX.DELETE, CTX.DELETE_LIMITED)):
+            result = SQL.DELETE
+        elif isinstance(ctx, CTX.INSERT):
+            result = SQL.INSERT
+        elif isinstance(ctx, (CTX.SELECT, CTX.SELECT_COMPOUND,
+                              CTX.SELECT_FACTORED, CTX.SELECT_SIMPLE)):
+            result = SQL.SELECT
+        elif isinstance(ctx, (CTX.UPDATE, CTX.UPDATE_LIMITED)):
+            result = SQL.UPDATE
+    except Exception:
+        logger.exception("Error determining type of SQL %r.", sql)
+    return result
+
+
 @util.memoize(__nohash__=True)
 def transform(sql, flags=None, renames=None, indent="  "):
     """
@@ -145,27 +172,29 @@ def unquote(val):
 
 def format(value, coldata=None):
     """Formats a value for use in an SQL statement like INSERT."""
-    if isinstance(value, six.string_types):
-        success = False
+    result = None
+    if value is None: result = "NULL"
+    elif isinstance(value, six.integer_types + (float, )): result = str(value)
+    elif not isinstance(value, six.string_types): value = str(value)
+
+    if result is None:
         if isinstance(coldata, dict) \
         and isinstance(coldata.get("type"), six.string_types) \
         and "JSON" == coldata["type"].upper():
-            try: result, success = "'%s'" % json.dumps(json.loads(value)), True
+            try: result = "'%s'" % json.dumps(json.loads(value))
             except Exception: pass
 
-        if not success and SAFEBYTE_RGX.search(value):
+        if result is None and SAFEBYTE_RGX.search(value):
             if isinstance(value, six.text_type):
                 try:
                     value = value.encode("latin1")
                 except UnicodeError:
                     value = value.encode("utf-8", errors="backslashreplace")
             result = "X'%s'" % codecs.encode(value, "hex").decode("latin1").upper()
-        elif not success:
+        elif result is None:
             if isinstance(value, six.text_type):
                 value = value.encode("utf-8").decode("latin1")
             result = "'%s'" % value.replace("'", "''")
-    else:
-        result = "NULL" if value is None else str(value)
     return result
 
 
@@ -173,6 +202,11 @@ def uni(x, encoding="utf-8"):
     """Convert anything to Unicode, except None."""
     if x is None or isinstance(x, six.text_type): return x
     return six.text_type(str(x), encoding, errors="replace")
+
+
+def collapse_whitespace(s):
+    """Collapse all whitespace into a single space, and strip if between non-alphanumerics."""
+    return re.sub(r"(\W)\s+(\W)", r"\1\2", re.sub(r"\s+", " ", s), re.U)
 
 
 
@@ -225,9 +259,14 @@ class CTX(object):
     CREATE_VIEW          = SQLiteParser.Create_view_stmtContext
     CREATE_VIRTUAL_TABLE = SQLiteParser.Create_virtual_table_stmtContext
     DELETE               = SQLiteParser.Delete_stmtContext
+    DELETE_LIMITED       = SQLiteParser.Delete_stmt_limitedContext
     INSERT               = SQLiteParser.Insert_stmtContext
     SELECT               = SQLiteParser.Select_stmtContext
+    SELECT_COMPOUND      = SQLiteParser.Compound_select_stmtContext
+    SELECT_FACTORED      = SQLiteParser.Factored_select_stmtContext
+    SELECT_SIMPLE        = SQLiteParser.Simple_select_stmtContext
     UPDATE               = SQLiteParser.Update_stmtContext
+    UPDATE_LIMITED       = SQLiteParser.Update_stmt_limitedContext
     COLUMN_NAME          = SQLiteParser.Column_nameContext
     INDEX_NAME           = SQLiteParser.Index_nameContext
     SCHEMA_NAME          = SQLiteParser.Database_nameContext
@@ -241,21 +280,23 @@ class CTX(object):
 
 
 """Words that need quoting if in name context, e.g. table name."""
-RESERVED_KEYWORDS = ["ACTION", "ADD", "AFTER", "ALL", "ALTER", "ALWAYS", "ANALYZE",
-    "AND", "AS", "ASC", "ATTACH", "AUTOINCREMENT", "BEFORE", "BEGIN", "BETWEEN",
-    "BY", "CASE", "CAST", "CHECK", "COLLATE", "COMMIT", "CONSTRAINT", "CREATE",
-    "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "DEFAULT", "DEFERRABLE",
-    "DEFERRED", "DELETE", "DESC", "DETACH", "DISTINCT", "DO", "DROP", "EACH",
-    "ELSE", "END", "ESCAPE", "EXCEPT", "EXISTS", "EXPLAIN", "FOR", "FOREIGN",
-    "FROM", "GENERATED", "GROUP", "HAVING", "IF", "IMMEDIATE", "IN", "INDEX",
-    "INITIALLY", "INSERT", "INSTEAD", "INTERSECT", "INTO", "IS", "ISNULL",
-    "JOIN", "KEY", "LIKE", "LIMIT", "MATCH", "NO", "NOT", "NOTHING", "NOTNULL",
-    "NULL", "OF", "ON", "OR", "ORDER", "OVER", "PRAGMA", "PRECEDING", "PRIMARY",
-    "RAISE", "RECURSIVE", "REFERENCES", "REGEXP", "REINDEX", "RELEASE", "RENAME",
-    "REPLACE", "RESTRICT", "ROLLBACK", "SAVEPOINT", "SELECT", "SET", "TABLE",
-    "TEMPORARY", "THEN", "TIES", "TO", "TRANSACTION", "TRIGGER", "UNBOUNDED",
-    "UNION", "UNIQUE", "UPDATE", "USING", "VACUUM", "VALUES", "VIEW", "WHEN",
-    "WHERE", "WITHOUT"]
+RESERVED_KEYWORDS = ["ABORT", "ACTION", "ADD", "AFTER", "ALL", "ALTER", "ALWAYS", "ANALYZE", "AND",
+    "AS", "ASC", "ATTACH", "AUTOINCREMENT", "BEFORE", "BEGIN", "BETWEEN", "BY", "CASCADE", "CASE",
+    "CAST", "CHECK", "COLLATE", "COLUMN", "COMMIT", "CONFLICT", "CONSTRAINT", "CREATE", "CROSS",
+    "CURRENT", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP", "DATABASE", "DEFAULT",
+    "DEFERRABLE", "DEFERRED", "DELETE", "DESC", "DETACH", "DISTINCT", "DO", "DROP", "EACH", "ELSE",
+    "END", "ESCAPE", "EXCEPT", "EXCLUDE", "EXCLUSIVE", "EXISTS", "EXPLAIN", "FAIL", "FILTER",
+    "FIRST", "FOLLOWING", "FOR", "FOREIGN", "FROM", "FULL", "GENERATED", "GLOB", "GROUP", "GROUPS",
+    "HAVING", "IF", "IGNORE", "IMMEDIATE", "IN", "INDEX", "INDEXED", "INITIALLY", "INNER", "INSERT",
+    "INSTEAD", "INTERSECT", "INTO", "IS", "ISNULL", "JOIN", "KEY", "LAST", "LEFT", "LIKE", "LIMIT",
+    "MATCH", "MATERIALIZED", "NATURAL", "NO", "NOT", "NOTHING", "NOTNULL", "NULL", "NULLS", "OF",
+    "OFFSET", "ON", "OR", "ORDER", "OTHERS", "OUTER", "OVER", "PARTITION", "PLAN", "PRAGMA",
+    "PRECEDING", "PRIMARY", "QUERY", "RAISE", "RANGE", "RECURSIVE", "REFERENCES", "REGEXP",
+    "REINDEX", "RELEASE", "RENAME", "REPLACE", "RESTRICT", "RETURNING", "RIGHT", "ROLLBACK", "ROW",
+    "ROWS", "SAVEPOINT", "SELECT", "SET", "TABLE", "TEMP", "TEMPORARY", "THEN", "TIES", "TO",
+    "TRANSACTION", "TRIGGER", "UNBOUNDED", "UNION", "UNIQUE", "UPDATE", "USING", "VACUUM", "VALUES",
+    "VIEW", "VIRTUAL", "WHEN", "WHERE", "WINDOW", "WITH", "WITHOUT"
+]
 
 
 class ParseError(Exception):
@@ -300,7 +341,9 @@ class Parser(object):
     CATEGORIES = {"index":   SQL.CREATE_INDEX,   "table": SQL.CREATE_TABLE,
                   "trigger": SQL.CREATE_TRIGGER, "view":  SQL.CREATE_VIEW,
                   "virtual table":  SQL.CREATE_VIRTUAL_TABLE}
-    TRIGGER_BODY_CTXS = [CTX.DELETE, CTX.INSERT, CTX.SELECT, CTX.UPDATE]
+    TRIGGER_BODY_CTXS = [CTX.DELETE, CTX.DELETE_LIMITED, CTX.INSERT,
+                         CTX.SELECT, CTX.SELECT_COMPOUND, CTX.SELECT_FACTORED, CTX.SELECT_SIMPLE,
+                         CTX.UPDATE, CTX.UPDATE_LIMITED]
 
     class ReparseException(Exception): pass
 
@@ -757,7 +800,7 @@ class Parser(object):
                 fkctx = c.foreign_key_clause()
                 result[key] = self.build_fk_extra(fkctx)
                 result[key]["table"] = self.u(fkctx.foreign_table)
-                result[key]["key"] = self.u(fkctx.column_name(0))
+                result[key]["key"] = self.u(fkctx.column_name(0) or "")
 
             if key and c.constraint_name(): result[key]["name"] = self.u(c.constraint_name)
 
@@ -1040,12 +1083,12 @@ class Generator(object):
         REPLACE_ORDER = ["Q", "GLUE", "CM", "LF", "PRE", "PAD", "WS"]
         ns = {"Q":    self.quote,   "LF": self.linefeed, "PRE": self.indentation,
               "PAD":  self.padding, "CM": self.comma,    "WS":  self.token,
-              "GLUE": self.glue, "data": data, "root": data,
+              "GLUE": self.glue, "data": data, "root": data, "collapse": collapse_whitespace,
               "Template": step.Template, "templates": templates}
 
         # Generate SQL, using unique tokens for whitespace-sensitive parts,
         # replaced after stripping down whitespace in template result.
-        tpl = step.Template(self.TEMPLATES[category], strip=True, collapse=True)
+        tpl = step.Template(self.TEMPLATES[category], strip=True, postprocess=collapse_whitespace)
         while True:
             self._tokens.clear(); self._tokendata.clear(); self._data = data
             result = tpl.expand(ns)

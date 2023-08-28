@@ -10,8 +10,14 @@ Stand-alone GUI components for wx:
   A StyledTextCtrl configured for byte editing.
   Raises CaretPositionEvent, LinePositionEvent and SelectionEvent.
 
+- CallableManagerDialog(wx.Dialog):
+  Dialog for displaying and managing a list of callables.
+
 - ColourManager(object):
   Updates managed component colours on Windows system colour change.
+
+- FileBrowseButton(wx.lib.filebrowsebutton.FileBrowseButton):
+  FileBrowseButton using a cached file dialog.
 
 - FileDrop(wx.FileDropTarget):
   A simple file drag-and-drop handler.
@@ -39,6 +45,9 @@ Stand-alone GUI components for wx:
   A large button with a custom icon, main label, and additional note.
   Inspired by wx.CommandLinkButton, which does not support custom icons
   (at least not of wx 2.9.4).
+
+- Patch(object):
+  Monkey-patches wx API for general compatibility over different versions.
 
 - ProgressWindow(wx.Dialog):
   A simple non-modal ProgressDialog, stays on top of parent frame.
@@ -87,12 +96,13 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    28.03.2022
+@modified    27.08.2023
 ------------------------------------------------------------------------------
 """
 import collections
 import copy
 import functools
+import keyword
 import locale
 import math
 import os
@@ -110,6 +120,7 @@ try: # ShapedButton requires PIL, might not be installed
 except Exception: pass
 import wx.lib.agw.ultimatelistctrl
 import wx.lib.embeddedimage
+import wx.lib.filebrowsebutton
 import wx.lib.gizmos
 import wx.lib.mixins.listctrl
 import wx.lib.newevent
@@ -118,6 +129,8 @@ import wx.lib.wordwrap
 import wx.stc
 
 
+try: import collections.abc as collections_abc             # Py3
+except ImportError: import collections as collections_abc  # Py3
 try:
     integer_types, string_types, text_type = (int, long), (basestring, ), unicode  # Py2
 except NameError:
@@ -135,6 +148,9 @@ BUTTON_MIN_WIDTH = 35 if "linux" in sys.platform else 20
 
 # Multiplier for wx.ComboBox width ~100px ranges
 COMBO_WIDTH_FACTOR = 1.5 if "linux" in sys.platform else 1
+
+# wx.NewId() deprecated from around wxPython 4
+NewId = (lambda: wx.NewIdRef().Id) if hasattr(wx, "NewIdRef") else wx.NewId
 
 
 class KEYS(object):
@@ -324,6 +340,8 @@ class ColourManager(object):
         """Returns wx.Colour or system colour as HTML colour hex string."""
         colour = idx if isinstance(idx, wx.Colour) \
                  else wx.SystemSettings.GetColour(idx)
+        if colour.Alpha() != wx.ALPHA_OPAQUE:
+            colour = wx.Colour(colour[:3])  # GetAsString(C2S_HTML_SYNTAX) can raise if transparent
         return colour.GetAsString(wx.C2S_HTML_SYNTAX)
 
 
@@ -350,7 +368,7 @@ class ColourManager(object):
                   if isinstance(colour2, integer_types) else wx.Colour(colour2)
         rgb1, rgb2 = tuple(colour1)[:3], tuple(colour2)[:3]
         delta  = tuple(a - b for a, b in zip(rgb1, rgb2))
-        result = tuple(a - (d * ratio) for a, d in zip(rgb1, delta))
+        result = tuple(a - int(d * ratio) for a, d in zip(rgb1, delta))
         result = tuple(min(255, max(0, x)) for x in result)
         return wx.Colour(result)
 
@@ -462,6 +480,444 @@ class ColourManager(object):
 
         stc.CallTipSetBackground(faces['calltipbg'])
         stc.CallTipSetForeground(faces['calltipfg'])
+
+
+
+CallableManagerEvent, EVT_CALLABLE_MANAGER = wx.lib.newevent.NewCommandEvent()
+
+class CallableManagerDialog(wx.Dialog):
+    """
+    Dialog for displaying and managing a list of callables.
+
+    Posts all changes as EVT_CALLABLE_MANAGER, with ClientObject as the current list.
+    """
+
+    def __init__(self, parent, title, items, validator=callable, tester=None, alias="callable", body=""):
+        """
+        @param   items      list of {label, body, name, ?callable, ?namespace, ?active}
+        @param   validator  function(target) returning bool or error message
+                            for potential target value from compiled namespace
+        @param   test       function(target, dialog) returning bool or error message
+                            for test-invoking the target
+        @param   alias      name for callable type, used in dialog texts
+        @param   body       default body content for new items
+        """
+        wx.Dialog.__init__(self, parent, title=title,
+                          style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER)
+        self.items     = [dict(x) for x in items]
+        self.validator = validator
+        self.tester    = tester
+        self.alias     = alias
+        self.body      = body
+
+        self.editmode  = False
+        self.newmode   = False
+        self.item      = self.items[0] if self.items else None
+        self.state     = {}  # Current item edit state, as {namespace: {..}, error: ".."}
+
+        panel = self.panel = wx.Panel(self, style=wx.BORDER_RAISED)
+        splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
+        panel_left  = wx.Panel(splitter)
+        panel_right = wx.Panel(splitter)
+
+        list_items  = wx.ListView(panel_left, style=wx.LC_REPORT | wx.LC_SINGLE_SEL |
+                                                    wx.LC_NO_HEADER)
+        button_up   = wx.Button(panel_left, label="Up")
+        button_down = wx.Button(panel_left, label="Down")
+
+        label_title = wx.StaticText(panel_right, label="Tit&le:")
+        edit_title = wx.TextCtrl(panel_right)
+        label_body = wx.StaticText(panel_right, label="&Body:")
+        stc_body = wx.stc.StyledTextCtrl(panel_right)
+        label_name = wx.StaticText(panel_right, label="Ta&rget:")
+        combo_name = wx.ComboBox(panel_right, style=wx.CB_DROPDOWN | wx.CB_READONLY)
+        button_test = wx.Button(panel_right, label="&Test")
+        label_active = wx.StaticText(panel_right, label="&Active:")
+        cb_active    = wx.CheckBox(panel_right)
+
+        label_error = wx.StaticText(panel_right, label="Error:")
+        edit_error  = wx.TextCtrl(panel_right, style=wx.TE_MULTILINE | wx.TE_NO_VSCROLL |
+                                                     wx.BORDER_NONE)
+
+        button_compile = wx.Button(panel_right, label="&Compile")
+        button_edit    = wx.Button(panel_right, label="&Edit")
+        button_save    = wx.Button(panel_right, label="&Save")
+        button_delete  = wx.Button(panel_right, label="Delete")
+        button_cancel  = wx.Button(panel_right, label="Canc&el")
+
+        button_new     = wx.Button(self, label="&New entry")
+        button_close   = wx.Button(self, label="Close")
+
+        self.Sizer        = wx.BoxSizer(wx.VERTICAL)
+        panel.Sizer       = wx.BoxSizer(wx.VERTICAL)
+        panel_left.Sizer  = wx.BoxSizer(wx.VERTICAL)
+        panel_right.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_arrows      = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_form        = wx.GridBagSizer(hgap=5, vgap=5)
+        sizer_test        = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_itembuttons = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_buttons     = wx.BoxSizer(wx.HORIZONTAL)
+
+        sizer_arrows.Add(button_up,   proportion=1)
+        sizer_arrows.Add(button_down, proportion=1)
+
+        sizer_test.Add(combo_name, proportion=1)
+        sizer_test.Add(button_test)
+
+        sizer_itembuttons.Add(button_compile)
+        sizer_itembuttons.AddStretchSpacer()
+        sizer_itembuttons.Add(button_edit,    flag=wx.LEFT, border=5)
+        sizer_itembuttons.Add(button_save,    flag=wx.LEFT, border=5)
+        sizer_itembuttons.Add(button_delete,  flag=wx.LEFT, border=5)
+        sizer_itembuttons.Add(button_cancel,  flag=wx.LEFT, border=5)
+
+        sizer_buttons.Add(button_new)
+        sizer_buttons.AddStretchSpacer()
+        sizer_buttons.Add(button_close)
+
+        panel_left.Sizer.Add(list_items, proportion=1, flag=wx.GROW)
+        panel_left.Sizer.Add(sizer_arrows, flag=wx.GROW)
+
+        sizer_form.Add(label_title,       pos=(0, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        sizer_form.Add(edit_title,        pos=(0, 1), flag=wx.GROW)
+        sizer_form.Add(label_body,        pos=(1, 0))
+        sizer_form.Add(stc_body,          pos=(1, 1), flag=wx.GROW)
+        sizer_form.Add(label_name,        pos=(2, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        sizer_form.Add(sizer_test,        pos=(2, 1), flag=wx.GROW)
+        sizer_form.Add(label_active,      pos=(3, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        sizer_form.Add(cb_active,         pos=(3, 1))
+        sizer_form.Add(label_error,       pos=(4, 0))
+        sizer_form.Add(edit_error,        pos=(4, 1), span=(2, 2), flag=wx.GROW)
+        sizer_form.Add(sizer_itembuttons, pos=(6, 0), span=(1, 2), flag=wx.GROW)
+        sizer_form.AddGrowableRow(1)
+        sizer_form.AddGrowableCol(1)
+
+        panel_right.Sizer.Add(sizer_form, proportion=1, flag=wx.ALL | wx.GROW, border=5)
+
+        panel.Sizer.Add(splitter, proportion=1, flag=wx.GROW)
+        self.Sizer.Add(panel, proportion=1, flag=wx.GROW)
+        self.Sizer.Add(sizer_buttons, flag=wx.ALL | wx.GROW, border=5)
+
+        splitter.SetMinimumPaneSize(150)
+        splitter.SplitVertically(panel_left, panel_right, splitter.MinimumPaneSize)
+
+        listfont = list_items.Font
+        listfont.PointSize = int(1.5 * listfont.PointSize)
+        list_items.Font = listfont
+        list_items.AppendColumn("")
+        edit_error.SetEditable(False)
+        stc_body.SetTabWidth(4)
+        stc_body.SetUseTabs(False)
+        stc_body.SetWrapMode(wx.stc.STC_WRAP_WORD)
+        stc_body.SetLexer(wx.stc.STC_LEX_PYTHON)
+        stc_body.SetKeyWords(0, " ".join(keyword.kwlist))
+        stc_body.SetMargins(0, 0)
+        stc_body.SetMarginType(1, wx.stc.STC_MARGIN_NUMBER)
+        ColourManager.SetShellStyles(stc_body)
+        button_test.Show(bool(tester))
+
+        label_title.ToolTip    = edit_title.ToolTip = "Title for %s; ampersand makes hotkey" % alias
+        label_body.ToolTip     = stc_body.ToolTip   = "Python code to compile for %s" % alias
+        label_active.ToolTip   = cb_active.ToolTip  = "Enable %s for use" % alias
+        label_name.ToolTip     = combo_name.ToolTip = "Callable name from body to invoke as %s" % alias
+        button_new.ToolTip     = "Enter new %s" % alias
+        button_close.ToolTip   = "Close dialog"
+        button_up.ToolTip      = "Move selected entry one step higher"
+        button_down.ToolTip    = "Move selected entry one step higher"
+        button_test.ToolTip    = "Invoke %s with content from popup" % alias
+        button_compile.ToolTip = "Compile and verify code"
+        button_edit.ToolTip    = "Edit current %s" % alias
+        button_save.ToolTip    = "Save %s" % alias
+        button_delete.ToolTip  = "Delete %s" % alias
+        button_cancel.ToolTip  = "Discard changes"
+
+        self.list_items     = list_items
+        self.edit_title     = edit_title
+        self.stc_body       = stc_body
+        self.combo_name     = combo_name
+        self.cb_active      = cb_active
+        self.label_error    = label_error
+        self.edit_error     = edit_error
+        self.button_up      = button_up
+        self.button_down    = button_down
+        self.button_test    = button_test
+        self.button_compile = button_compile
+        self.button_edit    = button_edit   
+        self.button_save    = button_save   
+        self.button_delete  = button_delete 
+        self.button_cancel  = button_cancel 
+        self.button_new     = button_new    
+        self.button_close   = button_close  
+
+        wrap = lambda f, *a: lambda e: wx.CallAfter(f, *a)
+        splitter.Bind(wx.EVT_SPLITTER_SASH_POS_CHANGED, wrap(self._UpdateUI))
+        self.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self._OnSelectItem,           list_items)
+        self.Bind(wx.stc.EVT_STC_MODIFIED,    wrap(self.EnsureMargin),     stc_body)
+        self.Bind(wx.EVT_BUTTON,              wrap(self.Compile),           button_compile)
+        self.Bind(wx.EVT_BUTTON,              wrap(self.Test),              button_test)
+        self.Bind(wx.EVT_BUTTON,              wrap(self.SetEditmode, True), button_edit)
+        self.Bind(wx.EVT_BUTTON,              self._OnCancelEdit,           button_cancel)
+        self.Bind(wx.EVT_BUTTON,              self._OnSaveEdit,             button_save)
+        self.Bind(wx.EVT_BUTTON,              self._OnDelete,               button_delete)
+        self.Bind(wx.EVT_BUTTON,              self._OnNew,                  button_new)
+        self.Bind(wx.EVT_BUTTON,              self._OnClose,                button_close)
+        self.Bind(wx.EVT_BUTTON,              wrap(self.MoveItem, -1),      button_up)
+        self.Bind(wx.EVT_BUTTON,              wrap(self.MoveItem, +1),      button_down)
+        self.Bind(wx.EVT_SYS_COLOUR_CHANGED,  self._OnSysColourChange)
+        self.Bind(wx.EVT_CLOSE,               self._OnClose)
+        self.SetEscapeId(button_close.Id)
+
+        ColourManager.Manage(self,        "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
+        ColourManager.Manage(edit_error,  "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
+        ColourManager.Manage(label_error, "ForegroundColour", wx.SYS_COLOUR_HOTLIGHT)
+        ColourManager.Manage(edit_error,  "ForegroundColour", wx.SYS_COLOUR_HOTLIGHT)
+
+        for i, item in enumerate(self.items): list_items.InsertItem(i, item["title"])
+        if self.items: list_items.Select(0)
+        self.Populate()
+        self.SetEditmode(False)
+
+        self.Layout()
+        self.Fit()
+        self.Size = (700, 500)
+        self.MinSize = (450, 350)
+        self.CenterOnParent()
+        self._UpdateUI()
+
+
+    def Populate(self):
+        """Populates dialog controls with current item."""
+        item = self.item or {}
+        readonly, self.stc_body.ReadOnly = self.stc_body.ReadOnly, False
+        self.edit_title.Value = item.get("title", "")
+        self.stc_body.Text    = item.get("body", "")
+        self.cb_active.Value  = item.get("active") is not False
+        self.label_error.Shown = False
+        self.edit_error.Value = ""
+        self.combo_name.SetItems([])
+        self.stc_body.ReadOnly = readonly
+        self.EnsureMargin()
+        self.button_test.Enabled = self.item is not None
+        if not self.newmode and self.item is not None: self.Compile()
+
+
+    def GetChanges(self):
+        """Returns dictionary of values changed in current item, if any."""
+        result = {}
+        if self.item.get("title", "") != self.edit_title.Value: result["title"] = self.edit_title.Value
+        if self.item.get("body",  "") != self.stc_body.Text:    result["body"]  = self.stc_body.Text
+        if self.item.get("name",  "") != self.combo_name.Value: result["name"]  = self.combo_name.Value
+        if self.item.get("active", True) != self.cb_active.Value:
+            result["active"] = self.cb_active.Value
+        return result
+
+
+    def Compile(self):
+        """Compiles entered code, updates state and UI with results."""
+        self.label_error.Shown = False
+        self.edit_error.Value = ""
+        ns, err, text = {}, None, self.stc_body.Text
+        try: eval(compile(text, "", "exec"), None, ns)
+        except Exception as e: ns, err = None, str(e)
+        if ns: ns = {k: v for k, v in sorted(ns.items()) if self.validator(v) is True}
+        if not ns and not err: err = "No suitable %s found in body." % self.alias
+        selected = self.combo_name.Value if ns and self.combo_name.Value in ns else None
+
+        self.combo_name.SetItems(list(ns or {}))
+        self.label_error.Shown = bool(err)
+        self.edit_error.Value = err or ""
+        if selected: self.combo_name.SetSelection(self.combo_name.FindString(selected))
+        elif ns: self.combo_name.SetSelection(0)
+        self.label_error.ContainingSizer.Layout()
+
+        self.state.update(namespace=ns or {}, error=err)
+
+
+    def Test(self):
+        """Compiles item if changed, and invokes external tester."""
+        if not self.state or "body" in self.GetChanges():
+            self.Compile()
+        if "namespace" in self.state and self.combo_name.Value in self.state["namespace"]:
+            target = self.state["namespace"][self.combo_name.Value]
+            self.tester(target, self)
+
+
+    def MoveItem(self, direction):
+        """Moves item currently selected in itemlist one step higher or lower; posts event."""
+        index = self.list_items.GetFirstSelected()
+        if index < 0 or direction < 0 and not index \
+        or direction > 0 and index == len(self.items) - 1:
+            self.list_items.SetFocus()
+            return
+        index2 = index + (1 if direction > 0 else -1)
+        self.list_items.SetItemText(index,  self.items[index2]["title"])
+        self.list_items.SetItemText(index2, self.items[index ]["title"])
+        self.items[index], self.items[index2] = self.items[index2], self.items[index]
+        self.list_items.SetFocus()
+        self.list_items.Select(index2)
+        self._PostEvent()
+
+
+    def SetEditmode(self, editmode=True):
+        """Sets form controls read-only or not and toggles buttons."""
+        self.editmode = editmode
+        if not editmode: self.newmode = False
+        self.edit_title.SetEditable(editmode)
+        self.stc_body.ReadOnly  = not editmode
+        self.combo_name.Enabled = editmode
+        self.cb_active.Enabled  = editmode
+        self.button_edit.Shown    = self.button_delete.Shown = not editmode
+        self.button_compile.Shown = self.button_save.Shown   = self.button_cancel.Shown = editmode
+        self.button_edit.Enabled  = self.button_delete.Enabled = not editmode and self.item is not None
+        self.button_edit.ContainingSizer.Layout()
+
+
+    def EnsureMargin(self):
+        """Ensures code editor having margin wide enough for line numbers."""
+        PADDING, CHARWIDTH = 4, 7
+        linecount = len(self.stc_body.Text.splitlines()) + 1
+        width = PADDING + CHARWIDTH * (1 + max(1, int(math.log10(linecount or 1))))
+        self.stc_body.SetMarginWidth(1, width)
+
+
+    def _CheckUnsaved(self):
+        """Returns true if form has unsaved changes and user prompted to cancel in popup."""
+        if not self.editmode or not self.GetChanges(): return False
+        return wx.OK != wx.MessageBox("There are unsaved changes.\n\n"
+                                      "Are you sure you want to discard them?",
+                                      "Unsaved changes", wx.OK | wx.CANCEL)
+
+
+    def _PostEvent(self):
+        """Posts CallableManagerEvent with current content."""
+        evt = CallableManagerEvent(self.Id)
+        evt.SetEventObject(self)
+        evt.SetClientObject([copy.copy(x) for x in self.items])
+        wx.PostEvent(self.Parent, evt)
+
+
+    def _UpdateUI(self):
+        """Sizes itemlist columns to fit."""
+        w = self.list_items.Size[0] - self.list_items.GetWindowBorderSize()[0]
+        self.list_items.SetColumnWidth(0, w)
+
+
+    def _OnSysColourChange(self, event):
+        """Handler for system colour change, updates STC styling."""
+        event.Skip()
+        ColourManager.SetShellStyles(self.stc_body)
+
+
+    def _OnSelectItem(self, event):
+        """Handler for activating an item entry, populates form."""
+        if self._CheckUnsaved() \
+        or self.item in self.items and self.items.index(self.item) == event.Index: return
+        self.item = self.items[event.Index]
+        self.state.clear()
+        self.newmode = False
+        self.Populate()
+        self.SetEditmode(False)
+
+
+    def _OnNew(self, event):
+        """Handler for clicking the new button, opens blank form if not already."""
+        if self.newmode or self._CheckUnsaved():
+            if self.newmode: self.edit_title.SetFocus()
+            return
+        self.SetEditmode(True)
+        self.newmode = True
+        self.item = {"body": (self.body + "\n") if self.body else ""}
+        self.state.clear()
+        self.Populate()
+        if self.list_items.GetFirstSelected() >= 0:
+            self.list_items.Select(self.list_items.GetFirstSelected(), False)
+        self.edit_title.SetFocus()
+
+
+    def _OnSaveEdit(self, event):
+        """Handler for saving changes, posts event if changed, and exits editmode."""
+        changes = self.GetChanges()
+        if not changes.get("title") and not self.item.get("title"):
+            self.edit_title.SetFocus()
+            return wx.MessageBox("Title is mandatory.", "Unsaved changes", wx.ICON_WARNING | wx.OK)
+        if changes:
+            self.Compile()
+            if self.state["error"] and wx.OK != wx.MessageBox(
+                "Are you sure you want to save invalid state?\n\nError: %s" % self.state["error"],
+                "Unsaved changes", wx.ICON_WARNING | wx.OK | wx.CANCEL
+            ): return
+
+            self.item.update(changes)
+            if self.item.get("active") is not False: self.item.pop("active", None)
+            if self.item.get("name") in self.state["namespace"]:
+                self.item["target"] = self.state["namespace"][self.item["name"]]
+
+            if self.newmode:
+                self.items.append(self.item)
+                self.list_items.InsertItem(len(self.items) - 1, self.item["title"])
+                self.list_items.Select(len(self.items) - 1)
+            elif "title" in changes:
+                idx = self.items.index(self.item)
+                self.list_items.SetItemText(idx, self.item["title"])
+            self._UpdateUI()
+
+            self._PostEvent()
+        self.SetEditmode(False)
+
+
+    def _OnCancelEdit(self, event):
+        """Handler for cancelling editmode, confirms unsaved changes."""
+        if self._CheckUnsaved(): return
+        if self.newmode: self.item = None
+        self.newmode = False
+        self.Populate()
+        self.SetEditmode(False)
+
+
+    def _OnDelete(self, event):
+        """Handler for deleting item, asks for confirmation and posts event."""
+        if wx.OK != wx.MessageBox("Are you sure you want to delete this item?", "Delete",
+                                  wx.OK | wx.CANCEL): return
+        self.list_items.DeleteItem(self.items.index(self.item))
+        self.items.remove(self.item)
+        self.state.clear()
+        self.item = None
+        self.Populate()
+        self.SetEditmode(False)
+        self._PostEvent()
+
+
+    def _OnClose(self, event):
+        """Handler for closing dialog, confirms unsaved changes."""
+        if self._CheckUnsaved(): return
+        self.EndModal(wx.ID_OK) if self.IsModal() else self.Hide()
+
+
+
+class FileBrowseButton(wx.lib.filebrowsebutton.FileBrowseButton):
+    """FileBrowseButton using a cached file dialog."""
+
+    def __init__ (self, parent, *args, **kwargs):
+        super(FileBrowseButton, self).__init__(parent, *args, **kwargs)
+        self.dialog = None
+
+    def OnBrowse (self, event=None):
+        """Opens file dialog, forwards selection to callback, if any."""
+        self.dialog = self.dialog or wx.FileDialog(self, message=self.dialogTitle, 
+                                                   wildcard=self.fileMask, style=self.fileMode)
+
+        dlg, current = self.dialog, self.GetValue()
+        if current != get_dialog_path(dlg):
+            root, tail = os.path.split(current)
+            if os.path.isdir(current):
+                dlg.Directory, dlg.Filename = current, ""
+            elif os.path.isdir(root):
+                dlg.Directory, dlg.Filename = root, tail
+            else:
+                dlg.Directory, dlg.Filename = self.startDirectory, ""
+
+        if dlg.ShowModal() == wx.ID_OK:
+            self.SetValue(get_dialog_path(dlg))
 
 
 
@@ -605,9 +1061,9 @@ class FormDialog(wx.Dialog):
             Walks through the collection of nested dicts or lists or tuples, invoking
             callback(child) for each element, recursively.
             """
-            if isinstance(x, collections.Iterable) and not isinstance(x, string_types):
+            if isinstance(x, collections_abc.Iterable) and not isinstance(x, string_types):
                 for k, v in enumerate(x):
-                    if isinstance(x, collections.Mapping): k, v = v, x[v]
+                    if isinstance(x, collections_abc.Mapping): k, v = v, x[v]
                     callback(v)
                     walk(v, callback)
 
@@ -794,7 +1250,7 @@ class FormDialog(wx.Dialog):
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         label, tb, ctrl = None, None, None
-        accname = "footer_%s" % wx.NewIdRef().Id
+        accname = "footer_%s" % NewId()
 
         if footer.get("label"):
             label = wx.StaticText(panel, label=footer["label"], name=accname + "_label")
@@ -1179,10 +1635,15 @@ class FormDialog(wx.Dialog):
             for c in self._comps.get(fpath + (field["togglename"]["name"], ), []):
                 if c not in (x for _, _, x in ctrls):
                     ctrls.append((field["togglename"], fpath, c))
-        for f in field.get("children", []):
-            for c in self._comps.get(fpath + (f["name"], ), []):
-                if c not in (x for _, _, x in ctrls):
-                    ctrls.append((f, fpath, c))
+        neststack = [(fpath, field["children"])] if field.get("children") else []
+        while neststack:
+            npath, children = neststack.pop(0)
+            for f in children:
+                for c in self._comps.get(npath + (f["name"], ), []):
+                    if c not in (x for _, _, x in ctrls):
+                        ctrls.append((f, npath, c))
+                if f.get("children"):
+                    neststack.append((npath + (f["name"], ), f["children"]))
 
         on = event.EventObject.Value if event else ctrl.Value
         for f, p, c in ctrls:
@@ -1557,8 +2018,25 @@ class NoteButton(wx.Panel, wx.Button):
     def __init__(self, parent, label=wx.EmptyString, note=wx.EmptyString,
                  bmp=wx.NullBitmap, id=-1, pos=wx.DefaultPosition,
                  size=wx.DefaultSize, style=0, name=wx.PanelNameStr):
+        """
+        Constructor.
+
+        @param   parent  parent window
+        @param   label   button label
+        @param   note    button note text
+        @param   bmp     button icon
+        @param   id      button wx identifier
+        @param   pos     button position
+        @param   size    button default size
+        @param   style   alignment flags for button content
+                         (left-right for horizontal, center for vertical),
+                         plus optional wx.BORDER_RAISED
+                         for permanent 3D-border and default cursor,
+                         plus any flags for wx.Panel
+        @param   name    control name
+        """
         wx.Panel.__init__(self, parent, id, pos, size,
-                          style | wx.FULL_REPAINT_ON_RESIZE, name)
+                          style & ~wx.BORDER_RAISED | wx.FULL_REPAINT_ON_RESIZE, name)
         self._label = label
         self._note = note
         self._bmp = bmp
@@ -1568,7 +2046,8 @@ class NoteButton(wx.Panel, wx.Button):
             self._bmp_disabled = wx.Bitmap(img) if img.IsOk() else bmp
         self._hover = False # Whether button is being mouse hovered
         self._press = False # Whether button is being mouse pressed
-        self._align = style & (wx.ALIGN_RIGHT | wx.ALIGN_CENTER)
+        self._style = style
+        self._wrapped = True
         self._enabled = True
         self._size = self.Size
 
@@ -1579,8 +2058,8 @@ class NoteButton(wx.Panel, wx.Button):
         self._extent_label = None
         self._extent_note = None
 
-        self._cursor_hover   = wx.Cursor(wx.CURSOR_HAND)
-        self._cursor_default = wx.Cursor(wx.CURSOR_DEFAULT)
+        
+        self._cursor_hover = None if wx.BORDER_RAISED & self._style else wx.Cursor(wx.CURSOR_HAND) 
 
         self.Bind(wx.EVT_MOUSE_EVENTS,       self.OnMouseEvent)
         self.Bind(wx.EVT_MOUSE_CAPTURE_LOST, self.OnMouseCaptureLostEvent)
@@ -1592,23 +2071,35 @@ class NoteButton(wx.Panel, wx.Button):
         self.Bind(wx.EVT_KEY_DOWN,           self.OnKeyDown)
         self.Bind(wx.EVT_CHAR_HOOK,          self.OnChar)
 
-        self.SetCursor(self._cursor_hover)
+        if not wx.BORDER_RAISED & self._style: self.SetCursor(self._cursor_hover)
         ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
         ColourManager.Manage(self, "BackgroundColour", wx.SYS_COLOUR_BTNFACE)
-        self.WrapTexts()
+        self.UpdateButton()
 
 
     def GetMinSize(self):
         return self.DoGetBestSize()
+    MinSize = property(GetMinSize, wx.Panel.SetMinSize)
+
+
+    def GetMinWidth(self):
+        return self.DoGetBestSize().Width
+    MinWidth = property(GetMinWidth)
+
+
+    def GetMinHeight(self):
+        return self.DoGetBestSize().Height
+    MinHeight = property(GetMinHeight)
 
 
     def DoGetBestSize(self):
-        w = 40 if self.Size.width  < 40 else self.Size.width
-        h = 40 if self.Size.height < 40 else self.Size.height
+        w, h = 10, 10
+        if any(self._extent_label or ()) or any(self._extent_note or ()):
+            w += 10 + max(ext[0] for ext in (self._extent_label, self._extent_note) if ext)
         if self._bmp:
-            w = max(w, self._bmp.Size.width  + 20)
-            h = max(h, self._bmp.Size.height + 20)
-        if self._extent_label:
+            bw, bh = (x + 10 for x in self._bmp.Size)
+            w, h = w + bw, h + bh
+        if any(self._extent_label or ()):
             h1 = 10 + self._bmp.Size.height + 10
             h2 = 10 + self._extent_label[1] + 10 + self._extent_note[1] + 10
             h  = max(h1, h2)
@@ -1625,10 +2116,14 @@ class NoteButton(wx.Panel, wx.Button):
             self.WrapTexts()
 
         x, y = 10, 10
-        if (self._align & wx.ALIGN_RIGHT):
+        if (self._style & wx.ALIGN_RIGHT):
             x = width - 10 - self._bmp.Size.width
-        elif (self._align & wx.ALIGN_CENTER):
+        elif (self._style & wx.ALIGN_CENTER_HORIZONTAL):
             x = 10 + (width - self.DoGetBestSize().width) // 2
+        if (self._style & wx.ALIGN_BOTTOM):
+            y = height - self.DoGetBestSize().height + 10
+        elif (self._style & wx.ALIGN_CENTER_VERTICAL):
+            y = (height - self.DoGetBestSize().height + 10) // 2
 
         dc.Font = self.Font
         dc.Brush = BRUSH(self.BackgroundColour)
@@ -1673,12 +2168,24 @@ class NoteButton(wx.Panel, wx.Button):
                 dc.DrawRectangle(5, 5, width - 10, height - 10)
             dc.Pen = PEN(dc.TextForeground)
 
-        if self._press or (is_focused and any(wx.GetKeyState(x) for x in KEYS.SPACE)):
+        if self._press or (is_focused and any(get_key_state(x) for x in KEYS.SPACE)):
             # Button is being clicked with mouse: create sunken effect
             colours = [(128, 128, 128)] * 2
             lines   = [(1, 1, width - 2, 1), (1, 1, 1, height - 2)]
             dc.DrawLineList(lines, [PEN(wx.Colour(*c)) for c in colours])
             x += 1; y += 1
+        elif wx.BORDER_RAISED & self._style:
+            # Draw 3D border
+            colours = [ColourManager.ColourHex(x) for x in (
+                wx.SYS_COLOUR_3DHILIGHT, wx.SYS_COLOUR_3DLIGHT,
+                wx.SYS_COLOUR_3DSHADOW,  wx.SYS_COLOUR_3DDKSHADOW
+            )]
+            lines, pencolours = [], []
+            lines  = [(0, 0, 0, height - 1), (0, 0, width - 1, 0)]
+            lines += [(1, 1, 1, height - 2), (1, 1, width - 2, 1)]
+            lines += [(1, height - 2, width - 2, height - 2), (width - 2, 1, width - 2, height - 2)]
+            lines += [(0, height - 1, width - 1, height - 1), (width - 1, 0, width - 1, height - 1)]
+            dc.DrawLineList(lines, sum(([PEN(wx.Colour(c))]*2 for c in colours), []))
         elif self._hover and self.IsThisEnabled():
             # Button is being hovered with mouse: create raised effect
             colours  = [(255, 255, 255)] * 2
@@ -1695,9 +2202,9 @@ class NoteButton(wx.Panel, wx.Button):
 
         if self._bmp:
             bmp = self._bmp if self.IsThisEnabled() else self._bmp_disabled
-            dc.DrawBitmap(bmp, x, y)
+            dc.DrawBitmap(bmp, x, y, useMask=True)
 
-        if self._align & wx.ALIGN_RIGHT:
+        if self._style & wx.ALIGN_RIGHT:
             x -= 10 + max(self._extent_label[0], self._extent_note[0])
         else:
             x += self._bmp.Size.width + 10
@@ -1724,7 +2231,7 @@ class NoteButton(wx.Panel, wx.Button):
                     if i < len(line):
                         chars += line[i]
                     i += 1
-                h += self._extent_label[1]
+                h += dc.GetTextExtent(line)[1]
                 text_label += chars + "\n"
         dc.DrawText(text_label, x, y)
 
@@ -1735,14 +2242,28 @@ class NoteButton(wx.Panel, wx.Button):
         dc.DrawText(self._text_note, x, y)
 
 
+    def GetWrapped(self):
+        """Returns current text wrap setting."""
+        return self._wrapped
+    def SetWrapped(self, on=True):
+        """
+        Enables or disables wrap mode, wrapping button texts to size if enabled,
+        or sizing button to unwrapped texts.
+        """
+        on = bool(on)
+        if on != self._wrapped:
+            self._wrapped = on
+            self.UpdateButton()
+    Wrapped = property(GetWrapped, SetWrapped)
+
+
     def WrapTexts(self):
-        """Wraps button texts to current control size."""
+        """Wraps button texts to current control size if wrap mode enabled."""
         self._text_label, self._text_note = self._label, self._note
 
         if not self._label and not self._note:
             self._extent_label = self._extent_note = (0, 0)
             return
-
         WORDWRAP = wx.lib.wordwrap.wordwrap
         width, height = self.Size
         if width > 20 and height > 20:
@@ -1751,13 +2272,25 @@ class NoteButton(wx.Panel, wx.Button):
             dc, width, height = wx.MemoryDC(), 500, 100
             dc.SelectObject(wx.Bitmap(500, 100))
         dc.Font = self.Font
-        x = 10 + self._bmp.Size.width + 10
-        self._text_note = WORDWRAP(self._text_note, width - 10 - x, dc)
-        dc.Font = wx.Font(dc.Font.PointSize, dc.Font.Family, dc.Font.Style,
-                          wx.FONTWEIGHT_BOLD, faceName=dc.Font.FaceName)
-        self._text_label = WORDWRAP(self._text_label, width - 10 - x, dc)
+        if self._wrapped:
+            x = 10 + self._bmp.Size.width + 10
+            self._text_note = WORDWRAP(self._text_note, width - 10 - x, dc)
+            dc.Font = wx.Font(dc.Font.PointSize, dc.Font.Family, dc.Font.Style,
+                              wx.FONTWEIGHT_BOLD, faceName=dc.Font.FaceName)
+            self._text_label = WORDWRAP(self._text_label, width - 10 - x, dc)
         self._extent_label = dc.GetMultiLineTextExtent(self._text_label)
         self._extent_note = dc.GetMultiLineTextExtent(self._text_note)
+
+
+    def UpdateButton(self):
+        """Wraps texts accordug to current settings and triggers button layout."""
+        exts = self._extent_label, self._extent_note
+        self.WrapTexts()
+        if not self._wrapped and exts != (self._extent_label, self._extent_note):
+            self.Size = self.MinSize = self.DoGetBestSize()
+        self.Refresh()
+        self.InvalidateBestSize()
+        wx.CallAfter(lambda: self.Parent and self.Parent.Layout())
 
 
     def OnPaint(self, event):
@@ -1771,8 +2304,7 @@ class NoteButton(wx.Panel, wx.Button):
         event.Skip()
         if event.Size != self._size:
             self._size = event.Size
-            wx.CallAfter(lambda: self and (self.WrapTexts(), self.Refresh(),
-                         self.InvalidateBestSize(), self.Parent.Layout()))
+            wx.CallAfter(lambda: self and self.UpdateButton())
 
 
     def OnFocus(self, event):
@@ -1885,21 +2417,76 @@ class NoteButton(wx.Panel, wx.Button):
     def SetLabel(self, label):
         if label != self._label:
             self._label = label
-            self.WrapTexts()
-            self.InvalidateBestSize()
-            self.Refresh()
+            self.UpdateButton()
     Label = property(GetLabel, SetLabel)
 
 
     def SetNote(self, note):
         if note != self._note:
             self._note = note
-            self.WrapTexts()
-            self.InvalidateBestSize()
-            self.Refresh()
+            self.UpdateButton()
     def GetNote(self):
         return self._note
     Note = property(GetNote, SetNote)
+
+
+
+class Patch(object):
+    """Monkey-patches wx API for general compatibility over different versions."""
+
+    _PATCHED = False
+
+    @staticmethod
+    def patch_wx():
+        """
+        Patches wx object methods to smooth over version and setup differences.
+
+        In wheel-built wxPython in Ubuntu22, floats are no longer auto-converted to ints
+        in core wx object method calls like wx.Colour().
+        """
+        if Patch._PATCHED: return
+
+        if not hasattr(wx.stc.StyledTextCtrl, "SetMarginCount"):  # Since wx 3.1.1
+            wx.stc.StyledTextCtrl.SetMarginCount = lambda *a, **kw: None
+
+        if not hasattr(wx.stc.StyledTextCtrl, "GetSelectionEmpty"):  # Not in Py2
+            def GetSelectionEmpty(self):
+                return all(self.GetSelectionNStart(i) == self.GetSelectionNEnd(i)
+                           for i in range(self.GetSelections()))
+            wx.stc.StyledTextCtrl.GetSelectionEmpty = GetSelectionEmpty
+
+        # Some versions have StartStyling(start), others StartStyling(start, mask)
+        STC__StartStyling = wx.stc.StyledTextCtrl.StartStyling
+        def StartStyling__Patched(self, *args, **kwargs):
+            try: return STC__StartStyling(self, *args, **kwargs)
+            except TypeError: return STC__StartStyling(self, *(args + (255, )), **kwargs)
+        wx.stc.StyledTextCtrl.StartStyling = StartStyling__Patched
+        Patch._PATCHED = True
+
+        # In some setups, float->int autoconversion is not done for Python/C sip objects
+        try: wx.Rect(1.1, 2.2, 3.3, 4.4)
+        except Exception: pass
+        else: return
+
+        def defloatify(func):
+            """Returns function pass-through wrapper, converting any float arguments to int."""
+            def inner(*args, **kwargs):
+                args = [int(v) if isinstance(v, float) else v for v in args]
+                kwargs = {k: int(v) if isinstance(v, float) else v for k, v in kwargs.items()}
+                return func(*args, **kwargs)
+            return functools.update_wrapper(inner, func)
+
+        wx.Colour.__init__              = defloatify(wx.Colour.__init__)
+        wx.Point.__init__               = defloatify(wx.Point.__init__)
+        wx.Rect.__init__                = defloatify(wx.Rect.__init__)
+        wx.ImageList.Draw               = defloatify(wx.ImageList.Draw)
+        wx.BufferedPaintDC.DrawText     = defloatify(wx.BufferedPaintDC.DrawText)
+        wx.BufferedPaintDC.DrawBitmap   = defloatify(wx.BufferedPaintDC.DrawBitmap)
+        wx.PaintDC.DrawText             = defloatify(wx.PaintDC.DrawText)
+        wx.PaintDC.DrawBitmap           = defloatify(wx.PaintDC.DrawBitmap)
+        wx.MemoryDC.DrawText            = defloatify(wx.MemoryDC.DrawText)
+        wx.MemoryDC.DrawBitmap          = defloatify(wx.MemoryDC.DrawBitmap)
+        wx.ScrolledWindow.SetScrollbars = defloatify(wx.ScrolledWindow.SetScrollbars)
 
 
 
@@ -2196,7 +2783,8 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
             # DoGetBorderSize() appears not implemented under Gtk
             borderw, borderh = (x / 2. for x in self.ManagedChild.GetWindowBorderSize())
         else:
-            while self.ManagedChild.GetLineLength(linesmax + 1) >= 0:
+            truelinesmax = self.ManagedChild.GetNumberOfLines()
+            while self.ManagedChild.GetLineLength(linesmax + 1) >= 0 and linesmax < truelinesmax - 1:
                 linesmax += 1
                 t = self.ManagedChild.GetLineText(linesmax)
                 widthmax = max(widthmax, self.ManagedChild.GetTextExtent(t)[0])
@@ -2343,7 +2931,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         # Default row column formatter function
         frmt = lambda: lambda r, c: "" if r.get(c) is None else text_type(r[c])
         self._formatters = collections.defaultdict(frmt)
-        id_copy = wx.NewIdRef().Id
+        id_copy = NewId()
         entries = [(wx.ACCEL_CMD, x, id_copy) for x in KEYS.INSERT + (ord("C"), )]
         self.SetAcceleratorTable(wx.AcceleratorTable(entries))
         self.Bind(wx.EVT_MENU, self.OnCopy, id=id_copy)
@@ -2681,6 +3269,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
     def OnDragStop(self, event):
         """Handler for stopping drag in the list, rearranges list."""
+        if event.GetIndex() is None: return
         start, stop = self._drag_start, max(1, event.GetIndex())
         if not start or start == stop: return
 
@@ -2998,11 +3587,9 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
 
     def SetStyleSpecs(self):
         """Sets STC style colours."""
-        fgcolour, bgcolour, highcolour = (
-            wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
-            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
-                      if self.Enabled else wx.SYS_COLOUR_BTNFACE,
-                      wx.SYS_COLOUR_HOTLIGHT)
+        fgcolour, bgcolour, highcolour = (ColourManager.ColourHex(x) for x in
+            (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW if self.Enabled else wx.SYS_COLOUR_BTNFACE,
+             wx.SYS_COLOUR_HOTLIGHT)
         )
 
 
@@ -3391,18 +3978,16 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.EVT_MOUSE_EVENTS,            self.OnMouse)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED,      self.OnSysColourChange)
         self.Bind(wx.stc.EVT_STC_ZOOM,            self.OnZoom)
-        self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste)
+        self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste) \
+        if hasattr(wx.stc, "EVT_STC_CLIPBOARD_PASTE") else None
         self.Bind(wx.stc.EVT_STC_START_DRAG,      lambda e: e.SetString(""))
 
 
     def SetStyleSpecs(self):
         """Sets STC style colours."""
         if not self: return
-        fgcolour, bgcolour, mbgcolour = (
-            wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
-            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
-                      if self.Enabled else wx.SYS_COLOUR_BTNFACE,
-                      wx.SYS_COLOUR_BTNFACE)
+        fgcolour, bgcolour = (ColourManager.ColourHex(x) for x in
+            (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW if self.Enabled else wx.SYS_COLOUR_BTNFACE)
         )
 
         self.SetCaretForeground(fgcolour)
@@ -3412,7 +3997,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         self.StyleClearAll() # Apply the new default style to all styles
 
         self.StyleSetSpec(self.STYLE_CHANGED, "fore:%s" % self.COLOUR_CHANGED)
-        self.StyleSetSpec(self.STYLE_MARGIN,  "back:%s" % mbgcolour)
+        self.StyleSetSpec(self.STYLE_MARGIN,  "back:%s" % bgcolour)
 
 
     def Enable(self, enable=True):
@@ -3912,17 +4497,16 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.EVT_MOUSE_EVENTS,            self.OnMouse)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED,      self.OnSysColourChange)
         self.Bind(wx.stc.EVT_STC_ZOOM,            self.OnZoom)
-        self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste)
+        self.Bind(wx.stc.EVT_STC_CLIPBOARD_PASTE, self.OnPaste) \
+        if hasattr(wx.stc, "EVT_STC_CLIPBOARD_PASTE") else None
         self.Bind(wx.stc.EVT_STC_START_DRAG,      lambda e: e.SetString(""))
 
 
     def SetStyleSpecs(self):
         """Sets STC style colours."""
         if not self: return
-        fgcolour, bgcolour = (
-            wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
-            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
-                      if self.Enabled else wx.SYS_COLOUR_BTNFACE)
+        fgcolour, bgcolour = (ColourManager.ColourHex(x) for x in
+            (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW if self.Enabled else wx.SYS_COLOUR_BTNFACE)
         )
 
         self.SetCaretForeground(fgcolour)
@@ -4343,7 +4927,7 @@ class JSONTextCtrl(wx.stc.StyledTextCtrl):
     def __init__(self, *args, **kwargs):
         wx.stc.StyledTextCtrl.__init__(self, *args, **kwargs)
 
-        self.SetLexer(wx.stc.STC_LEX_JSON)
+        self.SetLexer(wx.stc.STC_LEX_JSON) if hasattr(wx.stc, "STC_LEX_JSON") else None
         self.SetTabWidth(2)
         # Keywords must be lowercase, required by StyledTextCtrl
         self.SetKeyWords(0, u" ".join(self.KEYWORDS).lower())
@@ -4387,11 +4971,9 @@ class JSONTextCtrl(wx.stc.StyledTextCtrl):
 
     def SetStyleSpecs(self):
         """Sets STC style colours."""
-        fgcolour, bgcolour, highcolour = (
-            wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
-            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
-                      if self.Enabled else wx.SYS_COLOUR_BTNFACE,
-                      wx.SYS_COLOUR_HOTLIGHT)
+        fgcolour, bgcolour, highcolour = (ColourManager.ColourHex(x) for x in
+            (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW if self.Enabled else wx.SYS_COLOUR_BTNFACE,
+             wx.SYS_COLOUR_HOTLIGHT)
         )
 
         self.SetCaretForeground(fgcolour)
@@ -4401,6 +4983,7 @@ class JSONTextCtrl(wx.stc.StyledTextCtrl):
         self.StyleSetSpec(wx.stc.STC_STYLE_BRACELIGHT, "fore:%s" % highcolour)
         self.StyleSetSpec(wx.stc.STC_STYLE_BRACEBAD, "fore:#FF0000")
         self.StyleClearAll() # Apply the new default style to all styles
+        if not hasattr(wx.stc, "STC_JSON_DEFAULT"): return # Py2
 
         self.StyleSetSpec(wx.stc.STC_JSON_DEFAULT,   "face:%s" % self.FONT_FACE)
         self.StyleSetSpec(wx.stc.STC_JSON_STRING,    "fore:#FF007F") # "
@@ -4442,6 +5025,8 @@ class JSONTextCtrl(wx.stc.StyledTextCtrl):
 
     def OnUpdateUI(self, evt):
         # check for matching braces
+        if not hasattr(wx.stc, "STC_JSON_OPERATOR"): return # Py2
+
         braceAtCaret = -1
         braceOpposite = -1
         charBefore = None
@@ -4776,7 +5361,7 @@ class TabbedHtmlWindow(wx.Panel):
 
     def _CreateTab(self, index, title):
         """Creates a new tab in the tab container at specified index."""
-        p = wx.Panel(self, size=(0,0))
+        p = wx.Panel(self, size=(0, 0))
         p.Hide() # Dummy empty window as notebook needs something to hold
         self._notebook.InsertPage(index, page=p, text=title, select=True)
 
@@ -5443,11 +6028,9 @@ class YAMLTextCtrl(wx.stc.StyledTextCtrl):
 
     def SetStyleSpecs(self):
         """Sets STC style colours."""
-        fgcolour, bgcolour, highcolour, graycolour = (
-            wx.SystemSettings.GetColour(x).GetAsString(wx.C2S_HTML_SYNTAX)
-            for x in (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW
-                      if self.Enabled else wx.SYS_COLOUR_BTNFACE,
-                      wx.SYS_COLOUR_HOTLIGHT, wx.SYS_COLOUR_GRAYTEXT)
+        fgcolour, bgcolour, highcolour, graycolour = (ColourManager.ColourHex(x) for x in
+            (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW if self.Enabled else wx.SYS_COLOUR_BTNFACE,
+             wx.SYS_COLOUR_HOTLIGHT, wx.SYS_COLOUR_GRAYTEXT)
         )
 
         self.SetCaretForeground(fgcolour)
@@ -5677,6 +6260,12 @@ def get_dialog_path(dialog):
     return result
 
 
+def get_key_state(keycode):
+    """Returns true if specified key is currently down."""
+    try: return wx.GetKeyState(keycode)
+    except Exception: return False  # wx3 can raise for non-modifier keys in non-X11 backends
+
+
 def get_tool_rect(toolbar, id_tool):
     """Returns position and size of a toolbar tool by ID."""
     bmpsize, toolsize, packing = toolbar.ToolBitmapSize, toolbar.ToolSize, toolbar.ToolPacking
@@ -5713,3 +6302,27 @@ def is_fixed_long(value, bytevalue=None):
 def is_long_long(value):
     """Returns whether value is integer larger than 64 bits."""
     return isinstance(value, integer_types) and not (-2**63 <= value < 2**63)
+
+
+def set_dialog_filter(dialog, idx=-1, ext=None, exts=()):
+    """
+    Sets filter index in FileDialog, replaces extension in current filename.
+
+    Smooths over issue in Linux where setting filter index
+    retains previous extension in default filename.
+
+    @param   dialog      FileDialog instance
+    @param   idx         index to set
+    @param   ext         alternative to idx: file extension to set index at.
+                         If exts not given, tries to detect index from dialog wildcard.
+    @param   exts        list of file extensions to get index for `ext` from
+    """
+    # Wildcard is like "JSON data (*.json)|*.json|YAML data (*.yaml)|*.yaml|"
+    exts = exts or [x[2:] for x in dialog.Wildcard.split("|")[1::2] if x.startswith("*.")]
+    idx = exts.index(ext) if ext and ext in exts else idx
+    if idx >= 0:
+        dialog.SetFilterIndex(idx)
+        ext = exts[idx] if not ext and idx < len(exts) else ext or ""
+        base, extnow = os.path.splitext(dialog.Filename)
+        if extnow != "." + ext:
+            dialog.Filename = "%s.%s" % (base, ext)

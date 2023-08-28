@@ -4,7 +4,7 @@ sqlitely\. Sets execute flag permission on .sh files.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  27.03.2022
+@modified  27.08.2023
 """
 import glob
 import os
@@ -41,10 +41,10 @@ if "__main__" == __name__:
             zi.date_time = time.localtime(os.path.getmtime(fullpath))[:6]
             zi.compress_type = zipfile.ZIP_DEFLATED
             zi.create_system = 3 # UNIX
-            zi.external_attr = 0o644 << 16L # Permission flag -rw-r--r--
+            zi.external_attr = 0o644 << 16 # Permission flag -rw-r--r--
             if os.path.splitext(filename)[-1] in [".sh"] \
             or os.path.split(subdir)[-1]      in ["bin"]:
-                zi.external_attr = 0o755 << 16L # Permission flag -rwxr-xr-x
+                zi.external_attr = 0o755 << 16 # Permission flag -rwxr-xr-x
             print("Adding %s, %s bytes" % (zi.filename, os.path.getsize(fullpath)))
             zf.writestr(zi, open(fullpath, "rb").read())
             size += os.path.getsize(fullpath)
@@ -59,9 +59,9 @@ if "__main__" == __name__:
             (pathjoin(SRC_DIR, NAME),                  "*.py"),
             (pathjoin(SRC_DIR, NAME, "bin"),           "*"),
             (pathjoin(SRC_DIR, NAME, "grammar"),       "*"),
-            (pathjoin(SRC_DIR, NAME, "lib"),           "*.py"), 
+            (pathjoin(SRC_DIR, NAME, "lib"),           "*.py"),
             (pathjoin(SRC_DIR, NAME, "lib", "vendor"), "*.py"),
-            (pathjoin(SRC_DIR, NAME, "media"),         "*"), 
+            (pathjoin(SRC_DIR, NAME, "media"),         "*"),
             (pathjoin(SRC_DIR, NAME, "etc"),           "%s.ini" % NAME)
         ]:
             entries = glob.glob(os.path.join(BASE_DIR, subdir, wildcard))
@@ -70,11 +70,11 @@ if "__main__" == __name__:
             files = [f for f in files if not f.lower().endswith(".zip")]
             files = [f for f in files if not f.lower().endswith(".pyc")]
             size += add_files(zf, files, subdir)
-        rootfiles = ["LICENSE.md", "MANIFEST.in", "README.md",
+        rootfiles = ["CHANGELOG.md", "LICENSE.md", "MANIFEST.in", "README.md",
                      "requirements.txt", "setup.py", "%s.bat" % NAME, "%s.sh" % NAME]
         size += add_files(zf, rootfiles)
 
     os.chdir(INITIAL_DIR)
     size_zip = os.path.getsize(DEST_FILE)
-    print ("\nCreated %s, %s bytes (from %s, %.2f compression ratio)." % 
+    print ("\nCreated %s, %s bytes (from %s, %.2f compression ratio)." %
            (DEST_FILE, size_zip, size, float(size_zip) / size))

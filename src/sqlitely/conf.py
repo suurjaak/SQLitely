@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.04.2022
+@modified    27.08.2023
 ------------------------------------------------------------------------------
 """
 try: from ConfigParser import RawConfigParser                 # Py2
@@ -23,13 +23,14 @@ import sys
 
 import appdirs
 import six
-import wx
+try: import wx
+except ImportError: wx = None
 
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.0"
-VersionDate = "02.04.2022"
+Version = "2.1.dev144"
+VersionDate = "27.08.2023"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -48,10 +49,13 @@ else:
 """Name of file where FileDirectives are kept."""
 ConfigFile = "%s.ini" % os.path.join(EtcDirectory, Title.lower())
 
+"""Whether to ignore user-specific config paths."""
+ConfigFileStatic = False
+
 """List of attribute names that can be saved to and loaded from ConfigFile."""
 FileDirectives = ["AllowMultipleInstances", "ConsoleHistoryCommands", "DBFiles",
     "DBSort", "LastActivePages", "LastExportType", "LastSearchResults",
-    "LastSelectedFiles", "LastUpdateCheck", "ParseCache", "RecentFiles",
+    "LastSelectedFiles", "LastUpdateCheck", "ParseCache", "Plugins", "RecentFiles",
     "SchemaDiagrams", "SearchHistory", "SearchInMeta", "SearchInData",
     "SearchUseNewTab", "SearchCaseSensitive", "SQLWindowTexts", "TrayIconEnabled",
     "UpdateCheckAutomatic", "WindowMaximized", "WindowMinimizedToTray",
@@ -92,7 +96,7 @@ IPCPort = 59987
 """Identifier for inter-process communication."""
 IPCName = six.moves.urllib.parse.quote_plus(
     "%s-%s" % (wx.GetUserId(), ApplicationFile)
-).encode("latin1", "replace")
+).encode("latin1", "replace") if wx else ""
 
 """History of commands entered in console."""
 ConsoleHistoryCommands = []
@@ -126,6 +130,13 @@ SeekLeapLength = 10000
 
 """Cached parse results, as {CREATE SQL: {meta}}."""
 ParseCache = {}
+
+"""
+User-defined plugins, as {category: [{..}]}.
+
+E.g. {"ValueEditorFunctions": [{title, body, name, ?active}]} for column value editor.
+"""
+Plugins = {}
 
 """Contents of Recent Files menu."""
 RecentFiles = []
@@ -327,30 +338,44 @@ MaxRecentFiles = 20
 FontXlsxFile     = os.path.join(ResourceDirectory, "Carlito.ttf")
 FontXlsxBoldFile = os.path.join(ResourceDirectory, "CarlitoBold.ttf")
 
+"""Font files used for schema daigram."""
+FontDiagramFile     = os.path.join(ResourceDirectory, "OpenSans.ttf")
+FontDiagramBoldFile = os.path.join(ResourceDirectory, "OpenSansBold.ttf")
+FontDiagramSize     = 9
 
-def load():
-    """Loads FileDirectives from ConfigFile into this module's attributes."""
-    global Defaults, ConfigFile
 
+def load(configfile=None):
+    """
+    Loads FileDirectives into this module's attributes.
+
+    @param   configfile  name of configuration file to use from now if not module defaults
+    """
+    global Defaults, ConfigFile, ConfigFileStatic
+
+    try: VARTYPES = (basestring, bool, int, long, list, tuple, dict, type(None))         # Py2
+    except Exception: VARTYPES = (bytes, str, bool, int, list, tuple, dict, type(None))  # Py3
+
+    if configfile:
+        ConfigFile, ConfigFileStatic = configfile, True
     configpaths = [ConfigFile]
-    if not Defaults:
-        # Instantiate OS- and user-specific path
+    if not Defaults and not ConfigFileStatic:
+        # Instantiate OS- and user-specific paths
         try:
             p = appdirs.user_config_dir(Title, appauthor=False)
+            userpath = os.path.join(p, "%s.ini" % Title.lower())
             # Try user-specific path first, then path under application folder
-            configpaths.insert(0, os.path.join(p, "%s.ini" % Title.lower()))
+            if userpath not in configpaths: configpaths.insert(0, userpath)
         except Exception: pass
 
     section = "*"
     module = sys.modules[__name__]
-    VARTYPES = six.string_types + six.integer_types + (bool, list, tuple, dict, type(None))
     Defaults = {k: v for k, v in vars(module).items() if not k.startswith("_")
                 and isinstance(v, VARTYPES)}
 
     parser = RawConfigParser()
     parser.optionxform = str # Force case-sensitivity on names
     try:
-        for path in configpaths[::-1]:
+        for path in configpaths:
             if os.path.isfile(path) and parser.read(path):
                 break # for path
 
@@ -371,16 +396,21 @@ def load():
         pass # Fail silently
 
 
-def save():
-    """Saves FileDirectives into ConfigFile."""
-    configpaths = [ConfigFile]
-    try:
-        p = appdirs.user_config_dir(Title, appauthor=False)
-        userpath = os.path.join(p, "%s.ini" % Title.lower())
-        # Pick only userpath if exists, else try application folder first
-        if os.path.isfile(userpath): configpaths = [userpath]
-        else: configpaths.append(userpath)
-    except Exception: pass
+def save(configfile=None):
+    """
+    Saves FileDirectives into configuration file.
+
+    @param   configfile  name of configuration file to use if not module defaults
+    """
+    configpaths = [configfile] if configfile else [ConfigFile]
+    if not configfile and not ConfigFileStatic:
+        try:
+            p = appdirs.user_config_dir(Title, appauthor=False)
+            userpath = os.path.join(p, "%s.ini" % Title.lower())
+            # Pick only userpath if exists, else try application folder first
+            if os.path.isfile(userpath): configpaths = [userpath]
+            elif userpath not in configpaths: configpaths.append(userpath)
+        except Exception: pass
 
     section = "*"
     module = sys.modules[__name__]
@@ -389,13 +419,13 @@ def save():
     parser.add_section(section)
     try:
         for path in configpaths:
-            try: os.makedirs(os.path.split(path)[0])
+            try: os.makedirs(os.path.dirname(path))
             except Exception: pass
             try: f = open(path, "w")
             except Exception: continue # for path
             else: break # for path
 
-        f.write("# %s configuration written on %s.\n" %
+        f.write("# %s configuration written on %s.\n" % 
                 (Title, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         for name in FileDirectives:
             try: parser.set(section, name, json.dumps(getattr(module, name)))

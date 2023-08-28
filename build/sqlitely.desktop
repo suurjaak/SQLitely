@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=SQLitely
+GenericName=SQLite database tool
+Keywords=database SQLite SQLite3
+Type=Application
+Categories=Utility;Database;GTK;
+Icon=res/Icon256x256_32bit.png
+Exec=sqlitely

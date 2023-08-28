@@ -11,8 +11,8 @@ It can:
 - modify table data
 - free-form search over all database data and metadata
 - export data and metadata in various formats
-  (text, HTML, spreadsheet, JSON, SQL)
-- import data to tables from spreadsheet or JSON
+  (text, HTML, spreadsheet, JSON, YAML, SQL)
+- import data to tables from spreadsheet or JSON/YAML
 - view database table and index size statistics
 - copy tables from one database to another
 - execute direct SQL queries
@@ -80,6 +80,8 @@ Attribution
 Built using the following open-source software:
 
 - ANTLR Python runtime (https://antlr.org)
+- appdirs (https://pypi.org/project/appdirs)
+- chardet (https://pypi.org/project/chardet)
 - openpyxl (https://pypi.org/project/openpyxl)
 - Pillow (https://pypi.org/project/Pillow)
 - pyparsing (https://pypi.org/project/pyparsing)
@@ -107,6 +109,9 @@ Includes several icons from Fugue Icons,
 
 Includes fonts Carlito Regular and Carlito Bold,
 https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts.
+
+Includes fonts Open Sans Regular and Open Sans Bold,
+https://fonts.google.com/specimen/Open+Sans.
 
 Binaries compiled with PyInstaller, https://www.pyinstaller.org.
 

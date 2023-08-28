@@ -1,0 +1,69 @@
+# Snapcraft build file for SQLitely.
+#
+# To prepare the build environment, execute the following in project directory:
+#
+# mkdir -p snap/gui && cp build/snapcraft.yaml snap/ && cp build/sqlitely.desktop snap/gui/ \
+#   && cp res/Icon256x256_32bit.png snap/gui/sqlitely.png \
+#   && sed -i 's/Icon=.*/Icon=${SNAP}\/meta\/gui\/sqlitely.png/' snap/gui/sqlitely.desktop
+#
+# To build, execute the following in project directory:
+#
+# snapcraft snap
+#
+#
+# @author      Erki Suurjaak
+# @created     05.07.2022
+# @modified    05.07.2022
+name:    sqlitely
+title:   SQLitely
+summary: SQLite database tool
+website: https://suurjaak.github.io/SQLitely
+license: MIT
+description: |
+  SQLitely is an SQLite database tool, written in Python.
+
+  It can:
+
+  - detect and manage SQLite databases in bulk
+  - create new or temporary databases
+  - create and alter tables, indexes, triggers and views
+  - modify table data
+  - free-form search over all database data and metadata
+  - export data and metadata in various formats (text, HTML, spreadsheet, JSON, YAML, SQL)
+  - import data to tables from spreadsheet or JSON/YAML
+  - view database table and index size statistics
+  - copy tables from one database to another
+  - execute direct SQL queries
+  - manage database PRAGMA directives
+  - fix database corruption
+icon: snap/gui/sqlitely.png  # Icon for Snap store
+
+base:        core20      # Ubuntu 20.04 LTS
+confinement: strict      # 'strict' when ready, else 'devmode'
+grade:       stable      # 'stable' to release into candidate/stable channels, else 'devel'
+adopt-info:  sqlitely    # Version info from parts.sqlitely
+
+architectures:
+- build-on: [amd64, arm64, armhf]
+
+apps:
+  sqlitely:
+    command:    python3 -m sqlitely
+    plugs:      [home, network, network-bind, removable-media, unity7]
+    extensions: [gnome-3-38]  # Adds plugs: desktop, desktop-legacy, gsettings, opengl, x11, wayland
+
+parts:
+  sqlitely:
+    source: https://github.com/suurjaak/sqlitely.git
+    plugin: python
+    stage-packages:
+    - libgtk-3-0
+    - libsdl2-2.0-0
+    - libwebkit2gtk-4.0-37
+    python-packages:
+    - https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-20.04/wxPython-4.1.1-cp38-cp38-linux_x86_64.whl
+    requirements:
+    - /root/project/requirements.txt
+    override-pull: |  # Set build version from current git tag, drop leading letters ("v5.2" -> "5.2")
+      snapcraftctl pull
+      snapcraftctl set-version "$(git -C /root/project describe --tags | sed 's/^[a-z]*//i')"
