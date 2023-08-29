@@ -38,7 +38,7 @@ description: |
   - fix database corruption
 icon: snap/gui/sqlitely.png  # Icon for Snap store
 
-base:        core20      # Ubuntu 20.04 LTS
+base:        core18      # Ubuntu 18.04 LTS
 confinement: strict      # 'strict' when ready, else 'devmode'
 grade:       stable      # 'stable' to release into candidate/stable channels, else 'devel'
 adopt-info:  sqlitely    # Version info from parts.sqlitely
@@ -50,7 +50,7 @@ apps:
   sqlitely:
     command:    python3 -m sqlitely
     plugs:      [home, network, network-bind, removable-media, unity7]
-    extensions: [gnome-3-38]  # Adds plugs: desktop, desktop-legacy, gsettings, opengl, x11, wayland
+    extensions: [gnome-3-28]  # Adds plugs: desktop, desktop-legacy, gsettings, x11, wayland
 
 parts:
   sqlitely:
@@ -59,9 +59,9 @@ parts:
     stage-packages:
     - libgtk-3-0
     - libsdl2-2.0-0
-    - libwebkit2gtk-4.0-37
+    - libwebkitgtk-3.0-0
     python-packages:
-    - https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-20.04/wxPython-4.1.1-cp38-cp38-linux_x86_64.whl
+    - https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-18.04/wxPython-4.1.1-cp36-cp36m-linux_x86_64.whl
     requirements:
     - /root/project/requirements.txt
     override-pull: |  # Set build version from current git tag, drop leading letters ("v5.2" -> "5.2")

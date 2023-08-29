@@ -66,6 +66,9 @@ Installation
 Windows: download and launch the latest setup from
 https://suurjaak.github.io/SQLitely/downloads.html.
 
+Linux Snap Store: install SQLitely, or run
+`snap install sqlitely`.
+
 Mac/Linux/other: install Python and pip, run `pip install sqlitely`.
 
 The pip installation will add the `sqlitely` command to path.
