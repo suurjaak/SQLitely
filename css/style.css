@@ -343,6 +343,10 @@ a:hover small {
   content: "-";
   margin-right: 5px;
 }
+.wrapper span.subview span.subview * {
+  margin-left: 10px;
+  font-size: 0.9em;
+}
 
 
 blockquote {

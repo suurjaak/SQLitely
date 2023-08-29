@@ -35,6 +35,11 @@
           <span class="subview">
             <a href="#windows">Windows</a><br />
             <a href="#other">Linux/Mac/Other</a><br />
+            <span class="subview">
+              <a href="#other-snap">snap</a><br />
+              <a href="#other-source">source</a><br />
+            </span>
+            <a href="#general">General remarks</a><br />
             <a href="#deps">Source Dependencies</a><br />
             <a href="#docker">Docker</a><br />
           </span>
@@ -62,17 +67,29 @@
 
 <h2 id="other">Linux/Mac/other</h2>
 
+<a name="other-snap"><h4>snap</h4></a>
+
+<ul>
+<li>install Snap if not installed: <code>sudo apt-get install snap</code></li>
+<li>install SQLitely from the Snap Store, or run <code>snap install sqlitely</code></li>
+<li>launch SQLitely from OS menu, or run <code>sqlitely</code></li>
+</ul>
+
+
+<a name="other-source"><h4>source</h4></a>
 
 Install Python and pip, run <code class="language-plaintext highlighter-rouge">pip install sqlitely</code>.</p>
 
 <p>The pip installation will add the <code class="language-plaintext highlighter-rouge">sqlitely</code> command to path.</p>
+
+<a name="general"><h3>General remarks</h3></a>
 
 <p>Windows installers have been provided for convenience. The program itself 
 is stand-alone, can work from any directory, and does not need additional
 installation. The installed program can be copied to a USB stick and used
 elsewhere, same goes for the source code.</p>
 
-<h2 id="source-dependencies">Source Dependencies</h2>
+<h2 id="deps">Source Dependencies</h2>
 
 <p>If running from source code, SQLitely needs Python 3.5+ or 2.7,
 and the following 3rd-party Python packages:</p>
