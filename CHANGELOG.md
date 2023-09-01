@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+2.2, 2023-09-01
+---------------
+- add YAML formatting options to value editor
+
+
 2.1, 2023-08-16
 ---------------
 - add user-defined functions to value editor
