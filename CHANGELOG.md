@@ -1,10 +1,10 @@
 CHANGELOG
 =========
 
-2.2, 2023-09-01
+2.2, 2023-09-02
 ---------------
 - add YAML formatting options to value editor
-
+- fix Excel export error, from breaking changes in PIL
 
 2.1, 2023-08-16
 ---------------

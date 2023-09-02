@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    26.08.2023
+@modified    02.09.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -857,7 +857,7 @@ class SchemaPlacement(object):
         # Measure title width
         title = util.ellipsize(util.unprint(opts["name"]), self.MAX_TITLE)
         extent = self.GetTextExtent(title, self._font_bold) # (w, h, descent, lead)
-        w = max(w, extent[0] + extent[3] + 2 * self.HPAD)
+        w = max(w, extent[0] + 2 * self.HPAD)
 
         # Measure column text widths
         colmax = {"name": 0, "type": 0}
@@ -870,7 +870,7 @@ class SchemaPlacement(object):
                 t = util.ellipsize(util.unprint(c.get(k, "")), self.MAX_TEXT)
                 coltexts[-1].append(t)
                 if t: extent = self.GetTextExtent(t)
-                if t: colmax[k] = max(colmax[k], extent[0] + extent[3])
+                if t: colmax[k] = max(colmax[k], extent[0])
         w = max(w, self.LPAD + 2 * self.HPAD + sum(colmax.values()))
         h += self.LINEH * len(coltexts) + self.HEADERP * bool(coltexts)
         if self._show_stats and opts["stats"]:
@@ -1054,8 +1054,7 @@ class SchemaPlacement(object):
             # Make foreign key label
             if opts["name"]:
                 text = util.ellipsize(util.unprint(opts["name"]), self.MAX_TEXT)
-                textent = self.GetTextExtent(text)
-                tw, th = textent[0] + textent[3], textent[1] + textent[2]
+                tw, th = self.GetTextExtent(text)
                 tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
                                   if pts[i][0] == pts[i+1][0])
                 tx = tpt1[0] - tw // 2
@@ -1406,8 +1405,8 @@ class SchemaPlacement(object):
         stats_font = self.MakeFont(self.FONT_FACE, self.FONT_SIZE * self._zoom + self.FONT_STEP_STATS)
         text1, text2 = stats.get("rows", ""), stats.get("size", "")
 
-        w1 = next(d[0] + d[3] for d in [self.GetTextExtent(text1, stats_font)]) if text1 else 0
-        w2 = next(d[0] + d[3] for d in [self.GetTextExtent(text2, stats_font)]) if text2 else 0
+        w1 = next(w for w, _ in [self.GetTextExtent(text1, stats_font)]) if text1 else 0
+        w2 = next(w for w, _ in [self.GetTextExtent(text2, stats_font)]) if text2 else 0
         if w1 + w2 + 2 * self.BRADIUS > width:
             text1 = stats.get("rows_maxunits", text1) # Exact number does not fit: draw as "6.1M rows"
         return text1, text2
@@ -1507,7 +1506,7 @@ class SchemaPlacement(object):
             if text1:
                 statslists[0].append(text1); statslists[1].append((dx, dy))
             if text2:
-                w2 = next(d[0] + d[3] for d in [self.GetTextExtent(text2, stats_font)])
+                w2 = next(w for w, _ in [self.GetTextExtent(text2, stats_font)])
                 dx = w - w2 - self.BRADIUS
                 statslists[2].append(text2); statslists[3].append((dx, dy))
 
@@ -1620,18 +1619,19 @@ class SchemaPlacement(object):
         """
         Returns the dimensions of the specified text in the specified font.
 
-        @param   text  text to measure, linefeeds are ignored
+        @param   text  text to measure
         @param   font  wx.Font or PIL.ImageFont, if not using default font
-        @return        (width, height, descent, externalLeading) if wx available
-                       else (width, height, 0, 0)
+        @return        (width, height)
         """
         font = font or self._font
         if wx and isinstance(font, wx.Font):
             func, args = self._measurer.GetFullTextExtent, [text, font]
-        else:
-            func, args = font.getsize, [text]
-        extent = util.memoize(func, *args, __key__="GetFullTextExtent")
-        return (extent + (0, 0)) if 2 == len(extent) else extent
+            v = util.memoize(func, *args, __key__="GetTextExtent")[:2]  # (w, h, descent, leading)
+        else: # PIL >= 8.0.0 has getbbox, < 9.2.0 has getsize
+            func, args = font.getbbox if hasattr(font, "getbbox") else font.getsize, [text]
+            v = util.memoize(func, *args, __key__="GetTextExtent")
+            if len(v) == 4: v = v[2:]  # (left, top, right, bottom)
+        return v
 
 
     def MakeFont(self, name, size, bold=False):

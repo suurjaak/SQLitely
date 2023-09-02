@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.08.2023
+@modified    02.09.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -3028,7 +3028,7 @@ Database schema diagram SVG template.
 
 @param   fonts            {"normal": font object, "bold": font object}
 @param   font_faces       {name: {size}} for populating SVG font family
-@param   get_extent       function(text, font=default font) returning full text extent
+@param   get_extent       function(text, font=default font) returning (width, height)
 @param   get_stats_texts  function(stats, width) returning stats texts for item
 @param   items            diagram objects as [{"name", "type", "bounds", "columns", "stats"}]
 @param   lines            diagram relations as {("item1", "item2", ("col1", )): {"name", "pts"}}
@@ -3061,8 +3061,8 @@ itemcoltexts, itemcolmax = {}, {} # {item name: [[name, type], ]}, {item name: {
 for item in items:
     # Measure title width
     ititle = util.ellipsize(util.unprint(item["name"]), SchemaPlacement.MAX_TITLE)
-    extent = get_extent(ititle, fonts["bold"]) # (w, h, descent, lead)
-    w, h = max(MINW, extent[0] + extent[3] + 2 * SchemaPlacement.HPAD), MINH
+    extent = get_extent(ititle, fonts["bold"])
+    w, h = max(MINW, extent[0] + 2 * SchemaPlacement.HPAD), MINH
 
     cols = item.get("columns") or []
     colmax = itemcolmax[item["name"]] = {"name": 0, "type": 0}
@@ -3074,7 +3074,7 @@ for item in items:
             t = util.ellipsize(util.unprint(c.get(k, "")), SchemaPlacement.MAX_TEXT)
             coltexts[-1].append(t)
             if t: extent = get_extent(t)
-            if t: colmax[k] = max(colmax[k], extent[0] + extent[3])
+            if t: colmax[k] = max(colmax[k], extent[0])
     w = max(w, SchemaPlacement.LPAD + 2 * SchemaPlacement.HPAD + sum(colmax.values()))
 
     statswidth = sum(get_extent(t or "")[0] for t in get_stats_texts(item.get("stats", {}), w))
@@ -3102,12 +3102,11 @@ for line in lines.values():
     bounds.Union(lbounds)
     if not show_labels: continue # for line
 
-    extent = get_extent(util.ellipsize(util.unprint(line["name"]), SchemaPlacement.MAX_TEXT))
+    tw, th = get_extent(util.ellipsize(util.unprint(line["name"]), SchemaPlacement.MAX_TEXT))
     tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
                       if pts[i][0] == pts[i+1][0])
     tx = tpt1[0]
     ty = min(tpt1[1], tpt2[1]) + abs(tpt1[1] - tpt2[1]) // 2
-    tw, th = sum(extent[::4]), sum(extent[1:3])
     bounds.Union(Rect(Point(tx - tw // 2, ty - th), Size(tw, th)))
 
 bounds.Width += 2 * MARGIN; bounds.Height += 2 * MARGIN
@@ -3343,8 +3342,8 @@ if not cols and not istats: height = SchemaPlacement.HEADERH + 3
 text1, text2 = get_stats_texts(istats, item["bounds"].Width)
 
 ty = itemy + height - SchemaPlacement.STATSH + texth - SchemaPlacement.FONT_STEP_STATS
-w1 = next(d[0] + d[3] for d in [get_extent(text1)]) if text1 else 0
-w2 = next(d[0] + d[3] for d in [get_extent(text2)]) if text2 else 0
+w1 = next(w for w, _ in [get_extent(text1)]) if text1 else 0
+w2 = next(w for w, _ in [get_extent(text2)]) if text2 else 0
 if w1 + w2 + 2 * SchemaPlacement.BRADIUS > item["bounds"].Width and item.get("count"):
     text1 = istats["size_maxunits"]
 
