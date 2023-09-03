@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.09.2023
+@modified    02.09.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1769,13 +1769,18 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         sizer_footer = wx.BoxSizer(wx.HORIZONTAL)
 
         tb = self._tb = wx.ToolBar(panel1, style=wx.TB_FLAT | wx.TB_NODIVIDER)
-        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY,      wx.ART_TOOLBAR, (16, 16))
-        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN, wx.ART_TOOLBAR, (16, 16))
-        bmp3 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
+        bmp1 = images.ToolbarNumbered.Bitmap
+        bmp2 = images.ToolbarWordWrap.Bitmap
+        bmp3 = wx.ArtProvider.GetBitmap(wx.ART_COPY,      wx.ART_TOOLBAR, (16, 16))
+        bmp4 = wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN, wx.ART_TOOLBAR, (16, 16))
+        bmp5 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
         tb.SetToolBitmapSize(bmp1.Size)
-        tb.AddTool(wx.ID_COPY, "", bmp1, shortHelp="Copy SQL to clipboard")
-        tb.AddTool(wx.ID_OPEN, "", bmp2, shortHelp="Load SQL from file")
-        tb.AddTool(wx.ID_SAVE, "", bmp3, shortHelp="Save SQL to file")
+        tb.AddTool(wx.ID_INDENT, "", bmp1, shortHelp="Show line numbers", kind=wx.ITEM_CHECK)
+        tb.AddTool(wx.ID_STATIC, "", bmp2, shortHelp="Word-wrap",         kind=wx.ITEM_CHECK)
+        tb.AddSeparator()
+        tb.AddTool(wx.ID_COPY,   "", bmp3, shortHelp="Copy SQL to clipboard")
+        tb.AddTool(wx.ID_OPEN,   "", bmp4, shortHelp="Load SQL from file")
+        tb.AddTool(wx.ID_SAVE,   "", bmp5, shortHelp="Save SQL to file")
         tb.Realize()
 
         stc = self._stc = controls.SQLiteTextCtrl(panel1, traversable=True,
@@ -1833,22 +1838,24 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         panel_export = self._export = ExportProgressPanel(panel2)
         panel_export.Hide()
 
-        self.Bind(wx.EVT_TOOL,       self._OnCopySQL,        id=wx.ID_COPY)
-        self.Bind(wx.EVT_TOOL,       self._OnLoadSQL,        id=wx.ID_OPEN)
-        self.Bind(wx.EVT_TOOL,       self._OnSaveSQL,        id=wx.ID_SAVE)
-        self.Bind(wx.EVT_TOOL,       self._OnCopyGridSQL,    id=wx.ID_INFO)
-        self.Bind(wx.EVT_TOOL,       self._OnRequery,        id=wx.ID_REFRESH)
-        self.Bind(wx.EVT_TOOL,       self._OnResetView,      id=wx.ID_RESET)
-        self.Bind(wx.EVT_TOOL,       self._OnGotoRow,        id=wx.ID_INDEX)
-        self.Bind(wx.EVT_TOOL,       self._OnOpenForm,       id=wx.ID_EDIT)
-        self.Bind(wx.EVT_TOOL,       self._OnOpenColumnForm, id=wx.ID_MORE)
-        self.Bind(wx.EVT_BUTTON,     self._OnExecuteSQL,     button_sql)
-        self.Bind(wx.EVT_BUTTON,     self._OnExecuteScript,  button_script)
-        self.Bind(wx.EVT_BUTTON,     self._OnExport,         button_export)
-        self.Bind(wx.EVT_BUTTON,     self._OnGridClose,      button_close)
-        stc.Bind(wx.EVT_KEY_DOWN,    self._OnSTCKey)
-        self.Bind(EVT_GRID_BASE,     self._OnGridBaseEvent)
-        self.Bind(EVT_PROGRESS,      self._OnExportClose)
+        self.Bind(wx.EVT_TOOL,     self._OnToggleLineNumbers,  id=wx.ID_INDENT)
+        self.Bind(wx.EVT_TOOL,     self._OnToggleWordWrap,     id=wx.ID_STATIC)
+        self.Bind(wx.EVT_TOOL,     self._OnCopySQL,            id=wx.ID_COPY)
+        self.Bind(wx.EVT_TOOL,     self._OnLoadSQL,            id=wx.ID_OPEN)
+        self.Bind(wx.EVT_TOOL,     self._OnSaveSQL,            id=wx.ID_SAVE)
+        self.Bind(wx.EVT_TOOL,     self._OnCopyGridSQL,        id=wx.ID_INFO)
+        self.Bind(wx.EVT_TOOL,     self._OnRequery,            id=wx.ID_REFRESH)
+        self.Bind(wx.EVT_TOOL,     self._OnResetView,          id=wx.ID_RESET)
+        self.Bind(wx.EVT_TOOL,     self._OnGotoRow,            id=wx.ID_INDEX)
+        self.Bind(wx.EVT_TOOL,     self._OnOpenForm,           id=wx.ID_EDIT)
+        self.Bind(wx.EVT_TOOL,     self._OnOpenColumnForm,     id=wx.ID_MORE)
+        self.Bind(wx.EVT_BUTTON,   self._OnExecuteSQL,         button_sql)
+        self.Bind(wx.EVT_BUTTON,   self._OnExecuteScript,      button_script)
+        self.Bind(wx.EVT_BUTTON,   self._OnExport,             button_export)
+        self.Bind(wx.EVT_BUTTON,   self._OnGridClose,          button_close)
+        stc.Bind(wx.EVT_KEY_DOWN,  self._OnSTCKey)
+        self.Bind(EVT_GRID_BASE,   self._OnGridBaseEvent)
+        self.Bind(EVT_PROGRESS,    self._OnExportClose)
         grid.Bind(wx.grid.EVT_GRID_SELECT_CELL, self._OnSelectCell)
 
         sizer_header.Add(tb)
@@ -2277,6 +2284,18 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self._tbgrid.EnableTool(wx.ID_EDIT,  enable)
         self._tbgrid.EnableTool(wx.ID_MORE,  enable)
         self._tbgrid.EnableTool(wx.ID_INDEX, bool(self._grid.NumberRows))
+
+
+    def _OnToggleLineNumbers(self, event):
+        """Handler for toggling SQL line numbers."""
+        w = max(25, 5 + 10 * int(math.log(self._stc.LineCount, 10))) if event.IsChecked() else 0
+        self._stc.SetMarginWidth(0, w)
+
+
+    def _OnToggleWordWrap(self, event):
+        """Handler for toggling SQL word-wrap."""
+        mode = wx.stc.STC_WRAP_WORD if event.IsChecked() else wx.stc.STC_WRAP_NONE
+        self._stc.SetWrapMode(mode)
 
 
     def _OnLoadSQL(self, event=None):
@@ -3451,6 +3470,7 @@ class SchemaObjectPage(wx.Panel):
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
         panel1, panel2 = self._MakeColumnsGrid(splitter), wx.Panel(splitter)
+        sizer_bodytop = wx.BoxSizer(wx.HORIZONTAL)
 
         label_body = wx.StaticText(panel2, label="&Body:")
         stc_body   = self._ctrls["body"] = controls.SQLiteTextCtrl(panel2,
@@ -3460,6 +3480,16 @@ class SchemaObjectPage(wx.Panel):
                              "Can access OLD row reference on UPDATE and DELETE, " \
                              "and NEW row reference on INSERT and UPDATE."
         stc_body.ToolTip = label_body.ToolTip.Tip
+
+        tb_body = wx.ToolBar(panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        bmp1 = images.ToolbarNumbered.Bitmap
+        bmp2 = images.ToolbarWordWrap.Bitmap
+        tb_body.SetToolBitmapSize(bmp1.Size)
+        tb_body.AddTool(wx.ID_INDENT,  "", bmp1, shortHelp="Show line numbers", kind=wx.ITEM_CHECK)
+        tb_body.AddTool(wx.ID_STATIC,  "", bmp2, shortHelp="Word-wrap",         kind=wx.ITEM_CHECK)
+        tb_body.Realize()
+        tb_body.Bind(wx.EVT_TOOL, functools.partial(self._OnToggleSQLLineNumbers, stc=stc_body), id=wx.ID_INDENT)
+        tb_body.Bind(wx.EVT_TOOL, functools.partial(self._OnToggleSQLWordWrap,    stc=stc_body), id=wx.ID_STATIC)
 
         label_when = wx.StaticText(panel2, label="WHEN:", name="trigger_when_label")
         stc_when   = self._ctrls["when"] = controls.SQLiteTextCtrl(panel2,
@@ -3481,12 +3511,14 @@ class SchemaObjectPage(wx.Panel):
 
         sizer_flags.Add(check_for)
 
-        panel2.Sizer = wx.FlexGridSizer(cols=2)
-        panel2.Sizer.AddGrowableCol(1)
-        panel2.Sizer.AddGrowableRow(0)
-        panel2.Sizer.Add(label_body, border=5, flag=wx.RIGHT)
-        panel2.Sizer.Add(stc_body, flag=wx.GROW)
-        panel2.Sizer.Add(label_when, border=5, flag=wx.RIGHT)
+        sizer_bodytop.Add(label_body)
+        sizer_bodytop.AddStretchSpacer()
+        sizer_bodytop.Add(tb_body)
+
+        panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
+        panel2.Sizer.Add(sizer_bodytop, border=5, flag=wx.GROW)
+        panel2.Sizer.Add(stc_body, flag=wx.GROW, proportion=1)
+        panel2.Sizer.Add(label_when, border=5)
         panel2.Sizer.Add(stc_when, flag=wx.GROW)
 
         sizer.Add(sizer_table, border=5, flag=wx.TOP | wx.GROW)
@@ -3513,13 +3545,28 @@ class SchemaObjectPage(wx.Panel):
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
         panel1, panel2 = self._MakeColumnsGrid(splitter), wx.Panel(splitter)
         panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_bodytop = wx.BoxSizer(wx.HORIZONTAL)
 
         label_body = wx.StaticText(panel2, label="Se&lect:")
         stc_body = self._ctrls["select"] = controls.SQLiteTextCtrl(panel2,
             traversable=True, size=(-1, 40), style=wx.BORDER_STATIC)
         label_body.ToolTip = "SELECT statement for view"
 
-        panel2.Sizer.Add(label_body)
+        tb_body = wx.ToolBar(panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        bmp1 = images.ToolbarNumbered.Bitmap
+        bmp2 = images.ToolbarWordWrap.Bitmap
+        tb_body.SetToolBitmapSize(bmp1.Size)
+        tb_body.AddTool(wx.ID_INDENT,  "", bmp1, shortHelp="Show line numbers", kind=wx.ITEM_CHECK)
+        tb_body.AddTool(wx.ID_STATIC,  "", bmp2, shortHelp="Word-wrap",         kind=wx.ITEM_CHECK)
+        tb_body.Realize()
+        tb_body.Bind(wx.EVT_TOOL, functools.partial(self._OnToggleSQLLineNumbers, stc=stc_body), id=wx.ID_INDENT)
+        tb_body.Bind(wx.EVT_TOOL, functools.partial(self._OnToggleSQLWordWrap,    stc=stc_body), id=wx.ID_STATIC)
+
+        sizer_bodytop.Add(label_body)
+        sizer_bodytop.AddStretchSpacer()
+        sizer_bodytop.Add(tb_body)
+
+        panel2.Sizer.Add(sizer_bodytop)
         panel2.Sizer.Add(stc_body, proportion=1, flag=wx.GROW)
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
@@ -5599,22 +5646,24 @@ class SchemaObjectPage(wx.Panel):
         self._PopulateSQL()
 
 
-    def _OnToggleSQLLineNumbers(self, event):
-        """Handler for toggling SQL line numbers, saves configuration."""
-        conf.SchemaLineNumbered = event.IsChecked()
-        w = 0
-        if conf.SchemaLineNumbered:
-            w = max(25, 5 + 10 * int(math.log(self._ctrls["sql"].LineCount, 10)))
-        self._ctrls["sql"].SetMarginWidth(0, w)
-        util.run_once(conf.save)
+    def _OnToggleSQLLineNumbers(self, event, stc=None):
+        """Handler for toggling SQL line numbers, saves configuration if unspecified STC."""
+        stc, stc0 = self._ctrls["sql"] if stc is None else stc, stc
+        w = max(25, 5 + 10 * int(math.log(stc.LineCount, 10))) if event.IsChecked() else 0
+        stc.SetMarginWidth(0, w)
+        if stc0 is None:
+            conf.SchemaLineNumbered = event.IsChecked()
+            util.run_once(conf.save)
 
 
-    def _OnToggleSQLWordWrap(self, event):
-        """Handler for toggling SQL word-wrap, saves configuration."""
-        conf.SchemaWordWrap = event.IsChecked()
-        mode = wx.stc.STC_WRAP_WORD if conf.SchemaWordWrap else wx.stc.STC_WRAP_NONE
-        self._ctrls["sql"].SetWrapMode(mode)
-        util.run_once(conf.save)
+    def _OnToggleSQLWordWrap(self, event, stc=None):
+        """Handler for toggling SQL word-wrap, saves configuration if unspecified STC."""
+        stc, stc0 = self._ctrls["sql"] if stc is None else stc, stc
+        mode = wx.stc.STC_WRAP_WORD if event.IsChecked() else wx.stc.STC_WRAP_NONE
+        stc.SetWrapMode(mode)
+        if stc0 is None:
+            conf.SchemaWordWrap = event.IsChecked()
+            util.run_once(conf.save)
 
 
     def _OnCopySQL(self, event=None):

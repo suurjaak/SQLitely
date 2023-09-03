@@ -3,6 +3,7 @@ CHANGELOG
 
 2.2, 2023-09-02
 ---------------
+- add line number and word-wrap toggles to more controls
 - add YAML formatting options to value editor
 - fix Excel export error, from breaking changes in PIL
 

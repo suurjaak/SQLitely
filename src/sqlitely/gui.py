@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.08.2023
+@modified    02.09.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3162,12 +3162,19 @@ class DatabasePage(wx.Panel):
         stc = self.stc_pragma = controls.SQLiteTextCtrl(panel_sql, style=wx.BORDER_STATIC)
         stc.SetReadOnly(True)
         tb = self.tb_pragma = wx.ToolBar(panel_sql, style=wx.TB_FLAT | wx.TB_NODIVIDER)
-        bmp1 = wx.ArtProvider.GetBitmap(wx.ART_COPY,      wx.ART_TOOLBAR, (16, 16))
-        bmp2 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
+        bmp1 = images.ToolbarNumbered.Bitmap
+        bmp2 = images.ToolbarWordWrap.Bitmap
+        bmp3 = wx.ArtProvider.GetBitmap(wx.ART_COPY,      wx.ART_TOOLBAR, (16, 16))
+        bmp4 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR, (16, 16))
         tb.SetToolBitmapSize(bmp1.Size)
-        tb.AddTool(wx.ID_COPY, "", bmp1, shortHelp="Copy pragma SQL to clipboard")
-        tb.AddTool(wx.ID_SAVE, "", bmp2, shortHelp="Save pragma SQL to file")
+        tb.AddTool(wx.ID_INDENT, "", bmp1, shortHelp="Show line numbers", kind=wx.ITEM_CHECK)
+        tb.AddTool(wx.ID_STATIC, "", bmp2, shortHelp="Word-wrap",         kind=wx.ITEM_CHECK)
+        tb.AddSeparator()
+        tb.AddTool(wx.ID_COPY,   "", bmp3, shortHelp="Copy pragma SQL to clipboard")
+        tb.AddTool(wx.ID_SAVE,   "", bmp4, shortHelp="Save pragma SQL to file")
         tb.Realize()
+        tb.Bind(wx.EVT_TOOL, self.on_toggle_numbers_stc_pragma, id=wx.ID_INDENT)
+        tb.Bind(wx.EVT_TOOL, self.on_toggle_wrap_stc_pragma,    id=wx.ID_STATIC)
         tb.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_pragma), id=wx.ID_COPY)
         tb.Bind(wx.EVT_TOOL, lambda e: self.save_sql(self.stc_pragma.Text, "PRAGMA"), id=wx.ID_SAVE)
 
@@ -4123,6 +4130,18 @@ class DatabasePage(wx.Panel):
         mode = wx.stc.STC_WRAP_WORD if conf.SchemaWordWrap else wx.stc.STC_WRAP_NONE
         self.stc_schema.SetWrapMode(mode)
         util.run_once(conf.save)
+
+
+    def on_toggle_numbers_stc_pragma(self, event):
+        """Handler for toggling line numbers in pragma STC."""
+        w = max(25, 5 + 10 * int(math.log(self.stc_pragma.LineCount, 10))) if event.IsChecked() else 0
+        self.stc_pragma.SetMarginWidth(0, w)
+
+
+    def on_toggle_wrap_stc_pragma(self, event):
+        """Handler for toggling word-wrap in pragma STC."""
+        mode = wx.stc.STC_WRAP_WORD if event.IsChecked() else wx.stc.STC_WRAP_NONE
+        self.stc_pragma.SetWrapMode(mode)
 
 
     def on_update_stc_schema(self, event=None):
