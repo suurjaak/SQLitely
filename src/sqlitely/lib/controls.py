@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    27.08.2023
+@modified    03.09.2023
 ------------------------------------------------------------------------------
 """
 import collections
@@ -1434,14 +1434,7 @@ class FormDialog(wx.Dialog):
 
             mylabel = wx.StaticText(parent, label=label, name=accname + "_label")
             tb = wx.ToolBar(parent, style=wx.TB_FLAT | wx.TB_NODIVIDER)
-            ctrl = field["component"](parent, traversable=True, style=wx.BORDER_SUNKEN)
-
-            ctrl.SetName(accname)
-            ctrl.SetMarginCount(1)
-            ctrl.SetMarginType(0, wx.stc.STC_MARGIN_NUMBER)
-            ctrl.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
-            ctrl.SetMarginWidth(0, 0)
-            ctrl.SetWrapMode(wx.stc.STC_WRAP_WORD)
+            ctrl = field["component"](parent, traversable=True, style=wx.BORDER_SUNKEN, name=accname)
 
             OPTS = {"numbers": {"id": wx.ID_INDENT, "bmp": wx.ART_HELP,      "handler": self._OnToggleLineNumbers},
                     "wrap":    {"id": wx.ID_STATIC, "bmp": wx.ART_HELP,      "handler": self._OnToggleWordWrap},
@@ -3546,6 +3539,8 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.caretline_focus = kwargs.pop("caretline_focus", None)
         self.traversable     = kwargs.pop("traversable", False)
         self.wheelable       = kwargs.pop("wheelable", True)
+        self.linenumbers     = kwargs.pop("linenumbers", False)
+        self.wordwrap        = kwargs.pop("wordwrap", True)
 
         if "linux" in sys.platform:
             # If no explicit border specified, set BORDER_SIMPLE to make control visible
@@ -3563,12 +3558,16 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.autocomps_subwords = {}
 
         self.SetLexer(wx.stc.STC_LEX_SQL)
-        self.SetMarginWidth(1, 0) # Get rid of left margin
+        self.SetMarginCount(1)
+        self.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
+        self.SetMarginType(0, wx.stc.STC_MARGIN_NUMBER)
+        self.SetMarginWidth(0, 25) if self.linenumbers else None
+        self.SetMarginWidth(1, 0) # Get rid of marker margin
         self.SetTabWidth(4)
         # Keywords must be lowercase, required by StyledTextCtrl
         self.SetKeyWords(0, u" ".join(self.KEYWORDS + self.TYPEWORDS).lower())
         self.AutoCompStops(self.AUTOCOMP_STOPS)
-        self.SetWrapMode(wx.stc.STC_WRAP_WORD)
+        self.SetWrapMode(wx.stc.STC_WRAP_WORD if self.wordwrap else wx.stc.STC_WRAP_NONE)
         self.SetCaretLineBackAlpha(20)
         self.SetCaretLineVisible(True)
         self.AutoCompSetIgnoreCase(True)
@@ -3703,6 +3702,31 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.wheelable = wheelable
         if wheelable is False: self.Bind(wx.EVT_MOUSEWHEEL, self.OnWheel)
     Wheelable = property(IsWheelable, SetWheelable)
+
+
+    def HasLineNumbers(self):
+        """Returns whether control shows line numbers."""
+        return self.linenumbers
+
+
+    def SetLineNumbers(self, show=True):
+        """Sets whether control shows line numbers."""
+        self.linenumbers = bool(show)
+        w = max(25, 5 + 10 * int(math.log(self.LineCount, 10))) if show else 0
+        self.SetMarginWidth(0, w)
+    LineNumbers = property(HasLineNumbers, SetLineNumbers)
+
+
+    def HasWordWrap(self):
+        """Returns whether control wraps text."""
+        return self.wordwrap
+
+
+    def SetWordWrap(self, wrap=True):
+        """Sets whether control wraps text."""
+        self.wordwrap = bool(wrap)
+        self.SetWrapMode(wx.stc.STC_WRAP_WORD if wrap else wx.stc.STC_WRAP_NONE)
+    WordWrap = property(HasWordWrap, SetWordWrap)
 
 
     def OnFocus(self, event):

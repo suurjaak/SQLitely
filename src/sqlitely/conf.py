@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.09.2023
+@modified    11.09.2023
 ------------------------------------------------------------------------------
 """
 try: from ConfigParser import RawConfigParser                 # Py2
@@ -29,8 +29,8 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.2.dev2"
-VersionDate = "02.09.2023"
+Version = "2.2.dev3"
+VersionDate = "11.09.2023"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -57,9 +57,9 @@ FileDirectives = ["AllowMultipleInstances", "ConsoleHistoryCommands", "DBFiles",
     "DBSort", "LastActivePages", "LastExportType", "LastSearchResults",
     "LastSelectedFiles", "LastUpdateCheck", "ParseCache", "Plugins", "RecentFiles",
     "SchemaDiagrams", "SearchHistory", "SearchInMeta", "SearchInData",
-    "SearchUseNewTab", "SearchCaseSensitive", "SQLWindowTexts", "TrayIconEnabled",
-    "UpdateCheckAutomatic", "WindowMaximized", "WindowMinimizedToTray",
-    "WindowPosition", "WindowSize",
+    "SearchUseNewTab", "SearchCaseSensitive", "SQLWindowTexts", "TextLineNumbers",
+    "TextWordWraps", "TrayIconEnabled", "UpdateCheckAutomatic", "WindowMaximized",
+    "WindowMinimizedToTray", "WindowPosition", "WindowSize",
 ]
 """List of user-modifiable attributes, saved if changed from default."""
 OptionalFileDirectives = [
@@ -67,9 +67,9 @@ OptionalFileDirectives = [
     "MaxConsoleHistory", "MaxDBSizeForFullCount", "MaxTableRowIDForFullCount",
     "MaxHistoryInitialMessages", "MaxImportFilesizeForCount", "MaxRecentFiles",
     "MaxSearchHistory", "MaxSearchResults", "MaxParseCache", "PopupUnexpectedErrors",
-    "RunChecksums", "RunStatistics", "SchemaDiagramEnabled", "SchemaLineNumbered",
-    "SchemaWordWrap", "SearchResultsChunk", "SeekLength", "SeekLeapLength",
-    "StatisticsPlotWidth", "StatusFlashLength", "UpdateCheckInterval",
+    "RunChecksums", "RunStatistics", "SchemaDiagramEnabled", "SearchResultsChunk",
+    "SeekLength", "SeekLeapLength", "StatisticsPlotWidth", "StatusFlashLength",
+    "UpdateCheckInterval",
 ]
 Defaults = {}
 
@@ -153,12 +153,6 @@ SchemaDiagrams = {}
 """Whether database schema diagram is enabled."""
 SchemaDiagramEnabled = True
 
-"""Show line numbers in SQL controls, like database full schema panel."""
-SchemaLineNumbered = False
-
-"""Word-wrap lines in SQL controls, like database full schema panel."""
-SchemaWordWrap = True
-
 """
 Texts entered in global search, used for drop down auto-complete.
 Last value can be an empty string: search box had no text.
@@ -179,6 +173,12 @@ SearchInData = True
 
 """Texts in SQL window, loaded on reopening a database {filename: [(name, text), ], }."""
 SQLWindowTexts = {}
+
+"""Show line numbers in SQL controls, like database full schema panel."""
+TextLineNumbers = {}
+
+"""Word-wrap lines in SQL controls, like database full schema panel."""
+TextWordWraps = {"body": True, "entity": True, "pragma": True, "schema": True, "sql": True}
 
 """Whether the program tray icon is used."""
 TrayIconEnabled = True

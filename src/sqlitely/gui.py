@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.09.2023
+@modified    11.09.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3160,6 +3160,8 @@ class DatabasePage(wx.Panel):
         check_fullsql.Hide()
 
         stc = self.stc_pragma = controls.SQLiteTextCtrl(panel_sql, style=wx.BORDER_STATIC)
+        stc.LineNumbers = conf.TextLineNumbers.get("pragma")
+        stc.WordWrap    = conf.TextWordWraps  .get("pragma")
         stc.SetReadOnly(True)
         tb = self.tb_pragma = wx.ToolBar(panel_sql, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = images.ToolbarNumbered.Bitmap
@@ -3172,18 +3174,17 @@ class DatabasePage(wx.Panel):
         tb.AddSeparator()
         tb.AddTool(wx.ID_COPY,   "", bmp3, shortHelp="Copy pragma SQL to clipboard")
         tb.AddTool(wx.ID_SAVE,   "", bmp4, shortHelp="Save pragma SQL to file")
+        tb.ToggleTool(wx.ID_INDENT, bool(conf.TextLineNumbers.get("pragma")))
+        tb.ToggleTool(wx.ID_STATIC, bool(conf.TextWordWraps  .get("pragma")))
         tb.Realize()
-        tb.Bind(wx.EVT_TOOL, self.on_toggle_numbers_stc_pragma, id=wx.ID_INDENT)
-        tb.Bind(wx.EVT_TOOL, self.on_toggle_wrap_stc_pragma,    id=wx.ID_STATIC)
-        tb.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_pragma), id=wx.ID_COPY)
+        tb.Bind(wx.EVT_TOOL, lambda e: self.on_toggle_stc_linenumbers(e, "pragma"),   id=wx.ID_INDENT)
+        tb.Bind(wx.EVT_TOOL, lambda e: self.on_toggle_stc_wordwrap   (e, "pragma"),   id=wx.ID_STATIC)
+        tb.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_pragma),             id=wx.ID_COPY)
         tb.Bind(wx.EVT_TOOL, lambda e: self.save_sql(self.stc_pragma.Text, "PRAGMA"), id=wx.ID_SAVE)
 
-        button_edit = self.button_pragma_edit = \
-            wx.Button(page, label="Edit")
-        button_refresh = self.button_pragma_refresh = \
-            wx.Button(page, label="Refresh")
-        button_cancel = self.button_pragma_cancel = \
-            wx.Button(page, label="Cancel")
+        button_edit    = self.button_pragma_edit    = wx.Button(page, label="Edit")
+        button_refresh = self.button_pragma_refresh = wx.Button(page, label="Refresh")
+        button_cancel  = self.button_pragma_cancel  = wx.Button(page, label="Cancel")
 
         button_edit.ToolTip = "Change PRAGMA values"
         button_refresh.ToolTip = "Reload PRAGMA values from database"
@@ -3358,8 +3359,7 @@ class DatabasePage(wx.Panel):
 
         html_stats = self.html_stats = wx.html.HtmlWindow(panel_stats)
 
-        tb_sql = self.tb_sql = wx.ToolBar(panel_schema,
-                                      style=wx.TB_FLAT | wx.TB_NODIVIDER)
+        tb_sql = self.tb_sql = wx.ToolBar(panel_schema, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         tb_sql.SetToolBitmapSize(bmp1.Size)
         tb_sql.AddTool(wx.ID_REFRESH, "", bmp1, shortHelp="Refresh schema SQL")
         tb_sql.AddSeparator()
@@ -3369,24 +3369,21 @@ class DatabasePage(wx.Panel):
         tb_sql.AddTool(wx.ID_COPY,    "", bmp3, shortHelp="Copy schema SQL to clipboard")
         tb_sql.AddTool(wx.ID_SAVE,    "", bmp4, shortHelp="Save schema SQL to file")
         tb_sql.Realize()
-        tb_sql.ToggleTool(wx.ID_INDENT, conf.SchemaLineNumbered)
-        tb_sql.ToggleTool(wx.ID_STATIC, conf.SchemaWordWrap)
+        tb_sql.ToggleTool(wx.ID_INDENT, bool(conf.TextLineNumbers.get("schema")))
+        tb_sql.ToggleTool(wx.ID_STATIC, bool(conf.TextWordWraps  .get("schema")))
         tb_sql.EnableTool(wx.ID_COPY,   False)
         tb_sql.EnableTool(wx.ID_SAVE,   False)
-        tb_sql.Bind(wx.EVT_TOOL, self.on_update_stc_schema, id=wx.ID_REFRESH)
-        tb_sql.Bind(wx.EVT_TOOL, self.on_toggle_numbers_stc_schema, id=wx.ID_INDENT)
-        tb_sql.Bind(wx.EVT_TOOL, self.on_toggle_wrap_stc_schema,    id=wx.ID_STATIC)
-        tb_sql.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_schema), id=wx.ID_COPY)
+        tb_sql.Bind(wx.EVT_TOOL, self.on_update_stc_schema,      id=wx.ID_REFRESH)
+        tb_sql.Bind(wx.EVT_TOOL, self.on_toggle_stc_linenumbers, id=wx.ID_INDENT)
+        tb_sql.Bind(wx.EVT_TOOL, self.on_toggle_stc_wordwrap,    id=wx.ID_STATIC)
+        tb_sql.Bind(wx.EVT_TOOL, lambda e: self.on_copy_sql(self.stc_schema),   id=wx.ID_COPY)
         tb_sql.Bind(wx.EVT_TOOL, lambda e: self.save_sql(self.stc_schema.Text), id=wx.ID_SAVE)
 
         stc = self.stc_schema = controls.SQLiteTextCtrl(panel_schema, style=wx.BORDER_STATIC)
-        stc.SetMarginCount(1)
-        stc.SetMarginType(0, wx.stc.STC_MARGIN_NUMBER)
-        stc.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
-        stc.SetMarginWidth(0, 25 if conf.SchemaLineNumbered else 0)
+        stc.LineNumbers = conf.TextLineNumbers.get("schema")
+        stc.WordWrap    = conf.TextWordWraps  .get("schema")
         stc.SetText("Parsing..")
         stc.SetReadOnly(True)
-        stc.SetWrapMode(wx.stc.STC_WRAP_WORD if conf.SchemaWordWrap else wx.stc.STC_WRAP_NONE)
 
         panel_stats.Sizer.Add(tb_stats, border=5, flag=wx.ALL)
         panel_stats.Sizer.Add(html_stats, proportion=1, flag=wx.GROW)
@@ -4000,6 +3997,18 @@ class DatabasePage(wx.Panel):
                 clipboard_copy("\n\n".join(x.rstrip(";\n") + ";" for c in sqls
                                            for x in sqls[c].values()) + "\n\n")
                 guibase.status("Copied SQL to clipboard.")
+        elif "configure" == cmd: # configure linenumbers pragma True
+            name, args = args[0], args[1:]
+            if name in ("linenumbers", "wordwrap"):
+                category, on = args[0:2]
+                dct = conf.TextLineNumbers if "linenumbers" == name else conf.TextWordWraps
+                if bool(dct.get(category)) != bool(on):
+                    dct[category] = bool(on)
+                    util.run_once(conf.save)
+                    if "sql" == category and len(self.sql_pages) > 1:
+                        # Keep unified style across all SQL window tabs
+                        for p in self.sql_pages.values():
+                            (p.SetLineNumbers if "linenumbers" == name else p.SetWordWrap)(on)
 
         elif "export" == cmd:
             arg = args[0]
@@ -4114,34 +4123,18 @@ class DatabasePage(wx.Panel):
         self.notebook.GetCurrentPage().SetFocus()
 
 
-    def on_toggle_numbers_stc_schema(self, event):
-        """Handler for toggling line numbers in schema STC, saves configuration."""
-        conf.SchemaLineNumbered = event.IsChecked()
-        w = 0
-        if conf.SchemaLineNumbered:
-            w = max(25, 5 + 10 * int(math.log(self.stc_schema.LineCount, 10)))
-        self.stc_schema.SetMarginWidth(0, w)
+    def on_toggle_stc_linenumbers(self, event, name=None):
+        """Handler for toggling line numbers in schema or pragma STC, saves configuration."""
+        stc = self.stc_schema if name is None else self.stc_pragma
+        conf.TextLineNumbers[name or "schema"] = stc.LineNumbers = event.IsChecked()
         util.run_once(conf.save)
 
 
-    def on_toggle_wrap_stc_schema(self, event):
-        """Handler for toggling word-wrap in schema STC, saves configuration."""
-        conf.SchemaWordWrap = event.IsChecked()
-        mode = wx.stc.STC_WRAP_WORD if conf.SchemaWordWrap else wx.stc.STC_WRAP_NONE
-        self.stc_schema.SetWrapMode(mode)
+    def on_toggle_stc_wordwrap(self, event, name=None):
+        """Handler for toggling word-wrap in schema or pragma STC, saves configuration."""
+        stc = self.stc_schema if name is None else self.stc_pragma
+        conf.TextWordWraps[name or "schema"] = stc.WordWrap = event.IsChecked()
         util.run_once(conf.save)
-
-
-    def on_toggle_numbers_stc_pragma(self, event):
-        """Handler for toggling line numbers in pragma STC."""
-        w = max(25, 5 + 10 * int(math.log(self.stc_pragma.LineCount, 10))) if event.IsChecked() else 0
-        self.stc_pragma.SetMarginWidth(0, w)
-
-
-    def on_toggle_wrap_stc_pragma(self, event):
-        """Handler for toggling word-wrap in pragma STC."""
-        mode = wx.stc.STC_WRAP_WORD if event.IsChecked() else wx.stc.STC_WRAP_NONE
-        self.stc_pragma.SetWrapMode(mode)
 
 
     def on_update_stc_schema(self, event=None):
@@ -5831,6 +5824,11 @@ class DatabasePage(wx.Panel):
                 self.sql_page_counter += 1
                 name += " (%s)" % self.sql_page_counter
         p = components.SQLPage(self.notebook_sql, self.db)
+        p.DatabasePage = self
+        p.Linenumbers = next((x.LineNumbers for x in self.sql_pages.values()),
+                              conf.TextLineNumbers.get("sql"))
+        p.WordWrap    = next((x.WordWrap for x in self.sql_pages.values()),
+                              conf.TextWordWraps.get("sql"))
         p.Text = text
         self.sql_pages[name] = p
         self.notebook_sql.InsertPage(0, page=p, text=name, select=True)
@@ -5888,6 +5886,7 @@ class DatabasePage(wx.Panel):
         self.notebook_schema.Freeze()
         try:
             p = components.SchemaObjectPage(self.notebook_schema, self.db, data)
+            p.DatabasePage = self
             self.schema_pages[data["type"]][data.get("name") or str(id(p))] = p
             self.notebook_schema.InsertPage(0, page=p, text=title, select=True)
             for i, item in enumerate(self.pages_closed.get(self.notebook_schema, [])):

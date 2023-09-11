@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.09.2023
+@modified    11.09.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1746,6 +1746,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
 
         self._db       = db
+        self._page     = None # gui.DatabasePage instance
         self._last_sql = "" # Last executed SQL
         self._last_is_script = False # Whether last execution was script
         self._hovered_cell = None # (row, col)
@@ -1909,6 +1910,35 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         self._stc.SetText(text)
         self._stc.EmptyUndoBuffer() # So that undo does not clear the STC
     Text = property(GetText, SetText)
+
+
+    def GetDatabasePage(self):       return self._page
+    def SetDatabasePage(self, page): self._page = page
+    DatabasePage = property(GetDatabasePage, SetDatabasePage)
+
+
+    def HasLineNumbers(self):
+        """Returns whether SQL editor shows line numbers."""
+        return self._stc.LineNumbers
+
+
+    def SetLineNumbers(self, show=True):
+        """Sets whether SQL editor shows line numbers."""
+        self._stc.LineNumbers = show
+        self._tb.ToggleTool(wx.ID_INDENT, bool(show))
+    LineNumbers = property(HasLineNumbers, SetLineNumbers)
+
+
+    def HasWordWrap(self):
+        """Returns whether SQL editor wraps text."""
+        return self._stc.WordWrap
+
+
+    def SetWordWrap(self, wrap=True):
+        """Sets whether SQL editor wraps text."""
+        self._stc.WordWrap = wrap
+        self._tb.ToggleTool(wx.ID_STATIC, bool(wrap))
+    WordWrap = property(HasWordWrap, SetWordWrap)
 
 
     def CanUndoRedo(self):
@@ -2288,14 +2318,14 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnToggleLineNumbers(self, event):
         """Handler for toggling SQL line numbers."""
-        w = max(25, 5 + 10 * int(math.log(self._stc.LineCount, 10))) if event.IsChecked() else 0
-        self._stc.SetMarginWidth(0, w)
+        on = self._stc.LineNumbers = event.IsChecked()
+        if self._page: self._page.handle_command("configure", "linenumbers", "sql", on)
 
 
     def _OnToggleWordWrap(self, event):
         """Handler for toggling SQL word-wrap."""
-        mode = wx.stc.STC_WRAP_WORD if event.IsChecked() else wx.stc.STC_WRAP_NONE
-        self._stc.SetWrapMode(mode)
+        on = self._stc.WordWrap = event.IsChecked()
+        if self._page: self._page.handle_command("configure", "wordwrap", "sql", on)
 
 
     def _OnLoadSQL(self, event=None):
@@ -3010,6 +3040,7 @@ class SchemaObjectPage(wx.Panel):
         ColourManager.Manage(self, "ForegroundColour", wx.SYS_COLOUR_BTNTEXT)
 
         self._db       = db
+        self._page     = None # gui.DatabasePage instance
         self._category = item["type"]
         self._hasmeta  = "meta" in item
         self._newmode  = "name" not in item
@@ -3085,18 +3116,15 @@ class SchemaObjectPage(wx.Panel):
         tb.AddSeparator()
         tb.AddTool(wx.ID_COPY,    "", bmp3, shortHelp="Copy SQL to clipboard")
         tb.AddTool(wx.ID_SAVE,    "", bmp4, shortHelp="Save SQL to file")
-        tb.ToggleTool(wx.ID_INDENT, conf.SchemaLineNumbered)
-        tb.ToggleTool(wx.ID_STATIC, conf.SchemaWordWrap)
+        tb.ToggleTool(wx.ID_INDENT, bool(conf.TextLineNumbers.get("entity")))
+        tb.ToggleTool(wx.ID_STATIC, bool(conf.TextWordWraps  .get("entity")))
         tb.Realize()
 
         stc = self._ctrls["sql"] = controls.SQLiteTextCtrl(panel2, traversable=True,
                                                            style=wx.BORDER_STATIC)
-        stc.SetMarginCount(1)
-        stc.SetMarginType(0, wx.stc.STC_MARGIN_NUMBER)
-        stc.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
-        stc.SetMarginWidth(0, 25 if conf.SchemaLineNumbered else 0)
         stc.SetReadOnly(True)
-        stc.SetWrapMode(wx.stc.STC_WRAP_WORD if conf.SchemaWordWrap else wx.stc.STC_WRAP_NONE)
+        stc.LineNumbers = conf.TextLineNumbers.get("entity")
+        stc.WordWrap    = conf.TextWordWraps  .get("entity")
         stc._toggle = "skip"
 
         label_error = self._label_error = wx.StaticText(panel2)
@@ -3144,18 +3172,18 @@ class SchemaObjectPage(wx.Panel):
         panel2.Sizer.Add(label_error,      border=5,  flag=wx.TOP)
         panel2.Sizer.Add(sizer_buttons,    border=10, flag=wx.TOP | wx.RIGHT | wx.BOTTOM | wx.GROW)
 
-        tb.Bind(wx.EVT_TOOL, self._OnToggleSQLLineNumbers, id=wx.ID_INDENT)
-        tb.Bind(wx.EVT_TOOL, self._OnToggleSQLWordWrap,    id=wx.ID_STATIC)
-        tb.Bind(wx.EVT_TOOL, self._OnCopySQL,              id=wx.ID_COPY)
-        tb.Bind(wx.EVT_TOOL, self._OnSaveSQL,              id=wx.ID_SAVE)
-        self.Bind(wx.EVT_BUTTON,   self._OnSaveOrEdit,     button_edit)
-        self.Bind(wx.EVT_BUTTON,   self._OnRefresh,        button_refresh)
-        self.Bind(wx.EVT_BUTTON,   self._OnTest,           button_test)
-        self.Bind(wx.EVT_BUTTON,   self._OnImportSQL,      button_import)
-        self.Bind(wx.EVT_BUTTON,   self._OnToggleEdit,     button_cancel)
-        self.Bind(wx.EVT_BUTTON,   self._OnActions,        button_actions)
-        self.Bind(wx.EVT_BUTTON,   self._OnClose,          button_close)
-        self.Bind(wx.EVT_CHECKBOX, self._OnToggleAlterSQL, check_alter)
+        tb.Bind(wx.EVT_TOOL,       self._OnToggleLineNumbers, id=wx.ID_INDENT)
+        tb.Bind(wx.EVT_TOOL,       self._OnToggleWordWrap,    id=wx.ID_STATIC)
+        tb.Bind(wx.EVT_TOOL,       self._OnCopySQL,           id=wx.ID_COPY)
+        tb.Bind(wx.EVT_TOOL,       self._OnSaveSQL,           id=wx.ID_SAVE)
+        self.Bind(wx.EVT_BUTTON,   self._OnSaveOrEdit,        button_edit)
+        self.Bind(wx.EVT_BUTTON,   self._OnRefresh,           button_refresh)
+        self.Bind(wx.EVT_BUTTON,   self._OnTest,              button_test)
+        self.Bind(wx.EVT_BUTTON,   self._OnImportSQL,         button_import)
+        self.Bind(wx.EVT_BUTTON,   self._OnToggleEdit,        button_cancel)
+        self.Bind(wx.EVT_BUTTON,   self._OnActions,           button_actions)
+        self.Bind(wx.EVT_BUTTON,   self._OnClose,             button_close)
+        self.Bind(wx.EVT_CHECKBOX, self._OnToggleAlterSQL,    check_alter)
         self.Bind(wx.EVT_SIZE,     self._OnSize)
         self._BindDataHandler(self._OnChange, edit_name, ["name"])
 
@@ -3260,6 +3288,11 @@ class SchemaObjectPage(wx.Panel):
         if editmode != self._editmode:
             self._OnToggleEdit(force=True)
     ReadOnly = property(IsReadOnly, SetReadOnly)
+
+
+    def GetDatabasePage(self):       return self._page
+    def SetDatabasePage(self, page): self._page = page
+    DatabasePage = property(GetDatabasePage, SetDatabasePage)
 
 
     def _AssignColumnIDs(self, meta):
@@ -3480,6 +3513,8 @@ class SchemaObjectPage(wx.Panel):
                              "Can access OLD row reference on UPDATE and DELETE, " \
                              "and NEW row reference on INSERT and UPDATE."
         stc_body.ToolTip = label_body.ToolTip.Tip
+        stc_body.LineNumbers = conf.TextLineNumbers.get("body")
+        stc_body.WordWrap    = conf.TextWordWraps  .get("body")
 
         tb_body = wx.ToolBar(panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = images.ToolbarNumbered.Bitmap
@@ -3487,9 +3522,11 @@ class SchemaObjectPage(wx.Panel):
         tb_body.SetToolBitmapSize(bmp1.Size)
         tb_body.AddTool(wx.ID_INDENT,  "", bmp1, shortHelp="Show line numbers", kind=wx.ITEM_CHECK)
         tb_body.AddTool(wx.ID_STATIC,  "", bmp2, shortHelp="Word-wrap",         kind=wx.ITEM_CHECK)
+        tb_body.ToggleTool(wx.ID_INDENT, bool(conf.TextLineNumbers.get("body")))
+        tb_body.ToggleTool(wx.ID_STATIC, bool(conf.TextWordWraps  .get("body")))
         tb_body.Realize()
-        tb_body.Bind(wx.EVT_TOOL, functools.partial(self._OnToggleSQLLineNumbers, stc=stc_body), id=wx.ID_INDENT)
-        tb_body.Bind(wx.EVT_TOOL, functools.partial(self._OnToggleSQLWordWrap,    stc=stc_body), id=wx.ID_STATIC)
+        tb_body.Bind(wx.EVT_TOOL, functools.partial(self._OnToggleLineNumbers, name="body"), id=wx.ID_INDENT)
+        tb_body.Bind(wx.EVT_TOOL, functools.partial(self._OnToggleWordWrap,    name="body"), id=wx.ID_STATIC)
 
         label_when = wx.StaticText(panel2, label="WHEN:", name="trigger_when_label")
         stc_when   = self._ctrls["when"] = controls.SQLiteTextCtrl(panel2,
@@ -3511,7 +3548,7 @@ class SchemaObjectPage(wx.Panel):
 
         sizer_flags.Add(check_for)
 
-        sizer_bodytop.Add(label_body)
+        sizer_bodytop.Add(label_body, border=2, flag=wx.BOTTOM | wx.ALIGN_BOTTOM)
         sizer_bodytop.AddStretchSpacer()
         sizer_bodytop.Add(tb_body)
 
@@ -3551,6 +3588,8 @@ class SchemaObjectPage(wx.Panel):
         stc_body = self._ctrls["select"] = controls.SQLiteTextCtrl(panel2,
             traversable=True, size=(-1, 40), style=wx.BORDER_STATIC)
         label_body.ToolTip = "SELECT statement for view"
+        stc_body.LineNumbers = conf.TextLineNumbers.get("body")
+        stc_body.WordWrap    = conf.TextWordWraps  .get("body")
 
         tb_body = wx.ToolBar(panel2, style=wx.TB_FLAT | wx.TB_NODIVIDER)
         bmp1 = images.ToolbarNumbered.Bitmap
@@ -3558,15 +3597,17 @@ class SchemaObjectPage(wx.Panel):
         tb_body.SetToolBitmapSize(bmp1.Size)
         tb_body.AddTool(wx.ID_INDENT,  "", bmp1, shortHelp="Show line numbers", kind=wx.ITEM_CHECK)
         tb_body.AddTool(wx.ID_STATIC,  "", bmp2, shortHelp="Word-wrap",         kind=wx.ITEM_CHECK)
+        tb_body.ToggleTool(wx.ID_INDENT, bool(conf.TextLineNumbers.get("body")))
+        tb_body.ToggleTool(wx.ID_STATIC, bool(conf.TextWordWraps  .get("body")))
         tb_body.Realize()
-        tb_body.Bind(wx.EVT_TOOL, functools.partial(self._OnToggleSQLLineNumbers, stc=stc_body), id=wx.ID_INDENT)
-        tb_body.Bind(wx.EVT_TOOL, functools.partial(self._OnToggleSQLWordWrap,    stc=stc_body), id=wx.ID_STATIC)
+        tb_body.Bind(wx.EVT_TOOL, functools.partial(self._OnToggleLineNumbers, name="select"), id=wx.ID_INDENT)
+        tb_body.Bind(wx.EVT_TOOL, functools.partial(self._OnToggleWordWrap,    name="select"), id=wx.ID_STATIC)
 
-        sizer_bodytop.Add(label_body)
+        sizer_bodytop.Add(label_body, border=2, flag=wx.BOTTOM | wx.ALIGN_BOTTOM)
         sizer_bodytop.AddStretchSpacer()
         sizer_bodytop.Add(tb_body)
 
-        panel2.Sizer.Add(sizer_bodytop)
+        panel2.Sizer.Add(sizer_bodytop, flag=wx.GROW)
         panel2.Sizer.Add(stc_body, proportion=1, flag=wx.GROW)
 
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
@@ -5646,24 +5687,16 @@ class SchemaObjectPage(wx.Panel):
         self._PopulateSQL()
 
 
-    def _OnToggleSQLLineNumbers(self, event, stc=None):
-        """Handler for toggling SQL line numbers, saves configuration if unspecified STC."""
-        stc, stc0 = self._ctrls["sql"] if stc is None else stc, stc
-        w = max(25, 5 + 10 * int(math.log(stc.LineCount, 10))) if event.IsChecked() else 0
-        stc.SetMarginWidth(0, w)
-        if stc0 is None:
-            conf.SchemaLineNumbered = event.IsChecked()
-            util.run_once(conf.save)
+    def _OnToggleLineNumbers(self, event, name=None):
+        """Handler for toggling SQL line numbers in entity or given STC, saves configuration."""
+        on = self._ctrls[name or "sql"].LineNumbers = event.IsChecked()
+        self._page and self._page.handle_command("configure", "linenumbers", name or "entity", on)
 
 
-    def _OnToggleSQLWordWrap(self, event, stc=None):
-        """Handler for toggling SQL word-wrap, saves configuration if unspecified STC."""
-        stc, stc0 = self._ctrls["sql"] if stc is None else stc, stc
-        mode = wx.stc.STC_WRAP_WORD if event.IsChecked() else wx.stc.STC_WRAP_NONE
-        stc.SetWrapMode(mode)
-        if stc0 is None:
-            conf.SchemaWordWrap = event.IsChecked()
-            util.run_once(conf.save)
+    def _OnToggleWordWrap(self, event, name=None):
+        """Handler for toggling SQL word wrap in entity or given STC, saves configuration."""
+        on = self._ctrls[name or "sql"].WordWrap = event.IsChecked()
+        self._page and self._page.handle_command("configure", "wordwrap", name or "entity", on)
 
 
     def _OnCopySQL(self, event=None):
@@ -10300,7 +10333,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
     GradientEndColour = property(GetGradientEndColour, SetGradientEndColour)
 
 
-    def GetDatabasePage(self):         return self._page
+    def GetDatabasePage(self):       return self._page
     def SetDatabasePage(self, page): self._page = page
     DatabasePage = property(GetDatabasePage, SetDatabasePage)
 
