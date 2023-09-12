@@ -15,6 +15,7 @@ Released under the MIT License.
 """
 try: from ConfigParser import RawConfigParser                 # Py2
 except ImportError: from configparser import RawConfigParser  # Py3
+import copy
 import datetime
 import json
 import os
@@ -29,7 +30,7 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.2.dev4"
+Version = "2.2.dev5"
 VersionDate = "12.09.2023"
 
 if getattr(sys, "frozen", False):
@@ -355,6 +356,12 @@ def load(configfile=None):
     try: VARTYPES = (basestring, bool, int, long, list, tuple, dict, type(None))         # Py2
     except Exception: VARTYPES = (bytes, str, bool, int, list, tuple, dict, type(None))  # Py3
 
+    def safecopy(v):
+        """Tries to return a deep copy, or a shallow copy, or given value if copy fails."""
+        for f in (copy.deepcopy, copy.copy, lambda x: x):
+            try: return f(v)
+            except Exception: pass
+
     if configfile:
         ConfigFile, ConfigFileStatic = configfile, True
     configpaths = [ConfigFile]
@@ -369,8 +376,8 @@ def load(configfile=None):
 
     section = "*"
     module = sys.modules[__name__]
-    Defaults = {k: v for k, v in vars(module).items() if not k.startswith("_")
-                and isinstance(v, VARTYPES)}
+    Defaults = {k: safecopy(v) for k, v in vars(module).items()
+                if not k.startswith("_") and isinstance(v, VARTYPES)}
 
     parser = RawConfigParser()
     parser.optionxform = str # Force case-sensitivity on names
