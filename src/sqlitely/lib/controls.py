@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    03.09.2023
+@modified    12.09.2023
 ------------------------------------------------------------------------------
 """
 import collections
@@ -3982,9 +3982,10 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         self.SetCaretLineBackAlpha(20)
         self.SetCaretLineVisible(False)
 
-        self.SetMarginCount(1)
+        self.SetMarginCount(2)
         self.SetMarginType(0, wx.stc.STC_MARGIN_TEXT)
-        self.SetMarginWidth(0, cw * 9)
+        self.SetMarginWidth(0, cw * 9 + 5)
+        self.SetMarginWidth(1, 2)
         self.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
         self.SetMargins(3, 0)
 
