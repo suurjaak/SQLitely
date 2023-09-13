@@ -1,10 +1,11 @@
 CHANGELOG
 =========
 
-2.2, 2023-09-02
+2.2, 2023-09-13
 ---------------
 - add line number and word-wrap toggles to more controls
 - add YAML formatting options to value editor
+- fix error on changing column order in trigger/view editor
 - fix Excel export error, from breaking changes in PIL
 
 2.1, 2023-08-16

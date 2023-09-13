@@ -4301,7 +4301,7 @@ class SchemaObjectPage(wx.Panel):
         if insert:
             start = panel.Sizer.Cols * i
             panel.Sizer.Insert(start, list_column, border=5, flag=wx.LEFT)
-            panel.Sizer.InsertSpacer(start+1, (0, self.GRID_ROW_HEIGHT))
+            panel.Sizer.InsertSpacer(start+1, self.GRID_ROW_HEIGHT)
         else:
             panel.Sizer.Add(list_column, border=5, flag=wx.LEFT)
             panel.Sizer.Add(0, self.GRID_ROW_HEIGHT)
@@ -4330,7 +4330,7 @@ class SchemaObjectPage(wx.Panel):
         if insert:
             start = panel.Sizer.Cols * i
             panel.Sizer.Insert(start, text_column, border=5, flag=wx.LEFT | wx.GROW)
-            panel.Sizer.InsertSpacer(start+1, (0, self.GRID_ROW_HEIGHT))
+            panel.Sizer.InsertSpacer(start+1, self.GRID_ROW_HEIGHT)
         else:
             panel.Sizer.Add(text_column, border=5, flag=wx.LEFT | wx.GROW)
             panel.Sizer.Add(0, self.GRID_ROW_HEIGHT)
