@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.09.2023
+@modified    13.09.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1786,6 +1786,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         stc = self._stc = controls.SQLiteTextCtrl(panel1, traversable=True,
                                                   style=wx.BORDER_STATIC)
+        self._stc.SetScrollWidthTracking(False)
 
         panel2 = self._panel2 = wx.Panel(splitter)
         sizer2 = panel2.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -1909,6 +1910,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         """Sets the contents of the SQL window."""
         self._stc.SetText(text)
         self._stc.EmptyUndoBuffer() # So that undo does not clear the STC
+        self._stc.UpdateScrollWidth()
     Text = property(GetText, SetText)
 
 
@@ -3125,6 +3127,7 @@ class SchemaObjectPage(wx.Panel):
         stc.SetReadOnly(True)
         stc.LineNumbers = conf.TextLineNumbers.get("entity")
         stc.WordWrap    = conf.TextWordWraps  .get("entity")
+        stc.ScrollWidthTrackingInterval = 500
         stc._toggle = "skip"
 
         label_error = self._label_error = wx.StaticText(panel2)

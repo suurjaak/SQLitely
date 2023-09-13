@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    12.09.2023
+@modified    13.09.2023
 ------------------------------------------------------------------------------
 """
 import collections
@@ -110,6 +110,7 @@ import re
 import string
 import struct
 import sys
+import time
 
 import wx
 import wx.html
@@ -3556,6 +3557,9 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.autocomps_total = self.KEYWORDS[:]
         # {word.upper(): set(words filled in after word+dot), }
         self.autocomps_subwords = {}
+        self.last_change = time.time() # Timestamp of last text change
+        self.scrollwidth_interval = 0  # Milliseconds to wait before updating scroll width
+        self.scrollwidth_timer = None  # wx.Timer for updating scroll width on delay
 
         self.SetLexer(wx.stc.STC_LEX_SQL)
         self.SetMarginCount(1)
@@ -3571,6 +3575,8 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.SetCaretLineBackAlpha(20)
         self.SetCaretLineVisible(True)
         self.AutoCompSetIgnoreCase(True)
+        self.SetScrollWidthTracking(True) # Ensures scroll width is never less than required
+        self.UpdateScrollWidth()
 
         self.SetStyleSpecs()
 
@@ -3579,6 +3585,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.EVT_KILL_FOCUS,         self.OnKillFocus)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
         self.Bind(wx.stc.EVT_STC_ZOOM,       self.OnZoom)
+        self.Bind(wx.stc.EVT_STC_CHANGE,     self.OnChange)
         if self.caretline_focus: self.SetCaretLineVisible(False)
         if self.traversable: self.Bind(wx.EVT_CHAR_HOOK, self.OnChar)
         if self.wheelable is False: self.Bind(wx.EVT_MOUSEWHEEL, self.OnWheel)
@@ -3590,7 +3597,6 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
             (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW if self.Enabled else wx.SYS_COLOUR_BTNFACE,
              wx.SYS_COLOUR_HOTLIGHT)
         )
-
 
         self.SetCaretForeground(fgcolour)
         self.SetCaretLineBackground("#00FFFF")
@@ -3672,6 +3678,41 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.SetStyleSpecs()
         return result
 
+
+    def UpdateScrollWidth(self, force=False):
+        """
+        Updates horizontal scroll width, delaying action by scroll width tracking interval, if any.
+
+        @param   force  whether to update immediately, regardless of interval
+        """
+        if not force and self.scrollwidth_timer or self.WordWrap: return
+
+        def action():
+            if not self: return
+            self.scrollwidth_timer = None
+            if not TRACKING: self.SetScrollWidthTracking(True)
+            self.SetScrollWidth(1)
+            if self.HasFocus(): self.EnsureCaretVisible()
+            if not TRACKING: wx.CallLater(1, lambda: self and self.SetScrollWidthTracking(False))
+
+        INTERVAL, TRACKING = self.scrollwidth_interval, self.GetScrollWidthTracking()
+        overtime = False if force or not INTERVAL else (time.time() - self.last_change > INTERVAL)
+        self.scrollwidth_timer, _ = None, self.scrollwidth_timer and self.scrollwidth_timer.Stop()
+        if force or not INTERVAL or overtime: action()
+        else: self.scrollwidth_timer = wx.CallLater(INTERVAL, action)
+
+
+    def GetScrollWidthTrackingInterval(self):
+        """Returns milliseconds the control waits before updating scroll width after text change."""
+        return self.scrollwidth_interval
+    def SetScrollWidthTrackingInterval(self, interval):
+        """Sets milliseconds to wait before updating scroll width after text change."""
+        self.scrollwidth_interval = max(0, interval or 0)
+        if self.scrollwidth_timer: self.UpdateScrollWidth(force=True)
+    ScrollWidthTrackingInterval = property(GetScrollWidthTrackingInterval,
+                                           SetScrollWidthTrackingInterval)
+
+
     def IsTraversable(self):
         """Returns whether control is in traversable mode."""
         return self.traversable
@@ -3726,6 +3767,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         """Sets whether control wraps text."""
         self.wordwrap = bool(wrap)
         self.SetWrapMode(wx.stc.STC_WRAP_WORD if wrap else wx.stc.STC_WRAP_NONE)
+        if not wrap: self.UpdateScrollWidth()
     WordWrap = property(HasWordWrap, SetWordWrap)
 
 
@@ -3762,11 +3804,15 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.Parent.ProcessWindowEvent(event)
 
 
+    def OnChange(self, event):
+        """Updates horizontal scroll width and marks change timestamp."""
+        event.Skip()
+        if self.ScrollWidthTracking: self.UpdateScrollWidth()
+        self.last_change = time.time()
+
+
     def OnChar(self, event):
-        """
-        Goes to next/previous control on Tab/Shift+Tab,
-        swallows Enter.
-        """
+        """Goes to next/previous control on Tab/Shift+Tab,swallows Enter."""
         if self.AutoCompActive() or event.CmdDown() \
         or event.KeyCode not in KEYS.TAB: return event.Skip()
         if event.KeyCode in KEYS.ENTER and self.LinesOnScreen() < 2: return
