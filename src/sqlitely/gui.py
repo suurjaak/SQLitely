@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.09.2023
+@modified    15.09.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -576,6 +576,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             wx.ID_ANY, "Full database d&ump as SQL",
             "Dump entire database as SQL")
         menu_tools_export.AppendSeparator()
+        menu_tools_export_diagram = self.menu_tools_export_diagram = menu_tools_export.Append(
+            wx.ID_ANY, "Database &diagram",
+            "Export database diagram as bitmap or vector image")
         menu_tools_export_stats = self.menu_tools_export_stats = menu_tools_export.Append(
             wx.ID_ANY, "Database &statistics",
             "Export database schema information and statistics")
@@ -660,6 +663,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "structure"]),  menu_tools_export_structure)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "pragma"]),     menu_tools_export_pragma)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "schema"]),     menu_tools_export_schema)
+        self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "diagram"]),    menu_tools_export_diagram)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "statistics"]), menu_tools_export_stats)
         self.Bind(wx.EVT_MENU, functools.partial(self.on_menu_page, ["export", "dump"]),       menu_tools_export_dump)
 
@@ -4042,6 +4046,8 @@ class DatabasePage(wx.Panel):
             elif "statistics" == arg:
                 if any(self.db.schema.values()): return self.on_save_statistics()
                 wx.MessageBox("No statistics to save, database is empty.", conf.Title, wx.ICON_NONE)
+            elif "diagram" == arg:
+                self.diagram.SaveFile()
             elif "dump" == arg:
                 self.notebook.SetSelection(self.pageorder[self.page_data])
                 self.on_dump()
