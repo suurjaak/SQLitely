@@ -10746,9 +10746,13 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                     menu.Bind(wx.EVT_MENU, cmd("create", subcategory, next(iter(categories)), items[0]["name"]), it)
                 item_rename = menu.Append(wx.ID_ANY, "Rena&me %s\t(F2)" % next(iter(categories)))
             if "table" in categories:
-                label = util.plural("table", categories["table"], numbers=False)
-                item_reidx = menu.Append(wx.ID_ANY, "Reindex %s"  % label)
-                item_trunc = menu.Append(wx.ID_ANY, "Truncate %s" % label)
+                tables = [o["name"] for o in items if "table" == o["type"]]
+                can_reidx = any("index" in self._db.get_related("table", n, own=True, clone=False) for n in tables)
+                can_trunc = any(self._db.schema["table"][n].get("count") for n in tables)
+                item_reidx = menu.Append(wx.ID_ANY, "Reindex %s"  % util.plural("table", tables, numbers=False))
+                item_trunc = menu.Append(wx.ID_ANY, "Truncate %s" % util.plural("table", tables, numbers=False))
+                item_reidx.Enable(can_reidx)
+                item_trunc.Enable(can_trunc)
             item_drop = menu.Append(wx.ID_ANY, "Drop %s" % catlabel)
 
             names = [o["name"] for o in items]
