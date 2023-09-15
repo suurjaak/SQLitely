@@ -7,6 +7,7 @@ CHANGELOG
 - add diagram export to Tools-menu
 - add YAML formatting options to value editor
 - fix error on changing column order in trigger/view editor
+- fix error on reindexing table from diagram if table has no index
 - fix Excel export error, from breaking changes in PIL
 
 
