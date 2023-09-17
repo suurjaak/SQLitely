@@ -2937,6 +2937,7 @@ class DatabasePage(wx.Panel):
         bmp5 = images.ToolbarZoomFit.Bitmap
         bmp6 = images.ToolbarLayoutGrid.Bitmap
         bmp7 = images.ToolbarLayoutGraph.Bitmap
+        bmp8 = images.ToolbarRefresh.Bitmap
         tb.SetToolBitmapSize(bmp1.Size)
         tb.AddCheckTool(wx.ID_APPLY, "Enable", bmp1, shortHelp="Enable diagram")
         tb.AddSeparator()
@@ -2949,6 +2950,8 @@ class DatabasePage(wx.Panel):
         tb.AddSeparator()
         tb.AddCheckTool(wx.ID_STATIC,  "", bmp6, shortHelp="Grid layout (click for options)")
         tb.AddCheckTool(wx.ID_NETWORK, "", bmp7, shortHelp="Graph layout")
+        tb.AddSeparator()
+        tb.AddTool(wx.ID_REFRESH, "", bmp8, shortHelp="Reload schema and redraw diagram")
         tb.EnableTool(wx.ID_ZOOM_100, False)
         tb.ToggleTool(wx.ID_APPLY,    True)
         tb.ToggleTool(wx.ID_STATIC,   True)
@@ -2991,6 +2994,7 @@ class DatabasePage(wx.Panel):
         tb.Bind(wx.EVT_TOOL, self.on_diagram_zoom_fit, id=wx.ID_ZOOM_FIT)
         tb.Bind(wx.EVT_TOOL, self.on_diagram_grid,     id=wx.ID_STATIC)
         tb.Bind(wx.EVT_TOOL, self.on_diagram_graph,    id=wx.ID_NETWORK)
+        tb.Bind(wx.EVT_TOOL, self.on_diagram_refresh,  id=wx.ID_REFRESH)
         tb_opts.Bind(wx.EVT_TOOL, self.on_diagram_opt)
 
         self.Bind(wx.EVT_COMBOBOX,  self.on_diagram_zoom_combo, combo_zoom)
@@ -4546,6 +4550,12 @@ class DatabasePage(wx.Panel):
         self.diagram.SetLayout(self.diagram.LAYOUT_GRAPH)
         self.tb_diagram.ToggleTool(wx.ID_NETWORK, True)
         self.tb_diagram.ToggleTool(wx.ID_STATIC,  False)
+
+
+    def on_diagram_refresh(self, event):
+        """Handler for refreshing schema and redrawing diagram.."""
+        self.db.populate_schema(count=True, parse=True)
+        self.diagram.Populate()
 
 
     def on_pragma_change(self, event):

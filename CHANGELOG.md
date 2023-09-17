@@ -6,6 +6,7 @@ CHANGELOG
 - add line number and word-wrap toggles to more controls
 - add diagram export to Tools-menu
 - add option to export diagram with selected entities
+- add refresh-button to diagram toolbar
 - add YAML formatting options to value editor
 - retain undo history when loading SQL from file to SQL editor
 - fix error on changing column order in trigger/view editor
