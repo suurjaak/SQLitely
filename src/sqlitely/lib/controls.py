@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    13.09.2023
+@modified    17.09.2023
 ------------------------------------------------------------------------------
 """
 import collections
@@ -3677,6 +3677,14 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         result = super(self.__class__, self).Enable(enable)
         self.SetStyleSpecs()
         return result
+
+
+    def LoadFile(self, filename):
+        """Loads the file contents into editor, retaining undo history."""
+        with open(filename, "rb") as f: text = f.read()
+        if b"\r\n" in text: self.SetEOLMode(wx.stc.STC_EOL_CRLF)
+        elif b"\n" in text: self.SetEOLMode(wx.stc.STC_EOL_LF)
+        self.SetText(text)
 
 
     def UpdateScrollWidth(self, force=False):
