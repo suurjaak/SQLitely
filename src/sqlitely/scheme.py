@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    02.09.2023
+@modified    17.09.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -724,28 +724,32 @@ class SchemaPlacement(object):
         return self._dc.GetIdBounds(oid)
 
 
-    def MakeBitmap(self, zoom=None, selections=True, use_cache=True):
+    def MakeBitmap(self, zoom=None, selections=True, use_cache=True, items=None):
         """
         Returns diagram as image.
 
         @param   zoom        zoom level to use if not current
         @param   selections  whether currently selected items should be drawn as selected
         @param   use_cache   use bitmap caching
+        @param   items       list of entity names to include if not all
         """
-        if wx: return self.MakeBitmap_wx(zoom, selections, use_cache)
+        if wx: return self.MakeBitmap_wx(zoom, selections, use_cache, items=items)
 
 
-    def MakeBitmap_wx(self, zoom=None, selections=True, use_cache=True):
+    def MakeBitmap_wx(self, zoom=None, selections=True, use_cache=True, items=None):
         """
         Returns diagram as wx.Bitmap.
 
         @param   zoom        zoom level to use if not current
         @param   selections  whether currently selected items should be drawn as selected
         @param   use_cache   use bitmap caching
+        @param   items       list of entity names to include if not all
         """
         zoom0 = self._zoom
         lines0, sels0 = copy.deepcopy(self._lines), copy.deepcopy(self._sels)
         ids, bounder = list(self._ids), self._dc.GetIdBounds
+        if items: ids = [k for k, v in self._ids.items()
+                         if v in items or isinstance(v, tuple) and v[0] in items and v[1] in items]
         boundsmap0 = {myid: bounder(myid) for myid in ids}
 
 
@@ -771,12 +775,14 @@ class SchemaPlacement(object):
             dc.Clear()
             dc.Font = self._font
 
-            self.RecordLines(dc=dc, shift=shift)
+            self.RecordLines(dc=dc, shift=shift, items=items)
             for o in (o for o in self._order if o["name"] not in self._sels):
+                if items and o["name"] not in items: continue # for o
                 pos = [a + b for a, b in zip(self._dc.GetIdBounds(o["id"])[:2], shift)]
                 obmp, _ = self.GetItemBitmaps(o)
                 dc.DrawBitmap(obmp, pos, useMask=True)
             for name in self._sels:
+                if items and name not in items: continue # for name
                 o = self._objs[name]
                 pos = [a + b - 2 * self._zoom
                        for a, b in zip(self._dc.GetIdBounds(o["id"])[:2], shift)]
@@ -795,7 +801,7 @@ class SchemaPlacement(object):
         return bmp
 
 
-    def MakeTemplate(self, filetype, title=None, embed=False, selections=True):
+    def MakeTemplate(self, filetype, title=None, embed=False, selections=True, items=None):
         """
         Returns diagram as template content.
 
@@ -803,6 +809,7 @@ class SchemaPlacement(object):
         @param   title       specific title to set if not from database filename
         @param   embed       whether to omit full XML headers for embedding in HTML
         @param   selections  whether currently selected items should be drawn as selected
+        @param   items       list of entity names to include if not all
         """
         if "SVG" != filetype or not self._objs: return
 
@@ -823,12 +830,15 @@ class SchemaPlacement(object):
         tpl = step.Template(templates.DIAGRAM_SVG, strip=False)
         if title is None:
             title = os.path.splitext(os.path.basename(self._db.name))[0] + " schema"
-        ns = {"title": title, "items": [], "lines": self._lines if self._show_lines else {},
+        lines = self._lines if self._show_lines else {}
+        if items: lines = {k: v for k, v in lines.items() if k[0] in items and k[1] in items}
+        ns = {"title": title, "items": [], "lines": lines,
               "show_nulls": self._show_nulls, "show_labels": self._show_labels,
               "get_extent": self.GetTextExtent, "get_stats_texts": self.GetStatisticsTexts,
               "font_faces": copy.deepcopy(self.FONTS), "embed": embed,
               "fonts": {"normal": self._font, "bold": self._font_bold}}
         for o in self._objs.values():
+            if items and o["name"] not in items: continue # for o
             item = dict(o, bounds=self._dc.GetIdBounds(o["id"]))
             if not self._show_stats: item.pop("stats")
             item["columns"] = [c for c in item.get("columns", []) if self.IsColumnShown(item, c)]
@@ -1283,7 +1293,7 @@ class SchemaPlacement(object):
         self._dc.SetId(-1)
 
 
-    def RecordLines(self, remake=False, recalculate=False, dc=None, shift=None):
+    def RecordLines(self, remake=False, recalculate=False, dc=None, shift=None, items=None):
         """
         Records foreign relation lines to DC if showing lines is enabled.
 
@@ -1291,12 +1301,13 @@ class SchemaPlacement(object):
         @param   recalculate  whether to recalculate lines of selected items
         @param   dc           wx.DC to use if not own PseudoDC
         @param   shift        line coordinate shift as (dx, dy) if any
+        @param   items        list of entity names to record for if not all
         """
         if not self._show_lines: return
-        if wx: self.RecordLines_wx(remake, recalculate, dc, shift)
+        if wx: self.RecordLines_wx(remake, recalculate, dc, shift, items)
 
 
-    def RecordLines_wx(self, remake=False, recalculate=False, dc=None, shift=None):
+    def RecordLines_wx(self, remake=False, recalculate=False, dc=None, shift=None, items=None):
         """
         Records foreign relation lines to DC if showing lines is enabled, using wx.
 
@@ -1304,6 +1315,7 @@ class SchemaPlacement(object):
         @param   recalculate  whether to recalculate lines of selected items
         @param   dc           wx.DC to use if not own PseudoDC
         @param   shift        line coordinate shift as (dx, dy) if any
+        @param   items        list of entity names to record for if not all
         """
         if remake or recalculate: self.CalculateLines(remake)
 
@@ -1322,7 +1334,8 @@ class SchemaPlacement(object):
         dc.SetFont(self._font)
         for (name1, name2, cols), opts in sorted(self._lines.items(),
                 key=lambda x: any(n in self._sels for n in x[0][:2])):
-            if not opts["pts"]: continue # for (name1, name2, cols)
+            if not opts["pts"] or items and (name1 not in items or name2 not in items):
+                continue # for (name1, name2, cols)
             b1, b2 = (self._dc.GetIdBounds(o["id"])
                       for o in map(self._objs.get, (name1, name2)))
 

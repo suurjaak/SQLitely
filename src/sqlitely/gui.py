@@ -4388,7 +4388,7 @@ class DatabasePage(wx.Panel):
         """Handler for other diagram actions, opens popup menu."""
         menu = wx.Menu()
 
-        def on_export(event=None):
+        def on_export_zoom(event=None):
             CHOICES, LEVELS, index, level = [], [], -1, self.diagram.ZOOM_MAX
             while level >= self.diagram.ZOOM_MIN:
                 CHOICES.append("%s%%" % util.round_float(100 * level, 2))
@@ -4401,13 +4401,19 @@ class DatabasePage(wx.Panel):
             dlg.Destroy()
             if wx.ID_OK != res: return
             self.diagram.SaveFile(zoom=LEVELS[sel])
+        def on_export_sels(event=None):
+            self.diagram.SaveFile(items=self.diagram.Selection)
         def cmd(*args):
             return lambda e: self.handle_command(*args)
 
         menu = wx.Menu()
-        item_export = wx.MenuItem(menu, -1, "Export &zoomed bitmap")
+        item_export   = wx.MenuItem(menu, -1, "Export &zoomed bitmap")
+        item_selected = wx.MenuItem(menu, -1, "Export diagram with &selected entities")
+        item_selected.Enable(bool(self.diagram.Selection))
         menu.Append(item_export)
-        menu.Bind(wx.EVT_MENU, on_export, item_export)
+        menu.Append(item_selected)
+        menu.Bind(wx.EVT_MENU, on_export_zoom, item_export)
+        menu.Bind(wx.EVT_MENU, on_export_sels, item_selected)
 
         submenu, keys = wx.Menu(), []
         menu.AppendSubMenu(submenu, text="Create &new ..")

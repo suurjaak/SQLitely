@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.09.2023
+@modified    17.09.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10587,11 +10587,12 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
     Selection = property(GetSelection, SetSelection)
 
 
-    def SaveFile(self, zoom=None):
+    def SaveFile(self, zoom=None, items=None):
         """
         Opens file dialog and exports diagram in selected format.
 
-        @param   zoom  if set, exports bitmap at given zoom
+        @param   zoom   if set, exports bitmap at given zoom
+        @param   items  list of entity names to include if not all
         """
         if not self._enabled: return
 
@@ -10607,35 +10608,37 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         wxtype   = next(k for k, v in self.EXPORT_FORMATS.items() if v == filetype)
 
         if "SVG" == filetype:
-            content = self.MakeTemplate(filetype)
+            content = self.MakeTemplate(filetype, items=items)
             with open(filename, "wb") as f: f.write(content.encode("utf-8"))
         else:
-            self.MakeBitmap(zoom=zoom).SaveFile(filename, wxtype)
+            self.MakeBitmap(zoom=zoom, items=items).SaveFile(filename, wxtype)
             util.start_file(filename)
         guibase.status('Exported schema diagram to "%s".', filename, log=True)
 
 
-    def MakeBitmap(self, zoom=None):
+    def MakeBitmap(self, zoom=None, items=None):
         """
         Returns diagram as wx.Bitmap.
 
-        @param   zoom  zoom level to use if not current
+        @param   zoom   zoom level to use if not current
+        @param   items  list of entity names to include if not all
         """
         if not self or not self._enabled: return None
 
-        return self._layout.MakeBitmap(zoom)
+        return self._layout.MakeBitmap(zoom, selections=not items, items=items)
 
 
-    def MakeTemplate(self, filetype, title=None, embed=False):
+    def MakeTemplate(self, filetype, title=None, embed=False, items=None):
         """
         Returns diagram as template content.
 
         @param   filetype  template type like "SVG"
         @param   title     specific title to set if not from database filename
         @param   embed     whether to omit full XML headers for embedding in HTML
+        @param   items     list of entity names to include if not all
         """
         if not self or not self._enabled or "SVG" != filetype: return
-        return self._layout.MakeTemplate(filetype, title, embed)
+        return self._layout.MakeTemplate(filetype, title, embed, selections=not items, items=items)
 
 
     def EnsureVisible(self, name, force=False):
