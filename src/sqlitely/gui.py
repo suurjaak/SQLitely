@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.09.2023
+@modified    17.09.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4773,8 +4773,9 @@ class DatabasePage(wx.Panel):
             for parent in data[table]:
                 for fkid, rowids in data[table][parent].items():
                     fk, _, pk = fks[table][fkid]
-                    args = tuple(map(grammar.quote, (table, fk, parent, pk))) + (util.plural("row", rowids),)
-                    line = "%s.%s REFERENCING %s.%s: %s" % args
+                    line = "%s.%s REFERENCING " % tuple(map(grammar.quote, (table, fk)))
+                    line += ".".join(map(grammar.quote, filter(bool, (parent, pk))))
+                    line += ": " + util.plural("row", rowids)
                     if any(rowids): # NULL values: table WITHOUT ROWID
                         vals = [x[fk] for x in self.db.execute(
                             "SELECT %s FROM %s WHERE %s IN (%s)" %

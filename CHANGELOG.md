@@ -9,6 +9,7 @@ CHANGELOG
 - retain undo history when loading SQL from file to SQL editor
 - fix error on changing column order in trigger/view editor
 - fix error on reindexing table from diagram if table has no index
+- fix error on checking foreign keys if foreign table has no primary key
 - fix Excel export error, from breaking changes in PIL
 
 
