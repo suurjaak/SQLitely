@@ -6346,14 +6346,28 @@ def get_key_state(keycode):
 
 
 def get_tool_rect(toolbar, id_tool):
-    """Returns position and size of a toolbar tool by ID."""
-    bmpsize, toolsize, packing = toolbar.ToolBitmapSize, toolbar.ToolSize, toolbar.ToolPacking
-    result = wx.Rect(0, 0, *toolsize)
-    for i in range(toolbar.GetToolPos(id_tool)):
-        tool = toolbar.GetToolByPos(i)
-        result.x += packing + (1 if tool.IsSeparator() else bmpsize[0] if tool.IsButton()
-                               else tool.Control.Size[0])
+    """Returns position and size of a horizontal toolbar tool by ID. Spacers will skew result."""
+    PAD_BMP, PAD_LBL, PAD_SEP, W_SEP = 1, 2, 3, 2
+    BORDER, PACKING = wx.SystemSettings.GetMetric(wx.SYS_BORDER_X), toolbar.ToolPacking
+    W_BMP, H_TOOL = toolbar.ToolBitmapSize.Width, toolbar.ToolSize.Height
+    HAS_LABELS, NO_ICONS = (toolbar.WindowStyleFlag & x for x in (wx.TB_HORZ_TEXT, wx.TB_NOICONS))
 
+    def getsize(tool):
+        if tool.IsSeparator(): return (W_SEP, H_TOOL)
+        if tool.IsControl():   return tool.Control.Size
+        w = 2 * BORDER + PACKING
+        if HAS_LABELS and tool.Label:
+            if NO_ICONS: w += 2 * PAD_LBL + toolbar.GetTextExtent(tool.Label)[0]
+            else:        w += 3 * PAD_LBL + toolbar.GetTextExtent(tool.Label)[0] + W_BMP
+        else:            w += 2 * PAD_BMP + W_BMP
+        return (w, H_TOOL)
+    def getinter(tool, index):
+        w = PAD_SEP if tool.IsSeparator() else 0
+        return w + (PAD_SEP if index and toolbar.GetToolByPos(index - 1).IsSeparator() else 0)
+
+    result = wx.Rect(0, 0, *getsize(toolbar.GetToolByPos(toolbar.GetToolPos(id_tool))))
+    for i in range(toolbar.GetToolPos(id_tool)):
+        result.x += getinter(toolbar.GetToolByPos(i), i) + getsize(toolbar.GetToolByPos(i))[0]
     return result
 
 
