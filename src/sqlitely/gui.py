@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.09.2023
+@modified    18.09.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2938,6 +2938,7 @@ class DatabasePage(wx.Panel):
         bmp6 = images.ToolbarLayoutGrid.Bitmap
         bmp7 = images.ToolbarLayoutGraph.Bitmap
         bmp8 = images.ToolbarRefresh.Bitmap
+        bmp9 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR, (16, 16))
         tb.SetToolBitmapSize(bmp1.Size)
         tb.AddCheckTool(wx.ID_APPLY, "Enable", bmp1, shortHelp="Enable diagram")
         tb.AddSeparator()
@@ -2952,6 +2953,8 @@ class DatabasePage(wx.Panel):
         tb.AddCheckTool(wx.ID_NETWORK, "", bmp7, shortHelp="Graph layout")
         tb.AddSeparator()
         tb.AddTool(wx.ID_REFRESH, "", bmp8, shortHelp="Reload schema and redraw diagram")
+        tb.AddSeparator()
+        tb.AddTool(wx.ID_COPY, "", bmp9, shortHelp="Copy diagram images or entity names or schemas (click for options)")
         tb.EnableTool(wx.ID_ZOOM_100, False)
         tb.ToggleTool(wx.ID_APPLY,    True)
         tb.ToggleTool(wx.ID_STATIC,   True)
@@ -2995,6 +2998,7 @@ class DatabasePage(wx.Panel):
         tb.Bind(wx.EVT_TOOL, self.on_diagram_grid,     id=wx.ID_STATIC)
         tb.Bind(wx.EVT_TOOL, self.on_diagram_graph,    id=wx.ID_NETWORK)
         tb.Bind(wx.EVT_TOOL, self.on_diagram_refresh,  id=wx.ID_REFRESH)
+        tb.Bind(wx.EVT_TOOL, self.on_diagram_copy,     id=wx.ID_COPY)
         tb_opts.Bind(wx.EVT_TOOL, self.on_diagram_opt)
 
         self.Bind(wx.EVT_COMBOBOX,  self.on_diagram_zoom_combo, combo_zoom)
@@ -4542,7 +4546,7 @@ class DatabasePage(wx.Panel):
         menu.Bind(wx.EVT_MENU, lambda e: set_option(reverse=e.IsChecked()), item_reverse)
 
         rect = controls.get_tool_rect(self.tb_diagram, wx.ID_STATIC)
-        self.diagram.PopupMenu(menu, rect.Right + 2, -rect.Height - 2)
+        self.diagram.PopupMenu(menu, rect.Left, 0)
 
 
     def on_diagram_graph(self, event):
@@ -4556,6 +4560,49 @@ class DatabasePage(wx.Panel):
         """Handler for refreshing schema and redrawing diagram.."""
         self.db.populate_schema(count=True, parse=True)
         self.diagram.Populate()
+
+
+    def on_diagram_copy(self, event):
+        """Handler for copying from diagram, opens popup menu.."""
+        menu = wx.Menu()
+
+        item_bmp   = wx.MenuItem(menu, -1, "Copy as &bitmap")
+        item_svg   = wx.MenuItem(menu, -1, "Copy as &SVG")
+        item_names = wx.MenuItem(menu, -1, "Copy &names")
+        item_sql   = wx.MenuItem(menu, -1, "Copy CREATE S&QL")
+        item_all   = wx.MenuItem(menu, -1, "Copy all &related SQL")
+
+        menu.Append(item_bmp)
+        menu.Append(item_svg)
+        menu.AppendSeparator()
+        menu.Append(item_names)
+        menu.Append(item_sql)
+        menu.Append(item_all)
+
+        def handler(event):
+            names = sorted(self.diagram.Selection)
+            if event.Id == item_bmp.Id:
+                bmp = self.diagram.MakeBitmap(items=names)
+                if wx.TheClipboard.Open():
+                    wx.TheClipboard.SetData(wx.BitmapDataObject(bmp)), wx.TheClipboard.Close()
+            else:
+                names = names or sum((list(xx) for c, xx in self.db.schema.items()
+                                      if c in ("table", "view")), [])
+                if event.Id == item_all.Id:
+                    self.handle_command("copy", "related", None, *names)
+                    return
+                if event.Id == item_svg.Id: text = self.diagram.MakeTemplate("SVG", items=names)
+                elif event.Id == item_names.Id: text = "\n".join(map(grammar.quote, names))
+                elif event.Id == item_sql.Id:
+                    sqls = [self.db.get_sql(c, n) for n in names
+                            for c in (c for c, nn in self.db.schema.items() if n in nn)]
+                    text = "\n\n".join(sqls)
+                if wx.TheClipboard.Open():
+                    wx.TheClipboard.SetData(wx.TextDataObject(text)), wx.TheClipboard.Close()
+        for item in menu.MenuItems: menu.Bind(wx.EVT_MENU, handler, item)
+
+        rect = controls.get_tool_rect(self.tb_diagram, wx.ID_COPY)
+        self.diagram.PopupMenu(menu, rect.Left, 0)
 
 
     def on_pragma_change(self, event):
