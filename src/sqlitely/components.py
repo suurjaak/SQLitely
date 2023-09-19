@@ -10702,10 +10702,11 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
         def cmd(*args):
             return lambda e: self._page.handle_command(*args)
-        def clipboard_copy(text, label, *_, **__):
+        def clipboard_copy(value, label, *_, **__):
             if wx.TheClipboard.Open():
-                d = wx.TextDataObject(text() if callable(text) else text)
-                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
+                if callable(value): value = value()
+                cls = wx.BitmapDataObject if isinstance(value, wx.Bitmap) else wx.TextDataObject
+                wx.TheClipboard.SetData(cls(value)), wx.TheClipboard.Close()
                 if label: guibase.status("Copied %s to clipboard.", label)
 
         if not self._layout.Selection:
@@ -10740,9 +10741,14 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             item_reidx  = item_trunc = item_rename = None
             item_data   = menu.Append(wx.ID_ANY, "Open %s &data"   % catlabel)
             item_schema = menu.Append(wx.ID_ANY, "Open %s &schema\t(Enter)" % catlabel)
-            item_copy   = menu.Append(wx.ID_ANY, "&Copy %s" % util.plural("name", items, numbers=False))
-            item_sql    = menu.Append(wx.ID_ANY, "&Copy CREATE S&QL\t(%s-C)" % controls.KEYS.NAME_CTRL)
-            item_sqlall = menu.Append(wx.ID_ANY, "&Copy all &related SQL")
+
+            copymenu = wx.Menu()
+            menu.AppendSubMenu(copymenu, text="&Copy ..")
+            item_copy   = copymenu.Append(wx.ID_ANY, "Copy &%s" % util.plural("name", items, numbers=False))
+            item_sql    = copymenu.Append(wx.ID_ANY, "Copy CREATE S&QL\t(%s-C)" % controls.KEYS.NAME_CTRL)
+            item_sqlall = copymenu.Append(wx.ID_ANY, "&Copy all &related SQL")
+            item_bmp    = copymenu.Append(wx.ID_ANY, "Copy as &bitmap")
+            item_svg    = copymenu.Append(wx.ID_ANY, "Copy as &SVG")
             menu.AppendSeparator()
             if len(items) == 1:
                 submenu = wx.Menu()
@@ -10775,6 +10781,10 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                           for c, oo in categories.items() for o in oo
                       ), "CREATE SQL"), item_sql)
             menu.Bind(wx.EVT_MENU, cmd("copy", "related", None, *names), item_sqlall)
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
+                lambda: self.MakeBitmap(items=names), "diagram bitmap"), item_bmp)
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
+                lambda: self.MakeTemplate("SVG", items=names), "diagram SVG"), item_svg)
 
             if item_reidx:
                 menu.Bind(wx.EVT_MENU, cmd("reindex",  "table", *[o["name"] for o in categories["table"]]), item_reidx)
