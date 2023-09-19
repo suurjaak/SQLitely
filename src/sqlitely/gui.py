@@ -4035,14 +4035,14 @@ class DatabasePage(wx.Panel):
 
             if "tables" == arg:
                 self.notebook.SetSelection(self.pageorder[self.page_data])
-                self.on_export_data_file("table", list(self.db.schema["table"]))
+                self.on_export_data_file(None, args[1:] or list(self.db.schema["table"]))
             elif "multiitem" == arg:
                 self.notebook.SetSelection(self.pageorder[self.page_data])
-                self.on_export_multiitem("table")
+                self.on_export_multiitem("table", names=args[1:])
             elif "data" == arg:
                 self.on_export_to_db("table", names=list(self.db.schema["table"]))
             elif "structure" == arg:
-                self.on_export_to_db("table", names=list(self.db.schema["table"]), data=False)
+                self.on_export_to_db("table", names=args[1:] or list(self.db.schema["table"]), data=False)
             elif "pragma" == arg:
                 template = step.Template(templates.PRAGMA_SQL, strip=False)
                 sql = template.expand(pragma=self.pragma)
@@ -4055,7 +4055,7 @@ class DatabasePage(wx.Panel):
                 if any(self.db.schema.values()): return self.on_save_statistics()
                 wx.MessageBox("No statistics to save, database is empty.", conf.Title, wx.ICON_NONE)
             elif "diagram" == arg:
-                self.diagram.SaveFile()
+                self.diagram.SaveFile(items=args[1:])
             elif "dump" == arg:
                 self.notebook.SetSelection(self.pageorder[self.page_data])
                 self.on_dump()
@@ -5623,14 +5623,16 @@ class DatabasePage(wx.Panel):
         finally: self.Thaw()
 
 
-    def on_export_multiitem(self, category, event=None):
+    def on_export_multiitem(self, category, event=None, names=None):
         """
         Handler for saving database category data from multiple items to a single file,
         opens file dialog, saves content.
 
         @param   category  specific category to export entirely, or `None` for all categories
+        @param   names     specific entities to export if not all
         """
-        categories    = [category] if category else database.Database.DATA_CATEGORIES
+        categories = [category] if category else database.Database.DATA_CATEGORIES
+        if names: categories = [c for c in categories if any(n in self.db.schema[c] for n in names)]
         categorylabel = " and ".join(map(util.plural, categories))
 
         title = os.path.splitext(os.path.basename(self.db.name))[0]
@@ -5651,15 +5653,16 @@ class DatabasePage(wx.Panel):
 
         filename = controls.get_dialog_path(dialog)
         args = {"filename": filename, "format": extname, "db": self.db, "title": title,
-                "category": category}
+                "category": category, "names": names}
         opts = {"filename": filename, "multi": True,
-                "name": "all %s to single file" % categorylabel,
+                "name": "%s%s to single file" % ("" if names else "all ", categorylabel),
                 "callable": functools.partial(importexport.export_data_multiple, **args)}
         if "table" in categories:
             opts["subtotals"] = {t: {
                     "total": topts.get("count"),
                     "is_total_estimated": topts.get("is_count_estimated")
-                } for t, topts in self.db.schema["table"].items()}
+                } for t, topts in self.db.schema["table"].items()
+                  if not names or any(util.lceq(n, t) for n in names)}
             opts["total"] = sum(x["total"] or 0 for x in opts["subtotals"].values())
             if any(x["is_total_estimated"] for x in opts["subtotals"].values()):
                 opts["is_total_estimated"] = True
@@ -6285,7 +6288,7 @@ class DatabasePage(wx.Panel):
             "A global export is already underway.", conf.Title, wx.ICON_NONE
         )
 
-        names = [names] if isinstance(names, six.string_types) else names or []
+        names = [names] if isinstance(names, six.string_types) else list(names) if names else []
         if not names and category: names = list(self.db.schema[category])
         elif not names: names = sum((list(self.db.schema.get(x) or [])
                                      for x in database.Database.DATA_CATEGORIES), [])

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.09.2023
+@modified    19.09.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -241,7 +241,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
 
 
 
-def export_data_multiple(filename, format, title, db, category=None, make_iterables=None,
+def export_data_multiple(filename, format, title, db, category=None, names=None, make_iterables=None,
                          limit=None, maxcount=None, empty=True, reverse=False, progress=None):
     """
     Exports database data from multiple tables/views to a single output file.
@@ -251,6 +251,7 @@ def export_data_multiple(filename, format, title, db, category=None, make_iterab
     @param   title           export title, as string or a sequence of strings
     @param   db              Database instance
     @param   category        category to produce the data from, "table" or "view", or None for both
+    @param   names           specific entities to export if not all
     @param   make_iterables  function yielding pairs of ({info}, function yielding rows)
                              if not using category
     @param   limit           export limits per entity if any, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
@@ -272,7 +273,11 @@ def export_data_multiple(filename, format, title, db, category=None, make_iterab
     limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else util.tuplefy(limit)
     itemfiles = collections.OrderedDict() # {data name: path to partial file containing item data}
     categories = [] if make_iterables else [category] if category else db.DATA_CATEGORIES
-    items = {c: db.schema[c].copy() for c in categories}
+    if names:
+        items = {c: util.CaselessDict((n, db.schema[c][n].copy()) for n in names if n in db.schema[c])
+                    for c in categories if any(n in db.schema[c] for n in names)}
+        categories = list(items)
+    else: items = {c: db.schema[c].copy() for c in categories}
     counts = collections.defaultdict(int) # {name: number of rows yielded}
     for category, name in ((c, n) for c, x in items.items() for n in x):
         db.lock(category, name, filename, label="export")

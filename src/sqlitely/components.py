@@ -10749,7 +10749,16 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             item_sqlall = copymenu.Append(wx.ID_ANY, "&Copy all &related SQL")
             item_bmp    = copymenu.Append(wx.ID_ANY, "Copy as &bitmap")
             item_svg    = copymenu.Append(wx.ID_ANY, "Copy as &SVG")
+
+            exportmenu = wx.Menu()
+            menu.AppendSubMenu(exportmenu, text="&Export ..")
+            item_export_indiv  = exportmenu.Append(wx.ID_ANY, "Export &data to file")
+            item_export_combine = exportmenu.Append(wx.ID_ANY, "Export data to sing&le file") \
+                                 if len(items) > 1 else None
+            item_export_schema = exportmenu.Append(wx.ID_ANY, "Export structure to another data&base")
+            item_export_image  = exportmenu.Append(wx.ID_ANY, "Export diagram &image")
             menu.AppendSeparator()
+
             if len(items) == 1:
                 submenu = wx.Menu()
                 menu.AppendSubMenu(submenu, text="Create &new ..")
@@ -10785,6 +10794,11 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                 lambda: self.MakeBitmap(items=names), "diagram bitmap"), item_bmp)
             menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
                 lambda: self.MakeTemplate("SVG", items=names), "diagram SVG"), item_svg)
+
+            menu.Bind(wx.EVT_MENU, cmd("export", "tables",    *names), item_export_indiv)
+            menu.Bind(wx.EVT_MENU, cmd("export", "multiitem", *names), item_export_combine) if item_export_combine else None
+            menu.Bind(wx.EVT_MENU, cmd("export", "structure", *names), item_export_schema)
+            menu.Bind(wx.EVT_MENU, cmd("export", "diagram",   *names), item_export_image)
 
             if item_reidx:
                 menu.Bind(wx.EVT_MENU, cmd("reindex",  "table", *[o["name"] for o in categories["table"]]), item_reidx)
