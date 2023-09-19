@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.09.2023
+@modified    19.09.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10339,6 +10339,10 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
     def GetDatabasePage(self):       return self._page
     def SetDatabasePage(self, page): self._page = page
     DatabasePage = property(GetDatabasePage, SetDatabasePage)
+
+
+    def GetItems(self): return self._layout.GetItems()
+    Items = property(GetItems)
 
 
     """Returns current zoom level, 1 being 100% and .5 being 50%."""
