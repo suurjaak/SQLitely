@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.09.2023
+@modified    19.09.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4417,6 +4417,7 @@ class DatabasePage(wx.Panel):
         menu = wx.Menu()
         item_export   = wx.MenuItem(menu, -1, "Export &zoomed bitmap")
         item_selected = wx.MenuItem(menu, -1, "Export diagram with &selected entities")
+        item_export.Enable(bool(self.diagram.Items))
         item_selected.Enable(bool(self.diagram.Selection))
         menu.Append(item_export)
         menu.Append(item_selected)
@@ -4578,6 +4579,7 @@ class DatabasePage(wx.Panel):
         menu.Append(item_names)
         menu.Append(item_sql)
         menu.Append(item_all)
+        for x in menu.MenuItems if not self.diagram.Items else (): x.Enable(False)
 
         def handler(event):
             names = sorted(self.diagram.Selection)
