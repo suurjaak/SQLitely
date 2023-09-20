@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.09.2023
+@modified    20.09.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10434,6 +10434,8 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         enable = bool(enable)
         if enable == self._enabled: return False
         self._enabled = enable
+        self._UpdateColours()
+        self.ShowScrollbars(*[wx.SHOW_SB_DEFAULT if self._enabled else wx.SHOW_SB_NEVER] * 2)
         if enable:
             super(SchemaDiagramWindow, self).Enable()
             self.Redraw()
@@ -10563,16 +10565,13 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         if not opts or opts == self.Options: return
 
         remake = self._layout.SetOptions(opts)
-        if "enabled" in opts: self._enabled = bool(opts["enabled"])
 
         fullbounds = self._layout.GetFullBounds()
         if fullbounds and not wx.Rect(self.VirtualSize).Contains(fullbounds):
             self.SetVirtualSize([max(a, b + self.MOVE_STEP)
                                  for a, b in zip(self.VirtualSize, fullbounds.BottomRight)])
 
-        if "enabled" in opts:
-            super(SchemaDiagramWindow, self).Enable(self._enabled)
-
+        if "enabled" in opts: self.Enable(opts["enabled"])
         if refresh and self._enabled:
             self.Redraw(remake=remake)
             if "scroll" in opts: self.Scroll(*opts["scroll"])
@@ -11037,7 +11036,8 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
         @param   defaults  uses default colours instead of system theme colours
         """
-        wincolour     = controls.ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
+        wincolour     = controls.ColourManager.GetColour(wx.SYS_COLOUR_WINDOW if self._enabled else
+                                                         wx.SYS_COLOUR_INACTIVECAPTION)
         wtextcolour   = controls.ColourManager.GetColour(wx.SYS_COLOUR_WINDOWTEXT)
         btextcolour   = controls.ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
         gradendcolour = controls.ColourManager.GetColour(wx.SYS_COLOUR_HOTLIGHT)
