@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    17.09.2023
+@modified    20.09.2023
 ------------------------------------------------------------------------------
 """
 import collections
@@ -653,7 +653,7 @@ class CallableManagerDialog(wx.Dialog):
         wrap = lambda f, *a: lambda e: wx.CallAfter(f, *a)
         splitter.Bind(wx.EVT_SPLITTER_SASH_POS_CHANGED, wrap(self._UpdateUI))
         self.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self._OnSelectItem,           list_items)
-        self.Bind(wx.stc.EVT_STC_MODIFIED,    wrap(self.EnsureMargin),     stc_body)
+        self.Bind(wx.stc.EVT_STC_MODIFIED,    wrap(self.EnsureMargin),      stc_body)
         self.Bind(wx.EVT_BUTTON,              wrap(self.Compile),           button_compile)
         self.Bind(wx.EVT_BUTTON,              wrap(self.Test),              button_test)
         self.Bind(wx.EVT_BUTTON,              wrap(self.SetEditmode, True), button_edit)
@@ -848,7 +848,7 @@ class CallableManagerDialog(wx.Dialog):
                 "Unsaved changes", wx.ICON_WARNING | wx.OK | wx.CANCEL
             ): return
 
-            self.item.update(changes)
+            self.item.update(changes, **self.GetChanges())
             if self.item.get("active") is not False: self.item.pop("active", None)
             if self.item.get("name") in self.state["namespace"]:
                 self.item["target"] = self.state["namespace"][self.item["name"]]

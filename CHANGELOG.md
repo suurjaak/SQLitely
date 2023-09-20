@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.2, 2023-09-19
+2.2, 2023-09-20
 ---------------
 - add line number and word-wrap toggles to more controls
 - add diagram export to Tools-menu
@@ -13,6 +13,7 @@ CHANGELOG
 - fix error on changing column order in trigger/view editor
 - fix error on reindexing table from diagram if table has no index
 - fix error on checking foreign keys if foreign table has no primary key
+- fix user-defined function remaining inactive if saved without explicit compiling
 - fix Excel export error, from breaking changes in PIL
 
 
