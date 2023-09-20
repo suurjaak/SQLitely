@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.09.2023
+@modified    20.09.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4584,7 +4584,7 @@ class DatabasePage(wx.Panel):
         def handler(event):
             names = sorted(self.diagram.Selection)
             if event.Id == item_bmp.Id:
-                bmp = self.diagram.MakeBitmap(items=names)
+                bmp, label = self.diagram.MakeBitmap(items=names), "diagram bitmap"
                 if wx.TheClipboard.Open():
                     wx.TheClipboard.SetData(wx.BitmapDataObject(bmp)), wx.TheClipboard.Close()
             else:
@@ -4593,14 +4593,18 @@ class DatabasePage(wx.Panel):
                 if event.Id == item_all.Id:
                     self.handle_command("copy", "related", None, *names)
                     return
-                if event.Id == item_svg.Id: text = self.diagram.MakeTemplate("SVG", items=names)
-                elif event.Id == item_names.Id: text = "\n".join(map(grammar.quote, names))
+                if event.Id == item_svg.Id:
+                    text, label = self.diagram.MakeTemplate("SVG", items=names), "diagram SVG"
+                elif event.Id == item_names.Id:
+                    text = "\n".join(map(grammar.quote, names))
+                    label = util.plural("name", names, numbers=False)
                 elif event.Id == item_sql.Id:
                     sqls = [self.db.get_sql(c, n) for n in names
                             for c in (c for c, nn in self.db.schema.items() if n in nn)]
-                    text = "\n\n".join(sqls)
+                    text, label = "\n\n".join(sqls), "CREATE SQL"
                 if wx.TheClipboard.Open():
                     wx.TheClipboard.SetData(wx.TextDataObject(text)), wx.TheClipboard.Close()
+            guibase.status("Copied %s to clipboard.", label)
         for item in menu.MenuItems: menu.Bind(wx.EVT_MENU, handler, item)
 
         rect = controls.get_tool_rect(self.tb_diagram, wx.ID_COPY)
