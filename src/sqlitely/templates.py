@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    02.09.2023
+@modified    21.09.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -3132,25 +3132,20 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
   <title>{{ title }}</title>
 %endif
   <desc>{{ templates.export_comment() }}</desc>
-
   <defs>
-
     <linearGradient id="item-background">
       <stop style="stop-color: {{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }}; stop-opacity: 1;" offset="0" />
       <stop style="stop-color: {{ gradcolour.GetAsString(wx.C2S_HTML_SYNTAX) }}; stop-opacity: 1;" offset="1" />
     </linearGradient>
 
     <image id="pk" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramPK.data }}" />
-
     <image id="fk" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramFK.data }}" />
-
     <image id="null" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramNull.data }}" />
 
     <filter x="0" y="0" width="1" height="1" id="clearbg">
        <feFlood flood-color="{{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }}" />
        <feComposite in="SourceGraphic" in2="" />
     </filter>
-
   </defs>
 
   <style type="text/css">
@@ -3220,7 +3215,9 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
 
 
   <g id="relations">
+%if lines:
 
+%endif
 %for (name1, name2, cols), line in lines.items():
 <%
 
@@ -3285,14 +3282,12 @@ dash = "M %s,%s L %s,%s" % (adjust(*ptd1) + adjust(*ptd2))
       <text x="{{ tx }}" y="{{ ty }}" class="label">{{ util.ellipsize(util.unprint(line["name"]), SchemaPlacement.MAX_TEXT) }}</text>
     %endif
     </g>
-%endfor
 
+%endfor
   </g>
 
 
-
   <g id="items">
-
 %for item in items:
 <%
 
@@ -3321,8 +3316,8 @@ if not cols and not istats: height = SchemaPlacement.HEADERH + 3
     %if get("embed"):
       </a>
     %endif
-
     %if cols:
+
       <text x="{{ itemx }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + texth }}" class="columns">
       %for i, col in enumerate(cols):
         <tspan x="{{ itemx + SchemaPlacement.LPAD }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + texth + i * SchemaPlacement.LINEH }}px">{{ itemcoltexts[item["name"]][i][0] }}</tspan>
@@ -3335,7 +3330,6 @@ if not cols and not istats: height = SchemaPlacement.HEADERH + 3
       %endfor
       </text>
     %endif
-
     %if istats:
 <%
 
@@ -3362,7 +3356,9 @@ if w1 + w2 + 2 * SchemaPlacement.BRADIUS > item["bounds"].Width and item.get("co
       </g>
     %endif
     %for i, col in enumerate(cols):
+        %if any(col["name"] in x.get("name", ()) for x in pks) or any(col["name"] in x.get("name", ()) for x in pks) or "notnull" not in col and show_nulls:
 
+        %endif
         %if any(col["name"] in x.get("name", ()) for x in pks):
       <use xlink:href="#pk" x="{{ itemx + 3 }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
         %endif
@@ -3374,9 +3370,9 @@ if w1 + w2 + 2 * SchemaPlacement.BRADIUS > item["bounds"].Width and item.get("co
         %endif
     %endfor
     </g>
-
 %endfor
 
   </g>
+
 </svg>
 """
