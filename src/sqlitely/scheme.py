@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    17.09.2023
+@modified    21.09.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -191,6 +191,18 @@ class SchemaPlacement(object):
     ZOOM_MIN  = FONT_SPAN[0] / float(FONT_SIZE)
     ZOOM_MAX  = FONT_SPAN[1] / float(FONT_SIZE)
     ZOOM_DEFAULT = 1.0
+
+    DEFAULT_OPTIONS = {
+        "columns":     True,
+        "keycolumns":  False,
+        "lines":       True,
+        "labels":      True,
+        "nulls":       False,
+        "statistics":  False,
+        "layout":      {"layout": LAYOUT_GRID, "active": True,
+                        "grid": {"order": "name", "reverse": False, "vertical": True}},
+        "zoom":        ZOOM_DEFAULT,
+    }
 
     class GraphLayout(object):
         """
@@ -381,8 +393,8 @@ class SchemaPlacement(object):
         # image tuple as (standard bitmap, selected bitmap) and single image as dragrect highlight;
         # or {zoom: {PyEmdeddedImage: imageobject}} for scaled static images
         self._cache = defaultdict(lambda: defaultdict(dict))
-        self._order = []   # Draw order [{obj dict}, ] selected items at end
-        self._zoom  = 1.   # Zoom scale, 1 == 100%
+        self._order = [] # Draw order [{obj dict}, ] selected items at end
+        self._zoom  = self.DEFAULT_OPTIONS.get("zoom", self.ZOOM_DEFAULT) # Zoom scale, 1 == 100%
         self._dc    = PseudoDC()
         self._size  = Size(size)
 
@@ -390,14 +402,15 @@ class SchemaPlacement(object):
         self._dragrectabs = None # Selection being dragged, with non-negative dimensions
         self._dragrectid  = None # DC ops ID for selection rect
         self._use_cache   = True # Use self._cache for item bitmaps
-        self._show_cols   = True
-        self._show_keys   = False
-        self._show_nulls  = False
-        self._show_lines  = True
-        self._show_labels = True
-        self._show_stats  = False
+        self._show_cols   = self.DEFAULT_OPTIONS.get("columns",    True)
+        self._show_keys   = self.DEFAULT_OPTIONS.get("keycolumns", False)
+        self._show_nulls  = self.DEFAULT_OPTIONS.get("nulls",      False)
+        self._show_lines  = self.DEFAULT_OPTIONS.get("lines",      True)
+        self._show_labels = self.DEFAULT_OPTIONS.get("labels",     True)
+        self._show_stats  = self.DEFAULT_OPTIONS.get("stats",      False)
 
-        self._layout = {"layout": "grid", "active": True,
+        self._layout = copy.deepcopy(self.DEFAULT_OPTIONS.get("layout")) or \
+                       {"layout": self.LAYOUT_GRID, "active": True,
                         "grid": {"order": "name", "reverse": False, "vertical": True}}
 
         self._colour_bg     = self.DEFAULT_COLOURS["Background"]
@@ -1956,6 +1969,17 @@ class SchemaPlacement(object):
     def SetDragForegroundColour(self, colour): self._colour_dragfg = Colour(colour)
     DragForegroundColour = property(GetDragForegroundColour, SetDragForegroundColour, doc=
     """Border colour of the mouse-dragging rectangle.""")
+
+
+    def GetColours(self):
+        NN = ("Background", "Border", "DragBackground", "DragForeground", "Foreground",
+              "GradientEnd", "GradientStart", "Line", "Selection")
+        return {n: getattr(self, "%sColour" % n) for n in NN}
+    def SetColours(self, colours):
+        for n, c in colours.items():
+            if hasattr(self, "%sColour" % n): setattr(self, "%sColour" % n, c)
+    Colours = property(GetColours, SetColours, doc=
+    """Colours as dictionary, like {"Border": wx.BLACK}.""")
 
 
 class MyPoint(object):

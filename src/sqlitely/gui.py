@@ -4055,7 +4055,8 @@ class DatabasePage(wx.Panel):
                 if any(self.db.schema.values()): return self.on_save_statistics()
                 wx.MessageBox("No statistics to save, database is empty.", conf.Title, wx.ICON_NONE)
             elif "diagram" == arg:
-                self.diagram.SaveFile(items=args[1:])
+                self.diagram.SaveFile(items=args[1:], selections=False,
+                                      opts=scheme.SchemaPlacement.DEFAULT_OPTIONS)
             elif "dump" == arg:
                 self.notebook.SetSelection(self.pageorder[self.page_data])
                 self.on_dump()
@@ -4412,7 +4413,7 @@ class DatabasePage(wx.Panel):
             if wx.ID_OK != res: return
             self.diagram.SaveFile(zoom=LEVELS[sel])
         def on_export_sels(event=None):
-            self.diagram.SaveFile(items=self.diagram.Selection)
+            self.diagram.SaveFile(selections=False, items=self.diagram.Selection)
         def cmd(*args):
             return lambda e: self.handle_command(*args)
 

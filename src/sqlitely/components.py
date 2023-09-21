@@ -10590,14 +10590,16 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
     Selection = property(GetSelection, SetSelection)
 
 
-    def SaveFile(self, zoom=None, items=None):
+    def SaveFile(self, zoom=None, selections=True, items=None, opts=None):
         """
         Opens file dialog and exports diagram in selected format.
 
-        @param   zoom   if set, exports bitmap at given zoom
-        @param   items  list of entity names to include if not all
+        @param   zoom        if set, exports bitmap at given zoom
+        @param   selections  whether currently selected items should be drawn as selected
+        @param   items       list of entity names to include if not all
+        @param   opts        specific options for exported diagram if not using current
         """
-        if not self._enabled: return
+        if not self._enabled and not opts: return
 
         if not self._layout.Items: return guibase.status("Empty schema, nothing to export.")
 
@@ -10609,12 +10611,27 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         filename = controls.get_dialog_path(dlg)
         filetype = os.path.splitext(filename)[-1].lstrip(".").upper()
         wxtype   = next(k for k, v in self.EXPORT_FORMATS.items() if v == filetype)
+        layout = self._layout
+
+        redrawopts = dict(self.Options, **copy.deepcopy(opts)) if opts else {}
+        if not self._enabled or opts and self.Options != redrawopts:
+            layout = scheme.SchemaPlacement(self._db)
+            layout.SetFonts("Verdana",
+                            ("Open Sans", conf.FontDiagramSize,
+                             conf.FontDiagramFile, conf.FontDiagramBoldFile))
+            layout.SetOptions(redrawopts)
+            colours = self._layout.Colours
+            if not self._enabled:
+                colours["Background"] = controls.ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
+            layout.SetColours(colours)
+            layout.Populate()
+            layout.Redraw(wx.Rect(0, 0, *conf.Defaults["WindowSize"]), layout.LAYOUT_GRID)
 
         if "SVG" == filetype:
-            content = self.MakeTemplate(filetype, items=items)
-            with open(filename, "wb") as f: f.write(content.encode("utf-8"))
+            content = layout.MakeTemplate(filetype, title, embed, selections=selections, items=items)
+            with open(filename, "wb") as f: f.write(content.encode("utf-8", errors="replace"))
         else:
-            self.MakeBitmap(zoom=zoom, items=items).SaveFile(filename, wxtype)
+            layout.MakeBitmap(zoom, selections=selections, items=items).SaveFile(filename, wxtype)
             util.start_file(filename)
         guibase.status('Exported schema diagram to "%s".', filename, log=True)
 
