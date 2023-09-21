@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.09.2023
+@modified    21.09.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4327,10 +4327,11 @@ class DatabasePage(wx.Panel):
         self.tb_diagram_opts.ToggleTool(wx.ID_FILE5, self.diagram.ShowLineLabels)
         self.tb_diagram_opts.ToggleTool(wx.ID_FILE6, self.diagram.ShowStatistics)
 
-        for myid in wx.ID_ZOOM_FIT, wx.ID_STATIC, wx.ID_NETWORK:
+        for myid in wx.ID_ZOOM_FIT, wx.ID_STATIC, wx.ID_NETWORK, wx.ID_REFRESH, wx.ID_COPY:
             self.tb_diagram.EnableTool(myid, self.diagram.Enabled)
         schema_parsed = any(v.get("__parsed__") for vv in self.db.schema.values() for v in vv.values())
         self.combo_diagram_zoom.Enable(self.diagram.Enabled)
+        self.tb_diagram_opts.EnableTool(wx.ID_FILE1, self.diagram.Enabled)
         self.tb_diagram_opts.EnableTool(wx.ID_FILE2, self.diagram.Enabled and schema_parsed)
         self.tb_diagram_opts.EnableTool(wx.ID_FILE3, self.diagram.Enabled)
         self.tb_diagram_opts.EnableTool(wx.ID_FILE4, self.diagram.Enabled and schema_parsed)
@@ -4369,6 +4370,7 @@ class DatabasePage(wx.Panel):
         if event.IsChecked(): self.diagram.Populate()
         conf.SchemaDiagramEnabled = event.IsChecked()
         util.run_once(conf.save)
+
 
     def on_diagram_opt(self, event):
         """Handler for toggling a diagram display option, changes diagram display."""
