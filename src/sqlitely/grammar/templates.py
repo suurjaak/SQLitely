@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    05.08.2023
+@modified    23.09.2023
 ------------------------------------------------------------------------------
 """
 
@@ -353,7 +353,7 @@ CATEGORIES = ["table", "view", "index", "trigger"]
 SAVEPOINT alter_master;{{ LF() }}
 {{ LF() }}
 
-PRAGMA writable_SCHEMA = ON;{{ LF() }}
+PRAGMA writable_schema = ON;{{ LF() }}
 {{ LF() }}
 
 %for category in CATEGORIES:
@@ -367,7 +367,7 @@ WHERE {{ WS("type = ") }}{{ Q(category, force=True) }} {{ WS(" AND name = ") }}{
 PRAGMA schema_version = {{ data["version"] }};{{ LF() }}
 {{ LF() }}
 
-PRAGMA writable_SCHEMA = OFF;{{ LF() }}
+PRAGMA writable_schema = OFF;{{ LF() }}
 {{ LF() }}
 
 RELEASE SAVEPOINT alter_master;{{ LF() }}
