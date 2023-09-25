@@ -23,7 +23,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    23.09.2023
+@modified    25.09.2023
 ------------------------------------------------------------------------------
 """
 
@@ -336,19 +336,19 @@ Alter sqlite_master directly.
 4. COMMIT TRANSACTION
 
 @param   data {
-             version:   schema_version PRAGMA to set afterward
              ?table:    {name: CREATE SQL, }
              ?index:    {name: CREATE SQL, }
              ?trigger:  {name: CREATE SQL, }
              ?view:     {name: CREATE SQL, }
+             ?version:  schema_version PRAGMA to set afterward, if any
          }
 """
 ALTER_MASTER = """<%
 CATEGORIES = ["table", "view", "index", "trigger"]
 %>
 {{ WS("-- Overwrite CREATE statements in sqlite_master directly,") }}{{ LF() }}
-{{ WS("-- to avoid table names being force-quoted by SQLite") }}{{ LF() }}
-{{ WS("-- upon executing ALTER TABLE .. RENAME TO ..") }}{{ LF() }}
+{{ WS("-- to avoid SQLite dropping IF NOT EXISTS flags and comments,") }}{{ LF() }}
+{{ WS("-- or force-quoting table names upon ALTER TABLE .. RENAME TO ..") }}{{ LF() }}
 
 SAVEPOINT alter_master;{{ LF() }}
 {{ LF() }}
@@ -364,8 +364,11 @@ WHERE {{ WS("type = ") }}{{ Q(category, force=True) }} {{ WS(" AND name = ") }}{
     %endfor
 %endfor
 
+%if data.get("version") is not None:
+{{ LF() }}
 PRAGMA schema_version = {{ data["version"] }};{{ LF() }}
 {{ LF() }}
+%endif
 
 PRAGMA writable_schema = OFF;{{ LF() }}
 {{ LF() }}

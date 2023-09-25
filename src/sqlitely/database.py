@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.05.2023
+@modified    25.09.2023
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -2217,15 +2217,18 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return args
 
 
-    def update_sqlite_master(self, schema):
+    def update_sqlite_master(self, schema, bump=False):
         """
         Updates CREATE-statements in sqlite_master directly.
 
         @param   schema  {category: {name: CREATE SQL}}
+        @param   bump    whether to bump database schema version
         """
         try:
-            v = next(iter(self.execute("PRAGMA schema_version", log=False).fetchone().values()))
-            schema = dict(schema, version=v)
+            data = dict(schema)
+            if not bump:
+                v = next(iter(self.execute("PRAGMA schema_version", log=False).fetchone().values()))
+                data.update(version=v)
             sql, err = grammar.generate(schema, category="ALTER MASTER")
             if err: logger.warning("Error syncing sqlite_master contents: %s.", err)
             else: self.executescript(sql, name="ALTER")

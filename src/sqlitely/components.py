@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.09.2023
+@modified    25.09.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -3405,19 +3405,25 @@ class SchemaObjectPage(wx.Panel):
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
         sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
 
-        check_rowid  = self._ctrls["without"]   = wx.CheckBox(panel, label="WITHOUT &ROWID")
+        check_rowid  = self._ctrls["without"] = wx.CheckBox(panel, label="WITHOUT &ROWID")
+        check_exists = self._ctrls["exists"]  = wx.CheckBox(panel, label="IF N&OT EXISTS")
         check_rowid.ToolTip  = "Omit the default internal ROWID column. " \
                                "Table must have a non-autoincrement primary key. " \
                                "sqlite3_blob_open() will not work.\n\n" \
                                "Can reduce storage and processing overhead, " \
                                "suitable for tables with non-integer or composite " \
                                "primary keys, and not too much data per row."
+        check_exists.ToolTip = "Add 'IF NOT EXISTS' to CREATE SQL statement.\n\n" \
+                               "Does not affect creation within this database,\n" \
+                               "merely becomes part of schema SQL."
 
         nb = self._notebook_table = wx.Notebook(panel)
         panel_columnwrapper     = self._MakeColumnsGrid(nb)
         panel_constraintwrapper = self._MakeConstraintsGrid(nb)
 
         sizer_flags.Add(check_rowid)
+        sizer_flags.AddStretchSpacer()
+        sizer_flags.Add(check_exists)
 
         nb.AddPage(panel_columnwrapper, "Columns")
 
@@ -3428,6 +3434,7 @@ class SchemaObjectPage(wx.Panel):
         sizer.Add(nb, proportion=1, border=5, flag=wx.TOP | wx.GROW)
 
         self._BindDataHandler(self._OnChange, check_rowid,  ["without"])
+        self._BindDataHandler(self._OnChange, check_exists, ["exists"])
 
         return panel
 
@@ -3445,6 +3452,7 @@ class SchemaObjectPage(wx.Panel):
             style=wx.CB_DROPDOWN | wx.CB_READONLY)
 
         check_unique = self._ctrls["unique"] = wx.CheckBox(panel, label="&UNIQUE")
+        check_exists = self._ctrls["exists"] = wx.CheckBox(panel, label="IF N&OT EXISTS")
 
         panel_wrapper = self._MakeColumnsGrid(panel)
 
@@ -3457,11 +3465,16 @@ class SchemaObjectPage(wx.Panel):
                               "of columns in the table being indexed. " \
                               "May not contain subqueries, references to other tables, " \
                               "or functions whose result might change, like random()."
+        check_exists.ToolTip = "Add 'IF NOT EXISTS' to CREATE SQL statement.\n\n" \
+                               "Does not affect creation within this database,\n" \
+                               "merely becomes part of schema SQL."
 
         sizer_table.Add(label_table, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_table.Add(list_table, flag=wx.GROW)
 
         sizer_flags.Add(check_unique)
+        sizer_flags.AddStretchSpacer()
+        sizer_flags.Add(check_exists)
 
         sizer_where.Add(label_where, border=5, flag=wx.RIGHT)
         sizer_where.Add(stc_where, proportion=1, flag=wx.GROW)
@@ -3473,6 +3486,7 @@ class SchemaObjectPage(wx.Panel):
 
         self._BindDataHandler(self._OnChange, list_table,   ["table"])
         self._BindDataHandler(self._OnChange, check_unique, ["unique"])
+        self._BindDataHandler(self._OnChange, check_exists, ["exists"])
         self._BindDataHandler(self._OnChange, stc_where,    ["where"])
 
         return panel
@@ -3501,8 +3515,12 @@ class SchemaObjectPage(wx.Panel):
                              "INSERT, DELETE or UPDATE statements on the view."
         list_upon.ToolTip = label_upon.ToolTip.Tip
 
-        check_for = self._ctrls["for"] = wx.CheckBox(panel, label="FOR EACH &ROW")
+        check_for    = self._ctrls["for"]    = wx.CheckBox(panel, label="FOR EACH &ROW")
+        check_exists = self._ctrls["exists"] = wx.CheckBox(panel, label="IF N&OT EXISTS")
         check_for.ToolTip = "Not enforced by SQLite, all triggers are FOR EACH ROW by default"
+        check_exists.ToolTip = "Add 'IF NOT EXISTS' to CREATE SQL statement.\n\n" \
+                               "Does not affect creation within this database,\n" \
+                               "merely becomes part of schema SQL."
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
         panel1, panel2 = self._MakeColumnsGrid(splitter), wx.Panel(splitter)
@@ -3550,6 +3568,8 @@ class SchemaObjectPage(wx.Panel):
         sizer_table.Add(list_action)
 
         sizer_flags.Add(check_for)
+        sizer_flags.AddStretchSpacer()
+        sizer_flags.Add(check_exists)
 
         sizer_bodytop.Add(label_body, border=2, flag=wx.BOTTOM | wx.ALIGN_BOTTOM)
         sizer_bodytop.AddStretchSpacer()
@@ -3569,6 +3589,7 @@ class SchemaObjectPage(wx.Panel):
         self._BindDataHandler(self._OnChange, list_upon,    ["upon"])
         self._BindDataHandler(self._OnChange, list_action,  ["action"])
         self._BindDataHandler(self._OnChange, check_for,    ["for"])
+        self._BindDataHandler(self._OnChange, check_exists, ["exists"])
         self._BindDataHandler(self._OnChange, stc_body,     ["body"])
         self._BindDataHandler(self._OnChange, stc_when,     ["when"])
 
@@ -3581,6 +3602,12 @@ class SchemaObjectPage(wx.Panel):
         """Returns control panel for CREATE VIEW page."""
         panel = wx.Panel(parent)
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer_flags = wx.BoxSizer(wx.HORIZONTAL)
+
+        check_exists = self._ctrls["exists"]  = wx.CheckBox(panel, label="IF N&OT EXISTS")
+        check_exists.ToolTip = "Add 'IF NOT EXISTS' to CREATE SQL statement.\n\n" \
+                               "Does not affect creation within this database,\n" \
+                               "merely becomes part of schema SQL."
 
         splitter = self._panel_splitter = wx.SplitterWindow(panel, style=wx.BORDER_NONE)
         panel1, panel2 = self._MakeColumnsGrid(splitter), wx.Panel(splitter)
@@ -3613,9 +3640,11 @@ class SchemaObjectPage(wx.Panel):
         panel2.Sizer.Add(sizer_bodytop, flag=wx.GROW)
         panel2.Sizer.Add(stc_body, proportion=1, flag=wx.GROW)
 
+        sizer.Add(check_exists, border=5, flag=wx.ALIGN_RIGHT | wx.TOP | wx.BOTTOM)
         sizer.Add(splitter, proportion=1, flag=wx.GROW)
 
         self._BindDataHandler(self._OnChange, stc_body,     ["select"])
+        self._BindDataHandler(self._OnChange, check_exists, ["exists"])
 
         splitter.SetMinimumPaneSize(105)
         splitter.SplitHorizontally(panel1, panel2, splitter.MinimumPaneSize)
@@ -3872,6 +3901,7 @@ class SchemaObjectPage(wx.Panel):
         meta = self._item.get("meta") or {}
 
         self._ctrls["without"].Value = bool(meta.get("without"))
+        self._ctrls["exists"].Value  = bool(meta.get("exists"))
 
         for i, grid in enumerate((self._grid_columns, self._grid_constraints)):
             if i and not self._hasmeta: continue # for i, grid
@@ -3910,6 +3940,7 @@ class SchemaObjectPage(wx.Panel):
         for j, x in enumerate(self._tables): self._ctrls["table"].SetClientData(j, x)
 
         self._ctrls["unique"].Value = bool(meta.get("unique"))
+        self._ctrls["exists"].Value = bool(meta.get("exists"))
         self._ctrls["where"].SetText(meta.get("where") or "")
         items = (meta.get("columns") if self._hasmeta \
                  else self._item.get("columns")) or ()
@@ -3946,6 +3977,7 @@ class SchemaObjectPage(wx.Panel):
         self._ctrls["table"].Value     = util.unprint((meta.get("table") if self._hasmeta
                                                        else self._item.get("tbl_name")) or "")
         self._ctrls["for"].Value       = bool(meta.get("for"))
+        self._ctrls["exists"].Value    = bool(meta.get("exists"))
         self._ctrls["upon"].Value      = meta.get("upon") or ""
         self._ctrls["action"].Value    = meta.get("action") or ""
         self._ctrls["body"].SetText(meta.get("body") or "")
@@ -3978,6 +4010,7 @@ class SchemaObjectPage(wx.Panel):
         items = (meta.get("columns") if self._hasmeta
                  else self._item.get("columns")) or ()
 
+        self._ctrls["exists"].Value = bool(meta.get("exists"))
         self._ctrls["select"].SetText(meta.get("select") or "")
 
         self._EmptyControl(self._panel_columns)
@@ -4523,14 +4556,20 @@ class SchemaObjectPage(wx.Panel):
     def _GetAlterTableSQL(self):
         """Returns SQLs for carrying out table change."""
         result = "", "", None
-        if not self.IsChanged(): return result
+        if not self.IsChanged() or self._IfNotExistsChanged(only=True): return result
 
-        can_simple = True
-        old, new = self._original["meta"], self._item["meta"]
+        can_simple = True # Simple ALTER TABLE sufficient
+        old,   new   = self._original["meta"], self._item["meta"]
+        sql1,  sql2  = self._original["sql"],  self._item["sql"]
         cols1, cols2 = (x.get("columns", []) for x in (old, new))
         colmap1 = {c["__id__"]: c for c in cols1}
         colmap2 = {c["__id__"]: c for c in cols2}
         droppedcols = [colmap1[x]["name"] for x in colmap1 if x not in colmap2]
+
+        if self._IfNotExistsChanged():
+            # Omit IF NOT EXISTS from ALTER SQL, written to sqlite_master directly
+            new = dict(new, exists=bool(old.get("exists")))
+            sql2, _ = grammar.generate(new)
 
         for k in "without", "constraints":
             if bool(new.get(k)) != bool(old.get(k)):
@@ -4586,7 +4625,6 @@ class SchemaObjectPage(wx.Panel):
             allnames = sum(map(list, self._db.schema.values()), [])
             allnames.append(new["name"])
             dummyname = util.make_unique(new["name"], allnames)
-            sql1,  sql2  = self._original["sql"], self._item["sql"]
             rens1, rens2 = ({"table": {n: dummyname},
                              "column": {dummyname: {c["name"]: cid for cid, c in m.items()}}}
                             for n, m in ((old["name"], colmap1), (new["name"], colmap2)))
@@ -4640,7 +4678,7 @@ class SchemaObjectPage(wx.Panel):
     def _GetAlterIndexSQL(self):
         """Returns SQLs for carrying out index change."""
         result = "", "", None
-        if not self.IsChanged(): return result
+        if not self.IsChanged() or self._IfNotExistsChanged(only=True): return result
 
         args = {"name": self._original["name"],
                 "sql": self._item["sql0" if self._sql0_applies else "sql"],
@@ -4653,7 +4691,7 @@ class SchemaObjectPage(wx.Panel):
     def _GetAlterTriggerSQL(self):
         """Returns SQLs for carrying out trigger change."""
         result = "", "", None
-        if not self.IsChanged(): return result
+        if not self.IsChanged() or self._IfNotExistsChanged(only=True): return result
 
         args = {"name": self._original["name"],
                 "sql": self._item["sql0" if self._sql0_applies else "sql"],
@@ -4666,7 +4704,7 @@ class SchemaObjectPage(wx.Panel):
     def _GetAlterViewSQL(self):
         """Returns SQLs for carrying out view change."""
         result = "", "", None
-        if not self.IsChanged(): return result
+        if not self.IsChanged() or self._IfNotExistsChanged(only=True): return result
 
         renames = {}
         old, new = self._original["meta"], self._item["meta"]
@@ -4886,6 +4924,20 @@ class SchemaObjectPage(wx.Panel):
              "type": (lambda *a, **kw: self._CreateDialogConstraints(*a, **kw))},
             {"name": "conflict", "label": "ON CONFLICT", "choices": self.CONFLICT},
         ], footer
+
+
+    def _IfNotExistsChanged(self, only=False):
+        """
+        Returns whether unsaved changes include toggling IF NOT EXISTS.
+
+        @param   only  whether to return True if only this flag was changed
+        """
+        old, new  = self._original["meta"], self._item["meta"]
+        changed = bool(old.get("exists")) != bool(new.get("exists"))
+        if changed and only:
+            sql2, _ = grammar.generate(dict(new, exists=bool(old.get("exists"))))
+            changed = (self._original["sql"] == sql2)
+        return changed
 
 
     def _CreateDialogConstraints(self, dialog, field, parent, data):
@@ -5977,7 +6029,8 @@ class SchemaObjectPage(wx.Panel):
         Handler for clicking to test schema SQL validity, tries
         executing CREATE or ALTER statement, shows success.
         """
-        errors, sql, modified = [], self._item["sql"], (self.IsChanged() or self._newmode)
+        errors, sql = [], self._item["sql"]
+        modified = self._newmode or self.IsChanged() and not self._IfNotExistsChanged(only=True)
         if modified: errors, _ = self._Validate()
         if modified and not errors:
             if not self._newmode: sql, _, _ = self._GetAlterSQL()
@@ -6056,22 +6109,30 @@ class SchemaObjectPage(wx.Panel):
         if not self._newmode and self._sql0_applies \
         and self._item["sql"]  == self._original["sql"] \
         and self._item["sql0"] != self._original["sql0"]: # A formatting change, e.g. comment
-            self._db.update_sqlite_master({self._category: {self.Name: sql1}})
+            self._db.update_sqlite_master({self._category: {self.Name: sql2}})
             return finalize(post=False)
 
 
         if not self._newmode: sql1, sql2, alterargs = self._GetAlterSQL()
+        is_simple_alter = not self._newmode and (not alterargs or "COMPLEX ALTER TABLE" != alterargs.get("__type__"))
+        # SQLite drops "IF NOT EXISTS" from schema statement: alter sqlite_master directly
+        alter_exists = self._item["meta"].get("exists") and (self._newmode or not is_simple_alter) or \
+                       is_simple_alter and self._IfNotExistsChanged()
 
+        infotext = sql1.strip()
+        if alter_exists and not self._newmode and not sql1:
+            infotext = "%%s 'IF NOT EXISTS' %%s CREATE %s statement." % self._category.upper() % \
+                       (("Add", "to") if self._item["meta"].get("exists") else ("Remove", "from"))
         if wx.YES != controls.YesNoMessageBox(
-            "Execute the following schema change?\n\n%s" % sql1.strip(),
+            "Execute the following schema change?\n\n%s" % infotext,
             conf.Title, wx.ICON_INFORMATION
         ): return
 
 
-        self._PostEvent(sync=True, close_grids=True)
-        logger.info("Executing schema SQL:\n\n%s", sql2)
+        sql1 and self._PostEvent(sync=True, close_grids=True)
+        sql1 and logger.info("Executing schema SQL:\n\n%s", sql2)
         busy = controls.BusyPanel(self, "Saving..")
-        try: self._db.executescript(sql2, name="CREATE" if self._newmode else "ALTER")
+        try: sql1 and self._db.executescript(sql2, name="CREATE" if self._newmode else "ALTER")
         except Exception as e:
             logger.exception("Error executing SQL.")
             try: self._db.execute("ROLLBACK")
@@ -6086,7 +6147,7 @@ class SchemaObjectPage(wx.Panel):
             # sets a quoted name "y" to CREATE statements, including related objects,
             # regardless of whether the name required quoting.
             data = defaultdict(dict) # {category: {name: SQL}}
-            if not self._newmode and "table" == self._category \
+            if not self._newmode and "table" == self._category and alterargs \
             and ("tempname" in alterargs or alterargs["name"] != alterargs["name2"]):
                 if alterargs["name2"] == grammar.quote(alterargs["name2"]):
                     data["table"][alterargs["name2"]] = self._item["sql0" if self._sql0_applies else "sql"]
@@ -6097,6 +6158,12 @@ class SchemaObjectPage(wx.Panel):
                     if reltable["name"] == grammar.quote(reltable["name"]):
                         data["table"][reltable["name"]] = reltable["sql0"]
             if data: self._db.update_sqlite_master(data)
+            if alter_exists:
+                data.clear()
+                sql = self._item["sql0" if self._sql0_applies else "sql"]
+                data[self._category][self._item["meta"]["name"]] = sql
+                bump = not self._newmode and self._IfNotExistsChanged(only=True)
+                self._db.update_sqlite_master(data, bump=bump)
         finally:
             busy.Close()
 
