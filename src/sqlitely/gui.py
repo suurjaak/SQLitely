@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.09.2023
+@modified    25.09.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3118,7 +3118,7 @@ class DatabasePage(wx.Panel):
                 ctrl.Bind(wx.EVT_CHOICE, self.on_pragma_change)
             elif int == opts["type"]:
                 ctrl = wx.SpinCtrl(panel_pragma, name=ctrl_name)
-                ctrl.SetRange(opts.get("min", -sys.maxsize), opts.get("max", sys.maxsize))
+                ctrl.SetRange(opts.get("min", -2**31), opts.get("max", 2**31 - 1))
                 ctrl.Value = value
                 ctrl.Bind(wx.EVT_SPINCTRL, self.on_pragma_change)
             else:
