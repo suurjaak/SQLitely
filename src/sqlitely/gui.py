@@ -4037,9 +4037,9 @@ class DatabasePage(wx.Panel):
                 self.notebook.SetSelection(self.pageorder[self.page_data])
                 self.on_export_multiitem("table", names=args[1:])
             elif "data" == arg:
-                self.on_export_to_db("table", names=list(self.db.schema["table"]))
+                self.on_export_to_db(category="table", names=list(self.db.schema["table"]))
             elif "structure" == arg:
-                self.on_export_to_db("table", names=args[1:] or list(self.db.schema["table"]), data=False)
+                self.on_export_to_db(category="table", names=args[1:] or list(self.db.schema["table"]), data=False)
             elif "pragma" == arg:
                 template = step.Template(templates.PRAGMA_SQL, strip=False)
                 sql = template.expand(pragma=self.pragma)
@@ -7310,8 +7310,7 @@ class DatabasePage(wx.Panel):
             menu.Append(item_dump)
             menu.Append(item_database_meta)
             menu.Bind(wx.EVT_MENU, self.on_dump, item_dump)
-            menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_to_db),
-                      item_database_meta)
+            menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_to_db), item_database_meta)
             submenu = wx.Menu()
             menu.AppendSubMenu(submenu, text="Create ne&w ..")
             for category, key in (("table", "t"), ("view", "v")):
