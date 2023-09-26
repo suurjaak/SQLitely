@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.2, 2023-09-25
+2.2, 2023-09-26
 ---------------
 - add line number and word-wrap toggles to more controls
 - add diagram export to Tools-menu
@@ -11,6 +11,7 @@ CHANGELOG
 - add IF NOT EXISTS to schema editor
 - add YAML formatting options to value editor
 - retain undo history when loading SQL from file to SQL editor
+- improve compatibility with wxPython 4.2+
 - fix error on changing column order in trigger/view editor
 - fix error on reindexing table from diagram if table has no index
 - fix error on checking foreign keys if foreign table has no primary key

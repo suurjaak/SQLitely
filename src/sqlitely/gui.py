@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.09.2023
+@modified    26.09.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2524,8 +2524,7 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_TEXT_ENTER, self.on_searchall, edit_search)
         tb = self.tb_search = wx.ToolBar(self, style=wx.TB_FLAT | wx.TB_NODIVIDER)
 
-        bmp = wx.ArtProvider.GetBitmap(wx.ART_GO_FORWARD, wx.ART_TOOLBAR,
-                                       (16, 16))
+        bmp = wx.ArtProvider.GetBitmap(wx.ART_GO_FORWARD, wx.ART_TOOLBAR, (16, 16))
         tb.SetToolBitmapSize(bmp.Size)
         tb.AddTool(wx.ID_FIND, "", bmp, shortHelp="Start search")
         tb.Realize()
@@ -2615,12 +2614,11 @@ class DatabasePage(wx.Panel):
         label_html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNFACE)
         label_html.ForegroundColour = ColourManager.GetColour(wx.SYS_COLOUR_BTNTEXT)
 
-        tb = self.tb_search_settings = \
-            wx.ToolBar(page, style=wx.TB_FLAT | wx.TB_NODIVIDER | wx.TB_HORZ_TEXT)
+        tb = self.tb_search_settings = wx.ToolBar(page, style=wx.TB_FLAT | wx.TB_NODIVIDER | wx.TB_HORZ_TEXT)
         tb.SetToolBitmapSize((24, 24))
-        tb.AddRadioTool(wx.ID_STATIC, "Data", bitmap1=images.ToolbarData.Bitmap,
+        tb.AddRadioTool(wx.ID_STATIC, "Data", images.ToolbarData.Bitmap,
             shortHelp="Search in all columns of all database tables and views")
-        tb.AddRadioTool(wx.ID_INDEX, "Meta", bitmap1=images.ToolbarTitle.Bitmap,
+        tb.AddRadioTool(wx.ID_INDEX, "Meta", images.ToolbarTitle.Bitmap,
             shortHelp="Search in database CREATE SQL")
         tb.AddSeparator()
         tb.AddCheckTool(wx.ID_NEW, "Tabs", images.ToolbarTabs.Bitmap,
@@ -3349,12 +3347,11 @@ class DatabasePage(wx.Panel):
 
         bmp1 = images.ToolbarRefresh.Bitmap
         bmp2 = images.ToolbarStopped.Bitmap
-        bmp3 = wx.ArtProvider.GetBitmap(wx.ART_COPY, wx.ART_TOOLBAR,
-                                        (16, 16))
-        bmp4 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE, wx.ART_TOOLBAR,
-                                        (16, 16))
+        bmp3 = wx.ArtProvider.GetBitmap(wx.ART_COPY,         wx.ART_TOOLBAR, (16, 16))
+        bmp4 = wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE_AS, wx.ART_TOOLBAR, (16, 16))
         bmp5 = images.ToolbarNumbered.Bitmap
         bmp6 = images.ToolbarWordWrap.Bitmap
+
         tb_stats = self.tb_stats = wx.ToolBar(panel_stats,
                                       style=wx.TB_FLAT | wx.TB_NODIVIDER | wx.TB_HORZ_TEXT)
         tb_stats.SetToolBitmapSize(bmp1.Size)
@@ -4307,8 +4304,7 @@ class DatabasePage(wx.Panel):
                 self.html_stats.Scroll(*previous_scrollpos)
         finally: self.html_stats.Thaw()
         self.tb_stats.EnableTool(wx.ID_REFRESH, not self.worker_analyzer.is_working())
-        bmp = images.ToolbarStop.Bitmap if self.worker_analyzer.is_working() \
-              else images.ToolbarStopped.Bitmap
+        bmp = (images.ToolbarStop if self.worker_analyzer.is_working() else images.ToolbarStopped).Bitmap
         self.tb_stats.SetToolNormalBitmap(wx.ID_STOP, bmp)
 
 
