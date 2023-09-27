@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.09.2023
+@modified    27.09.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10700,6 +10700,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         else:
             layout.MakeBitmap(zoom, selections=selections, items=items).SaveFile(filename, wxtype)
             util.start_file(filename)
+        if layout is self._layout: self.Redraw()
         guibase.status('Exported schema diagram to "%s".', filename, log=True)
 
 

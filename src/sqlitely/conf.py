@@ -10,7 +10,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.09.2023
+@modified    27.09.2023
 ------------------------------------------------------------------------------
 """
 try: from ConfigParser import RawConfigParser                 # Py2
@@ -30,8 +30,8 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.2.dev31"
-VersionDate = "26.09.2023"
+Version = "2.2.dev32"
+VersionDate = "27.09.2023"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
