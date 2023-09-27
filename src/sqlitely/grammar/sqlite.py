@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    07.08.2023
+@modified    27.09.2023
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -410,6 +410,14 @@ class Parser(object):
                 logger.error('Errors parsing SQL "%s":\n\n%s', sql,
                              listener.getErrors(stack=True))
                 return None, listener.getErrors()
+
+            if sum(not isinstance(x, TerminalNode) for x in tree.children) > 1 \
+            or sum(not isinstance(x, TerminalNode) for x in tree.children[0].children) > 1:
+                stmts = [x for x in tree.children if not isinstance(x, TerminalNode)] or \
+                        [x for x in tree.children[0].children if not isinstance(x, TerminalNode)]
+                logger.error('Error parsing SQL "%s":\n\n'
+                             "encountered %s statements where one was expected.", sql, len(stmts))
+                return None, "Too many statements"
 
             # parse ctx -> statement list ctx -> statement ctx -> specific type ctx
             ctx = tree.children[0].children[0].children[0]

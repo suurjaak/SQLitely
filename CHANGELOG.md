@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.2, 2023-09-26
+2.2, 2023-09-27
 ---------------
 - add line number and word-wrap toggles to more controls
 - add diagram export to Tools-menu
@@ -17,6 +17,7 @@ CHANGELOG
 - fix error on checking foreign keys if foreign table has no primary key
 - fix user-defined function remaining inactive if saved without explicit compiling
 - fix numeric spinctrls in pragma editor having invalid range
+- fix detecting multiple statements in user-entered CREATE SQL
 - fix Excel export error, from breaking changes in PIL
 
 
