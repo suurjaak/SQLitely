@@ -231,6 +231,7 @@ class SQL(object):
     CREATE               = "CREATE"
     DEFAULT              = "DEFAULT"
     DEFERRABLE           = "DEFERRABLE"
+    DELETE               = "DELETE"
     EXPLAIN              = "EXPLAIN"
     FOR_EACH_ROW         = "FOR EACH ROW"
     FOREIGN_KEY          = "FOREIGN KEY"
