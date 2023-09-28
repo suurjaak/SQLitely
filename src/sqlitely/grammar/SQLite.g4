@@ -42,15 +42,16 @@
  *                disallow certain keywords in column types and constraint names;
  *                add TRUE/FALSE literals;
  *                add support for INDEX expressions;
- *                add support for NULLS FIRST|LAST in ORDER BY.
+ *                add support for NULLS FIRST|LAST in ORDER BY;
+ *                ensure statement list is delimited.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
- * Updated by   : Erki Suurjaak, 2019-2022
+ * Updated by   : Erki Suurjaak, 2019-2023
  */
 grammar SQLite;
 
 parse
- : ( sql_stmt_list | error )* EOF
+ : ( sql_stmt_list | error )? EOF
  ;
 
 error

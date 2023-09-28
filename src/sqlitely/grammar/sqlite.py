@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    27.09.2023
+@modified    28.09.2023
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -92,7 +92,10 @@ def get_type(sql):
     result = None
     try:
         parser = SQLiteParser(CommonTokenStream(SQLiteLexer(InputStream(sql))))
-        tree = parser.parse().children[0].children[0].children[0]
+        tree = parser.parse()
+        if sum(not isinstance(x, TerminalNode) for x in tree.children) > 1 \
+        or sum(not isinstance(x, TerminalNode) for x in tree.children[0].children) > 1:
+            raise Exception("Too many statements")
         ctx = tree.children[0].children[0].children[0]
         if isinstance(ctx, (CTX.DELETE, CTX.DELETE_LIMITED)):
             result = SQL.DELETE
