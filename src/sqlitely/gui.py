@@ -6028,6 +6028,7 @@ class DatabasePage(wx.Panel):
             self.load_tree_schema()
             self.diagram.Populate()
             self.populate_diagram_finder()
+            self.on_update_stc_schema()
 
             relnames = {n: n for c, xx in self.db.get_related(category, name).items() for n in xx} \
                        if category in ("table", "view") else {}
@@ -6743,19 +6744,21 @@ class DatabasePage(wx.Panel):
         if not self or self.flags.get("reload_schema_underway"): return
 
         self.flags["reload_schema_underway"] = True
-        self.db.populate_schema(count=count, parse=True)
-        self.on_pragma_refresh(reload=True)
-        for pmap in self.data_pages, self.schema_pages:
-            for p in (p for d in pmap.values() for p in d.values()): p.Reload()
-        self.button_refresh_data.Disable()
-        self.button_refresh_schema.Disable()
-        ff = [self.load_tree_data, self.load_tree_schema, self.on_update_stc_schema,
-              self.diagram.Populate, self.populate_diagram_finder,
-              self.update_autocomp, self.update_info_panel, self.on_update_statistics]
-        for func in ff:
-            if (wx.YieldIfNeeded() or True) and not self: return
-            func()
-        self.flags.pop("reload_schema_underway", None)
+        try:
+            self.db.populate_schema(count=count, parse=True)
+            self.on_pragma_refresh(reload=True)
+            for pmap in self.data_pages, self.schema_pages:
+                for p in (p for d in pmap.values() for p in d.values()): p.Reload()
+            self.button_refresh_data.Disable()
+            self.button_refresh_schema.Disable()
+            ff = [self.load_tree_data, self.load_tree_schema, self.on_update_stc_schema,
+                  self.diagram.Populate, self.populate_diagram_finder,
+                  self.update_autocomp, self.update_info_panel, self.on_update_statistics]
+            for func in ff:
+                if (wx.YieldIfNeeded() or True) and not self: return
+                func()
+        finally:
+            self.flags.pop("reload_schema_underway", None)
 
 
     def populate_diagram_finder(self):
