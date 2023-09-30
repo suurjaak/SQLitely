@@ -6210,7 +6210,7 @@ class DatabasePage(wx.Panel):
         if len(items) == 1:
             category = get_category(items[0])
             dialog = self.dialog_savefile
-            filename = "%s %s" % (category.capitalize(), items[0])
+            filename = "%s %s" % (category.capitalize(), util.ellipsize(items[0], limit=100))
             dialog.Filename = util.safe_filename(filename)
             dialog.Message = "Save %s as" % category
         else:
