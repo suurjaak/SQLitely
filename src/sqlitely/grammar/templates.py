@@ -7,6 +7,7 @@ Parameters expected by templates:
     data       statement data structure
     root       root data structure
     collapse   function to collapse all whitespace
+    terminate  function to terminate SQL statement with semicolon if not already terminated
     Template   Template-class
     templates  this module
     CM         comma setter(type, i, ?subtype, ?j, ?root=None)
@@ -23,7 +24,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    25.09.2023
+@modified    28.09.2023
 ------------------------------------------------------------------------------
 """
 
@@ -680,7 +681,7 @@ VIEW
 %endif
 
 
-AS {{ WS(data["select"]) if data.get("select") else "" }};
+AS {{ WS(terminate(data["select"])) if data.get("select") else ";" }}
 """
 
 

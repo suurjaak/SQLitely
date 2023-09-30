@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    28.09.2023
+@modified    30.09.2023
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -92,6 +92,7 @@ def get_type(sql):
     result = None
     try:
         parser = SQLiteParser(CommonTokenStream(SQLiteLexer(InputStream(sql))))
+        parser.removeErrorListeners()
         tree = parser.parse()
         if sum(not isinstance(x, TerminalNode) for x in tree.children) > 1 \
         or sum(not isinstance(x, TerminalNode) for x in tree.children[0].children) > 1:
@@ -199,6 +200,36 @@ def format(value, coldata=None):
                 value = value.encode("utf-8").decode("latin1")
             result = "'%s'" % value.replace("'", "''")
     return result
+
+
+def terminate(sql, data=None):
+    """
+    Returns given SQL statement terminated with semicolon, if not already.
+
+    Adds a linefeed before terminator if statement ends with a line comment.
+
+    @param   sql   any statement of recognized type, e.g. "CREATE VIEW foo AS SELECT 3 -- comment"
+    @param   data  parsed metadata dictionary, statement will be parsed if not given
+    """
+    sql = sql.rstrip()
+    if data is None:
+        data = {}
+        try:
+            stream = CommonTokenStream(SQLiteLexer(InputStream(sql)))
+            parser = SQLiteParser(stream)
+            parser.removeErrorListeners()
+            tree = parser.parse()
+            cc = stream.filterForChannel(0, len(stream.tokens) - 1, channel=2) or []
+            data["__comments__"]   = {x.start: x.text for x in cc}
+            data["__terminated__"] = any(isinstance(x, TerminalNode) and ";" == x.getText() and
+                                         any(x.getSourceInterval()[0] < c.start for c in cc)
+                                         for x in tree.children[0].children[1:])
+        except Exception: pass
+    if data and data.get("__terminated__"): return sql
+    if data and data.get("__comments__") \
+    and any(int(n) + len(s) >= len(sql) for n, s in data["__comments__"].items()):
+        sql += "\n"
+    return sql if sql.endswith(";") else (sql + ";")
 
 
 def uni(x, encoding="utf-8"):
@@ -381,6 +412,7 @@ class Parser(object):
     def __init__(self):
         self._category = None # "CREATE TABLE" etc
         self._stream   = None # antlr TokenStream
+        self._tree     = None # Parsed context tree
         self._repls    = []   # [(start index, end index, replacement)]
 
 
@@ -434,6 +466,7 @@ class Parser(object):
                 logger.error(error)
                 return None, error
             self._category = name
+            self._tree = tree
             return ctx, None
 
         def build(ctx):
@@ -456,9 +489,11 @@ class Parser(object):
                 else: result.pop("schema", None)
                 self.rename_schema(ctx, renames)
 
-            cc = self._stream.filterForChannel(0, len(self._stream.tokens) - 1, channel=2)
-            result["__comments__"] = [x.text for x in cc or []]
-
+            cc = self._stream.filterForChannel(0, len(self._stream.tokens) - 1, channel=2) or []
+            result["__comments__"] = {x.start: x.text for x in cc}
+            result["__terminated__"] = any(isinstance(x, TerminalNode) and ";" == x.getText() and
+                                           any(x.getSourceInterval()[0] < c.start for c in cc)
+                                           for x in self._tree.children[0].children[1:])
             return result
 
         result, error, tries = None, None, 0
@@ -1096,7 +1131,7 @@ class Generator(object):
         ns = {"Q":    self.quote,   "LF": self.linefeed, "PRE": self.indentation,
               "PAD":  self.padding, "CM": self.comma,    "WS":  self.token,
               "GLUE": self.glue, "data": data, "root": data, "collapse": collapse_whitespace,
-              "Template": step.Template, "templates": templates}
+              "Template": step.Template, "templates": templates, "terminate": terminate}
 
         # Generate SQL, using unique tokens for whitespace-sensitive parts,
         # replaced after stripping down whitespace in template result.

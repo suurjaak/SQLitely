@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.09.2023
+@modified    30.09.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3995,16 +3995,16 @@ class DatabasePage(wx.Panel):
         elif "copy" == cmd:
             target = args[0]
             if "related" == target:
-                sqls = defaultdict(OrderedDict) # {category: {name: sql}}
+                items = defaultdict(OrderedDict) # {category: {name: {"sql", "meta"}}}
                 names = args[2:]
                 for name in args[2:]:
                     category = next(c for c, xx in self.db.schema.items() if name in xx)
-                    sqls[category][name] = self.db.get_sql(category, name)
+                    items[category][name] = self.db.get_category(category, name)
                     for category2, items2 in self.db.get_full_related(category, name)[0].items():
                         for name2, item2 in items2.items():
-                            sqls[category2][name2] = item2["sql"]
-                clipboard_copy("\n\n".join(x.rstrip(";\n") + ";" for c in sqls
-                                           for x in sqls[c].values()) + "\n\n")
+                            items[category2][name2] = item2
+                clipboard_copy("\n\n".join(grammar.terminate(x["sql"], x.get("meta")) for c in items
+                                           for x in items[c].values()) + "\n\n")
                 guibase.status("Copied SQL to clipboard.")
         elif "configure" == cmd: # configure linenumbers pragma True
             name, args = args[0], args[1:]

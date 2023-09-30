@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.09.2023
+@modified    30.09.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -5846,18 +5846,17 @@ class SchemaObjectPage(wx.Panel):
                                   props, data, autocomp=words, onclose=onclose)
         wx_accel.accelerate(dlg)
         if wx.ID_OK != dlg.ShowModal(): return
-        sql = dlg.GetData().get("sql", "").strip().replace("\r\n", "\n")
+        sql = dlg.GetData().get("sql", "").strip().replace("\r\n", "\n").rstrip(";")
         dlg.Destroy()
-        if not sql.endswith(";"): sql += ";"
         if not sql or sql == data["sql"]: return
 
         logger.info("Importing %s definition from SQL:\n\n%s", self._category, sql)
         meta, _ = grammar.parse(sql, self._category)
+        sql = grammar.terminate(sql, meta)
         self._item.update(sql=sql, sql0=sql, meta=self._AssignColumnIDs(meta))
         self._sql0_applies = True
         self._Populate()
         self._PostEvent(modified=True)
-
 
 
     def _OnRefresh(self, event=None, parse=False, count=False, name0=None):

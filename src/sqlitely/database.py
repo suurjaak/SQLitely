@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.09.2023
+@modified    30.09.2023
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1013,10 +1013,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 and re.search(r"TOKENIZE\s*[\W]*icu[\W]", row["sql"], re.I):
                     continue # for row
 
-            sql = row["sql"].strip().replace("\r\n", "\n")
-            sql = re.sub("\n\s+\)[\s;]*$", "\n)", sql) # Strip trailing whitespace and ;
-            if not sql.endswith(";"): sql += ";"
-            row["sql"] = row["sql0"] = sql
+            sqlraw = row["sql"].strip().replace("\r\n", "\n")
+            sql = re.sub("\n\s+\)(?=[\s;]*$)", "\n)", sqlraw) # "\n  );\n" -> "\n)"
+            row["sql"], row["sql0"], row["sqlraw"] = sql, sql, sqlraw
             self.schema[row["type"]][row["name"]] = row
 
         index, total = 0, sum(len(vv) for vv in self.schema.values())
@@ -1034,7 +1033,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 opts["__id__"] = opts0.get("__id__") or next(self.id_counter)
 
                 # Retrieve metainfo from PRAGMA, or use previous if unchanged
-                if mycategory in ("table", "view") and opts0 and opts["sql0"] == opts0["sql0"]:
+                if mycategory in ("table", "view") and opts0 and opts["sqlraw"] == opts0["sqlraw"]:
                     opts["columns"] = opts0.get("columns") or []
                 elif mycategory in ("table", "index", "view"):
                     pragma = "index_info" if "index" == mycategory else "table_info"
@@ -1058,12 +1057,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
                 # Use previous metainfo if unchanged
                 meta, sql = None, None
-                if opts0 and opts0.get("meta") and opts["sql0"] == opts0["sql0"]:
+                if opts0 and opts0.get("meta") and opts["sqlraw"] == opts0["sqlraw"]:
                     meta, sql = opts0["meta"], opts0["sql"]
-                    opts["__parsed__"] = True
+                    opts.update(sql0=opts0["sql0"], __parsed__=True)
                 if meta: opts.update(meta=meta)
-                if sql and (not meta or not meta.get("__comments__")):
-                    opts.update(sql=sql)
+                if sql and not meta.get("__comments__"):
+                    opts.update(sql=grammar.terminate(sql, meta))
                 if meta and "table" == mycategory and meta.get("columns"):
                     opts["columns"] = meta["columns"]
 
@@ -1083,9 +1082,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             for myname, opts in itemmap.items():
                 if category and name and not util.lceq(myname, name): continue # for myname
 
-                opts0 = schema0.get(mycategory, {}).get(myname, {})
-
-                # Parse metainfo from SQL if commanded and previous not available
+                # Parse metainfo from SQL if commanded and not already available
                 meta, sql = None, None
                 if parse and not opts.get("__parsed__"):
                     meta, _ = grammar.parse(opts["sql0"])
@@ -1102,11 +1099,15 @@ WARNING: misuse can easily result in a corrupt database file.""",
                                            "SQLite columns %s.\nParsed columns %s.",
                                            grammar.quote(myname), opts["columns"], meta["columns"])
                             meta = None
+                    if meta:
+                        opts.update(sql0=grammar.terminate(opts["sql0"], meta))
                     if generate and meta and not meta.get("__comments__"):
                         sql, _ = grammar.generate(meta)
                 if meta: opts.update(meta=meta)
                 if sql and (not meta or not meta.get("__comments__")):
                     opts.update(sql=sql)
+                elif meta:
+                    opts.update(sql=opts["sql0"])
                 if meta and "table" == mycategory and meta.get("columns"):
                     opts["columns"] = meta["columns"]
 
