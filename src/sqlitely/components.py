@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.09.2023
+@modified    01.10.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10785,12 +10785,20 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
         def cmd(*args):
             return lambda e: self._page.handle_command(*args)
-        def clipboard_copy(value, label, *_, **__):
-            if wx.TheClipboard.Open():
-                if callable(value): value = value()
-                cls = wx.BitmapDataObject if isinstance(value, wx.Bitmap) else wx.TextDataObject
-                wx.TheClipboard.SetData(cls(value)), wx.TheClipboard.Close()
-                if label: guibase.status("Copied %s to clipboard.", label)
+        def on_copy(event):
+            text, label = None, None
+            if event.Id in (item_bmp.Id, item_sql.Id):
+                self._page.handle_command("copy", "sql+bmp", None, *names)
+            elif event.Id == item_sqlall.Id:
+                self._page.handle_command("copy", "related", None, *names)
+            elif event.Id == item_svg.Id:
+                text, label = self.MakeTemplate("SVG", items=names), "diagram SVG"
+            elif event.Id == item_copy.Id:
+                text = "\n".join(map(grammar.quote, names))
+                label = util.plural("name", names, numbers=False)
+            if text and wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text)), wx.TheClipboard.Close()
+            if label: guibase.status("Copied %s to clipboard.", label)
 
         if not self._layout.Selection:
             submenu, keys = wx.Menu(), []
@@ -10805,6 +10813,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         else:
             items = list(map(self._layout.GetItem, self._layout.Selection))
             items.sort(key=lambda o: o["name"].lower())
+            names = [o["name"] for o in items]
             categories = {}
             for o in items: categories.setdefault(o["type"], []).append(o)
             title = "%s %s" % (
@@ -10830,7 +10839,8 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             item_copy   = copymenu.Append(wx.ID_ANY, "Copy &%s" % util.plural("name", items, numbers=False))
             item_sql    = copymenu.Append(wx.ID_ANY, "Copy CREATE S&QL\t(%s-C)" % controls.KEYS.NAME_CTRL)
             item_sqlall = copymenu.Append(wx.ID_ANY, "&Copy all &related SQL")
-            item_bmp    = copymenu.Append(wx.ID_ANY, "Copy as &bitmap")
+            copymenu.AppendSeparator()
+            item_bmp    = copymenu.Append(wx.ID_ANY, "Copy as &bitmap\t(%s-C)" % controls.KEYS.NAME_CTRL)
             item_svg    = copymenu.Append(wx.ID_ANY, "Copy as &SVG")
 
             exportmenu = wx.Menu()
@@ -10860,23 +10870,11 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                 item_trunc.Enable(can_trunc)
             item_drop = menu.Append(wx.ID_ANY, "Drop %s" % catlabel)
 
-            names = [o["name"] for o in items]
             menu.Bind(wx.EVT_MENU, cmd("data",   None, *names), item_data)
             menu.Bind(wx.EVT_MENU, cmd("schema", None, *names), item_schema)
             menu.Bind(wx.EVT_MENU, cmd("drop",   None, names),  item_drop)
 
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, "\n".join(map(grammar.quote, names)),
-                                                     util.plural("name", names, numbers=False)), item_copy)
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
-                      lambda: "\n\n".join(
-                          self._db.get_sql(c, o["name"])
-                          for c, oo in categories.items() for o in oo
-                      ), "CREATE SQL"), item_sql)
-            menu.Bind(wx.EVT_MENU, cmd("copy", "related", None, *names), item_sqlall)
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
-                lambda: self.MakeBitmap(items=names), "diagram bitmap"), item_bmp)
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
-                lambda: self.MakeTemplate("SVG", items=names), "diagram SVG"), item_svg)
+            for item in copymenu.MenuItems: menu.Bind(wx.EVT_MENU, on_copy, item)
 
             menu.Bind(wx.EVT_MENU, cmd("export", "tables",    *names), item_export_indiv)
             menu.Bind(wx.EVT_MENU, cmd("export", "multiitem", *names), item_export_combine) if item_export_combine else None
@@ -11331,14 +11329,8 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             self._layout.SortItems(key=lambda o: (o["type"], o["name"].lower()))
             self.Redraw()
         elif event.CmdDown() and event.UnicodeKey == ord('C'):
-            items.sort(key=lambda o: o["name"].lower())
-            categories = {}
-            for o in items: categories.setdefault(o["type"], []).append(o)
-            text = "\n\n".join(self._db.get_sql(c, o["name"])
-                               for c, oo in categories.items() for o in oo)
-            if wx.TheClipboard.Open():
-                wx.TheClipboard.SetData(wx.TextDataObject(text)), wx.TheClipboard.Close()
-                guibase.status("Copied CREATE SQL to clipboard.")
+            names = sorted(o["name"] for o in items)
+            self._page.handle_command("copy", "sql+bmp", None, *names)
         elif event.KeyCode in controls.KEYS.PLUS + controls.KEYS.MINUS:
             self.Zoom += self.ZOOM_STEP * (1 if event.KeyCode in controls.KEYS.PLUS else -1)
         elif event.KeyCode in controls.KEYS.MULTIPLY:

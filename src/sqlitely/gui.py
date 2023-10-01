@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.09.2023
+@modified    01.10.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -3993,11 +3993,10 @@ class DatabasePage(wx.Panel):
         elif "import" == cmd:
             components.ImportDialog(self, self.db).ShowModal()
         elif "copy" == cmd:
-            target = args[0]
+            target, names = args[0], args[2:]
             if "related" == target:
                 items = defaultdict(OrderedDict) # {category: {name: {"sql", "meta"}}}
-                names = args[2:]
-                for name in args[2:]:
+                for name in names:
                     category = next(c for c, xx in self.db.schema.items() if name in xx)
                     items[category][name] = self.db.get_category(category, name)
                     for category2, items2 in self.db.get_full_related(category, name)[0].items():
@@ -4006,6 +4005,17 @@ class DatabasePage(wx.Panel):
                 clipboard_copy("\n\n".join(grammar.terminate(x["sql"], x.get("meta")) for c in items
                                            for x in items[c].values()) + "\n\n")
                 guibase.status("Copied SQL to clipboard.")
+            elif "sql+bmp" == target:
+                bmp = self.diagram.MakeBitmap(items=names)
+                sqls = [self.db.get_sql(c, n) for n in names
+                        for c in (c for c, nn in self.db.schema.items() if n in nn)]
+                if wx.TheClipboard.Open():
+                    obj = wx.DataObjectComposite()
+                    obj.Add(wx.TextDataObject("\n\n".join(sqls)), preferred=True)
+                    obj.Add(wx.BitmapDataObject(bmp))
+                    wx.TheClipboard.SetData(obj), wx.TheClipboard.Close()
+                guibase.status("Copied CREATE SQL and diagram bitmap to clipboard.")
+
         elif "configure" == cmd: # configure linenumbers pragma True
             name, args = args[0], args[1:]
             if name in ("linenumbers", "wordwrap"):
@@ -4566,11 +4576,12 @@ class DatabasePage(wx.Panel):
         """Handler for copying from diagram, opens popup menu.."""
         menu = wx.Menu()
 
-        item_bmp   = wx.MenuItem(menu, -1, "Copy as &bitmap")
-        item_svg   = wx.MenuItem(menu, -1, "Copy as &SVG")
-        item_names = wx.MenuItem(menu, -1, "Copy &names")
+        label = util.plural("name", self.diagram.Selection or self.diagram.Items, numbers=False)
+        item_names = wx.MenuItem(menu, -1, "Copy &%s" % label)
         item_sql   = wx.MenuItem(menu, -1, "Copy CREATE S&QL")
         item_all   = wx.MenuItem(menu, -1, "Copy all &related SQL")
+        item_bmp   = wx.MenuItem(menu, -1, "Copy as &bitmap")
+        item_svg   = wx.MenuItem(menu, -1, "Copy as &SVG")
 
         menu.Append(item_bmp)
         menu.Append(item_svg)
@@ -4581,29 +4592,21 @@ class DatabasePage(wx.Panel):
         for x in menu.MenuItems if not self.diagram.Items else (): x.Enable(False)
 
         def handler(event):
-            names = sorted(self.diagram.Selection)
-            if event.Id == item_bmp.Id:
-                bmp, label = self.diagram.MakeBitmap(items=names), "diagram bitmap"
-                if wx.TheClipboard.Open():
-                    wx.TheClipboard.SetData(wx.BitmapDataObject(bmp)), wx.TheClipboard.Close()
-            else:
-                names = names or sum((list(xx) for c, xx in self.db.schema.items()
-                                      if c in ("table", "view")), [])
-                if event.Id == item_all.Id:
-                    self.handle_command("copy", "related", None, *names)
-                    return
-                if event.Id == item_svg.Id:
-                    text, label = self.diagram.MakeTemplate("SVG", items=names), "diagram SVG"
-                elif event.Id == item_names.Id:
-                    text = "\n".join(map(grammar.quote, names))
-                    label = util.plural("name", names, numbers=False)
-                elif event.Id == item_sql.Id:
-                    sqls = [self.db.get_sql(c, n) for n in names
-                            for c in (c for c, nn in self.db.schema.items() if n in nn)]
-                    text, label = "\n\n".join(sqls), "CREATE SQL"
-                if wx.TheClipboard.Open():
-                    wx.TheClipboard.SetData(wx.TextDataObject(text)), wx.TheClipboard.Close()
-            guibase.status("Copied %s to clipboard.", label)
+            names = sorted(self.diagram.Selection) or \
+                    sum((list(xx) for c, xx in self.db.schema.items() if c in ("table", "view")), [])
+            text, label = None, None
+            if event.Id in (item_bmp.Id, item_sql.Id):
+                self.handle_command("copy", "sql+bmp", None, *names)
+            elif event.Id == item_all.Id:
+                  self.handle_command("copy", "related", None, *names)
+            elif event.Id == item_svg.Id:
+                text, label = self.diagram.MakeTemplate("SVG", items=names), "diagram SVG"
+            elif event.Id == item_names.Id:
+                text = "\n".join(map(grammar.quote, names))
+                label = util.plural("name", names, numbers=False)
+            if text and wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(text)), wx.TheClipboard.Close()
+            if label: guibase.status("Copied %s to clipboard.", label)
         for item in menu.MenuItems: menu.Bind(wx.EVT_MENU, handler, item)
 
         rect = controls.get_tool_rect(self.tb_diagram, wx.ID_COPY)
