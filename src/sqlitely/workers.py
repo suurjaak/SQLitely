@@ -27,6 +27,7 @@ import traceback
 import six
 from six.moves import queue
 import step
+from step.step import escape_html
 
 from . lib import util
 from . import conf
@@ -147,8 +148,7 @@ class SearchThread(WorkerThread):
         """Returns word/phrase matcher regex."""
         if not words: return re.compile("(?!)") # Match nothing
         words_re = [x if isinstance(w, tuple) else x.replace(r"\*", ".*")
-                    for w in words
-                    for x in [re.escape(step.step.escape_html(flatten(w)[0]))]]
+                    for w in words for x in [re.escape(escape_html(flatten(w)[0]))]]
         patterns = "(%s)" % "|".join(words_re)
         # For replacing matching words with <b>words</b>
         return re.compile(patterns, 0 if case else re.IGNORECASE)
@@ -229,7 +229,7 @@ class SearchThread(WorkerThread):
                     cursor = search["db"].execute(sql, params)
                     row = cursor.fetchone()
                     if not row:
-                        mytexts.append(step.step.escape_html(item["name"]))
+                        mytexts.append(escape_html(util.ellipsize(item["name"])))
                         continue # for item
 
                     result["output"] = tpl_item.expand(category=category, item=item)
@@ -266,8 +266,8 @@ class SearchThread(WorkerThread):
                     result = dict(result, output="", map={})
 
                 mytexts.append("<b>%s</b> (<a href='#%s'><font color='%s'>%s</font></a>)" % (
-                    step.step.escape_html(item["name"]), step.step.escape_html(item["name"]),
-                    conf.LinkColour, util.plural("result", count)
+                    escape_html(util.ellipsize(item["name"])), escape_html(item["name"]),
+                    conf.LinkColour, util.plural("result", count).replace(" ", "&nbsp;")
                 ))
                 if not self._is_working \
                 or result["count"] >= conf.MaxSearchResults: break # for item
