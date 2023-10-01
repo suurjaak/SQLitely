@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.09.2023
+@modified    01.10.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -20,7 +20,7 @@ from . lib import util
 from . import conf
 
 # Modules imported inside templates:
-#import base64, collections, itertools, json, logging, math, os, pyparsing, sys, six, wx, yaml
+#import base64, collections, itertools, json, logging, math, os, pyparsing, sys, six, step, wx, yaml
 #from sqlitely import conf, grammar, images, searchparser, templates
 
 """Regex for matching unprintable characters (\x00 etc)."""
@@ -269,7 +269,7 @@ HTML data export template.
 @param   ?progress    callback(name, count) returning whether to cancel, if any
 """
 DATA_HTML = """<%
-from sqlitely.lib.vendor.step import Template
+from step import Template
 from sqlitely import templates
 %>{{! Template(templates.DATA_HTML_HEADER).expand(title=title, multiple=get("multiple")) }}
 <body>
@@ -293,7 +293,7 @@ HTML export template for multiple items.
 """
 DATA_HTML_MULTIPLE = """<%
 import os
-from sqlitely.lib.vendor.step import Template
+from step import Template
 from sqlitely.lib import util
 from sqlitely import templates
 
@@ -1668,7 +1668,7 @@ Database statistics HTML.
 @param   ?running  whether analysis is currently running
 """
 STATISTICS_HTML = """<%
-from sqlitely.lib.vendor.step import Template
+from step import Template
 from sqlitely.lib import util
 from sqlitely import conf, templates
 %>
@@ -1832,7 +1832,7 @@ HTML statistics export template.
 """
 DATA_STATISTICS_HTML = """<%
 import base64, math
-from sqlitely.lib.vendor.step import Template
+from step import Template
 from sqlitely.lib import util
 from sqlitely import conf, grammar, images, templates
 from sqlitely.templates import urlquote
@@ -2586,7 +2586,7 @@ Text statistics export template.
 """
 DATA_STATISTICS_TXT = """<%
 import math
-from sqlitely.lib.vendor.step import Template
+from step import Template
 from sqlitely.lib import util
 from sqlitely import grammar, templates
 
@@ -2910,7 +2910,7 @@ Database dump SQL template.
 DUMP_SQL = """<%
 import itertools, logging, os
 from sqlitely.lib import util
-from sqlitely.lib.vendor.step import Template
+from step import Template
 from sqlitely import grammar, templates
 
 logger = logging.getLogger("sqlitely")

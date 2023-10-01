@@ -28,6 +28,7 @@ import webbrowser
 
 import six
 from six.moves import urllib
+import step
 import wx
 import wx.adv
 import wx.html
@@ -42,7 +43,6 @@ from . lib import controls
 from . lib.controls import ColourManager
 from . lib import util
 from . lib import wx_accel
-from . lib.vendor import step
 
 from . import components
 from . import conf

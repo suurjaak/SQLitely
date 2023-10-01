@@ -88,15 +88,13 @@ Built using the following open-source software:
 - pytz (https://pythonhosted.org/pytz/)
 - PyYAML (https://pypi.org/project/PyYAML/)
 - six (https://pypi.org/project/six/)
+- step (https://pypi.org/project/step-template/)
 - wxPython (https://wxpython.org)
 - xlrd (https://pypi.org/project/xlrd)
 - XlsxWriter (https://pypi.org/project/XlsxWriter)
 
 Includes sqlite_analyzer, a command-line utility for table space analysis,
 (c) 2000, D. Richard Hipp, https://www.sqlite.org.
-
-Includes a modified version of step, Simple Template Engine for Python,
-(c) 2012, Daniele Mazzocchio, https://github.com/dotpy/step.
 
 Includes a modified version of SQLite.g4 from sqlite-parser,
 (c) 2013, Bart Kiers, https://github.com/bkiers/sqlite-parser.

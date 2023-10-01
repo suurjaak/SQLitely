@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    30.09.2023
+@modified    01.10.2023
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -22,9 +22,9 @@ import uuid
 
 from antlr4 import InputStream, CommonTokenStream, TerminalNode, Token
 import six
+import step
 
 from .. lib import util
-from .. lib.vendor import step
 from . import templates
 from . SQLiteLexer import SQLiteLexer
 from . SQLiteParser import SQLiteParser

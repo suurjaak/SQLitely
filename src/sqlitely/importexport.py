@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.09.2023
+@modified    01.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -40,9 +40,9 @@ except ImportError: xlrd = None
 try: import xlsxwriter
 except ImportError: xlsxwriter = None
 import six
+import step
 
 from . lib import util
-from . lib.vendor import step
 from . import conf
 from . import grammar
 from . import templates

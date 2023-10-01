@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    21.09.2023
+@modified    01.10.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -21,12 +21,12 @@ import os
 
 from PIL import Image, ImageColor, ImageFont
 import six
+import step
 try:
     import wx
     import wx.adv
 except ImportError: wx = None
 
-from . lib.vendor import step
 from . lib import util
 try: from . lib import controls
 except ImportError: controls = None

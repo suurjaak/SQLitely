@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.08.2023
+@modified    01.10.2023
 ------------------------------------------------------------------------------
 """
 import os
@@ -61,7 +61,7 @@ setuptools.setup(
     keywords             = "sqlite database",
 
     install_requires     = ["appdirs", "chardet", "openpyxl", "Pillow", "pyparsing", "pytz",
-                            "six", "wxPython>=4.0", "xlrd", "XlsxWriter"],
+                            "six", "step-template>=0.0.4", "wxPython>=4.0", "xlrd", "XlsxWriter"],
     extras_require       = {
         ':python_version < "3"': ["antlr4-python2-runtime==4.9"],
         ':python_version > "3"': ["antlr4-python3-runtime==4.9"],

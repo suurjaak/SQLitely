@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2023
+@modified    01.10.2023
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -26,9 +26,9 @@ import traceback
 
 import six
 from six.moves import queue
+import step
 
 from . lib import util
-from . lib.vendor import step
 from . import conf
 from . import database
 from . import grammar
@@ -144,7 +144,7 @@ class SearchThread(WorkerThread):
         if not words: return re.compile("(?!)") # Match nothing
         words_re = [x if isinstance(w, tuple) else x.replace(r"\*", ".*")
                     for w in words
-                    for x in [re.escape(step.escape_html(flatten(w)[0]))]]
+                    for x in [re.escape(step.step.escape_html(flatten(w)[0]))]]
         patterns = "(%s)" % "|".join(words_re)
         # For replacing matching words with <b>words</b>
         return re.compile(patterns, 0 if case else re.IGNORECASE)
@@ -225,7 +225,7 @@ class SearchThread(WorkerThread):
                     cursor = search["db"].execute(sql, params)
                     row = cursor.fetchone()
                     if not row:
-                        mytexts.append(step.escape_html(item["name"]))
+                        mytexts.append(step.step.escape_html(item["name"]))
                         continue # for item
 
                     result["output"] = tpl_item.expand(category=category, item=item)
@@ -262,7 +262,7 @@ class SearchThread(WorkerThread):
                     result = dict(result, output="", map={})
 
                 mytexts.append("<b>%s</b> (<a href='#%s'><font color='%s'>%s</font></a>)" % (
-                    step.escape_html(item["name"]), step.escape_html(item["name"]),
+                    step.step.escape_html(item["name"]), step.step.escape_html(item["name"]),
                     conf.LinkColour, util.plural("result", count)
                 ))
                 if not self._is_working \

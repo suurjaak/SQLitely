@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.09.2023
+@modified    01.10.2023
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -25,9 +25,9 @@ import sys
 import tempfile
 
 import six
+import step
 
 from . lib.util import CaselessDict
-from . lib.vendor import step
 from . lib import util
 from . import conf
 from . import grammar

@@ -40,6 +40,7 @@ import PIL
 import pytz
 import six
 from six.moves import queue, urllib
+import step
 import wx
 import wx.adv
 import wx.grid
@@ -56,7 +57,6 @@ from . lib import controls
 from . lib.controls import ColourManager
 from . lib import util
 from . lib import wx_accel
-from . lib.vendor import step
 
 from . import conf
 from . import database
