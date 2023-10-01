@@ -1390,6 +1390,7 @@ def convert_lf(s, newline=os.linesep):
     return re.sub("(\r(?!\n))|((?<!\r)\n)|(\r\n)", newline, s)
 
 
+@util.memoize
 def get_text_extent(font, text):
     """Returns (width, height) of text in specified font."""
     if hasattr(font, "getsize"): return font.getsize(text)     # <  PIL 9.2.0
@@ -1553,9 +1554,9 @@ class xlsx_writer(object):
         # For calculating column widths
         self._fonts = collections.defaultdict(lambda: FONT_XLSX)
         self._fonts["bold"] = FONT_XLSX_BOLD
-        unit_width_default = get_text_extent(self._fonts[None], "0")[0]
+        unit_width_default = get_text_extent(self._fonts[None], "0")[0] or 1
         self._unit_widths = collections.defaultdict(lambda: unit_width_default)
-        self._unit_widths["bold"] = get_text_extent(self._fonts["bold"], "0")[0]
+        self._unit_widths["bold"] = get_text_extent(self._fonts["bold"], "0")[0] or 1
 
         if sheetname: # Create default sheet
             self.add_sheet(sheetname)
@@ -1640,8 +1641,9 @@ class xlsx_writer(object):
                       if isinstance(v, six.text_type)
                       else v.strftime("%Y-%m-%d %H:%M") if isinstance(v, datetime.datetime)
                       else v if isinstance(v, six.string_types) else str(v))
-            pixels = max(get_text_extent(self._fonts[fmt_name], x)[0]
-                         for x in strval.split("\n"))
+            widths = [sum(get_text_extent(self._fonts[fmt_name], x)[0] for x in line)
+                      for line in strval.splitlines()]
+            pixels = max(widths) if widths else 0
             width = float(pixels) / self._unit_widths[fmt_name] + 1
             if not merge_cols and width > self._col_widths[self._sheet.name][c]:
                 self._col_widths[self._sheet.name][c] = width
