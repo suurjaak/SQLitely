@@ -3005,6 +3005,7 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_BUTTON,    self.on_diagram_action,     button_action)
         self.Bind(wx.EVT_COMBOBOX,  self.on_diagram_find,       combo_find)
         self.Bind(wx.EVT_CHAR_HOOK, self.on_diagram_find_char,  combo_find)
+        self.Bind(wx.EVT_CHAR_HOOK, self.on_diagram_focus_find, diagram)
 
 
     def create_page_sql(self, notebook):
@@ -4494,6 +4495,13 @@ class DatabasePage(wx.Panel):
                 self.diagram.EnsureVisible(self.diagram.Selection[0], force=True)
         else: # Launch delayed timer to not apply search on every keypress
             self.timers["diagram_find"] = wx.CallLater(500, self.on_diagram_find)
+
+
+    def on_diagram_focus_find(self, event):
+        """Handler for keypress in diagram, focuses quickfind on Ctrl+F."""
+        if event.CmdDown() and event.KeyCode in [ord("F")]:
+            self.combo_diagram_find.SetFocus()
+        else: event.Skip()
 
 
     def on_diagram_zoom_fit(self, event=None):
