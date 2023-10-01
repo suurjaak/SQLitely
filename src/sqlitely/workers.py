@@ -73,9 +73,13 @@ class WorkerThread(threading.Thread):
         Stops the worker thread. Obtained results will be posted back,
         unless drop is false.
         """
+        if not self._is_running: return
         self._is_running = False
         self._is_working = False
         self._drop_results = drop
+        while not self._queue.empty():
+            try: self._queue.get(block=False)
+            except queue.Empty: break
         self._queue.put(None) # To wake up thread waiting on queue
 
 
@@ -135,7 +139,7 @@ class SearchThread(WorkerThread):
     """
 
     def __init__(self, callback):
-        super(self.__class__, self).__init__(callback)
+        super(SearchThread, self).__init__(callback)
         self.parser = SearchQueryParser()
 
 
