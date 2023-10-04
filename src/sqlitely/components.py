@@ -11234,7 +11234,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         elif event.Dragging() or event.LeftUp():
             # Continue or stop item or selection rectangle drag
             event.Skip()
-            if event.Dragging() and "win" in sys.platform:
+            if event.Dragging() and "win" in sys.platform and self._dragpos:
                 # Windows produces intermediary events with a large jump when out of bounds
                 dragpos = wx.Point(self._dragpos) - viewport.TopLeft
                 if not all(map(wx.Rect(self.Size).Contains, (event.Position, dragpos))) \
