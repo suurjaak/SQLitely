@@ -21,6 +21,7 @@ CHANGELOG
 - fix user-defined function remaining inactive if saved without explicit compiling
 - fix numeric spinctrls in pragma editor having invalid range
 - fix detecting multiple statements in user-entered CREATE SQL
+- fix ambiguity in parsing INDEX expressions with COLLATE
 - fix Excel export error, from breaking changes in PIL
 - drop step as a vendored library, use from public package index instead
 
