@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.10.2023
+@modified    03.10.2023
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1390,7 +1390,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         @param   category   "table" | "index" | "trigger" | "view" if not everything
         @param   name       category item name if not everything in category,
                             or a list of names
-        @param   column     named table column to return SQL for
+        @param   column     named table/view column to return SQL for, or index column or expression
         @param   indent     whether to format SQL with linefeeds and indentation
         @param   transform  {"flags":   flags to toggle, like {"exists": True},
                              "renames": renames to perform in SQL statement body,
@@ -1415,11 +1415,13 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if names and myname.lower() not in names:
                     continue # for myname, opts
 
-                if names and column and mycategory in ("table", "view"):
-                    col = next((c for c in opts["columns"]
-                                if util.lceq(c["name"], column)), None)
+                if names and column and mycategory in ("table", "view", "index"):
+                    columns = opts["columns"]
+                    if opts.get("meta", {}).get("columns"): columns = opts["meta"]["columns"]
+                    col = next((c for c in columns if util.lceq(c.get("name") or c["expr"], column)), None)
                     if not col: continue # for myname, opts
-                    sql, err = grammar.generate(dict(col, __type__="column"), indent=False)
+                    gentype = "index column" if "index" == mycategory else "column"
+                    sql, err = grammar.generate(dict(col, __type__=gentype), indent=False)
                     if err: raise Exception(err)
                     return sql
 

@@ -24,7 +24,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    28.09.2023
+@modified    03.10.2023
 ------------------------------------------------------------------------------
 """
 
@@ -527,6 +527,18 @@ for ctype, cnstr in get_constraints():
 
 
 
+INDEX_COLUMN_DEFINITION = """
+  {{ Q(data["name"]) if "name" in data else WS(data["expr"]) if "expr" in data else "" }}
+%if data.get("collate"):
+  COLLATE {{ data["collate"] }}
+%endif
+%if data.get("order"):
+  {{ data["order"] }}
+%endif
+"""
+
+
+
 CREATE_INDEX = """
 CREATE
 
@@ -546,13 +558,7 @@ ON {{ Q(data["table"]) if "table" in data else "" }}{{ WS(" ") }}
 (
 {{ GLUE() }}
 %for i, col in enumerate(data.get("columns", [])):
-  {{ Q(col["name"]) if "name" in col else WS(col["expr"]) if "expr" in col else "" }}
-    %if col.get("collate"):
-  COLLATE {{ col["collate"] }}
-    %endif
-    %if col.get("order"):
-  {{ col["order"] }}
-    %endif
+  {{ Template(templates.INDEX_COLUMN_DEFINITION, strip=True, postprocess=collapse).expand(dict(locals(), data=col)) }}
   {{ CM("columns", i, root=root) }}
 %endfor
 {{ GLUE() }}

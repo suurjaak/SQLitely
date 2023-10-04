@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.10.2023
+@modified    04.10.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -10789,6 +10789,8 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             text, label = None, None
             if event.Id in (item_bmp.Id, item_sql.Id):
                 self._page.handle_command("copy", "sql+bmp", None, *names)
+            elif event.Id == item_sqlown.Id:
+                self._page.handle_command("copy", "owned", None, *names)
             elif event.Id == item_sqlall.Id:
                 self._page.handle_command("copy", "related", None, *names)
             elif event.Id == item_svg.Id:
@@ -10831,23 +10833,25 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             menu.AppendSeparator()
 
             item_reidx  = item_trunc = item_rename = None
-            item_data   = menu.Append(wx.ID_ANY, "Open %s &data"   % catlabel)
             item_schema = menu.Append(wx.ID_ANY, "Open %s &schema\t(Enter)" % catlabel)
+            item_data   = menu.Append(wx.ID_ANY, "Open %s &data"   % catlabel)
 
             copymenu = wx.Menu()
             menu.AppendSubMenu(copymenu, text="&Copy ..")
             item_copy   = copymenu.Append(wx.ID_ANY, "Copy &%s" % util.plural("name", items, numbers=False))
             item_sql    = copymenu.Append(wx.ID_ANY, "Copy CREATE S&QL\t(%s-C)" % controls.KEYS.NAME_CTRL)
-            item_sqlall = copymenu.Append(wx.ID_ANY, "&Copy all &related SQL")
+            item_sqlown = copymenu.Append(wx.ID_ANY, "Copy &owned SQL")
+            item_sqlall = copymenu.Append(wx.ID_ANY, "Copy all &related SQL")
             copymenu.AppendSeparator()
             item_bmp    = copymenu.Append(wx.ID_ANY, "Copy as &bitmap\t(%s-C)" % controls.KEYS.NAME_CTRL)
             item_svg    = copymenu.Append(wx.ID_ANY, "Copy as &SVG")
 
             exportmenu = wx.Menu()
             menu.AppendSubMenu(exportmenu, text="&Export ..")
-            item_export_indiv  = exportmenu.Append(wx.ID_ANY, "Export &data to file")
-            item_export_combine = exportmenu.Append(wx.ID_ANY, "Export data to sing&le file") \
+            item_export_indiv  = exportmenu.Append(wx.ID_ANY, "Export data to &file")
+            item_export_combine = exportmenu.Append(wx.ID_ANY, "Export data to &single file") \
                                  if len(items) > 1 else None
+            item_export_data   = exportmenu.Append(wx.ID_ANY, "Export data to another &database") if "table" in categories else None
             item_export_schema = exportmenu.Append(wx.ID_ANY, "Export structure to another data&base")
             item_export_image  = exportmenu.Append(wx.ID_ANY, "Export diagram &image")
             menu.AppendSeparator()
@@ -10870,14 +10874,15 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                 item_trunc.Enable(can_trunc)
             item_drop = menu.Append(wx.ID_ANY, "Drop %s" % catlabel)
 
-            menu.Bind(wx.EVT_MENU, cmd("data",   None, *names), item_data)
             menu.Bind(wx.EVT_MENU, cmd("schema", None, *names), item_schema)
-            menu.Bind(wx.EVT_MENU, cmd("drop",   None, names),  item_drop)
+            menu.Bind(wx.EVT_MENU, cmd("data",   None, *names), item_data)
+            menu.Bind(wx.EVT_MENU, cmd("drop",   None, *names), item_drop)
 
             for item in copymenu.MenuItems: menu.Bind(wx.EVT_MENU, on_copy, item)
 
             menu.Bind(wx.EVT_MENU, cmd("export", "tables",    *names), item_export_indiv)
             menu.Bind(wx.EVT_MENU, cmd("export", "multiitem", *names), item_export_combine) if item_export_combine else None
+            menu.Bind(wx.EVT_MENU, cmd("export", "data",      *names), item_export_data) if item_export_data else None
             menu.Bind(wx.EVT_MENU, cmd("export", "structure", *names), item_export_schema)
             menu.Bind(wx.EVT_MENU, cmd("export", "diagram",   *names), item_export_image)
 
@@ -11354,7 +11359,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             self._layout.SortItems(key=lambda o: (o["type"], o["name"].lower()))
             self.Redraw()
         elif event.KeyCode in controls.KEYS.DELETE and items and self._page:
-            self._page.handle_command("drop", *[None] + [[o["name"] for o in items]])
+            self._page.handle_command("drop", None, *[o["name"] for o in items])
         elif event.KeyCode in controls.KEYS.INSERT:
             self.OpenContextMenu()
         elif event.KeyCode in (wx.WXK_F2, wx.WXK_NUMPAD_F2) and items and self._page:

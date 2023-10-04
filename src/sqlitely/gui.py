@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.10.2023
+@modified    04.10.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2717,10 +2717,10 @@ class DatabasePage(wx.Panel):
 
         self.Bind(wx.EVT_BUTTON, self.on_refresh_tree_data, button_refresh)
         tree.Bind(wx.EVT_TREE_ITEM_ACTIVATED,   self.on_change_tree_data)
-        tree.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_data)
+        tree.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_tree_menu)
         tree.Bind(wx.EVT_TREE_BEGIN_LABEL_EDIT, self.on_editstart_tree)
         tree.Bind(wx.EVT_TREE_END_LABEL_EDIT,   self.on_editend_tree)
-        tree.Bind(wx.EVT_CONTEXT_MENU,          self.on_rclick_tree_data)
+        tree.Bind(wx.EVT_CONTEXT_MENU,          self.on_tree_menu)
         tree.Bind(wx.EVT_SIZE,                  self.on_size_tree)
         tree.Bind(wx.EVT_CHAR_HOOK,             self.on_key_tree)
 
@@ -2880,10 +2880,10 @@ class DatabasePage(wx.Panel):
         self.Bind(wx.EVT_BUTTON, self.on_refresh_tree_schema, button_refresh)
         self.Bind(wx.EVT_BUTTON, self.on_schema_create,  button_new)
         tree.Bind(wx.EVT_TREE_ITEM_ACTIVATED,   self.on_change_tree_schema)
-        tree.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_rclick_tree_schema)
+        tree.Bind(wx.EVT_TREE_ITEM_RIGHT_CLICK, self.on_tree_menu)
         tree.Bind(wx.EVT_TREE_BEGIN_LABEL_EDIT, self.on_editstart_tree)
         tree.Bind(wx.EVT_TREE_END_LABEL_EDIT,   self.on_editend_tree)
-        tree.Bind(wx.EVT_CONTEXT_MENU,          self.on_rclick_tree_schema)
+        tree.Bind(wx.EVT_CONTEXT_MENU,          self.on_tree_menu)
         tree.Bind(wx.EVT_SIZE,                  self.on_size_tree)
         tree.Bind(wx.EVT_CHAR_HOOK,             self.on_key_tree)
         self.Bind(components.EVT_SCHEMA_PAGE,   self.on_schema_page_event)
@@ -3450,11 +3450,14 @@ class DatabasePage(wx.Panel):
         elif "create" == cmd:
             self.notebook.SetSelection(self.pageorder[self.page_schema])
             category = args[0]
-            sourcecat, sourcename = (list(args[1:]) + [None, None])[:2]
-            meta = args[3] if len(args) > 3 else {}
+            sourcecat, sourcename, sourcecol = (list(args[1:]) + [None, None, None])[:3]
+            meta = args[4] if len(args) > 4 else {}
             newdata = {"type": category,
                        "meta": {"__type__": "CREATE %s" % category.upper()}}
             if category in ("index", "trigger"):
+                if sourcecol:
+                    newdata["meta"]["columns"] = [{"name": sourcecol}]
+                    if "trigger" == category: newdata["meta"]["action"] = grammar.SQL.UPDATE
                 if "table" == sourcecat:
                     newdata["meta"]["table"] = sourcename
                 elif "trigger" == category and "view" == sourcecat:
@@ -3523,7 +3526,7 @@ class DatabasePage(wx.Panel):
 
         elif "drop" == cmd:
             category = args[0]
-            names = args[1] if len(args) > 1 else list(self.db.schema[category])
+            names = args[1:] if len(args) > 1 else list(self.db.schema[category])
 
             lock = self.db.get_lock(category=None)
             if lock: return wx.MessageBox("%s, cannot drop." % lock,
@@ -3541,6 +3544,8 @@ class DatabasePage(wx.Panel):
             ) for c, nn in categories.items())
             if len(names) == 1:
                 itemtext = "the %s %s" % (next(iter(categories)), fmt_entity(names[0]))
+            if len(args) < 2:
+                itemtext = "all %s" % util.plural(category)
 
             if wx.YES != controls.YesNoMessageBox(
                 "Are you sure you want to drop %s?%s" % (itemtext, extra),
@@ -3678,14 +3683,13 @@ class DatabasePage(wx.Panel):
                               ), conf.Title)
 
         elif "truncate" == cmd:
-            self.on_truncate(args) if args else self.on_truncate_all()
+            self.on_truncate(names=args) if args else self.on_truncate_all()
         elif "reindex" == cmd:
             if not self.db.schema.get("index"):
                 return wx.MessageBox("No indexes to re-create.", conf.Title,
                                      wx.ICON_INFORMATION)
 
-            category = (list(args) + [None])[0]
-            names = args[1:]
+            [category], names = args[:1] or [None], args[1:]
 
             targets = indexes = list(self.db.schema["index"])
             if names and "table" == category:
@@ -3994,8 +3998,21 @@ class DatabasePage(wx.Panel):
         elif "import" == cmd:
             components.ImportDialog(self, self.db).ShowModal()
         elif "copy" == cmd:
-            target, names = args[0], args[2:]
-            if "related" == target:
+            target, [category], names = args[0], args[1:2] or [None], args[2:]
+            if category and not names: names = list(self.db.schema.get(category, []))
+            if "sql" == target:
+                if not category and not names:
+                    sql = self.db.get_sql()
+                else:
+                    items = defaultdict(OrderedDict) # {category: {name: {"sql", "meta"}}}
+                    for name in names:
+                        category = next(c for c, xx in self.db.schema.items() if name in xx)
+                        items[category][name] = self.db.get_category(category, name)
+                        sql = "\n\n".join(grammar.terminate(x["sql"], x.get("meta")) for c in self.db.CATEGORIES
+                                          if c in items for x in items[c].values()) + "\n\n"
+                clipboard_copy(sql)
+                guibase.status("Copied SQL to clipboard.")
+            elif "related" == target:
                 items = defaultdict(OrderedDict) # {category: {name: {"sql", "meta"}}}
                 for name in names:
                     category = next(c for c, xx in self.db.schema.items() if name in xx)
@@ -4003,8 +4020,19 @@ class DatabasePage(wx.Panel):
                     for category2, items2 in self.db.get_full_related(category, name)[0].items():
                         for name2, item2 in items2.items():
                             items[category2][name2] = item2
-                clipboard_copy("\n\n".join(grammar.terminate(x["sql"], x.get("meta")) for c in items
-                                           for x in items[c].values()) + "\n\n")
+                clipboard_copy("\n\n".join(grammar.terminate(x["sql"], x.get("meta")) for c in self.db.CATEGORIES
+                                           if c in items for x in items[c].values()) + "\n\n")
+                guibase.status("Copied SQL to clipboard.")
+            elif "owned" == target:
+                items = defaultdict(OrderedDict) # {category: {name: {"sql", "meta"}}}
+                for name in names:
+                    category = next(c for c, xx in self.db.schema.items() if name in xx)
+                    items[category][name] = self.db.get_category(category, name)
+                    for category2, items2 in self.db.get_related(category, name, own=True).items():
+                        for name2, item2 in items2.items():
+                            items[category2][name2] = item2
+                clipboard_copy("\n\n".join(grammar.terminate(x["sql"], x.get("meta")) for c in self.db.CATEGORIES
+                                           if c in items for x in items[c].values()) + "\n\n")
                 guibase.status("Copied SQL to clipboard.")
             elif "sql+bmp" == target:
                 bmp = self.diagram.MakeBitmap(items=names)
@@ -4042,13 +4070,17 @@ class DatabasePage(wx.Panel):
             )
 
             if "tables" == arg:
-                self.notebook.SetSelection(self.pageorder[self.page_data])
                 self.on_export_data_file(None, args[1:] or list(self.db.schema["table"]))
             elif "multiitem" == arg:
-                self.notebook.SetSelection(self.pageorder[self.page_data])
                 self.on_export_multiitem("table", names=args[1:])
             elif "data" == arg:
-                self.on_export_to_db(category="table", names=list(self.db.schema["table"]))
+                self.on_export_to_db(category="table", names=args[1:] or list(self.db.schema["table"]))
+            elif "sql" == arg:
+                [category], names = args[1:2] or [None], args[2:]
+                sql = self.db.get_sql(category, names)
+                title = "%s %s" % (category, names[0]) if category and len(names) == 1 else \
+                        util.plural(category) if category else None
+                self.save_sql(sql, title)
             elif "structure" == arg:
                 self.on_export_to_db(category="table", names=args[1:] or list(self.db.schema["table"]), data=False)
             elif "pragma" == arg:
@@ -4066,7 +4098,6 @@ class DatabasePage(wx.Panel):
                 self.diagram.SaveFile(items=args[1:], selections=False,
                                       opts=scheme.SchemaPlacement.DEFAULT_OPTIONS)
             elif "dump" == arg:
-                self.notebook.SetSelection(self.pageorder[self.page_data])
                 self.on_dump()
 
 
@@ -4438,9 +4469,8 @@ class DatabasePage(wx.Panel):
         menu.AppendSubMenu(submenu, text="Create &new ..")
         for category in database.Database.CATEGORIES:
             key = next((x for x in category if x not in keys), category[0])
-            keys.append(key)
             it = wx.MenuItem(submenu, -1, "New " + category.replace(key, "&" + key, 1))
-            submenu.Append(it)
+            submenu.Append(it), keys.append(key)
             menu.Bind(wx.EVT_MENU, cmd("create", category), it)
 
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
@@ -5623,6 +5653,7 @@ class DatabasePage(wx.Panel):
         if any(x["is_total_estimated"] for x in opts["subtotals"].values()):
             opts["is_total_estimated"] = True
 
+        self.notebook.SetSelection(self.pageorder[self.page_data])
         self.Freeze()
         try:
             self.splitter_data.Hide()
@@ -5662,6 +5693,7 @@ class DatabasePage(wx.Panel):
         if wx.ID_OK != dialog.ShowModal(): return
 
         wx.YieldIfNeeded() # Allow dialog to disappear
+        self.notebook.SetSelection(self.pageorder[self.page_data])
         extname = importexport.EXPORT_EXTS[dialog.FilterIndex]
         conf.LastExportType = extname
 
@@ -5956,9 +5988,8 @@ class DatabasePage(wx.Panel):
         menu, keys = wx.Menu(), []
         for category in database.Database.CATEGORIES:
             key = next((x for x in category if x not in keys), category[0])
-            keys.append(key)
             it = wx.MenuItem(menu, -1, "New " + category.replace(key, "&" + key, 1))
-            menu.Append(it)
+            menu.Append(it), keys.append(key)
             menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), it)
         event.EventObject.PopupMenu(menu, tuple(event.EventObject.Size))
 
@@ -6022,7 +6053,7 @@ class DatabasePage(wx.Panel):
         if truncate:
             self.on_truncate(name)
         if drop:
-            self.handle_command("drop", category, [name])
+            self.handle_command("drop", category, name)
         if close_grids:
             self.toggle_cursors(category, name, close=True)
         if reload_grids:
@@ -6161,7 +6192,7 @@ class DatabasePage(wx.Panel):
         if close and idx >= 0:
             self.notebook_data.DeletePage(idx)
         if drop:
-            self.handle_command("drop", category, [name])
+            self.handle_command("drop", category, name)
         if reindex:
             self.handle_command("reindex", category, name)
         if (modified is not None or updated is not None) and event.source:
@@ -6252,7 +6283,7 @@ class DatabasePage(wx.Panel):
             ): return
 
         exports = []
-
+        self.notebook.SetSelection(self.pageorder[self.page_data])
         for name, filename in zip(items, filenames):
             if not filename.lower().endswith(".%s" % extname):
                 filename += ".%s" % extname
@@ -7173,28 +7204,20 @@ class DatabasePage(wx.Panel):
                 event.EventObject.SetFocus()
 
 
-    def on_rclick_tree_data(self, event):
-        """
-        Handler for right-clicking an item in the tables list,
-        opens popup menu for choices to export data.
-        """
-        tree = self.tree_data
+    def on_tree_menu(self, event):
+        """Handler for opening popup menu for items in data/schema tree."""
+        tree = event.EventObject
+        while not isinstance(tree, controls.TreeListCtrl): tree = tree.Parent
         if isinstance(event, wx.ContextMenuEvent): item = tree.GetSelection()
         else: item = event.GetItem()
         if not item or not item.IsOk(): return
         data = tree.GetItemPyData(item)
         if not data: return
 
-        def select_item(item, *_, **__):
-            if not self: return
-            tree.SelectItem(item)
-        def open_data(data, *_, **__):
-            tree.FindAndActivateItem(type=data["type"], name=data["name"])
-        def open_meta(data, *_, **__):
-            if self.tree_schema.FindAndActivateItem(type=data["type"],
-                name=data["name"], level=data["type"]
-            ):
-                self.notebook.SetSelection(self.pageorder[self.page_schema])
+        def cmd(*args):
+            return lambda e: self.handle_command(*args)
+        def select_item(it, *_, **__):
+            if self: tree.SelectItem(it)
         def import_data(*_, **__):
             dlg = components.ImportDialog(self, self.db)
             if "table" == data["type"]: dlg.SetTable(data["name"], fixed=True)
@@ -7206,481 +7229,255 @@ class DatabasePage(wx.Panel):
                 if label: guibase.status("Copied %s to clipboard.", label)
         def toggle_items(node, *_, **__):
             tree.ToggleItem(node)
-        def create_object(category, *_, **__):
-            newdata = {"type": category,
-                       "meta": {"__type__": "CREATE %s" % category.upper()}}
-            self.notebook.SetSelection(self.pageorder[self.page_schema])
-            self.add_schema_page(newdata)
-
-        boldfont = wx.Font(self.Font.PointSize, wx.FONTFAMILY_SWISS,
-            wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD, faceName=self.Font.FaceName)
-
-        menu = wx.Menu()
-        item_file = item_file_multi = item_database = item_import = None
-        item_reindex = item_reindex_all = item_truncate = None
-        item_rename = item_clone = item_create = None
-        item_drop = item_drop_all = item_drop_col = None
-        if data.get("type") in database.Database.DATA_CATEGORIES: # Single table/view
-            item_name = wx.MenuItem(menu, -1, "%s %s" % (
-                        data["type"].capitalize(), fmt_entity(data["name"])))
-            item_open = wx.MenuItem(menu, -1, "&Open %s data" % data["type"])
-            item_open_meta = wx.MenuItem(menu, -1, "Open %s &schema" % data["type"])
-            item_copy      = wx.MenuItem(menu, -1, "&Copy name")
-            item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s S&QL" % data["type"])
-
-            item_name.Font = boldfont
-
-            menu.Append(item_name)
-            menu.AppendSeparator()
-            menu.Append(item_open)
-            menu.Append(item_open_meta)
-            menu.Append(item_copy)
-            menu.Append(item_copy_sql)
-
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
-                      item_name)
-            menu.Bind(wx.EVT_MENU, functools.partial(open_data, data), item_open)
-            menu.Bind(wx.EVT_MENU, functools.partial(open_meta, data), item_open_meta)
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"], "%s name" % data["type"]),
-                      item_copy)
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"], "%s SQL" % data["type"]),
-                      item_copy_sql)
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
-                      functools.partial(self.db.get_sql, data["type"], data["name"]), "%s SQL" % data["type"]), item_copy_sql)
-
-            item_file = wx.MenuItem(menu, -1, "Export %s to &file" % data["type"])
-            if data["type"] in ("table", "view"):
-                item_database = wx.MenuItem(menu, -1, "Export %s to another data&base" % data["type"])
-                item_clone    = wx.MenuItem(menu, -1, "C&lone %s" % data["type"])
-            if "table" == data["type"]:
-                item_import   = wx.MenuItem(menu, -1, "&Import into table from file")
-                item_truncate = wx.MenuItem(menu, -1, "Truncate table")
-                item_reindex  = wx.MenuItem(menu, -1, "Reindex table")
-            item_rename = wx.MenuItem(menu, -1, "Rena&me %s\t(F2)" % data["type"])
-            item_drop   = wx.MenuItem(menu, -1, "Drop %s" % data["type"])
-
-        elif "column" == data.get("type"): # Column
-            item_name = wx.MenuItem(menu, -1, 'Column "%s.%s"' % (
-                        fmt_entity(data["parent"]["name"], force=False),
-                        fmt_entity(data["name"], force=False)))
-            item_open      = wx.MenuItem(menu, -1, "&Open %s data" % data["parent"]["type"])
-            item_open_meta = wx.MenuItem(menu, -1, "Open %s &schema" % data["parent"]["type"])
-            item_copy      = wx.MenuItem(menu, -1, "&Copy name")
-            item_copy_sql  = wx.MenuItem(menu, -1, "Copy column S&QL")
-            item_renamecol = wx.MenuItem(menu, -1, "Rena&me column\t(F2)") \
-                             if "table" == data["parent"]["type"] else None
-            item_drop_col  = wx.MenuItem(menu, -1, "Drop column") \
-                             if "table" == data["parent"]["type"] else None
-
-            item_name.Font = boldfont
-
-            menu.Append(item_name)
-            menu.AppendSeparator()
-            menu.Append(item_open)
-            menu.Append(item_open_meta)
-            menu.Append(item_copy)
-            menu.Append(item_copy_sql)
-            if item_renamecol or item_drop_col:
-                menu.AppendSeparator()
-            if item_renamecol:
-                menu.Append(item_renamecol)
-            if item_drop_col:
-                if len(data["parent"]["columns"]) == 1: item_drop_col.Enable(False)
-                menu.Append(item_drop_col)
-
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
-                      item_name)
-            menu.Bind(wx.EVT_MENU, functools.partial(open_data, data["parent"]), item_open)
-            menu.Bind(wx.EVT_MENU, functools.partial(open_meta, data["parent"]), item_open_meta)
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"], "column name"), item_copy)
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
-                    functools.partial(self.db.get_sql, data["parent"]["type"], data["parent"]["name"], data["name"]),
-                "column SQL"), item_copy_sql)
-            if item_renamecol:
-                menu.Bind(wx.EVT_MENU, lambda e: tree.EditLabel(item), item_renamecol)
-            if item_drop_col:
-                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.handle_command, "drop column", data["parent"]["name"], data["name"]), item_drop_col)
-
-        elif "category" == data.get("type"): # Category list
-            item_copy = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
-            item_file = wx.MenuItem(menu, -1, "Export all %s to &file" % util.plural(data["category"]))
-            item_file_multi = wx.MenuItem(menu, -1, "Export all %s to &single file" % util.plural(data["category"]))
-
-            menu.Append(item_copy)
-
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, ", ".join(data["items"]), "%s names" % data["category"]), item_copy)
-
-            if data["category"] in ("table", "view"):
-                item_database    = wx.MenuItem(menu, -1, "Export all %s to another data&base" % util.plural(data["category"]))
-            if "table" == data["category"]:
-                item_import      = wx.MenuItem(menu, -1, "&Import into table from file")
-                item_reindex_all = wx.MenuItem(menu, -1, "Reindex all")
-
-            item_drop_all = wx.MenuItem(menu, -1, "Drop all %s" % util.plural(data["category"]))
-            item_create   = wx.MenuItem(menu, -1, "Create &new %s" % data["category"])
-        else: # Root
-            item_dump   = wx.MenuItem(menu, -1, "Save database d&ump as SQL")
-            item_database_meta = wx.MenuItem(menu, -1, "Export all to another data&base")
-            menu.Append(item_dump)
-            menu.Append(item_database_meta)
-            menu.Bind(wx.EVT_MENU, self.on_dump, item_dump)
-            menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_to_db), item_database_meta)
-            submenu = wx.Menu()
-            menu.AppendSubMenu(submenu, text="Create ne&w ..")
-            for category, key in (("table", "t"), ("view", "v")):
-                it = wx.MenuItem(submenu, -1, "New " + category.replace(key, "&" + key, 1))
-                submenu.Append(it)
-                menu.Bind(wx.EVT_MENU, functools.partial(create_object, category), it)
-            item_drop_schema = wx.MenuItem(menu, -1, "Drop everything")
-            menu.Append(item_drop_schema)
-            menu.Bind(wx.EVT_MENU, functools.partial(self.handle_command, "drop schema"),
-                      item_drop_schema)
-            item_drop_schema.Enabled = any(self.db.schema.values())
-
-        if item_file:
-            menu.AppendSeparator()
-            menu.Append(item_file)
-            if item_file_multi: menu.Append(item_file_multi)
-            if item_database: menu.Append(item_database)
-            if item_import: menu.Append(item_import)
-            if item_reindex:
-                menu.AppendSeparator()
-                menu.Append(item_reindex)
-            if item_truncate:
-                menu.Append(item_truncate)
-            if item_drop_all:
-                menu.AppendSeparator()
-                menu.Append(item_drop_all)
-                menu.Append(item_create)
-            if item_rename:
-                menu.Append(item_rename)
-            if item_reindex_all:
-                menu.Append(item_reindex_all)
-            if item_clone:
-                menu.Append(item_clone)
-            if item_drop:
-                menu.Append(item_drop)
-            names = data["items"] if "category" == data["type"] else data["name"]
-            category = data["category"] if "category" == data["type"] else data["type"]
-            menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_data_file, category, names),
-                      item_file)
-            if item_file_multi:
-                menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_multiitem, category),
-                          item_file_multi)
-            if item_database:
-                menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_to_db, category=category, names=names),
-                          item_database)
-            if item_import:
-                menu.Bind(wx.EVT_MENU, import_data, item_import)
-            if item_reindex:
-                item_reindex.Enable("index" == data["type"] or "index" in self.db.get_related("table", data["name"], own=True))
-                menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("reindex", data["type"], data["name"]), item_reindex)
-            if item_reindex_all:
-                if not self.db.schema.get("index"): item_reindex_all.Enable(False)
-                menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("reindex", data["category"]), item_reindex_all)
-            if item_truncate:
-                if not self.db.schema["table"][data["name"]].get("count"):
-                    item_truncate.Enable(False)
-                menu.Bind(wx.EVT_MENU, functools.partial(self.on_truncate, data["name"]), item_truncate)
-            if item_rename:
-                menu.Bind(wx.EVT_MENU, lambda e: tree.EditLabel(item), item_rename)
-            if item_clone:
-                menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("clone", data["type"], data["name"], "table" == data["type"]), item_clone)
-            if item_drop:
-                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.handle_command, "drop", data["type"], [data["name"]]), item_drop)
-
-        if item_drop_all:
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.handle_command, "drop", data["category"], data["items"]),
-                      item_drop_all)
-        if item_create:
-            menu.Bind(wx.EVT_MENU, functools.partial(create_object, data["category"]),
-                      item_create)
-        if item_file_multi:
-            if not data["items"]:
-                item_copy.Enable(False)
-                item_file.Enable(False)
-                item_file_multi.Enable(False)
-                if item_database: item_database.Enable(False)
-                item_drop_all.Enable(False)
-
-        if tree.HasChildren(item):
-            item_expand = wx.MenuItem(menu, -1, "&Toggle expanded/collapsed")
-            menu.Bind(wx.EVT_MENU, functools.partial(toggle_items, item), item_expand)
-            if menu.MenuItemCount: menu.AppendSeparator()
-            menu.Append(item_expand)
-
-        item0 = tree.GetSelection()
-        if item != item0: select_item(item)
-        tree.PopupMenu(menu)
-        if item0 and item != item0: select_item(item0)
-
-
-    def on_rclick_tree_schema(self, event):
-        """
-        Handler for right-clicking an item in the schema tree,
-        opens popup menu for choices.
-        """
-        tree = self.tree_schema
-        if isinstance(event, wx.ContextMenuEvent): item = tree.GetSelection()
-        else: item = event.GetItem()
-        if not item or not item.IsOk(): return
-        data = tree.GetItemPyData(item)
-        if not data: return
-
-        def select_item(it, *_, **__):
-            if not self: return
-            tree.SelectItem(it)
-        def clipboard_copy(text, label, *_, **__):
-            if wx.TheClipboard.Open():
-                d = wx.TextDataObject(text() if callable(text) else text)
-                wx.TheClipboard.SetData(d), wx.TheClipboard.Close()
-                if label: guibase.status("Copied %s to clipboard.", label)
-        def toggle_items(node, *_, **__):
-            tree.ToggleItem(node)
         def open_data(data, *_, **__):
             if self.tree_data.FindAndActivateItem(type=data["type"], name=data["name"]):
                 self.notebook.SetSelection(self.pageorder[self.page_data])
         def open_meta(data, *_, **__):
-            tree.FindAndActivateItem(type=data["type"], name=data["name"],
-                                     level=data["level"])
-        def create_object(category, column=None, *_, **__):
-            args = []
-            if data.get("type") in self.db.CATEGORIES:
-                args = data["type"], data["name"]
-            elif data.get("parent"):
-                args = data["parent"]["type"], data["parent"]["name"]
-            if column:
-                if "trigger" == category:
-                    args += ({"columns": [{"name": column}], "action": "UPDATE"}, )
-                elif "index" == category:
-                    args += ({"columns": [{"name": column}]}, )
-            self.handle_command("create", category, *args)
-        def copy_related(*_, **__):
-            self.handle_command("copy", "related", data["type"], data["name"])
+            if self.tree_schema.FindAndActivateItem(type=data["type"], name=data["name"], level=data["type"]):
+                self.notebook.SetSelection(self.pageorder[self.page_schema])
 
         menu = wx.Menu()
         boldfont = self.Font.Bold()
 
-        if "schema" == data["type"]:
-            submenu, keys = wx.Menu(), []
-            if any(self.db.schema.values()):
-                item_copy_sql = wx.MenuItem(menu, -1, "Copy schema S&QL")
-                item_save_sql = wx.MenuItem(menu, -1, "Save schema SQL to fi&le")
-                item_database_meta = wx.MenuItem(menu, -1, "Export all structures to another data&base")
-                menu.Append(item_copy_sql)
-                menu.Append(item_save_sql)
-                menu.Append(item_database_meta)
-                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, self.db.get_sql, "schema SQL"),
-                          item_copy_sql)
-                menu.Bind(wx.EVT_MENU, lambda e: self.save_sql(self.db.get_sql()),
-                          item_save_sql)
-                menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_to_db, data=False),
-                          item_database_meta)
-
-            menu.AppendSubMenu(submenu, text="Create ne&w ..")
-            for category in database.Database.CATEGORIES:
+        if data["type"] in ("data", "schema"): # Root
+            exportmenu, newmenu, keys = wx.Menu(), wx.Menu(), []
+            item_copy         = wx.MenuItem(menu, -1, "&Copy schema SQL")
+            item_schema       = wx.MenuItem(exportmenu, -1, "Export &schema as SQL")
+            item_dump         = wx.MenuItem(exportmenu, -1, "Export full d&ump as SQL")
+            item_database     = wx.MenuItem(exportmenu, -1, "Export all to another &database")
+            item_database_sql = wx.MenuItem(exportmenu, -1, "Export all structures to another data&base")
+            item_drop_schema  = wx.MenuItem(menu, -1, "Drop everything")
+            for category in self.db.CATEGORIES:
                 key = next((x for x in category if x not in keys), category[0])
-                keys.append(key)
-                it = wx.MenuItem(submenu, -1, "New " + category.replace(key, "&" + key, 1))
-                submenu.Append(it)
-                menu.Bind(wx.EVT_MENU, functools.partial(create_object, category, None), it)
-            item_drop_schema = wx.MenuItem(menu, -1, "Drop everything")
-            menu.Append(item_drop_schema)
-            menu.Bind(wx.EVT_MENU, functools.partial(self.handle_command, "drop schema"),
-                      item_drop_schema)
-            item_drop_schema.Enabled = any(self.db.schema.values())
-        elif "category" == data["type"]:
-            sqlkws = {"category": data["category"]}
-            if data.get("parent"): sqlkws["name"] = [x["name"] for x in data["items"]]
-            names = [x["name"] for x in data["items"]]
-            item_reindex = None
+                it = wx.MenuItem(newmenu, -1, "New " + category.replace(key, "&" + key, 1))
+                newmenu.Append(it), keys.append(key)
 
-            if names:
-                item_drop_all = wx.MenuItem(menu, -1, "Drop all %s" % util.plural(data["category"]))
-                item_copy     = wx.MenuItem(menu, -1, "&Copy %s names" % data["category"])
-                item_copy_sql = wx.MenuItem(menu, -1, "Copy %s S&QL" % util.plural(data["category"]))
-                item_save_sql = wx.MenuItem(menu, -1, "Save %s SQL to fi&le" % util.plural(data["category"]))
-                if data["category"] in ("table", "index"):
-                    item_reindex = wx.MenuItem(menu, -1, "Reindex all")
-                    menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("reindex", data["category"]), item_reindex)
-
-                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.handle_command, "drop", data["category"], names),
-                          item_drop_all)
-                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, lambda: "\n".join(map(grammar.quote, names)), "%s names" % data["category"]),
-                          item_copy)
-                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
-                          functools.partial(self.db.get_sql, **sqlkws), "%s SQL" % util.plural(data["category"])), item_copy_sql)
-                menu.Bind(wx.EVT_MENU, lambda e: self.save_sql(self.db.get_sql(**sqlkws), util.plural(data["category"])), item_save_sql)
-
-            item_create = wx.MenuItem(menu, -1, "Create &new %s" % data["category"])
-
-            if names:
-                menu.Append(item_copy)
-                menu.Append(item_copy_sql)
-                menu.Append(item_save_sql)
-
-                if data["category"] in ("table", "view"):
-                    item_database_meta = wx.MenuItem(menu, -1, "Export all %s structures to another data&base" % data["category"])
-                    menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_to_db, category=data["category"], names=names, data=False),
-                              item_database_meta)
-                    menu.Append(item_database_meta)
-
-                menu.AppendSeparator()
-                if item_reindex: menu.Append(item_reindex)
-                menu.Append(item_drop_all)
-            menu.Append(item_create)
-            menu.Bind(wx.EVT_MENU, functools.partial(create_object, data["category"], None), item_create)
-        elif "column" == data["type"]:
-            has_name, has_sql, table = True, True, {}
-            submenu_col_create, item_renamecol, item_dropcol = None, None, None
-            if "view" == data["parent"]["type"]:
-                has_sql = False
-            elif "index" == data["parent"]["type"]:
-                has_name = "name" in data
-                table = self.db.schema.get("table", {}).get(data["parent"]["tbl_name"])
-                sqltext = " ".join(filter(bool, (
-                    grammar.quote(data["name"]) if has_name else data.get("expr"),
-                    "COLLATE %s" % data["collate"] if data.get("collate") else "",
-                    data.get("order"),
-                )))
-            else:
-                table = self.db.schema.get("table", {}).get(data["parent"]["name"])
-                sqlkws = {"category": "table", "name": table["name"], "column": data["name"]}
-                sqltext = functools.partial(self.db.get_sql, **sqlkws)
-
-                submenu_col_create, keys = wx.Menu(), []
-                for category in database.Database.CATEGORIES :
-                    key = next((x for x in category if x not in keys), category[0])
-                    keys.append(key)
-                    if category not in ("index", "trigger"): continue # for category
-                    it = wx.MenuItem(submenu_col_create, -1, "New " + category.replace(key, "&" + key, 1))
-                    submenu_col_create.Append(it)
-                    menu.Bind(wx.EVT_MENU, functools.partial(create_object, category, data["name"]), it)
-
-                item_renamecol = wx.MenuItem(menu, -1, "Rena&me column\t(F2)")
-                menu.Bind(wx.EVT_MENU, lambda e: tree.EditLabel(item), item_renamecol)
-                item_dropcol   = wx.MenuItem(menu, -1, "Drop column")
-                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.handle_command, "drop column", data["parent"]["name"], data["name"]), item_dropcol)
-
-            if has_name:
-                parts = [fmt_entity(x, force=False)
-                         for x in (table.get("name"), data["name"]) if x]
-                inter = " ." if len(parts) > 1 and parts[0][-2:] == ".." else "."
-                title = ("%s" if any('"' in x for x in parts) else '"%s"') % inter.join(parts)
-                item_name = wx.MenuItem(menu, -1, 'Column %s' % title)
-                item_name.Font = boldfont
-                item_copy = wx.MenuItem(menu, -1, "&Copy name")
-
-            if has_sql:
-                item_copy_sql = wx.MenuItem(menu, -1, "Copy column S&QL")
-
-            if has_name:
-                menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
-                          item_name)
-                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"], "column name"),
-                          item_copy)
-            if has_sql:
-                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, sqltext, "column SQL"),
-                          item_copy_sql)
-
-            if has_name:
-                menu.Append(item_name)
-                menu.AppendSeparator()
-                menu.Append(item_copy)
-            if has_sql:
-                menu.Append(item_copy_sql)
-            if submenu_col_create or item_renamecol or item_dropcol:
-                menu.AppendSeparator()
-            if submenu_col_create:
-                menu.AppendSubMenu(submenu_col_create, text="Create &new ..")
-            if item_renamecol:
-                menu.Append(item_renamecol)
-            if item_dropcol:
-                if len(data["parent"]["columns"]) == 1: item_dropcol.Enable(False)
-                menu.Append(item_dropcol)
-        elif "columns" == data["type"]:
-            cols = data["parent"].get("columns") or data["parent"].get("meta", {}).get("columns", [])
-            names = [x["name"] for x in cols]
-            item_copy = wx.MenuItem(menu, -1, "&Copy column names")
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, lambda: "\n".join(map(grammar.quote, names)), "column names"),
-                      item_copy)
+            exportmenu.Append(item_schema)
+            exportmenu.Append(item_dump)
+            exportmenu.Append(item_database)
+            exportmenu.Append(item_database_sql)
             menu.Append(item_copy)
-        else: # Single category item, like table
-            sqlkws = {"category": data["type"], "name": data["name"]}
+            menu.AppendSubMenu(exportmenu, text="&Export ..")
+            menu.AppendSubMenu(newmenu, text="Create &new ..")
+            menu.Append(item_drop_schema)
 
-            item_name   = wx.MenuItem(menu, -1, "%s %s" % (
-                          data["type"].capitalize(), fmt_entity(data["name"])))
-            item_open = wx.MenuItem(menu, -1, "&Open %s schema" % data["type"])
-            item_open_data = wx.MenuItem(menu, -1, "Open %s &data" % data["type"]) \
-                             if data["type"] in ("table", "view") else None
-            item_copy      = wx.MenuItem(menu, -1, "&Copy name")
-            item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s S&QL" % data["type"])
-            item_copy_rel  = wx.MenuItem(menu, -1, "Copy all &related SQL")
-            item_rename    = wx.MenuItem(menu, -1, "Rena&me %s\t(F2)" % data["type"]) \
-                             if "category" == data.get("parent", {}).get("type") else None
-            item_clone     = wx.MenuItem(menu, -1, "C&lone %s structure" % data["type"]) \
-                             if data["type"] in ("table", "view") else None
-            item_drop      = wx.MenuItem(menu, -1, "Drop %s" % data["type"])
-            item_reindex   = wx.MenuItem(menu, -1, "Reindex") \
-                             if data["type"] in ("table", "index") else None
+            item_drop_schema.Enable(any(self.db.schema.values()))
+
+            menu.Bind(wx.EVT_MENU, cmd("copy", "sql"), item_copy)
+            menu.Bind(wx.EVT_MENU, cmd("export", "schema"), item_schema)
+            menu.Bind(wx.EVT_MENU, cmd("export", "dump"), item_dump)
+            menu.Bind(wx.EVT_MENU, cmd("export", "data"), item_database)
+            menu.Bind(wx.EVT_MENU, cmd("export", "structure"), item_database_sql)
+            menu.Bind(wx.EVT_MENU, cmd("drop schema"), item_drop_schema)
+            for c, it in zip(self.db.CATEGORIES, newmenu.MenuItems):
+                menu.Bind(wx.EVT_MENU, cmd("create", c), it)
+
+        elif "category" == data["type"]: # Category list
+            names, category = data["items"], data["category"]
+            if any(isinstance(x, dict) for x in names): names = [x["name"] for x in names]
+            names0 = names if data.get("parent") else []
+            relcategory, relname = (data["parent"]["type"], data["parent"]["name"]) if data.get("parent") else (None, None)
+            item_import = item_reindex_all = item_truncate_all = item_database_sql = None
+            item_file, item_file_multi, item_database = None, None, None
+
+            copymenu, exportmenu = wx.Menu(), wx.Menu()
+            item_copy     = wx.MenuItem(copymenu, -1, "Copy &names")
+            item_copy_sql = wx.MenuItem(copymenu, -1, "Copy CREATE &SQL")
+            item_copy_own = wx.MenuItem(copymenu, -1, "Copy &owned SQL" if category in ("table", "view") else "Copy CREATE SQL with &parents")
+            item_copy_rel = wx.MenuItem(copymenu, -1, "Copy all &related SQL")
+            item_save_sql = wx.MenuItem(exportmenu, -1, "Save %s S&QL to file" % util.plural(category))
+            if "table" == category:
+                item_database_sql = wx.MenuItem(exportmenu, -1, "Export all %s structures to another data&base" % category)
+                item_import       = wx.MenuItem(menu, -1, "&Import into table from file")
+                item_truncate_all = wx.MenuItem(menu, -1, "Truncate all")
+            if category in ("table", "view"):
+                item_file       = wx.MenuItem(exportmenu, -1, "Export all %s to &file" % util.plural(category))
+                item_file_multi = wx.MenuItem(exportmenu, -1, "Export all %s to &single file" % util.plural(category))
+                item_database   = wx.MenuItem(exportmenu, -1, "Export all %s to another &database" % util.plural(category))
+            if category in ("table", "index"):
+                item_reindex_all = wx.MenuItem(menu, -1, "Reindex all")
+            item_create   = wx.MenuItem(menu, -1, "Create &new %s" % category)
+            item_drop_all = wx.MenuItem(menu, -1, "Drop all %s" % util.plural(category))
+
+            copymenu.Append(item_copy)
+            copymenu.Append(item_copy_sql)
+            copymenu.Append(item_copy_own)
+            copymenu.Append(item_copy_rel)
+            exportmenu.Append(item_save_sql)
+            exportmenu.Append(item_file) if item_file else None
+            exportmenu.Append(item_file_multi) if item_file_multi else None
+            exportmenu.Append(item_database) if item_database else None
+            exportmenu.Append(item_database_sql) if item_database_sql else None
+
+            item_copymenu   = menu.AppendSubMenu(copymenu, text="&Copy ..")
+            item_exportmenu = menu.AppendSubMenu(exportmenu, text="&Export ..")
+            menu.Append(item_import) if item_import else None
+            menu.AppendSeparator()
+            menu.Append(item_create)
+            menu.Append(item_reindex_all) if item_reindex_all else None
+            menu.Append(item_truncate_all) if item_truncate_all else None
+            menu.Append(item_drop_all)
+
+            if not names:
+                item_copymenu    .Enable(False)
+                item_exportmenu  .Enable(False)
+                item_truncate_all.Enable(False) if item_truncate_all else None
+                item_drop_all    .Enable(False)
+            if item_reindex_all:
+                item_reindex_all.Enable(bool(self.db.schema.get("index")) if names else False)
+
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, "\n".join(names), "%s names" % category), item_copy)
+            menu.Bind(wx.EVT_MENU, cmd("copy", "sql", category, *names0), item_copy_sql)
+            menu.Bind(wx.EVT_MENU, cmd("copy", "owned", category, *names0), item_copy_own)
+            menu.Bind(wx.EVT_MENU, cmd("copy", "related", category, *names0), item_copy_rel)
+            menu.Bind(wx.EVT_MENU, cmd("export", "sql", category, *names0), item_save_sql)
+            menu.Bind(wx.EVT_MENU, cmd("export", "tables", *names), item_file) if item_file else None
+            menu.Bind(wx.EVT_MENU, cmd("export", "multiitem", category, *names), item_file_multi) if item_file_multi else None
+            menu.Bind(wx.EVT_MENU, cmd("export", "data", *names), item_database) if item_database else None
+            menu.Bind(wx.EVT_MENU, cmd("export", "structure", *names), item_database_sql) if item_database_sql else None
+            menu.Bind(wx.EVT_MENU, import_data, item_import) if item_import else None
+            menu.Bind(wx.EVT_MENU, cmd("create", category, relcategory, relname), item_create)
+            menu.Bind(wx.EVT_MENU, cmd("truncate", *names0), item_truncate_all) if item_truncate_all else None
+            menu.Bind(wx.EVT_MENU, cmd("drop", category, *names0), item_drop_all)
+            menu.Bind(wx.EVT_MENU, cmd("reindex", category, *names0), item_reindex_all) if item_reindex_all else None
+
+        elif "column" == data["type"]: # Single column
+            category, name = data["parent"]["type"], data.get("name")
+            parentname = data["parent"]["name"]
+            ownername  = data["parent"]["tbl_name" if "index" == category else "name"]
+            subcategories = {"table": ["index", "trigger", "view"], "view": ["trigger"]}.get(category, [])
+            fullname = "Column expression" if not name else \
+                       'Column "%s.%s"' % (fmt_entity(ownername, force=False), fmt_entity(name, force=False))
+            sqltext = functools.partial(self.db.get_sql, category, parentname, name or data["expr"])
+
+            newmenu = wx.Menu() if subcategories else None
+            item_name      = wx.MenuItem(menu, -1, fullname)
+            item_open      = wx.MenuItem(menu, -1, "&Open %s data" % category) if "index" != category else None
+            item_open_meta = wx.MenuItem(menu, -1, "Open %s &schema" % category) if "index" != category else None
+            item_copy      = wx.MenuItem(menu, -1, "&Copy name") if name else None
+            item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s S&QL" % ("column" if name else "expression"))
+            item_renamecol = wx.MenuItem(menu, -1, "Rena&me column\t(F2)") if "table" == category else None
+            item_drop_col  = wx.MenuItem(menu, -1, "Drop column") if "table" == category else None
+            for c in subcategories: newmenu.Append(-1, "New &%s" % c)
 
             item_name.Font = boldfont
 
             menu.Append(item_name)
+            menu.AppendSeparator() if item_open else None
+            menu.Append(item_open) if item_open and tree is self.tree_data else None
+            menu.Append(item_open_meta) if item_open_meta else None
+            menu.Append(item_open) if item_open and tree is self.tree_schema else None
             menu.AppendSeparator()
-            menu.Append(item_open)
-            if item_open_data: menu.Append(item_open_data)
-            menu.Append(item_copy)
+            menu.Append(item_copy) if item_copy else None
             menu.Append(item_copy_sql)
-            menu.Append(item_copy_rel)
+            menu.AppendSeparator() if newmenu or item_renamecol or item_drop_col else None
+            menu.AppendSubMenu(newmenu, text="Create &new ..") if newmenu else None
+            menu.Append(item_renamecol) if item_renamecol else None
+            menu.Append(item_drop_col) if item_drop_col else None
 
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item),
-                      item_name)
-            menu.Bind(wx.EVT_MENU, functools.partial(open_meta, data), item_open)
-            if item_open_data:
-                menu.Bind(wx.EVT_MENU, functools.partial(open_data, data),
-                          item_open_data)
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, data["name"], "%s name" % data["type"]),
-                      item_copy)
-            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy,
-                      functools.partial(self.db.get_sql, **sqlkws), "%s SQL" % data["type"]), item_copy_sql)
-            menu.Bind(wx.EVT_MENU, copy_related, item_copy_rel)
-            if item_rename:
-                menu.Bind(wx.EVT_MENU, lambda e: tree.EditLabel(item), item_rename)
-            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, self.handle_command, "drop", data["type"], [data["name"]]),
-                      item_drop)
+            if item_drop_col: item_drop_col.Enable(len(data["parent"]["columns"]) != 1)
 
-            if data["type"] in ("table", "view"):
-                item_database_meta = wx.MenuItem(menu, -1, "Export %s structure to another data&base" % data["type"])
-                menu.Append(item_database_meta)
-                menu.Bind(wx.EVT_MENU, functools.partial(self.on_export_to_db, category=data["type"], names=data["name"], data=False),
-                          item_database_meta)
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item), item_name)
+            menu.Bind(wx.EVT_MENU, functools.partial(open_data, data["parent"]), item_open) if item_open else None
+            menu.Bind(wx.EVT_MENU, functools.partial(open_meta, data["parent"]), item_open_meta) if item_open_meta else None
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, name, "column name"), item_copy) if item_copy else None
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, sqltext, "column SQL"), item_copy_sql)
+            menu.Bind(wx.EVT_MENU, lambda e: tree.EditLabel(item), item_renamecol) if item_renamecol else None
+            menu.Bind(wx.EVT_MENU, cmd("drop column", ownername, name), item_drop_col) if item_drop_col else None
+            for c, it in zip(subcategories, newmenu.MenuItems) if newmenu else ():
+                menu.Bind(wx.EVT_MENU, cmd("create", c, category, ownername, name), it)
 
+        elif "columns" == data["type"]: # Columns list
+            if "index" != data["parent"]["type"]:
+                cols = data["parent"].get("columns") or data["parent"].get("meta", {}).get("columns", [])
+                names = [x["name"] for x in cols]
+                item_copy = wx.MenuItem(menu, -1, "&Copy column names")
+                menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, lambda: "\n".join(map(grammar.quote, names)), "column names"), item_copy)
+                menu.Append(item_copy)
+
+        else: # Single category item, like table
+            name, category = data["name"], data["type"]
+            subcategories = {"table": ["index", "trigger", "view"], "view": ["trigger"]}.get(category, [])
+            item_file = item_database_sql = item_clone = None
+            item_import = item_database = item_clone_sql = item_reindex = item_truncate = None
+
+            copymenu, (exportmenu, newmenu) = wx.Menu(), ((wx.Menu(), wx.Menu()) if subcategories else (None, None))
+            item_name = wx.MenuItem(menu, -1, "%s %s" % (category.capitalize(), fmt_entity(name)))
+            item_open = wx.MenuItem(menu, -1, "Open %s &data" % category) if category in ("table", "view") else None
+            item_open_meta = wx.MenuItem(menu,    -1, "Open %s &schema" % category)
+            item_copy      = wx.MenuItem(copymenu, -1, "Copy &name")
+            item_copy_sql  = wx.MenuItem(copymenu, -1, "Copy CREATE &SQL")
+            item_copy_own  = wx.MenuItem(copymenu, -1, "Copy &owned SQL" if category in ("table", "view") else "Copy CREATE SQL with &parent")
+            item_copy_rel  = wx.MenuItem(copymenu, -1, "Copy all &related SQL")
+
+            if category in ("table", "view"):
+                item_file         = wx.MenuItem(exportmenu, -1, "Export data to &file")
+                item_database_sql = wx.MenuItem(exportmenu, -1, "Export structure to another data&base")
+                item_clone        = wx.MenuItem(menu,       -1, "C&lone %s" % category)
+            if "table" == category:
+                item_database  = wx.MenuItem(exportmenu, -1, "Export data to another &database")
+                item_clone_sql = wx.MenuItem(menu, -1, "Clone %s structure" % category)
+                item_import    = wx.MenuItem(menu, -1, "&Import into table from file")
+                item_reindex   = wx.MenuItem(menu, -1, "Reindex table")
+                item_truncate  = wx.MenuItem(menu, -1, "Truncate table")
+            if "index" == category:
+                item_reindex  = wx.MenuItem(menu, -1, "Reindex")
+            item_rename = wx.MenuItem(menu, -1, "Rena&me %s\t(F2)" % category)
+            item_drop   = wx.MenuItem(menu, -1, "Drop %s" % category)
+            for c in subcategories: newmenu.Append(-1, "New &%s" % c)
+
+            item_name.Font = boldfont
+
+            copymenu.Append(item_copy)
+            copymenu.Append(item_copy_sql)
+            copymenu.Append(item_copy_own)
+            copymenu.Append(item_copy_rel)
+            exportmenu.Append(item_file) if item_file else None
+            exportmenu.Append(item_database) if item_database else None
+            exportmenu.Append(item_database_sql) if item_database_sql else None
+
+            menu.Append(item_name)
             menu.AppendSeparator()
-
-            if data["type"] in ("table", "view"):
-                submenu, keys = wx.Menu(), []
-                menu.AppendSubMenu(submenu, text="Create &new ..")
-                for category in database.Database.CATEGORIES:
-                    key = next((x for x in category if x not in keys), category[0])
-                    keys.append(key)
-                    if "view" == data["type"] and category not in ["trigger"]:
-                        continue # for category
-                    if category == data["type"]: continue # for category
-                    it = wx.MenuItem(submenu, -1, "New " + category.replace(key, "&" + key, 1))
-                    submenu.Append(it)
-                    menu.Bind(wx.EVT_MENU, functools.partial(create_object, category, None), it)
-
-            if item_rename:
-                menu.Append(item_rename)
-            if item_clone:
-                menu.Append(item_clone)
-                menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("clone", data["type"], data["name"]), item_clone)
+            menu.Append(item_open) if item_open and tree is self.tree_data else None
+            menu.Append(item_open_meta)
+            menu.Append(item_open) if item_open and tree is self.tree_schema else None
+            menu.AppendSeparator()
+            menu.AppendSubMenu(copymenu, text="&Copy ..")
+            menu.AppendSubMenu(exportmenu, text="&Export ..") if exportmenu else None
+            menu.Append(item_import) if item_import else None
+            menu.AppendSeparator()
+            menu.AppendSubMenu(newmenu, text="Create &new ..") if newmenu else None
+            menu.Append(item_reindex) if item_reindex else None
+            menu.Append(item_rename)
+            menu.Append(item_clone) if item_clone else None
+            menu.Append(item_clone_sql) if item_clone_sql else None
+            menu.Append(item_truncate) if item_truncate else None
             menu.Append(item_drop)
+
             if item_reindex:
-                menu.Append(item_reindex)
-                item_reindex.Enable("index" == data["type"] or "index" in self.db.get_related("table", data["name"], own=True))
-                menu.Bind(wx.EVT_MENU, lambda e: self.handle_command("reindex", data["type"], data["name"]), item_reindex)
+                item_reindex.Enable("index" == category or "index" in self.db.get_related("table", name, own=True, clone=False))
+            if item_truncate:
+                item_truncate.Enable(bool(self.db.schema["table"][name].get("count")))
+
+            menu.Bind(wx.EVT_MENU, functools.partial(wx.CallAfter, select_item, item), item_name)
+            menu.Bind(wx.EVT_MENU, functools.partial(open_data, data), item_open)
+            menu.Bind(wx.EVT_MENU, functools.partial(open_meta, data), item_open_meta)
+            menu.Bind(wx.EVT_MENU, functools.partial(clipboard_copy, name, "%s name" % category), item_copy)
+            menu.Bind(wx.EVT_MENU, cmd("copy", "sql", category, name), item_copy_sql)
+            menu.Bind(wx.EVT_MENU, cmd("copy", "owned", category, name), item_copy_own)
+            menu.Bind(wx.EVT_MENU, cmd("copy", "related", category, name), item_copy_rel)
+            menu.Bind(wx.EVT_MENU, cmd("export", "tables", name), item_file) if item_file else None
+            menu.Bind(wx.EVT_MENU, cmd("export", "data", name), item_database) if item_database else None
+            menu.Bind(wx.EVT_MENU, cmd("export", "structure", name), item_database_sql) if item_database_sql else None
+            menu.Bind(wx.EVT_MENU, import_data, item_import) if item_import else None
+            menu.Bind(wx.EVT_MENU, cmd("reindex", category, name), item_reindex) if item_reindex else None
+            menu.Bind(wx.EVT_MENU, lambda e: tree.EditLabel(item), item_rename)
+            menu.Bind(wx.EVT_MENU, cmd("clone", category, name, "table" == category), item_clone) if item_clone else None
+            menu.Bind(wx.EVT_MENU, cmd("clone", category, name), item_clone_sql) if item_clone_sql else None
+            menu.Bind(wx.EVT_MENU, cmd("truncate", name), item_truncate) if item_truncate else None
+            menu.Bind(wx.EVT_MENU, cmd("drop", category, name), item_drop) if item_drop else None
+            for c, it in zip(subcategories, newmenu.MenuItems) if newmenu else ():
+                menu.Bind(wx.EVT_MENU, cmd("create", c, category, name), it)
 
         if tree.HasChildren(item):
             item_expand   = wx.MenuItem(menu, -1, "&Toggle expanded/collapsed")

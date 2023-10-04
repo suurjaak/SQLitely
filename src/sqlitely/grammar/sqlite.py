@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    01.10.2023
+@modified    03.10.2023
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -1095,6 +1095,7 @@ class Generator(object):
         "ALTER TRIGGER":           templates.ALTER_TRIGGER,
         "ALTER VIEW":              templates.ALTER_VIEW,
         "ALTER MASTER":            templates.ALTER_MASTER,
+        "INDEX COLUMN":            templates.INDEX_COLUMN_DEFINITION,
         SQL.CREATE_INDEX:          templates.CREATE_INDEX,
         SQL.CREATE_TABLE:          templates.CREATE_TABLE,
         SQL.CREATE_TRIGGER:        templates.CREATE_TRIGGER,
