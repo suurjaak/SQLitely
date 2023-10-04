@@ -966,6 +966,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             path, file = os.path.split(p.db.name)
             subtitle = os.path.join(os.path.split(path)[-1] or path, file)
             self.db_menustate[p.db.filename] = {"full": True}
+        elif p is self.page_main:
+            self.list_db.ContainingSizer.Layout()
         self.Title = " - ".join(filter(bool, (conf.Title, subtitle)))
         self.update_notebook_header()
 
