@@ -3443,6 +3443,7 @@ class DatabasePage(wx.Panel):
 
         if "data" == cmd:
             self.notebook.SetSelection(self.pageorder[self.page_data])
+            if self.panel_data_export.Shown: return
             names = args[1:]
             for name in names:
                 category = next((c for c, xx in self.db.schema.items() if name in xx), None)
@@ -5288,6 +5289,8 @@ class DatabasePage(wx.Panel):
             if "schema" == link_data.get("page"):
                 tree, page = self.tree_schema, self.page_schema
                 match.update(level=category)
+            if page is self.page_data and self.panel_data_export.Shown:
+                return self.notebook.SetSelection(self.pageorder[page])
             if tree.FindAndActivateItem(match):
                 self.notebook.SetSelection(self.pageorder[page])
                 wx.YieldIfNeeded()
@@ -5632,6 +5635,8 @@ class DatabasePage(wx.Panel):
         """
         Handler for saving database dump to file, opens file dialog and saves content.
         """
+        if self.panel_data_export.Shown:
+            return self.notebook.SetSelection(self.pageorder[self.page_data])
         filename = os.path.splitext(os.path.basename(self.db.name))[0]
         filename += " dump"
         dialog = wx.FileDialog(
@@ -5678,6 +5683,8 @@ class DatabasePage(wx.Panel):
         @param   category  specific category to export entirely, or `None` for all categories
         @param   names     specific entities to export if not all
         """
+        if self.panel_data_export.Shown:
+            return self.notebook.SetSelection(self.pageorder[self.page_data])
         categories = [category] if category else database.Database.DATA_CATEGORIES
         if names: categories = [c for c in categories if any(n in self.db.schema[c] for n in names)]
         categorylabel = " and ".join(map(util.plural, categories))
@@ -6238,6 +6245,8 @@ class DatabasePage(wx.Panel):
         @param   category  "table" or "view" or None for both
         @param   item      "name" or ["name", ]
         """
+        if self.panel_data_export.Shown:
+            return self.notebook.SetSelection(self.pageorder[self.page_data])
         items = [item] if isinstance(item, six.string_types) else item
 
         categories = [category] if category else database.Database.DATA_CATEGORIES
@@ -6335,6 +6344,8 @@ class DatabasePage(wx.Panel):
         if data and self.panel_data_export.IsRunning(): return wx.MessageBox(
             "A global export is already underway.", conf.Title, wx.ICON_NONE
         )
+        if self.panel_data_export.Shown:
+            return self.notebook.SetSelection(self.pageorder[self.page_data])
 
         names = [names] if isinstance(names, six.string_types) else list(names) if names else []
         if not names and category: names = list(self.db.schema[category])
@@ -7232,7 +7243,8 @@ class DatabasePage(wx.Panel):
         def toggle_items(node, *_, **__):
             tree.ToggleItem(node)
         def open_data(data, *_, **__):
-            if self.tree_data.FindAndActivateItem(type=data["type"], name=data["name"]):
+            if self.panel_data_export.Shown \
+            or self.tree_data.FindAndActivateItem(type=data["type"], name=data["name"]):
                 self.notebook.SetSelection(self.pageorder[self.page_data])
         def open_meta(data, *_, **__):
             if self.tree_schema.FindAndActivateItem(type=data["type"], name=data["name"], level=data["type"]):
