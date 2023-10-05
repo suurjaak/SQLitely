@@ -1335,7 +1335,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         """Handler for dragging items around in dblist, saves file order."""
         event.Skip()
         def save_list_order():
-            conf.DBFiles = [self.list_db.GetItemText(i)
+            conf.DBFiles = [self.list_db.GetItemTextFull(i)
                             for i in range(1, self.list_db.GetItemCountFull())]
             util.run_once(conf.save)
         wx.CallAfter(save_list_order) # Allow list to update items

@@ -3183,13 +3183,14 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
 
     def GetItemCountFull(self):
-        """Returns the full row count, including items hidden by filter."""
+        """Returns the full row count, including top row and items hidden by filter."""
         return len(self._id_rows) + bool(self._top_row)
 
 
     def GetItemTextFull(self, idx):
-        """Returns item text by index, including items hidden by filter."""
-        data, col_name = self._id_rows[idx][-1], self._columns[0][0]
+        """Returns item text by index, including top row and items hidden by filter."""
+        rows = ([(0, self._top_row)] if self._top_row else []) + self._id_rows
+        data, col_name = rows[idx][-1], self._columns[0][0]
         return self._formatters[col_name](data, col_name)
 
 
