@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.2, 2023-10-04
+2.2, 2023-10-05
 ---------------
 - add line number and word-wrap toggles to more controls
 - add diagram export to Tools-menu
@@ -10,6 +10,7 @@ CHANGELOG
 - add option to copy diagram image to clipboard
 - add IF NOT EXISTS to schema editor
 - add YAML formatting options to value editor
+- highlight open databases in database list
 - unify context menus in data and schema trees
 - retain undo history when loading SQL from file to SQL editor
 - improve adding final semicolon to user-entered commented CREATE SQL

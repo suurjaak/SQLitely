@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.10.2023
+@modified    05.10.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1149,7 +1149,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.dbs[event.filename2] = event.source.db
 
             if event.temporary: self.db_datas.pop(event.filename1, None)
+            if "name" in self.db_datas.get(event.filename1, {}):
+                self.list_db.SetItemStyleByText(event.filename1, None)
             self.update_database_list(event.filename2)
+            self.list_db.SetItemStyleByText(event.filename2, "active")
             if self.list_db.IsSelected(0): self.list_db.Select(0, False)
             for i in range(1, self.list_db.GetItemCount()):
                 fn = self.list_db.GetItemText(i)
@@ -2272,6 +2275,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             del conf.LastActivePages[page.db.filename]
 
         page.on_close()
+        if not page.db.temporary: self.list_db.SetItemStyleByText(page.db.filename, None)
 
         if page in self.db_pages:
             del self.db_pages[page]
@@ -2392,6 +2396,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.db_datas[db.filename]["title"] = tab_title
                 page = DatabasePage(self.notebook, tab_title, db, self.memoryfs)
                 if not page: return
+                if filename: self.list_db.SetItemStyleByText(db.filename, "active")
                 conf.DBsOpen[db.filename] = db
                 self.db_pages[page] = db
                 util.run_once(conf.save)
