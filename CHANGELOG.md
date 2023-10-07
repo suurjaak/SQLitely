@@ -17,6 +17,7 @@ CHANGELOG
 - improve adding final semicolon to user-entered commented CREATE SQL
 - improve compatibility with wxPython 4.2+
 - speed up Excel export by improved caching for column width calculation
+- speed up populating hex/byte editors in value editor
 - fix error on changing column order in trigger/view editor
 - fix error on reindexing table from diagram if table has no index
 - fix error on checking foreign keys if foreign table has no primary key

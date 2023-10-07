@@ -96,9 +96,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    05.10.2023
+@modified    07.10.2023
 ------------------------------------------------------------------------------
 """
+import binascii
 import collections
 import copy
 import functools
@@ -130,7 +131,7 @@ import wx.lib.wordwrap
 import wx.stc
 
 
-try: import collections.abc as collections_abc             # Py3
+try: import collections.abc as collections_abc             # Py2
 except ImportError: import collections as collections_abc  # Py3
 try:
     integer_types, string_types, text_type = (int, long), (basestring, ), unicode  # Py2
@@ -4335,35 +4336,43 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
     def _Populate(self):
         """Sets current content to widget."""
-        fulltext, count = [], len(self._bytes)
-        for i, c in enumerate(self._bytes):
-            text, line = "%02X" % c, i // self.WIDTH
-            if i < count - 1:
-                text += "\n" if i and not (i + 1) % self.WIDTH else " "
-            fulltext.append(text)
-        super(HexTextCtrl, self).ChangeValue("".join(fulltext))
+        lines, hexlify = [], binascii.hexlify
+        if sys.version_info < (3, 8):
+            hexlify = lambda data, sep: sep.join("%02X" % c for c in data)
+        for i in range(0, len(self._bytes), self.WIDTH):
+            lines.append(hexlify(self._bytes[i:i + self.WIDTH], " ").decode("latin1").upper())
+        super(HexTextCtrl, self).ChangeValue("\n".join(lines))
         self._Restyle()
         self._Remargin()
 
 
     def _Restyle(self):
         """Restyles current content according to changed state."""
-        self.StartStyling(0)
-        self.SetStyling(super(HexTextCtrl, self).Length, 0)
-        for i, c in enumerate(self._bytes):
-            if c == self._bytes0[i]: continue # for i, c
-            self.StartStyling(i * 3)
-            self.SetStyling(2, self.STYLE_CHANGED)
+        eventmask0, _ = self.GetModEventMask(), self.SetModEventMask(0)
+        try:
+            self.StartStyling(0)
+            self.SetStyling(super(HexTextCtrl, self).Length, 0)
+            ranges, currange = [], None
+            for i, c in enumerate(self._bytes):
+                if c == self._bytes0[i]: currange = None
+                elif currange:           currange[-1] += 1
+                else:                    currange = [i, 1]; ranges.append(currange)
+            for i, length in ranges:
+                self.StartStyling(i * 3)
+                self.SetStyling(length * 3 - 1, self.STYLE_CHANGED)
+        finally: self.SetModEventMask(eventmask0)
 
 
     def _Remargin(self):
         """Rebuilds hex address margin."""
-        sself = super(HexTextCtrl, self)
-        margintexts = []
-        self.MarginTextClearAll()
-        for line in range((sself.Length + self.WIDTH - 1) // self.WIDTH):
-            self.MarginSetStyle(line, self.STYLE_MARGIN)
-            self.MarginSetText (line, " %08X " % line)
+        eventmask0, _ = self.GetModEventMask(), self.SetModEventMask(0)
+        try:
+            sself = super(HexTextCtrl, self)
+            self.MarginTextClearAll()
+            for line in range((sself.Length + self.WIDTH - 1) // self.WIDTH):
+                self.MarginSetStyle(line, self.STYLE_MARGIN)
+                self.MarginSetText (line, " %08X " % line)
+        finally: self.SetModEventMask(eventmask0)
 
 
     def _SetValue(self, value):
@@ -4502,6 +4511,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
                 if idx:
                     if bpos >= len(self._bytes): self.DeleteBack()
                     sself.SetSelection(frompos, frompos)
+                self._Remargin()
             else:
                 self._Populate()
                 sself.SetSelection(*(pos + direction * 3 - idx, ) * 2)
@@ -4808,26 +4818,29 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
 
     def _Populate(self):
         """Sets current content to widget."""
-        count = len(self._bytes)
-        fulltext = []
-        for i, c in enumerate(self._bytes):
-            fulltext.append(re.sub("[^\x20-\x7e]", ".", chr(self._bytes[i])))
-            if i and i < count - 1 and not (i + 1) % self.WIDTH:
-                fulltext.append("\n")
-        fullstr = "".join(fulltext)
-        if super(ByteTextCtrl, self).Text != fullstr:
-            super(ByteTextCtrl, self).ChangeValue(fullstr)
+        chars = re.sub("[^\x20-\x7e]", ".", bytes(self._bytes).decode("latin1"))
+        lines = [chars[i:i + self.WIDTH] for i in range(0, len(self._bytes), self.WIDTH)]
+        fulltext = "\n".join(lines)
+        if super(ByteTextCtrl, self).Text != fulltext:
+            super(ByteTextCtrl, self).ChangeValue(fulltext)
         self._Restyle()
 
 
     def _Restyle(self):
         """Restyles current content according to changed state."""
-        self.StartStyling(0)
-        self.SetStyling(super(ByteTextCtrl, self).Length, 0)
-        for i, c in enumerate(self._bytes):
-            if c == self._bytes0[i]: continue # for i, c
-            self.StartStyling(i // self.WIDTH + i)
-            self.SetStyling(1, self.STYLE_CHANGED)
+        eventmask0, _ = self.GetModEventMask(), self.SetModEventMask(0)
+        try:
+            self.StartStyling(0)
+            self.SetStyling(super(ByteTextCtrl, self).Length, 0)
+            ranges, currange = [], None
+            for i, c in enumerate(self._bytes):
+                if c == self._bytes0[i]: currange = None
+                elif currange:           currange[-1] += 1
+                else:                    currange = [i, 1]; ranges.append(currange)
+            for i, length in ranges:
+                self.StartStyling(i // self.WIDTH + i)
+                self.SetStyling(length // self.WIDTH + length, self.STYLE_CHANGED)
+        finally: self.SetModEventMask(eventmask0)
 
 
     def _SetValue(self, value, noreset=False):
