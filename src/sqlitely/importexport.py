@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.10.2023
+@modified    07.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1194,8 +1194,6 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
     try:
         if not was_open: db.open()
         continue_on_error, create_sql = None, None
-        isolevel = db.connection.isolation_level
-        db.connection.isolation_level = None # Disable autocommit
         with db.connection:
             cursor = db.connection.cursor()
             cursor.execute("BEGIN TRANSACTION")
@@ -1294,7 +1292,6 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
             progress(**kwargs)
     finally:
         if db.is_open():
-            if isolevel is not None: db.connection.isolation_level = isolevel
             if cursor: util.try_ignore(cursor.close)
             if table: db.unlock("table", table, filename)
             if not was_open: db.close()
