@@ -9879,9 +9879,10 @@ class ColumnDialog(wx.Dialog):
 
         FMTS = sorted(x for x in self.IMAGE_FORMATS.values() if "SVG" != x)
         def load_svg(v):
+            v = v if isinstance(v, six.binary_type) else v.encode("latin1")
             # Make a new string, as CreateFromBytes changes <> to NULL-bytes
             # in the actual input string object itself.. somehow..
-            svg = wx.svg.SVGimage.CreateFromBytes(v + " ")
+            svg = wx.svg.SVGimage.CreateFromBytes(v + b" ")
             if not svg.width or not svg.height: return None
             img = svg.ConvertToScaledBitmap((svg.width, svg.height)).ConvertToImage()
             img.Type = next(k for k, v in self.IMAGE_FORMATS.items() if "SVG" == v)
@@ -9995,7 +9996,7 @@ class ColumnDialog(wx.Dialog):
                         img = wx.Image(io.BytesIO(x))
                         if not img: raise Exception()
                     except Exception:
-                        if "<svg" in x and wx.svg: img = load_svg(x)
+                        if b"<svg" in x and wx.svg: img = load_svg(x)
                     if img: v = x
             except Exception as e:
                 status.Label = str(e)
