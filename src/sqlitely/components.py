@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.10.2023
+@modified    07.10.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -86,7 +86,10 @@ SchemaDiagramEvent, EVT_DIAGRAM       = wx.lib.newevent.NewCommandEvent()
 class SQLiteGridBase(wx.grid.GridTableBase):
     """
     Table base for wx.grid.Grid, can take its data from a single table/view, or from
-    the results of any SELECT query.
+    the results of a SELECT query.
+
+    Does not open ongoing transactions for data edits like INSERT/UPDATE/DELETE,
+    but keeps them in memory until explicitly saved or discarded.
     """
 
     """wx.Grid stops working when too many rows."""
@@ -1990,7 +1993,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             return wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
 
         cursor = result["result"]
-        if restore:
+        if restore and isinstance(self._grid.Table, SQLiteGridBase):
             scrollpos = list(map(self._grid.GetScrollPos, [wx.HORIZONTAL, wx.VERTICAL]))
             cursorpos = [self._grid.GridCursorRow, self._grid.GridCursorCol]
             state = self._grid.Table and self._grid.Table.GetFilterSort()
@@ -2039,7 +2042,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
             self._last_is_script = script
             self._SizeColumns()
 
-            if restore:
+            if restore and isinstance(self._grid.Table, SQLiteGridBase):
                 maxrow = max(scrollpos[1] * self.SCROLLPOS_ROW_RATIO, cursorpos[0])
                 seekrow = (maxrow // conf.SeekLength + 1) * conf.SeekLength - 1
                 self._grid.Table.SeekToRow(seekrow)
@@ -2091,8 +2094,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         """
         if self._export.IsRunning() and not force \
         and wx.YES != controls.YesNoMessageBox(
-            "Export is currently underway, "
-            "are you sure you want to cancel it?",
+            "Export is currently underway, are you sure you want to cancel it?",
             conf.Title, wx.ICON_WARNING, default=wx.NO
         ): return
         self._export.Stop()
@@ -2121,9 +2123,10 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
     def _PopulateCount(self, reload=False):
         """Populates row count in self._label_rows."""
         super(SQLPage, self)._PopulateCount(reload=reload)
-        self._tbgrid.EnableTool(wx.ID_EDIT,  bool(self._grid.NumberRows))
-        self._tbgrid.EnableTool(wx.ID_MORE,  bool(self._grid.NumberRows))
-        self._tbgrid.EnableTool(wx.ID_INDEX, bool(self._grid.NumberRows))
+        workable = isinstance(self._grid.Table, SQLiteGridBase) and bool(self._grid.NumberRows)
+        self._tbgrid.EnableTool(wx.ID_EDIT,  workable)
+        self._tbgrid.EnableTool(wx.ID_MORE,  workable)
+        self._tbgrid.EnableTool(wx.ID_INDEX, workable)
 
 
     def _OnExport(self, event=None):
@@ -2230,9 +2233,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnExecuteSQL(self, event=None):
         """
-        Handler for clicking to run an SQL query, runs the selected text or
-        whole contents, displays its results, if any, and commits changes
-        done, if any.
+        Handler for clicking to run an SQL query, runs the selected text or whole contents,
+        displays its results, if any, and commits changes done, if any.
         """
         if self._export.Shown: return
         sql = (self._stc.SelectedText or self._stc.Text).strip()
@@ -2288,12 +2290,14 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnGotoRow(self, event=None):
         """Handler for clicking to open goto row dialog."""
-        if self._grid.NumberRows: wx.CallAfter(self._grid.Table.OnGoto, None)
+        if isinstance(self._grid.Table, SQLiteGridBase) and self._grid.NumberRows:
+            wx.CallAfter(self._grid.Table.OnGoto, None)
 
 
     def _OnOpenForm(self, event=None):
         """Handler for clicking to open data form for row."""
-        if not self._grid.NumberRows: return
+        if not isinstance(self._grid.Table, SQLiteGridBase) or not self._grid.NumberRows:
+            return
         wx.Yield() # Allow toolbar icon time to toggle back
         row = self._grid.GridCursorRow
         wx.CallAfter(DataDialog(self, self._grid.Table, row).ShowModal)
@@ -2302,7 +2306,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
     def _OnOpenColumnForm(self, event=None):
         """Handler for clicking to open column dialog for column."""
-        if not self._grid.NumberRows: return
+        if not isinstance(self._grid.Table, SQLiteGridBase) or not self._grid.NumberRows:
+            return
         wx.Yield() # Allow toolbar icon time to toggle back
         row, col = self._grid.GridCursorRow, self._grid.GridCursorCol
         wx.CallAfter(self.Refresh) # Refresh grid labels enabled-status

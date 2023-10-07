@@ -20,6 +20,7 @@ CHANGELOG
 - fix error on changing column order in trigger/view editor
 - fix error on reindexing table from diagram if table has no index
 - fix error on checking foreign keys if foreign table has no primary key
+- fix error on toolbar actions upon action query results in SQL editor
 - fix user-defined function remaining inactive if saved without explicit compiling
 - fix numeric spinctrls in pragma editor having invalid range
 - fix detecting multiple statements in user-entered CREATE SQL
