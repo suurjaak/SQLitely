@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.10.2023
+@modified    07.10.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -96,10 +96,9 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             "HelpBorderColour":        wx.SYS_COLOUR_ACTIVEBORDER,
         })
         self.dbs_selected = []  # Current selected files in main list
-        self.db_datas = {}  # added DBs {filename: {name, size, last_modified,
-                            #            tables, title, error},}
-        self.dbs = {}       # Open databases {filename: Database, }
-        self.db_pages = {}  # {DatabasePage: Database, }
+        self.db_datas = {}  # DB infos {filename: {?name, size, last_modified, ?tables, ?title, ?error}}
+        self.dbs = {}       # Open databases {filename: Database}
+        self.db_pages = {}  # Open database pages {DatabasePage: Database}
         self.db_filter = "" # Current database list filter
         self.db_filter_timer = None # Database list filter callback timer
         self.db_menustate    = {}   # {filename: {} if refresh or {full: True} if reload}
@@ -878,13 +877,12 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         boldfont = self.Font.Bold()
 
         curpage = self.notebook.GetCurrentPage()
-        curfile = curpage.db.name if isinstance(curpage, DatabasePage) else None
+        curfile = curpage.db.filename if isinstance(curpage, DatabasePage) else None
 
-        openfiles = [(os.path.split(db.name)[-1], p)
-                     for p, db in self.db_pages.items()]
-        for filename, page in sorted(openfiles):
-            item = wx.MenuItem(menu, -1, filename)
-            if page.db.name == curfile or len(openfiles) < 2:
+        openfiles = [(os.path.split(db.name)[-1], p) for p, db in self.db_pages.items()]
+        for name, page in sorted(openfiles):
+            item = wx.MenuItem(menu, -1, util.ellipsize(name))
+            if page.db.filename == curfile or len(openfiles) < 2:
                 item.Font = boldfont
             menu.Bind(wx.EVT_MENU, functools.partial(open_item, page.db.name), item)
             menu.Append(item)
@@ -892,15 +890,16 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         allfiles = [(os.path.split(k)[-1], k) for k, v in self.db_datas.items()
                     if "name" in v]
-        for i, (filename, path) in enumerate(sorted(allfiles)):
-            label = "&%s %s" % ((i + 1), filename)
+        for i, (name, path) in enumerate(sorted(allfiles)):
+            if path in self.dbs and self.dbs[path].temporary: continue # for
+            label = "&%s %s" % ((i + 1), util.ellipsize(name))
             item = wx.MenuItem(menu, -1, label)
             if len(allfiles) > 1 and (path == curfile if curfile
             else len(openfiles) == 1 and path in self.dbs):
                 item.Font = boldfont
             menu_all.Append(item)
             menu.Bind(wx.EVT_MENU, functools.partial(open_item, path), item)
-        if allfiles:
+        if menu_all.MenuItemCount:
             menu.AppendSubMenu(menu_all, "All &files")
 
         item_recent = menu.AppendSubMenu(menu_recent, "&Recent files")
@@ -965,6 +964,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.page_db_latest = p
             path, file = os.path.split(p.db.name)
             subtitle = os.path.join(os.path.split(path)[-1] or path, file)
+            subtitle = util.ellipsize(subtitle, conf.MaxTabTitleLength, front=True)
             self.db_menustate[p.db.filename] = {"full": True}
         elif p is self.page_main:
             self.list_db.ContainingSizer.Layout()
@@ -1145,8 +1145,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         rename, updated = (getattr(event, x, None) for x in ("rename", "updated"))
 
         if rename:
-            self.dbs.pop(event.filename1, None)
-            self.dbs[event.filename2] = event.source.db
+            for dct in (self.dbs, conf.DBsOpen): dct.pop(event.filename1, None)
+            self.dbs[event.filename2] = conf.DBsOpen[event.filename2] = event.source.db
 
             if event.temporary: self.db_datas.pop(event.filename1, None)
             if "name" in self.db_datas.get(event.filename1, {}):
@@ -1222,8 +1222,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 self.update_database_detail()
         elif event.KeyCode in [ord("F")] and event.CmdDown():
             self.edit_filter.SetFocus()
-        elif self.list_db.GetFirstSelected() >= 0 and self.dbs_selected \
-        and not event.AltDown() and event.KeyCode in controls.KEYS.ENTER:
+        elif event.KeyCode in controls.KEYS.ENTER and not event.AltDown() \
+        and self.list_db.GetFirstSelected() >= 0 and self.dbs_selected:
             self.load_database_pages(self.dbs_selected)
         elif event.KeyCode in controls.KEYS.DELETE and self.dbs_selected:
             self.on_remove_database(None)
@@ -1433,8 +1433,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             data = defaultdict(lambda: None, name=filename)
             if os.path.exists(filename):
                 data["size"] = database.get_size(filename)
-                data["last_modified"] = datetime.datetime.fromtimestamp(
-                                        os.path.getmtime(filename))
+                data["last_modified"] = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
             self.db_datas[filename] = data
             items.append(data)
             if filename in conf.LastSelectedFiles: selected_files += [filename]
@@ -1631,7 +1630,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         )
         if wx.ID_OK != dialog.ShowModal(): return
 
-        path = controls.get_dialog_path(dialog)
+        path = dialog.GetPath() if len(filenames) > 1 else controls.get_dialog_path(dialog)
         wx.YieldIfNeeded() # Allow dialog to disappear
 
         new_filenames = []
@@ -1641,7 +1640,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if filename == filename2:
                 logger.error("Attempted to save %s as itself.", filename)
                 wx.MessageBox("Cannot overwrite %s with itself." % filename,
-                              conf.Title, wx.OK | wx.ICON_ERROR)
+                              conf.Title, wx.OK | wx.ICON_WARNING)
+                continue # for filename
+            if filename2 in self.dbs:
+                logger.error("Attempted to save %s as %s, which is currently open in program.",
+                             filename, filename2)
+                wx.MessageBox("%s is currently open in %s." %
+                              (filename2, conf.Title), conf.Title, wx.OK | wx.ICON_WARNING)
                 continue # for filename
             try: shutil.copyfile(filename, filename2)
             except Exception as e:
@@ -1789,6 +1794,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
                 self.clear_database_data(filename, recent=True)
                 self.dbs.pop(filename, None)
+                conf.DBsOpen.pop(filename, None)
                 self.db_datas.get(filename, {}).pop("name", None)
 
                 for i in range(self.list_db.GetItemCount())[::-1]:
@@ -2285,8 +2291,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         # Close databases, if not used in any other page
         page.db.unregister_consumer(page)
         if not page.db.has_consumers():
-            if page.db.name in self.dbs:
-                del self.dbs[page.db.name]
+            if page.db.filename in self.dbs:
+                del self.dbs[page.db.filename]
             page.db.close()
             conf.DBsOpen.pop(page.db.filename, None)
             self.db_datas.get(page.db.filename, {}).pop("title", None)
@@ -2359,7 +2365,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 if db:
                     logger.info("Opened %s (%s).", db, util.format_bytes(db.get_size()))
                     guibase.status("Reading database %s.", db)
-                    self.dbs[db.name] = db
+                    self.dbs[db.filename] = conf.DBsOpen[db.filename] = db
                     # Add filename to Recent Files menu and conf, if needed
                     if filename:
                         if filename in conf.RecentFiles: # Remove earlier position
@@ -2397,7 +2403,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 page = DatabasePage(self.notebook, tab_title, db, self.memoryfs)
                 if not page: return
                 if filename: self.list_db.SetItemStyleByText(db.filename, "active")
-                conf.DBsOpen[db.filename] = db
                 self.db_pages[page] = db
                 util.run_once(conf.save)
                 if not page: return # User closed page before loading was complete
@@ -2461,12 +2466,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
     def clear_database_data(self, filename, recent=False):
         """Clears database data from configuration."""
         lists = [conf.DBFiles, conf.LastSelectedFiles]
+        dicts = conf.LastActivePages, conf.LastSearchResults, conf.SchemaDiagrams, conf.SQLWindowTexts
         if recent: lists.append(conf.RecentFiles)
         for lst in lists:
             if filename in lst: lst.remove(filename)
-        for dct in conf.LastActivePages, conf.LastSearchResults, \
-                   conf.SchemaDiagrams,  conf.SQLWindowTexts, self.dbs:
-            dct.pop(filename, None)
+        for dct in dicts: dct.pop(filename, None)
         if not recent: return
         # Remove from recent file history
         idx = next((i for i in range(self.history_file.Count)
@@ -5823,7 +5827,7 @@ class DatabasePage(wx.Panel):
 
             filename2 = controls.get_dialog_path(dialog)
             if filename1 != filename2 and filename2 in conf.DBsOpen: return wx.MessageBox(
-                "%s is already open in %s." % (filename2, conf.Title),
+                "%s is currently open in %s." % (filename2, conf.Title),
                 conf.Title, wx.OK | wx.ICON_WARNING
             )
         rename = (filename1 != filename2)
