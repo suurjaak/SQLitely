@@ -9,6 +9,7 @@ CHANGELOG
 - add refresh-button and copy-button to diagram toolbar
 - add option to copy diagram image to clipboard
 - add IF NOT EXISTS to schema editor
+- add "Go to row" button to data dialog
 - add YAML formatting options to value editor
 - open databases in autocommit mode
 - highlight open databases in database list

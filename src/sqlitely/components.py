@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.10.2023
+@modified    08.10.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -7853,37 +7853,40 @@ class DataDialog(wx.Dialog):
         bmp2  = wx.ArtProvider.GetBitmap(wx.ART_COPY,        wx.ART_TOOLBAR, (16, 16))
         bmp3  = images.ToolbarRefresh.Bitmap
         bmp4  = images.ToolbarFullScreen.Bitmap
-        bmp5  = images.ToolbarColumnForm.Bitmap
-        bmp6  = images.ToolbarCommit.Bitmap
-        bmp7  = images.ToolbarRollback.Bitmap
-        bmp8  = wx.ArtProvider.GetBitmap(wx.ART_NEW,         wx.ART_TOOLBAR, (16, 16))
-        bmp9  = wx.ArtProvider.GetBitmap(wx.ART_DELETE,      wx.ART_TOOLBAR, (16, 16))
-        bmp10 = wx.ArtProvider.GetBitmap(wx.ART_GO_FORWARD,  wx.ART_TOOLBAR, (16, 16))
+        bmp5  = images.ToolbarGoto.Bitmap
+        bmp6  = images.ToolbarColumnForm.Bitmap
+        bmp7  = images.ToolbarCommit.Bitmap
+        bmp8  = images.ToolbarRollback.Bitmap
+        bmp9  = wx.ArtProvider.GetBitmap(wx.ART_NEW,         wx.ART_TOOLBAR, (16, 16))
+        bmp10 = wx.ArtProvider.GetBitmap(wx.ART_DELETE,      wx.ART_TOOLBAR, (16, 16))
+        bmp11 = wx.ArtProvider.GetBitmap(wx.ART_GO_FORWARD,  wx.ART_TOOLBAR, (16, 16))
         tb.SetToolBitmapSize(bmp1.Size)
         tb.AddTool(wx.ID_BACKWARD,     "", bmp1, shortHelp="Go to previous row  (Alt-Left)")
         tb.AddControl(wx.StaticText(tb, size=(15, 10)))
         if self._editable:
             tb.AddSeparator()
-            tb.AddTool(wx.ID_COPY,     "", bmp2, shortHelp="Copy row data or SQL")
-            tb.AddTool(wx.ID_REFRESH,  "", bmp3, shortHelp="Reload data from database  (F5)")
-            tb.AddTool(wx.ID_HIGHEST,  "", bmp4, shortHelp="Resize to fit  (F11)")
+            tb.AddTool(wx.ID_COPY,     "", bmp2,  shortHelp="Copy row data or SQL")
+            tb.AddTool(wx.ID_REFRESH,  "", bmp3,  shortHelp="Reload data from database  (F5)")
+            tb.AddTool(wx.ID_HIGHEST,  "", bmp4,  shortHelp="Resize to fit  (F11)")
             tb.AddSeparator()
-            tb.AddTool(wx.ID_EDIT,     "", bmp5, shortHelp="Open column dialog  (%s-F2)" % controls.KEYS.NAME_CTRL)
+            tb.AddTool(wx.ID_INDEX,    "", bmp5,  shortHelp="Go to row ..  (%s-G)" % controls.KEYS.NAME_CTRL)
+            tb.AddTool(wx.ID_EDIT,     "", bmp6,  shortHelp="Open column dialog  (%s-F2)" % controls.KEYS.NAME_CTRL)
             tb.AddSeparator()
-            tb.AddTool(wx.ID_SAVE,     "", bmp6, shortHelp="Commit row changes to database  (F10)")
-            tb.AddTool(wx.ID_UNDO,     "", bmp7, shortHelp="Rollback row changes and restore original values  (F9)")
+            tb.AddTool(wx.ID_SAVE,     "", bmp7,  shortHelp="Commit row changes to database  (F10)")
+            tb.AddTool(wx.ID_UNDO,     "", bmp8,  shortHelp="Rollback row changes and restore original values  (F9)")
             tb.AddSeparator()
             tb.AddStretchableSpace()
             tb.AddSeparator()
-            tb.AddTool(wx.ID_ADD,      "", bmp8, shortHelp="Add new row")
-            tb.AddTool(wx.ID_DELETE,   "", bmp9, shortHelp="Delete row")
+            tb.AddTool(wx.ID_ADD,      "", bmp9,  shortHelp="Add new row")
+            tb.AddTool(wx.ID_DELETE,   "", bmp10, shortHelp="Delete row")
             tb.AddSeparator()
         else:
             tb.AddStretchableSpace()
-            tb.AddTool(wx.ID_EDIT,     "", bmp5, shortHelp="Open column dialog  (F4)")
+            tb.AddTool(wx.ID_INDEX,    "", bmp5,  shortHelp="Go to row ..  (%s-G)" % controls.KEYS.NAME_CTRL)
+            tb.AddTool(wx.ID_EDIT,     "", bmp6,  shortHelp="Open column dialog  (F4)")
             tb.AddStretchableSpace()
         tb.AddControl(wx.StaticText(tb, size=(15, 10)))
-        tb.AddTool(wx.ID_FORWARD,      "", bmp10, shortHelp="Go to next row  (Alt-Right)")
+        tb.AddTool(wx.ID_FORWARD,      "", bmp11, shortHelp="Go to next row  (Alt-Right)")
         if self._editable:
             tb.EnableTool(wx.ID_UNDO, False)
             tb.EnableTool(wx.ID_SAVE, False)
@@ -7945,6 +7948,7 @@ class DataDialog(wx.Dialog):
         self.Bind(wx.EVT_TOOL,   self._OnCopy,                       id=wx.ID_COPY)
         self.Bind(wx.EVT_TOOL,   self._OnReset,                      id=wx.ID_REFRESH)
         self.Bind(wx.EVT_TOOL,   self._OnFit,                        id=wx.ID_HIGHEST)
+        self.Bind(wx.EVT_TOOL,   self._OnGotoRow,                    id=wx.ID_INDEX)
         self.Bind(wx.EVT_TOOL,   self._OnColumnDialog,               id=wx.ID_EDIT)
         self.Bind(wx.EVT_TOOL,   self._OnCommit,                     id=wx.ID_SAVE)
         self.Bind(wx.EVT_TOOL,   self._OnRollback,                   id=wx.ID_UNDO)
@@ -7965,6 +7969,7 @@ class DataDialog(wx.Dialog):
 
         accelerators = [(wx.ACCEL_ALT,    wx.WXK_LEFT,  wx.ID_BACKWARD),
                         (wx.ACCEL_ALT,    wx.WXK_RIGHT, wx.ID_FORWARD),
+                        (wx.ACCEL_CMD,    ord('G'),     wx.ID_INDEX),
                         (wx.ACCEL_CMD,    wx.WXK_F2,    wx.ID_EDIT),
                         (wx.ACCEL_NORMAL, wx.WXK_F5,    wx.ID_REFRESH),
                         (wx.ACCEL_NORMAL, wx.WXK_F9,    wx.ID_UNDO),
@@ -7994,6 +7999,7 @@ class DataDialog(wx.Dialog):
             self.Title = title
             self._tb.EnableTool(wx.ID_BACKWARD, bool(self._row))
             self._tb.EnableTool(wx.ID_FORWARD,  self._row + 1 < gridbase.RowsCount)
+            self._tb.EnableTool(wx.ID_INDEX,    gridbase.RowsCount > 1)
             if self._editable:
                 changed = self._data[gridbase.KEY_NEW] or (self._data != self._original)
                 self._tb.EnableTool(wx.ID_SAVE, changed)
@@ -8084,6 +8090,25 @@ class DataDialog(wx.Dialog):
         if direction > 0 and self._row >= self._gridbase.GetNumberRows() - 1 \
         and not self._gridbase.IsComplete():
             self._gridbase.SeekAhead()
+        self._Populate()
+
+
+    def _OnGotoRow(self, event=None):
+        """Handler for navigating to specified row, shows entry dialog and loads row data."""
+        if self._gridbase.RowsCount < 2: return
+        dlg = wx.TextEntryDialog(self, "Row number to go to:", conf.Title,
+                                 value=str(self._row), style=wx.OK | wx.CANCEL)
+        dlg.CenterOnParent()
+        if wx.ID_OK != dlg.ShowModal(): return
+        try: row = int(dlg.GetValue())
+        except Exception: return
+        row = max(1, min(row, self._gridbase.RowsCount)) - 1
+        if row == self._row: return
+        self._OnUpdate()
+        self._gridbase.SeekToRow(row)
+        self._row = row
+        self._data = self._gridbase.GetRowData(self._row)
+        self._original = self._gridbase.GetRowData(self._row, original=True)
         self._Populate()
 
 
