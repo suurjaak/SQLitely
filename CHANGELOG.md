@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.2, 2023-10-07
+2.2, 2023-10-08
 ---------------
 - add line number and word-wrap toggles to more controls
 - add diagram export to Tools-menu
@@ -27,6 +27,7 @@ CHANGELOG
 - fix numeric spinctrls in pragma editor having invalid range
 - fix detecting multiple statements in user-entered CREATE SQL
 - fix ambiguity in parsing INDEX expressions with COLLATE
+- fix value editor raising error on program exit
 - fix Excel export error, from breaking changes in PIL
 - drop step as a vendored library, use from public package index instead
 

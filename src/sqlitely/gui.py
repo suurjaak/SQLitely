@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.10.2023
+@modified    08.10.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2206,6 +2206,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         if not self.IsMaximized(): conf.WindowSize = self.Size[:]
         conf.save()
         self.trayicon.Destroy()
+        self.columndlg and self.columndlg.Destroy()
         wx.CallAfter(sys.exit) # Immediate exit fails if exiting from tray
 
 
