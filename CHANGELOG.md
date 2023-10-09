@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.2, 2023-10-08
+2.2, 2023-10-09
 ---------------
 - add line number and word-wrap toggles to more controls
 - add diagram export to Tools-menu
