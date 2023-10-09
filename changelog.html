@@ -38,9 +38,9 @@
           <a href="https://github.com/suurjaak/SQLitely">View the Project on GitHub <small>suurjaak/SQLitely</small></a>
 
           <ul>
-            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.1_setup.exe">Download <strong>Setup</strong></a></li>
-            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.1_x64_setup.exe">Download <strong>64bit Setup</strong></a></li>
-            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.1-src.zip">Download <strong>Source</strong></a></li>
+            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.2_setup.exe">Download <strong>Setup</strong></a></li>
+            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.2_x64_setup.exe">Download <strong>64bit Setup</strong></a></li>
+            <li><a href="https://erki.lap.ee/downloads/sqlitely/sqlitely_2.2-src.zip">Download <strong>Source</strong></a></li>
           </ul>
         </p>
         
@@ -49,6 +49,39 @@
       <section>
 
         <h2>Changelog</h2>
+
+        <h4>v2.2, 2023-10-09:</h4>
+        <ul>
+          <li>add line number and word-wrap toggles to more controls</li>
+          <li>add diagram export to Tools-menu</li>
+          <li>add option to export diagram with selected entities</li>
+          <li>add refresh-button and copy-button to diagram toolbar</li>
+          <li>add option to copy diagram image to clipboard</li>
+          <li>add IF NOT EXISTS to schema editor</li>
+          <li>add "Go to row" button to data dialog</li>
+          <li>add YAML formatting options to value editor</li>
+          <li>open databases in autocommit mode</li>
+          <li>highlight open databases in database list</li>
+          <li>unify context menus in data and schema trees</li>
+          <li>retain undo history when loading SQL from file to SQL editor</li>
+          <li>improve adding final semicolon to user-entered commented CREATE SQL</li>
+          <li>improve compatibility with wxPython 4.2+</li>
+          <li>speed up Excel export by improved caching for column width calculation</li>
+          <li>speed up populating hex/byte editors in value editor</li>
+          <li>fix error on changing column order in trigger/view editor</li>
+          <li>fix error on reindexing table from diagram if table has no index</li>
+          <li>fix error on checking foreign keys if foreign table has no primary key</li>
+          <li>fix error on toolbar actions upon action query results in SQL editor</li>
+          <li>fix error on loading SVG image in value editor</li>
+          <li>fix user-defined function remaining inactive if saved without explicit compiling</li>
+          <li>fix numeric spinctrls in pragma editor having invalid range</li>
+          <li>fix detecting multiple statements in user-entered CREATE SQL</li>
+          <li>fix ambiguity in parsing INDEX expressions with COLLATE</li>
+          <li>fix value editor raising error on program exit</li>
+          <li>fix Excel export error, from breaking changes in PIL</li>
+          <li>drop step as a vendored library, use from public package index instead</li>
+        </ul>
+        <br />
 
         <h4>v2.1, 2023-08-27:</h4>
         <ul>
