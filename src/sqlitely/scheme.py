@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    01.10.2023
+@modified    09.10.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1449,7 +1449,7 @@ class SchemaPlacement(object):
         key2 = (opts["sql0"], bool(opts.get("meta") or opts.get("hasmeta")),
                 self._show_cols, self._show_keys, self._show_nulls,
                 str(statistics) if statistics else None, False)
-        return key1 in self._cache[self._zoom] and key2 in self._cache[self._zoom][key1]
+        return key1 in self._cache[self._zoom] and self._cache[self._zoom][key1].get(key2)
 
 
     def GetItemBitmaps(self, opts, statistics=None, dragrect=False):

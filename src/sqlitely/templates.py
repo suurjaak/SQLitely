@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.10.2023
+@modified    09.10.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -3038,14 +3038,18 @@ Database schema diagram SVG template.
 @param   ?embed           whether to omit full XML headers and provide links for embedding in HTML
 """
 DIAGRAM_SVG = """<%
-import math, wx
+import math
+try: import wx
+except ImportError: wx = None
 from sqlitely.lib import util
-from sqlitely.scheme import SchemaPlacement, Point, Rect, Size
+from sqlitely.scheme import SchemaPlacement, Colour, Point, Rect, Size
 from sqlitely import grammar, images, templates
 from sqlitely.templates import urlquote
 
+C2S_HTML    = wx.C2S_HTML_SYNTAX if wx else Colour.C2S_HTML_SYNTAX
 CRADIUS     = 1
 MARGIN      = 10
+FKWIDTH     = images.DiagramFK.Bitmap.Width if hasattr(images.DiagramFK, "Bitmap") else 9
 wincolour   = SchemaPlacement.DEFAULT_COLOURS["Background"]
 wtextcolour = SchemaPlacement.DEFAULT_COLOURS["Foreground"]
 gtextcolour = SchemaPlacement.DEFAULT_COLOURS["Border"]
@@ -3134,8 +3138,8 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
   <desc>{{ templates.export_comment() }}</desc>
   <defs>
     <linearGradient id="item-background">
-      <stop style="stop-color: {{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }}; stop-opacity: 1;" offset="0" />
-      <stop style="stop-color: {{ gradcolour.GetAsString(wx.C2S_HTML_SYNTAX) }}; stop-opacity: 1;" offset="1" />
+      <stop style="stop-color: {{ wincolour.GetAsString(C2S_HTML) }}; stop-opacity: 1;" offset="0" />
+      <stop style="stop-color: {{ gradcolour.GetAsString(C2S_HTML) }}; stop-opacity: 1;" offset="1" />
     </linearGradient>
 
     <image id="pk" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramPK.data }}" />
@@ -3143,7 +3147,7 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
     <image id="null" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramNull.data }}" />
 
     <filter x="0" y="0" width="1" height="1" id="clearbg">
-       <feFlood flood-color="{{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }}" />
+       <feFlood flood-color="{{ wincolour.GetAsString(C2S_HTML) }}" />
        <feComposite in="SourceGraphic" in2="" />
     </filter>
   </defs>
@@ -3152,18 +3156,18 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
     <![CDATA[
 
       svg {
-        background:      {{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+        background:      {{ wincolour.GetAsString(C2S_HTML) }};
         shape-rendering: crispEdges;
       }
 
       path {
         fill:            none;
-        stroke:          {{ gtextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+        stroke:          {{ gtextcolour.GetAsString(C2S_HTML) }};
         stroke-width:    1px;
       }
 
       text {
-        fill:            {{ wtextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+        fill:            {{ wtextcolour.GetAsString(C2S_HTML) }};
         font-size:       {{ fontsize }}px;
         font-family:     {{ ", ".join(('"%s"' if " " in n else '%s') % n for n in font_faces) }};
         white-space:     pre;
@@ -3171,12 +3175,12 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
 
       .item .box {
          fill:           url(#item-background);
-         stroke:         {{ gtextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+         stroke:         {{ gtextcolour.GetAsString(C2S_HTML) }};
          stroke-width:   1px;
       }
 
       .item .content {
-        fill:            {{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+        fill:            {{ wincolour.GetAsString(C2S_HTML) }};
         fill-opacity:    1;
       }
 
@@ -3190,22 +3194,22 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
       }
 
       .item .stats .size {
-        fill:            {{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+        fill:            {{ wincolour.GetAsString(C2S_HTML) }};
         text-anchor:     end;
       }
 
       .item .separator {
-        stroke:          {{ gtextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+        stroke:          {{ gtextcolour.GetAsString(C2S_HTML) }};
         stroke-width:    1px;
       }
 
       .relation path {
-        stroke:          {{ btextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+        stroke:          {{ btextcolour.GetAsString(C2S_HTML) }};
         stroke-width:    1px;
       }
 
       .relation .label {
-        fill:            {{ btextcolour.GetAsString(wx.C2S_HTML_SYNTAX) }};
+        fill:            {{ btextcolour.GetAsString(C2S_HTML) }};
         filter:          url(#clearbg);
         text-anchor:     middle;
       }
@@ -3363,7 +3367,7 @@ if w1 + w2 + 2 * SchemaPlacement.BRADIUS > item["bounds"].Width and item.get("co
       <use xlink:href="#pk" x="{{ itemx + 3 }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
         %endif
         %if any(col["name"] in x.get("name", ()) for x in fks):
-      <use xlink:href="#fk" x="{{ itemx + item["bounds"].Width - 5 - images.DiagramFK.Bitmap.Width }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
+      <use xlink:href="#fk" x="{{ itemx + item["bounds"].Width - 5 - FKWIDTH }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
         %endif
         %if "notnull" not in col and show_nulls:
       <use xlink:href="#null" x="{{ itemx + 3 }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
