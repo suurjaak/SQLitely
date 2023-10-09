@@ -7,6 +7,7 @@ Parameters expected by templates:
     data       statement data structure
     root       root data structure
     collapse   function to collapse all whitespace
+    terminate  function to terminate SQL statement with semicolon if not already terminated
     Template   Template-class
     templates  this module
     CM         comma setter(type, i, ?subtype, ?j, ?root=None)
@@ -23,7 +24,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    05.08.2023
+@modified    03.10.2023
 ------------------------------------------------------------------------------
 """
 
@@ -336,24 +337,24 @@ Alter sqlite_master directly.
 4. COMMIT TRANSACTION
 
 @param   data {
-             version:   schema_version PRAGMA to set afterward
              ?table:    {name: CREATE SQL, }
              ?index:    {name: CREATE SQL, }
              ?trigger:  {name: CREATE SQL, }
              ?view:     {name: CREATE SQL, }
+             ?version:  schema_version PRAGMA to set afterward, if any
          }
 """
 ALTER_MASTER = """<%
 CATEGORIES = ["table", "view", "index", "trigger"]
 %>
 {{ WS("-- Overwrite CREATE statements in sqlite_master directly,") }}{{ LF() }}
-{{ WS("-- to avoid table names being force-quoted by SQLite") }}{{ LF() }}
-{{ WS("-- upon executing ALTER TABLE .. RENAME TO ..") }}{{ LF() }}
+{{ WS("-- to avoid SQLite dropping IF NOT EXISTS flags and comments,") }}{{ LF() }}
+{{ WS("-- or force-quoting table names upon ALTER TABLE .. RENAME TO ..") }}{{ LF() }}
 
 SAVEPOINT alter_master;{{ LF() }}
 {{ LF() }}
 
-PRAGMA writable_SCHEMA = ON;{{ LF() }}
+PRAGMA writable_schema = ON;{{ LF() }}
 {{ LF() }}
 
 %for category in CATEGORIES:
@@ -364,10 +365,13 @@ WHERE {{ WS("type = ") }}{{ Q(category, force=True) }} {{ WS(" AND name = ") }}{
     %endfor
 %endfor
 
+%if data.get("version") is not None:
+{{ LF() }}
 PRAGMA schema_version = {{ data["version"] }};{{ LF() }}
 {{ LF() }}
+%endif
 
-PRAGMA writable_SCHEMA = OFF;{{ LF() }}
+PRAGMA writable_schema = OFF;{{ LF() }}
 {{ LF() }}
 
 RELEASE SAVEPOINT alter_master;{{ LF() }}
@@ -523,6 +527,18 @@ for ctype, cnstr in get_constraints():
 
 
 
+INDEX_COLUMN_DEFINITION = """
+  {{ Q(data["name"]) if "name" in data else WS(data["expr"]) if "expr" in data else "" }}
+%if data.get("collate"):
+  COLLATE {{ data["collate"] }}
+%endif
+%if data.get("order"):
+  {{ data["order"] }}
+%endif
+"""
+
+
+
 CREATE_INDEX = """
 CREATE
 
@@ -542,13 +558,7 @@ ON {{ Q(data["table"]) if "table" in data else "" }}{{ WS(" ") }}
 (
 {{ GLUE() }}
 %for i, col in enumerate(data.get("columns", [])):
-  {{ Q(col["name"]) if "name" in col else WS(col["expr"]) if "expr" in col else "" }}
-    %if col.get("collate"):
-  COLLATE {{ col["collate"] }}
-    %endif
-    %if col.get("order"):
-  {{ col["order"] }}
-    %endif
+  {{ Template(templates.INDEX_COLUMN_DEFINITION, strip=True, postprocess=collapse).expand(dict(locals(), data=col)) }}
   {{ CM("columns", i, root=root) }}
 %endfor
 {{ GLUE() }}
@@ -677,7 +687,7 @@ VIEW
 %endif
 
 
-AS {{ WS(data["select"]) if data.get("select") else "" }};
+AS {{ WS(terminate(data["select"])) if data.get("select") else ";" }}
 """
 
 

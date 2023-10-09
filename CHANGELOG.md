@@ -1,7 +1,39 @@
 CHANGELOG
 =========
 
-2.1, 2023-08-28
+2.2, 2023-10-08
+---------------
+- add line number and word-wrap toggles to more controls
+- add diagram export to Tools-menu
+- add option to export diagram with selected entities
+- add refresh-button and copy-button to diagram toolbar
+- add option to copy diagram image to clipboard
+- add IF NOT EXISTS to schema editor
+- add "Go to row" button to data dialog
+- add YAML formatting options to value editor
+- open databases in autocommit mode
+- highlight open databases in database list
+- unify context menus in data and schema trees
+- retain undo history when loading SQL from file to SQL editor
+- improve adding final semicolon to user-entered commented CREATE SQL
+- improve compatibility with wxPython 4.2+
+- speed up Excel export by improved caching for column width calculation
+- speed up populating hex/byte editors in value editor
+- fix error on changing column order in trigger/view editor
+- fix error on reindexing table from diagram if table has no index
+- fix error on checking foreign keys if foreign table has no primary key
+- fix error on toolbar actions upon action query results in SQL editor
+- fix error on loading SVG image in value editor
+- fix user-defined function remaining inactive if saved without explicit compiling
+- fix numeric spinctrls in pragma editor having invalid range
+- fix detecting multiple statements in user-entered CREATE SQL
+- fix ambiguity in parsing INDEX expressions with COLLATE
+- fix value editor raising error on program exit
+- fix Excel export error, from breaking changes in PIL
+- drop step as a vendored library, use from public package index instead
+
+
+2.1, 2023-08-16
 ---------------
 - add user-defined functions to value editor
 - add button panels to data and schema tabs

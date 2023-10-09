@@ -66,6 +66,9 @@ Installation
 Windows: download and launch the latest setup from
 https://suurjaak.github.io/SQLitely/downloads.html.
 
+Linux Snap Store: install SQLitely, or run
+`snap install sqlitely`.
+
 Mac/Linux/other: install Python and pip, run `pip install sqlitely`.
 
 The pip installation will add the `sqlitely` command to path.
@@ -101,6 +104,7 @@ and the following 3rd-party Python packages:
 - pytz (https://pythonhosted.org/pytz/)
 - PyYAML (https://pypi.org/project/PyYAML/)
 - six (https://pypi.org/project/six/)
+- step (https://pypi.org/project/step-template/)
 - wxPython 4.0+ (https://wxpython.org)
 - xlrd (https://pypi.org/project/xlrd)
 - XlsxWriter (https://pypi.org/project/XlsxWriter)
@@ -118,9 +122,6 @@ Attribution
 
 Includes sqlite_analyzer, a command-line utility for table space analysis,
 (c) 2000, D. Richard Hipp, https://www.sqlite.org.
-
-Includes a modified version of step, Simple Template Engine for Python,
-(c) 2012, Daniele Mazzocchio, https://github.com/dotpy/step.
 
 Includes a modified version of SQLite.g4 from sqlite-parser,
 (c) 2013, Bart Kiers, https://github.com/bkiers/sqlite-parser.

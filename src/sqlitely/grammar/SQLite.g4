@@ -42,15 +42,17 @@
  *                disallow certain keywords in column types and constraint names;
  *                add TRUE/FALSE literals;
  *                add support for INDEX expressions;
- *                add support for NULLS FIRST|LAST in ORDER BY.
+ *                add support for NULLS FIRST|LAST in ORDER BY;
+ *                ensure statement list is delimited;
+ *                fix ambiguity in parsing INDEX expressions with COLLATE.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
- * Updated by   : Erki Suurjaak, 2019-2022
+ * Updated by   : Erki Suurjaak, 2019-2023
  */
 grammar SQLite;
 
 parse
- : ( sql_stmt_list | error )* EOF
+ : ( sql_stmt_list | error )? EOF
  ;
 
 error
@@ -392,7 +394,9 @@ raise_function
  ;
 
 indexed_column
- : ( column_name | expr ) ( K_COLLATE collation_name )? ( K_ASC | K_DESC )?
+ : ( column_name ( K_COLLATE collation_name )? ( K_ASC | K_DESC )? )
+ | ( expr        ( K_COLLATE collation_name )  ( K_ASC | K_DESC )? )
+ | ( expr        ( K_COLLATE collation_name )? ( K_ASC | K_DESC )? )
  ;
 
 table_constraint

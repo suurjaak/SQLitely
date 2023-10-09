@@ -96,9 +96,10 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    27.08.2023
+@modified    07.10.2023
 ------------------------------------------------------------------------------
 """
+import binascii
 import collections
 import copy
 import functools
@@ -110,6 +111,7 @@ import re
 import string
 import struct
 import sys
+import time
 
 import wx
 import wx.html
@@ -129,7 +131,7 @@ import wx.lib.wordwrap
 import wx.stc
 
 
-try: import collections.abc as collections_abc             # Py3
+try: import collections.abc as collections_abc             # Py2
 except ImportError: import collections as collections_abc  # Py3
 try:
     integer_types, string_types, text_type = (int, long), (basestring, ), unicode  # Py2
@@ -652,7 +654,7 @@ class CallableManagerDialog(wx.Dialog):
         wrap = lambda f, *a: lambda e: wx.CallAfter(f, *a)
         splitter.Bind(wx.EVT_SPLITTER_SASH_POS_CHANGED, wrap(self._UpdateUI))
         self.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self._OnSelectItem,           list_items)
-        self.Bind(wx.stc.EVT_STC_MODIFIED,    wrap(self.EnsureMargin),     stc_body)
+        self.Bind(wx.stc.EVT_STC_MODIFIED,    wrap(self.EnsureMargin),      stc_body)
         self.Bind(wx.EVT_BUTTON,              wrap(self.Compile),           button_compile)
         self.Bind(wx.EVT_BUTTON,              wrap(self.Test),              button_test)
         self.Bind(wx.EVT_BUTTON,              wrap(self.SetEditmode, True), button_edit)
@@ -847,7 +849,7 @@ class CallableManagerDialog(wx.Dialog):
                 "Unsaved changes", wx.ICON_WARNING | wx.OK | wx.CANCEL
             ): return
 
-            self.item.update(changes)
+            self.item.update(changes, **self.GetChanges())
             if self.item.get("active") is not False: self.item.pop("active", None)
             if self.item.get("name") in self.state["namespace"]:
                 self.item["target"] = self.state["namespace"][self.item["name"]]
@@ -1434,14 +1436,7 @@ class FormDialog(wx.Dialog):
 
             mylabel = wx.StaticText(parent, label=label, name=accname + "_label")
             tb = wx.ToolBar(parent, style=wx.TB_FLAT | wx.TB_NODIVIDER)
-            ctrl = field["component"](parent, traversable=True, style=wx.BORDER_SUNKEN)
-
-            ctrl.SetName(accname)
-            ctrl.SetMarginCount(1)
-            ctrl.SetMarginType(0, wx.stc.STC_MARGIN_NUMBER)
-            ctrl.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
-            ctrl.SetMarginWidth(0, 0)
-            ctrl.SetWrapMode(wx.stc.STC_WRAP_WORD)
+            ctrl = field["component"](parent, traversable=True, style=wx.BORDER_SUNKEN, name=accname)
 
             OPTS = {"numbers": {"id": wx.ID_INDENT, "bmp": wx.ART_HELP,      "handler": self._OnToggleLineNumbers},
                     "wrap":    {"id": wx.ID_STATIC, "bmp": wx.ART_HELP,      "handler": self._OnToggleWordWrap},
@@ -2461,6 +2456,36 @@ class Patch(object):
             try: return STC__StartStyling(self, *args, **kwargs)
             except TypeError: return STC__StartStyling(self, *(args + (255, )), **kwargs)
         wx.stc.StyledTextCtrl.StartStyling = StartStyling__Patched
+
+        if wx.VERSION >= (4, 2):
+            # Previously, ToolBitmapSize was set to largest, and smaller bitmaps were padded
+            ToolBar__Realize = wx.ToolBar.Realize
+            def Realize__Patched(self):
+                sz = tuple(self.GetToolBitmapSize())
+                for i in range(self.GetToolsCount()):
+                    t = self.GetToolByPos(i)
+                    for b in filter(bool, (t.NormalBitmap, t.DisabledBitmap)):
+                        sz = max(sz[0], b.Width), max(sz[1], b.Height)
+                self.SetToolBitmapSize(sz)
+                for i in range(self.GetToolsCount()):
+                    t = self.GetToolByPos(i)
+                    if t.NormalBitmap:   t.NormalBitmap   = resize_img(t.NormalBitmap,   sz)
+                    if t.DisabledBitmap: t.DisabledBitmap = resize_img(t.DisabledBitmap, sz)
+                return ToolBar__Realize(self)
+            wx.ToolBar.Realize = Realize__Patched
+
+            def resize_bitmaps(func):
+                """Returns function pass-through wrapper, resizing any Bitmap arguments."""
+                def inner(self, *args, **kwargs):
+                    sz = self.GetToolBitmapSize()
+                    args = [resize_img(v, sz) if v and isinstance(v, wx.Bitmap) else v for v in args]
+                    kwargs = {k: resize_img(v, sz) if v and isinstance(v, wx.Bitmap) else v
+                              for k, v in kwargs.items()}
+                    return func(self, *args, **kwargs)
+                return functools.update_wrapper(inner, func)
+            wx.ToolBar.SetToolNormalBitmap   = resize_bitmaps(wx.ToolBar.SetToolNormalBitmap)
+            wx.ToolBar.SetToolDisabledBitmap = resize_bitmaps(wx.ToolBar.SetToolDisabledBitmap)
+
         Patch._PATCHED = True
 
         # In some setups, float->int autoconversion is not done for Python/C sip objects
@@ -2895,11 +2920,18 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         "REFUOI1jZGRiZqAEMFGke2gY8P/f3/9kGwDTjM8QnAaga8JlCG3CAJdt2MQxDCAUaOjyjKMp"
         "cRAYAABS2CPsss3BWQAAAABJRU5ErkJggg==")
 
-    #----------------------------------------------------------------------
     SORT_ARROW_DOWN = wx.lib.embeddedimage.PyEmbeddedImage(
         "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAEhJ"
         "REFUOI1jZGRiZqAEMFGke9QABgYGBgYWdIH///7+J6SJkYmZEacLkCUJacZqAD5DsInTLhDR"
         "bcPlKrwugGnCFy6Mo3mBAQChDgRlP4RC7wAAAABJRU5ErkJggg==")
+
+    ## Item styles as {style name: {option name: values to set or callable(self) returning values to set}}
+    STYLES = {
+        None:     {"ItemFont":             lambda self: self.Font,
+                   "ItemTextColour":       lambda self: self.ForegroundColour,
+                   "ItemBackgroundColour": lambda self: self.BackgroundColour}, # None is default style
+        "active": {"ItemFont":             lambda self: self.Font.Bold()},
+    }
 
 
     def __init__(self, *args, **kwargs):
@@ -2919,6 +2951,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         self._data_map = {}     # {item_id: row dict, } currently visible data
         self._id_rows = []      # [(item_id, {row dict}), ] all data items
         self._id_images = {}    # {item_id: imageIds}
+        self._id_styles = {}    # {item_id: style name if any}
         self._columns = []      # [(name, label), ]
         self._filter = ""       # Filter string
         self._col_widths = {}   # {col_index: width in pixels, }
@@ -2972,6 +3005,9 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             self.SetUserLineHeight(int(h * 1.5))
 
 
+    def GetTopRow(self):
+        """Returns top row data dictionary, or None if no top row."""
+        return copy.deepcopy(self._top_row)
     def SetTopRow(self, data, imageIds=()):
         """
         Adds special top row to list, not subject to sorting or filtering.
@@ -2980,8 +3016,8 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         @param   imageIds  list of indexes for the images associated to top row
         """
         self._top_row = data
-        if imageIds: self._id_images[-1] = self._ConvertImageIds(imageIds)
-        else: self._id_images.pop(-1, None)
+        if imageIds: self._id_images[0] = self._ConvertImageIds(imageIds)
+        else: self._id_images.pop(0, None)
         self._PopulateTopRow()
 
 
@@ -3008,7 +3044,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         if imageIds: imageIds = self._ConvertImageIds(imageIds)
         for r in rows:
             item_id = self.counter()
-            self._id_rows += [(item_id, r)]
+            self._id_rows += [(item_id, copy.deepcopy(r))]
             if imageIds: self._id_images[item_id] = imageIds
         self.RefreshRows()
 
@@ -3036,7 +3072,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
         index = min(index, self.GetItemCount())
         if self._RowMatchesFilter(data):
-            columns = [c[0] for c in self._columns]
+            data, columns = copy.deepcopy(data), [c[0] for c in self._columns]
             for i, col_name in enumerate(columns):
                 col_value = self._formatters[col_name](data, col_name)
 
@@ -3046,9 +3082,8 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             self.SetItemData(index, item_id)
             self.itemDataMap[item_id] = [data[c] for c in columns]
             self._data_map[item_id] = data
-            self.SetItemTextColour(index, self.ForegroundColour)
-            self.SetItemBackgroundColour(index, self.BackgroundColour)
-        self._id_rows.insert(index - (1 if self._top_row else 0), (item_id, data))
+            self._ApplyItemStyle(index, None)
+        self._id_rows.insert(index - bool(self._top_row), (item_id, data))
         if self.GetSortState()[0] >= 0:
             self.SortListItems(*self.GetSortState())
 
@@ -3073,11 +3108,12 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         """
         Find an item whose primary label matches the text.
 
-        @return   item index, or -1 if not found
+        @return   item index, or NOT_FOUND
         """
         for i in range(self.GetItemCount()):
+            data = self.GetItemData(i)
             if self.GetItemText(i) == text: return i
-        return -1
+        return wx.NOT_FOUND
 
 
     def RefreshRows(self):
@@ -3111,8 +3147,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         for i, col_name in enumerate([c[0] for c in self._columns]):
             col_value = self._formatters[col_name](data, col_name)
             self.SetStringItem(row, i, col_value)
-        self.SetItemTextColour(row,       self.ForegroundColour)
-        self.SetItemBackgroundColour(row, self.BackgroundColour)
+        self._ApplyItemStyle(row, self.GetItemStyle(row))
 
 
     def ResetColumnWidths(self):
@@ -3128,6 +3163,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         del self._data_map[item_id]
         self._id_rows.remove((item_id, data))
         self._id_images.pop(item_id, None)
+        self._id_styles.pop(item_id, None)
         return wx.lib.agw.ultimatelistctrl.UltimateListCtrl.DeleteItem(self, index)
 
 
@@ -3136,6 +3172,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
         self.itemDataMap = {}
         self._data_map = {}
         self._id_rows = []
+        self._id_styles = {}
         for item_id in self._id_images:
             if item_id >= 0: self._id_images.pop(item_id)
         self.Freeze()
@@ -3147,13 +3184,14 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
 
     def GetItemCountFull(self):
-        """Returns the full row count, including items hidden by filter."""
+        """Returns the full row count, including top row and items hidden by filter."""
         return len(self._id_rows) + bool(self._top_row)
 
 
     def GetItemTextFull(self, idx):
-        """Returns item text by index, including items hidden by filter."""
-        data, col_name = self._id_rows[idx][-1], self._columns[0][0]
+        """Returns item text by index, including top row and items hidden by filter."""
+        rows = ([(0, self._top_row)] if self._top_row else []) + self._id_rows
+        data, col_name = rows[idx][-1], self._columns[0][0]
         return self._formatters[col_name](data, col_name)
 
 
@@ -3192,9 +3230,48 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
     def GetItemMappedData(self, index):
         """Returns the data mapped to the specified row index."""
-        data_id = self.GetItemData(index)
-        data = self._data_map.get(data_id)
-        return data
+        return copy.deepcopy(self._data_map.get(self.GetItemData(index)))
+
+
+    def GetItemStyle(self, index):
+        """Returns style name for item, or None if no style applied."""
+        return self._id_styles.get(self.GetItemData(index))
+    def SetItemStyle(self, index, name):
+        """Sets style on item, or clears current style if None. Redraws item if style changed."""
+        if name is not None and name not in self.STYLES:
+            raise ValueError("Unknown item style: %r" % (name, ))
+        item_id = self.GetItemData(index)
+        if self._id_styles.get(item_id) == name: return
+        self._id_styles[item_id] = name
+        self._ApplyItemStyle(index, name)
+
+
+    def GetItemStyleByText(self, text):
+        """
+        Returns style for item with given primary label, or None if no style applied.
+
+        Ignores current filter if any.
+        """
+        col_name = self._columns[0][0]
+        rows = ([(0, self._top_row)] if self._top_row else []) + self._id_rows
+        item_id = next(d for d, r in rows if self._formatters[col_name](r, col_name) == text)
+        return self._id_styles.get(item_id)
+    def SetItemStyleByText(self, text, style):
+        """
+        Sets style on item with given primary label, or clears current style if None.
+        
+        Ignores current filter if any. Redraws item if style changed and item displayed.
+        """
+        if style is not None and style not in self.STYLES:
+            raise ValueError("Unknown item style: %r" % (style, ))
+        col_name = self._columns[0][0]
+        rows = ([(0, self._top_row)] if self._top_row else []) + self._id_rows
+        item_id = next(d for d, r in rows if self._formatters[col_name](r, col_name) == text)
+        if self._id_styles.get(item_id) == style: return
+        self._id_styles[item_id] = style
+        if item_id not in self._data_map: return
+        index = next(i for i in range(self.GetItemCount()) if item_id == self.GetItemData(i))
+        self._ApplyItemStyle(index, style)
 
 
     def GetListCtrl(self):
@@ -3213,8 +3290,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             self, col, ascending)
 
         if selected_ids: # Re-select the previously selected items
-            idindx = dict((self.GetItemData(i), i)
-                          for i in range(self.GetItemCount()))
+            idindx = dict((self.GetItemData(i), i) for i in range(self.GetItemCount()))
             [self.Select(idindx[i]) for i in selected_ids if i in idindx]
 
 
@@ -3283,14 +3359,16 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             idx, selecteds = self.GetItemCount() - 1, [start]
 
         datas     = list(map(self.GetItemMappedData, selecteds))
-        image_ids = list(map(self._id_images.get, map(self.GetItemData, selecteds)))
+        styles    = list(map(self.GetItemStyle,      selecteds))
+        image_ids = list(map(self._id_images.get,    map(self.GetItemData, selecteds)))
 
         self.Freeze()
         try:
             for x in selecteds[::-1]: self.DeleteItem(x)
-            for i, (data, imageIds) in enumerate(zip(datas, image_ids)):
+            for i, (data, style, imageIds) in enumerate(zip(datas, styles, image_ids)):
                 imageIds0 = self._ConvertImageIds(imageIds, reverse=True)
                 self.InsertRow(idx + i, data, imageIds0)
+                self.SetItemStyle(idx + i, style)
                 self.Select(idx + i)
             self._drag_start = None
         finally: self.Thaw()
@@ -3298,8 +3376,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
     def OnDragStart(self, event):
         """Handler for dragging items in the list, cancels dragging."""
-        if self.GetSortState()[0] < 0 \
-        and (not self._top_row or event.GetIndex()):
+        if self.GetSortState()[0] < 0 and (not self._top_row or event.GetIndex()):
             self._drag_start = event.GetIndex()
         else:
             self._drag_start = None
@@ -3312,6 +3389,14 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             def __init__(self, pos=wx.Point()): self._position = pos
             def GetPosition(self): return self._position
         wx.CallAfter(lambda: self and self.Children[0].DragFinish(HackEvent()))
+
+
+    def _ApplyItemStyle(self, index, name):
+        """Applies given style on item."""
+        fullstyle = dict(self.STYLES[None], **self.STYLES[name])
+        for k, v in fullstyle.items():
+            if callable(v): v = v(self)
+            getattr(self, "Set%s" % k)(index, *v if isinstance(v, (list, tuple)) else [v])
 
 
     def _CreateImageList(self):
@@ -3350,14 +3435,13 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
 
         columns = [c[0] for c in self._columns]
         col_value = self._formatters[columns[0]](self._top_row, columns[0])
-        if -1 in self._id_images:
-            self.InsertImageStringItem(0, col_value, self._id_images[-1])
+        if 0 in self._id_images:
+            self.InsertImageStringItem(0, col_value, self._id_images[0])
         else: self.InsertStringItem(0, col_value)
         for i, col_name in enumerate(columns[1:], 1):
             col_value = self._formatters[col_name](self._top_row, col_name)
             self.SetStringItem(0, i, col_value)
-        self.SetItemBackgroundColour(0, self.BackgroundColour)
-        self.SetItemTextColour(0, self.ForegroundColour)
+        self._ApplyItemStyle(0, self.GetItemStyle(0))
 
         def resize():
             if not self: return
@@ -3406,8 +3490,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
                 self.SetStringItem(index, col_index, col_value)
                 item_data_map[item_id][col_index] = row.get(col_name)
                 col_index += 1
-            self.SetItemTextColour(index, self.ForegroundColour)
-            self.SetItemBackgroundColour(index, self.BackgroundColour)
+            self._ApplyItemStyle(index, self.GetItemStyle(index))
             index += 1
         self._data_map = row_data_map
         self.itemDataMap = item_data_map
@@ -3429,8 +3512,7 @@ class SortableUltimateListCtrl(wx.lib.agw.ultimatelistctrl.UltimateListCtrl,
             self.SortListItems(*self.GetSortState())
 
         if selected_ids: # Re-select the previously selected items
-            idindx = dict((self.GetItemData(i), i)
-                          for i in range(self.GetItemCount()))
+            idindx = dict((self.GetItemData(i), i) for i in range(self.GetItemCount()))
             for item_id in selected_ids:
                 if item_id not in idindx: continue # for item_id
                 self.Select(idindx[item_id])
@@ -3546,6 +3628,8 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.caretline_focus = kwargs.pop("caretline_focus", None)
         self.traversable     = kwargs.pop("traversable", False)
         self.wheelable       = kwargs.pop("wheelable", True)
+        self.linenumbers     = kwargs.pop("linenumbers", False)
+        self.wordwrap        = kwargs.pop("wordwrap", True)
 
         if "linux" in sys.platform:
             # If no explicit border specified, set BORDER_SIMPLE to make control visible
@@ -3561,17 +3645,26 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.autocomps_total = self.KEYWORDS[:]
         # {word.upper(): set(words filled in after word+dot), }
         self.autocomps_subwords = {}
+        self.last_change = time.time() # Timestamp of last text change
+        self.scrollwidth_interval = 0  # Milliseconds to wait before updating scroll width
+        self.scrollwidth_timer = None  # wx.Timer for updating scroll width on delay
 
         self.SetLexer(wx.stc.STC_LEX_SQL)
-        self.SetMarginWidth(1, 0) # Get rid of left margin
+        self.SetMarginCount(1)
+        self.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
+        self.SetMarginType(0, wx.stc.STC_MARGIN_NUMBER)
+        self.SetMarginWidth(0, 25) if self.linenumbers else None
+        self.SetMarginWidth(1, 0) # Get rid of marker margin
         self.SetTabWidth(4)
         # Keywords must be lowercase, required by StyledTextCtrl
         self.SetKeyWords(0, u" ".join(self.KEYWORDS + self.TYPEWORDS).lower())
         self.AutoCompStops(self.AUTOCOMP_STOPS)
-        self.SetWrapMode(wx.stc.STC_WRAP_WORD)
+        self.SetWrapMode(wx.stc.STC_WRAP_WORD if self.wordwrap else wx.stc.STC_WRAP_NONE)
         self.SetCaretLineBackAlpha(20)
         self.SetCaretLineVisible(True)
         self.AutoCompSetIgnoreCase(True)
+        self.SetScrollWidthTracking(True) # Ensures scroll width is never less than required
+        self.UpdateScrollWidth()
 
         self.SetStyleSpecs()
 
@@ -3580,6 +3673,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.Bind(wx.EVT_KILL_FOCUS,         self.OnKillFocus)
         self.Bind(wx.EVT_SYS_COLOUR_CHANGED, self.OnSysColourChange)
         self.Bind(wx.stc.EVT_STC_ZOOM,       self.OnZoom)
+        self.Bind(wx.stc.EVT_STC_CHANGE,     self.OnChange)
         if self.caretline_focus: self.SetCaretLineVisible(False)
         if self.traversable: self.Bind(wx.EVT_CHAR_HOOK, self.OnChar)
         if self.wheelable is False: self.Bind(wx.EVT_MOUSEWHEEL, self.OnWheel)
@@ -3591,7 +3685,6 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
             (wx.SYS_COLOUR_BTNTEXT, wx.SYS_COLOUR_WINDOW if self.Enabled else wx.SYS_COLOUR_BTNFACE,
              wx.SYS_COLOUR_HOTLIGHT)
         )
-
 
         self.SetCaretForeground(fgcolour)
         self.SetCaretLineBackground("#00FFFF")
@@ -3673,6 +3766,49 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.SetStyleSpecs()
         return result
 
+
+    def LoadFile(self, filename):
+        """Loads the file contents into editor, retaining undo history."""
+        with open(filename, "rb") as f: text = f.read()
+        if b"\r\n" in text: self.SetEOLMode(wx.stc.STC_EOL_CRLF)
+        elif b"\n" in text: self.SetEOLMode(wx.stc.STC_EOL_LF)
+        self.SetText(text)
+
+
+    def UpdateScrollWidth(self, force=False):
+        """
+        Updates horizontal scroll width, delaying action by scroll width tracking interval, if any.
+
+        @param   force  whether to update immediately, regardless of interval
+        """
+        if not force and self.scrollwidth_timer or self.WordWrap: return
+
+        def action():
+            if not self: return
+            self.scrollwidth_timer = None
+            if not TRACKING: self.SetScrollWidthTracking(True)
+            self.SetScrollWidth(1)
+            if self.HasFocus(): self.EnsureCaretVisible()
+            if not TRACKING: wx.CallLater(1, lambda: self and self.SetScrollWidthTracking(False))
+
+        INTERVAL, TRACKING = self.scrollwidth_interval, self.GetScrollWidthTracking()
+        overtime = False if force or not INTERVAL else (time.time() - self.last_change > INTERVAL)
+        self.scrollwidth_timer, _ = None, self.scrollwidth_timer and self.scrollwidth_timer.Stop()
+        if force or not INTERVAL or overtime: action()
+        else: self.scrollwidth_timer = wx.CallLater(INTERVAL, action)
+
+
+    def GetScrollWidthTrackingInterval(self):
+        """Returns milliseconds the control waits before updating scroll width after text change."""
+        return self.scrollwidth_interval
+    def SetScrollWidthTrackingInterval(self, interval):
+        """Sets milliseconds to wait before updating scroll width after text change."""
+        self.scrollwidth_interval = max(0, interval or 0)
+        if self.scrollwidth_timer: self.UpdateScrollWidth(force=True)
+    ScrollWidthTrackingInterval = property(GetScrollWidthTrackingInterval,
+                                           SetScrollWidthTrackingInterval)
+
+
     def IsTraversable(self):
         """Returns whether control is in traversable mode."""
         return self.traversable
@@ -3703,6 +3839,32 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.wheelable = wheelable
         if wheelable is False: self.Bind(wx.EVT_MOUSEWHEEL, self.OnWheel)
     Wheelable = property(IsWheelable, SetWheelable)
+
+
+    def HasLineNumbers(self):
+        """Returns whether control shows line numbers."""
+        return self.linenumbers
+
+
+    def SetLineNumbers(self, show=True):
+        """Sets whether control shows line numbers."""
+        self.linenumbers = bool(show)
+        w = max(25, 5 + 10 * int(math.log(self.LineCount, 10))) if show else 0
+        self.SetMarginWidth(0, w)
+    LineNumbers = property(HasLineNumbers, SetLineNumbers)
+
+
+    def HasWordWrap(self):
+        """Returns whether control wraps text."""
+        return self.wordwrap
+
+
+    def SetWordWrap(self, wrap=True):
+        """Sets whether control wraps text."""
+        self.wordwrap = bool(wrap)
+        self.SetWrapMode(wx.stc.STC_WRAP_WORD if wrap else wx.stc.STC_WRAP_NONE)
+        if not wrap: self.UpdateScrollWidth()
+    WordWrap = property(HasWordWrap, SetWordWrap)
 
 
     def OnFocus(self, event):
@@ -3738,11 +3900,15 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         self.Parent.ProcessWindowEvent(event)
 
 
+    def OnChange(self, event):
+        """Updates horizontal scroll width and marks change timestamp."""
+        event.Skip()
+        if self.ScrollWidthTracking: self.UpdateScrollWidth()
+        self.last_change = time.time()
+
+
     def OnChar(self, event):
-        """
-        Goes to next/previous control on Tab/Shift+Tab,
-        swallows Enter.
-        """
+        """Goes to next/previous control on Tab/Shift+Tab,swallows Enter."""
         if self.AutoCompActive() or event.CmdDown() \
         or event.KeyCode not in KEYS.TAB: return event.Skip()
         if event.KeyCode in KEYS.ENTER and self.LinesOnScreen() < 2: return
@@ -3958,9 +4124,10 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
         self.SetCaretLineBackAlpha(20)
         self.SetCaretLineVisible(False)
 
-        self.SetMarginCount(1)
+        self.SetMarginCount(2)
         self.SetMarginType(0, wx.stc.STC_MARGIN_TEXT)
-        self.SetMarginWidth(0, cw * 9)
+        self.SetMarginWidth(0, cw * 9 + 5)
+        self.SetMarginWidth(1, 2)
         self.SetMarginCursor(0, wx.stc.STC_CURSORARROW)
         self.SetMargins(3, 0)
 
@@ -4169,35 +4336,43 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
 
     def _Populate(self):
         """Sets current content to widget."""
-        fulltext, count = [], len(self._bytes)
-        for i, c in enumerate(self._bytes):
-            text, line = "%02X" % c, i // self.WIDTH
-            if i < count - 1:
-                text += "\n" if i and not (i + 1) % self.WIDTH else " "
-            fulltext.append(text)
-        super(HexTextCtrl, self).ChangeValue("".join(fulltext))
+        lines, hexlify = [], binascii.hexlify
+        if sys.version_info < (3, 8):
+            hexlify = lambda data, sep: sep.join("%02X" % c for c in data)
+        for i in range(0, len(self._bytes), self.WIDTH):
+            lines.append(hexlify(self._bytes[i:i + self.WIDTH], " ").decode("latin1").upper())
+        super(HexTextCtrl, self).ChangeValue("\n".join(lines))
         self._Restyle()
         self._Remargin()
 
 
     def _Restyle(self):
         """Restyles current content according to changed state."""
-        self.StartStyling(0)
-        self.SetStyling(super(HexTextCtrl, self).Length, 0)
-        for i, c in enumerate(self._bytes):
-            if c == self._bytes0[i]: continue # for i, c
-            self.StartStyling(i * 3)
-            self.SetStyling(2, self.STYLE_CHANGED)
+        eventmask0, _ = self.GetModEventMask(), self.SetModEventMask(0)
+        try:
+            self.StartStyling(0)
+            self.SetStyling(super(HexTextCtrl, self).Length, 0)
+            ranges, currange = [], None
+            for i, c in enumerate(self._bytes):
+                if c == self._bytes0[i]: currange = None
+                elif currange:           currange[-1] += 1
+                else:                    currange = [i, 1]; ranges.append(currange)
+            for i, length in ranges:
+                self.StartStyling(i * 3)
+                self.SetStyling(length * 3 - 1, self.STYLE_CHANGED)
+        finally: self.SetModEventMask(eventmask0)
 
 
     def _Remargin(self):
         """Rebuilds hex address margin."""
-        sself = super(HexTextCtrl, self)
-        margintexts = []
-        self.MarginTextClearAll()
-        for line in range((sself.Length + self.WIDTH - 1) // self.WIDTH):
-            self.MarginSetStyle(line, self.STYLE_MARGIN)
-            self.MarginSetText (line, " %08X " % line)
+        eventmask0, _ = self.GetModEventMask(), self.SetModEventMask(0)
+        try:
+            sself = super(HexTextCtrl, self)
+            self.MarginTextClearAll()
+            for line in range((sself.Length + self.WIDTH - 1) // self.WIDTH):
+                self.MarginSetStyle(line, self.STYLE_MARGIN)
+                self.MarginSetText (line, " %08X " % line)
+        finally: self.SetModEventMask(eventmask0)
 
 
     def _SetValue(self, value):
@@ -4336,6 +4511,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
                 if idx:
                     if bpos >= len(self._bytes): self.DeleteBack()
                     sself.SetSelection(frompos, frompos)
+                self._Remargin()
             else:
                 self._Populate()
                 sself.SetSelection(*(pos + direction * 3 - idx, ) * 2)
@@ -4642,26 +4818,29 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
 
     def _Populate(self):
         """Sets current content to widget."""
-        count = len(self._bytes)
-        fulltext = []
-        for i, c in enumerate(self._bytes):
-            fulltext.append(re.sub("[^\x20-\x7e]", ".", chr(self._bytes[i])))
-            if i and i < count - 1 and not (i + 1) % self.WIDTH:
-                fulltext.append("\n")
-        fullstr = "".join(fulltext)
-        if super(ByteTextCtrl, self).Text != fullstr:
-            super(ByteTextCtrl, self).ChangeValue(fullstr)
+        chars = re.sub("[^\x20-\x7e]", ".", bytes(self._bytes).decode("latin1"))
+        lines = [chars[i:i + self.WIDTH] for i in range(0, len(self._bytes), self.WIDTH)]
+        fulltext = "\n".join(lines)
+        if super(ByteTextCtrl, self).Text != fulltext:
+            super(ByteTextCtrl, self).ChangeValue(fulltext)
         self._Restyle()
 
 
     def _Restyle(self):
         """Restyles current content according to changed state."""
-        self.StartStyling(0)
-        self.SetStyling(super(ByteTextCtrl, self).Length, 0)
-        for i, c in enumerate(self._bytes):
-            if c == self._bytes0[i]: continue # for i, c
-            self.StartStyling(i // self.WIDTH + i)
-            self.SetStyling(1, self.STYLE_CHANGED)
+        eventmask0, _ = self.GetModEventMask(), self.SetModEventMask(0)
+        try:
+            self.StartStyling(0)
+            self.SetStyling(super(ByteTextCtrl, self).Length, 0)
+            ranges, currange = [], None
+            for i, c in enumerate(self._bytes):
+                if c == self._bytes0[i]: currange = None
+                elif currange:           currange[-1] += 1
+                else:                    currange = [i, 1]; ranges.append(currange)
+            for i, length in ranges:
+                self.StartStyling(i // self.WIDTH + i)
+                self.SetStyling(length // self.WIDTH + length, self.STYLE_CHANGED)
+        finally: self.SetModEventMask(eventmask0)
 
 
     def _SetValue(self, value, noreset=False):
@@ -6267,14 +6446,28 @@ def get_key_state(keycode):
 
 
 def get_tool_rect(toolbar, id_tool):
-    """Returns position and size of a toolbar tool by ID."""
-    bmpsize, toolsize, packing = toolbar.ToolBitmapSize, toolbar.ToolSize, toolbar.ToolPacking
-    result = wx.Rect(0, 0, *toolsize)
-    for i in range(toolbar.GetToolPos(id_tool)):
-        tool = toolbar.GetToolByPos(i)
-        result.x += packing + (1 if tool.IsSeparator() else bmpsize[0] if tool.IsButton()
-                               else tool.Control.Size[0])
+    """Returns position and size of a horizontal toolbar tool by ID. Spacers will skew result."""
+    PAD_BMP, PAD_LBL, PAD_SEP, W_SEP = 1, 2, 3, 2
+    BORDER, PACKING = wx.SystemSettings.GetMetric(wx.SYS_BORDER_X), toolbar.ToolPacking
+    W_BMP, H_TOOL = toolbar.ToolBitmapSize.Width, toolbar.ToolSize.Height
+    HAS_LABELS, NO_ICONS = (toolbar.WindowStyleFlag & x for x in (wx.TB_HORZ_TEXT, wx.TB_NOICONS))
 
+    def getsize(tool):
+        if tool.IsSeparator(): return (W_SEP, H_TOOL)
+        if tool.IsControl():   return tool.Control.Size
+        w = 2 * BORDER + PACKING
+        if HAS_LABELS and tool.Label:
+            if NO_ICONS: w += 2 * PAD_LBL + toolbar.GetTextExtent(tool.Label)[0]
+            else:        w += 3 * PAD_LBL + toolbar.GetTextExtent(tool.Label)[0] + W_BMP
+        else:            w += 2 * PAD_BMP + W_BMP
+        return (w, H_TOOL)
+    def getinter(tool, index):
+        w = PAD_SEP if tool.IsSeparator() else 0
+        return w + (PAD_SEP if index and toolbar.GetToolByPos(index - 1).IsSeparator() else 0)
+
+    result = wx.Rect(0, 0, *getsize(toolbar.GetToolByPos(toolbar.GetToolPos(id_tool))))
+    for i in range(toolbar.GetToolPos(id_tool)):
+        result.x += getinter(toolbar.GetToolByPos(i), i) + getsize(toolbar.GetToolByPos(i))[0]
     return result
 
 
@@ -6302,6 +6495,29 @@ def is_fixed_long(value, bytevalue=None):
 def is_long_long(value):
     """Returns whether value is integer larger than 64 bits."""
     return isinstance(value, integer_types) and not (-2**63 <= value < 2**63)
+
+
+def resize_img(img, size, aspect_ratio=True, bg=(-1, -1, -1)):
+    """Returns a resized wx.Image or wx.Bitmap, centered in free space if any."""
+    if not img or not size or list(size) == list(img.GetSize()): return img
+
+    result = img if isinstance(img, wx.Image) else img.ConvertToImage()
+    size1, size2 = list(result.GetSize()), list(size)
+    align_pos = None
+    if size1[0] < size[0] and size1[1] < size[1]:
+        size2 = tuple(size1)
+        align_pos = [(a - b) // 2 for a, b in zip(size, size2)]
+    elif aspect_ratio:
+        ratio = size1[0] / float(size1[1]) if size1[1] else 0.0
+        size2[ratio > 1] = int(size2[ratio > 1] * (ratio if ratio < 1 else 1 / ratio))
+        align_pos = [(a - b) // 2 for a, b in zip(size, size2)]
+    if size1[0] > size[0] or size1[1] > size[1]:
+        if result is img: result = result.Copy()
+        result.Rescale(*size2)
+    if align_pos:
+        if result is img: result = result.Copy()
+        result.Resize(size, align_pos, *bg)
+    return result.ConvertToBitmap() if isinstance(img, wx.Bitmap) else result
 
 
 def set_dialog_filter(dialog, idx=-1, ext=None, exts=()):

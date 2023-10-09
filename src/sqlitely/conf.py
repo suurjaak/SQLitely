@@ -10,11 +10,12 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.08.2023
+@modified    08.10.2023
 ------------------------------------------------------------------------------
 """
 try: from ConfigParser import RawConfigParser                 # Py2
 except ImportError: from configparser import RawConfigParser  # Py3
+import copy
 import datetime
 import json
 import os
@@ -29,8 +30,8 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.1"
-VersionDate = "28.08.2023"
+Version = "2.2.dev57"
+VersionDate = "08.10.2023"
 
 if getattr(sys, "frozen", False):
     # Running as a pyinstaller executable
@@ -57,9 +58,9 @@ FileDirectives = ["AllowMultipleInstances", "ConsoleHistoryCommands", "DBFiles",
     "DBSort", "LastActivePages", "LastExportType", "LastSearchResults",
     "LastSelectedFiles", "LastUpdateCheck", "ParseCache", "Plugins", "RecentFiles",
     "SchemaDiagrams", "SearchHistory", "SearchInMeta", "SearchInData",
-    "SearchUseNewTab", "SearchCaseSensitive", "SQLWindowTexts", "TrayIconEnabled",
-    "UpdateCheckAutomatic", "WindowMaximized", "WindowMinimizedToTray",
-    "WindowPosition", "WindowSize",
+    "SearchUseNewTab", "SearchCaseSensitive", "SQLWindowTexts", "TextLineNumbers",
+    "TextWordWraps", "TrayIconEnabled", "UpdateCheckAutomatic", "WindowMaximized",
+    "WindowMinimizedToTray", "WindowPosition", "WindowSize",
 ]
 """List of user-modifiable attributes, saved if changed from default."""
 OptionalFileDirectives = [
@@ -67,9 +68,9 @@ OptionalFileDirectives = [
     "MaxConsoleHistory", "MaxDBSizeForFullCount", "MaxTableRowIDForFullCount",
     "MaxHistoryInitialMessages", "MaxImportFilesizeForCount", "MaxRecentFiles",
     "MaxSearchHistory", "MaxSearchResults", "MaxParseCache", "PopupUnexpectedErrors",
-    "RunChecksums", "RunStatistics", "SchemaDiagramEnabled", "SchemaLineNumbered",
-    "SchemaWordWrap", "SearchResultsChunk", "SeekLength", "SeekLeapLength",
-    "StatisticsPlotWidth", "StatusFlashLength", "UpdateCheckInterval",
+    "RunChecksums", "RunStatistics", "SchemaDiagramEnabled", "SearchResultsChunk",
+    "SeekLength", "SeekLeapLength", "StatisticsPlotWidth", "StatusFlashLength",
+    "UpdateCheckInterval",
 ]
 Defaults = {}
 
@@ -153,12 +154,6 @@ SchemaDiagrams = {}
 """Whether database schema diagram is enabled."""
 SchemaDiagramEnabled = True
 
-"""Show line numbers in SQL controls, like database full schema panel."""
-SchemaLineNumbered = False
-
-"""Word-wrap lines in SQL controls, like database full schema panel."""
-SchemaWordWrap = True
-
 """
 Texts entered in global search, used for drop down auto-complete.
 Last value can be an empty string: search box had no text.
@@ -179,6 +174,12 @@ SearchInData = True
 
 """Texts in SQL window, loaded on reopening a database {filename: [(name, text), ], }."""
 SQLWindowTexts = {}
+
+"""Show line numbers in SQL controls, like database full schema panel."""
+TextLineNumbers = {}
+
+"""Word-wrap lines in SQL controls, like database full schema panel."""
+TextWordWraps = {"body": True, "entity": True, "pragma": True, "schema": True, "sql": True}
 
 """Whether the program tray icon is used."""
 TrayIconEnabled = True
@@ -355,6 +356,12 @@ def load(configfile=None):
     try: VARTYPES = (basestring, bool, int, long, list, tuple, dict, type(None))         # Py2
     except Exception: VARTYPES = (bytes, str, bool, int, list, tuple, dict, type(None))  # Py3
 
+    def safecopy(v):
+        """Tries to return a deep copy, or a shallow copy, or given value if copy fails."""
+        for f in (copy.deepcopy, copy.copy, lambda x: x):
+            try: return f(v)
+            except Exception: pass
+
     if configfile:
         ConfigFile, ConfigFileStatic = configfile, True
     configpaths = [ConfigFile]
@@ -369,8 +376,8 @@ def load(configfile=None):
 
     section = "*"
     module = sys.modules[__name__]
-    Defaults = {k: v for k, v in vars(module).items() if not k.startswith("_")
-                and isinstance(v, VARTYPES)}
+    Defaults = {k: safecopy(v) for k, v in vars(module).items()
+                if not k.startswith("_") and isinstance(v, VARTYPES)}
 
     parser = RawConfigParser()
     parser.optionxform = str # Force case-sensitivity on names

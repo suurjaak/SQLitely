@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.08.2023
+@modified    01.10.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -20,7 +20,7 @@ from . lib import util
 from . import conf
 
 # Modules imported inside templates:
-#import base64, collections, itertools, json, logging, math, os, pyparsing, sys, six, wx, yaml
+#import base64, collections, itertools, json, logging, math, os, pyparsing, sys, six, step, wx, yaml
 #from sqlitely import conf, grammar, images, searchparser, templates
 
 """Regex for matching unprintable characters (\x00 etc)."""
@@ -269,7 +269,7 @@ HTML data export template.
 @param   ?progress    callback(name, count) returning whether to cancel, if any
 """
 DATA_HTML = """<%
-from sqlitely.lib.vendor.step import Template
+from step import Template
 from sqlitely import templates
 %>{{! Template(templates.DATA_HTML_HEADER).expand(title=title, multiple=get("multiple")) }}
 <body>
@@ -293,7 +293,7 @@ HTML export template for multiple items.
 """
 DATA_HTML_MULTIPLE = """<%
 import os
-from sqlitely.lib.vendor.step import Template
+from step import Template
 from sqlitely.lib import util
 from sqlitely import templates
 
@@ -1668,7 +1668,7 @@ Database statistics HTML.
 @param   ?running  whether analysis is currently running
 """
 STATISTICS_HTML = """<%
-from sqlitely.lib.vendor.step import Template
+from step import Template
 from sqlitely.lib import util
 from sqlitely import conf, templates
 %>
@@ -1832,7 +1832,7 @@ HTML statistics export template.
 """
 DATA_STATISTICS_HTML = """<%
 import base64, math
-from sqlitely.lib.vendor.step import Template
+from step import Template
 from sqlitely.lib import util
 from sqlitely import conf, grammar, images, templates
 from sqlitely.templates import urlquote
@@ -2586,7 +2586,7 @@ Text statistics export template.
 """
 DATA_STATISTICS_TXT = """<%
 import math
-from sqlitely.lib.vendor.step import Template
+from step import Template
 from sqlitely.lib import util
 from sqlitely import grammar, templates
 
@@ -2910,7 +2910,7 @@ Database dump SQL template.
 DUMP_SQL = """<%
 import itertools, logging, os
 from sqlitely.lib import util
-from sqlitely.lib.vendor.step import Template
+from step import Template
 from sqlitely import grammar, templates
 
 logger = logging.getLogger("sqlitely")
@@ -3028,7 +3028,7 @@ Database schema diagram SVG template.
 
 @param   fonts            {"normal": font object, "bold": font object}
 @param   font_faces       {name: {size}} for populating SVG font family
-@param   get_extent       function(text, font=default font) returning full text extent
+@param   get_extent       function(text, font=default font) returning (width, height)
 @param   get_stats_texts  function(stats, width) returning stats texts for item
 @param   items            diagram objects as [{"name", "type", "bounds", "columns", "stats"}]
 @param   lines            diagram relations as {("item1", "item2", ("col1", )): {"name", "pts"}}
@@ -3061,8 +3061,8 @@ itemcoltexts, itemcolmax = {}, {} # {item name: [[name, type], ]}, {item name: {
 for item in items:
     # Measure title width
     ititle = util.ellipsize(util.unprint(item["name"]), SchemaPlacement.MAX_TITLE)
-    extent = get_extent(ititle, fonts["bold"]) # (w, h, descent, lead)
-    w, h = max(MINW, extent[0] + extent[3] + 2 * SchemaPlacement.HPAD), MINH
+    extent = get_extent(ititle, fonts["bold"])
+    w, h = max(MINW, extent[0] + 2 * SchemaPlacement.HPAD), MINH
 
     cols = item.get("columns") or []
     colmax = itemcolmax[item["name"]] = {"name": 0, "type": 0}
@@ -3074,7 +3074,7 @@ for item in items:
             t = util.ellipsize(util.unprint(c.get(k, "")), SchemaPlacement.MAX_TEXT)
             coltexts[-1].append(t)
             if t: extent = get_extent(t)
-            if t: colmax[k] = max(colmax[k], extent[0] + extent[3])
+            if t: colmax[k] = max(colmax[k], extent[0])
     w = max(w, SchemaPlacement.LPAD + 2 * SchemaPlacement.HPAD + sum(colmax.values()))
 
     statswidth = sum(get_extent(t or "")[0] for t in get_stats_texts(item.get("stats", {}), w))
@@ -3102,12 +3102,11 @@ for line in lines.values():
     bounds.Union(lbounds)
     if not show_labels: continue # for line
 
-    extent = get_extent(util.ellipsize(util.unprint(line["name"]), SchemaPlacement.MAX_TEXT))
+    tw, th = get_extent(util.ellipsize(util.unprint(line["name"]), SchemaPlacement.MAX_TEXT))
     tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
                       if pts[i][0] == pts[i+1][0])
     tx = tpt1[0]
     ty = min(tpt1[1], tpt2[1]) + abs(tpt1[1] - tpt2[1]) // 2
-    tw, th = sum(extent[::4]), sum(extent[1:3])
     bounds.Union(Rect(Point(tx - tw // 2, ty - th), Size(tw, th)))
 
 bounds.Width += 2 * MARGIN; bounds.Height += 2 * MARGIN
@@ -3133,25 +3132,20 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
   <title>{{ title }}</title>
 %endif
   <desc>{{ templates.export_comment() }}</desc>
-
   <defs>
-
     <linearGradient id="item-background">
       <stop style="stop-color: {{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }}; stop-opacity: 1;" offset="0" />
       <stop style="stop-color: {{ gradcolour.GetAsString(wx.C2S_HTML_SYNTAX) }}; stop-opacity: 1;" offset="1" />
     </linearGradient>
 
     <image id="pk" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramPK.data }}" />
-
     <image id="fk" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramFK.data }}" />
-
     <image id="null" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramNull.data }}" />
 
     <filter x="0" y="0" width="1" height="1" id="clearbg">
        <feFlood flood-color="{{ wincolour.GetAsString(wx.C2S_HTML_SYNTAX) }}" />
        <feComposite in="SourceGraphic" in2="" />
     </filter>
-
   </defs>
 
   <style type="text/css">
@@ -3221,7 +3215,9 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
 
 
   <g id="relations">
+%if lines:
 
+%endif
 %for (name1, name2, cols), line in lines.items():
 <%
 
@@ -3286,14 +3282,12 @@ dash = "M %s,%s L %s,%s" % (adjust(*ptd1) + adjust(*ptd2))
       <text x="{{ tx }}" y="{{ ty }}" class="label">{{ util.ellipsize(util.unprint(line["name"]), SchemaPlacement.MAX_TEXT) }}</text>
     %endif
     </g>
-%endfor
 
+%endfor
   </g>
 
 
-
   <g id="items">
-
 %for item in items:
 <%
 
@@ -3322,8 +3316,8 @@ if not cols and not istats: height = SchemaPlacement.HEADERH + 3
     %if get("embed"):
       </a>
     %endif
-
     %if cols:
+
       <text x="{{ itemx }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + texth }}" class="columns">
       %for i, col in enumerate(cols):
         <tspan x="{{ itemx + SchemaPlacement.LPAD }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + texth + i * SchemaPlacement.LINEH }}px">{{ itemcoltexts[item["name"]][i][0] }}</tspan>
@@ -3336,15 +3330,14 @@ if not cols and not istats: height = SchemaPlacement.HEADERH + 3
       %endfor
       </text>
     %endif
-
     %if istats:
 <%
 
 text1, text2 = get_stats_texts(istats, item["bounds"].Width)
 
 ty = itemy + height - SchemaPlacement.STATSH + texth - SchemaPlacement.FONT_STEP_STATS
-w1 = next(d[0] + d[3] for d in [get_extent(text1)]) if text1 else 0
-w2 = next(d[0] + d[3] for d in [get_extent(text2)]) if text2 else 0
+w1 = next(w for w, _ in [get_extent(text1)]) if text1 else 0
+w2 = next(w for w, _ in [get_extent(text2)]) if text2 else 0
 if w1 + w2 + 2 * SchemaPlacement.BRADIUS > item["bounds"].Width and item.get("count"):
     text1 = istats["size_maxunits"]
 
@@ -3363,7 +3356,9 @@ if w1 + w2 + 2 * SchemaPlacement.BRADIUS > item["bounds"].Width and item.get("co
       </g>
     %endif
     %for i, col in enumerate(cols):
+        %if any(col["name"] in x.get("name", ()) for x in pks) or any(col["name"] in x.get("name", ()) for x in pks) or "notnull" not in col and show_nulls:
 
+        %endif
         %if any(col["name"] in x.get("name", ()) for x in pks):
       <use xlink:href="#pk" x="{{ itemx + 3 }}" y="{{ itemy + SchemaPlacement.HEADERH + SchemaPlacement.HEADERP + i * SchemaPlacement.LINEH }}" />
         %endif
@@ -3375,9 +3370,9 @@ if w1 + w2 + 2 * SchemaPlacement.BRADIUS > item["bounds"].Width and item.get("co
         %endif
     %endfor
     </g>
-
 %endfor
 
   </g>
+
 </svg>
 """

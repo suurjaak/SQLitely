@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    26.08.2023
+@modified    01.10.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -21,12 +21,12 @@ import os
 
 from PIL import Image, ImageColor, ImageFont
 import six
+import step
 try:
     import wx
     import wx.adv
 except ImportError: wx = None
 
-from . lib.vendor import step
 from . lib import util
 try: from . lib import controls
 except ImportError: controls = None
@@ -191,6 +191,18 @@ class SchemaPlacement(object):
     ZOOM_MIN  = FONT_SPAN[0] / float(FONT_SIZE)
     ZOOM_MAX  = FONT_SPAN[1] / float(FONT_SIZE)
     ZOOM_DEFAULT = 1.0
+
+    DEFAULT_OPTIONS = {
+        "columns":     True,
+        "keycolumns":  False,
+        "lines":       True,
+        "labels":      True,
+        "nulls":       False,
+        "statistics":  False,
+        "layout":      {"layout": LAYOUT_GRID, "active": True,
+                        "grid": {"order": "name", "reverse": False, "vertical": True}},
+        "zoom":        ZOOM_DEFAULT,
+    }
 
     class GraphLayout(object):
         """
@@ -381,8 +393,8 @@ class SchemaPlacement(object):
         # image tuple as (standard bitmap, selected bitmap) and single image as dragrect highlight;
         # or {zoom: {PyEmdeddedImage: imageobject}} for scaled static images
         self._cache = defaultdict(lambda: defaultdict(dict))
-        self._order = []   # Draw order [{obj dict}, ] selected items at end
-        self._zoom  = 1.   # Zoom scale, 1 == 100%
+        self._order = [] # Draw order [{obj dict}, ] selected items at end
+        self._zoom  = self.DEFAULT_OPTIONS.get("zoom", self.ZOOM_DEFAULT) # Zoom scale, 1 == 100%
         self._dc    = PseudoDC()
         self._size  = Size(size)
 
@@ -390,14 +402,15 @@ class SchemaPlacement(object):
         self._dragrectabs = None # Selection being dragged, with non-negative dimensions
         self._dragrectid  = None # DC ops ID for selection rect
         self._use_cache   = True # Use self._cache for item bitmaps
-        self._show_cols   = True
-        self._show_keys   = False
-        self._show_nulls  = False
-        self._show_lines  = True
-        self._show_labels = True
-        self._show_stats  = False
+        self._show_cols   = self.DEFAULT_OPTIONS.get("columns",    True)
+        self._show_keys   = self.DEFAULT_OPTIONS.get("keycolumns", False)
+        self._show_nulls  = self.DEFAULT_OPTIONS.get("nulls",      False)
+        self._show_lines  = self.DEFAULT_OPTIONS.get("lines",      True)
+        self._show_labels = self.DEFAULT_OPTIONS.get("labels",     True)
+        self._show_stats  = self.DEFAULT_OPTIONS.get("stats",      False)
 
-        self._layout = {"layout": "grid", "active": True,
+        self._layout = copy.deepcopy(self.DEFAULT_OPTIONS.get("layout")) or \
+                       {"layout": self.LAYOUT_GRID, "active": True,
                         "grid": {"order": "name", "reverse": False, "vertical": True}}
 
         self._colour_bg     = self.DEFAULT_COLOURS["Background"]
@@ -724,28 +737,32 @@ class SchemaPlacement(object):
         return self._dc.GetIdBounds(oid)
 
 
-    def MakeBitmap(self, zoom=None, selections=True, use_cache=True):
+    def MakeBitmap(self, zoom=None, selections=True, use_cache=True, items=None):
         """
         Returns diagram as image.
 
         @param   zoom        zoom level to use if not current
         @param   selections  whether currently selected items should be drawn as selected
         @param   use_cache   use bitmap caching
+        @param   items       list of entity names to include if not all
         """
-        if wx: return self.MakeBitmap_wx(zoom, selections, use_cache)
+        if wx: return self.MakeBitmap_wx(zoom, selections, use_cache, items=items)
 
 
-    def MakeBitmap_wx(self, zoom=None, selections=True, use_cache=True):
+    def MakeBitmap_wx(self, zoom=None, selections=True, use_cache=True, items=None):
         """
         Returns diagram as wx.Bitmap.
 
         @param   zoom        zoom level to use if not current
         @param   selections  whether currently selected items should be drawn as selected
         @param   use_cache   use bitmap caching
+        @param   items       list of entity names to include if not all
         """
         zoom0 = self._zoom
         lines0, sels0 = copy.deepcopy(self._lines), copy.deepcopy(self._sels)
         ids, bounder = list(self._ids), self._dc.GetIdBounds
+        if items: ids = [k for k, v in self._ids.items()
+                         if v in items or isinstance(v, tuple) and v[0] in items and v[1] in items]
         boundsmap0 = {myid: bounder(myid) for myid in ids}
 
 
@@ -771,12 +788,14 @@ class SchemaPlacement(object):
             dc.Clear()
             dc.Font = self._font
 
-            self.RecordLines(dc=dc, shift=shift)
+            self.RecordLines(dc=dc, shift=shift, items=items)
             for o in (o for o in self._order if o["name"] not in self._sels):
+                if items and o["name"] not in items: continue # for o
                 pos = [a + b for a, b in zip(self._dc.GetIdBounds(o["id"])[:2], shift)]
                 obmp, _ = self.GetItemBitmaps(o)
                 dc.DrawBitmap(obmp, pos, useMask=True)
             for name in self._sels:
+                if items and name not in items: continue # for name
                 o = self._objs[name]
                 pos = [a + b - 2 * self._zoom
                        for a, b in zip(self._dc.GetIdBounds(o["id"])[:2], shift)]
@@ -795,7 +814,7 @@ class SchemaPlacement(object):
         return bmp
 
 
-    def MakeTemplate(self, filetype, title=None, embed=False, selections=True):
+    def MakeTemplate(self, filetype, title=None, embed=False, selections=True, items=None):
         """
         Returns diagram as template content.
 
@@ -803,6 +822,7 @@ class SchemaPlacement(object):
         @param   title       specific title to set if not from database filename
         @param   embed       whether to omit full XML headers for embedding in HTML
         @param   selections  whether currently selected items should be drawn as selected
+        @param   items       list of entity names to include if not all
         """
         if "SVG" != filetype or not self._objs: return
 
@@ -823,12 +843,15 @@ class SchemaPlacement(object):
         tpl = step.Template(templates.DIAGRAM_SVG, strip=False)
         if title is None:
             title = os.path.splitext(os.path.basename(self._db.name))[0] + " schema"
-        ns = {"title": title, "items": [], "lines": self._lines if self._show_lines else {},
+        lines = self._lines if self._show_lines else {}
+        if items: lines = {k: v for k, v in lines.items() if k[0] in items and k[1] in items}
+        ns = {"title": title, "items": [], "lines": lines,
               "show_nulls": self._show_nulls, "show_labels": self._show_labels,
               "get_extent": self.GetTextExtent, "get_stats_texts": self.GetStatisticsTexts,
               "font_faces": copy.deepcopy(self.FONTS), "embed": embed,
               "fonts": {"normal": self._font, "bold": self._font_bold}}
         for o in self._objs.values():
+            if items and o["name"] not in items: continue # for o
             item = dict(o, bounds=self._dc.GetIdBounds(o["id"]))
             if not self._show_stats: item.pop("stats")
             item["columns"] = [c for c in item.get("columns", []) if self.IsColumnShown(item, c)]
@@ -857,7 +880,7 @@ class SchemaPlacement(object):
         # Measure title width
         title = util.ellipsize(util.unprint(opts["name"]), self.MAX_TITLE)
         extent = self.GetTextExtent(title, self._font_bold) # (w, h, descent, lead)
-        w = max(w, extent[0] + extent[3] + 2 * self.HPAD)
+        w = max(w, extent[0] + 2 * self.HPAD)
 
         # Measure column text widths
         colmax = {"name": 0, "type": 0}
@@ -870,7 +893,7 @@ class SchemaPlacement(object):
                 t = util.ellipsize(util.unprint(c.get(k, "")), self.MAX_TEXT)
                 coltexts[-1].append(t)
                 if t: extent = self.GetTextExtent(t)
-                if t: colmax[k] = max(colmax[k], extent[0] + extent[3])
+                if t: colmax[k] = max(colmax[k], extent[0])
         w = max(w, self.LPAD + 2 * self.HPAD + sum(colmax.values()))
         h += self.LINEH * len(coltexts) + self.HEADERP * bool(coltexts)
         if self._show_stats and opts["stats"]:
@@ -1054,8 +1077,7 @@ class SchemaPlacement(object):
             # Make foreign key label
             if opts["name"]:
                 text = util.ellipsize(util.unprint(opts["name"]), self.MAX_TEXT)
-                textent = self.GetTextExtent(text)
-                tw, th = textent[0] + textent[3], textent[1] + textent[2]
+                tw, th = self.GetTextExtent(text)
                 tpt1, tpt2 = next(pts[i:i+2] for i in range(len(pts) - 1)
                                   if pts[i][0] == pts[i+1][0])
                 tx = tpt1[0] - tw // 2
@@ -1284,7 +1306,7 @@ class SchemaPlacement(object):
         self._dc.SetId(-1)
 
 
-    def RecordLines(self, remake=False, recalculate=False, dc=None, shift=None):
+    def RecordLines(self, remake=False, recalculate=False, dc=None, shift=None, items=None):
         """
         Records foreign relation lines to DC if showing lines is enabled.
 
@@ -1292,12 +1314,13 @@ class SchemaPlacement(object):
         @param   recalculate  whether to recalculate lines of selected items
         @param   dc           wx.DC to use if not own PseudoDC
         @param   shift        line coordinate shift as (dx, dy) if any
+        @param   items        list of entity names to record for if not all
         """
         if not self._show_lines: return
-        if wx: self.RecordLines_wx(remake, recalculate, dc, shift)
+        if wx: self.RecordLines_wx(remake, recalculate, dc, shift, items)
 
 
-    def RecordLines_wx(self, remake=False, recalculate=False, dc=None, shift=None):
+    def RecordLines_wx(self, remake=False, recalculate=False, dc=None, shift=None, items=None):
         """
         Records foreign relation lines to DC if showing lines is enabled, using wx.
 
@@ -1305,6 +1328,7 @@ class SchemaPlacement(object):
         @param   recalculate  whether to recalculate lines of selected items
         @param   dc           wx.DC to use if not own PseudoDC
         @param   shift        line coordinate shift as (dx, dy) if any
+        @param   items        list of entity names to record for if not all
         """
         if remake or recalculate: self.CalculateLines(remake)
 
@@ -1323,7 +1347,8 @@ class SchemaPlacement(object):
         dc.SetFont(self._font)
         for (name1, name2, cols), opts in sorted(self._lines.items(),
                 key=lambda x: any(n in self._sels for n in x[0][:2])):
-            if not opts["pts"]: continue # for (name1, name2, cols)
+            if not opts["pts"] or items and (name1 not in items or name2 not in items):
+                continue # for (name1, name2, cols)
             b1, b2 = (self._dc.GetIdBounds(o["id"])
                       for o in map(self._objs.get, (name1, name2)))
 
@@ -1406,8 +1431,8 @@ class SchemaPlacement(object):
         stats_font = self.MakeFont(self.FONT_FACE, self.FONT_SIZE * self._zoom + self.FONT_STEP_STATS)
         text1, text2 = stats.get("rows", ""), stats.get("size", "")
 
-        w1 = next(d[0] + d[3] for d in [self.GetTextExtent(text1, stats_font)]) if text1 else 0
-        w2 = next(d[0] + d[3] for d in [self.GetTextExtent(text2, stats_font)]) if text2 else 0
+        w1 = next(w for w, _ in [self.GetTextExtent(text1, stats_font)]) if text1 else 0
+        w2 = next(w for w, _ in [self.GetTextExtent(text2, stats_font)]) if text2 else 0
         if w1 + w2 + 2 * self.BRADIUS > width:
             text1 = stats.get("rows_maxunits", text1) # Exact number does not fit: draw as "6.1M rows"
         return text1, text2
@@ -1507,7 +1532,7 @@ class SchemaPlacement(object):
             if text1:
                 statslists[0].append(text1); statslists[1].append((dx, dy))
             if text2:
-                w2 = next(d[0] + d[3] for d in [self.GetTextExtent(text2, stats_font)])
+                w2 = next(w for w, _ in [self.GetTextExtent(text2, stats_font)])
                 dx = w - w2 - self.BRADIUS
                 statslists[2].append(text2); statslists[3].append((dx, dy))
 
@@ -1620,18 +1645,19 @@ class SchemaPlacement(object):
         """
         Returns the dimensions of the specified text in the specified font.
 
-        @param   text  text to measure, linefeeds are ignored
+        @param   text  text to measure
         @param   font  wx.Font or PIL.ImageFont, if not using default font
-        @return        (width, height, descent, externalLeading) if wx available
-                       else (width, height, 0, 0)
+        @return        (width, height)
         """
         font = font or self._font
         if wx and isinstance(font, wx.Font):
             func, args = self._measurer.GetFullTextExtent, [text, font]
-        else:
-            func, args = font.getsize, [text]
-        extent = util.memoize(func, *args, __key__="GetFullTextExtent")
-        return (extent + (0, 0)) if 2 == len(extent) else extent
+            v = util.memoize(func, *args, __key__="GetTextExtent")[:2]  # (w, h, descent, leading)
+        else: # PIL >= 8.0.0 has getbbox, < 9.2.0 has getsize
+            func, args = font.getbbox if hasattr(font, "getbbox") else font.getsize, [text]
+            v = util.memoize(func, *args, __key__="GetTextExtent")
+            if len(v) == 4: v = v[2:]  # (left, top, right, bottom)
+        return v
 
 
     def MakeFont(self, name, size, bold=False):
@@ -1943,6 +1969,17 @@ class SchemaPlacement(object):
     def SetDragForegroundColour(self, colour): self._colour_dragfg = Colour(colour)
     DragForegroundColour = property(GetDragForegroundColour, SetDragForegroundColour, doc=
     """Border colour of the mouse-dragging rectangle.""")
+
+
+    def GetColours(self):
+        NN = ("Background", "Border", "DragBackground", "DragForeground", "Foreground",
+              "GradientEnd", "GradientStart", "Line", "Selection")
+        return {n: getattr(self, "%sColour" % n) for n in NN}
+    def SetColours(self, colours):
+        for n, c in colours.items():
+            if hasattr(self, "%sColour" % n): setattr(self, "%sColour" % n, c)
+    Colours = property(GetColours, SetColours, doc=
+    """Colours as dictionary, like {"Border": wx.BLACK}.""")
 
 
 class MyPoint(object):

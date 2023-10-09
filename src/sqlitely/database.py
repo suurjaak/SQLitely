@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    24.05.2023
+@modified    07.10.2023
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -25,9 +25,9 @@ import sys
 import tempfile
 
 import six
+import step
 
 from . lib.util import CaselessDict
-from . lib.vendor import step
 from . lib import util
 from . import conf
 from . import grammar
@@ -519,8 +519,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
     def open(self, log_error=True, parse=False):
         """Opens the database."""
         try:
-            self.connection = sqlite3.connect(self.filename,
-                                              check_same_thread=False)
+            self.connection = sqlite3.connect(self.filename, check_same_thread=False,
+                                              isolation_level=None) # Autocommit mode
             self.connection.row_factory = self.row_factory
             self.connection.text_factory = six.binary_type
             self.compile_options = [next(iter(x.values())) for x in
@@ -924,7 +924,6 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 logger.info("SQL: %s%s", sql,
                             ("\nParameters: %s" % params) if params else "")
             result = (cursor or self.connection).execute(sql, params).rowcount
-            if self.connection.isolation_level is not None: self.connection.commit()
             if name: self.log_query(name, sql, params)
             self.last_modified = datetime.datetime.now()
         return result
@@ -1013,10 +1012,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 and re.search(r"TOKENIZE\s*[\W]*icu[\W]", row["sql"], re.I):
                     continue # for row
 
-            sql = row["sql"].strip().replace("\r\n", "\n")
-            sql = re.sub("\n\s+\)[\s;]*$", "\n)", sql) # Strip trailing whitespace and ;
-            if not sql.endswith(";"): sql += ";"
-            row["sql"] = row["sql0"] = sql
+            sqlraw = row["sql"].strip().replace("\r\n", "\n")
+            sql = re.sub("\n\s+\)(?=[\s;]*$)", "\n)", sqlraw) # "\n  );\n" -> "\n)"
+            row["sql"], row["sql0"], row["sqlraw"] = sql, sql, sqlraw
             self.schema[row["type"]][row["name"]] = row
 
         index, total = 0, sum(len(vv) for vv in self.schema.values())
@@ -1034,7 +1032,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 opts["__id__"] = opts0.get("__id__") or next(self.id_counter)
 
                 # Retrieve metainfo from PRAGMA, or use previous if unchanged
-                if mycategory in ("table", "view") and opts0 and opts["sql0"] == opts0["sql0"]:
+                if mycategory in ("table", "view") and opts0 and opts["sqlraw"] == opts0["sqlraw"]:
                     opts["columns"] = opts0.get("columns") or []
                 elif mycategory in ("table", "index", "view"):
                     pragma = "index_info" if "index" == mycategory else "table_info"
@@ -1058,12 +1056,12 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
                 # Use previous metainfo if unchanged
                 meta, sql = None, None
-                if opts0 and opts0.get("meta") and opts["sql0"] == opts0["sql0"]:
+                if opts0 and opts0.get("meta") and opts["sqlraw"] == opts0["sqlraw"]:
                     meta, sql = opts0["meta"], opts0["sql"]
-                    opts["__parsed__"] = True
+                    opts.update(sql0=opts0["sql0"], __parsed__=True)
                 if meta: opts.update(meta=meta)
-                if sql and (not meta or not meta.get("__comments__")):
-                    opts.update(sql=sql)
+                if sql and not meta.get("__comments__"):
+                    opts.update(sql=grammar.terminate(sql, meta))
                 if meta and "table" == mycategory and meta.get("columns"):
                     opts["columns"] = meta["columns"]
 
@@ -1083,9 +1081,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             for myname, opts in itemmap.items():
                 if category and name and not util.lceq(myname, name): continue # for myname
 
-                opts0 = schema0.get(mycategory, {}).get(myname, {})
-
-                # Parse metainfo from SQL if commanded and previous not available
+                # Parse metainfo from SQL if commanded and not already available
                 meta, sql = None, None
                 if parse and not opts.get("__parsed__"):
                     meta, _ = grammar.parse(opts["sql0"])
@@ -1102,11 +1098,15 @@ WARNING: misuse can easily result in a corrupt database file.""",
                                            "SQLite columns %s.\nParsed columns %s.",
                                            grammar.quote(myname), opts["columns"], meta["columns"])
                             meta = None
+                    if meta:
+                        opts.update(sql0=grammar.terminate(opts["sql0"], meta))
                     if generate and meta and not meta.get("__comments__"):
                         sql, _ = grammar.generate(meta)
                 if meta: opts.update(meta=meta)
                 if sql and (not meta or not meta.get("__comments__")):
                     opts.update(sql=sql)
+                elif meta:
+                    opts.update(sql=opts["sql0"])
                 if meta and "table" == mycategory and meta.get("columns"):
                     opts["columns"] = meta["columns"]
 
@@ -1389,7 +1389,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         @param   category   "table" | "index" | "trigger" | "view" if not everything
         @param   name       category item name if not everything in category,
                             or a list of names
-        @param   column     named table column to return SQL for
+        @param   column     named table/view column to return SQL for, or index column or expression
         @param   indent     whether to format SQL with linefeeds and indentation
         @param   transform  {"flags":   flags to toggle, like {"exists": True},
                              "renames": renames to perform in SQL statement body,
@@ -1414,11 +1414,13 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if names and myname.lower() not in names:
                     continue # for myname, opts
 
-                if names and column and mycategory in ("table", "view"):
-                    col = next((c for c in opts["columns"]
-                                if util.lceq(c["name"], column)), None)
+                if names and column and mycategory in ("table", "view", "index"):
+                    columns = opts["columns"]
+                    if opts.get("meta", {}).get("columns"): columns = opts["meta"]["columns"]
+                    col = next((c for c in columns if util.lceq(c.get("name") or c["expr"], column)), None)
                     if not col: continue # for myname, opts
-                    sql, err = grammar.generate(dict(col, __type__="column"), indent=False)
+                    gentype = "index column" if "index" == mycategory else "column"
+                    sql, err = grammar.generate(dict(col, __type__=gentype), indent=False)
                     if err: raise Exception(err)
                     return sql
 
@@ -1613,7 +1615,6 @@ WARNING: misuse can easily result in a corrupt database file.""",
                   (grammar.quote(table), str_cols, str_vals)
         else: sql = "INSERT INTO %s DEFAULT VALUES" % grammar.quote(table)
         cursor = self.execute(sql, args)
-        if self.connection.isolation_level is not None: self.connection.commit()
         self.log_query("INSERT", sql, args)
         self.last_modified = datetime.datetime.now()
         return cursor.lastrowid
@@ -1725,72 +1726,67 @@ WARNING: misuse can easily result in a corrupt database file.""",
         result, queue = [], [(self.schema["table"][table]["name"], rows, rowids)]
 
         queries = [] # [(sql, params)]
-        try:
-            isolevel = self.connection.isolation_level
-            self.connection.isolation_level = None # Disable autocommit
-            with self.connection:
-                cursor = self.connection.cursor()
-                self.execute("BEGIN TRANSACTION", cursor=cursor)
+        with self.connection:
+            cursor = self.connection.cursor()
+            self.execute("BEGIN TRANSACTION", cursor=cursor)
 
-                while queue:
-                    table1, rows1, rowids1 = queue.pop(0)
-                    if not util.lceq(table1, table):
-                        lock = self.get_lock("table", table1)
-                        if lock: raise Exception("%s, cannot delete." % lock)
-                    col_data = self.schema["table"][table1]["columns"]
-                    pks = [{"name": y} for x in self.get_keys(table, True)[0]
-                           for y in x["name"]]
-                    rowidname = self.get_rowid(table1)
-                    use_rowids = rowidname and rowids1 and all(rowids1) and \
-                                 not (len(pks) == 1 and all(pks[0]["name"] in r for r in rows1))
-                    key_cols = [{"name": "_rowid_"}] if use_rowids else pks or col_data
-                    key_data, myrows = [], []
+            while queue:
+                table1, rows1, rowids1 = queue.pop(0)
+                if not util.lceq(table1, table):
+                    lock = self.get_lock("table", table1)
+                    if lock: raise Exception("%s, cannot delete." % lock)
+                col_data = self.schema["table"][table1]["columns"]
+                pks = [{"name": y} for x in self.get_keys(table, True)[0]
+                       for y in x["name"]]
+                rowidname = self.get_rowid(table1)
+                use_rowids = rowidname and rowids1 and all(rowids1) and \
+                             not (len(pks) == 1 and all(pks[0]["name"] in r for r in rows1))
+                key_cols = [{"name": "_rowid_"}] if use_rowids else pks or col_data
+                key_data, myrows = [], []
 
-                    for row, rowid in zip(rows1, rowids1):
-                        data = {rowidname: rowid} if use_rowids else \
-                               {c["name"]: row[c["name"]] for c in key_cols}
-                        if not any(data in xx for t, xx in result if util.lceq(t, table1)):
-                            key_data.append(data); myrows.append(row)
-                    if not key_data: continue # while queue
+                for row, rowid in zip(rows1, rowids1):
+                    data = {rowidname: rowid} if use_rowids else \
+                           {c["name"]: row[c["name"]] for c in key_cols}
+                    if not any(data in xx for t, xx in result if util.lceq(t, table1)):
+                        key_data.append(data); myrows.append(row)
+                if not key_data: continue # while queue
 
-                    logger.info("Deleting %s from table %s, %s.", util.plural("row", key_data),
-                                util.unprint(grammar.quote(table1)), self.name)
-                    for where, args in self.chunk_args(key_cols, key_data):
-                        sql = "DELETE FROM %s WHERE %s" % (grammar.quote(table1), where)
-                        self.execute(sql, args, cursor=cursor)
-                        queries.append((sql, args))
-                    result.append((table1, key_data))
+                logger.info("Deleting %s from table %s, %s.", util.plural("row", key_data),
+                            util.unprint(grammar.quote(table1)), self.name)
+                for where, args in self.chunk_args(key_cols, key_data):
+                    sql = "DELETE FROM %s WHERE %s" % (grammar.quote(table1), where)
+                    self.execute(sql, args, cursor=cursor)
+                    queries.append((sql, args))
+                result.append((table1, key_data))
 
-                    for lk in self.get_keys(table1)[0]:
-                        if "table" not in lk: continue # for lk
-                        lkrows = [x for x in myrows
-                                  if all(x[c] is not None for c in lk["name"])]
-                        if not lkrows: continue # for lk
-                        for table2, keys2 in lk["table"].items():
-                            table2 = self.schema["table"][table2]["name"]
+                for lk in self.get_keys(table1)[0]:
+                    if "table" not in lk: continue # for lk
+                    lkrows = [x for x in myrows
+                              if all(x[c] is not None for c in lk["name"])]
+                    if not lkrows: continue # for lk
+                    for table2, keys2 in lk["table"].items():
+                        table2 = self.schema["table"][table2]["name"]
 
-                            key_cols2 = [{"name": x} for x in keys2]
-                            key_data2 = [{x: row[y] for x, y in zip(keys2, lk["name"])}
-                                         for row in lkrows]
-                            cols = "*"
-                            rowidname2 = self.get_rowid(table2)
-                            if rowidname2: cols = "%s AS %s, *" % ((rowidname2, ) * 2)
-                            sqlbase = "SELECT %s FROM %s" % (cols, grammar.quote(table2))
-                            rows2, rowids2 = [], []
-                            for where2, args2 in self.chunk_args(key_cols2, key_data2):
-                                sql2 = "%s WHERE %s" % (sqlbase, where2)
-                                myrows2 = self.execute(sql2, args2, cursor=cursor).fetchall()
-                                rowids2 += [x.pop(rowidname2) if rowidname2 else None
-                                            for x in myrows2]
-                                rows2.extend(myrows2)
-                            if rows2: queue.append((table2, rows2, rowids2))
+                        key_cols2 = [{"name": x} for x in keys2]
+                        key_data2 = [{x: row[y] for x, y in zip(keys2, lk["name"])}
+                                     for row in lkrows]
+                        cols = "*"
+                        rowidname2 = self.get_rowid(table2)
+                        if rowidname2: cols = "%s AS %s, *" % ((rowidname2, ) * 2)
+                        sqlbase = "SELECT %s FROM %s" % (cols, grammar.quote(table2))
+                        rows2, rowids2 = [], []
+                        for where2, args2 in self.chunk_args(key_cols2, key_data2):
+                            sql2 = "%s WHERE %s" % (sqlbase, where2)
+                            myrows2 = self.execute(sql2, args2, cursor=cursor).fetchall()
+                            rowids2 += [x.pop(rowidname2) if rowidname2 else None
+                                        for x in myrows2]
+                            rows2.extend(myrows2)
+                        if rows2: queue.append((table2, rows2, rowids2))
 
-                self.execute("COMMIT", cursor=cursor)
-                self.log_query("DELETE CASCADE", [x for x, _ in queries],
-                               [x for _, x in queries])
-                self.last_modified = datetime.datetime.now()
-        finally:
-            self.connection.isolation_level = isolevel
+            self.execute("COMMIT", cursor=cursor)
+            self.log_query("DELETE CASCADE", [x for x, _ in queries],
+                           [x for _, x in queries])
+            self.last_modified = datetime.datetime.now()
 
         return result
 
@@ -2217,15 +2213,18 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return args
 
 
-    def update_sqlite_master(self, schema):
+    def update_sqlite_master(self, schema, bump=False):
         """
         Updates CREATE-statements in sqlite_master directly.
 
         @param   schema  {category: {name: CREATE SQL}}
+        @param   bump    whether to bump database schema version
         """
         try:
-            v = next(iter(self.execute("PRAGMA schema_version", log=False).fetchone().values()))
-            schema = dict(schema, version=v)
+            data = dict(schema)
+            if not bump:
+                v = next(iter(self.execute("PRAGMA schema_version", log=False).fetchone().values()))
+                data.update(version=v)
             sql, err = grammar.generate(schema, category="ALTER MASTER")
             if err: logger.warning("Error syncing sqlite_master contents: %s.", err)
             else: self.executescript(sql, name="ALTER")

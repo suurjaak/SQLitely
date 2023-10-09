@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.08.2023
+@modified    15.09.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -680,7 +680,7 @@ def articled(word):
 def join(sep, iterable, last=", and "):
     """Returns sep.join(iterable) but with a custom separator before last."""
     lst = list(iterable)
-    return lst[0] if len(lst) < 2 else sep.join(lst[:-1]) + last + lst[-1]
+    return "" if not lst else lst[0] if len(lst) < 2 else sep.join(lst[:-1]) + last + lst[-1]
 
 
 def count(items, unit=None, key="count", suf=""):

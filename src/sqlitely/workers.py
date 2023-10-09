@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.08.2023
+@modified    01.10.2023
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -26,9 +26,10 @@ import traceback
 
 import six
 from six.moves import queue
+import step
+from step.step import escape_html
 
 from . lib import util
-from . lib.vendor import step
 from . import conf
 from . import database
 from . import grammar
@@ -73,9 +74,13 @@ class WorkerThread(threading.Thread):
         Stops the worker thread. Obtained results will be posted back,
         unless drop is false.
         """
+        if not self._is_running: return
         self._is_running = False
         self._is_working = False
         self._drop_results = drop
+        while not self._queue.empty():
+            try: self._queue.get(block=False)
+            except queue.Empty: break
         self._queue.put(None) # To wake up thread waiting on queue
 
 
@@ -135,7 +140,7 @@ class SearchThread(WorkerThread):
     """
 
     def __init__(self, callback):
-        super(self.__class__, self).__init__(callback)
+        super(SearchThread, self).__init__(callback)
         self.parser = SearchQueryParser()
 
 
@@ -143,8 +148,7 @@ class SearchThread(WorkerThread):
         """Returns word/phrase matcher regex."""
         if not words: return re.compile("(?!)") # Match nothing
         words_re = [x if isinstance(w, tuple) else x.replace(r"\*", ".*")
-                    for w in words
-                    for x in [re.escape(step.escape_html(flatten(w)[0]))]]
+                    for w in words for x in [re.escape(escape_html(flatten(w)[0]))]]
         patterns = "(%s)" % "|".join(words_re)
         # For replacing matching words with <b>words</b>
         return re.compile(patterns, 0 if case else re.IGNORECASE)
@@ -225,7 +229,7 @@ class SearchThread(WorkerThread):
                     cursor = search["db"].execute(sql, params)
                     row = cursor.fetchone()
                     if not row:
-                        mytexts.append(step.escape_html(item["name"]))
+                        mytexts.append(escape_html(util.ellipsize(item["name"])))
                         continue # for item
 
                     result["output"] = tpl_item.expand(category=category, item=item)
@@ -262,8 +266,8 @@ class SearchThread(WorkerThread):
                     result = dict(result, output="", map={})
 
                 mytexts.append("<b>%s</b> (<a href='#%s'><font color='%s'>%s</font></a>)" % (
-                    step.escape_html(item["name"]), step.escape_html(item["name"]),
-                    conf.LinkColour, util.plural("result", count)
+                    escape_html(util.ellipsize(item["name"])), escape_html(item["name"]),
+                    conf.LinkColour, util.plural("result", count).replace(" ", "&nbsp;")
                 ))
                 if not self._is_working \
                 or result["count"] >= conf.MaxSearchResults: break # for item

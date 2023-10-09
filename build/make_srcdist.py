@@ -4,7 +4,7 @@ sqlitely\. Sets execute flag permission on .sh files.
 
 @author    Erki Suurjaak
 @created   21.08.2019
-@modified  27.08.2023
+@modified  21.10.2023
 """
 import glob
 import os
@@ -60,7 +60,6 @@ if "__main__" == __name__:
             (pathjoin(SRC_DIR, NAME, "bin"),           "*"),
             (pathjoin(SRC_DIR, NAME, "grammar"),       "*"),
             (pathjoin(SRC_DIR, NAME, "lib"),           "*.py"),
-            (pathjoin(SRC_DIR, NAME, "lib", "vendor"), "*.py"),
             (pathjoin(SRC_DIR, NAME, "media"),         "*"),
             (pathjoin(SRC_DIR, NAME, "etc"),           "%s.ini" % NAME)
         ]:

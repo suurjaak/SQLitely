@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.08.2023
+@modified    07.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -40,9 +40,9 @@ except ImportError: xlrd = None
 try: import xlsxwriter
 except ImportError: xlsxwriter = None
 import six
+import step
 
 from . lib import util
-from . lib.vendor import step
 from . import conf
 from . import grammar
 from . import templates
@@ -241,7 +241,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
 
 
 
-def export_data_multiple(filename, format, title, db, category=None, make_iterables=None,
+def export_data_multiple(filename, format, title, db, category=None, names=None, make_iterables=None,
                          limit=None, maxcount=None, empty=True, reverse=False, progress=None):
     """
     Exports database data from multiple tables/views to a single output file.
@@ -251,6 +251,7 @@ def export_data_multiple(filename, format, title, db, category=None, make_iterab
     @param   title           export title, as string or a sequence of strings
     @param   db              Database instance
     @param   category        category to produce the data from, "table" or "view", or None for both
+    @param   names           specific entities to export if not all
     @param   make_iterables  function yielding pairs of ({info}, function yielding rows)
                              if not using category
     @param   limit           export limits per entity if any, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
@@ -272,7 +273,11 @@ def export_data_multiple(filename, format, title, db, category=None, make_iterab
     limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else util.tuplefy(limit)
     itemfiles = collections.OrderedDict() # {data name: path to partial file containing item data}
     categories = [] if make_iterables else [category] if category else db.DATA_CATEGORIES
-    items = {c: db.schema[c].copy() for c in categories}
+    if names:
+        items = {c: util.CaselessDict((n, db.schema[c][n].copy()) for n in names if n in db.schema[c])
+                    for c in categories if any(n in db.schema[c] for n in names)}
+        categories = list(items)
+    else: items = {c: db.schema[c].copy() for c in categories}
     counts = collections.defaultdict(int) # {name: number of rows yielded}
     for category, name in ((c, n) for c, x in items.items() for n in x):
         db.lock(category, name, filename, label="export")
@@ -1189,8 +1194,6 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
     try:
         if not was_open: db.open()
         continue_on_error, create_sql = None, None
-        isolevel = db.connection.isolation_level
-        db.connection.isolation_level = None # Disable autocommit
         with db.connection:
             cursor = db.connection.cursor()
             cursor.execute("BEGIN TRANSACTION")
@@ -1289,7 +1292,6 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
             progress(**kwargs)
     finally:
         if db.is_open():
-            if isolevel is not None: db.connection.isolation_level = isolevel
             if cursor: util.try_ignore(cursor.close)
             if table: db.unlock("table", table, filename)
             if not was_open: db.close()
@@ -1383,6 +1385,13 @@ def iter_file_rows(filename, columns, sheet=None):
 def convert_lf(s, newline=os.linesep):
     r"""Returns string with \r \n \r\n linefeeds replaced with given."""
     return re.sub("(\r(?!\n))|((?<!\r)\n)|(\r\n)", newline, s)
+
+
+@util.memoize
+def get_text_extent(font, text):
+    """Returns (width, height) of text in specified font."""
+    if hasattr(font, "getsize"): return font.getsize(text)     # <  PIL 9.2.0
+    if hasattr(font, "getbbox"): return font.getbbox(text)[2:] # >= PIL 8.0.0
 
 
 class csv_reader(object):
@@ -1542,9 +1551,9 @@ class xlsx_writer(object):
         # For calculating column widths
         self._fonts = collections.defaultdict(lambda: FONT_XLSX)
         self._fonts["bold"] = FONT_XLSX_BOLD
-        unit_width_default = self._fonts[None].getsize("0")[0]
+        unit_width_default = get_text_extent(self._fonts[None], "0")[0] or 1
         self._unit_widths = collections.defaultdict(lambda: unit_width_default)
-        self._unit_widths["bold"] = self._fonts["bold"].getsize("0")[0]
+        self._unit_widths["bold"] = get_text_extent(self._fonts["bold"], "0")[0] or 1
 
         if sheetname: # Create default sheet
             self.add_sheet(sheetname)
@@ -1629,8 +1638,9 @@ class xlsx_writer(object):
                       if isinstance(v, six.text_type)
                       else v.strftime("%Y-%m-%d %H:%M") if isinstance(v, datetime.datetime)
                       else v if isinstance(v, six.string_types) else str(v))
-            pixels = max(self._fonts[fmt_name].getsize(x)[0]
-                         for x in strval.split("\n"))
+            widths = [sum(get_text_extent(self._fonts[fmt_name], x)[0] for x in line)
+                      for line in strval.splitlines()]
+            pixels = max(widths) if widths else 0
             width = float(pixels) / self._unit_widths[fmt_name] + 1
             if not merge_cols and width > self._col_widths[self._sheet.name][c]:
                 self._col_widths[self._sheet.name][c] = width

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    07.08.2023
+@modified    03.10.2023
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -22,9 +22,9 @@ import uuid
 
 from antlr4 import InputStream, CommonTokenStream, TerminalNode, Token
 import six
+import step
 
 from .. lib import util
-from .. lib.vendor import step
 from . import templates
 from . SQLiteLexer import SQLiteLexer
 from . SQLiteParser import SQLiteParser
@@ -92,7 +92,11 @@ def get_type(sql):
     result = None
     try:
         parser = SQLiteParser(CommonTokenStream(SQLiteLexer(InputStream(sql))))
-        tree = parser.parse().children[0].children[0].children[0]
+        parser.removeErrorListeners()
+        tree = parser.parse()
+        if sum(not isinstance(x, TerminalNode) for x in tree.children) > 1 \
+        or sum(not isinstance(x, TerminalNode) for x in tree.children[0].children) > 1:
+            raise Exception("Too many statements")
         ctx = tree.children[0].children[0].children[0]
         if isinstance(ctx, (CTX.DELETE, CTX.DELETE_LIMITED)):
             result = SQL.DELETE
@@ -198,6 +202,36 @@ def format(value, coldata=None):
     return result
 
 
+def terminate(sql, data=None):
+    """
+    Returns given SQL statement terminated with semicolon, if not already.
+
+    Adds a linefeed before terminator if statement ends with a line comment.
+
+    @param   sql   any statement of recognized type, e.g. "CREATE VIEW foo AS SELECT 3 -- comment"
+    @param   data  parsed metadata dictionary, statement will be parsed if not given
+    """
+    sql = sql.rstrip()
+    if data is None:
+        data = {}
+        try:
+            stream = CommonTokenStream(SQLiteLexer(InputStream(sql)))
+            parser = SQLiteParser(stream)
+            parser.removeErrorListeners()
+            tree = parser.parse()
+            cc = stream.filterForChannel(0, len(stream.tokens) - 1, channel=2) or []
+            data["__comments__"]   = {x.start: x.text for x in cc}
+            data["__terminated__"] = any(isinstance(x, TerminalNode) and ";" == x.getText() and
+                                         any(x.getSourceInterval()[0] < c.start for c in cc)
+                                         for x in tree.children[0].children[1:])
+        except Exception: pass
+    if data and data.get("__terminated__"): return sql
+    if data and data.get("__comments__") \
+    and any(int(n) + len(s) >= len(sql) for n, s in data["__comments__"].items()):
+        sql += "\n"
+    return sql if sql.endswith(";") else (sql + ";")
+
+
 def uni(x, encoding="utf-8"):
     """Convert anything to Unicode, except None."""
     if x is None or isinstance(x, six.text_type): return x
@@ -228,6 +262,7 @@ class SQL(object):
     CREATE               = "CREATE"
     DEFAULT              = "DEFAULT"
     DEFERRABLE           = "DEFERRABLE"
+    DELETE               = "DELETE"
     EXPLAIN              = "EXPLAIN"
     FOR_EACH_ROW         = "FOR EACH ROW"
     FOREIGN_KEY          = "FOREIGN KEY"
@@ -377,6 +412,7 @@ class Parser(object):
     def __init__(self):
         self._category = None # "CREATE TABLE" etc
         self._stream   = None # antlr TokenStream
+        self._tree     = None # Parsed context tree
         self._repls    = []   # [(start index, end index, replacement)]
 
 
@@ -411,6 +447,14 @@ class Parser(object):
                              listener.getErrors(stack=True))
                 return None, listener.getErrors()
 
+            if sum(not isinstance(x, TerminalNode) for x in tree.children) > 1 \
+            or sum(not isinstance(x, TerminalNode) for x in tree.children[0].children) > 1:
+                stmts = [x for x in tree.children if not isinstance(x, TerminalNode)] or \
+                        [x for x in tree.children[0].children if not isinstance(x, TerminalNode)]
+                logger.error('Error parsing SQL "%s":\n\n'
+                             "encountered %s statements where one was expected.", sql, len(stmts))
+                return None, "Too many statements"
+
             # parse ctx -> statement list ctx -> statement ctx -> specific type ctx
             ctx = tree.children[0].children[0].children[0]
             name = self.CTXS.get(type(ctx))
@@ -422,6 +466,7 @@ class Parser(object):
                 logger.error(error)
                 return None, error
             self._category = name
+            self._tree = tree
             return ctx, None
 
         def build(ctx):
@@ -444,9 +489,11 @@ class Parser(object):
                 else: result.pop("schema", None)
                 self.rename_schema(ctx, renames)
 
-            cc = self._stream.filterForChannel(0, len(self._stream.tokens) - 1, channel=2)
-            result["__comments__"] = [x.text for x in cc or []]
-
+            cc = self._stream.filterForChannel(0, len(self._stream.tokens) - 1, channel=2) or []
+            result["__comments__"] = {x.start: x.text for x in cc}
+            result["__terminated__"] = any(isinstance(x, TerminalNode) and ";" == x.getText() and
+                                           any(x.getSourceInterval()[0] < c.start for c in cc)
+                                           for x in self._tree.children[0].children[1:])
             return result
 
         result, error, tries = None, None, 0
@@ -1048,6 +1095,7 @@ class Generator(object):
         "ALTER TRIGGER":           templates.ALTER_TRIGGER,
         "ALTER VIEW":              templates.ALTER_VIEW,
         "ALTER MASTER":            templates.ALTER_MASTER,
+        "INDEX COLUMN":            templates.INDEX_COLUMN_DEFINITION,
         SQL.CREATE_INDEX:          templates.CREATE_INDEX,
         SQL.CREATE_TABLE:          templates.CREATE_TABLE,
         SQL.CREATE_TRIGGER:        templates.CREATE_TRIGGER,
@@ -1084,7 +1132,7 @@ class Generator(object):
         ns = {"Q":    self.quote,   "LF": self.linefeed, "PRE": self.indentation,
               "PAD":  self.padding, "CM": self.comma,    "WS":  self.token,
               "GLUE": self.glue, "data": data, "root": data, "collapse": collapse_whitespace,
-              "Template": step.Template, "templates": templates}
+              "Template": step.Template, "templates": templates, "terminate": terminate}
 
         # Generate SQL, using unique tokens for whitespace-sensitive parts,
         # replaced after stripping down whitespace in template result.
