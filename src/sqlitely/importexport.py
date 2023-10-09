@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.10.2023
+@modified    09.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -851,7 +851,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
                 logs.append((sql, params))
                 count += 1
         db.connection.commit()
-        if count is None and (progress or not empty): # If CREATE TABLE AS query
+        if count in (None, -1) and (progress or not empty): # If CREATE TABLE AS query
             count = db.execute("SELECT COUNT(*) AS count FROM %s" % fullname).fetchone()["count"]
         if progress and not progress(name=table, count=count):
             result, count = None, None
