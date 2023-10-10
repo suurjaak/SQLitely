@@ -1,6 +1,11 @@
 CHANGELOG
 =========
 
+2.3, 2023-10-10
+---------------
+- add command-line interface, with export, parse, search and stats
+
+
 2.2, 2023-10-08
 ---------------
 - add line number and word-wrap toggles to more controls
