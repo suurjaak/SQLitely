@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.09.2023
+@modified    10.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1116,7 +1116,7 @@ def filters_to_regex(texts, end=False):
                     for filters_to_regex(["foo*bar", "-xyz"])
     """
     wildify = lambda t: ".*".join(map(re.escape, t.split("*")))
-    suff, texts = ("$" if end else ""), util.tuplefy(texts)
+    suff, texts = ("$" if end else ""), tuplefy(texts)
     includes, excludes = ([t[skip:] for t in texts if skip == t.startswith('-')] for skip in (0, 1))
     matchstr = "|".join("(%s%s)" % (wildify(t), suff) for t in includes)
     skipstr = "(?!.*(%s)%s)" % ("|".join(map(wildify, excludes)), suff) if excludes else ""
