@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.10.2023
+@modified    11.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -27,7 +27,6 @@ import multiprocessing.connection
 import os
 try: import Queue as queue        # Py2
 except ImportError: import queue  # Py3
-
 import sys
 import tempfile
 import threading
@@ -123,7 +122,7 @@ ARGUMENTS = {
                       "(relevant only when exporting to SQL or database)"},
              {"args": ["--filter"], "nargs": "+",
               "help": "names of specific entities to export or skip\n"
-                      "(supports * wildcards; initial dash - skips)"},
+                      "(supports * wildcards; initial ~ skips)"},
              {"args": ["--limit"], "type": int, "metavar": "NUM",
               "help": "maximum number of rows to export per table or view"},
              {"args": ["--offset"], "type": int, "metavar": "NUM",
@@ -1004,7 +1003,7 @@ def run_parse(dbname, args):
 
 def run_stats(dbname, args):
     """
-    Writes database statistics to file.
+    Writes database statistics to file or prints to console.
 
     @param   dbname         path of database to analyze
     @param   args
