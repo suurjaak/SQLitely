@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.10.2023
+@modified    11.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1038,7 +1038,8 @@ def get_import_file_data(filename, progress=None):
         "sheets":      [
             "name":    sheet name,
             "rows":    count or -1 if file too large,
-            "columns": [first row cell value, ],
+            "columns": [first row cell value, ] for spreadsheets, or 
+                       OrderedDict(first row column name: value) for JSON/YAML
     ]}.
 
     @param   progress  callback() returning false if function should cancel
@@ -1067,7 +1068,7 @@ def get_import_file_data(filename, progress=None):
                 for i, row in iterer:
                     rows += bool(row)
                     if progress and not i % 100 and not progress(): break # for i, row
-        sheets.append({"rows": rows, "columns": columns, "name": "<no name>"})
+        sheets.append({"rows": rows, "columns": columns, "name": "<CSV data>"})
     elif is_json:
         rows, columns, buffer, started = 0, {}, "", False
         decoder = json.JSONDecoder(object_pairs_hook=collections.OrderedDict)
@@ -1199,7 +1200,7 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
             cursor.execute("BEGIN TRANSACTION")
 
             for i, (table, sheet) in enumerate(tables):
-                sheet = sheet if extname not in ("csv", "json") else None
+                sheet = sheet if extname not in ("csv", "json", "yaml") else None
                 columns = tablecolumns[table]
                 if table not in db.schema.get("table", {}):
                     cols = [{"name": x} for x in columns.values()]
