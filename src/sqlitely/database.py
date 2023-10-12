@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.10.2023
+@modified    12.10.2023
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -517,7 +517,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
 
     def open(self, log_error=True, parse=False):
-        """Opens the database."""
+        """Opens the database, if not already open."""
+        if self.connection: return
         try:
             self.connection = sqlite3.connect(self.filename, check_same_thread=False,
                                               isolation_level=None) # Autocommit mode
@@ -537,7 +538,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
 
     def close(self):
-        """Closes the database and frees all allocated data."""
+        """Closes the database if open, and frees all allocated data."""
         if self.connection:
             try: self.connection.close()
             except Exception: pass
