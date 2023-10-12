@@ -12107,11 +12107,11 @@ class ImportWizard(wx.adv.Wizard):
         """
         if not self or self.CurrentPage is not self.page2: return
 
-        VARS = "count", "errorcount", "error", "index", "done", "table"
-        count, errorcount, error, index, done, table = (kwargs.get(x) for x in VARS)
+        VARS = "count", "errorcount", "error", "index", "done", "name"
+        count, errorcount, error, index, done, name = (kwargs.get(x) for x in VARS)
         callback = kwargs.pop("callback", None)
 
-        itemindex = next((i for i, x in self.items.items() if x["tname"] == table), None)
+        itemindex = next((i for i, x in self.items.items() if x["tname"] == name), None)
         item = self.items[itemindex] if itemindex is not None else None
         if itemindex is not None:
             self.page2.progress.setdefault(itemindex, {}).update(kwargs)
