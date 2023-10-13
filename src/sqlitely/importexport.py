@@ -1192,13 +1192,14 @@ def import_data(filename, db, tables, has_header=True, progress=None):
     table, source, cursor, isolevel = None, None, None, None
     was_open, file_existed = db.is_open(), os.path.isfile(db.filename)
     try:
-        if not was_open: db.open()
-        continue_on_error, create_sql = None, None
+        db.open()
+        continue_on_error = None
         with db.connection:
             cursor = db.connection.cursor()
             cursor.execute("BEGIN TRANSACTION")
 
             for i, item in enumerate(tables):
+                create_sql = None
                 table, source, columns = item["name"], item["source"], item["columns"]
                 if table not in db.schema.get("table", {}):
                     cols = [{"name": x} for x in columns.values()]
