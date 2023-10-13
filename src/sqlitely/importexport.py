@@ -1165,21 +1165,19 @@ def get_import_file_data(filename, progress=None):
 
 
 
-def import_data(filename, db, tables, tablecolumns, pks=None,
-                has_header=True, progress=None):
+def import_data(filename, db, tables, has_header=True, progress=None):
     """
     Imports data from spreadsheet or JSON or YAML data file to database table.
     Will create tables if not existing yet.
 
     @param   filename       file path to import from
     @param   db             database.Database instance
-    @param   tables         tables to import to and sheets to import from, as [(table, sheet)]
-                            (sheet can be None if file is CSV/JSON/YAML)
-    @param   tablecolumns   mapping of file columns to table columns,
-                            as {table: OrderedDict(file column key: table columm name)},
-                            where key is column index if spreadsheet else column name
-    @param   pks            names of auto-increment primary key to add
-                            for new tables, if any, as {table: pk}
+    @param   tables         tables to import to and sheets to import from, as [{
+                              "name": table name,
+                              "source": source worksheet, can be None if file is CSV/JSON/YAML,
+                              ?"pk": name of auto-increment primary key to add if new table,
+                              "columns": OrderedDict(file column key: table column name)
+                             }], where file column key is column index if spreadsheet else column name
     @param   has_header     whether spreadsheet file has a header row
     @param   progress       callback(?name, ?source, ?count, ?done, ?error, ?errorcount, ?index) to report
                             progress, returning False if import should cancel,
@@ -1190,8 +1188,8 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
     result = True
 
     extname = os.path.splitext(filename)[-1][1:].lower()
-    has_sheets = "xls" in extname
-    table, sheet, cursor, isolevel = None, None, None, None
+    has_sheets, new_tables = "xls" in extname, []
+    table, source, cursor, isolevel = None, None, None, None
     was_open, file_existed = db.is_open(), os.path.isfile(db.filename)
     try:
         if not was_open: db.open()
@@ -1200,15 +1198,14 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
             cursor = db.connection.cursor()
             cursor.execute("BEGIN TRANSACTION")
 
-            for i, (table, sheet) in enumerate(tables):
-                columns = tablecolumns[table]
+            for i, item in enumerate(tables):
+                table, source, columns = item["name"], item["source"], item["columns"]
                 if table not in db.schema.get("table", {}):
                     cols = [{"name": x} for x in columns.values()]
-                    if pks.get(table):
-                        cols.insert(0, {"name": pks[table], "type": "INTEGER",
+                    if item.get("pk"):
+                        cols.insert(0, {"name": item["pk"], "type": "INTEGER",
                                         "pk": {"autoincrement": True}, "notnull": {}})
-                    meta = {"name": table, "__type__": grammar.SQL.CREATE_TABLE,
-                            "columns": cols}
+                    meta = {"name": table, "columns": cols, "__type__": grammar.SQL.CREATE_TABLE}
                     create_sql, err = grammar.generate(meta)
                     if err: raise Exception(err)
 
@@ -1221,13 +1218,15 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
                     logger.info("Creating new table %s.",
                                 grammar.quote(table, force=True))
                     cursor.execute(create_sql)
+                    new_tables.append(table)
+                    db.populate_schema(category="table", name=table, parse=True)
                 db.lock("table", table, filename, label="import")
                 logger.info("Running import from %s%s to table %s.",
-                            filename, (" sheet '%s'" % sheet) if has_sheets else "",
+                            filename, (" sheet '%s'" % source) if has_sheets else "",
                             grammar.quote(table, force=True))
                 index, count, errorcount = -1, 0, 0
-                result = progress(name=table, source=sheet, index=0, count=0)
-                for row in iter_file_rows(filename, list(columns), sheet) if result else ():
+                result = progress(name=table, source=source, index=0, count=0)
+                for row in iter_file_rows(filename, list(columns), source) if result else ():
                     index += 1
                     if has_header and not index: continue # for row
                     lastcount, lasterrorcount = count, errorcount
@@ -1243,7 +1242,7 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
                         if continue_on_error is None:
                             result = progress(error=util.format_exc(e), index=index,
                                               count=count, errorcount=errorcount,
-                                              name=table, source=sheet)
+                                              name=table, source=source)
                             if result:
                                 continue_on_error = True
                                 continue # for row
@@ -1253,7 +1252,7 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
                             break # for row
                     if result and progress \
                     and (count != lastcount and not count % 100 or errorcount != lasterrorcount and not errorcount % 100):
-                        result = progress(name=table, source=sheet, count=count, errorcount=errorcount)
+                        result = progress(name=table, source=source, count=count, errorcount=errorcount)
                         if not result:
                             logger.info("Cancelling%s import on user request.",
                                         " and rolling back" if result is None else "")
@@ -1266,39 +1265,41 @@ def import_data(filename, db, tables, tablecolumns, pks=None,
                 db.unlock("table", table, filename)
                 logger.info("Finished importing %s from %s%s to table %s%s.",
                             util.plural("row", count),
-                            filename, (" sheet '%s'" % sheet) if has_sheets else "",
+                            filename, (" sheet '%s'" % source) if has_sheets else "",
                             grammar.quote(table, force=True),
                             ", all rolled back" if result is None and count else "")
-                mytable, mysheet = table, sheet
+                mytable, mysource = table, source
                 if i == len(tables) - 1:
                     if result: cursor.execute("COMMIT")
                     util.try_ignore(cursor.close)
-                    cursor = table = sheet = None
+                    cursor = table = source = None
                 if result and progress:
-                    result = progress(name=mytable, source=mysheet, count=count, errorcount=errorcount, done=True)
+                    result = progress(name=mytable, source=mysource, count=count, errorcount=errorcount, done=True)
                 if not result:
-                    break # for i, (table, sheet)
+                    break # for i, (table, source)
 
             logger.info("Finished importing from %s to %s.", filename, db)
 
     except Exception as e:
         logger.exception("Error running import from %s%s%s in %s.",
-                         filename, (" sheet '%s'" % sheet) if sheet and has_sheets else "",
+                         filename, (" sheet '%s'" % source) if source and has_sheets else "",
                          (" to table %s " % grammar.quote(table, force=True) if table else ""),
                          db.filename)
         result = False
         if cursor: util.try_ignore(cursor.execute, "ROLLBACK")
         if progress:
             kwargs = dict(error=util.format_exc(e), done=True)
-            if table: kwargs.update(name=table, source=sheet)
+            if table: kwargs.update(name=table, source=source)
             progress(**kwargs)
     finally:
         if db.is_open():
             if cursor: util.try_ignore(cursor.close)
             if table: db.unlock("table", table, filename)
             if not was_open: db.close()
-        if result is None and not file_existed:
-            util.try_ignore(os.unlink, db.filename)
+        if result is None:
+            if not file_existed: util.try_ignore(os.unlink, db.filename)
+            for mytable in new_tables if file_existed and "table" in db.schema else ():
+                db.schema["table"].pop(mytable, None)
 
     return result
 

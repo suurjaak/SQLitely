@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.10.2023
+@modified    12.10.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -6612,10 +6612,10 @@ class DatabasePage(wx.Panel):
         Handler for import dialog event, refreshes schema,
         opens table if specified.
         """
-        VARS = "table", "open", "count", "parse"
-        table, open, count, parse = (getattr(event, x, None) for x in VARS)
-        if table and (count or parse):
-            self.db.populate_schema(category="table", name=table, count=count, parse=parse)
+        VARS = "table", "open", "count"
+        table, open, count = (getattr(event, x, None) for x in VARS)
+        if table and count:
+            self.db.populate_schema(category="table", name=table, count=count)
         if table:
             self.reload_schema()
             self.update_page_header(updated=True)

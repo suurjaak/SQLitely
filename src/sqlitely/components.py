@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.10.2023
+@modified    12.10.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -7369,13 +7369,12 @@ class ImportDialog(wx.Dialog):
         self._gauge.Pulse()
 
         has_names = self._data["format"] in ("json", "yaml")
-        sheet, table = self._sheet.get("name"), self._table["name"]
         columns = OrderedDict((a["name" if has_names else "index"], b["name"])
                               for a, b in zip(self._cols1, self._cols2))
+        tables = [{"name": self._table["name"], "source": self._sheet.get("name"),
+                   "columns": columns, "pk": self._table.get("pk")}]
         callable = functools.partial(importexport.import_data, self._data["name"],
-                                     self._db, [(table, sheet)], {table: columns},
-                                     {table: self._table.get("pk")}, self._has_header,
-                                     self._OnProgressCallback)
+                                     self._db, tables, self._has_header, self._OnProgressCallback)
         self._worker_import.work(callable)
 
 
@@ -7439,7 +7438,7 @@ class ImportDialog(wx.Dialog):
         if done or aborted:
             success = self._importing
             if success: self._importing = False
-            if success is not None: self._PostEvent(count=bool(count), parse=self._has_new)
+            if success is not None: self._PostEvent(count=bool(count) or self._has_new)
             SHOW = (self._button_restart, )
             HIDE = (self._button_ok, self._button_reset)
             if not isinstance(self.Parent, DataObjectPage): SHOW += (self._button_open, )
@@ -12062,15 +12061,11 @@ class ImportWizard(wx.adv.Wizard):
 
             self.items[i] = item
 
-
-        tables  = [(x["tname"], x["name"]) for _, x in sorted(self.items.items())]
-        pks     = {x["tname"]:  x["pk"]    for x in self.items.values() if "pk" in x}
-        columns = {x["tname"]:  OrderedDict(
+        tables = [{"name": x["tname"], "source": x["name"], "pk": x.get("pk"), "columns": OrderedDict(
             (a if has_names else i, b) for i, (a, b) in enumerate(zip(x["columns"], x["tcolumns"]))
-        ) for x in self.items.values()}
+        )} for _, x in sorted(self.items.items())]
         callable = functools.partial(importexport.import_data, self.page1.filename,
-                                     self.db, tables, columns, pks,
-                                     self.page1.use_header, self.OnProgressCallback)
+                                     self.db, tables, self.page1.use_header, self.OnProgressCallback)
         self.db.close()
         try: not self.page2.file_existed and os.unlink(self.db.filename)
         except Exception: pass
@@ -12117,8 +12112,7 @@ class ImportWizard(wx.adv.Wizard):
             self.page2.progress.setdefault(itemindex, {}).update(kwargs)
 
         finished = not self.page2.importing
-        tablefmt = util.unprint(grammar.quote(item["tname"], force=True)) \
-                   if item else ""
+        tablefmt = util.unprint(grammar.quote(item["tname"], force=True)) if item else ""
 
         if count is not None:
             tfraction = 0
