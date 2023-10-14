@@ -68,7 +68,7 @@ ARGUMENTS = {
         {"args": ["--verbose"], "action": "store_true",
          "help": "print detailed logging messages to stderr"},
         {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
-         "help": "path of configuration file to use"}
+         "help": "path of program configuration file to use"}
     ],
 
     "commands": [
@@ -81,7 +81,7 @@ ARGUMENTS = {
                       "(supports * wildcards)"},
 
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
-              "help": "path of configuration file to use"},
+              "help": "path of program configuration file to use"},
         ]},
         {"name": "export",
          "help": "export SQLite database in various output formats",
@@ -102,7 +102,7 @@ ARGUMENTS = {
               "help": "write output to file instead of printing to console;\n"
                       "filename will be auto-generated if not given;\n"
                       "used as prefix if not --combine;\n"
-                      "auto-populated for non-printable formats (%s)" %
+                      "automatic for non-printable formats (%s)" %
                       ",".join(["db"] + sorted(set(importexport.EXPORT_EXTS) -
                                                set(importexport.PRINTABLE_EXTS)))},
              {"args": ["-p", "--path"], "metavar": "DIR",
@@ -140,7 +140,7 @@ ARGUMENTS = {
              {"args": ["--verbose"], "action": "store_true",
               "help": "print detailed logging messages to stderr"},
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
-              "help": "path of configuration file to use"},
+              "help": "path of program configuration file to use"},
         ]},
         {"name": "import",
          "help": "import data from file to database ",
@@ -172,7 +172,7 @@ ARGUMENTS = {
              {"args": ["--verbose"], "action": "store_true",
               "help": "print detailed logging messages to stderr"},
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
-              "help": "path of configuration file to use"},
+              "help": "path of program configuration file to use"},
         ]},
         {"name": "parse",
          "help": "search in SQLite database schema",
@@ -188,7 +188,7 @@ ARGUMENTS = {
               "help": "case-sensitive search"},
              {"args": ["-o", "--output"], "dest": "OUTFILE", "metavar": "FILE",
                        "nargs": "?", "const": "",
-              "help": "write output to file instead of printing to console;\n"
+              "help": "write output to SQL file instead of printing to console;\n"
                       "filename will be auto-generated if not given"},
              {"args": ["--overwrite"], "action": "store_true",
               "help": "overwrite output file if already exists\n"
@@ -203,7 +203,7 @@ ARGUMENTS = {
              {"args": ["--verbose"], "action": "store_true",
               "help": "print detailed logging messages to stderr"},
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
-              "help": "path of configuration file to use"},
+              "help": "path of program configuration file to use"},
         ]},
         {"name": "search",
          "help": "search in SQLite database data",
@@ -231,7 +231,7 @@ ARGUMENTS = {
               "help": "write output to file instead of printing to console;\n"
                       "filename will be auto-generated if not given;\n"
                       "used as prefix if not --combine;\n"
-                      "auto-populated for non-printable formats (%s)" %
+                      "automatic for non-printable formats (%s)" %
                       ",".join(["db"] + sorted(set(importexport.EXPORT_EXTS) -
                                                set(importexport.PRINTABLE_EXTS)))},
              {"args": ["-p", "--path"], "metavar": "DIR",
@@ -258,7 +258,7 @@ ARGUMENTS = {
              {"args": ["--verbose"], "action": "store_true",
               "help": "print detailed logging messages to stderr"},
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
-              "help": "path of configuration file to use"},
+              "help": "path of program configuration file to use"},
         ]},
         {"name": "stats",
          "help": "print or save database statistics",
@@ -292,7 +292,7 @@ ARGUMENTS = {
              {"args": ["--verbose"], "action": "store_true",
               "help": "print detailed logging messages to stderr"},
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
-              "help": "path of configuration file to use"},
+              "help": "path of program configuration file to use"},
         ]},
     ],
 }
