@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.10.2023
+@modified    12.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -23,10 +23,12 @@ import functools
 import glob
 import locale
 import logging
+import math
 import multiprocessing.connection
 import os
 try: import Queue as queue        # Py2
 except ImportError: import queue  # Py3
+import re
 import sys
 import tempfile
 import threading
@@ -132,6 +134,38 @@ ARGUMENTS = {
                       "view rows in reverse row_number() order"},
              {"args": ["--max-count"], "dest": "maxcount", "type": int, "metavar": "NUM",
               "help": "maximum total number of rows to export over all tables and views"},
+             {"args": ["--progress"], "action": "store_true",
+              "help": "display progress bar"},
+
+             {"args": ["--verbose"], "action": "store_true",
+              "help": "print detailed logging messages to stderr"},
+             {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
+              "help": "path of configuration file to use"},
+        ]},
+        {"name": "import",
+         "help": "import data from file to database ",
+         "description": "Import data from spreadsheet/JSON/YAML files\n"
+                        "to a new or existing SQLite database.",
+         "arguments": [
+             {"args": ["INFILE"],
+              "help": "file to import from.\nSupported extensions: {%s}." %
+                      ",".join(sorted(importexport.IMPORT_EXTS))},
+             {"args": ["OUTFILE"], "metavar": "DB",
+              "help": "SQLite database to import to, will be created if not present"},
+             {"args": ["--filter"], "nargs": "+",
+              "help": "names of specific Excel worksheets to import or skip\n"
+                      "(supports * wildcards; initial ~ skips)"},
+             {"args": ["--row-header"], "action": "store_true",
+              "help": "use first row of input spreadsheet for column names"},
+             {"args": ["--table-name"],
+              "help": "name of table to import into, defaults to file base name\n"
+                      "or worksheet name if Excel spreadsheet"},
+             {"args": ["--create-always"], "action": "store_true",
+              "help": "create new table even if a matching table already exists"},
+             {"args": ["--add-pk"], "action": "store_true",
+              "help": "add auto-increment primary key column to created tables"},
+             {"args": ["--assume-yes"], "action": "store_true",
+              "help": "skip confirmation prompt for starting import"},
              {"args": ["--progress"], "action": "store_true",
               "help": "display progress bar"},
 
@@ -472,13 +506,14 @@ def output(s="", **kwargs):
         raise # Propagate any other errors
 
 
-def make_progress(action, entities, args):
+def make_progress(action, entities, args, results=None):
     """
     Returns progress-function for reporting output status.
 
     @param   action    name of action being progressed, like "export" or "search"
-    @param   entities  {name: {name, type, count, ?output_type, ?total}}
+    @param   entities  {name: {name, type, count, ?total, ?table}}
     @param   args      argparse.Namespace
+    @param   results   list to append progress values to, if any
     """
     NAME_MAX = 25
     infinitive = "%sing" % action
@@ -487,12 +522,11 @@ def make_progress(action, entities, args):
     def progress(result=None, **kwargs):
         """Prints out progress texts, registers counts."""
         result = result or kwargs
-        item = next((x for x in entities.values()
-                     if result.get("name") and x.get("output_name") == result["name"]), None)
-        item = item or entities.get(result.get("name"))
-        itemindex = next((i for i, n in enumerate(entities) if n == result.get("name")), None)
+        itemname = result.get("source" if "import" == action else "name")
+        item = entities.get(itemname)
+        itemindex = next((i for i, n in enumerate(entities) if util.lceq(n, itemname)), None)
 
-        if "name" in result and result["name"] != ns["name"]:
+        if itemname and itemname != ns["name"]:
             if ns["bar"]:
                 ns["bar"] = ns["bar"].stop()
                 output()
@@ -502,41 +536,51 @@ def make_progress(action, entities, args):
                 ns["bar"] = ns["bar"].stop()
                 output()
             output("\nError %s from %s: %s" % (infinitive, args.INFILE, result["error"]))
-        elif "count" in result and "name" in result:
+        elif "count" in result and item:
             item["count"] = result["count"]
 
-            if item["name"] != ns["name"]:
-                label = util.unprint(item["name"])
-                if args.progress: label = util.ellipsize(label, NAME_MAX)
-                text = " %s %s %s" % (infinitive.capitalize(), item["type"],
-                                      grammar.quote(label, force=True))
-                if "total" in item:
+            if itemname != ns["name"]:
+                if item["type"]:
+                    label = util.unprint(itemname)
+                    if args.progress: label = util.ellipsize(label, NAME_MAX)
+                    text = " %s %s %s" % (infinitive.capitalize(), item["type"],
+                                          grammar.quote(label, force=True))
+                else: text = " %s %s" % (infinitive.capitalize(), itemname) # "Importing <JSON data>"
+                if item.get("total", -1) != -1:
                     text += ", %s total" % util.count(item, "row", "total")
-                text += " (%s of %s)" % (itemindex + 1,
-                                          sum(x["type"] == item["type"] for x in entities.values()))
+                itemcount = sum(x["type"] == item["type"] for x in entities.values())
+                if itemcount > 1: text += " (%s of %s)" % (itemindex + 1, itemcount)
                 ns["afterword"] = text
 
             if args.progress:
                 if not ns["bar"]:
-                    pulse = "search" == action or "table" != item["type"]
+                    pulse = ("import" == action and (item["total"] == -1 or item["total"] < 100)) or \
+                            ("search" == action) or ("export" == action and "table" != item["type"])
                     ns["bar"] = util.ProgressBar(pulse=pulse, interval=0.05, value=result["count"],
                                                  afterword=ns["afterword"], echo=output)
-                    if "export" == action and "table" == item["type"]:
+                    if action in ("export", "import") and "view" != item["type"] \
+                    and item.get("total", -1) != -1:
                         total = max(0, item["total"] - (args.offset or 0))
                         if max(-1, -1 if args.limit is None else args.limit) >= 0:
                             total = min(total, args.limit)
                         ns["bar"].max = total
-                    ns["bar"].draw() if 0 in (item.get("total"), args.limit) else ns["bar"].start()
+                    ns["bar"].draw()
+                    if 0 not in (item.get("total"), args.limit):
+                        ns["bar"].start()
                 else:
+                    ns["bar"].pulse = False
                     ns["bar"].update(result["count"])
-            elif item["name"] != ns["name"]:
+            elif itemname != ns["name"]:
                 logger.info(ns["afterword"].strip())
         if result.get("done"):
             if ns["bar"]:
                 ns["bar"] = ns["bar"].stop()
                 output()
+        if result.get("errorcount") and item:
+            item["errorcount"] = result["errorcount"]
 
-        if item: ns["name"] = item["name"]
+        if item: ns["name"] = itemname
+        if isinstance(results, list): results.append(result)
         return True
 
     return progress
@@ -587,11 +631,12 @@ def prepare_args(action, args):
     if action in ACTION_FORMATS:
         FORMATS = {k: v for k, v in FORMATS.items() if k in ACTION_FORMATS[action]}
 
-    if args.OUTFILE and not args.format: # Try to detect format from output filename
+    if "import" != action and args.OUTFILE and not args.format: # Detect format from output filename
         fmt = os.path.splitext(args.OUTFILE)[-1].lower().lstrip(".")
         if fmt in FORMATS:
             args.format = fmt
-    args.format = args.format or DEFAULT_FORMATS[action]
+    if hasattr(args, "format"):
+        args.format = args.format or DEFAULT_FORMATS[action]
     if "stats" == action and "sql" == args.format:
         args.disk_usage = True
     if hasattr(args, "combine"):
@@ -604,7 +649,7 @@ def prepare_args(action, args):
         args.offset   =    0 if args.offset   is None or args.offset   <= 0 else args.offset
 
     outfile_transient = args.OUTFILE is None and args.format in importexport.PRINTABLE_EXTS
-    outfile_required  = "stats" == action or (args.combine and args.OUTFILE == "")
+    outfile_required  = "stats" == action or (getattr(args, "combine", False) and args.OUTFILE == "")
     if not args.OUTFILE and (outfile_required or args.format not in importexport.PRINTABLE_EXTS):
         dct = {"action": action.capitalize(), "db": os.path.basename(args.INFILE)}
         base = OUTFILE_TEMPLATES.get(action, "%(action)s from %(db)s") % dct
@@ -616,7 +661,7 @@ def prepare_args(action, args):
         args.OUTFILE = os.path.join(args.path, args.OUTFILE)
 
     if args.OUTFILE and getattr(args, "combine", True) \
-    and not args.overwrite and not outfile_transient:
+    and not getattr(args, "overwrite", True) and not outfile_transient:
         args.OUTFILE = util.unique_path(args.OUTFILE)
 
 
@@ -1084,6 +1129,181 @@ def run_stats(dbname, args):
             if args.start_file: util.start_file(args.OUTFILE)
 
 
+def run_import(infile, args):
+    """
+    Imports data from file to database, prints results.
+
+    @param   infile           path of data file to import
+    @param   args
+               OUTFILE        path of database to create or update
+               filter         names of worksheets to import, supports * wildcards, leading - skips
+               table_name     table to import into, defaults to sheet or file name
+               create_always  whether to create new table even if matching table exists
+               row_header     whether to use first row of input spreadsheet for column names
+               add_pk         whether to add auto-increment primary key column to created tables
+               assume_yes     whether to skip confirmation prompt
+               progress       show progress bar
+    """
+    entity_rgx = util.filters_to_regex(args.filter) if args.filter else None
+    prepare_args("import", args)
+
+    dbname, file_existed, total = args.OUTFILE, os.path.isfile(args.OUTFILE), 0
+    db = database.Database(dbname)
+
+    output()
+    progressargs = dict(pulse=True, interval=0.05) if args.progress else dict(static=True)
+    bar = util.ProgressBar(**progressargs)
+    try:
+        args.progress and bar.start()
+        bar.update(afterword=" Examining data")
+        info = importexport.get_import_file_data(infile)
+        if args.progress: bar.pause, _ = True, output()
+        has_sheets, has_names = "xls" in info["format"], info["format"] in ("json", "yaml")
+        output()
+        output("Import from: %s (%s%s)" % \
+               (info["name"], util.format_bytes(info["size"]),
+                ", %s" % util.plural("sheet", info["sheets"]) if has_sheets else ""))
+
+        sheets = info["sheets"]
+        if entity_rgx: sheets = [x for x in sheets if entity_rgx.match(x["name"])]
+        if not sheets:
+            extra = "" if not args.filter else " using sheet filter: %s" % " ".join(args.filter)
+            output()
+            sys.exit("Nothing to import from %s%s." % (infile, extra))
+        if not any(x["rows"] for x in sheets):
+            output()
+            sys.exit("Nothing to import from %s." % infile)
+        output("Import into: %s (%s)" %
+               (db.name, util.format_bytes(db.filesize) if file_existed else "new file"))
+
+        if args.progress: bar.pause = False
+        bar.update(afterword=" Parsing schema")
+        db.populate_schema(parse=True)
+        if args.progress: bar.pause, _ = True, output()
+        items = util.CaselessDict((n, xx[n]) for xx in db.schema.values() for n in xx)
+        for sheet in sheets:
+            colmapping, pk, existing_ok = collections.OrderedDict(), None, False
+            tname = sheet["name"] if has_sheets else os.path.splitext(os.path.basename(infile))[0]
+            if args.table_name: tname = args.table_name
+
+            sourcecols = sheet["columns"] if has_names or args.row_header else \
+                         [util.make_spreadsheet_column(i) for i in range(len(sheet["columns"]))]
+
+            if not args.create_always:
+                # Find closest matching table, with the least number of columns and preferably matching names
+                candidates = [] # [(whether column names match, table column names, {item}), ]
+                name_matches = lambda s: re.match(r"%s(_\d+)?" % re.escape(tname), s, re.I)
+                for item in (x for x in items.values() if "table" == x["type"] and name_matches(x["name"])):
+                    tablecols = [x["name"] for x in item["columns"]]
+                    if len(tablecols) >= len(sourcecols):
+                        cols_match = (has_names or args.row_header) and \
+                                     all(any(util.lceq(a, b) for b in tablecols) for a in sourcecols)
+                        candidates.append((cols_match, tablecols, item))
+                for cols_match, tablecols, item in sorted(candidates, key=lambda x: (not x[0], len(x[1]))):
+                    tname, existing_ok = item["name"], True
+                    if cols_match:
+                        colmapping.update((a if has_names else i,
+                                           next(b for b in tablecols if util.lceq(a, b)))
+                                          for i, a in enumerate(sourcecols))
+                    else:
+                        colmapping.update(enumerate(tablecols[:len(sourcecols)]))
+                    break # for
+            if not existing_ok:
+                tname = util.make_unique(tname, items)
+                if has_names: colmapping.update(zip(sourcecols, sourcecols))
+                else: colmapping.update(enumerate(sourcecols))
+                if args.add_pk: pk = util.make_unique("id", list(colmapping.values()))
+                item = {"name": tname, "type": "table",
+                        "columns": ([{"name": pk, "pk": {"autoincrement": True}}] if pk else []) + 
+                                   [{"name": n} for n in colmapping.values()]}
+
+            sheettotal = sheet["rows"]
+            if args.row_header and not has_names and sheet["rows"] != -1: sheettotal -= 1
+            sheet.update(table=tname, tablecolumns=colmapping, tablepk=pk, count=None,
+                         total=sheettotal, type="sheet" if has_sheets else None)
+            if not existing_ok: items[tname] = item
+
+        infotext = "Importing%s:\n" % (" " + util.plural("sheet", sheets) if has_sheets else "")
+        for sheet in sheets:
+            infotext += "- %s (%s) into %stable %s\n" % \
+                        (('"%s"' if has_sheets else "%s") % sheet["name"],
+                         util.plural("column", sheet["columns"]),
+                         "" if sheet["table"] in db.schema["table"] else "new ",
+                         grammar.quote(sheet["table"], force=True))
+            infotext += "  Mapping from source columns to table columns:\n"
+            maxlen1 = max(len(grammar.quote(a, force=True)) for a in sheet["columns"])
+            for i, (a, b) in enumerate(sheet["tablecolumns"].items()):
+                key1 = grammar.quote(list(sheet["columns"])[i], force=True) \
+                       if has_names or args.row_header else ""
+                infotext += "  %s. %s%s -> %s\n" % \
+                            (("%%%ds" % math.ceil(math.log(len(sheet["columns"]), 10))) % (i + 1),
+                             key1 or "column",
+                             " " * (maxlen1 - len(key1)) if key1 else "",
+                             grammar.quote(b, force=True))
+        output()
+        output(infotext)
+        if not args.assume_yes:
+            output()
+            output("Proceed with import? (Y/n) ", end="")
+            resp = six.moves.input().strip()
+            if resp.lower() not in ("", "y", "yes"):
+                return
+
+        entities = util.CaselessDict(((x["name"], x) for x in sheets), insertorder=True)
+        reports = []
+        tables = [{"name": x["table"], "source": x["name"], "pk": x.get("tablepk"),
+                   "columns": x["tablecolumns"]} for x in sheets]
+        progress = make_progress("import", entities, args, reports)
+        bar.update(afterword=" Importing")
+        importexport.import_data(infile, db, tables, args.row_header, progress)
+
+    except Exception:
+        _, e, tb = sys.exc_info()
+        bar.stop()
+        output()
+        output("Error reading %s." % infile, file=sys.stderr)
+        six.reraise(type(e), e, tb)
+    else:
+        if args.progress: bar.pause = False
+        bar.update(afterword=" Finalizing")
+        db.close()
+        if args.progress: bar.pulse = False
+        bar.update(value=100)
+        bar.stop()
+        if args.progress: output()
+        output()
+        total = sum(x["count"] or 0 for x in sheets)
+        errors = [x for x in reports if x.get("error")]
+        for sheet in sheets if total else ():
+            output("Imported %s %sto table %s%s." % (
+                   util.plural("row", sheet["count"] or 0),
+                   "from sheet %s " % grammar.quote(sheet["name"], force=True)
+                   if has_sheets else "",
+                   grammar.quote(sheet["table"], force=True),
+                   " (%s failed)" % (util.plural("row", sheet["errorcount"]))
+                   if sheet.get("errorcount") else ""))
+        if total:
+            output("Import complete, %s inserted to %s (%s)." % (
+                   util.plural("row", total), db.name,
+                   util.format_bytes(db.get_size())))
+            if any (x.get("errorcount") for x in sheets):
+                output("Failed to insert %s." %
+                       util.plural("row", sum(x.get("errorcount") or 0 for x in sheets)))
+        else:
+            output("Nothing imported.")
+        if errors:
+            output()
+            output("Errors encountered:")
+            for result in errors:
+                output("- %s%s" % ("sheet %s: " % grammar.quote(result["name"], force=True)
+                                   if has_sheets and result.get("name") else "", result["error"]))
+
+    finally:
+        util.try_ignore(db.close)
+        if not total and not file_existed:
+            util.try_ignore(os.unlink, dbname)
+
+
 def run_gui(filenames):
     """Main GUI program entrance."""
     global logger, window
@@ -1222,6 +1442,8 @@ def run(nogui=False):
 
     if "export" == arguments.command:
         run_export(arguments.INFILE, arguments)
+    elif "import" == arguments.command:
+        run_import(arguments.INFILE, arguments)
     elif "parse" == arguments.command:
         run_parse(arguments.INFILE, arguments)
     elif "search" == arguments.command:

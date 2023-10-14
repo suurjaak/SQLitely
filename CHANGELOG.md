@@ -1,9 +1,9 @@
 CHANGELOG
 =========
 
-2.3, 2023-10-10
+2.3, 2023-10-12
 ---------------
-- add command-line interface, with export, parse, search and stats
+- add command-line interface, with export, import, parse, search and stats
 
 
 2.2, 2023-10-08
