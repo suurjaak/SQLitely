@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.10.2023
+@modified    14.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -184,7 +184,7 @@ class ProgressBar(threading.Thread):
         @param   echo       print function
         """
         threading.Thread.__init__(self)
-        for k, v in locals().items(): setattr(self, k, v) if "self" != k else 0
+        for k, v in locals().items(): "self" != k and setattr(self, k, v)
         self.daemon = True # Daemon threads do not keep application running
         self.percent = None        # Current progress ratio in per cent
         self.value = None          # Current progress bar value
@@ -200,9 +200,10 @@ class ProgressBar(threading.Thread):
         if static or not pulse: self.update(value, draw=static)
 
 
-    def update(self, value=None, afterword=None, draw=True):
-        """Updates the progress bar value / afterword, and refreshes by default."""
+    def update(self, value=None, afterword=None, draw=True, **kwargs):
+        """Updates the progress bar value / afterword and any other properties, and redraws."""
         if afterword is not None: self.afterword = afterword
+        for k, v in kwargs.items(): hasattr(self, k) and setattr(self, k, v)
         if self.static:
             if self.afterword.strip(): self.echo(self.afterword.strip())
             return

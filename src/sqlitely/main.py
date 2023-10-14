@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.10.2023
+@modified    14.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -528,12 +528,12 @@ def make_progress(action, entities, args, results=None):
 
         if itemname and itemname != ns["name"]:
             if ns["bar"]:
-                ns["bar"] = ns["bar"].stop()
+                ns["bar"].stop(), ns.update(bar=None)
                 output()
 
         if "error" in result:
             if ns["bar"]:
-                ns["bar"] = ns["bar"].stop()
+                ns["bar"].stop(), ns.update(bar=None)
                 output()
             output("\nError %s from %s: %s" % (infinitive, args.INFILE, result["error"]))
         elif "count" in result and item:
@@ -568,13 +568,12 @@ def make_progress(action, entities, args, results=None):
                     if 0 not in (item.get("total"), args.limit):
                         ns["bar"].start()
                 else:
-                    ns["bar"].pulse = False
-                    ns["bar"].update(result["count"])
+                    ns["bar"].update(result["count"], pulse=False)
             elif itemname != ns["name"]:
                 logger.info(ns["afterword"].strip())
         if result.get("done"):
             if ns["bar"]:
-                ns["bar"] = ns["bar"].stop()
+                ns["bar"].stop(), ns.update(bar=None)
                 output()
         if result.get("errorcount") and item:
             item["errorcount"] = result["errorcount"]
@@ -1176,8 +1175,7 @@ def run_import(infile, args):
         output("Import into: %s (%s)" %
                (db.name, util.format_bytes(db.filesize) if file_existed else "new file"))
 
-        if args.progress: bar.pause = False
-        bar.update(afterword=" Parsing schema")
+        bar.update(afterword=" Parsing schema", pause=False)
         db.populate_schema(parse=True)
         if args.progress: bar.pause, _ = True, output()
         items = util.CaselessDict((n, xx[n]) for xx in db.schema.values() for n in xx)
@@ -1264,11 +1262,9 @@ def run_import(infile, args):
         output("Error reading %s." % infile, file=sys.stderr)
         six.reraise(type(e), e, tb)
     else:
-        if args.progress: bar.pause = False
-        bar.update(afterword=" Finalizing")
+        bar.update(afterword=" Finalizing", pause=False)
         db.close()
-        if args.progress: bar.pulse = False
-        bar.update(value=100)
+        if args.progress: bar.update(value=100, pulse=False)
         bar.stop()
         if args.progress: output()
         output()
