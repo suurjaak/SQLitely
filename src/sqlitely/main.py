@@ -403,7 +403,7 @@ class ConsoleWriter(object):
             countdown = 60
             txt = "\rClosing window in %s.. Press ENTER to exit."
             while countdown > 0 and q.empty():
-                output(txt % countdown, end=" ")
+                output(txt, countdown, end=" ")
                 countdown -= 1
                 time.sleep(1)
             q.put(None)
@@ -481,12 +481,18 @@ def ipc_send(authkey, port, data, limit=10000):
     return result
 
 
-def output(s="", **kwargs):
-    """Print wrapper, avoids "Broken pipe" errors if piping is interrupted."""
+def output(s="", *args, **kwargs):
+    """
+    Print wrapper, avoids "Broken pipe" errors if piping is interrupted.
+
+    @param   args    format arguments for text
+    @param   kwargs  additional arguments to print()
+    """
     BREAK_EXS = (KeyboardInterrupt, )
     try: BREAK_EXS += (BrokenPipeError, )  # Py3
     except NameError: pass  # Py2
 
+    if args: s %= args
     try: print(s, **kwargs)
     except UnicodeError:
         try:
@@ -535,7 +541,7 @@ def make_progress(action, entities, args, results=None):
             if ns["bar"]:
                 ns["bar"].stop(), ns.update(bar=None)
                 output()
-            output("\nError %s from %s: %s" % (infinitive, args.INFILE, result["error"]))
+            output("\nError %s from %s: %s", infinitive, args.INFILE, result["error"])
         elif "count" in result and item:
             item["count"] = result["count"]
 
@@ -1018,7 +1024,7 @@ def run_parse(dbname, args):
         _, e, tb = sys.exc_info()
         if args.OUTFILE and not file_existed:
             util.try_ignore(os.unlink, args.OUTFILE)
-        output("Error searching %s." % dbname, file=sys.stderr)
+        output("Error searching %s.", dbname, file=sys.stderr)
         six.reraise(type(e), e, tb)
     else:
         errput = lambda s="": output(s, file=sys.stderr)
@@ -1028,13 +1034,13 @@ def run_parse(dbname, args):
             errput("Found nothing in %s%s." %
                    (dbname, " matching %r" % args.SEARCH if db.schema and args.SEARCH else ""))
         elif not args.OUTFILE:
-            output("\n-- Source: %s" % dbname)
+            output("\n-- Source: %s", dbname)
             for l in headers:
-                output("-- %s" % l)
+                output("-- %s", l)
             if headers: output()
             output("\n\n".join(matches))
             if args.SEARCH:
-                output("\n-- Found %s: %s." % (util.plural("entity", len(matches)), countstr))
+                output("\n-- Found %s: %s.", util.plural("entity", matches), countstr)
         else:
             fmt_bytes = lambda f, s=None: util.format_bytes((s or os.path.getsize)(f))
 
@@ -1106,7 +1112,7 @@ def run_stats(dbname, args):
         output()
         if args.OUTFILE and not file_existed:
             util.try_ignore(os.unlink, args.OUTFILE)
-        output("Error analyzing %s." % dbname, file=sys.stderr)
+        output("Error analyzing %s.", dbname, file=sys.stderr)
         six.reraise(type(e), e, tb)
     else:
         fmt_bytes = lambda f, s=None: util.format_bytes((s or os.path.getsize)(f))
@@ -1159,9 +1165,8 @@ def run_import(infile, args):
         if args.progress: bar.pause, _ = True, output()
         has_sheets, has_names = "xls" in info["format"], info["format"] in ("json", "yaml")
         output()
-        output("Import from: %s (%s%s)" % \
-               (info["name"], util.format_bytes(info["size"]),
-                ", %s" % util.plural("sheet", info["sheets"]) if has_sheets else ""))
+        output("Import from: %s (%s%s)", info["name"], util.format_bytes(info["size"]),
+               ", %s" % util.plural("sheet", info["sheets"]) if has_sheets else "")
 
         sheets = info["sheets"]
         if entity_rgx: sheets = [x for x in sheets if entity_rgx.match(x["name"])]
@@ -1172,8 +1177,8 @@ def run_import(infile, args):
         if not any(x["rows"] for x in sheets):
             output()
             sys.exit("Nothing to import from %s." % infile)
-        output("Import into: %s (%s)" %
-               (db.name, util.format_bytes(db.filesize) if file_existed else "new file"))
+        output("Import into: %s (%s)", db.name,
+                util.format_bytes(db.filesize) if file_existed else "new file")
 
         bar.update(afterword=" Parsing schema", pause=False)
         db.populate_schema(parse=True)
@@ -1259,7 +1264,7 @@ def run_import(infile, args):
         _, e, tb = sys.exc_info()
         bar.stop()
         output()
-        output("Error reading %s." % infile, file=sys.stderr)
+        output("Error reading %s.", infile, file=sys.stderr)
         six.reraise(type(e), e, tb)
     else:
         bar.update(afterword=" Finalizing", pause=False)
@@ -1271,19 +1276,19 @@ def run_import(infile, args):
         total = sum(x["count"] or 0 for x in sheets)
         errors = [x for x in reports if x.get("error")]
         for sheet in sheets if total else ():
-            output("Imported %s %sto table %s%s." % (
+            output("Imported %s %sto table %s%s.",
                    util.plural("row", sheet["count"] or 0),
                    "from sheet %s " % grammar.quote(sheet["name"], force=True)
                    if has_sheets else "",
                    grammar.quote(sheet["table"], force=True),
                    " (%s failed)" % (util.plural("row", sheet["errorcount"]))
-                   if sheet.get("errorcount") else ""))
+                   if sheet.get("errorcount") else "")
         if total:
-            output("Import complete, %s inserted to %s (%s)." % (
+            output("Import complete, %s inserted to %s (%s).",
                    util.plural("row", total), db.name,
-                   util.format_bytes(db.get_size())))
+                   util.format_bytes(db.get_size()))
             if any (x.get("errorcount") for x in sheets):
-                output("Failed to insert %s." %
+                output("Failed to insert %s.",
                        util.plural("row", sum(x.get("errorcount") or 0 for x in sheets)))
         else:
             output("Nothing imported.")
@@ -1291,8 +1296,8 @@ def run_import(infile, args):
             output()
             output("Errors encountered:")
             for result in errors:
-                output("- %s%s" % ("sheet %s: " % grammar.quote(result["name"], force=True)
-                                   if has_sheets and result.get("name") else "", result["error"]))
+                output("- %s%s", "sheet %s: " % grammar.quote(result["name"], force=True)
+                                 if has_sheets and result.get("name") else "", result["error"])
 
     finally:
         util.try_ignore(db.close)
