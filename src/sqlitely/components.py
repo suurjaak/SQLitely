@@ -7374,7 +7374,8 @@ class ImportDialog(wx.Dialog):
         tables = [{"name": self._table["name"], "source": self._sheet.get("name"),
                    "columns": columns, "pk": self._table.get("pk")}]
         callable = functools.partial(importexport.import_data, self._data["name"],
-                                     self._db, tables, self._has_header, self._OnProgressCallback)
+                                     self._db, tables, self._has_header,
+                                     progress=self._OnProgressCallback)
         self._worker_import.work(callable)
 
 
@@ -12065,7 +12066,8 @@ class ImportWizard(wx.adv.Wizard):
             (a if has_names else i, b) for i, (a, b) in enumerate(zip(x["columns"], x["tcolumns"]))
         )} for _, x in sorted(self.items.items())]
         callable = functools.partial(importexport.import_data, self.page1.filename,
-                                     self.db, tables, self.page1.use_header, self.OnProgressCallback)
+                                     self.db, tables, self.page1.use_header,
+                                     progress=self.OnProgressCallback)
         self.db.close()
         try: not self.page2.file_existed and os.unlink(self.db.filename)
         except Exception: pass

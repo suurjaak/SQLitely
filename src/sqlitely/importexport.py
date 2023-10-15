@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.10.2023
+@modified    15.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -270,7 +270,7 @@ def export_data_multiple(filename, format, title, db, category=None, names=None,
                  "txt":  templates.DATA_TXT_MULTIPLE,
                  "yaml": templates.DATA_YAML_MULTIPLE}
 
-    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else util.tuplefy(limit)
+    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else (limit, )
     itemfiles = collections.OrderedDict() # {data name: path to partial file containing item data}
     categories = [] if make_iterables else [category] if category else db.DATA_CATEGORIES
     if names:
@@ -481,7 +481,7 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
     """
     result = False
     entities, namespace, cursors = copy.deepcopy(db.schema), {}, []
-    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else util.tuplefy(limit)
+    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else (limit, )
     related_includes = collections.defaultdict(list) # {name: [name of owned or required entity, ]}
     counts = collections.defaultdict(int) # {name: number of rows yielded}
 
@@ -600,7 +600,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
     CATEGORIES = db.DATA_CATEGORIES
     sqls0, sqls1, actionsqls = [], [], []
     requireds, processeds, exporteds = {}, set(), set()
-    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else util.tuplefy(limit)
+    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else (limit, )
     totalcount = 0
 
     is_samefile = util.lceq(db.filename, filename)
@@ -799,7 +799,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
     schemas = [list(x.values())[1] for x in
                db.execute("PRAGMA database_list").fetchall()]
     schema2 = util.make_unique("main", schemas, suffix="%s")
-    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else util.tuplefy(limit)
+    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else (limit, )
 
     db.lock(None, None, filename, label="query export")
 
@@ -1165,7 +1165,7 @@ def get_import_file_data(filename, progress=None):
 
 
 
-def import_data(filename, db, tables, has_header=True, progress=None):
+def import_data(filename, db, tables, has_header=True, limit=None, maxcount=None, progress=None):
     """
     Imports data from spreadsheet or JSON or YAML data file to database table.
     Will create tables if not existing yet.
@@ -1174,11 +1174,13 @@ def import_data(filename, db, tables, has_header=True, progress=None):
     @param   db             database.Database instance
     @param   tables         tables to import to and sheets to import from, as [{
                               "name": table name,
-                              "source": source worksheet, can be None if file is CSV/JSON/YAML,
+                              "source": source worksheet or label, can be None if file is CSV/JSON/YAML,
                               ?"pk": name of auto-increment primary key to add if new table,
                               "columns": OrderedDict(file column key: table column name)
                              }], where file column key is column index if spreadsheet else column name
     @param   has_header     whether spreadsheet file has a header row
+    @param   limit          import limits per sheet if any, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
+    @param   maxcount       maximum total number of rows to import over all sheets
     @param   progress       callback(?name, ?source, ?count, ?done, ?error, ?errorcount, ?index) to report
                             progress, returning False if import should cancel,
                             and None if import should rollback.
@@ -1186,14 +1188,18 @@ def import_data(filename, db, tables, has_header=True, progress=None):
     @return                 success
     """
     result = True
+    limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else (limit, )
+    if limit and not limit[0] or maxcount == 0:
+        progress and progress(done=True)
+        return result
 
     extname = os.path.splitext(filename)[-1][1:].lower()
-    has_sheets, new_tables = "xls" in extname, []
+    has_sheets, has_names, new_tables = "xls" in extname, extname in ("json", "yaml"), []
     table, source, cursor, isolevel = None, None, None, None
     was_open, file_existed = db.is_open(), os.path.isfile(db.filename)
     try:
         db.open()
-        continue_on_error = None
+        continue_on_error, totalcount = None, 0
         with db.connection:
             cursor = db.connection.cursor()
             cursor.execute("BEGIN TRANSACTION")
@@ -1225,16 +1231,31 @@ def import_data(filename, db, tables, has_header=True, progress=None):
                 logger.info("Running import from %s%s to table %s.",
                             filename, (" sheet '%s'" % source) if has_sheets else "",
                             grammar.quote(table, force=True))
-                index, count, errorcount = -1, 0, 0
+                index, indexrange, count, errorcount = -1, (), 0, 0
+                if limit:
+                    amount, fromrow = limit if len(limit) == 2 else (limit[0], 0)
+                    amount, fromrow = (sys.maxsize if amount < 0 else amount), max(0, fromrow)
+                    indexrange = fromrow, fromrow + amount
+                if maxcount and maxcount > 0:
+                    indexrange = indexrange or (0, sys.maxsize)
+                    indexrange = indexrange[0], min(indexrange[1], maxcount - totalcount)
                 result = progress(name=table, source=source, index=0, count=0)
                 for row in iter_file_rows(filename, list(columns), source) if result else ():
                     index += 1
-                    if has_header and not index: continue # for row
+                    if has_header and not has_names and not index: continue # for row
+                    do_import, do_report = True, False
+                    row_index = index - bool(has_header and not has_names)
+                    if indexrange and row_index < indexrange[0]:
+                        do_import, do_report = False, index and not index % 100
+                    elif indexrange and row_index >= indexrange[1]:
+                        break # for row
                     lastcount, lasterrorcount = count, errorcount
 
                     try:
-                        cursor.execute(sql, row)
-                        count += 1
+                        if do_import:
+                            cursor.execute(sql, row)
+                            count += 1
+                            totalcount += 1
                     except Exception as e:
                         errorcount += 1
                         if not progress: raise
@@ -1251,9 +1272,10 @@ def import_data(filename, db, tables, has_header=True, progress=None):
                                         " and rolling back" if result is None else "")
                             if result is None: cursor.execute("ROLLBACK")
                             break # for row
-                    if result and progress \
-                    and (count != lastcount and not count % 100 or errorcount != lasterrorcount and not errorcount % 100):
-                        result = progress(name=table, source=source, count=count, errorcount=errorcount)
+                    do_report = do_report or (count != lastcount and not count % 100 or
+                                              errorcount != lasterrorcount and not errorcount % 100)
+                    if result and progress and do_report:
+                        result = progress(name=table, source=source, index=index, count=count, errorcount=errorcount)
                         if not result:
                             logger.info("Cancelling%s import on user request.",
                                         " and rolling back" if result is None else "")
@@ -1276,8 +1298,9 @@ def import_data(filename, db, tables, has_header=True, progress=None):
                     cursor = table = source = None
                 if result and progress:
                     result = progress(name=mytable, source=mysource, count=count, errorcount=errorcount, done=True)
-                if not result:
-                    break # for i, (table, source)
+                if not result \
+                or maxcount and totalcount >= maxcount:
+                    break # for i, item
 
             logger.info("Finished importing from %s to %s.", filename, db)
 

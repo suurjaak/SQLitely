@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.10.2023
+@modified    15.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -166,6 +166,12 @@ ARGUMENTS = {
               "help": "add auto-increment primary key column to created tables"},
              {"args": ["--assume-yes"], "action": "store_true",
               "help": "skip confirmation prompt for starting import"},
+             {"args": ["--limit"], "type": int, "metavar": "NUM",
+              "help": "maximum number of rows to import, per table"},
+             {"args": ["--offset"], "type": int, "metavar": "NUM",
+              "help": "number of initial rows to skip from each table"},
+             {"args": ["--max-count"], "dest": "maxcount", "type": int, "metavar": "NUM",
+              "help": "maximum total number of rows to import over all tables"},
              {"args": ["--progress"], "action": "store_true",
               "help": "display progress bar"},
 
@@ -1147,10 +1153,19 @@ def run_import(infile, args):
                row_header     whether to use first row of input spreadsheet for column names
                add_pk         whether to add auto-increment primary key column to created tables
                assume_yes     whether to skip confirmation prompt
+               limit          maximum number of rows to import per table
+               offset         number of initial rows to skip from each table
+               maxcount       maximum total number of rows to import over all tables
                progress       show progress bar
     """
     entity_rgx = util.filters_to_regex(args.filter) if args.filter else None
     prepare_args("import", args)
+    if 0 in (args.limit, args.maxcount):
+        sys.exit("Nothing to import with %s." %
+                 ("limit %r" % args.limit if not args.limit else "max count %r" % args.maxcount))
+    limit = None if (args.limit < 0 and not args.offset) else (args.limit, ) if not args.offset else \
+            (args.limit, args.offset)
+    maxcount = args.maxcount
 
     dbname, file_existed, total = args.OUTFILE, os.path.isfile(args.OUTFILE), 0
     db = database.Database(dbname)
@@ -1174,7 +1189,8 @@ def run_import(infile, args):
             extra = "" if not args.filter else " using sheet filter: %s" % " ".join(args.filter)
             output()
             sys.exit("Nothing to import from %s%s." % (infile, extra))
-        if not any(x["rows"] for x in sheets):
+        sheets = [x for x in sheets if x["rows"]]
+        if not sheets:
             output()
             sys.exit("Nothing to import from %s." % infile)
         output("Import into: %s (%s)", db.name,
@@ -1228,11 +1244,13 @@ def run_import(infile, args):
 
         infotext = "Importing%s:\n" % (" " + util.plural("sheet", sheets) if has_sheets else "")
         for sheet in sheets:
-            infotext += "- %s (%s) into %stable %s\n" % \
-                        (('"%s"' if has_sheets else "%s") % sheet["name"],
-                         util.plural("column", sheet["columns"]),
-                         "" if sheet["table"] in db.schema["table"] else "new ",
-                         grammar.quote(sheet["table"], force=True))
+            infotext += "- %s (%s%s) into %stable %s\n" % (
+                grammar.quote(sheet["name"], force=True) if has_sheets else sheet["name"],
+                util.plural("column", sheet["columns"]),
+                ", %s" % util.plural("row", sheet["total"]) if sheet["total"] >= 0 else "",
+                "" if sheet["table"] in db.schema["table"] else "new ",
+                grammar.quote(sheet["table"], force=True)
+            )
             infotext += "  Mapping from source columns to table columns:\n"
             maxlen1 = max(len(grammar.quote(a, force=True)) for a in sheet["columns"])
             for i, (a, b) in enumerate(sheet["tablecolumns"].items()):
@@ -1258,7 +1276,7 @@ def run_import(infile, args):
                    "columns": x["tablecolumns"]} for x in sheets]
         progress = make_progress("import", entities, args, reports)
         bar.update(afterword=" Importing")
-        importexport.import_data(infile, db, tables, args.row_header, progress)
+        importexport.import_data(infile, db, tables, args.row_header, limit, maxcount, progress)
 
     except Exception:
         _, e, tb = sys.exc_info()
@@ -1275,7 +1293,7 @@ def run_import(infile, args):
         output()
         total = sum(x["count"] or 0 for x in sheets)
         errors = [x for x in reports if x.get("error")]
-        for sheet in sheets if total else ():
+        for sheet in (x for x in sheets if x["count"]) if total else ():
             output("Imported %s %sto table %s%s.",
                    util.plural("row", sheet["count"] or 0),
                    "from sheet %s " % grammar.quote(sheet["name"], force=True)
