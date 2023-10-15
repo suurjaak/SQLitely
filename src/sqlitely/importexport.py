@@ -1094,7 +1094,7 @@ def get_import_file_data(filename, progress=None):
                     break # for chunk
             if rows and f.tell() < size: rows = -1
         sheets.append({"rows": rows, "columns": columns, "name": "<JSON data>"})
-    elif is_xls:
+    elif is_xls and xlrd:
         with xlrd.open_workbook(filename, on_demand=True) as wb:
             for sheet in wb.sheets():
                 if progress and not progress(): return None
@@ -1105,7 +1105,7 @@ def get_import_file_data(filename, progress=None):
                 if not columns: rows = 0
                 else: rows = -1 if size > conf.MaxImportFilesizeForCount else sheet.nrows
                 sheets.append({"rows": rows, "columns": columns, "name": sheet.name})
-    elif is_xlsx:
+    elif is_xlsx and openpyxl:
         wb = None
         try:
             with warnings.catch_warnings():
@@ -1122,7 +1122,7 @@ def get_import_file_data(filename, progress=None):
                            else sum(1 for _ in sheet.iter_rows())
                     sheets.append({"rows": rows, "columns": columns, "name": sheet.title})
         finally: wb and wb.close()
-    elif is_yaml:
+    elif is_yaml and yaml:
         extname = "yaml"
         rows, columns = 0, {}
         with open(filename, "rbU" if six.PY2 else "rb") as f:
