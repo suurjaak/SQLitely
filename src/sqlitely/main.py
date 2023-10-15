@@ -676,6 +676,22 @@ def prepare_args(action, args):
         args.OUTFILE = util.unique_path(args.OUTFILE)
 
 
+def validate_args(action, args):
+    """
+    Populates format and outfile and limits and defaults of command-line arguments in-place.
+
+    Prints error and exits if any arguments are invalid.
+
+    @param   action  name like "export" or "search"
+    @param   args    argparse.Namespace
+    """
+    prepare_args(action, args)
+    if 0 in (args.limit, args.maxcount):
+        sys.exit("Nothing to export with %s." %
+                 ("limit %r" % args.limit if not args.limit else "max count %r" % args.maxcount))
+    if "export" == action and args.schema_only and args.format in ("json", "yaml"):
+        sys.exit("Nothing to export from %s without data as %s." % (dbname, args.format.upper()))
+
 
 def do_output(action, args, func, entities, files):
     """
@@ -748,10 +764,7 @@ def run_export(dbname, args):
                progress     show progress bar
     """
     entity_rgx = util.filters_to_regex(args.filter) if args.filter else None
-    prepare_args("export", args)
-
-    if args.schema_only and args.format in ("json", "yaml"):
-        sys.exit("Nothing to export from %s without data as %s." % (dbname, args.format.upper()))
+    validate_args("export", args)
 
     db = database.Database(dbname)
 
@@ -876,7 +889,7 @@ def run_search(dbname, args):
                reverse      query rows in reverse order
                maxcount     maximum total number of rows to export over all tables and views
     """
-    prepare_args("search", args)
+    validate_args("search", args)
 
     db = database.Database(dbname)
     queryparser = searchparser.SearchQueryParser()
@@ -1072,7 +1085,7 @@ def run_stats(dbname, args):
     """
     outfile0 = args.OUTFILE
     file_existed = args.OUTFILE and not args.overwrite and os.path.isfile(args.OUTFILE)
-    prepare_args("stats", args)
+    validate_args("stats", args)
 
     db = database.Database(os.path.abspath(dbname))
     stats = {}
@@ -1158,47 +1171,9 @@ def run_import(infile, args):
                maxcount       maximum total number of rows to import over all tables
                progress       show progress bar
     """
-    entity_rgx = util.filters_to_regex(args.filter) if args.filter else None
-    prepare_args("import", args)
-    if 0 in (args.limit, args.maxcount):
-        sys.exit("Nothing to import with %s." %
-                 ("limit %r" % args.limit if not args.limit else "max count %r" % args.maxcount))
-    limit = None if (args.limit < 0 and not args.offset) else (args.limit, ) if not args.offset else \
-            (args.limit, args.offset)
-    maxcount = args.maxcount
 
-    dbname, file_existed, total = args.OUTFILE, os.path.isfile(args.OUTFILE), 0
-    db = database.Database(dbname)
-
-    output()
-    progressargs = dict(pulse=True, interval=0.05) if args.progress else dict(static=True)
-    bar = util.ProgressBar(**progressargs)
-    try:
-        args.progress and bar.start()
-        bar.update(afterword=" Examining data")
-        info = importexport.get_import_file_data(infile)
-        if args.progress: bar.pause, _ = True, output()
-        has_sheets, has_names = "xls" in info["format"], info["format"] in ("json", "yaml")
-        output()
-        output("Import from: %s (%s%s)", info["name"], util.format_bytes(info["size"]),
-               ", %s" % util.plural("sheet", info["sheets"]) if has_sheets else "")
-
-        sheets = info["sheets"]
-        if entity_rgx: sheets = [x for x in sheets if entity_rgx.match(x["name"])]
-        if not sheets:
-            extra = "" if not args.filter else " using sheet filter: %s" % " ".join(args.filter)
-            output()
-            sys.exit("Nothing to import from %s%s." % (infile, extra))
-        sheets = [x for x in sheets if x["rows"]]
-        if not sheets:
-            output()
-            sys.exit("Nothing to import from %s." % infile)
-        output("Import into: %s (%s)", db.name,
-                util.format_bytes(db.filesize) if file_existed else "new file")
-
-        bar.update(afterword=" Parsing schema", pause=False)
-        db.populate_schema(parse=True)
-        if args.progress: bar.pause, _ = True, output()
+    def build_mappings(sheets):
+        """Populates source-to-table mappings for all sheets."""
         items = util.CaselessDict((n, xx[n]) for xx in db.schema.values() for n in xx)
         for sheet in sheets:
             colmapping, pk, existing_ok = collections.OrderedDict(), None, False
@@ -1242,27 +1217,65 @@ def run_import(infile, args):
                          total=sheettotal, type="sheet" if has_sheets else None)
             if not existing_ok: items[tname] = item
 
-        infotext = "Importing%s:\n" % (" " + util.plural("sheet", sheets) if has_sheets else "")
+
+    entity_rgx = util.filters_to_regex(args.filter) if args.filter else None
+    validate_args("import", args)
+
+    dbname, file_existed, total = args.OUTFILE, os.path.isfile(args.OUTFILE), 0
+    db = database.Database(dbname)
+
+    output()
+    progressargs = dict(pulse=True, interval=0.05) if args.progress else dict(static=True)
+    bar = util.ProgressBar(**progressargs)
+    try:
+        args.progress and bar.start()
+        bar.update(afterword=" Examining data")
+        info = importexport.get_import_file_data(infile)
+        if args.progress: bar.pause, _ = True, output()
+        has_sheets, has_names = "xls" in info["format"], info["format"] in ("json", "yaml")
+        output()
+        output("Import from: %s (%s%s)", info["name"], util.format_bytes(info["size"]),
+               ", %s" % util.plural("sheet", info["sheets"]) if has_sheets else "")
+
+        sheets = info["sheets"]
+        if entity_rgx: sheets = [x for x in sheets if entity_rgx.match(x["name"])]
+        if not sheets:
+            extra = "" if not args.filter else " using sheet filter: %s" % " ".join(args.filter)
+            output()
+            sys.exit("Nothing to import from %s%s." % (infile, extra))
+        sheets = [x for x in sheets if x["rows"]]
+        if not sheets:
+            output()
+            sys.exit("Nothing to import from %s." % infile)
+        output("Import into: %s (%s)", db.name,
+                util.format_bytes(db.filesize) if file_existed else "new file")
+
+        bar.update(afterword=" Parsing schema", pause=False)
+        db.populate_schema(parse=True)
+        if args.progress: bar.pause, _ = True, output()
+        build_mappings(sheets)
+
+        output()
+        output("Importing%s:", " " + util.plural("sheet", sheets) if has_sheets else "")
         for sheet in sheets:
-            infotext += "- %s (%s%s) into %stable %s\n" % (
+            output("- %s (%s%s) into %stable %s",
                 grammar.quote(sheet["name"], force=True) if has_sheets else sheet["name"],
                 util.plural("column", sheet["columns"]),
                 ", %s" % util.plural("row", sheet["total"]) if sheet["total"] >= 0 else "",
                 "" if sheet["table"] in db.schema["table"] else "new ",
                 grammar.quote(sheet["table"], force=True)
             )
-            infotext += "  Mapping from source columns to table columns:\n"
+            output("  Mapping from source columns to table columns:")
             maxlen1 = max(len(grammar.quote(a, force=True)) for a in sheet["columns"])
             for i, (a, b) in enumerate(sheet["tablecolumns"].items()):
                 key1 = grammar.quote(list(sheet["columns"])[i], force=True) \
                        if has_names or args.row_header else ""
-                infotext += "  %s. %s%s -> %s\n" % \
-                            (("%%%ds" % math.ceil(math.log(len(sheet["columns"]), 10))) % (i + 1),
-                             key1 or "column",
-                             " " * (maxlen1 - len(key1)) if key1 else "",
-                             grammar.quote(b, force=True))
-        output()
-        output(infotext)
+                output("  %s. %s%s -> %s",
+                    ("%%%ds" % math.ceil(math.log(len(sheet["columns"]), 10))) % (i + 1),
+                    key1 or "column",
+                    " " * (maxlen1 - len(key1)) if key1 else "",
+                    grammar.quote(b, force=True)
+                )
         if not args.assume_yes:
             output()
             output("Proceed with import? (Y/n) ", end="")
@@ -1275,6 +1288,9 @@ def run_import(infile, args):
         tables = [{"name": x["table"], "source": x["name"], "pk": x.get("tablepk"),
                    "columns": x["tablecolumns"]} for x in sheets]
         progress = make_progress("import", entities, args, reports)
+        limit = None if (args.limit < 0 and not args.offset) else (args.limit, ) \
+                if not args.offset else (args.limit, args.offset)
+        maxcount = args.maxcount
         bar.update(afterword=" Importing")
         importexport.import_data(infile, db, tables, args.row_header, limit, maxcount, progress)
 
