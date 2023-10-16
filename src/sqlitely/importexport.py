@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.10.2023
+@modified    16.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1057,17 +1057,13 @@ def get_import_file_data(filename, progress=None):
     if is_csv:
         rows, columns = 0, []
         with csv_reader(filename) as f:
-            iterer = enumerate(f)
-            for i, row in iterer:
-                if row: # Skip any initial blank rows
-                    rows, columns = 1, row
-                    break # for i, row
+            for i, row in enumerate(f):
+                rows += 1
+                if rows == 1:
+                    columns = row
+                    if size > conf.MaxImportFilesizeForCount: break # for i, row
                 if progress and not i % 100 and not progress(): break # for i, row
             if rows and size > conf.MaxImportFilesizeForCount: rows = -1
-            elif rows and size:
-                for i, row in iterer:
-                    rows += bool(row)
-                    if progress and not i % 100 and not progress(): break # for i, row
         sheets.append({"rows": rows, "columns": columns, "name": "<CSV data>"})
     elif is_json:
         rows, columns, buffer, started = 0, {}, "", False
