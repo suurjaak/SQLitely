@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.10.2023
+@modified    18.10.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -27,7 +27,6 @@ import tempfile
 import webbrowser
 
 import six
-from six.moves import urllib
 import step
 import wx
 import wx.adv
@@ -5247,13 +5246,7 @@ class DatabasePage(wx.Panel):
 
             menutitle = "C&opy link location"
             if href.startswith("file://"):
-                href = urllib.request.url2pathname(href[5:])
-                if any(href.startswith(x) for x in ["\\\\\\", "///"]):
-                    href = href[3:] # Strip redundant filelink slashes
-                if isinstance(href, six.text_type):
-                    # Workaround for wx.html.HtmlWindow double encoding
-                    href = href.encode("latin1", errors="xmlcharrefreplace"
-                           ).decode("utf-8")
+                href = util.url_to_path(href, double_decode=True)
                 menutitle = "C&opy file location"
             elif href.startswith("mailto:"):
                 href = href[7:]
@@ -5278,15 +5271,12 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, on_selectall,     item_selectall)
             self.notebook_search.PopupMenu(menu)
         elif href.startswith("file://"):
-            # Open the link, or file, or program internal link to table
-            filename = path = urllib.request.url2pathname(href[5:])
-            if any(path.startswith(x) for x in ["\\\\\\", "///"]):
-                filename = href = path[3:]
+            # Open file
+            path = util.url_to_path(href, double_decode=True)
             if path and os.path.exists(path):
                 util.start_file(path)
             else:
-                e = 'The file "%s" cannot be found on this computer.' % \
-                    filename
+                e = 'The file "%s" cannot be found on this computer.' % path
                 wx.MessageBox(e, conf.Title, wx.OK | wx.ICON_WARNING)
         elif link_data:
             # Go to specific data/schema page object
@@ -5325,7 +5315,7 @@ class DatabasePage(wx.Panel):
                     self.notebook.SetSelection(self.pageorder[thepage])
         elif href.startswith("#"): # In-page link
             event.Skip()
-        elif not href.startswith("file:"):
+        elif not href.startswith("file://"):
             webbrowser.open(href)
 
 

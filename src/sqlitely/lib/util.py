@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.10.2023
+@modified    18.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -38,6 +38,7 @@ from PIL import Image
 import six
 from six.moves import collections_abc
 from six.moves import html_entities
+from six.moves import urllib
 import pytz
 try: import wx
 except ImportError: wx = None
@@ -755,6 +756,24 @@ def unique_path(pathname):
         result = os.path.join(path, name)
         counter += 1
     return result
+
+
+def path_to_url(path):
+    """Returns path as file URL, e.g. "/my file" as "file:///my%20file"."""
+    return urllib.parse.urljoin('file:', urllib.request.pathname2url(path))
+
+
+def url_to_path(url, double_decode=False):
+    """Returns file URL as path, e.g. "file:///my%20file" as "/my file"."""
+    if not url.startswith("file:"): return url
+    path = urllib.request.url2pathname(url[5:])
+    if any(path.startswith(x) for x in ["\\\\\\", "///"]):
+        path = path[3:] # Strip redundant filelink slashes
+    if double_decode and isinstance(path, six.text_type):
+        # Workaround for wx.html.HtmlWindow double encoding
+        try: path = path.encode("latin1", errors="xmlcharrefreplace").decode("utf-8")
+        except Exception: pass
+    return path
 
 
 def start_file(filepath):
