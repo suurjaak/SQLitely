@@ -1895,7 +1895,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         def get_field_doc(name, tree=ast.parse(source)):
             """Returns the docstring immediately before name assignment."""
             for i, node in enumerate(tree.body):
-                if i and isinstance(node, ast.Assign) and node.targets[0].id == name:
+                if i and isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name) \
+                and node.targets[0].id == name:
                     prev = tree.body[i - 1]
                     if isinstance(prev, ast.Expr) \
                     and isinstance(prev.value, (ast.Str, ast.Constant)):  # Py2: Str, Py3: Constant
@@ -7539,8 +7540,7 @@ class AboutDialog(wx.Dialog):
 
         html.SetPage(content() if callable(content) else content)
         html.BackgroundColour = ColourManager.GetColour(wx.SYS_COLOUR_WINDOW)
-        html.Bind(wx.html.EVT_HTML_LINK_CLICKED,
-                  lambda e: webbrowser.open(e.GetLinkInfo().Href))
+        html.Bind(wx.html.EVT_HTML_LINK_CLICKED, self.OnLink)
         button_update.Bind(wx.EVT_BUTTON, parent.on_check_update)
 
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
@@ -7556,6 +7556,13 @@ class AboutDialog(wx.Dialog):
         if "win32" != sys.platform: self.MinSize = (550, -1)
         self.Size = (self.Size[0], html.VirtualSize[1] + (10 if "win32" != sys.platform else 70))
         self.CenterOnParent()
+
+
+    def OnLink(self, event):
+        """Handler for clicking link, opens URLs in browser and files in registered application."""
+        href = event.GetLinkInfo().Href
+        if not href.startswith("file://"): webbrowser.open(href)
+        else: util.start_file(util.url_to_path(href, double_decode=True))
 
 
     def OnSysColourChange(self, event):

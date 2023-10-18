@@ -13,7 +13,7 @@
 #
 # @author      Erki Suurjaak
 # @created     05.07.2022
-# @modified    05.07.2022
+# @modified    18.10.2023
 name:    sqlitely
 title:   SQLitely
 summary: SQLite database tool
@@ -67,3 +67,8 @@ parts:
     override-pull: |  # Set build version from current git tag, drop leading letters ("v5.2" -> "5.2")
       snapcraftctl pull
       snapcraftctl set-version "$(git -C /root/project describe --tags | sed 's/^[a-z]*//i')"
+  texts:
+    source: build/3rd-party licenses.txt
+    plugin: dump
+    organize:
+      "*": "/"

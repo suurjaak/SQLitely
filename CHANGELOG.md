@@ -1,9 +1,10 @@
 CHANGELOG
 =========
 
-2.3, 2023-10-12
+2.3, 2023-10-18
 ---------------
 - add command-line interface, with export, import, parse, search and stats
+- include third-party license texts in snaps and stand-alone exes
 
 
 2.2, 2023-10-08

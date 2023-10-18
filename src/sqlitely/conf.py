@@ -30,11 +30,11 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.3.dev18"
+Version = "2.3.dev19"
 VersionDate = "18.10.2023"
 
-if getattr(sys, "frozen", False):
-    # Running as a pyinstaller executable
+Frozen, Snapped = getattr(sys, "frozen", False), (sys.executable or "").startswith("/snap/")
+if Frozen: # Running as a pyinstaller executable
     ApplicationDirectory = os.path.dirname(sys.executable)
     ApplicationFile = os.path.realpath(sys.executable)
     ResourceDirectory = os.path.join(getattr(sys, "_MEIPASS", ""), "media")
@@ -343,6 +343,10 @@ FontXlsxBoldFile = os.path.join(ResourceDirectory, "CarlitoBold.ttf")
 FontDiagramFile     = os.path.join(ResourceDirectory, "OpenSans.ttf")
 FontDiagramBoldFile = os.path.join(ResourceDirectory, "OpenSansBold.ttf")
 FontDiagramSize     = 9
+
+"""Path for licences of bundled open-source software."""
+LicenseFile = os.path.join(ResourceDirectory if Frozen else "/", "3rd-party licenses.txt") \
+              if Frozen or Snapped else None
 
 
 def load(configfile=None):
