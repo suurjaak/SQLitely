@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.10.2023
+@modified    21.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -24,7 +24,6 @@ import glob
 import locale
 import logging
 import math
-import multiprocessing.connection
 import os
 try: import Queue as queue        # Py2
 except ImportError: import queue  # Py3
@@ -310,6 +309,10 @@ window = None  # Application main window instance
 
 class MainApp(wx.App if wx else object):
 
+    def OnInit(self):
+        self.SingleChecker = None
+        return True
+
     def InitLocale(self):
         self.ResetLocale()
         if "win32" == sys.platform:  # Avoid dialog buttons in native language
@@ -469,22 +472,6 @@ def install_thread_excepthook():
             except Exception: sys.excepthook(*sys.exc_info())
         self.run = run_with_except_hook
     threading.Thread.__init__ = init
-
-
-def ipc_send(authkey, port, data, limit=10000):
-    """
-    Sends data to another program instance via multiprocessing,
-    climbing port number higher until success or reaching step limit.
-
-    @return  True if operation successful, False otherwise
-    """
-    result = False
-    while not result and limit:
-        kwargs = {"address": ("localhost", port), "authkey": authkey}
-        try:   multiprocessing.connection.Client(**kwargs).send(data)
-        except Exception: port, limit = port + 1, limit - 1
-        else:             result = True
-    return result
 
 
 def output(s="", *args, **kwargs):
@@ -1348,17 +1335,20 @@ def run_gui(filenames):
     logger.addHandler(guibase.GUILogHandler())
     logger.setLevel(logging.DEBUG)
 
-    singlechecker = wx.SingleInstanceChecker(conf.IPCName)
+    singlechecker = util.SingleInstanceChecker(conf.IPCName, appname=conf.Title)
     if not conf.AllowMultipleInstances and singlechecker.IsAnotherRunning():
         data = list(map(os.path.realpath, filenames))
-        if ipc_send(conf.IPCName, conf.IPCPort, data): return
-        else: logger.error("Failed to communicate with allowed instance.")
+        if singlechecker.SendToOther(data, conf.IPCPort):
+            info = " (PID %s)" % singlechecker.GetOtherPid() if singlechecker.GetOtherPid() else ""
+            sys.exit("Another instance of %s seems to be running%s: exiting." % (conf.Title, info))
+        else: logger.error("Failed to communicate with other running instance.")
 
     install_thread_excepthook()
     sys.excepthook = except_hook
 
     # Create application main window
     app = MainApp(redirect=True) # stdout and stderr redirected to wx popup
+    app.SingleChecker, singlechecker = singlechecker, None
     window = gui.MainWindow()
     app.SetTopWindow(window) # stdout/stderr popup closes with MainWindow
 
@@ -1381,8 +1371,8 @@ def run_gui(filenames):
     window.run_console("self = wx.GetApp().TopWindow # Application main window")
     for f in filenames:
         wx.CallAfter(wx.PostEvent, window, gui.OpenDatabaseEvent(-1, file=f))
-    app.MainLoop()
-    del singlechecker
+    try: app.MainLoop()
+    finally: del app.SingleChecker
 
 
 def run(nogui=False):

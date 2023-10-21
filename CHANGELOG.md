@@ -1,9 +1,10 @@
 CHANGELOG
 =========
 
-2.3, 2023-10-18
+2.3, 2023-10-21
 ---------------
 - add command-line interface, with export, import, parse, search and stats
+- use a custom lockfile implementation for single instance check in Linux
 - include third-party license texts in snaps and stand-alone exes
 
 

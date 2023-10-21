@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.10.2023
+@modified    21.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -18,14 +18,18 @@ import collections
 import copy
 import ctypes
 import datetime
+try: import fcntl
+except Exception: fcntl = None
 import inspect
 import io
 import itertools
 import locale
 import math
+import multiprocessing.connection
 import os
 import platform
 import re
+import stat
 import string
 import struct
 import subprocess
@@ -270,6 +274,179 @@ class ProgressBar(threading.Thread):
     def stop(self):
         self.is_running = False
 
+
+
+class SingleInstanceChecker(object):
+    """
+    Allows checking that only a single instance of a program is running, per user login.
+
+    Allows sending data from one instance to another, via multiprocessing.connection.
+
+    Uses wx.SingleInstanceChecker in Windows, and a custom lockfile otherwise,
+    as wx.SingleInstanceChecker in Linux can fail.
+    """
+
+    def __init__(self, name=None, path=None, appname=None):
+        """
+        Creates new SingleInstanceChecker, acquiring exclusive lock on name.
+
+        @param   name     unique ID for application, by default constructed from app name + username;
+                          best if contains alphanumerics and other basic printables only
+        @param   path     directory of lockfile, ignored in Windows, defaults to user data folder
+        @param   appname  used for lockfile subdirectory under path if present, ignored in Windows
+        """
+        self._name     = name.strip() if name else None
+        self._lockdir  = path
+        self._appname  = appname.strip() if appname else None
+        self._checker  = None # wx.SingleInstanceChecker instance in Windows if wx available
+        self._lockpath = None # Path for lockfile in non-Windows
+        self._lockfd   = None # File descriptor for lockfile
+        self._hasother = None # True: another is running, False: only this running, None: unknown
+        self._otherpid = None # Process ID of the other detected instance
+        self._listener = None # multiprocessing.connection.Listener for data from other instances
+        if "win32" != sys.platform: self._PopulatePath(), self._Lock()
+        else: self._checker = wx.SingleInstanceChecker(*[name] if name else [])
+
+
+    def IsAnotherRunning(self):
+        """Returns whether another copy of this program is already running, or None if unknown."""
+        if self._checker is not None: return self._checker.IsAnotherRunning()
+        if self._hasother: self._Lock() # Try locking again, maybe the other has exited
+        else: # Check if lockfile handle is still valid
+            try: deleted = not os.fstat(self._lockfd).st_nlink # Number of hard links
+            except Exception: deleted = None
+            if deleted:
+                try: os.close(self._lockfd)
+                except Exception: pass
+                self._lockfd = None
+                self._Lock()
+        return self._hasother
+
+
+    def GetOtherPid(self):
+        """Returns the process ID of the other running instance, or None if unknown or Windows."""
+        return self._otherpid
+
+
+    def SendToOther(self, data, port, portrange=10000):
+        """
+        Sends data to the other program instance via multiprocessing.
+
+        @param   data       data to send, anything that can be pickled
+        @param   port       default TCP port number for communications
+        @param   portrange  maximum steps to try increasing port number if connection fails
+        @return             True if operation successful, False otherwise
+        """
+        result = None
+        authkey = self._name or "%s-%s" % (wx.GetApp().AppName, wx.GetUserId())
+        while result is None and portrange >= 0:
+            kwargs = {"address": ("localhost", port), "authkey": authkey}
+            try: client = multiprocessing.connection.Client(**kwargs)
+            except Exception: port, portrange = port + 1, portrange - 1
+            else:
+                try:              result, _ = True, client.send(data)
+                except Exception: result = False
+                finally:          try_ignore(client.close)
+        return result or False
+
+
+    def StartReceive(self, callback, port, portrange=10000):
+        """
+        Opens listener for receiving data from other instances, and runs it in background thread.
+
+        @param   callback   function to invoke with received data
+        @param   port       default TCP port number for communications
+        @param   portrange  maximum steps to try increasing port number if opening listener fails
+        @return             True if opening listener succeeded, false otherwise
+        """
+        authkey = self._name or "%s-%s" % (wx.GetApp().AppName, wx.GetUserId())
+        while not self._listener and portrange >= 0:
+            kwargs = {"address": ("localhost", port), "authkey": authkey}
+            try: self._listener = multiprocessing.connection.Listener(**kwargs)
+            except Exception: port, portrange = port + 1, portrange - 1
+        if not self._listener: return False
+
+        def receiver(self, callback):
+            while self._listener:
+                try: callback(self._listener.accept().recv())
+                except Exception: pass
+
+        t = threading.Thread(target=receiver, args=(self, callback))
+        t.daemon = True
+        t.start()
+        return True
+
+
+    def StopReceive(self):
+        """
+        Shuts down current IPC listener being received from, if any.
+
+        @return  True if listener was active, False otherwise
+        """
+        listener, self._listener = self._listener, None
+        listener and try_ignore(listener.close)
+        return bool(listener)
+
+
+    def __del__(self):
+        """Unlocks current lock, if any."""
+        if self._checker is not None: del self._checker
+        else: self._Unlock()
+        self._checker = None
+
+
+    def _PopulatePath(self):
+        """Populates lockfile path, and name if not populated."""
+        name = self._name
+        if not name:
+            name = os.getenv("USER", os.getenv("USERNAME"))
+            procname = sys.executable or (sys.argv[0] if sys.argv else "")
+            name = re.sub(r"\W", "__", "__".join(filter(bool, (procname, name)))) or "__"
+        lockdir = self._lockdir or os.path.join(os.path.expanduser("~"), ".local", "share")
+        if self._appname: lockdir = os.path.join(lockdir, self._appname.lower())
+        self._lockpath, self._name = os.path.join(lockdir, "%s.lock" % name), name
+
+
+    def _Lock(self):
+        """Tries to create lockfile and acquire lock, sets instance status."""
+        if self._lockfd or not fcntl: return
+
+        self._hasother = self._otherpid = None
+        try:
+            try: os.makedirs(os.path.dirname(self._lockpath))
+            except Exception: pass
+
+            flags, mode = os.O_RDWR | os.O_CREAT, stat.S_IRUSR | stat.S_IWUSR
+            umask0 = os.umask(0) # Override default umask
+            try: self._lockfd = os.open(self._lockpath, flags, mode)
+            finally: os.umask(umask0) # Restore default umask
+
+            try: fcntl.lockf(self._lockfd, fcntl.LOCK_EX | fcntl.LOCK_NB) # Exclusive non-blocking
+            except (IOError, OSError):
+                try: self._otherpid = int(os.read(self._lockfd, 1024))
+                except Exception: pass
+                try: os.close(self._lockfd)
+                except Exception: pass
+                self._hasother, self._lockfd = True, None
+            else:
+                self._hasother = False
+                try: os.write(self._lockfd, b"%d" % os.getpid()), os.fsync(self._lockfd)
+                except Exception: pass
+        except Exception:
+            try: os.close(self._lockfd)
+            except Exception: pass
+            self._lockfd = None
+
+
+    def _Unlock(self):
+        """Unlocks and closes and deletes lockfile, if any."""
+        if not self._lockfd: return
+        funcs  = (fcntl.lockf,                   os.close,       os.unlink)
+        argses = ([self._lockfd, fcntl.LOCK_UN], [self._lockfd], [self._lockpath])
+        for func, args in zip(funcs, argses):
+            try: func(*args)
+            except Exception: pass
+        self._lockfd = None
 
 
 def coalesce(value, fallback):

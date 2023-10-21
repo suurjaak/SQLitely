@@ -106,7 +106,6 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         # List of Notebook pages user has visited, used for choosing page to
         # show when closing one.
         self.pages_visited = []
-        self.ipc_listener = None # workers.IPCListener instance
         self.is_started = False
         self.is_minimizing = False
         self.is_dragging_page = False
@@ -231,9 +230,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.list_db.SetFocus()
 
         if not conf.AllowMultipleInstances:
-            args = conf.IPCName, conf.IPCPort, self.on_ipc
-            self.ipc_listener = workers.IPCListener(*args)
-            self.ipc_listener.start()
+            wx.GetApp().SingleChecker.StartReceive(self.on_ipc, conf.IPCPort)
 
         if conf.WindowMinimizedToTray:
             conf.WindowMinimizedToTray = False
@@ -811,19 +808,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
 
     def on_toggle_allow_multi(self, event):
-        """
-        Handler for toggling allowing multiple instances, starts-stops the
-        IPC server.
-        """
+        """Handler for toggling allowing multiple instances, starts-stops the IPC server."""
         allow = conf.AllowMultipleInstances = event.IsChecked()
         util.run_once(conf.save)
-        if allow:
-            self.ipc_listener.stop()
-            self.ipc_listener = None
-        else:
-            args = conf.IPCName, conf.IPCPort, self.on_ipc
-            self.ipc_listener = workers.IPCListener(*args)
-            self.ipc_listener.start()
+        checker = wx.GetApp().SingleChecker
+        checker.StopReceive() if allow else checker.StartReceive(self.on_ipc, conf.IPCPort)
 
 
     def on_toggle_trayicon(self, event=None):
@@ -1041,12 +1030,13 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             util.run_once(conf.save)
 
 
-    def on_ipc(self, data):
+    def on_ipc(self, data=()):
         """
-        Handler for responding to an inter-process message from another
-        program instance that was launched and then exited because of
-        conf.AllowMultipleInstances. Raises the program window and loads
-        given databases if any.
+        Handler for responding to an inter-process message from another program instance,
+        which will exit because of conf.AllowMultipleInstances. Raises program window
+        and loads given databases if any.
+
+        @param   data  zero or more filenames to load, as string or sequence of strings
         """
         def after(data):
             if not self: return
@@ -1054,8 +1044,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if conf.WindowMinimizedToTray: self.on_toggle_to_tray()
             else: self.Restore()
             self.Raise()
-            data = data if isinstance(data, (list, set, tuple)) else list(filter(bool, [data]))
-            if data: self.load_database_pages(data, clearselection=True)
+            filenames = data if isinstance(data, (list, set, tuple)) else list(filter(bool, [data]))
+            if filenames: self.load_database_pages(filenames, clearselection=True)
         wx.CallAfter(after, data)
 
 
