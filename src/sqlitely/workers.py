@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.10.2023
+@modified    21.10.2023
 ------------------------------------------------------------------------------
 """
 from collections import OrderedDict
@@ -591,7 +591,8 @@ class IPCListener(WorkerThread):
 
         while self._is_running:
             try: self._callback(self._listener.accept().recv())
-            except Exception: logger.exception("Error on IPC port %s.", self._port)
+            except Exception:
+                self._listener and logger.exception("Error on IPC port %s.", self._port)
         self._is_working = False
         l, self._listener = self._listener, None
         l and util.try_ignore(l.close)
