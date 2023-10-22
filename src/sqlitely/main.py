@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.10.2023
+@modified    22.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -118,9 +118,10 @@ ARGUMENTS = {
              {"args": ["--no-empty"], "action": "store_true",
               "help": "skip empty tables and views from output altogether\n"
                       "(affected by offset and limit)"},
-             {"args": ["--no-related"], "action": "store_true",
-              "help": "do not include related entities when using filter\n"
-                      "(relevant only when exporting to SQL or database)"},
+             {"args": ["--include-related"], "dest": "related", "action": "store_true",
+              "help": "include related entities:\n"
+                      "foreign tables and view dependencies if using filter,\n"
+                      "and indexes and triggers if exporting to database or SQL"},
              {"args": ["--filter"], "nargs": "+",
               "help": "names of specific entities to export or skip\n"
                       "(supports * wildcards; initial ~ skips)"},
@@ -505,7 +506,7 @@ def output(s="", *args, **kwargs):
         raise # Propagate any other errors
 
 
-def make_progress(action, entities, args, results=None):
+def make_progress(action, entities, args, results=None, **ns):
     """
     Returns progress-function for reporting output status.
 
@@ -513,11 +514,12 @@ def make_progress(action, entities, args, results=None):
     @param   entities  {name: {name, type, count, ?total, ?table}}
     @param   args      argparse.Namespace
     @param   results   list to append progress values to, if any
+    @param   ns        namespace defaults
     """
     NAME_MAX = 25
     infinitive = "%sing" % action
 
-    ns = {"bar": None, "name": None, "afterword": None}
+    ns = dict({"bar": None, "name": None, "afterword": None}, **ns)
     def progress(result=None, **kwargs):
         """Prints out progress texts, registers counts."""
         result = result or kwargs
@@ -570,6 +572,13 @@ def make_progress(action, entities, args, results=None):
                     ns["bar"].update(result["count"], pulse=False)
             elif itemname != ns["name"]:
                 logger.info(ns["afterword"].strip())
+        elif "index" in result and "total" in result and args.progress: # E.g. db.populate_schema()
+            if not ns["bar"]:
+                ns["bar"] = util.ProgressBar(value=result["index"], max=result["total"],
+                                             afterword=ns["afterword"], echo=output)
+                ns["bar"].draw()
+            else:
+                ns["bar"].update(result["index"])
         if result.get("done"):
             if ns["bar"]:
                 ns["bar"].stop(), ns.update(bar=None)
@@ -747,37 +756,55 @@ def run_export(dbname, args):
                offset       number of initialrows to skip from each table or view
                reverse      query rows in reverse order
                maxcount     maximum total number of rows to export over all tables and views
-               no_related   do not include related entities when exporting specific items only
+               no_empty     skip empty tables and views from output altogether
+                            (affected by offset and limit)
+               related      include related entities, like data dependencies or index/trigger items
                progress     show progress bar
     """
-    entity_rgx = util.filters_to_regex(args.filter) if args.filter else None
     validate_args("export", args)
+    entity_rgx = util.filters_to_regex(args.filter) if args.filter else None
 
     db = database.Database(dbname)
+    if args.related or args.format in ("db", "sql"):
+        progress = None
+        if args.progress:
+            progress, _ = make_progress("export", {}, args, afterword=" Parsing schema"), output()
+        db.populate_schema(parse=True, generate=False, progress=progress)
 
     entities = util.CaselessDict((kv for c in db.DATA_CATEGORIES for kv in db.schema[c].items()))
     if args.filter:
         entities.clear()
-        # First pass: select all entities matching by name
+        # First pass: select all data entities matching by name
         for category in db.CATEGORIES if args.format in ("db", "sql") else db.DATA_CATEGORIES:
             for name, item in db.schema.get(category, {}).items():
                 if entity_rgx.match(name):
                     entities[name] = item
-        # Second pass: select all owned or required related entities, recursively
-        if args.format in ("db", "sql"):
-            for category, name in [(x["type"], x["name"]) for x in entities.values()]:
-                for rels in db.get_full_related(category, name)[0].values():
-                    for relname, relitem in rels.items():
-                        entities[relname] = relitem
+    if args.filter and args.format in ("db", "sql"):
+        # Second pass: select dependent tables and views for views, recursively
+        for item in [x for x in entities.values() if "view" == x["type"]]:
+            for category, items in db.get_full_related(item["type"], item["name"])[0].items():
+                if category in db.DATA_CATEGORIES: entities.update(items)
+    if args.filter and args.related:
+        # Third pass: select foreign tables for tables, recursively
+        for item in [x for x in entities.values() if "table" == x["type"]]:
+            for category, items in db.get_full_related(item["type"], item["name"])[0].items():
+                if "table" == category: entities.update(items)
+    if args.related and args.format in ("db", "sql"):
+        # Fourth pass: select owned indexes and triggers
+        for item in list(entities.values()):
+            for items in db.get_related(item["type"], item["name"], own=True, clone=False).values():
+                entities.update(items)
+    if args.filter and args.related and args.format in ("db", "sql"):
+        # Fifth pass: select referred tables/views for triggers, recursively
+        for item in [x for x in entities.values() if "trigger" == x["type"]]:
+            for category, items in db.get_full_related(item["type"], item["name"])[0].items():
+                if category in db.DATA_CATEGORIES: entities.update(items)
     entities = util.CaselessDict([(n, copy.deepcopy(d)) for c in db.CATEGORIES
                                   for n, d in entities.items() if c == d["type"]], insertorder=True)
 
     if not entities:
         extra = "" if not args.filter else " using filter: %s" % " ".join(args.filter)
         sys.exit("Nothing to export as %s from %s%s." % (args.format.upper(), dbname, extra))
-
-    if args.filter or args.no_empty:
-        db.populate_schema(parse=True, generate=False)
 
     if "db" == args.format and args.overwrite:
         os.path.exists(args.OUTFILE) and os.unlink(args.OUTFILE)
@@ -1205,9 +1232,8 @@ def run_import(infile, args):
             if not existing_ok: items[tname] = item
 
 
-    entity_rgx = util.filters_to_regex(args.filter) if args.filter else None
     validate_args("import", args)
-
+    entity_rgx = util.filters_to_regex(args.filter) if args.filter else None
     dbname, file_existed, total = args.OUTFILE, os.path.isfile(args.OUTFILE), 0
     db = database.Database(dbname)
 
@@ -1274,7 +1300,7 @@ def run_import(infile, args):
         reports = []
         tables = [{"name": x["table"], "source": x["name"], "pk": x.get("tablepk"),
                    "columns": x["tablecolumns"]} for x in sheets]
-        progress = make_progress("import", entities, args, reports)
+        progress = make_progress("import", entities, args, reports=reports)
         limit = None if (args.limit < 0 and not args.offset) else (args.limit, ) \
                 if not args.offset else (args.limit, args.offset)
         maxcount = args.maxcount
