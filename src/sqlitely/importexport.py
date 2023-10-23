@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.10.2023
+@modified    23.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -576,7 +576,7 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
     return result
 
 
-def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
+def export_to_db(db, filename, schema, renames=None, data=False, selects=None, related=False,
                  limit=None, maxcount=None, empty=True, reverse=False, progress=None):
     """
     Exports selected tables and views to another database, structure only or
@@ -588,6 +588,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
     @param   renames   {category: {name1: name2}}
     @param   data      whether to export table data
     @param   selects   {table name: SELECT SQL if not using default}
+    @param   related   auto-include indexes and triggers of exported tables and views
     @param   limit     query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
     @param   maxcount  maximum total number of rows to export over all entities
     @param   empty     do not skip tables with no output rows
@@ -607,7 +608,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
     file_existed = is_samefile or os.path.isfile(filename)
     insert_sql = "INSERT INTO %s.%s SELECT * FROM main.%s"
 
-    for category, name in ((c, n) for c, nn in schema.items() for n in nn):
+    for category, name in ((c, n) for c, nn in schema.items() for n in nn) if related else ():
         items = [db.schema[category][name]]
         items.extend(db.get_related(category, name, own=True).get("trigger", {}).values())
         for item in items:
@@ -717,7 +718,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                         break # for category, name
 
                 # Create indexes and triggers for tables, triggers for views
-                relateds = db.get_related(category, name, own=True)
+                relateds = db.get_related(category, name, own=True) if related else {}
                 for subcategory, subitemmap in relateds.items():
                     for subname, subitem in subitemmap.items():
                         subname2 = subname

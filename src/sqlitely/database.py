@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.10.2023
+@modified    22.10.2023
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1224,7 +1224,8 @@ WARNING: misuse can easily result in a corrupt database file.""",
                         if False, returns only indirectly associated items,
                         like tables and views and triggers for tables and views
                         that query them in view or trigger body,
-                        also foreign tables for tables;
+                        also foreign tables for tables,
+                        other tables and views for triggers that query them in body;
                         if None, returns all relations.
                         Ignored if data=True.
         @param   data   return cascading data dependency relations:

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.10.2023
+@modified    23.10.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -6503,7 +6503,7 @@ class DatabasePage(wx.Panel):
         schema = {c: list(xx) for c, xx in eschema.items()}
 
         args = {"db": self.db, "filename": filename2, "schema": schema,
-                "renames": renames, "data": data, "selects": selects}
+                "related": True, "renames": renames, "data": data, "selects": selects}
 
 
         def on_complete(result):

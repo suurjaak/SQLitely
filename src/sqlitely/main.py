@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.10.2023
+@modified    23.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -116,7 +116,8 @@ ARGUMENTS = {
              {"args": ["--no-data"], "dest": "schema_only", "action": "store_true",
               "help": "export database structure only, without data"},
              {"args": ["--no-empty"], "action": "store_true",
-              "help": "skip empty tables and views from output altogether\n"
+              "help": "skip empty tables and views from output altogether,\n"
+                      "ignored if exporting to another database,\n"
                       "(affected by offset and limit)"},
              {"args": ["--include-related"], "dest": "related", "action": "store_true",
               "help": "include related entities:\n"
@@ -757,7 +758,7 @@ def run_export(dbname, args):
                reverse      query rows in reverse order
                maxcount     maximum total number of rows to export over all tables and views
                no_empty     skip empty tables and views from output altogether
-                            (affected by offset and limit)
+                            ignored if exporting to db (affected by offset and limit)
                related      include related entities, like data dependencies or index/trigger items
                progress     show progress bar
     """
@@ -772,6 +773,7 @@ def run_export(dbname, args):
         db.populate_schema(parse=True, generate=False, progress=progress)
 
     entities = util.CaselessDict((kv for c in db.DATA_CATEGORIES for kv in db.schema[c].items()))
+    renames = collections.defaultdict(util.CaselessDict) # {category: {name1: name2}}
     if args.filter:
         entities.clear()
         # First pass: select all data entities matching by name
@@ -809,6 +811,15 @@ def run_export(dbname, args):
     if "db" == args.format and args.overwrite:
         os.path.exists(args.OUTFILE) and os.unlink(args.OUTFILE)
 
+    if "db" == args.format and os.path.exists(args.OUTFILE):
+        db2 = database.Database(args.OUTFILE)
+        allitems2 = util.CaselessDict((n, True) for nn in db2.schema.values() for n in nn)
+        db2.close()
+        for name, item in entities.items():
+            name2 = util.make_unique(name, allitems2) if name in allitems2 else name
+            if name != name2: renames[item["type"]][name] = name2
+            allitems2[name2] = True
+
     for item in (x for x in entities.values() if x["type"] in db.DATA_CATEGORIES):
         item["title"] = "%s %s" % (item["type"], grammar.quote(item["name"], force=True))
         item["count"] = 0
@@ -838,8 +849,8 @@ def run_export(dbname, args):
         schema.update((c, [n for n, x in entities.items() if c == x["type"]]) for c in db.CATEGORIES
                       if any(c == x["type"] for x in entities.values()))
         func, posargs = importexport.export_to_db, [db, args.OUTFILE, schema]
-        kwargs.update(data=not args.schema_only, limit=limit,
-                      maxcount=args.maxcount, empty=not args.no_empty, reverse=args.reverse)
+        kwargs.update(data=not args.schema_only, limit=limit, maxcount=args.maxcount,
+                      related=args.related, renames=renames, reverse=args.reverse)
 
     elif args.OUTFILE and args.combine and "sql" == args.format:
         func, posargs = importexport.export_dump, (args.OUTFILE, db)
