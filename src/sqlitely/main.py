@@ -839,9 +839,10 @@ def run_export(dbname, args):
     def make_iterables():
         """Yields pairs of ({item}, callable returning iterable cursor)."""
         items = [x for c in db.DATA_CATEGORIES for x in entities.values() if c == x["type"]]
+        maxcount = 0 if args.schema_only else args.maxcount
         for item in (reversed if args.reverse else list)(items):
             order_sql = db.get_order_sql(item["name"], reverse=True) if args.reverse else ""
-            limit_sql = db.get_limit_sql(*limit, maxcount=args.maxcount, totals=entities.values())
+            limit_sql = db.get_limit_sql(*limit, maxcount=maxcount, totals=entities.values())
             sql = "SELECT * FROM %s%s%s" % (grammar.quote(item["name"]), order_sql, limit_sql)
 
             make_iterable = functools.partial(db.select, sql,
