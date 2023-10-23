@@ -550,8 +550,7 @@ def make_progress(action, entities, args, results=None, **ns):
                 else: text = " %s %s" % (infinitive.capitalize(), itemname) # "Importing <JSON data>"
                 if item.get("total", -1) != -1:
                     text += ", %s total" % util.count(item, "row", "total")
-                itemcount = sum(x["type"] == item["type"] for x in entities.values())
-                if itemcount > 1: text += " (%s of %s)" % (itemindex + 1, itemcount)
+                if len(entities) > 1: text += " (%s of %s)" % (itemindex + 1, len(entities))
                 ns.update(afterword=text, name=itemname)
 
             if args.progress:
