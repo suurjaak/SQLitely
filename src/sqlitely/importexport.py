@@ -455,7 +455,7 @@ def export_stats(filename, format, db, data, diagram=None):
     return True
 
 
-def export_dump(filename, db, data=True, pragma=True, filters=None, related=False,
+def export_dump(filename, db, schema=None, data=True, pragma=True, related=False,
                 limit=None, maxcount=None, empty=True, reverse=False, progress=None):
     """
     Exports full database dump to SQL file.
@@ -463,8 +463,7 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
     @param   db        Database instance
     @param   data      whether to dump table data
     @param   pragma    whether to dump PRAGMA settings
-    @param   filters   names of database entities to dump if not all,
-                       supports * wildcards
+    @param   schema    {category: [name, ]} to export if not all
     @param   related   auto-include related items if using filters, recursively
                        (for tables: indexes and triggers, and referenced foreign tables;
                         for views: triggers, and tables and views referenced in view body;
@@ -504,24 +503,10 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
             yield {"name": n, "columns": item["columns"], "rows": make_iterable(n)}
             if progress and not progress(name=n, done=True): break # for n, item
 
-    if filters:
-        entities.clear()
-        rgx = util.filters_to_regex(filters)
-        # Select all entities matching by name
-        default_includes = util.CaselessDict()
-        for category in db.schema:
-            for name, item in db.schema[category].items():
-                if rgx.match(name):
-                    entities[category][name] = item
-                    default_includes[name] = True
-        # Select all owned or referred entities
-        for item in [x for d in entities.values() for x in d.values()] if related else ():
-            rels, related_includes = db.get_full_related(item["type"], item["name"])
-            for category2, items2 in rels.items():
-                for name2, item2 in items2.items():
-                    if name2 not in default_includes:
-                        entities[category2][name2] = item2
-                        related_includes[item["name"]].append(name2)
+    for category in set(schema) & set(entities) if schema else ():
+        names = [x.lower() for x in schema[category]]
+        for name in list(entities[category]):
+            if name.lower() not in names: entities[category].pop(name)
 
     if not empty:
         empties = []
@@ -541,9 +526,8 @@ def export_dump(filename, db, data=True, pragma=True, filters=None, related=Fals
             if item["type"] in ("table", "view"):
                 for rels in db.get_related(item["type"], item["name"], own=True).values():
                     empties.extend(rels)
-            empties.extend(related_includes.get(item["name"], []))
 
-    if filters or not empty:
+    if schema or not empty:
         sql = "\n\n".join("\n\n".join(v["sql"] for v in entities[c].values())
                           for c in db.CATEGORIES)
     else:

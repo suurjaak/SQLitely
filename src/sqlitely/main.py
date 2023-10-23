@@ -552,13 +552,13 @@ def make_progress(action, entities, args, results=None, **ns):
                     text += ", %s total" % util.count(item, "row", "total")
                 itemcount = sum(x["type"] == item["type"] for x in entities.values())
                 if itemcount > 1: text += " (%s of %s)" % (itemindex + 1, itemcount)
-                ns["afterword"] = text
+                ns.update(afterword=text, name=itemname)
 
             if args.progress:
                 if not ns["bar"]:
                     pulse = ("import" == action and (item["total"] == -1 or item["total"] < 100)) or \
                             ("search" == action) or ("export" == action and "table" != item["type"])
-                    ns["bar"] = util.ProgressBar(pulse=pulse, interval=0.05, value=result["count"],
+                    ns["bar"] = util.ProgressBar(pulse=pulse, interval=0.05, value=item["count"],
                                                  afterword=ns["afterword"], echo=output)
                     if action in ("export", "import") and "view" != item["type"] \
                     and item.get("total", -1) != -1:
@@ -570,7 +570,7 @@ def make_progress(action, entities, args, results=None, **ns):
                     if 0 not in (item.get("total"), args.limit):
                         ns["bar"].start()
                 else:
-                    ns["bar"].update(result["count"], pulse=False)
+                    ns["bar"].update(item["count"], pulse=False)
             elif itemname != ns["name"]:
                 logger.info(ns["afterword"].strip())
         elif "index" in result and "total" in result and args.progress: # E.g. db.populate_schema()
@@ -582,12 +582,13 @@ def make_progress(action, entities, args, results=None, **ns):
                 ns["bar"].update(result["index"])
         if result.get("done"):
             if ns["bar"]:
+                ns["bar"].update(value=ns["bar"].max, pulse=False)
                 ns["bar"].stop(), ns.update(bar=None)
                 output()
+            ns["name"] = None
         if result.get("errorcount") and item:
             item["errorcount"] = result["errorcount"]
 
-        if item: ns["name"] = itemname
         if isinstance(results, list): results.append(result)
         return True
 
@@ -826,6 +827,9 @@ def run_export(dbname, args):
         if args.progress and "table" == item["type"]:
             item.update(db.get_count(item["name"], key="total"))
 
+    schema = collections.OrderedDict() # {category: [name, ]}
+    schema.update((c, [n for n, x in entities.items() if c == x["type"]]) for c in db.CATEGORIES
+                  if any(c == x["type"] for x in entities.values()))
     files = collections.OrderedDict()  # {entity name: output filename}
     maxrow, fromrow = args.limit, args.offset
     limit = (maxrow, fromrow) if (fromrow > 0) else (maxrow, ) if (maxrow >= 0) else ()
@@ -845,18 +849,14 @@ def run_export(dbname, args):
             yield item, make_iterable
 
     if "db" == args.format:
-        schema = collections.OrderedDict()
-        schema.update((c, [n for n, x in entities.items() if c == x["type"]]) for c in db.CATEGORIES
-                      if any(c == x["type"] for x in entities.values()))
         func, posargs = importexport.export_to_db, [db, args.OUTFILE, schema]
         kwargs.update(data=not args.schema_only, limit=limit, maxcount=args.maxcount,
                       related=args.related, renames=renames, reverse=args.reverse)
 
     elif args.OUTFILE and args.combine and "sql" == args.format:
-        func, posargs = importexport.export_dump, (args.OUTFILE, db)
-        kwargs.update(filters=args.filter, data=not args.schema_only, pragma=not args.filter,
-                      limit=limit, maxcount=args.maxcount, empty=not args.no_empty,
-                      reverse=args.reverse)
+        func, posargs = importexport.export_dump, (args.OUTFILE, db, schema)
+        kwargs.update(data=not args.schema_only, pragma=not args.filter, limit=limit,
+                      maxcount=args.maxcount, empty=not args.no_empty, reverse=args.reverse)
 
     elif args.OUTFILE and args.combine:
         title = "Export from %s" % os.path.basename(dbname)
