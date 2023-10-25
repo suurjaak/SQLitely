@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.10.2023
+@modified    25.10.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -271,10 +271,10 @@ HTML data export template.
 DATA_HTML = """<%
 from step import Template
 from sqlitely import templates
-%>{{! Template(templates.DATA_HTML_HEADER).expand(title=title, multiple=get("multiple")) }}
+%>{{! Template(templates.DATA_HTML_HEADER, strip=False).expand(title=title, multiple=get("multiple")) }}
 <body>
 <div id="root">
-{{! Template(templates.DATA_HTML_MULTIPLE_PART).expand(locals()) }}
+{{! Template(templates.DATA_HTML_MULTIPLE_PART, strip=False).expand(locals()) }}
 <div id="footer">{{ templates.export_comment() }}</div>
 </div>
 </body>
@@ -299,7 +299,7 @@ from sqlitely import templates
 
 progress = get("progress")
 _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
-%>{{! Template(templates.DATA_HTML_HEADER).expand(title=title, multiple=True) }}
+%>{{! Template(templates.DATA_HTML_HEADER, strip=False).expand(title=title, multiple=True) }}
 <body>
 <div id="root">
 %if len(files) > 1:
@@ -2206,7 +2206,7 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
     </tr>
     %for item in sorted(stats["table"], key=lambda x: (-x["size"], x["name"].lower())):
     <tr>
-      <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size"], total=total)) }}</td>
+      <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML, strip=False).expand(dict(category="table", size=item["size"], total=total)) }}</td>
       <td title="{{ item["name"] }}">{{ util.unprint(item["name"]) }}</td>
       <td class="right" title="{{ util.format_bytes(item["size"]) }}">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
     </tr>
@@ -2225,7 +2225,7 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
   </tr>
         %for item in sorted(stats["table"], key=lambda x: (-x["size_total"], x["name"].lower())):
   <tr>
-    <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="table", size=item["size_total"], total=total)) }}</td>
+    <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML, strip=False).expand(dict(category="table", size=item["size_total"], total=total)) }}</td>
     <td title="{{ item["name"] }}">{{ util.unprint(item["name"]) }}</td>
     <td class="right" title="{{ util.format_bytes(item["size_total"]) }}">{{ util.format_bytes(item["size_total"], max_units=False, with_units=False) }}</td>
   </tr>
@@ -2243,7 +2243,7 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
   </tr>
         %for item in sorted([x for x in stats["table"] if "index" in x], key=lambda x: (-x["size_index"], x["name"].lower())):
   <tr>
-    <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size_index"], total=total)) }}</td>
+    <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML, strip=False).expand(dict(category="index", size=item["size_index"], total=total)) }}</td>
     <td title="{{ item["name"] }} ({{ len(item["index"]) }})">{{ util.unprint(item["name"]) }} ({{ len(item["index"]) }})</td>
     <td class="right" title="{{ util.format_bytes(item["size_index"]) }}">{{ util.format_bytes(item["size_index"], max_units=False, with_units=False) }}</td>
     <td class="right">{{ int(round(100 * util.safedivf(item["size_index"], index_total))) }}%</td>
@@ -2262,7 +2262,7 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
   </tr>
         %for item in sorted(stats["index"], key=lambda x: (-x["size"], x["name"].lower())):
   <tr>
-    <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML).expand(dict(category="index", size=item["size"], total=total)) }}</td>
+    <td>{{! Template(templates.DATA_STATISTICS_ROW_PLOT_HTML, strip=False).expand(dict(category="index", size=item["size"], total=total)) }}</td>
     <td title="{{ item["name"] }}">{{ util.unprint(item["name"]) }}</td>
     <td title="{{ item["table"] }}">{{ item["table"] }}</td>
     <td class="right" title="{{ util.format_bytes(item["size"]) }}">{{ util.format_bytes(item["size"], max_units=False, with_units=False) }}</td>
