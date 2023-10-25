@@ -109,6 +109,12 @@ from sqlitely import conf, images
       display: flex;
       justify-content: space-between;
     }
+    table.body_table.multiple.collapsed > tbody > tr:nth-child(1) > td {
+      border-radius: 10px;
+    }
+    table.body_table.multiple.collapsed > tbody > tr:nth-child(2) > td {
+      display: none;
+    }
     ol.title {
       min-width: 200px;
       width: fit-content;
@@ -187,6 +193,7 @@ from sqlitely import conf, images
       return false;
     };
 
+    /** Schedules doSearch() for filtering table by event target value. */
     var onSearch = function(table_id, evt) {
       search_state[table_id] = search_state[table_id] || {};
       window.clearTimeout(search_state[table_id].timer); // Avoid reacting to rapid changes
@@ -202,13 +209,16 @@ from sqlitely import conf, images
       }, 200);
     };
 
-    var onToggle = function(a, id1, id2) {
+    /** Toggles class "open" on link and given class on given elements; class defaults to "hidden". */
+    var onToggle = function(a, id1, id2, cls) {
+      cls = cls || 'hidden';
       a.classList.toggle('open');
-      document.getElementById(id1).classList.toggle('hidden');
-      id2 && document.getElementById(id2).classList.toggle('hidden');
+      id1 && document.getElementById(id1).classList.toggle(cls);
+      id2 && document.getElementById(id2).classList.toggle(cls);
     };
 
 %if get("multiple"):
+    /** Toggles all data table row toggles on or off. */
     var onToggleAll = function(a) {
       a.classList.toggle('open');
       var on = !a.classList.contains('open');
@@ -218,6 +228,7 @@ from sqlitely import conf, images
     };
 
 %endif
+    /** Filters table rows by current search state for table. */
     var doSearch = function(table_id) {
       var words = String(search_state[table_id].text).split(/\s/g).filter(Boolean);
       var regexes = words.map(function(word) { return new RegExp(escapeRegExp(word), "i"); });
@@ -377,7 +388,7 @@ progress = get("progress")
       Source: <b>{{ db }}</b>{{ " (%s)" % dbsize if dbsize else "" }}.<br />
 %endif
       <b>{{ row_count }}</b> {{ util.plural("row", row_count, numbers=False) }}{{ " in results" if sql else "" }}.
-      <a class="toggle down open" title="Toggle rows" onclick="onToggle(this, '{{ item_id }}__rows')"> </a>
+      <a class="toggle down open" title="Toggle rows" onclick="onToggle(this, '{{ item_id }}', null, 'collapsed')"> </a>
       <br />
     </td>
   </tr></table>
