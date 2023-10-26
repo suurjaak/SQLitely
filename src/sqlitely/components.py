@@ -10882,8 +10882,9 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
 
             exportmenu = wx.Menu()
             menu.AppendSubMenu(exportmenu, text="&Export ..")
-            item_export_indiv  = exportmenu.Append(wx.ID_ANY, "Export data to &file")
-            item_export_combine = exportmenu.Append(wx.ID_ANY, "Export data to &single file") \
+            item_export_indiv  = exportmenu.Append(wx.ID_ANY, "Export data to " +
+                                                   ("&individual files" if len(items) > 1 else "&file"))
+            item_export_combine = exportmenu.Append(wx.ID_ANY, "Export data to a single &file") \
                                  if len(items) > 1 else None
             item_export_data   = exportmenu.Append(wx.ID_ANY, "Export data to another &database") if "table" in categories else None
             item_export_schema = exportmenu.Append(wx.ID_ANY, "Export structure to another data&base")

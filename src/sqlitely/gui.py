@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.10.2023
+@modified    26.10.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -548,10 +548,10 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_tools_export = wx.Menu()
         self.menu_tools_export = menu_tools.AppendSubMenu(menu_tools_export, "&Export")
         menu_tools_export_tables = self.menu_tools_export_tables = menu_tools_export.Append(
-            wx.ID_ANY, "All tables to &file",
+            wx.ID_ANY, "All tables to &individual files",
             "Export all tables to individual files")
         menu_tools_export_multiitem = self.menu_tools_export_multiitem = menu_tools_export.Append(
-            wx.ID_ANY, "All tables to sing&le file",
+            wx.ID_ANY, "All tables to a single &file",
             "Export all tables to a single file, "
             "each table in separate section")
         menu_tools_export_data = self.menu_tools_export_data = menu_tools_export.Append(
@@ -5164,7 +5164,7 @@ class DatabasePage(wx.Panel):
                     menu_types = wx.Menu()
                     item_choices = menu.AppendSubMenu(menu_types, label)
                     item_choices.Enable(schemaflags[category])
-                    for i, typelabel in enumerate(["To &file", "To a &single file"]):
+                    for i, typelabel in enumerate(["To &individual files", "To a single &file"]):
                         item = wx.MenuItem(menu_types, -1, typelabel)
                         if i:
                             handler = functools.partial(self.on_export_multiitem, category)
@@ -7251,8 +7251,8 @@ class DatabasePage(wx.Panel):
             item_schema       = wx.MenuItem(exportmenu, -1, "Export &schema as SQL")
             item_dump         = wx.MenuItem(exportmenu, -1, "Export full d&ump as SQL")
             item_database     = wx.MenuItem(exportmenu, -1, "Export all to another &database")
-            item_file         = wx.MenuItem(exportmenu, -1, "Export all to &file")
-            item_file_multi   = wx.MenuItem(exportmenu, -1, "Export all to &single file")
+            item_file         = wx.MenuItem(exportmenu, -1, "Export all to &individual files")
+            item_file_multi   = wx.MenuItem(exportmenu, -1, "Export all to a single &file")
             item_database_sql = wx.MenuItem(exportmenu, -1, "Export all structures to another data&base")
             item_drop_schema  = wx.MenuItem(menu, -1, "Drop everything")
             for category in self.db.CATEGORIES:
@@ -7297,19 +7297,19 @@ class DatabasePage(wx.Panel):
             item_copy_sql = wx.MenuItem(copymenu, -1, "Copy CREATE &SQL")
             item_copy_own = wx.MenuItem(copymenu, -1, "Copy &owned SQL" if category in ("table", "view") else "Copy CREATE SQL with &parents")
             item_copy_rel = wx.MenuItem(copymenu, -1, "Copy all &related SQL")
-            item_save_sql = wx.MenuItem(exportmenu, -1, "Save %s S&QL to file" % util.plural(category))
+            item_save_sql = wx.MenuItem(exportmenu, -1, "Save %s &SQL to file" % util.plural(category))
             if "table" == category:
-                item_database_sql = wx.MenuItem(exportmenu, -1, "Export all %s structures to another data&base" % category)
+                item_database_sql = wx.MenuItem(exportmenu, -1, "Export %s structures to another data&base" % category)
                 item_import       = wx.MenuItem(menu, -1, "&Import into table from file")
                 item_truncate_all = wx.MenuItem(menu, -1, "Truncate all")
             if category in ("table", "view"):
-                item_file       = wx.MenuItem(exportmenu, -1, "Export all %s to &file" % util.plural(category))
-                item_file_multi = wx.MenuItem(exportmenu, -1, "Export all %s to &single file" % util.plural(category))
-                item_database   = wx.MenuItem(exportmenu, -1, "Export all %s to another &database" % util.plural(category))
+                item_file       = wx.MenuItem(exportmenu, -1, "Export %s to &individual files" % util.plural(category))
+                item_file_multi = wx.MenuItem(exportmenu, -1, "Export %s to a single &file" % util.plural(category))
+                item_database   = wx.MenuItem(exportmenu, -1, "Export %s to another &database" % util.plural(category))
             if category in ("table", "index"):
                 item_reindex_all = wx.MenuItem(menu, -1, "Reindex all")
             item_create   = wx.MenuItem(menu, -1, "Create &new %s" % category)
-            item_drop_all = wx.MenuItem(menu, -1, "Drop all %s" % util.plural(category))
+            item_drop_all = wx.MenuItem(menu, -1, "Drop %s" % util.plural(category))
 
             copymenu.Append(item_copy)
             copymenu.Append(item_copy_sql)
