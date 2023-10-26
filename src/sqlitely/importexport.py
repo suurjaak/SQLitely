@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.10.2023
+@modified    26.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -385,6 +385,11 @@ def export_data_multiple(filename, format, title, db, category=None, names=None,
                         is_empty, _ = not any(cursor), util.try_ignore(lambda: cursor.close())
                         if is_empty: continue # for item_i
 
+                    myitem = dict(item, count=item.get("count", 0))
+                    def myprogress(**kwargs):
+                        if "count" in kwargs: myitem["count"] = kwargs["count"]
+                        return progress(**kwargs) if progress else True
+
                     # Write item data to temporary file, later inserted into main file
                     tmpname = util.unique_path("{0}_{2}{1}".format(*os.path.splitext(filename) + 
                                                                     (util.safe_filename(name), )))
@@ -392,8 +397,8 @@ def export_data_multiple(filename, format, title, db, category=None, names=None,
                                            grammar.quote(name, force=True))
                     result = export_data(make_iterable, tmpname, format, itemtitle, db,
                                          item["columns"], category=item["type"], name=name,
-                                         multiple=True, progress=progress)
-                    itemfiles[tmpname] = item
+                                         multiple=True, progress=myprogress)
+                    itemfiles[tmpname] = myitem
 
                 if not result: break # for item_i
                 if progress and not progress():
