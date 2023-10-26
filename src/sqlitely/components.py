@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.10.2023
+@modified    26.10.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -6498,14 +6498,17 @@ class ExportProgressPanel(wx.Panel):
         self.Freeze()
         opts, ctrls = (x[index] for x in (self._tasks, self._ctrls))
         unit = opts.get("unit", "row")
-        if "error" in result:
+        error = result.get("error")
+        if not error and result.get("result") is False and opts.get("error"):
+            error = opts["error"]
+        if error:
             self._current = None
             ctrls["title"].Label = 'Failed to export "%s".' % opts["filename"]
-            ctrls["text"].Label = result["error"]
-            opts.update(error=result["error"], result=False)
+            ctrls["text"].Label = error
+            opts.update(error=error, result=False)
             self.Layout()
             if not opts["pending"] or len(self._tasks) < 2:
-                error = "Error saving %s:\n\n%s" % (opts["filename"], result["error"])
+                error = "Error saving %s:\n\n%s" % (opts["filename"], error)
                 wx.MessageBox(error, conf.Title, wx.OK | wx.ICON_ERROR)
         elif "done" in result:
             opts.update(result=result.get("result", True))
