@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.10.2023
+@modified    29.10.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4073,11 +4073,11 @@ class DatabasePage(wx.Panel):
             )
 
             if "tables" == arg:
-                self.on_export_data_file(None, args[1:] or list(self.db.schema["table"]))
+                self.on_export_data_file(category=None, item=args[1:] or list(self.db.schema["table"]))
             elif "multiitem" == arg:
-                self.on_export_multiitem("table", names=args[1:])
+                self.on_export_multiitem(category=None, names=args[1:])
             elif "data" == arg:
-                self.on_export_to_db(category="table", names=args[1:] or list(self.db.schema["table"]))
+                self.on_export_to_db(names=args[1:] or list(self.db.schema["table"]))
             elif "sql" == arg:
                 [category], names = args[1:2] or [None], args[2:]
                 sql = self.db.get_sql(category, names)
@@ -4085,7 +4085,7 @@ class DatabasePage(wx.Panel):
                         util.plural(category) if category else None
                 self.save_sql(sql, title)
             elif "structure" == arg:
-                self.on_export_to_db(category="table", names=args[1:] or list(self.db.schema["table"]), data=False)
+                self.on_export_to_db(names=args[1:] or list(self.db.schema["table"]), data=False)
             elif "pragma" == arg:
                 template = step.Template(templates.PRAGMA_SQL, strip=False)
                 sql = template.expand(pragma=self.pragma)
@@ -7245,11 +7245,14 @@ class DatabasePage(wx.Panel):
         boldfont = self.Font.Bold()
 
         if data["type"] in ("data", "schema"): # Root
+            names = list(self.db.schema.get("table", [])) + list(self.db.schema.get("view", []))
             exportmenu, newmenu, keys = wx.Menu(), wx.Menu(), []
             item_copy         = wx.MenuItem(menu, -1, "&Copy schema SQL")
             item_schema       = wx.MenuItem(exportmenu, -1, "Export &schema as SQL")
             item_dump         = wx.MenuItem(exportmenu, -1, "Export full d&ump as SQL")
             item_database     = wx.MenuItem(exportmenu, -1, "Export all to another &database")
+            item_file         = wx.MenuItem(exportmenu, -1, "Export all to &file")
+            item_file_multi   = wx.MenuItem(exportmenu, -1, "Export all to &single file")
             item_database_sql = wx.MenuItem(exportmenu, -1, "Export all structures to another data&base")
             item_drop_schema  = wx.MenuItem(menu, -1, "Drop everything")
             for category in self.db.CATEGORIES:
@@ -7260,6 +7263,8 @@ class DatabasePage(wx.Panel):
             exportmenu.Append(item_schema)
             exportmenu.Append(item_dump)
             exportmenu.Append(item_database)
+            exportmenu.Append(item_file)
+            exportmenu.Append(item_file_multi)
             exportmenu.Append(item_database_sql)
             menu.Append(item_copy)
             menu.AppendSubMenu(exportmenu, text="&Export ..")
@@ -7272,6 +7277,8 @@ class DatabasePage(wx.Panel):
             menu.Bind(wx.EVT_MENU, cmd("export", "schema"), item_schema)
             menu.Bind(wx.EVT_MENU, cmd("export", "dump"), item_dump)
             menu.Bind(wx.EVT_MENU, cmd("export", "data"), item_database)
+            menu.Bind(wx.EVT_MENU, cmd("export", "tables", *names), item_file)
+            menu.Bind(wx.EVT_MENU, cmd("export", "multiitem", None, *names), item_file_multi)
             menu.Bind(wx.EVT_MENU, cmd("export", "structure"), item_database_sql)
             menu.Bind(wx.EVT_MENU, cmd("drop schema"), item_drop_schema)
             for c, it in zip(self.db.CATEGORIES, newmenu.MenuItems):
