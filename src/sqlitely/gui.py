@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.10.2023
+@modified    27.10.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1706,7 +1706,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                     self.list_db.DeleteItem(i)
         finally: self.list_db.Thaw()
         del self.dbs_selected[:]
-        self.list_db.Select(0)
+        self.list_db.Select(0, False), self.list_db.Select(0)
         self.update_database_list()
         util.run_once(conf.save)
 
@@ -1718,17 +1718,20 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         file_indexes = list(filter(filter_func, file_indexes))
         if not file_indexes: return
 
-        for i in range(len(file_indexes)):
-            # - i, as item count is getting smaller one by one
-            selected = file_indexes[i] - i
-            filename = self.list_db.GetItemText(selected)
-            self.clear_database_data(filename, recent=True)
-            self.db_datas.get(filename, {}).pop("name", None)
-            self.list_db.DeleteItem(selected)
+        self.list_db.Freeze()
+        try:
+            for i in range(len(file_indexes)):
+                # - i, as item count is getting smaller one by one
+                selected = file_indexes[i] - i
+                filename = self.list_db.GetItemText(selected)
+                self.clear_database_data(filename, recent=True)
+                self.db_datas.get(filename, {}).pop("name", None)
+                self.list_db.DeleteItem(selected)
+        finally: self.list_db.Thaw()
 
         self.update_database_list()
         if self.dbs_selected: self.update_database_detail()
-        else: self.list_db.Select(0)
+        else: self.list_db.Select(0, False), self.list_db.Select(0)
 
         util.run_once(conf.save)
         guibase.status("Removed %s from the database list.",
@@ -1772,29 +1775,32 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             ): return
 
         errors = []
-        for filename in self.dbs_selected[:]:
-            try:
-                page = next((k for k, v in self.db_pages.items()
-                             if v.filename == filename), None)
-                if page:
-                    page.on_close()
-                    self.notebook.DeletePage(self.notebook.GetPageIndex(page))
-                os.unlink(filename)
+        self.list_db.Freeze()
+        try:
+            for filename in self.dbs_selected[:]:
+                try:
+                    page = next((k for k, v in self.db_pages.items()
+                                 if v.filename == filename), None)
+                    if page:
+                        page.on_close()
+                        self.notebook.DeletePage(self.notebook.GetPageIndex(page))
+                    os.unlink(filename)
 
-                self.clear_database_data(filename, recent=True)
-                self.dbs.pop(filename, None)
-                conf.DBsOpen.pop(filename, None)
-                self.db_datas.get(filename, {}).pop("name", None)
+                    self.clear_database_data(filename, recent=True)
+                    self.dbs.pop(filename, None)
+                    conf.DBsOpen.pop(filename, None)
+                    self.db_datas.get(filename, {}).pop("name", None)
 
-                for i in range(self.list_db.GetItemCount())[::-1]:
-                    if self.list_db.GetItemText(i) == filename:
-                        self.list_db.DeleteItem(i)
-                self.dbs_selected.remove(filename)
-            except Exception as e:
-                logger.exception("Error deleting %s.", filename)
-                errors.append("%s: %s" % (filename, util.format_exc(e)))
+                    for i in range(self.list_db.GetItemCount())[::-1]:
+                        if self.list_db.GetItemText(i) == filename:
+                            self.list_db.DeleteItem(i)
+                    self.dbs_selected.remove(filename)
+                except Exception as e:
+                    logger.exception("Error deleting %s.", filename)
+                    errors.append("%s: %s" % (filename, util.format_exc(e)))
+        finally: self.list_db.Thaw()
 
-        self.list_db.Select(0)
+        self.list_db.Select(0, False), self.list_db.Select(0)
         self.update_database_list()
         util.run_once(conf.save)
         if errors:
