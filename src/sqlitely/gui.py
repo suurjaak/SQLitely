@@ -238,7 +238,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         else:
             self.Show(True)
         plugins.init_plugins("ValueEditorFunctions")
-        wx.CallLater(20000, self.update_check)
+        wx.CallLater(20000, self.update_check) if not conf.Snapped else None
         wx.CallLater(1, self.populate_database_list)
         logger.info("Started application.")
         wx.CallAfter(setattr, self, "is_started", True)
@@ -453,7 +453,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 "Show/hide %s icon in system tray" % conf.Title, kind=wx.ITEM_CHECK)
         menu_autoupdate_check = self.menu_autoupdate_check = menu_options.Append(
             wx.ID_ANY, "Automatic &update check",
-            "Automatically check for program updates periodically", kind=wx.ITEM_CHECK)
+            "Automatically check for program updates periodically", kind=wx.ITEM_CHECK
+        ) if not conf.Snapped else None
         menu_allow_multi = self.menu_allow_multi = menu_options.Append(
             wx.ID_ANY, "Allow &multiple instances",
             "Allow multiple %s instances to run at the same time" % conf.Title,
@@ -583,7 +584,8 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         menu_update = self.menu_update = menu_help.Append(wx.ID_ANY,
             "Check for &updates",
-            "Check whether a new version of %s is available" % conf.Title)
+            "Check whether a new version of %s is available" % conf.Title
+        ) if not conf.Snapped else None
         menu_homepage = self.menu_homepage = menu_help.Append(wx.ID_ANY,
             "Go to &homepage",
             "Open the %s homepage, %s" % (conf.Title, conf.HomeUrl))
@@ -610,7 +612,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                   id2=wx.ID_FILE1 + conf.MaxRecentFiles)
         if self.trayicon.IsAvailable():
             menu_tray.Check(conf.TrayIconEnabled)
-        menu_autoupdate_check.Check(conf.UpdateCheckAutomatic)
+        menu_autoupdate_check.Check(conf.UpdateCheckAutomatic) if menu_autoupdate_check else None
         menu_allow_multi.Check(conf.AllowMultipleInstances)
 
         menu.Bind(wx.EVT_MENU_OPEN, self.on_menu_open)
@@ -622,7 +624,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_save_active_database_as, menu_save_database_as)
         self.Bind(wx.EVT_MENU, self.on_open_options,            menu_advanced)
         self.Bind(wx.EVT_MENU, self.on_exit,                    menu_exit)
-        self.Bind(wx.EVT_MENU, self.on_check_update,            menu_update)
+        self.Bind(wx.EVT_MENU, self.on_check_update,            menu_update) if menu_update else None
         self.Bind(wx.EVT_MENU, self.on_menu_homepage,           menu_homepage)
         self.Bind(wx.EVT_MENU, self.on_showhide_log,            menu_log)
         self.Bind(wx.EVT_MENU, self.on_toggle_console,          menu_console)
@@ -631,7 +633,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             self.Bind(wx.EVT_MENU, self.on_toggle_to_tray,      menu_to_tray)
             self.Bind(wx.EVT_MENU, self.on_toggle_trayicon,     menu_tray)
         self.Bind(wx.EVT_MENU, self.on_toggle_autoupdate_check,
-                  menu_autoupdate_check)
+                  menu_autoupdate_check) if menu_autoupdate_check else None
         self.Bind(wx.EVT_MENU, self.on_toggle_allow_multi, menu_allow_multi)
         self.Bind(wx.EVT_MENU, self.on_about, menu_about)
 
@@ -1388,22 +1390,19 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         guibase.status("")
         if check_result:
             version, url, changes = check_result
-            MAX = 1000
             guibase.status("New %s version %s available.", conf.Title, version)
-            if wx.YES == controls.YesNoMessageBox(
-                "Newer version (%s) available. You are currently on "
-                "version %s.%s\nDownload and install %s %s?" %
-                (version, conf.Version, "\n\n%s\n" % util.ellipsize(changes, MAX),
-                 conf.Title, version),
-                "Update information", wx.ICON_INFORMATION
-            ):
+            func = wx.MessageBox if conf.Snapped else controls.YesNoMessageBox
+            text = "Newer version (%s) available. You are currently on version %s.%s" % \
+                   (version, conf.Version, "\n\n%s\n" % util.ellipsize(changes, 1000))
+            if not conf.Snapped: text += "\nDownload and install %s %s?" % (conf.Title, version)
+            if wx.YES == func(text, "Update information", wx.ICON_INFORMATION):
                 wx.CallAfter(support.download_and_install, url)
         elif full_response and check_result is not None:
             wx.MessageBox("You are using the latest version of %s, %s.\n\n " %
                 (conf.Title, conf.Version), "Update information",
                 wx.OK | wx.ICON_INFORMATION)
         elif full_response:
-            wx.MessageBox("Could not contact download server.",
+            wx.MessageBox("Could not contact server.",
                           "Update information", wx.OK | wx.ICON_WARNING)
         if check_result is not None:
             conf.LastUpdateCheck = datetime.date.today().strftime("%Y%m%d")

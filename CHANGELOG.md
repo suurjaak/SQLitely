@@ -6,6 +6,7 @@ CHANGELOG
 - add command-line interface, with export, import, parse, search and stats
 - use a custom lockfile implementation for single instance check in Linux
 - fix updating main page upon removing databases when home-row is also selected
+- disable automatic update checks and downloads in snaps
 - include third-party license texts in snaps and stand-alone exes
 
 
