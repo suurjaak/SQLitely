@@ -4,6 +4,7 @@ CHANGELOG
 2.3, 2023-10-27
 ---------------
 - add command-line interface, with export, import, parse, search and stats
+- add option to rename SQL window pages
 - use a custom lockfile implementation for single instance check in Linux
 - fix updating main page upon removing databases when home-row is also selected
 - disable automatic update checks and downloads in snaps

@@ -3037,7 +3037,8 @@ class DatabasePage(wx.Panel):
             self.add_sql_page(name, text, console=(i == len(oldpages) - 1))
         if self.sql_pages:
             self.sql_page_counter = max(
-                int(re.sub(r"[^\d]", "", x) or 0) for x in self.sql_pages
+                int(re.sub(r"[^\d]", "", x)) if re.match(r"^SQL \(\d+\)$", x, re.I) else 0
+                for x in self.sql_pages
             ) or len(self.sql_pages)
         else: self.add_sql_page()
         nb.AddPage(page=wx.Panel(page), text="+")
@@ -5566,6 +5567,17 @@ class DatabasePage(wx.Panel):
             else: t = "%s %s" % (vv[0], fmt_entity(vv[1])) if all(vv) else vv[-1]
             return util.cap(t) if cap else t
 
+        def on_rename(event=None):
+            name = nb.GetPageText(nb.GetPageIndex(page))
+            dlg = wx.TextEntryDialog(self, "Enter new name for tab:", conf.Title, name)
+            if wx.ID_OK != dlg.ShowModal(): return
+            name2 = dlg.GetValue().strip()
+            if not name2 or name2 == name: return
+            self.sql_pages.pop(name)
+            name2 = util.make_unique(name2, self.sql_pages, " (%s)")
+            self.sql_pages[name2] = page
+            nb.SetPageText(nb.GetPageIndex(page), name2)
+
         def on_take(event=None):
             text, source, case = (page["info"].get(x) for x in ["text", "source", "case"])
             myid = wx.ID_INDEX if "meta" == source else wx.ID_STATIC
@@ -5580,7 +5592,7 @@ class DatabasePage(wx.Panel):
             self.edit_searchall.SelectAll()
 
         menu, hmenu = wx.Menu(), wx.Menu()
-        item_close = item_save = item_last = item_take = None
+        item_close = item_save = item_rename = item_last = item_take = None
 
         pp = self.pages_closed.get(nb, [])
         if nb in (self.notebook_data, self.notebook_schema): # Remove stale items
@@ -5591,6 +5603,8 @@ class DatabasePage(wx.Panel):
             item_close = wx.MenuItem(menu, -1, "&Close\t%s-W" % controls.KEYS.NAME_CTRL)
             if isinstance(page, (components.DataObjectPage, components.SchemaObjectPage)):
                 item_save = wx.MenuItem(menu, -1, "&Save")
+            if isinstance(page, components.SQLPage):
+                item_rename = wx.MenuItem(menu, -1, "Rena&me")
 
         if nb is self.notebook_search and page and page.get("info"):
             item_take = wx.MenuItem(menu, -1, "&Take search query")
@@ -5602,9 +5616,10 @@ class DatabasePage(wx.Panel):
                 hmenu.Append(item_open)
                 menu.Bind(wx.EVT_MENU, functools.partial(self.reopen_page, nb, i), item_open)
 
-        if item_close: menu.Append(item_close)
-        if item_save:  menu.Append(item_save)
-        if item_take:  menu.Append(item_take)
+        if item_close:  menu.Append(item_close)
+        if item_save:   menu.Append(item_save)
+        if item_rename: menu.Append(item_rename)
+        if item_take:   menu.Append(item_take)
 
         if hmenu.MenuItemCount:
             if menu.MenuItemCount: menu.AppendSeparator()
@@ -5617,6 +5632,8 @@ class DatabasePage(wx.Panel):
                 if not page.IsChanged() if isinstance(page, components.DataObjectPage) \
                 else page.ReadOnly: item_save.Enable(False)
                 menu.Bind(wx.EVT_MENU, lambda e: page.Save(), item_save)
+            if isinstance(page, components.SQLPage):
+                menu.Bind(wx.EVT_MENU, on_rename, item_rename)
 
         if nb is self.notebook_search and page and page.get("info"):
             menu.Bind(wx.EVT_MENU, on_take, item_take)
