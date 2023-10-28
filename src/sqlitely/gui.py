@@ -4435,7 +4435,7 @@ class DatabasePage(wx.Panel):
             if event.Selection: self.diagram.ShowLines = True
         elif wx.ID_FILE6 == event.Id:
             self.diagram.ShowStatistics = event.Selection
-        
+
 
     def on_diagram_export(self, event):
         """Handler for exporting diagram, opens file dialog."""
@@ -4467,10 +4467,10 @@ class DatabasePage(wx.Panel):
         menu = wx.Menu()
         item_export   = wx.MenuItem(menu, -1, "Export &zoomed bitmap")
         item_selected = wx.MenuItem(menu, -1, "Export diagram with &selected entities")
-        item_export.Enable(bool(self.diagram.Items))
-        item_selected.Enable(bool(self.diagram.Selection))
         menu.Append(item_export)
         menu.Append(item_selected)
+        item_export.Enable(bool(self.diagram.Items))
+        item_selected.Enable(bool(self.diagram.Selection))
         menu.Bind(wx.EVT_MENU, on_export_zoom, item_export)
         menu.Bind(wx.EVT_MENU, on_export_sels, item_selected)
 
