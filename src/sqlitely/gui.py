@@ -385,7 +385,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
 
         splitter.Bind(wx.EVT_SPLITTER_SASH_POS_CHANGED, lambda e: self.list_db.ResetColumnWidths())
 
-        panel_main.Sizer.Add(label_main, border=10, flag=wx.ALL)
+        panel_main.Sizer.Add(label_main, border=10, flag=wx.ALL | wx.GROW)
         panel_main.Sizer.Add((0, 10))
         panel_main.Sizer.Add(self.button_new,    flag=wx.GROW)
         panel_main.Sizer.Add(self.button_import, flag=wx.GROW)
