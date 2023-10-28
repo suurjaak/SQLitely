@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.10.2023
+@modified    28.10.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -3408,9 +3408,12 @@ class SchemaObjectPage(wx.Panel):
         """Returns control panel for CREATE TABLE page."""
         panel = wx.Panel(parent)
         sizer = panel.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_flags   = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_flags = wx.BoxSizer(wx.HORIZONTAL)
 
-        check_rowid  = self._ctrls["without"] = wx.CheckBox(panel, label="WITHOUT &ROWID")
+        check_rowid = self._ctrls["without"] = wx.CheckBox(panel, label="WITHOUT &ROWID")
+        check_strict = None
+        if self._db.has_strict():
+            check_strict = self._ctrls["strict"]  = wx.CheckBox(panel, label="STRICT")
         check_exists = self._ctrls["exists"]  = wx.CheckBox(panel, label="IF N&OT EXISTS")
         check_rowid.ToolTip  = "Omit the default internal ROWID column. " \
                                "Table must have a non-autoincrement primary key. " \
@@ -3418,6 +3421,12 @@ class SchemaObjectPage(wx.Panel):
                                "Can reduce storage and processing overhead, " \
                                "suitable for tables with non-integer or composite " \
                                "primary keys, and not too much data per row."
+        if check_strict:
+            check_strict.ToolTip = "Apply strict typing rules to table.\n\n" \
+                                   "Every column must declare a datatype: " \
+                                   "one of INT, INTEGER, REAL, TEXT, BLOB, ANY. " \
+                                   "Error is raised if column content cannot be coerced " \
+                                   "into declared type (other than ANY)."
         check_exists.ToolTip = "Add 'IF NOT EXISTS' to CREATE SQL statement.\n\n" \
                                "Does not affect creation within this database,\n" \
                                "merely becomes part of schema SQL."
@@ -3427,6 +3436,7 @@ class SchemaObjectPage(wx.Panel):
         panel_constraintwrapper = self._MakeConstraintsGrid(nb)
 
         sizer_flags.Add(check_rowid)
+        sizer_flags.Add(check_strict, border=5, flag=wx.LEFT) if check_strict else None
         sizer_flags.AddStretchSpacer()
         sizer_flags.Add(check_exists)
 
@@ -3438,7 +3448,8 @@ class SchemaObjectPage(wx.Panel):
         sizer.Add(sizer_flags, border=5, flag=wx.TOP | wx.BOTTOM | wx.GROW)
         sizer.Add(nb, proportion=1, border=5, flag=wx.TOP | wx.GROW)
 
-        self._BindDataHandler(self._OnChange, check_rowid,  ["without"])
+        self._BindDataHandler(self._OnToggleTableOption, check_rowid,  ["without"]) 
+        self._BindDataHandler(self._OnToggleTableOption, check_strict, ["strict"]) if check_strict else None
         self._BindDataHandler(self._OnChange, check_exists, ["exists"])
 
         return panel
@@ -3905,8 +3916,10 @@ class SchemaObjectPage(wx.Panel):
         """Populates panel with table-specific data."""
         meta = self._item.get("meta") or {}
 
-        self._ctrls["without"].Value = bool(meta.get("without"))
-        self._ctrls["exists"].Value  = bool(meta.get("exists"))
+        self._ctrls["without"].Value = any(x.get("without") for x in util.getval(meta, "options") or [])
+        if self._ctrls.get("strict"):
+            self._ctrls["strict"].Value = any(x.get("strict") for x in util.getval(meta, "options") or [])
+        self._ctrls["exists"].Value = bool(meta.get("exists"))
 
         for i, grid in enumerate((self._grid_columns, self._grid_constraints)):
             if i and not self._hasmeta: continue # for i, grid
@@ -4576,9 +4589,10 @@ class SchemaObjectPage(wx.Panel):
             new = dict(new, exists=bool(old.get("exists")))
             sql2, _ = grammar.generate(new)
 
-        for k in "without", "constraints":
-            if bool(new.get(k)) != bool(old.get(k)):
-                can_simple = False # Top-level flag or constraints existence changed
+        if bool(util.getval(new, "constraints")) != bool(util.getval(old, "constraints")):
+            can_simple = False # Top-level constraints existence changed
+        if util.getval(new, "options") != util.getval(old, "options"):
+            can_simple = False # Top-level flag changed
         if can_simple:
             if len(old.get("constraints") or []) != len(new.get("constraints") or []):
                 can_simple = False # New or removed constraints
@@ -5733,6 +5747,22 @@ class SchemaObjectPage(wx.Panel):
             event.EventObject.GetPrevSibling().Value = True
             event.EventObject.GetNextSibling().Value = True
             coldata["notnull"] = {}
+        self._sql0_applies = False
+        self._PopulateSQL()
+        self._PostEvent(modified=True)
+
+
+    def _OnToggleTableOption(self, path, event):
+        """Toggles WITHOUT ROWID / STRICT flag."""
+        key, value = path[0], event.EventObject.Value
+        data = self._item["meta"].setdefault("options", [])
+        if value:
+            if not any(x.get(key) for x in data):
+                data0 = self._original["meta"].get("options", [])
+                do_prepend = len(data0) > 1 and data0[0].get(key) or "without" == key # Retain order
+                data.insert(0, {key: True}) if do_prepend else data.append({key: True})
+        else:
+            data[:] = [x for x in data if not x.get(key)]
         self._sql0_applies = False
         self._PopulateSQL()
         self._PostEvent(modified=True)

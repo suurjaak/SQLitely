@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    03.10.2023
+@modified    28.10.2023
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -622,9 +622,9 @@ class Parser(object):
           ?schema:       table schema name
           ?temporary:    True if TEMPORARY | TEMP
           ?exists:       True if IF NOT EXISTS
-          ?without:      True if WITHOUT ROWID
           columns:       [{name, ..}]
           ?constraints:  [{type, ..}]
+          ?options:      [{"without" if WITHOUT ROWID or "strict" if STRICT: True}, ]
         }.
         """
         result = {}
@@ -632,8 +632,7 @@ class Parser(object):
         result["name"] = self.u(ctx.table_name)
         if ctx.database_name(): result["schema"]  = self.u(ctx.database_name)
         if ctx.K_TEMP() or ctx.K_TEMPORARY(): result["temporary"] = True
-        if ctx.K_EXISTS():      result["exists"]  = True
-        if ctx.K_WITHOUT():     result["without"] = True
+        if ctx.K_EXISTS(): result["exists"]  = True
 
         result["columns"] = [self.build_table_column(x) for x in ctx.column_def()]
         if self._repls:
@@ -647,6 +646,11 @@ class Parser(object):
         if ctx.table_constraint():
             result["constraints"] = [self.build_table_constraint(x)
                                      for x in ctx.table_constraint()]
+
+        for optctx in ctx.table_option():
+            for flag, key in ((optctx.K_WITHOUT, "without"), (optctx.C_STRICT, "strict")):
+                if flag() and not any(key in x for x in result.get("options", [])):
+                    result.setdefault("options", []).append({key: True})
 
         return result
 

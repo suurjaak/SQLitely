@@ -3606,7 +3606,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
         "TEMPORARY", "THEN", "TIES", "TO", "TRANSACTION", "TRIGGER", "UNBOUNDED",
         "UNION", "UNIQUE", "UPDATE", "USING", "VACUUM", "VALUES", "VIEW", "VIRTUAL",
         "WHEN", "WHERE", "WINDOW", "WITH", "WITHOUT",
-        "BINARY", "NOCASE", "ROWID", "RTRIM", # Keywords only in some context
+        "BINARY", "NOCASE", "ROWID", "RTRIM", "STRICT", # Keywords only in some context
     ])))
     """SQLite data types."""
     TYPEWORDS = list(map(text_type, sorted([

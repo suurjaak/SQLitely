@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.10.2023
+@modified    28.10.2023
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -809,9 +809,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Returns ROWID name for table, or None if table is WITHOUT ROWID
         or has columns shadowing all ROWID aliases (ROWID, _ROWID_, OID).
         """
-        if util.getval(self.schema["table"], table, "meta", "without"): return None
-        sql = self.schema["table"].get(table, {}).get("sql")
-        if not sql or re.search("WITHOUT\s+ROWID[\s;]*$", sql, re.I): return None
+        if util.getval(self.schema, "table", table) \
+        and not util.getval(self.schema, "table", table, "meta"):
+            self.populate_schema(category="table", name=table, parse=True)
+        meta = util.getval(self.schema, "table", table, "meta") or {}
+        if any(x.get("without") for x in meta.get("options", [])): return None
         ALIASES = ("_rowid_", "rowid", "oid")
         cols = [c["name"].lower() for c in self.schema["table"][table]["columns"]]
         return next((x for x in ALIASES if x not in cols), None)
@@ -899,6 +901,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
         to triggers/views referring the table (from version 3.25).
         """
         return sqlite3.sqlite_version_info >= (3, 25)
+
+
+    def has_strict(self):
+        """Returns whether SQLite supports strict type checking (from version 3.37)."""
+        return sqlite3.sqlite_version_info >= (3, 37)
 
 
     def execute(self, sql, params=(), log=True, cursor=None):

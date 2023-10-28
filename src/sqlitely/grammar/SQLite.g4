@@ -45,7 +45,8 @@
  *                add support for NULLS FIRST|LAST in ORDER BY;
  *                ensure statement list is delimited;
  *                fix ambiguity in parsing INDEX expressions with COLLATE,
- *                update keywords.
+ *                update keywords;
+ *                add support for CREATE TABLE .. STRICT.
  *                
  * Updated for  : SQLitely, an SQLite database tool.
  * Updated by   : Erki Suurjaak, 2019-2023
@@ -136,7 +137,8 @@ create_index_stmt
 create_table_stmt
  : K_CREATE ( K_TEMP | K_TEMPORARY )? K_TABLE ( K_IF K_NOT K_EXISTS )?
    ( database_name '.' )? table_name
-   ( '(' column_def ( ',' column_def )*? ( ',' table_constraint )* ')' ( K_WITHOUT C_ROWID )?
+   ( '(' column_def ( ',' column_def )*? ( ',' table_constraint )* ')'
+   ( table_option ( ',' table_option )* )?
    | K_AS select_stmt 
    )
  ;
@@ -406,6 +408,11 @@ table_constraint
    | K_CHECK '(' expr ')'
    | K_FOREIGN K_KEY '(' column_name ( ',' column_name )* ')' foreign_key_clause
    )
+ ;
+
+table_option
+ : K_WITHOUT C_ROWID
+ | C_STRICT
  ;
 
 with_clause
@@ -902,6 +909,7 @@ K_WITH : W I T H;
 K_WITHOUT : W I T H O U T;
 
 C_ROWID : R O W I D;
+C_STRICT : S T R I C T;
 C_TRUE : T R U E;
 C_FALSE : F A L S E;
 

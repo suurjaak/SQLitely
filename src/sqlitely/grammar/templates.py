@@ -24,7 +24,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     07.09.2019
-@modified    03.10.2023
+@modified    28.10.2023
 ------------------------------------------------------------------------------
 """
 
@@ -601,9 +601,15 @@ TABLE
 {{ GLUE() }}
 )
 
-%if data.get("without"):
+%for i, c in enumerate(data.get("options") or []):
+    %if c.get("without"):
 WITHOUT ROWID
-%endif
+    %elif c.get("strict"):
+STRICT
+    %endif
+  {{ CM("options", i, root=root) }}
+  {{ GLUE() }}
+%endfor
 {{ GLUE() }};
 """
 
