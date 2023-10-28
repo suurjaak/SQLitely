@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    27.10.2023
+@modified    28.10.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4623,12 +4623,14 @@ class DatabasePage(wx.Panel):
         """Handler for copying from diagram, opens popup menu.."""
         menu = wx.Menu()
 
-        label = util.plural("name", self.diagram.Selection or self.diagram.Items, numbers=False)
-        item_names = wx.MenuItem(menu, -1, "Copy &%s" % label)
-        item_sql   = wx.MenuItem(menu, -1, "Copy CREATE S&QL")
+        label = "selected " if self.diagram.Selection else ""
+        namelabel = util.plural("name", self.diagram.Selection or self.diagram.Items, numbers=False)
+
+        item_names = wx.MenuItem(menu, -1, "Copy %s &%s" % (label, namelabel))
+        item_sql   = wx.MenuItem(menu, -1, "Copy %sCREATE S&QL" % label)
         item_all   = wx.MenuItem(menu, -1, "Copy all &related SQL")
-        item_bmp   = wx.MenuItem(menu, -1, "Copy as &bitmap")
-        item_svg   = wx.MenuItem(menu, -1, "Copy as &SVG")
+        item_bmp   = wx.MenuItem(menu, -1, "Copy %sas &bitmap" % label)
+        item_svg   = wx.MenuItem(menu, -1, "Copy %sas &SVG" % label)
 
         menu.Append(item_bmp)
         menu.Append(item_svg)
