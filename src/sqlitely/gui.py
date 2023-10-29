@@ -4806,10 +4806,8 @@ class DatabasePage(wx.Panel):
             self.splitter_pragma.SashInvisible = False
         for name, opts in database.Database.PRAGMA.items():
             ctrl = self.pragma_ctrls[name]
-            writable = opts.get("write")
-            if callable(writable): writable = writable(self.db)
-            if writable is not False and "table" != opts["type"]:
-                ctrl.Enable()
+            writable = opts["write"](self.db) if callable(opts.get("write")) else opts.get("write")
+            ctrl.Enable(writable is not False and "table" != opts["type"])
         self.panel_pragma_sql.Layout()
         self.page_pragma.Layout()
 
@@ -4840,6 +4838,8 @@ class DatabasePage(wx.Panel):
                 ctrl.Value = value
             else:
                 ctrl.Value = "" if value is None else value
+            writable = opts["write"](self.db) if callable(opts.get("write")) else opts.get("write")
+            ctrl.Enable(writable is not False and "table" != opts["type"])
         self.populate_pragma_sql()
         self.pragma_edit = editmode
         self.update_page_header()

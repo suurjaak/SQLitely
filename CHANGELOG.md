@@ -10,6 +10,7 @@ CHANGELOG
 - include original encoding pragma in database recovery
 - update SQLite keywords from 126 to the latest 147-element list
 - use a custom lockfile implementation for single instance check in Linux
+- fix auto_vacuum and encoding pragmas not being editable in new databases
 - fix updating main page upon removing databases when home-row is also selected
 - disable automatic update checks and downloads in snaps
 - include third-party license texts in snaps and stand-alone exes
