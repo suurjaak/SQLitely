@@ -2499,7 +2499,7 @@ class DatabasePage(wx.Panel):
         self.pragma_ctrls   = {}    # {pragma_name: wx control}
         self.pragma_items   = {}    # {pragma_name: [all wx components for directive]}
         self.pragma_edit = False    # Whether in PRAGMA edit mode
-        self.pragma_fullsql = False # Whether show SQL for all PRAGMAs, changed or not
+        self.pragma_fullsql = True  # Whether show SQL for all PRAGMAs, changed or not
         self.pragma_filter = ""     # Current PRAGMA filter
         self.memoryfs = memoryfs
         parent_notebook.InsertPage(1, self, title)
@@ -3170,13 +3170,13 @@ class DatabasePage(wx.Panel):
                     sizer_pragma.SetItemMinSize(x, (widths[i], -1))
 
         check_sql = self.check_pragma_sql = \
-            wx.CheckBox(panel_sql, label="See change S&QL")
-        check_sql.ToolTip = "See SQL statements for PRAGMA changes"
+            wx.CheckBox(panel_sql, label="See PRAGMA S&QL")
+        check_sql.ToolTip = "See SQL statements for setting all PRAGMA values"
         check_sql.Value = True
-        check_fullsql = self.check_pragma_fullsql = \
-            wx.CheckBox(panel_sql, label="See f&ull SQL")
-        check_fullsql.ToolTip = "See SQL statements for setting all current PRAGMA values"
-        check_fullsql.Hide()
+        check_changesql = self.check_pragma_changesql = \
+            wx.CheckBox(panel_sql, label="See chan&ge SQL")
+        check_changesql.ToolTip = "See SQL statements for PRAGMA changes only"
+        check_changesql.Hide()
 
         stc = self.stc_pragma = controls.SQLiteTextCtrl(panel_sql, style=wx.BORDER_STATIC)
         stc.LineNumbers = conf.TextLineNumbers.get("pragma")
@@ -3210,11 +3210,11 @@ class DatabasePage(wx.Panel):
         button_cancel.ToolTip = "Cancel PRAGMA changes"
         button_cancel.Enabled = False
 
-        self.Bind(wx.EVT_BUTTON,     self.on_pragma_edit,    button_edit)
-        self.Bind(wx.EVT_BUTTON,     self.on_pragma_refresh, button_refresh)
-        self.Bind(wx.EVT_BUTTON,     self.on_pragma_cancel,  button_cancel)
-        self.Bind(wx.EVT_CHECKBOX,   self.on_pragma_sql,     check_sql)
-        self.Bind(wx.EVT_CHECKBOX,   self.on_pragma_fullsql, check_fullsql)
+        self.Bind(wx.EVT_BUTTON,     self.on_pragma_edit,      button_edit)
+        self.Bind(wx.EVT_BUTTON,     self.on_pragma_refresh,   button_refresh)
+        self.Bind(wx.EVT_BUTTON,     self.on_pragma_cancel,    button_cancel)
+        self.Bind(wx.EVT_CHECKBOX,   self.on_pragma_sql,       check_sql)
+        self.Bind(wx.EVT_CHECKBOX,   self.on_pragma_changesql, check_changesql)
         page.Bind(wx.EVT_CHAR_HOOK,  self.on_pragma_key)
         edit_filter.Bind(wx.EVT_TEXT_ENTER, self.on_pragma_filter)
 
@@ -3228,7 +3228,7 @@ class DatabasePage(wx.Panel):
 
         sizer_sql_header.Add(check_sql, border=5, flag=wx.TOP | wx.ALIGN_CENTER_VERTICAL)
         sizer_sql_header.AddStretchSpacer()
-        sizer_sql_header.Add(check_fullsql, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
+        sizer_sql_header.Add(check_changesql, border=5, flag=wx.RIGHT | wx.ALIGN_CENTER_VERTICAL)
         sizer_sql_header.Add(tb)
 
         sizer_sql.Add(sizer_sql_header, flag=wx.GROW)
@@ -3247,8 +3247,9 @@ class DatabasePage(wx.Panel):
         sizer.Add(sizer_footer, border=10, flag=wx.BOTTOM | wx.TOP | wx.GROW)
 
         splitter.SplitHorizontally(panel_wrapper, panel_sql, page.Size[1] - 150)
-        splitter.Unsplit()
+        splitter._sashPosition = splitter.SashPosition
         ColourManager.Manage(panel_wrapper, "BackgroundColour", "BgColour")
+        self.populate_pragma_sql()
 
 
     def create_page_info(self, notebook):
@@ -4707,19 +4708,23 @@ class DatabasePage(wx.Panel):
 
 
     def on_pragma_sql(self, event=None):
-        """Handler for toggling PRAGMA change SQL visible."""
+        """Handler for toggling PRAGMA SQL visible."""
+        self.check_pragma_changesql.Shown = self.check_pragma_sql.Value and self.pragma_edit
         self.stc_pragma.Shown = self.check_pragma_sql.Value
-        self.check_pragma_fullsql.Shown = self.check_pragma_sql.Value
         self.tb_pragma.Shown = self.check_pragma_sql.Value
-        self.splitter_pragma.SashPosition = self.page_pragma.Size[1] - (200 if self.stc_pragma.Shown else 20)
+        if self.stc_pragma.Shown:
+            self.splitter_pragma.SashPosition = self.splitter_pragma._sashPosition
+        else:
+            self.splitter_pragma._sashPosition = self.splitter_pragma.SashPosition
+            self.splitter_pragma.SashPosition = self.page_pragma.Size[1] - 20
         self.splitter_pragma.SashInvisible = not self.stc_pragma.Shown
         self.panel_pragma_sql.Layout()
         self.page_pragma.Layout()
 
 
-    def on_pragma_fullsql(self, event=None):
-        """Handler for toggling full PRAGMA SQL."""
-        self.pragma_fullsql = self.check_pragma_fullsql.Value
+    def on_pragma_changesql(self, event=None):
+        """Handler for toggling PRAGMA change SQL."""
+        self.pragma_fullsql = not self.check_pragma_changesql.Value
         self.panel_pragma_sql.Layout()
         self.populate_pragma_sql()
 
@@ -4796,20 +4801,16 @@ class DatabasePage(wx.Panel):
         self.pragma_edit = True
         self.button_pragma_edit.Label = "Save"
         self.button_pragma_cancel.Enable()
-        self.splitter_pragma.SplitHorizontally(*list(self.splitter_pragma.Children) + [self.page_pragma.Size[1] - 200])
         if self.check_pragma_sql.Value:
-            self.stc_pragma.Shown = True
-            self.check_pragma_fullsql.Shown = True
-            self.tb_pragma.Shown = True
-        else:
-            self.splitter_pragma.SashPosition = self.page_pragma.Size[1] - 20
-            self.splitter_pragma.SashInvisible = False
+            self.check_pragma_changesql.Shown = True
+        self.pragma_fullsql = not self.check_pragma_changesql.Value
         for name, opts in database.Database.PRAGMA.items():
             ctrl = self.pragma_ctrls[name]
             writable = opts["write"](self.db) if callable(opts.get("write")) else opts.get("write")
             ctrl.Enable(writable is not False and "table" != opts["type"])
         self.panel_pragma_sql.Layout()
         self.page_pragma.Layout()
+        self.populate_pragma_sql()
 
 
     def on_pragma_refresh(self, event=None, reload=False):
@@ -4853,11 +4854,12 @@ class DatabasePage(wx.Panel):
         ): return
 
         self.pragma_edit = False
+        self.pragma_fullsql = True
         self.button_pragma_edit.Label = "Edit"
         self.button_pragma_cancel.Disable()
+        self.check_pragma_changesql.Hide()
         self.pragma_changes.clear()
         self.on_pragma_refresh()
-        self.splitter_pragma.Unsplit()
         for name, opts in database.Database.PRAGMA.items():
             if "table" != opts["type"]: self.pragma_ctrls[name].Disable()
         self.page_pragma.Layout()

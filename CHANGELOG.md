@@ -8,6 +8,7 @@ CHANGELOG
 - add support for CREATE TABLE .. STRICT (Python 3.9+)
 - include read-only pragmas in PRAGMA SQL
 - include original encoding pragma in database recovery
+- show pragma SQL in view mode as well
 - update SQLite keywords from 126 to the latest 147-element list
 - use a custom lockfile implementation for single instance check in Linux
 - fix auto_vacuum and encoding pragmas not being editable in new databases
