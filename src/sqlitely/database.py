@@ -585,7 +585,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         try: pragma = self.get_pragma_values(dump=True)
         except Exception: logger.exception("Failed to get PRAGMAs for %s.", self.name)
         pragma_first = {k: v for k, v in pragma.items()
-                        if k in ("auto_vacuum", "page_size")}
+                        if util.getval(self.PRAGMAS, k, "initial") is True}
         if pragma_first:
             sql = pragma_tpl.expand(pragma=pragma_first, schema="new")
             self.executescript(sql)

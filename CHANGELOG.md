@@ -7,6 +7,7 @@ CHANGELOG
 - add option to rename SQL window pages
 - add support for CREATE TABLE .. STRICT (Python 3.9+)
 - include read-only pragmas in PRAGMA SQL
+- include original encoding pragma in database recovery
 - update SQLite keywords from 126 to the latest 147-element list
 - use a custom lockfile implementation for single instance check in Linux
 - fix updating main page upon removing databases when home-row is also selected
