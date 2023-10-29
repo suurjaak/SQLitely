@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.10.2023
+@modified    29.10.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4094,7 +4094,7 @@ class DatabasePage(wx.Panel):
                 self.on_export_to_db(names=args[1:] or list(self.db.schema["table"]), data=False)
             elif "pragma" == arg:
                 template = step.Template(templates.PRAGMA_SQL, strip=False)
-                sql = template.expand(pragma=self.pragma)
+                sql = template.expand(pragma=self.pragma, db=self.db)
                 self.save_sql(sql, "PRAGMA")
             elif "schema" == arg:
                 if any(self.db.schema.values()): return self.save_sql(self.stc_schema.Text)
@@ -4697,7 +4697,7 @@ class DatabasePage(wx.Panel):
             if self.pragma_fullsql: values = dict(self.pragma, **values)
 
             template = step.Template(templates.PRAGMA_SQL, strip=False)
-            sql = template.expand(pragma=values)
+            sql = template.expand(pragma=values, db=self.db)
             self.stc_pragma.SetReadOnly(False)
             self.stc_pragma.Text = sql
             self.stc_pragma.SetReadOnly(True)
@@ -4766,7 +4766,7 @@ class DatabasePage(wx.Panel):
         result = True
 
         template = step.Template(templates.PRAGMA_SQL, strip=False)
-        sql = template.expand(pragma=self.pragma_changes)
+        sql = template.expand(pragma=self.pragma_changes, db=self.db)
         if sql and wx.YES != controls.YesNoMessageBox(
             "Save PRAGMA changes?\n\n%s" % sql, conf.Title,
             wx.ICON_INFORMATION, default=wx.NO

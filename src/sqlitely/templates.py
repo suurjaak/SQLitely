@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.10.2023
+@modified    29.10.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -2535,7 +2535,7 @@ mycategory = "view" if item["tbl_name"] in db.schema["view"] else "table"
     %if pragma:
 <h2><a class="toggle" title="Toggle PRAGMAs" onclick="onToggle(this, 'pragma')">PRAGMA settings</a></h2>
 <div class="hidden sql" id="pragma">
-{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma) }}
+{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma, db=db) }}
 </div>
     %endif
 
@@ -2943,7 +2943,7 @@ progress = get("progress")
 -- {{ templates.export_comment() }}
 %if pragma_first:
 
-{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma_first) }}
+{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma_first, db=db) }}
 
 %endif
 %if sql:
@@ -2978,7 +2978,7 @@ except Exception as e:
 
 %endfor
 
-{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma_last) }}
+{{! Template(templates.PRAGMA_SQL).expand(pragma=pragma_last, db=db) }}
 """
 
 
@@ -2987,24 +2987,26 @@ except Exception as e:
 Database PRAGMA statements SQL template.
 
 @param   pragma   PRAGMA values as {name: value}
+@param   ?db      database, if any
 @param   ?schema  schema for PRAGMA directive, if any
 """
 PRAGMA_SQL = """<%
 import six
 from sqlitely import database, grammar
 
-pragma = dict(pragma)
+pragma, db = dict(pragma), get("db")
 for name, opts in database.Database.PRAGMA.items():
-    if opts.get("read") or opts.get("write") is False:
+    if opts.get("read") is False:
         pragma.pop(name, None)
 
-lastopts, lastvalue, count = {}, None, 0
-is_initial = lambda o, v: o["initial"](None, v) if callable(o.get("initial")) else o.get("initial")
+lastopts, lastvalue, flags, count = {}, None, {}, 0
+is_initial  = lambda o, v: o["initial"](db, v) if callable(o.get("initial")) else o.get("initial")
+is_readonly = lambda o: False if "initial" in o else (o["write"](db) if callable(o.get("write")) else o.get("write")) is False
 def sortkey(x):
     k, v, o = x
     return ((-1, not callable(o.get("initial"))) if is_initial(o, v)
             else (1, 0) if callable(o.get("initial")) else (0, 0),
-            bool(o.get("deprecated")), o.get("label", k))
+            bool(o.get("deprecated")), is_readonly(o), o.get("label", k))
 %>
 %for name, value, opts in sorted(((k, pragma.get(k), o) for k, o in database.Database.PRAGMA.items()), key=sortkey):
 <%
@@ -3023,9 +3025,13 @@ if name not in pragma:
     %elif not opts.get("deprecated") and not is_initial(opts, value) and (not count or is_initial(lastopts, lastvalue)):
 
 -- COMMON PRAGMAS:
+    %elif is_readonly(opts) and not flags.get("readonly"):
+
+-- READ-ONLY PRAGMAS:
     %endif
 <%
 lastopts, lastvalue = opts, value
+flags["readonly"] = is_readonly(opts)
 if isinstance(value, six.string_types):
     value = '"%s"' % value.replace('"', '""')
 elif isinstance(value, bool): value = str(value).upper()

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.10.2023
+@modified    29.10.2023
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -95,7 +95,7 @@ class Database(object):
         "values": {0: "NONE", 1: "FULL", 2: "INCREMENTAL"},
         "dump": True,
         "initial": True,
-        "write": lambda db: not list(db.schema.values()) and not db.filesize,
+        "write": lambda db: not list(db.schema.values()) and not db.filesize if db else False,
         "short": "Auto-vacuum settings",
         "description": """  FULL: truncate deleted rows on every commit.
   INCREMENTAL: truncate on PRAGMA incremental_vacuum.
@@ -230,7 +230,7 @@ Must be turned on before any tables are created, not possible to change afterwar
         "type": str,
         "dump": True,
         "initial": True,
-        "write": lambda db: not list(db.schema.values()) and not db.filesize,
+        "write": lambda db: not list(db.schema.values()) and not db.filesize if db else False,
         "short": "Database text encoding",
         "values": {"UTF-8": "UTF-8", "UTF-16": "UTF-16 native byte-ordering", "UTF-16le": "UTF-16 little endian", "UTF-16be": "UTF-16 big endian"},
         "description": "The text encoding used by the database. It is not possible to change the encoding after the database has been created.",
@@ -349,7 +349,7 @@ Must be turned on before any tables are created, not possible to change afterwar
         "name": "query_only",
         "label": "Query only",
         "type": bool,
-        "initial": lambda db, v: not v, # Should be first only if false, else last
+        "initial": lambda db, v: not v, # Should be first in PRAGMA list only if false, else last after all other SQL
         "short": "Prevent database changes",
         "description": "If enabled, prevents all changes to the database file for the duration of the current session.",
       },
