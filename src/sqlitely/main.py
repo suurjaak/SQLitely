@@ -158,13 +158,13 @@ ARGUMENTS = {
                       "(supports * wildcards; initial ~ skips)"},
              {"args": ["--row-header"], "action": "store_true",
               "help": "use first row of input spreadsheet for column names"},
-             {"args": ["--column-range"], "type": util.parse_ranges,
+             {"args": ["--column-range"], "metavar": "RANGE", "type": util.parse_ranges,
               "help": "spreadsheet columns to pick if not all,\n"
                       "as a comma-separated list of indexes or index ranges,\n"
                       "range as START..END or START.. or ..END\n"
                       "(no START: from first, no END: until last).\n"
                       "Numbers are 1-based, can be spreadsheet columns like AB."},
-             {"args": ["--table-name"],
+             {"args": ["--table-name"], "metavar": "NAME",
               "help": "name of table to import into, defaults to file base name\n"
                       "or worksheet name if Excel spreadsheet"},
              {"args": ["--create-always"], "action": "store_true",
