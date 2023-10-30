@@ -145,8 +145,8 @@ ARGUMENTS = {
         ]},
         {"name": "import",
          "help": "import data from file to database ",
-         "description": "Import data from spreadsheet/JSON/YAML files\n"
-                        "to a new or existing SQLite database.",
+         "description": "Import data from files to a new or existing SQLite database.\n"
+                        "Prompts for confirmation.",
          "arguments": [
              {"args": ["INFILE"],
               "help": "file to import from.\nSupported extensions: {%s}." %
@@ -158,6 +158,12 @@ ARGUMENTS = {
                       "(supports * wildcards; initial ~ skips)"},
              {"args": ["--row-header"], "action": "store_true",
               "help": "use first row of input spreadsheet for column names"},
+             {"args": ["--column-range"], "type": util.parse_ranges,
+              "help": "spreadsheet columns to pick if not all,\n"
+                      "as a comma-separated list of indexes or index ranges,\n"
+                      "range as START..END or START.. or ..END\n"
+                      "(no START: from first, no END: until last).\n"
+                      "Numbers are 1-based, can be spreadsheet columns like AB."},
              {"args": ["--table-name"],
               "help": "name of table to import into, defaults to file base name\n"
                       "or worksheet name if Excel spreadsheet"},
@@ -1189,6 +1195,7 @@ def run_import(infile, args):
                table_name     table to import into, defaults to sheet or file name
                create_always  whether to create new table even if matching table exists
                row_header     whether to use first row of input spreadsheet for column names
+               column_range   list of specific column indexes to pick if not all; ending -1: until last
                add_pk         whether to add auto-increment primary key column to created tables
                assume_yes     whether to skip confirmation prompt
                limit          maximum number of rows to import per table
@@ -1205,8 +1212,15 @@ def run_import(infile, args):
             tname = sheet["name"] if has_sheets else os.path.splitext(os.path.basename(infile))[0]
             if args.table_name: tname = args.table_name
 
-            sourcecols = sheet["columns"] if has_names or args.row_header else \
-                         [util.int_to_base(i) for i in range(len(sheet["columns"]))]
+            colnames = sheet["columns"] if has_names or args.row_header else \
+                       [util.int_to_base(i) for i in range(len(sheet["columns"]))]
+            sourcecols = collections.OrderedDict(enumerate(colnames))
+            if is_spreadsheet and args.column_range:
+                until_last, sourcecols0 = (-1 == args.column_range[-1]), sourcecols.copy()
+                colindexes = args.column_range[:-1] if until_last else args.column_range
+                for i in set(sourcecols) - set(colindexes): sourcecols.pop(i)
+                if until_last:
+                    sourcecols.update((i, c) for i, c in sourcecols0.items() if i > colindexes[-1])
 
             if not args.create_always:
                 # Find closest matching table, with the least number of columns and preferably matching names
@@ -1216,21 +1230,21 @@ def run_import(infile, args):
                     tablecols = [x["name"] for x in item["columns"]]
                     if len(tablecols) >= len(sourcecols):
                         cols_match = (has_names or args.row_header) and \
-                                     all(any(util.lceq(a, b) for b in tablecols) for a in sourcecols)
+                                     all(any(util.lceq(a, b) for b in tablecols)
+                                         for a in sourcecols.values())
                         candidates.append((cols_match, tablecols, item))
                 for cols_match, tablecols, item in sorted(candidates, key=lambda x: (not x[0], len(x[1]))):
                     tname, existing_ok = item["name"], True
                     if cols_match:
-                        colmapping.update((a if has_names else i,
-                                           next(b for b in tablecols if util.lceq(a, b)))
-                                          for i, a in enumerate(sourcecols))
+                        colmapping.update((a, next(c for c in tablecols if util.lceq(a, c)))
+                                          for a, b in sourcecols.items())
                     else:
                         colmapping.update(enumerate(tablecols[:len(sourcecols)]))
                     break # for
             if not existing_ok:
                 tname = util.make_unique(tname, items)
-                if has_names: colmapping.update(zip(sourcecols, sourcecols))
-                else: colmapping.update(enumerate(sourcecols))
+                if has_names: colmapping.update((c, c) for c in sourcecols.values())
+                else: colmapping.update(sourcecols)
                 if args.add_pk: pk = util.make_unique("id", list(colmapping.values()))
                 item = {"name": tname, "type": "table",
                         "columns": ([{"name": pk, "pk": {"autoincrement": True}}] if pk else []) + 
@@ -1256,6 +1270,7 @@ def run_import(infile, args):
         bar.update(afterword=" Examining data")
         info = importexport.get_import_file_data(infile)
         if args.progress: bar.pause, _ = True, output()
+        is_spreadsheet = info["format"] in ("csv", "xls", "xlsx")
         has_sheets, has_names = "xls" in info["format"], info["format"] in ("json", "yaml")
         output()
         output("Import from: %s (%s%s)", info["name"], util.format_bytes(info["size"]),
@@ -1271,14 +1286,18 @@ def run_import(infile, args):
         if not sheets:
             output()
             sys.exit("Nothing to import from %s." % infile)
-        output("Import into: %s (%s)", db.name,
-                util.format_bytes(db.filesize) if file_existed else "new file")
 
         bar.update(afterword=" Parsing schema", pause=False)
         db.populate_schema(parse=True)
         if args.progress: bar.pause, _ = True, output()
         build_mappings(sheets)
+        sheets = [x for x in sheets if x["tablecolumns"]]
+        if not sheets:
+            output()
+            sys.exit("Nothing to import from %s." % infile)
 
+        output("Import into: %s (%s)", db.name,
+                util.format_bytes(db.filesize) if file_existed else "new file")
         output()
         output("Importing%s:", " " + util.plural("sheet", sheets) if has_sheets else "")
         for sheet in sheets:
@@ -1290,12 +1309,13 @@ def run_import(infile, args):
                 grammar.quote(sheet["table"], force=True)
             )
             output("  Mapping from source columns to table columns:")
-            maxlen1 = max(len(grammar.quote(a, force=True)) for a in sheet["columns"])
+            get_name1 = lambda a: sheet["columns"][a] if isinstance(a, int) else a
+            maxlen1 = max(len(grammar.quote(get_name1(a), force=True)) for a in sheet["tablecolumns"])
             for i, (a, b) in enumerate(sheet["tablecolumns"].items()):
-                key1 = grammar.quote(list(sheet["columns"])[i], force=True) \
+                key1 = grammar.quote(get_name1(a), force=True) \
                        if has_names or args.row_header else ""
                 output("  %s. %s%s -> %s",
-                    ("%%%ds" % math.ceil(math.log(len(sheet["columns"]), 10))) % (i + 1),
+                    ("%%%ds" % math.ceil(math.log(len(sheet["tablecolumns"]) + 1, 10))) % (i + 1),
                     key1 or "column",
                     " " * (maxlen1 - len(key1)) if key1 else "",
                     grammar.quote(b, force=True)
