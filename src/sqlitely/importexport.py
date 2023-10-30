@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.10.2023
+@modified    30.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1032,6 +1032,8 @@ def get_import_file_data(filename, progress=None):
                        OrderedDict(first row column name: value) for JSON/YAML
     ]}.
 
+    Skips initial empty spreadsheet rows.
+
     @param   progress  callback() returning false if function should cancel
     @return  metadata dict, or None if cancelled
     """
@@ -1048,6 +1050,8 @@ def get_import_file_data(filename, progress=None):
         rows, columns = 0, []
         with csv_reader(filename) as f:
             for i, row in enumerate(f):
+                if not rows and not any(row): # Skip initial blank rows
+                    continue # for i, row
                 rows += 1
                 if rows == 1:
                     columns = row
@@ -1083,13 +1087,19 @@ def get_import_file_data(filename, progress=None):
     elif is_xls and xlrd:
         with xlrd.open_workbook(filename, on_demand=True) as wb:
             for sheet in wb.sheets():
-                if progress and not progress(): return None
-                columns = [x.value for x in next(sheet.get_rows(), [])]
-                while columns and columns[-1] is None: columns.pop(-1)
-                columns = [x.strip() if isinstance(x, six.string_types)
-                           else "" if x is None else str(x) for x in columns]
+                columns, skipped = [], 0
+                for row in sheet.get_rows():
+                    if progress and not progress(): return None
+                    if all(x.value in ("", None) for x in row): # Skip initial blank rows
+                        skipped += 1
+                        continue # for row
+                    columns = [x.value for x in row]
+                    while columns and columns[-1] in (None, ""): columns.pop(-1)
+                    columns = [x.strip() if isinstance(x, six.string_types)
+                               else "" if x is None else str(x) for x in columns]
+                    break # for row
                 if not columns: rows = 0
-                else: rows = -1 if size > conf.MaxImportFilesizeForCount else sheet.nrows
+                else: rows = -1 if size > conf.MaxImportFilesizeForCount else sheet.nrows - skipped
                 sheets.append({"rows": rows, "columns": columns, "name": sheet.name})
     elif is_xlsx and openpyxl:
         wb = None
@@ -1099,13 +1109,19 @@ def get_import_file_data(filename, progress=None):
 
                 wb = openpyxl.load_workbook(filename, data_only=True, read_only=True)
                 for sheet in wb.worksheets:
-                    if progress and not progress(): return None
-                    columns = list(next(sheet.values, []))
-                    while columns and columns[-1] is None: columns.pop(-1)
-                    columns = [x.strip() if isinstance(x, six.string_types)
-                               else "" if x is None else str(x) for x in columns]
+                    columns, skipped = [], 0
+                    for row in sheet.iter_rows(values_only=True):
+                        if progress and not progress(): return None
+                        if all(x in ("", None) for x in row): # Skip initial blank rows
+                            skipped += 1
+                            continue # for row
+                        columns = list(next(sheet.values, []))
+                        while columns and columns[-1] is None: columns.pop(-1)
+                        columns = [x.strip() if isinstance(x, six.string_types)
+                                   else "" if x is None else str(x) for x in columns]
+                        break # for row
                     rows = 0 if not columns else -1 if size > conf.MaxImportFilesizeForCount \
-                           else sum(1 for _ in sheet.iter_rows())
+                           else sum(1 for _ in sheet.iter_rows()) - skipped
                     sheets.append({"rows": rows, "columns": columns, "name": sheet.title})
         finally: wb and wb.close()
     elif is_yaml and yaml:
@@ -1155,6 +1171,8 @@ def import_data(filename, db, tables, has_header=True, limit=None, maxcount=None
     """
     Imports data from spreadsheet or JSON or YAML data file to database table.
     Will create tables if not existing yet.
+
+    Skips initial empty spreadsheet rows.
 
     @param   filename       file path to import from
     @param   db             database.Database instance
@@ -1319,6 +1337,8 @@ def iter_file_rows(filename, columns, sheet=None):
     """
     Yields rows as [value, ] from spreadsheet or JSON or YAML file.
 
+    Skips initial empty spreadsheet rows.
+
     @param   filename    file path to open
     @param   columns     list of column keys to return,
                          where key is column index if spreadsheet else column name
@@ -1332,8 +1352,12 @@ def iter_file_rows(filename, columns, sheet=None):
     is_yaml = any(n.endswith("." + x) for n in [filename.lower()] for x in YAML_EXTS)
     if is_csv:
         with csv_reader(filename) as f:
+            started = False
             for row in f:
+                if not started and not any(row): # Skip initial blank rows
+                    continue # for row
                 yield [row[i] if i < len(row) else None for i in columns]
+                started = True
     elif is_json:
         started, buffer = False, ""
         decoder = json.JSONDecoder(object_pairs_hook=collections.OrderedDict)
@@ -1357,8 +1381,12 @@ def iter_file_rows(filename, columns, sheet=None):
                 if f.tell() >= size: break # for chunk
     elif is_xls:
         with xlrd.open_workbook(filename, on_demand=True) as wb:
+            started = False
             for row in wb.sheet_by_name(sheet).get_rows():
+                if not started and all(x.value in ("", None) for x in row): # Skip initial blank rows
+                    continue # for row
                 yield [row[i].value if i < len(row) else None for i in columns]
+                started = True
     elif is_xlsx:
         wb = None
         try:
@@ -1366,8 +1394,12 @@ def iter_file_rows(filename, columns, sheet=None):
                 warnings.simplefilter("ignore") # openpyxl can throw warnings on styles etc
 
                 wb = openpyxl.load_workbook(filename, data_only=True, read_only=True)
+                started = False
                 for row in wb.get_sheet_by_name(sheet).iter_rows(values_only=True):
+                    if not started and all(x is None for x in row): # Skip initial blank rows
+                        continue # for row
                     yield [row[i] if i < len(row) else None for i in columns]
+                    started = True
         finally: wb and wb.close()
     elif is_yaml:
         # Keep structures nested in values as YAML strings in database

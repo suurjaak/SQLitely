@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.3, 2023-10-29
+2.3, 2023-10-30
 ---------------
 - add command-line interface, with export, import, parse, search and stats
 - add option to rename SQL window pages
@@ -9,6 +9,7 @@ CHANGELOG
 - include read-only pragmas in PRAGMA SQL
 - include original encoding pragma in database recovery
 - show pragma SQL in view mode as well
+- skip initial blank rows in spreadsheet imports
 - update SQLite keywords from 126 to the latest 147-element list
 - use a custom lockfile implementation for single instance check in Linux
 - fix auto_vacuum and encoding pragmas not being editable in new databases
