@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.10.2023
+@modified    30.10.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -7150,7 +7150,7 @@ class ImportDialog(wx.Dialog):
             op = "%%0%dd" % math.ceil(math.log(len(self._cols1), 10))
             return "col_%s" % op % (coldata["index"] + 1) # Zero-pad to max
         else:
-            return util.make_spreadsheet_column(coldata["index"])
+            return util.int_to_base(coldata["index"])
 
 
     def _MoveItems(self, side, indexes, skip=None, index2=None, direction=None, swap=False):
@@ -12088,7 +12088,7 @@ class ImportWizard(wx.adv.Wizard):
             colnames = item["tcolumns"] = []
             for j, col in enumerate(sheet["columns"]):
                 if not col or not self.page1.use_header and not has_names:
-                    col = util.make_spreadsheet_column(j)
+                    col = util.int_to_base(j)
                 col = util.make_unique(col, colnames)
                 colnames.append(col)
             if self.page2.add_pk:

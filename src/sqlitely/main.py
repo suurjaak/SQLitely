@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.10.2023
+@modified    30.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1206,7 +1206,7 @@ def run_import(infile, args):
             if args.table_name: tname = args.table_name
 
             sourcecols = sheet["columns"] if has_names or args.row_header else \
-                         [util.make_spreadsheet_column(i) for i in range(len(sheet["columns"]))]
+                         [util.int_to_base(i) for i in range(len(sheet["columns"]))]
 
             if not args.create_always:
                 # Find closest matching table, with the least number of columns and preferably matching names

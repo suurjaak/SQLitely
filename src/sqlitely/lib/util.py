@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.10.2023
+@modified    30.10.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -662,6 +662,20 @@ def parse_time(s):
     return result
 
 
+def int_to_base(value, digits=string.ascii_uppercase):
+    """
+    Returns integer represented in custom base.
+    
+    @param   value   integer to represent, like 702
+    @param   digits  base digits, defaults to upper-case ASCII letters A..Z
+    @return          integer string in given base, like "AAA" for 702
+    """
+    result, base, n = "", len(digits), value + 1
+    while n:
+        result, n = digits[(n % base or base) - 1] + result, (n - 1) // base
+    return result
+
+
 def get_arity(func, positional=True, keyword=False):
     """
     Returns the maximum number of arguments the function takes, -1 if variable number.
@@ -1074,14 +1088,6 @@ def make_unique(value, existing, suffix="_%s", counter=2, case=False):
         is_present = lambda: result.lower() in existing
     while is_present(): result, counter = value + suffix % counter, counter + 1
     return result
-
-
-def make_spreadsheet_column(index):
-    """Returns spreadsheet-like column name for index, e.g. "AA" for 26."""
-    digits, base = string.ascii_uppercase, len(string.ascii_uppercase)
-    t, n = "", index + 1 # Convert to 1-based alphabetic label
-    while n: t, n = digits[(n % base or base) - 1] + t, (n - 1) // base
-    return t
 
 
 def getval(collection, *path, **kwargs):
