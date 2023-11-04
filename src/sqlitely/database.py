@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.10.2023
+@modified    04.11.2023
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -810,7 +810,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
         or has columns shadowing all ROWID aliases (ROWID, _ROWID_, OID).
         """
         if util.getval(self.schema, "table", table) \
-        and not util.getval(self.schema, "table", table, "meta"):
+        and not util.getval(self.schema, "table", table, "meta") \
+        and re.search(r"\bWITHOUT\b.*\bROWID\b", self.schema["table"][table]["sql"], re.I):
+            # Parse table SQL if it might be WITHOUT ROWID
             self.populate_schema(category="table", name=table, parse=True)
         meta = util.getval(self.schema, "table", table, "meta") or {}
         if any(x.get("without") for x in meta.get("options", [])): return None
@@ -1120,7 +1122,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
                 # Retrieve table row counts if commanded
                 if "table" == mycategory and count:
-                    opts.update(self.get_count(myname))
+                    mycounts = self.get_count(myname)
+                    opts = self.schema[mycategory][myname] # get_count() can trigger parse for rowid
+                    opts.update(mycounts)
 
                 index += 1
                 if progress and not progress(index=index, total=total): return
