@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.10.2023
+@modified    04.11.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1017,6 +1017,13 @@ def export_to_console(make_iterables, format, title=None,
     return result
 
 
+def get_format(filename):
+    """Returns import/export file format like "yaml", or None, detected from filename extension."""
+    extname = os.path.splitext(filename)[-1][1:].lower()
+    if extname in set(IMPORT_EXTS + EXPORT_EXTS):
+        return "yaml" if extname in YAML_EXTS else extname
+    return None
+
 
 def get_import_file_data(filename, progress=None):
     """
@@ -1042,11 +1049,8 @@ def get_import_file_data(filename, progress=None):
     if not size: raise ValueError("File is empty.")
     modified = datetime.datetime.fromtimestamp(os.path.getmtime(filename))
 
-    extname = os.path.splitext(filename)[-1][1:].lower()
-    is_csv, is_json, is_xls, is_xlsx = \
-        (extname == x for x in ("csv", "json", "xls", "xlsx"))
-    is_yaml = extname in YAML_EXTS
-    if is_csv:
+    fmt = get_format(filename)
+    if "csv" == fmt:
         rows, columns = 0, []
         with csv_reader(filename) as f:
             for i, row in enumerate(f):
@@ -1059,7 +1063,7 @@ def get_import_file_data(filename, progress=None):
                 if progress and not i % 100 and not progress(): break # for i, row
             if rows and size > conf.MaxImportFilesizeForCount: rows = -1
         sheets.append({"rows": rows, "columns": columns, "name": "<CSV data>"})
-    elif is_json:
+    elif "json" == fmt:
         rows, columns, buffer, started = 0, {}, "", False
         decoder = json.JSONDecoder(object_pairs_hook=collections.OrderedDict)
         with open(filename) as f:
@@ -1084,7 +1088,7 @@ def get_import_file_data(filename, progress=None):
                     break # for chunk
             if rows and f.tell() < size: rows = -1
         sheets.append({"rows": rows, "columns": columns, "name": "<JSON data>"})
-    elif is_xls and xlrd:
+    elif "xls" == fmt and xlrd:
         with xlrd.open_workbook(filename, on_demand=True) as wb:
             for sheet in wb.sheets():
                 columns, skipped = [], 0
@@ -1101,7 +1105,7 @@ def get_import_file_data(filename, progress=None):
                 if not columns: rows = 0
                 else: rows = -1 if size > conf.MaxImportFilesizeForCount else sheet.nrows - skipped
                 sheets.append({"rows": rows, "columns": columns, "name": sheet.name})
-    elif is_xlsx and openpyxl:
+    elif "xlsx" == fmt and openpyxl:
         wb = None
         try:
             with warnings.catch_warnings():
@@ -1124,8 +1128,7 @@ def get_import_file_data(filename, progress=None):
                            else sum(1 for _ in sheet.iter_rows()) - skipped
                     sheets.append({"rows": rows, "columns": columns, "name": sheet.title})
         finally: wb and wb.close()
-    elif is_yaml and yaml:
-        extname = "yaml"
+    elif "yaml" == fmt and yaml:
         rows, columns = 0, {}
         with open(filename, "rbU" if six.PY2 else "rb") as f:
             parser = yaml.parse(f, yaml.SafeLoader)
@@ -1163,7 +1166,7 @@ def get_import_file_data(filename, progress=None):
     else:
         raise ValueError("File type not recognized.")
 
-    return {"name": filename, "size": size, "modified": modified, "format": extname, "sheets": sheets}
+    return {"name": filename, "size": size, "modified": modified, "format": fmt, "sheets": sheets}
 
 
 
@@ -1197,8 +1200,8 @@ def import_data(filename, db, tables, has_header=True, limit=None, maxcount=None
         progress and progress(done=True)
         return result
 
-    extname = os.path.splitext(filename)[-1][1:].lower()
-    has_sheets, has_names, new_tables = "xls" in extname, extname in ("json", "yaml"), []
+    fmt = get_format(filename)
+    has_sheets, has_names, new_tables = "xls" in fmt, fmt in ("json", "yaml"), []
     table, source, cursor, isolevel = None, None, None, None
     was_open, file_existed = db.is_open(), os.path.isfile(db.filename)
     try:
@@ -1344,13 +1347,8 @@ def iter_file_rows(filename, columns, sheet=None):
                          where key is column index if spreadsheet else column name
     @param   sheet       sheet name to read from, if applicable
     """
-    size = os.path.getsize(filename)
-    is_csv  = filename.lower().endswith(".csv")
-    is_json = filename.lower().endswith(".json")
-    is_xls  = filename.lower().endswith(".xls")
-    is_xlsx = filename.lower().endswith(".xlsx")
-    is_yaml = any(n.endswith("." + x) for n in [filename.lower()] for x in YAML_EXTS)
-    if is_csv:
+    size, fmt = os.path.getsize(filename), get_format(filename)
+    if "csv" == fmt:
         with csv_reader(filename) as f:
             started = False
             for row in f:
@@ -1358,7 +1356,7 @@ def iter_file_rows(filename, columns, sheet=None):
                     continue # for row
                 yield [row[i] if i < len(row) else None for i in columns]
                 started = True
-    elif is_json:
+    elif "json" == fmt:
         started, buffer = False, ""
         decoder = json.JSONDecoder(object_pairs_hook=collections.OrderedDict)
         with open(filename) as f:
@@ -1379,7 +1377,7 @@ def iter_file_rows(filename, columns, sheet=None):
                     except ValueError: # Not enough data to decode, read more
                         break # while started and buffer
                 if f.tell() >= size: break # for chunk
-    elif is_xls:
+    elif "xls" == fmt:
         with xlrd.open_workbook(filename, on_demand=True) as wb:
             started = False
             for row in wb.sheet_by_name(sheet).get_rows():
@@ -1387,7 +1385,7 @@ def iter_file_rows(filename, columns, sheet=None):
                     continue # for row
                 yield [row[i].value if i < len(row) else None for i in columns]
                 started = True
-    elif is_xlsx:
+    elif "xlsx" == fmt:
         wb = None
         try:
             with warnings.catch_warnings():
@@ -1401,7 +1399,7 @@ def iter_file_rows(filename, columns, sheet=None):
                     yield [row[i] if i < len(row) else None for i in columns]
                     started = True
         finally: wb and wb.close()
-    elif is_yaml:
+    elif "yaml" == fmt:
         # Keep structures nested in values as YAML strings in database
         cast = lambda x: yaml.safe_dump(x) if isinstance(x, (dict, list)) else x
         with open(filename, "rbU" if six.PY2 else "rb") as f:
