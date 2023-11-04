@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.10.2023
+@modified    04.11.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1229,8 +1229,7 @@ def run_import(infile, args):
                 for item in (x for x in items.values() if "table" == x["type"] and name_matches(x["name"])):
                     tablecols = [x["name"] for x in item["columns"]]
                     if len(tablecols) >= len(sourcecols):
-                        cols_match = (has_names or args.row_header) and \
-                                     all(any(util.lceq(a, b) for b in tablecols)
+                        cols_match = all(any(util.lceq(a, b) for b in tablecols)
                                          for a in sourcecols.values())
                         candidates.append((cols_match, tablecols, item))
                 for cols_match, tablecols, item in sorted(candidates, key=lambda x: (not x[0], len(x[1]))):
