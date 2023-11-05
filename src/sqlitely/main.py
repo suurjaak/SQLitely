@@ -1297,7 +1297,9 @@ def run_import(infile, args):
             if not existing_ok:
                 tname = util.make_unique(tname, items)
                 if has_names: colmapping.update((c, c) for c in sourcecols.values())
-                else: colmapping.update(sourcecols)
+                else:
+                    for i, c in sourcecols.items():
+                        colmapping[i] = util.make_unique(c, list(colmapping.values()))
                 if args.add_pk: pk = util.make_unique("id", list(colmapping.values()))
                 item = {"name": tname, "type": "table",
                         "columns": ([{"name": pk, "pk": {"autoincrement": True}}] if pk else []) + 
