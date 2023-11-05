@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.11.2023
+@modified    05.11.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -158,12 +158,14 @@ ARGUMENTS = {
                       "(supports * wildcards; initial ~ skips)"},
              {"args": ["--row-header"], "action": "store_true",
               "help": "use first row of input spreadsheet for column names"},
-             {"args": ["--column-range"], "metavar": "RANGE", "type": util.parse_ranges,
-              "help": "spreadsheet columns to pick if not all,\n"
+             {"args": ["--columns"],
+              "help": "columns to import if not all,\n"
                       "as a comma-separated list of indexes or index ranges,\n"
                       "range as START..END or START.. or ..END\n"
                       "(no START: from first, no END: until last).\n"
-                      "Numbers are 1-based, can be spreadsheet columns like AB."},
+                      "Indexes can be numbers starting from 1\n"
+                      "or spreadsheet column labels like AB,\n"
+                      "must be column names if import from JSON/YAML."},
              {"args": ["--table-name"], "metavar": "NAME",
               "help": "name of table to import into, defaults to file base name\n"
                       "or worksheet name if Excel spreadsheet"},
@@ -679,14 +681,17 @@ def prepare_args(action, args):
         args.OUTFILE = util.unique_path(args.OUTFILE)
 
 
-def validate_args(action, args):
+def validate_args(action, args, infile=None):
     """
     Populates format and outfile and limits and defaults of command-line arguments in-place.
+
+    Converts columns filter for import-action to [(from, to), ].
 
     Prints error and exits if any arguments are invalid.
 
     @param   action  name like "export" or "search"
     @param   args    argparse.Namespace
+    @param   infile  input filename if any
     """
     prepare_args(action, args)
     if 0 in (args.limit, args.maxcount):
@@ -694,6 +699,58 @@ def validate_args(action, args):
                  ("limit %r" % args.limit if not args.limit else "max count %r" % args.maxcount))
     if "export" == action and args.schema_only and args.format in ("json", "yaml"):
         sys.exit("Nothing to export from %s without data as %s." % (dbname, args.format.upper()))
+    if "import" == action and args.columns:
+        has_names = importexport.get_format(infile) in ("json", "yaml")
+        try: args.columns = parse_columns(args.columns, numeric=not has_names)
+        except Exception: sys.exit("Invalid columns range: %r" % args.columns)
+
+
+def parse_columns(value, numeric=False):
+    """
+    Returns a list of column range tuples as (from, to).
+
+    @param   value    comma-separated ranges like "1,3..8" or "A..D,F..Z" or "name1..nameN"
+    @param   numeric  whether column keys are decimal / spreadsheet-like labels, or string names
+    @return           [(from, to), ]; from=None signifies "from first" and to=None "until last"
+    """
+    SEP, RNG = ",", ".."
+    result = []
+    if numeric:
+        indexes = util.parse_ranges(value, SEP, RNG)
+        if indexes[-1] == -1: result, indexes = [(indexes[-2], None)], indexes[:-2]
+        result[:0] = [(x, x) for x in indexes]
+    else:
+        for part in filter(bool, (x.strip() for x in value.split(SEP))):
+            if RNG not in part: result.append((part, part))
+            else:
+                start, end = (v.strip() or None for v in part.split(RNG))
+                if start is not None or end is not None: result.append((start, end))
+    return result
+
+
+def filter_columns(columns, filters):
+    """
+    Returns columns filtered by given ranges.
+
+    @param   columns  {index: column true name or spreadsheet-like label A B}
+    @param   filters  column range tuples as returned from parse_columns()
+    """
+    result = type(columns)()
+    for first, last in filters:
+        numeric = all(isinstance(x, (int, type(None))) for x in (first, last))
+        if numeric:
+            for i in range(max(0, first or 0), len(columns) if last is None else last + 1):
+                if i in columns: result[i] = columns[i]
+        else:
+            start, end, items = 0, len(columns), list(columns.items())
+            if first is not None:
+                start = next((i for i, (_, c) in enumerate(items) if c == first), None)
+            if last is not None:
+                end = next((i + 1 for i, (_, c) in enumerate(items) if c == last), None)
+            if start is None or end is None: continue # for first, last
+            for i in range(start, end):
+                result[items[i][0]] = items[i][1]
+    return result
 
 
 def do_output(action, args, func, entities, files):
@@ -1195,7 +1252,7 @@ def run_import(infile, args):
                table_name     table to import into, defaults to sheet or file name
                create_always  whether to create new table even if matching table exists
                row_header     whether to use first row of input spreadsheet for column names
-               column_range   list of specific column indexes to pick if not all; ending -1: until last
+               columns        specific column ranges to pick if not all
                add_pk         whether to add auto-increment primary key column to created tables
                assume_yes     whether to skip confirmation prompt
                limit          maximum number of rows to import per table
@@ -1215,12 +1272,7 @@ def run_import(infile, args):
             colnames = sheet["columns"] if has_names or args.row_header else \
                        [util.int_to_base(i) for i in range(len(sheet["columns"]))]
             sourcecols = collections.OrderedDict(enumerate(colnames))
-            if is_spreadsheet and args.column_range:
-                until_last, sourcecols0 = (-1 == args.column_range[-1]), sourcecols.copy()
-                colindexes = args.column_range[:-1] if until_last else args.column_range
-                for i in set(sourcecols) - set(colindexes): sourcecols.pop(i)
-                if until_last:
-                    sourcecols.update((i, c) for i, c in sourcecols0.items() if i > colindexes[-1])
+            if args.columns: sourcecols = filter_columns(sourcecols, args.columns)
 
             if not args.create_always:
                 # Find closest matching table, with the least number of columns and preferably matching names
@@ -1235,10 +1287,12 @@ def run_import(infile, args):
                 for cols_match, tablecols, item in sorted(candidates, key=lambda x: (not x[0], len(x[1]))):
                     tname, existing_ok = item["name"], True
                     if cols_match:
-                        colmapping.update((a, next(c for c in tablecols if util.lceq(a, c)))
-                                          for a, b in sourcecols.items())
+                        colmapping.update((a, next(b for b in tablecols if util.lceq(a, b)))
+                                          for a in (sourcecols.values() if has_names else sourcecols))
+                    elif has_names:
+                        colmapping.update(zip(sourcecols.values() , tablecols))
                     else:
-                        colmapping.update(enumerate(tablecols[:len(sourcecols)]))
+                        colmapping.update(zip(sourcecols, tablecols))
                     break # for
             if not existing_ok:
                 tname = util.make_unique(tname, items)
@@ -1255,8 +1309,8 @@ def run_import(infile, args):
                          total=sheettotal, type="sheet" if has_sheets else None)
             if not existing_ok: items[tname] = item
 
-
-    validate_args("import", args)
+    columns0 = args.columns
+    validate_args("import", args, infile)
     entity_rgx = util.filters_to_regex(args.filter) if args.filter else None
     dbname, file_existed, total = args.OUTFILE, os.path.isfile(args.OUTFILE), 0
     db = database.Database(dbname)
@@ -1292,8 +1346,9 @@ def run_import(infile, args):
         build_mappings(sheets)
         sheets = [x for x in sheets if x["tablecolumns"]]
         if not sheets:
+            extra = "" if not args.columns else " using columns: %s" % columns0
             output()
-            sys.exit("Nothing to import from %s." % infile)
+            sys.exit("Nothing to import from %s%s." % (infile, extra))
 
         output("Import into: %s (%s)", db.name,
                 util.format_bytes(db.filesize) if file_existed else "new file")

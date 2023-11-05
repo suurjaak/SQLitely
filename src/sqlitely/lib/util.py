@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.10.2023
+@modified    04.11.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -664,14 +664,12 @@ def parse_time(s):
 
 def parse_ranges(value, sep=",", rng=".."):
     """
-    Returns a list of indexes for a string of ranges, given as integers or spreadsheet-like indexes.
+    Returns a list of indexes for a ranges string, given as integers or spreadsheet-like labels A B.
 
     Range end is inclusive.
     Integers in value are expected to be 1-based, result will be 0-based.
 
     E.g. [0, 1, 2, 4, 6, -1] for "..3,5,7.." amd "..C,E,G..".
-
-    Raises on error.
 
     @param   value  any separated combination of INDEX  START..END  START..  ..END
     @param   sep    separator to use, defaults to ","
@@ -681,19 +679,16 @@ def parse_ranges(value, sep=",", rng=".."):
     result, endless = [], sys.maxsize
     if not value: return result
     to_int = lambda v: max(0, int(v) - 1) if v.isdigit() else base_to_int(v)
-    try:
-        for part in filter(bool, value.split(sep)):
-            if rng not in part: result.append(to_int(part))
-            else:
-                start, end = (to_int(v) if v else None for v in part.split(rng))
-                if start is None and end is None: continue # for part
-                if end is None: endless = min(endless, start or 0)
-                else: result.extend(range(start or 0, end + 1))
-        result = sorted(set(result))
-        if endless != sys.maxsize: result = [v for v in result if v < endless] + [endless, -1]
-        if result == [0, -1]: result = [] # Drop all-inclusive range as unnecessary
-    except Exception:
-        raise ValueError("Invalid ranges in string: %r" % value)
+    for part in filter(bool, (x.strip() for x in value.split(sep))):
+        if rng not in part: result.append(to_int(part))
+        else:
+            start, end = (to_int(v.strip()) if v.strip() else None for v in part.split(rng))
+            if start is None and end is None: continue # for part
+            if end is None: endless = min(endless, start or 0)
+            else: result.extend(range(start or 0, end + 1))
+    result = sorted(set(result))
+    if endless != sys.maxsize: result = [v for v in result if v < endless] + [endless, -1]
+    if result == [0, -1]: result = [] # Drop all-inclusive range as unnecessary
     return result
 
 
