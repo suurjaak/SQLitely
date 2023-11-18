@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    09.10.2023
+@modified    12.11.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -30,6 +30,7 @@ except ImportError: wx = None
 from . lib import util
 try: from . lib import controls
 except ImportError: controls = None
+from . import grammar
 from . import images
 from . import templates
 
@@ -889,8 +890,9 @@ class SchemaPlacement(object):
             if not self.IsColumnShown(opts, c):
                 continue  # for c
             coltexts.append([])
-            for k in ["name", "type"]:
-                t = util.ellipsize(util.unprint(c.get(k, "")), self.MAX_TEXT)
+            for i, k in enumerate(["name", "type"]):
+                t = c.get(k, "") if i or c.get(k) is None else util.unprint(grammar.quote(c[k], embed=True))
+                t = util.ellipsize(t, self.MAX_TEXT)
                 coltexts[-1].append(t)
                 if t: extent = self.GetTextExtent(t)
                 if t: colmax[k] = max(colmax[k], extent[0])

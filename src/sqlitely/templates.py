@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.10.2023
+@modified    12.11.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -402,7 +402,7 @@ progress = get("progress")
   <tr>
     <th class="index asc"><a class="sort asc" title="Sort by index" onclick="onSort(this)">#</a></th>
 %for i, c in enumerate(columns):
-    <th><a class="sort" title="Sort by {{ grammar.quote(c["name"]) }}" onclick="onSort(this)">{{ util.unprint(c["name"]) }}</a></th>
+    <th><a class="sort" title="Sort by {{ escape(util.unprint(grammar.quote(c["name"], embed=True))) }}" onclick="onSort(this)">{{ util.unprint(grammar.quote(c["name"], embed=True)) }}</a></th>
 %endfor
   </tr>
 <%
@@ -791,7 +791,7 @@ TXT data export template.
 DATA_TXT = """<%
 import os
 from sqlitely.lib import util
-from sqlitely import templates
+from sqlitely import grammar, templates
 
 _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
@@ -811,7 +811,7 @@ SQL: {{ sql }}
 <%
 headers = []
 for c in columns:
-    fc = util.unprint(c["name"])
+    fc = util.unprint(grammar.quote(c["name"], embed=True))
     headers.append((fc.ljust if columnjusts[c["name"]] else fc.rjust)(columnwidths[c["name"]]))
 hr = "|-" + "-|-".join("".ljust(columnwidths[c["name"]], "-") for c in columns) + "-|"
 header = "| " + " | ".join(headers) + " |"
@@ -883,6 +883,7 @@ TXT export template for item partial file in multiple item export.
 """
 DATA_TXT_MULTIPLE_PART = """<%
 from sqlitely.lib import util
+from sqlitely import grammar
 
 progress = get("progress")
 %>{{ "\\n".join(util.tuplefy(title)) }}.
@@ -899,7 +900,7 @@ SQL: {{ sql }}
 
 headers = []
 for c in columns:
-    fc = util.unprint(c["name"])
+    fc = util.unprint(grammar.quote(c["name"], embed=True))
     headers.append((fc.ljust if columnjusts[c["name"]] else fc.rjust)(columnwidths[c["name"]]))
 hr = "|-" + "-|-".join("".ljust(columnwidths[c["name"]], "-") for c in columns) + "-|"
 header = "| " + " | ".join(headers) + " |"
@@ -974,9 +975,9 @@ TXT data template for copying rows as page.
 DATA_ROWS_PAGE_TXT = """<%
 import six
 from sqlitely.lib import util
-from sqlitely import templates
+from sqlitely import grammar, templates
 
-fmtcols = [util.unprint(c["name"]) for c in columns]
+fmtcols = [util.unprint(grammar.quote(c["name"])) for c in columns]
 colwidth = max(map(len, fmtcols))
 %>
 %for i, row in enumerate(rows):
@@ -1225,7 +1226,7 @@ from sqlitely import conf, grammar
 <tr>
 <th>#</th>
 %for c in item["columns"]:
-<th>{{ util.unprint(c["name"]) }}</th>
+<th>{{ util.unprint(grammar.quote(c["name"], embed=True)) }}</th>
 %endfor
 </tr>
 """
@@ -2323,7 +2324,7 @@ relateds = db.get_related(category, item["name"])
       <table class="subtable">
         <tr>
           <td title="{{ item["name"] }}" {{! wrapclass(item["name"]) }}>
-            {{ util.unprint(item["name"]) }}
+            {{ util.unprint(grammar.quote(item["name"], embed=True)) }}
           </td>
           <td>
             <a class="toggle" title="Toggle SQL" onclick="onToggle(this, '{{ category }}/{{! urlquote(item["name"]) }}/sql')">SQL</a>
@@ -2345,7 +2346,7 @@ countstr = util.count(item)
       <a class="toggle right" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urlquote(item["name"]) }}/cols')">{{ len(item["columns"]) }}</a>
       <table class="columns hidden" id="{{ category }}/{{! urlquote(item["name"]) }}/cols">
                 %for i, c in enumerate(item["columns"]):
-        <tr data-content="{{ i + 1 }}"><td {{! wrapclass(c["name"]) }}>{{ util.unprint(c["name"]) }}</td><td {{! wrapclass(c.get("type")) }}>{{ util.unprint(c.get("type", "")) }}</td></tr>
+        <tr data-content="{{ i + 1 }}"><td {{! wrapclass(c["name"]) }}>{{ util.unprint(grammar.quote(c["name"], embed=True)) }}</td><td {{! wrapclass(c.get("type")) }}>{{ util.unprint(c.get("type", "")) }}</td></tr>
                 %endfor
       </table>
     </td>
@@ -2361,7 +2362,7 @@ rels = [] # [(source, keys, target, keys)]
 <%
 
 lks2, fks2 = db.get_keys(item2["name"])
-fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(util.unprint, map(grammar.quote, x)))
+fmtkeys = lambda x: ("(%s)" if len(x) > 1 else "%s") % ", ".join(map(util.unprint, (grammar.quote(y, embed=True) for y in x)))
 for col in lks2:
     for table, keys in col.get("table", {}).items():
         if util.lceq(table, item["name"]):
@@ -2371,7 +2372,7 @@ for col in fks2:
         if util.lceq(table, item["name"]):
             rels.append((item2["name"], col["name"], None, keys or []))
 %>
-  <a href="#{{category}}/{{! urlquote(item2["name"]) }}" title="Go to {{ category }} {{ grammar.quote(item2["name"], force=True) }}" {{! wrapclass(item2["name"]) }}>{{ item2["name"] }}</a><br />
+  <a href="#{{category}}/{{! urlquote(item2["name"]) }}" title="Go to {{ category }} {{ grammar.quote(item2["name"], force=True) }}" {{! wrapclass(item2["name"]) }}>{{ grammar.quote(item2["name"], embed=True) }}</a><br />
                 %endfor
           </td>
                 %if rels:
@@ -2386,7 +2387,7 @@ for col in fks2:
       <div class="hidden" id="{{ category }}/{{! urlquote(item["name"]) }}/related">
         <br />
                     %for (a, c1, b, c2) in rels:
-                        %if a:
+                        %if a is not None:
         <a href="#table/{{! urlquote(a) }}" title="Go to table {{ grammar.quote(a, force=True) }}" {{! wrapclass(a) }}>{{ util.unprint(grammar.quote(a)) }}</a>{{ "." if c1 else "" }}{{ fmtkeys(c1) }} <span class="nowrap">REFERENCES</span> {{ fmtkeys(c2) }}<br />
                         %else:
         {{ fmtkeys(c1) }} <span class="nowrap">REFERENCES</span> <a href="#table/{{! urlquote(b) }}" title="Go to table {{ util.unprint(grammar.quote(b, force=True)) }}" {{! wrapclass(b) }}>{{ grammar.quote(b) }}</a>{{ "." if c2 else "" }}{{ fmtkeys(c2) }}<br />
@@ -2402,7 +2403,7 @@ for col in fks2:
 <%
 flags["has_direct"] = True
 %>
-  {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(item2["name"]) }}</a><br />
+  {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(grammar.quote(item2["name"])) }}</a><br />
                     %endif
                 %endfor
 
@@ -2414,7 +2415,7 @@ flags["has_direct"] = True
 <%
 flags["has_indirect"] = True
 %>
-  <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(item2["name"]) }}</a></em><br />
+  <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(grammar.quote(item2["name"])) }}</a></em><br />
                     %endif
                 %endfor
     </td>
@@ -2443,7 +2444,7 @@ size = next((x["size_total"] for x in stats["table"] if util.lceq(x["name"], ite
                     %if col.get("expr"):
       <pre>{{ col["expr"] }}</pre>
                     %else:
-      {{ util.unprint(col["name"] or "") }}
+      {{ util.unprint(grammar.quote(col["name"], embed=True)) }}
                     %endif
       <br />
                 %endfor
@@ -2475,7 +2476,7 @@ mycategory = "view" if item["tbl_name"] in db.schema["view"] else "table"
     <td>
                 %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values()):
                     %if not util.lceq(item2["name"], item["tbl_name"]):
-  <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(item2["name"]) }}</a></em><br />
+  <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(grammar.quote(item2["name"])) }}</a></em><br />
                     %endif
                 %endfor
     </td>
@@ -2487,28 +2488,28 @@ mycategory = "view" if item["tbl_name"] in db.schema["view"] else "table"
       <a class="toggle right" title="Toggle columns" onclick="onToggle(this, '{{ category }}/{{! urlquote(item["name"]) }}/cols')">{{ len(item["columns"]) }}</a>
       <table class="columns hidden" id="{{ category }}/{{! urlquote(item["name"]) }}/cols">
                 %for i, col in enumerate(item["columns"]):
-        <tr data-content="{{ i + 1 }}"><td {{! wrapclass(col["name"]) }}>{{ util.unprint(col["name"]) }}</td><td {{! wrapclass(col.get("type")) }}>{{ util.unprint(col.get("type", "")) }}</td></tr>
+        <tr data-content="{{ i + 1 }}"><td {{! wrapclass(col["name"]) }}>{{ util.unprint(grammar.quote(col["name"], embed=True)) }}</td><td {{! wrapclass(col.get("type")) }}>{{ util.unprint(col.get("type", "")) }}</td></tr>
                 %endfor
       </table>
     </td>
 
     <td>
                 %for item2 in (x for c in ("table", "view") for x in relateds.get(c, {}).values() if x["name"].lower() in item["meta"]["__tables__"]):
-      {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(item2["name"]) }}</a><br />
+      {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(grammar.quote(item2["name"])) }}</a><br />
                 %endfor
 
                 %for i, item2 in enumerate(x for c in ("trigger", ) for x in relateds.get(c, {}).values() if util.lceq(x.get("tbl_name"), item["name"])):
                     %if not i:
       <br />
                     %endif
-      {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(item2["name"]) }}</a><br />
+      {{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(grammar.quote(item2["name"])) }}</a><br />
                 %endfor
 
     </td>
 
     <td>
                 %for item2 in (x for c in db.CATEGORIES for x in relateds.get(c, {}).values() if item["name"].lower() in x["meta"]["__tables__"]):
-      <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(item2["name"]) }}</a></em><br />
+      <em>{{ item2["type"] }} <a title="Go to {{ item2["type"] }} {{ grammar.quote(item2["name"], force=True) }}" href="#{{ item2["type"] }}/{{! urlquote(item2["name"]) }}" {{! wrapclass(item2["name"]) }}>{{ util.unprint(grammar.quote(item2["name"])) }}</a></em><br />
                 %endfor
     </td>
             %endif
@@ -3094,11 +3095,11 @@ for item in items:
     cols = item.get("columns") or []
     colmax = itemcolmax[item["name"]] = {"name": 0, "type": 0}
     coltexts = itemcoltexts[item["name"]] = [] # [[name, type]]
-    for i, c in enumerate(cols):
+    for c in cols:
         coltexts.append([])
-        for k in ["name", "type"]:
-            v = c.get(k)
-            t = util.ellipsize(util.unprint(c.get(k, "")), SchemaPlacement.MAX_TEXT)
+        for i, k in enumerate(["name", "type"]):
+            t = c.get(k, "") if i or c.get(k) is None else util.unprint(grammar.quote(c[k], embed=True))
+            t = util.ellipsize(t, SchemaPlacement.MAX_TEXT)
             coltexts[-1].append(t)
             if t: extent = get_extent(t)
             if t: colmax[k] = max(colmax[k], extent[0])
@@ -3306,7 +3307,7 @@ dash = "M %s,%s L %s,%s" % (adjust(*ptd1) + adjust(*ptd2))
       <path d="{{ crow2 }}" />
       <path d="{{ dash }}" />
     %if show_labels:
-      <text x="{{ tx }}" y="{{ ty }}" class="label">{{ util.ellipsize(util.unprint(line["name"]), SchemaPlacement.MAX_TEXT) }}</text>
+      <text x="{{ tx }}" y="{{ ty }}" class="label">{{ util.ellipsize(util.unprint(grammar.quote(line["name"], embed=True)), SchemaPlacement.MAX_TEXT) }}</text>
     %endif
     </g>
 

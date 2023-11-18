@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.11.2023
+@modified    12.11.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -183,7 +183,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
                 namespace["namespace"] = namespace # To update row_count
 
                 if "txt" == format: # Run through rows once, to populate text-justify options
-                    widths = {c: len(util.unprint(c)) for c in colnames}
+                    widths = {c: len(util.unprint(grammar.quote(c))) for c in colnames}
                     justs  = {c: True   for c in colnames}
                     try:
                         cursor2 = make_iterable()
@@ -913,7 +913,7 @@ def export_to_console(make_iterables, format, title=None,
 
         # Run through rows once for txt output, to populate text-justify options
         colnames = [c["name"] for c in item["columns"]]
-        widths   = {c: len(util.unprint(c)) for c in colnames}
+        widths   = {c: len(util.unprint(grammar.quote(c))) for c in colnames}
         justs    = {c: True   for c in colnames}
         do_break = False
         for i, row in enumerate(make_iterable()) if "txt" == format else ():

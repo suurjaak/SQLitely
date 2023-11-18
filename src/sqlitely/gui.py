@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.10.2023
+@modified    11.11.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4896,7 +4896,7 @@ class DatabasePage(wx.Panel):
                 for fkid, rowids in data[table][parent].items():
                     fk, _, pk = fks[table][fkid]
                     line = "%s.%s REFERENCING " % tuple(map(grammar.quote, (table, fk)))
-                    line += ".".join(map(grammar.quote, filter(bool, (parent, pk))))
+                    line += ".".join(grammar.quote(x) for x in (parent, pk) if x is not None)
                     line += ": " + util.plural("row", rowids)
                     if any(rowids): # NULL values: table WITHOUT ROWID
                         vals = [x[fk] for x in self.db.execute(
@@ -7068,7 +7068,7 @@ class DatabasePage(wx.Panel):
                         tree.SetItemImage(colchild, imgs["columns"], wx.TreeItemIcon_Normal)
                         lks, fks = self.db.get_keys(item["name"]) if "table" == category else [(), ()]
                         for col in columns:
-                            subchild = tree.AppendItem(colchild, util.unprint(col.get("name") or col.get("expr")))
+                            subchild = tree.AppendItem(colchild, util.unprint(col.get("name") or col.get("expr") or ""))
                             mytype = util.unprint(col.get("type", ""))
                             if any(col["name"] in x["name"] for x in lks):
                                 mytype = u"\u1d18\u1d0b  " + mytype # Unicode small caps "PK"
@@ -7384,16 +7384,16 @@ class DatabasePage(wx.Panel):
             parentname = data["parent"]["name"]
             ownername  = data["parent"]["tbl_name" if "index" == category else "name"]
             subcategories = {"table": ["index", "trigger", "view"], "view": ["trigger"]}.get(category, [])
-            fullname = "Column expression" if not name else \
+            fullname = "Column expression" if name is None else \
                        'Column "%s.%s"' % (fmt_entity(ownername, force=False), fmt_entity(name, force=False))
-            sqltext = functools.partial(self.db.get_sql, category, parentname, name or data["expr"])
+            sqltext = functools.partial(self.db.get_sql, category, parentname, name or data.get("expr") or "")
 
             newmenu = wx.Menu() if subcategories else None
             item_name      = wx.MenuItem(menu, -1, fullname)
             item_open      = wx.MenuItem(menu, -1, "&Open %s data" % category) if "index" != category else None
             item_open_meta = wx.MenuItem(menu, -1, "Open %s &schema" % category) if "index" != category else None
-            item_copy      = wx.MenuItem(menu, -1, "&Copy name") if name else None
-            item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s S&QL" % ("column" if name else "expression"))
+            item_copy      = wx.MenuItem(menu, -1, "&Copy name") if name is not None else None
+            item_copy_sql  = wx.MenuItem(menu, -1, "Copy %s S&QL" % ("expression" if name is None else "column"))
             item_renamecol = wx.MenuItem(menu, -1, "Rena&me column\t(F2)") if "table" == category else None
             item_drop_col  = wx.MenuItem(menu, -1, "Drop column") if "table" == category else None
             for c in subcategories: newmenu.Append(-1, "New &%s" % c)

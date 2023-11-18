@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.11.2023
+@modified    07.11.2023
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1488,7 +1488,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         result = False
         if table:    result = not util.lceq(table[:7], "sqlite_")
-        elif column: result = True
+        elif column is not None: result = True
         return result
 
 
@@ -1550,7 +1550,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         existing = dict(existing or {})
         for c in cols:
             c, t = (c["name"], c.get("type")) if isinstance(c, dict) else (c, None)
-            name, v = re.sub(r"\W", "", c, flags=re.I), data[c]
+            name, v = re.sub(r"\W", "", c, flags=re.I) or "unnamed", data[c]
             name = util.make_unique(name, existing, counter=1, case=True)
             if None not in (t, v) and not isinstance(v, sqlite3.Binary) \
             and "BLOB" == self.get_affinity(t):

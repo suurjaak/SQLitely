@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    28.10.2023
+@modified    28.11.2023
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -144,20 +144,22 @@ def transform(sql, flags=None, renames=None, indent="  "):
 
 
 @util.memoize
-def quote(val, force=False, allow=""):
+def quote(val, force=False, allow="", embed=False):
     """
     Returns value in quotes and proper-escaped for queries,
     if name needs quoting (has non-alphanumerics or starts with number)
-    or if force set. Always returns unicode.
+    or if force set. Always returns a string.
 
     @param   allow  extra characters to allow without quoting
+    @param   embed  quote only if empty string or contains quotes or starts/ends with spaces
     """
     pattern = r"(^[^\w\d%s])|(?=[^\w%s])" % ((re.escape(allow) ,) * 2) \
               if allow else r"(^[\W\d])|(?=\W)"
-    result = uni(val)
-    if force or result.upper() in RESERVED_KEYWORDS \
+    result = uni(val) or ""
+    if "" == val or force or result.upper() in RESERVED_KEYWORDS \
     or re.search(pattern, result, re.U):
-        result = u'"%s"' % result.replace('"', '""')
+        if not embed or '"' in result or re.search("^$|^ | $", result):
+            result = u'"%s"' % result.replace('"', '""')
     return result
 
 
@@ -165,9 +167,9 @@ def quote(val, force=False, allow=""):
 def unquote(val):
     """
     Returns unquoted string, if string within '' or "" or `` or [].
-    Always returns unicode.
+    Convers value to string if not already.
     """
-    result = uni(val)
+    result = uni(val) or ""
     if re.match(r"^([\"].*[\"])|([\'].*[\'])|([\`].*[\`])|([\[].*[\]])$", result, re.DOTALL):
         result, sep = result[1:-1], result[0]
         if sep != "[": result = result.replace(sep * 2, sep)
@@ -1150,7 +1152,7 @@ class Generator(object):
             for (tokentype, _), token in self._tokens.items():
                 if "PAD" != tokentype: continue # for (tokentype, _), token
                 data = self._tokendata[token]
-                widths[data["key"]] = max(len(data["value"]), widths[data["key"]])
+                widths[data["key"]] = max(len(data["value"].splitlines()[-1]), widths[data["key"]])
 
             for (tokentype, val), token in sorted(
                 self._tokens.items(), key=lambda x: REPLACE_ORDER.index(x[0][0])
@@ -1160,7 +1162,9 @@ class Generator(object):
                     result = re.sub(r"\s*%s\s*" % re.escape(token), val, result, count=count)
                 elif "PAD" == tokentype: # Insert spaces per padding type/value
                     data = self._tokendata[token]
-                    ws = " " * (widths[data["key"]] - len(data["value"]))
+                    datalines = data["value"].splitlines()
+                    ws = " " * (widths[data["key"]] - len(datalines[-1] or ""))
+                    if len(datalines) > 1: ws += self._indent
                     result = result.replace(token, ws, count)
                 elif "CM" == tokentype:
                     # Strip leading whitespace and multiple trailing spaces from commas
@@ -1227,7 +1231,7 @@ class Generator(object):
         """
         if not self._indent: return ""
         val = data[key] if key in data else ""
-        val = quote(val, **quotekw or {}) if val and quoted else val
+        val = quote(val, **quotekw or {}) if quoted and val is not None else val
         return self.token("%s-%s" % (key, val), "PAD", key=key, value=val)
 
 

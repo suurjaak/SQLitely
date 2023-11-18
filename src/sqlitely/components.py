@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.10.2023
+@modified    19.11.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -3812,7 +3812,7 @@ class SchemaObjectPage(wx.Panel):
         for i, x in enumerate(headeritems):
             x.Window.Bind(wx.EVT_LEFT_UP, functools.partial(on_header, i))
 
-        self._BindDataHandler(self._OnAddItem,     button_add_column, ["columns"], {"name": ""})
+        self._BindDataHandler(self._OnAddItem,     button_add_column, ["columns"], {"name": None})
         if "index" == self._category:
             self._BindDataHandler(self._OnAddItem, button_add_expr,   ["columns"], {"expr": ""})
         self._BindDataHandler(self._OnMoveItem,    button_move_up,    ["columns"], -1)
@@ -4073,8 +4073,8 @@ class SchemaObjectPage(wx.Panel):
 
         button_open = wx.Button(panel, label="Open", size=(50, -1))
 
-        text_name.MinSize    = (150, -1)
         list_type.MinSize    = (100, -1)
+        text_name.MinSize    = (150, list_type.Size[1])
         text_default.MinSize = (100, list_type.Size[1])
         button_open._toggle = lambda: ("disable" if self._cascader or not self._hasmeta else "enable")
         button_open.Enable("enable" in button_open._toggle())
@@ -5308,8 +5308,9 @@ class SchemaObjectPage(wx.Panel):
         title = "Table column"
         if "constraints" == path[0]:
             title = "%s constraint" % data["type"]
+        format = lambda x: util.unprint(grammar.quote(x, embed=True))
         dlg = controls.FormDialog(self.TopLevelParent, title, props, data,
-                                  self._editmode, autocomp=words, footer=footer)
+                                  self._editmode, autocomp=words, footer=footer, format=format)
         wx_accel.accelerate(dlg)
         if wx.ID_OK != dlg.ShowModal() or not self._editmode: return
         data2 = dlg.GetData()
@@ -5877,8 +5878,9 @@ class SchemaObjectPage(wx.Panel):
             wx.MessageBox("Failed to parse SQL.\n\n%s" % err,
                           conf.Title, wx.OK | wx.ICON_ERROR)
 
+        format = lambda x: util.unprint(grammar.quote(x, embed=True))
         dlg = controls.FormDialog(self.TopLevelParent, "Edit SQL",
-                                  props, data, autocomp=words, onclose=onclose)
+                                  props, data, autocomp=words, onclose=onclose, format=format)
         wx_accel.accelerate(dlg)
         if wx.ID_OK != dlg.ShowModal(): return
         sql = dlg.GetData().get("sql", "").strip().replace("\r\n", "\n").rstrip(";")

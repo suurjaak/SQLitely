@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    28.10.2023
+@modified    20.11.2023
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -992,13 +992,15 @@ class FormDialog(wx.Dialog):
                        supported toolbar buttons "copy", "paste", plus "sep" for separator
        populate:       function(dialog, ctrl) invoked on startup and each change
     }
+    @param   format    function(value) for formatting ComboBox/ListBox items
     """
 
     WIDTH = 640 if "linux" in sys.platform else 440
     HEIGHT_FOOTER = 100 if "linux" in sys.platform else 65
 
 
-    def __init__(self, parent, title, props=None, data=None, edit=None, autocomp=None, onclose=None, footer=None):
+    def __init__(self, parent, title, props=None, data=None, edit=None, autocomp=None,
+                 onclose=None, footer=None, format=None):
         wx.Dialog.__init__(self, parent, title=title,
                           style=wx.CAPTION | wx.CLOSE_BOX | wx.RESIZE_BORDER)
         self._ignore_change = False
@@ -1007,6 +1009,7 @@ class FormDialog(wx.Dialog):
         self._autocomp = autocomp
         self._onclose  = onclose
         self._footer   = dict(footer) if footer and footer.get("populate") else None
+        self._format   = format if callable(format) else lambda x: x
         self._toggles  = {} # {(path): wx.CheckBox, }
         self._props    = []
         self._data     = {}
@@ -1168,12 +1171,6 @@ class FormDialog(wx.Dialog):
         return result
 
 
-    def _Unprint(self, s, escape=True):
-        """Returns string with unprintable characters escaped or stripped."""
-        repl = (lambda m: m.group(0).encode("unicode-escape").decode("latin1")) if escape else ""
-        return re.sub(r"[\x00-\x1f]", repl, s)
-
-
     def _AddField(self, field, path=()):
         """Adds field controls to dialog."""
         callback = field["type"] if callable(field.get("type")) \
@@ -1322,7 +1319,7 @@ class FormDialog(wx.Dialog):
                 choices = [x for x in choices if x not in value]
             listbox1, listbox2 = (x for x in ctrls if isinstance(x, wx.ListBox))
             for listbox, vv in zip((listbox1, listbox2), (choices, value)):
-                listbox.SetItems(list(map(self._Unprint, vv)))
+                listbox.SetItems(list(map(self._format, vv)))
                 for j, x in enumerate(vv): listbox.SetClientData(j, x)
                 listbox.Enable(self._editmode)
             for c in ctrls:
@@ -1369,9 +1366,9 @@ class FormDialog(wx.Dialog):
                 else:
                     if isinstance(value, (list, tuple)): value = "".join(value)
                     if isinstance(c, wx.ComboBox):
-                        c.SetItems(list(map(self._Unprint, choices)))
+                        c.SetItems(list(map(self._format, choices)))
                         for j, x in enumerate(choices): c.SetClientData(j, x)
-                        value = self._Unprint(value) if value else value
+                        value = self._format(value) if value else value
                     c.Value = "" if value is None else value
 
                 if isinstance(c, wx.TextCtrl): c.SetEditable(self._editmode)
@@ -1501,7 +1498,9 @@ class FormDialog(wx.Dialog):
                 style = wx.CB_DROPDOWN | (0 if field.get("choicesedit") else wx.CB_READONLY)
                 ctrl = wx.ComboBox(parent, size=(200, -1), style=style)
             else:
-                ctrl = wx.TextCtrl(parent)
+                v = self._GetValue(field, path)
+                tstyle = wx.TE_MULTILINE if v and "\n" in v else 0
+                ctrl = wx.TextCtrl(parent, style=tstyle)
 
             result.append(ctrl)
             if isinstance(ctrl, wx.Control):
@@ -1524,7 +1523,7 @@ class FormDialog(wx.Dialog):
         elif isinstance(ctrl, wx.Button):   events = [wx.EVT_BUTTON]
         elif isinstance(ctrl, wx.CheckBox): events = [wx.EVT_CHECKBOX]
         elif isinstance(ctrl, wx.ComboBox): events = [wx.EVT_TEXT, wx.EVT_COMBOBOX]
-        elif isinstance(ctrl, wx.ListBox): events = [wx.EVT_LISTBOX_DCLICK]
+        elif isinstance(ctrl, wx.ListBox):  events = [wx.EVT_LISTBOX_DCLICK]
         else: events = [wx.EVT_TEXT]
         for e in events: self.Bind(e, functools.partial(handler, *args), ctrl)
 
@@ -1570,7 +1569,7 @@ class FormDialog(wx.Dialog):
 
         if field.get("exclusive"):
             for i in indexes[::-1]: listbox1.Delete(i)
-        listbox2.AppendItems(list(map(self._Unprint, selecteds)))
+        listbox2.AppendItems(list(map(self._format, selecteds)))
         for j, x in enumerate(selecteds, listbox2.Count - len(selecteds)):
             listbox2.SetClientData(j, x)
         items2 = list(map(listbox2.GetClientData, range(listbox2.Count)))
@@ -1591,7 +1590,7 @@ class FormDialog(wx.Dialog):
         for i in indexes[::-1]: listbox2.Delete(i)
         items2 = list(map(listbox2.GetClientData, range(listbox2.Count)))
         allchoices = self._GetChoices(field, path)
-        listbox1.SetItems([self._Unprint(x) for x in allchoices if x not in items2])
+        listbox1.SetItems([self._format(x) for x in allchoices if x not in items2])
         for j, x in enumerate(x for x in allchoices if x not in items2):
             listbox1.SetClientData(j, x)
         self._SetValue(field, items2, path)
@@ -1612,7 +1611,7 @@ class FormDialog(wx.Dialog):
             i2 = i + direction
             items[i], items[i2] = items[i2], items[i]
 
-        listbox2.SetItems(list(map(self._Unprint, items)))
+        listbox2.SetItems(list(map(self._format, items)))
         for j, x in enumerate(items): listbox2.SetClientData(j, x)
         for i in indexes: listbox2.Select(i + direction)
         self._SetValue(field, items, path)
