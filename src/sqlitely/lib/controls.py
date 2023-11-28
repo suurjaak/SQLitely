@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    20.11.2023
+@modified    28.11.2023
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -1562,7 +1562,7 @@ class FormDialog(wx.Dialog):
                               if isinstance(x, wx.ListBox))
         if isinstance(event.EventObject, wx.ListBox):
             indexes.append(event.GetSelection())
-        else:
+        else: # Helper button
             indexes.extend(listbox1.GetSelections())
             if not indexes and listbox1.GetCount(): indexes.append(0)
         selecteds = list(map(listbox1.GetClientData, indexes))
@@ -1583,16 +1583,17 @@ class FormDialog(wx.Dialog):
                               if isinstance(x, wx.ListBox))
         if isinstance(event.EventObject, wx.ListBox):
             indexes.append(event.GetSelection())
-        else:
+        else: # Helper button
             indexes.extend(listbox2.GetSelections())
             if not indexes and listbox2.GetCount(): indexes.append(0)
 
         for i in indexes[::-1]: listbox2.Delete(i)
         items2 = list(map(listbox2.GetClientData, range(listbox2.Count)))
-        allchoices = self._GetChoices(field, path)
-        listbox1.SetItems([self._format(x) for x in allchoices if x not in items2])
-        for j, x in enumerate(x for x in allchoices if x not in items2):
-            listbox1.SetClientData(j, x)
+        if field.get("exclusive"):
+            allchoices = self._GetChoices(field, path)
+            listbox1.SetItems([self._format(x) for x in allchoices if x not in items2])
+            for j, x in enumerate(x for x in allchoices if x not in items2):
+                listbox1.SetClientData(j, x)
         self._SetValue(field, items2, path)
 
 
