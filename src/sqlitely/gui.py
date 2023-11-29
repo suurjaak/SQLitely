@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    11.11.2023
+@modified    29.11.2023
 ------------------------------------------------------------------------------
 """
 import ast
@@ -18,7 +18,6 @@ import datetime
 import functools
 import inspect
 import logging
-import math
 import os
 import re
 import shutil
@@ -3750,7 +3749,7 @@ class DatabasePage(wx.Panel):
         elif "rename" == cmd:
             category, name, name2 = (list(args) + [None])[:3]
             if name not in self.db.schema.get(category) or {}: return
-            if not name2:
+            if name2 is None:
                 dlg = wx.TextEntryDialog(self, 
                     'Rename %s %s to:' % (category, fmt_entity(name)),
                     conf.Title, value=name, style=wx.OK | wx.CANCEL
@@ -3822,7 +3821,7 @@ class DatabasePage(wx.Panel):
             table, name, name2 = (list(args) + [None])[:3]
             item = self.db.get_category("table", table)
             if not item: return
-            if not name2:
+            if name2 is None:
                 dlg = wx.TextEntryDialog(self, 
                     "Rename column %s.%s to:"
                     % (fmt_entity(table, force=False), fmt_entity(name, force=False)),
@@ -6085,7 +6084,7 @@ class DatabasePage(wx.Panel):
         if reload_grids:
             self.toggle_cursors(category, name)
         if (modified is not None or updated is not None) and event.source:
-            if name:
+            if name is not None:
                 title = "%s %s" % (category.capitalize(), fmt_entity(name, force=False))
                 title = make_unique_page_title(title, self.notebook_schema, skip=idx)
                 if event.source.IsChanged(): title += "*"
@@ -6114,7 +6113,7 @@ class DatabasePage(wx.Panel):
             self.on_pragma_refresh(reload=True)
             self.update_autocomp()
             self.load_tree_data()
-            datapage = self.data_pages.get(category, {}).get(name0 or name)
+            datapage = self.data_pages.get(category, {}).get(name0 if name0 is not None else name)
             if datapage:
                 if name in self.db.schema[category]:
                     if not datapage.IsChanged():
@@ -6222,7 +6221,7 @@ class DatabasePage(wx.Panel):
         if reindex:
             self.handle_command("reindex", category, name)
         if (modified is not None or updated is not None) and event.source:
-            if name:
+            if name is not None:
                 title = "%s %s" % (category.capitalize(), fmt_entity(name, force=False))
                 title = make_unique_page_title(title, self.notebook_data, skip=idx)
                 if event.source.IsChanged(): title += "*"
@@ -6230,7 +6229,7 @@ class DatabasePage(wx.Panel):
                     self.notebook_data.SetPageText(idx, title)
             if not self.flags.get("save_underway"): self.update_page_header()
         if updated and not self.flags.get("save_underway"):
-            self.db.populate_schema(count=True, category=category, name=table or name)
+            self.db.populate_schema(count=True, category=category, name=table if table is not None else name)
             self.load_tree_data()
         if open:
             page = self.data_pages["table"].get(table) or \
@@ -6471,7 +6470,7 @@ class DatabasePage(wx.Panel):
             name2 = name2_prev = name
             entryheader = "already contains a"
             depend = "" if name in names else " (required by %s)" % fmt_dependents(name)
-            while name2:
+            while name2 is not None:
                 category2 = next(c for c, xx in schema2.items() if name2 in xx)
                 entrydialog = wx.TextEntryDialog(self, entrymsg % {
                     "category":  category, "category2": category2,
@@ -6506,7 +6505,7 @@ class DatabasePage(wx.Panel):
 
             if is_samefile and name2 in names1_all: # Needs rename if same file
                 continue # while mynames
-            if name2:
+            if name2 is not None:
                 eschema[category][name] = True
                 if name != name2: renames[category][name] = name2
                 add_requireds(name)
@@ -6567,7 +6566,6 @@ class DatabasePage(wx.Panel):
             elif result["result"]:
                 wx.PostEvent(self, OpenDatabaseEvent(self.Id, file=filename2))
 
-
         if not data:
             # Purely structure export: do not open export panel
             busy = controls.BusyPanel(self, 'Exporting structure to "%s".' % filename2)
@@ -6575,21 +6573,21 @@ class DatabasePage(wx.Panel):
             def progress(result=None, name=None, error=None, **_):
                 """Callback function for worker and ExportProgressPanel."""
                 if error:
-                    if name: subtasks.setdefault(name, {})["error"] = error
+                    if name is not None: subtasks.setdefault(name, {})["error"] = error
                     else: errors.append(error)
-                elif name: subtasks.setdefault(name, {})["result"] = True
+                elif name is not None: subtasks.setdefault(name, {})["result"] = True
                 def after(result, name, error):
                     if not self: return
                     if error:
                         t = error
-                        if name: t = "%s: %s" % (grammar.quote(name, force=True), t)
+                        if name is not None: t = "%s: %s" % (grammar.quote(name, force=True), t)
                         guibase.status("Failed to export %s.", t)
                     if result:
                         busy.Close()
                         result = dict(result, subtasks=subtasks, error=result.get("error", "\n".join(errors)))
                         on_complete(result)
 
-                if result or name or error: wx.CallAfter(after, result, name, error)
+                if result or name is not None or error: wx.CallAfter(after, result, name, error)
                 return True
 
             func = functools.partial(importexport.export_to_db, progress=progress, **args)
@@ -7386,7 +7384,8 @@ class DatabasePage(wx.Panel):
             subcategories = {"table": ["index", "trigger", "view"], "view": ["trigger"]}.get(category, [])
             fullname = "Column expression" if name is None else \
                        'Column "%s.%s"' % (fmt_entity(ownername, force=False), fmt_entity(name, force=False))
-            sqltext = functools.partial(self.db.get_sql, category, parentname, name or data.get("expr") or "")
+            sqltext = functools.partial(self.db.get_sql, category, parentname,
+                                        name if name is not None else data.get("expr") or "")
 
             newmenu = wx.Menu() if subcategories else None
             item_name      = wx.MenuItem(menu, -1, fullname)

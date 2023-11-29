@@ -1,12 +1,12 @@
 CHANGELOG
 =========
 
-2.3, 2023-11-28
+2.3, 2023-11-29
 ---------------
 - add command-line interface, with export, import, parse, search and stats
 - add option to rename SQL window pages
 - add support for CREATE TABLE .. STRICT (Python 3.9+)
-- add support for empty or whitespacey column and constraint names
+- add support for empty or whitespacey table and column and constraint names
 - include read-only pragmas in PRAGMA SQL
 - include original encoding pragma in database recovery
 - show pragma SQL in view mode as well

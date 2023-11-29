@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.11.2023
+@modified    29.11.2023
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -692,11 +692,11 @@ WARNING: misuse can easily result in a corrupt database file.""",
         @param   key       any hashable to identify lock by
         @param   label     an informational label for lock
         """
-        category, name = (x.lower() if x else x for x in (category, name))
-        if name and name not in self.schema.get(category, {}): return            
+        category, name = (x.lower() if x else x is not None for x in (category, name))
+        if name is not None and name not in self.schema.get(category, {}): return            
         self.locks[category][name].add(key)
         self.locklabels[key] = label
-        if "view" == category and name:
+        if "view" == category and name is not None:
             relateds = self.get_related(category, name, data=True, clone=False)
             if not relateds: return
             subkey = (hash(key), category, name)
@@ -710,10 +710,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
     def unlock(self, category, name, key):
         """Unlocks a schema object for altering or deleting."""
-        category, name = (x.lower() if x else x for x in (category, name))
+        category, name = (x.lower() if x is not None else x for x in (category, name))
         self.locks[category][name].discard(key)
         self.locklabels.pop(key, None)
-        if "view" == category and name:
+        if "view" == category and name is not None:
             subkey = (hash(key), category, name)
             relateds = self.get_related(category, name, data=True, clone=False)
             for subcategory, itemmap in relateds.items():
@@ -751,7 +751,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         skipkeys = set(util.tuplefy(kwargs.pop("skip", ())))
         result, keys = "", ()
 
-        if kwargs.get("category") and kwargs.get("name"):
+        if kwargs.get("category") and kwargs.get("name") is not None:
             category, name = kwargs["category"], kwargs["name"]
             keys = self.locks.get(category, {}).get(name)
             if keys and skipkeys: keys = keys - skipkeys
@@ -794,7 +794,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 keys = keys - skipkeys
                 if not keys: continue # for name, keys
                 t, labels = "", list(filter(bool, map(self.locklabels.get, keys)))
-                if category and name:
+                if category and name is not None:
                     name = self.schema.get(category, {}).get(name, {}).get("name", name)
                     t = "%s %s" % (category, util.unprint(grammar.quote(name, force=True)))
                 elif category: t = util.plural(category)
@@ -996,13 +996,13 @@ WARNING: misuse can easily result in a corrupt database file.""",
                             returning false if populate should cancel
         """
         if not self.is_open(): return
-        category, name = (x.lower() if x else x for x in (category, name))
+        category, name = (x.lower() if x is not None else x for x in (category, name))
 
         schema0 = CaselessDict((c, CaselessDict(
             (k, copy.copy(v)) for k, v in d.items()
         )) for c, d in self.schema.items())
         if category:
-            if name: self.schema[category].pop(name, None)
+            if name is not None: self.schema[category].pop(name, None)
             else: self.schema[category].clear()
         else: self.schema.clear()
 
@@ -1011,7 +1011,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         args = {"sql": "", "notname": "sqlite_%"}
         if category:
             where += " AND type = :type"; args.update(type=category)
-            if name: where += " AND LOWER(name) = :name"; args.update(name=name)
+            if name is not None: where += " AND LOWER(name) = :name"; args.update(name=name)
         for row in self.execute(
             "SELECT type, name, tbl_name, sql FROM sqlite_master "
             "WHERE %s ORDER BY type, name COLLATE NOCASE" % where, args, log=False
@@ -1028,7 +1028,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
             self.schema[row["type"]][row["name"]] = row
 
         index, total = 0, sum(len(vv) for vv in self.schema.values())
-        if category and name: progress = None # Skip progress report if one item
+        if category and name is not None: progress = None # Skip progress report if one item
         elif category: total = len(self.schema.get(category) or {})
         if progress and not progress(index=0, total=total): return
 
@@ -1036,7 +1036,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         for mycategory, itemmap in self.schema.items():
             if category and category != mycategory: continue # for mycategory
             for myname, opts in itemmap.items():
-                if category and name and not util.lceq(myname, name): continue # for myname
+                if category and name is not None and not util.lceq(myname, name): continue # for myname
 
                 opts0 = schema0.get(mycategory, {}).get(myname, {})
                 opts["__id__"] = opts0.get("__id__") or next(self.id_counter)
@@ -1089,7 +1089,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         for mycategory, itemmap in self.schema.items():
             if category and category != mycategory: continue # for mycategory
             for myname, opts in itemmap.items():
-                if category and name and not util.lceq(myname, name): continue # for myname
+                if category and name is not None and not util.lceq(myname, name): continue # for myname
 
                 # Parse metainfo from SQL if commanded and not already available
                 meta, sql = None, None
@@ -1216,7 +1216,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
 
         result = CaselessDict()
         for myname, opts in self.schema.get(category, {}).items():
-            if name and myname not in name: continue # for myname
+            if name is not None and myname not in name: continue # for myname
             result[myname] = copy.deepcopy(opts)
         return result
 
@@ -1487,7 +1487,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Tables must not start with "sqlite_", no limitations otherwise.
         """
         result = False
-        if table:    result = not util.lceq(table[:7], "sqlite_")
+        if table is not None:    result = not util.lceq(table[:7], "sqlite_")
         elif column is not None: result = True
         return result
 

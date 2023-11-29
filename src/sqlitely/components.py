@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    19.11.2023
+@modified    29.11.2023
 ------------------------------------------------------------------------------
 """
 import base64
@@ -2147,7 +2147,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         if extname in importexport.EXPORT_EXTS: conf.LastExportType = extname
         try:
             make_iterable = self._grid.Table.GetRowIterator
-            name = ""
+            name = None
             if "sql" == extname:
                 dlg = wx.TextEntryDialog(self,
                     "Enter table name for SQL INSERT statements:",
@@ -6018,9 +6018,7 @@ class SchemaObjectPage(wx.Panel):
         errors, meta, meta2 = [], self._item["meta"], None
         name = meta.get("name") or ""
 
-        if not name:
-            errors += ["Name is required."]
-        if self._category in ("index", "trigger") and not meta.get("table"):
+        if self._category in ("index", "trigger") and meta.get("table") is None:
             if "trigger" == self._category and "INSTEAD OF" == meta.get("upon"):
                 errors += ["View is required."]
             else:
@@ -6081,7 +6079,7 @@ class SchemaObjectPage(wx.Panel):
                 conf.Title, default=wx.NO
             ): return
 
-            lock = self._db.get_lock(*list(filter(bool, [self._category, self._item.get("name")])))
+            lock = self._db.get_lock(*(x for x in [self._category, self._item.get("name")] if x is not None))
             if lock: return wx.MessageBox("%s, cannot test." % lock,
                                          conf.Title, wx.OK | wx.ICON_WARNING)
 
@@ -6119,7 +6117,7 @@ class SchemaObjectPage(wx.Panel):
                           conf.Title, wx.OK | wx.ICON_WARNING)
             return
 
-        lock = self._db.get_lock(*list(filter(bool, [self._category, self._item.get("name")])))
+        lock = self._db.get_lock(*(x for x in [self._category, self._item.get("name")] if x is not None))
         if lock: return wx.MessageBox("%s, cannot %s." %
                                       (lock, "create" if self._newmode else "alter"),
                                       conf.Title, wx.OK | wx.ICON_WARNING)

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.11.2023
+@modified    30.11.2023
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -734,7 +734,7 @@ i = 0
 if get("namespace"): namespace["row_count"] += 1
 values = [grammar.format(row[c["name"]], c) for c in columns]
 %>
-INSERT INTO {{ name }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
+INSERT INTO {{ grammar.quote(name) }} ({{ str_cols }}) VALUES ({{ ", ".join(values) }});
 <%
 if not i % 100 and progress and not progress(name=name, count=i):
     break # for i, row
@@ -768,7 +768,7 @@ setstr = ", ".join("%s = %s" % (grammar.quote(c["name"]).encode("utf-8").decode(
 wherestr = " AND ".join("%s = %s" % (grammar.quote(c["name"]).encode("utf-8").decode("latin1"), grammar.format(original[c["name"]], c))
                        for c in columns if c["name"] in pks and c["name"] in original)
 %>
-UPDATE {{ name }} SET {{ setstr }}{{ (" WHERE " + wherestr) if wherestr else "" }};
+UPDATE {{ grammar.quote(name) }} SET {{ setstr }}{{ (" WHERE " + wherestr) if wherestr else "" }};
 %endfor
 """
 
@@ -803,7 +803,7 @@ Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
 
 SQL: {{ sql }}
 %endif
-%if name and get("create_sql"):
+%if name is not None and get("create_sql"):
 
 {{ create_sql.rstrip(";\\n") }};
 %endif
@@ -892,7 +892,7 @@ progress = get("progress")
 
 SQL: {{ sql }}
 %endif
-%if name and get("create_sql"):
+%if name is not None and get("create_sql"):
 
 {{ create_sql.rstrip(";\\n") }};
 %endif

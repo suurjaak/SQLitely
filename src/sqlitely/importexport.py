@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    12.11.2023
+@modified    29.11.2023
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -100,7 +100,7 @@ logger = logging.getLogger(__name__)
 
 
 def export_data(make_iterable, filename, format, title, db, columns,
-                query="", category="", name="", multiple=False, progress=None):
+                query=None, category=None, name=None, multiple=False, progress=None):
     """
     Exports database data to file.
 
@@ -142,7 +142,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
     tmpfile, tmpname = None, None # Temporary file for exported rows
     try:
         with open(filename, "wb") as f:
-            if category and name: db.lock(category, name, make_iterable, label="export")
+            if category and name is not None: db.lock(category, name, make_iterable, label="export")
             count = 0
             cursor = make_iterable()
 
@@ -154,7 +154,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
                 else:
                     props = {"title": "; ".join(("Source: %s" % db, ) + util.tuplefy(title)),
                              "comments": templates.export_comment()}
-                    writer = xlsx_writer(filename, name or "SQL Query", props=props)
+                    writer = xlsx_writer(filename, name if name is not None else "SQL Query", props=props)
                     writer.set_header(True)
                 if query:
                     a = [[query]] + (["bold", 0, False] if "xlsx" == format else [])
@@ -235,7 +235,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
         if tmpname:    util.try_ignore(os.unlink, tmpname)
         if not result: util.try_ignore(os.unlink, filename)
         if cursor:     util.try_ignore(lambda: cursor.close())
-        if category and name: db.unlock(category, name, make_iterable)
+        if category and name is not None: db.unlock(category, name, make_iterable)
 
     return result
 
@@ -1607,7 +1607,7 @@ class xlsx_writer(object):
         if self._sheet and hasattr(self._sheet, "_opt_close"):
             self._sheet._opt_close() # Close file handle to not hit ulimit
         safename = None
-        if name:
+        if name is not None:
             # Max length 31, no []:\\?/*\x00\x03, cannot start/end with '.
             stripped = name.strip("'")
             safename = re.sub(r"[\[\]\:\\\?\/\*\x00\x03]", " ", stripped)
@@ -1622,7 +1622,7 @@ class xlsx_writer(object):
                 counter += 1
         sheet = self._workbook.add_worksheet(safename)
         self._sheets[sheet.name.lower()] = self._sheet = sheet
-        self._sheetnames[sheet] = name or sheet.name
+        self._sheetnames[sheet] = name if name is not None else sheet.name
         self._col_widths[sheet.name] = collections.defaultdict(lambda: 0)
         for c in self._autowrap:
             sheet.set_column(c, c, self.COL_MAXWIDTH, self._formats[None])
