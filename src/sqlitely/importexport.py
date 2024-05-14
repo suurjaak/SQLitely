@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.11.2023
+@modified    14.05.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -565,7 +565,7 @@ def export_dump(filename, db, schema=None, data=True, pragma=True, related=False
     return result
 
 
-def export_to_db(db, filename, schema, renames=None, data=False, selects=None, related=False,
+def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
                  limit=None, maxcount=None, empty=True, reverse=False, progress=None):
     """
     Exports selected tables and views to another database, structure only or
@@ -577,7 +577,6 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, r
     @param   renames   {category: {name1: name2}}
     @param   data      whether to export table data
     @param   selects   {table name: SELECT SQL if not using default}
-    @param   related   auto-include indexes and triggers of exported tables and views
     @param   limit     query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
     @param   maxcount  maximum total number of rows to export over all entities
     @param   empty     do not skip tables with no output rows
@@ -587,25 +586,13 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, r
     @return            True on success, False on failure, None on cancel
     """
     result = True
-    CATEGORIES = db.DATA_CATEGORIES
     sqls0, sqls1, actionsqls = [], [], []
-    requireds, processeds, exporteds = {}, set(), set()
     limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else (limit, )
     totalcount = 0
 
     is_samefile = util.lceq(db.filename, filename)
     file_existed = is_samefile or os.path.isfile(filename)
     insert_sql = "INSERT INTO %s.%s SELECT * FROM main.%s"
-
-    for category, name in ((c, n) for c, nn in schema.items() for n in nn) if related else ():
-        items = [db.schema[category][name]]
-        items.extend(db.get_related(category, name, own=True).get("trigger", {}).values())
-        for item in items:
-            # Foreign tables and tables/views used in triggers for table,
-            # tables/views used in view body and view triggers for view.
-            for name2 in util.getval(item, "meta", "__tables__", default=[]):
-                if util.lceq(name, name2): continue # for name2
-                requireds.setdefault(name, []).append(name2)
 
     finalargs, fks_on = {"done": True}, None
     db.lock(None, None, filename, label="database export")
@@ -628,32 +615,11 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, r
             sql = "PRAGMA foreign_keys = off"
             db.execute(sql), sqls0.append(sql)
 
-
-        for category, name in ((c, x) for c in CATEGORIES for x in schema.get(c, ())):
+        for category, name in ((c, n) for c, xx in schema.items() for n in xx):
             name2 = myrenames.get(category, {}).get(name, name)
-            processeds.add(name)
-
-            if requireds.get(name) \
-            and any(x in processeds and x not in exporteds for x in requireds[name]):
-                # Skip item if it requires something that failed to export
-                reqs = {}
-                for name0 in requireds[name]:
-                    if name0 in processeds and name0 not in exporteds:
-                        category0 = "table" if name0 in db.schema.get("table", {}) else "view"
-                        reqs.setdefault(category0, set()).add(name0)
-                err = "Requires %s" % " and ".join(
-                    "%s %s" % (util.plural(c, vv, numbers=False),
-                               ", ".join(grammar.quote(v, force=True)
-                                         for v in sorted(vv, key=lambda x: x.lower())))
-                    for c, vv in sorted(reqs.items())
-                )
-                if progress and not progress(name=name, error=err):
-                    result = None
-                    break # for category, name
-                continue # for category, name
 
             try:
-                # Create table or view structure
+                # Create structure
                 label = "%s %s" % (category, grammar.quote(name, force=True))
                 if name != name2: label += " as %s" % grammar.quote(name2, force=True)
 
@@ -672,7 +638,6 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, r
                         break # for category, name
                     continue # for category, name
                 db.execute(sql), actionsqls.append(sql)
-                if not data or "table" != category: exporteds.add(name)
                 allnames2[name2] = category
 
                 # Copy table data
@@ -692,7 +657,6 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, r
                     count = db.execute(sql).rowcount
                     db.connection.commit()
                     actionsqls.append(sql)
-                    exporteds.add(name)
                     totalcount += count
 
                     if not empty and not count:
@@ -700,32 +664,10 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None, r
                         sql = "DROP TABLE %s.%s" % (schema2, grammar.quote(name2))
                         db.execute(sql), actionsqls.append(sql)
                         db.connection.commit()
-                        exporteds.discard(name)
                         continue # for category, name
                     if progress and not progress(name=name, count=count):
                         result = None
                         break # for category, name
-
-                # Create indexes and triggers for tables, triggers for views
-                relateds = db.get_related(category, name, own=True) if related else {}
-                for subcategory, subitemmap in relateds.items():
-                    for subname, subitem in subitemmap.items():
-                        subname2 = subname
-                        if name != name2:
-                            subname2 = re.sub(re.escape(name), re.sub(r"\W", "", name2),
-                                              subname2, count=1, flags=re.I | re.U)
-                        subname2 = util.make_unique(subname2, allnames2)
-                        allnames2[subname2] = subcategory
-
-                        sublabel = "%s %s" % (subcategory, grammar.quote(subname, force=True))
-                        if subname != subname2: sublabel += " as %s" % grammar.quote(subname2, force=True)
-                        logger.info("Creating %s for %s in %s.", sublabel, label, filename)
-                        subrenames = dict(myrenames, **{subcategory: {subname: subname2}}
-                                                     if subname != subname2 else {})
-                        sql, err = grammar.transform(subitem["sql"], renames=subrenames)
-                        if sql:
-                            db.execute(sql)
-                            actionsqls.append(sql)
 
             except Exception as e:
                 logger.exception("Error exporting %s %s from %s to %s.",

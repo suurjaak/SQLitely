@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.05.2024
+@modified    14.05.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -914,7 +914,7 @@ def run_export(dbname, args):
     if "db" == args.format:
         func, posargs = importexport.export_to_db, [db, args.OUTFILE, schema]
         kwargs.update(data=not args.schema_only, limit=limit, maxcount=args.maxcount,
-                      related=args.related, renames=renames, reverse=args.reverse)
+                      renames=renames, reverse=args.reverse)
 
     elif args.OUTFILE and args.combine and "sql" == args.format:
         func, posargs = importexport.export_dump, (args.OUTFILE, db, schema)

@@ -6528,7 +6528,7 @@ class DatabasePage(wx.Panel):
         schema = {c: list(xx) for c, xx in eschema.items()}
 
         args = {"db": self.db, "filename": filename2, "schema": schema,
-                "related": True, "renames": renames, "data": data, "selects": selects}
+                "renames": renames, "data": data, "selects": selects}
 
 
         def on_complete(result):
