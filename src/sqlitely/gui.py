@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.11.2023
+@modified    13.05.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4026,7 +4026,7 @@ class DatabasePage(wx.Panel):
                 for name in names:
                     category = next(c for c, xx in self.db.schema.items() if name in xx)
                     items[category][name] = self.db.get_category(category, name)
-                    for category2, items2 in self.db.get_full_related(category, name)[0].items():
+                    for category2, items2 in self.db.get_full_related(category, name).items():
                         for name2, item2 in items2.items():
                             items[category2][name2] = item2
                 clipboard_copy("\n\n".join(grammar.terminate(x["sql"], x.get("meta")) for c in self.db.CATEGORIES
@@ -6426,7 +6426,7 @@ class DatabasePage(wx.Panel):
                 guibase.status("Warning: no item named %s in database to export.",
                                grammar.quote(name, force=True), log=True)
                 return
-            for category2, items2 in self.db.get_full_related(category, name)[0].items():
+            for category2, items2 in self.db.get_full_related(category, name).items():
                 for name2, item2 in items2.items():
                     if util.lceq(name, name2): continue # for name2
                     if name.lower() in util.getval(item2, "meta", "__tables__", default=[]):

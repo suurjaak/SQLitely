@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    05.11.2023
+@modified    13.05.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -847,12 +847,12 @@ def run_export(dbname, args):
     if args.filter and args.format in ("db", "sql"):
         # Second pass: select dependent tables and views for views, recursively
         for item in [x for x in entities.values() if "view" == x["type"]]:
-            for category, items in db.get_full_related(item["type"], item["name"])[0].items():
+            for category, items in db.get_full_related(item["type"], item["name"]).items():
                 if category in db.DATA_CATEGORIES: entities.update(items)
     if args.filter and args.related:
         # Third pass: select foreign tables for tables, recursively
         for item in [x for x in entities.values() if "table" == x["type"]]:
-            for category, items in db.get_full_related(item["type"], item["name"])[0].items():
+            for category, items in db.get_full_related(item["type"], item["name"]).items():
                 if "table" == category: entities.update(items)
     if args.related and args.format in ("db", "sql"):
         # Fourth pass: select owned indexes and triggers
@@ -862,7 +862,7 @@ def run_export(dbname, args):
     if args.filter and args.related and args.format in ("db", "sql"):
         # Fifth pass: select referred tables/views for triggers, recursively
         for item in [x for x in entities.values() if "trigger" == x["type"]]:
-            for category, items in db.get_full_related(item["type"], item["name"])[0].items():
+            for category, items in db.get_full_related(item["type"], item["name"]).items():
                 if category in db.DATA_CATEGORIES: entities.update(items)
     entities = util.CaselessDict([(n, copy.deepcopy(d)) for c in db.CATEGORIES
                                   for n, d in entities.items() if c == d["type"]], insertorder=True)

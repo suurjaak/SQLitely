@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.11.2023
+@modified    13.05.2024
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1293,55 +1293,63 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
-    def get_full_related(self, category, name):
+    def get_full_related(self, category, name, foreign=True):
         """
         Returns the full dependency tree of a database object: its own objects
         like indexes and triggers, plus everything it and its own objects refer to, recursively.
 
-        @return   {category: CaselessDict({name: item, })}, {originating name: [related name]}
+        @param   foreign  whether to include foreign relations
+        @return  {category: CaselessDict({name: item, })}
         """
         category, name = category.lower(), name.lower()
-        result, deps = defaultdict(CaselessDict), defaultdict(list)
+        result = defaultdict(CaselessDict)
         item = self.schema[category][name]
+        skip_foreign = not foreign and "table" == category
 
         # Take all tables and views the item refers to
-        for name2 in util.getval(item, "meta", "__tables__", default=[]):
+        for name2 in util.getval(item, "meta", "__tables__", default=[]) if not skip_foreign else ():
             category2 = next((c for c in self.schema if name2 in self.schema[c]), None)
             if category2:
                 result[category2][name2] = self.schema[category2][name2]
-                if name2 not in deps[name]: deps[name].append(name2)
         # Take all owned or required related entities
         own = None if "trigger" == category else True
         for relcategory, rels in self.get_related(category, name, own=own).items():
             for relname, relitem in rels.items():
                 result[relcategory][relname] = relitem
-                if relname not in deps[name]: deps[name].append(relname)
 
         processed = set()
         while True:
-            processed0 = processed.copy()
+            processed0, processed2 = processed.copy(), set()
             # Take all owned or required related entities
             for category2, name2 in [(c, n) for c in result for n in result[c]]:
                 if name2 in processed: continue # for category2
-                processed.add(name2)
+                processed2.add(name2)
 
                 own = None if "trigger" == category2 else True
                 for relcategory, rels in self.get_related(category2, name2, own=own).items():
                     for relname, relitem in rels.items():
                         result[relcategory][relname] = relitem
-                        if relname not in deps[name2]: deps[name2].append(relname)
+            # Take foreign tables
+            for name2 in [n for n in result.get("table", {})] if not skip_foreign else ():
+                if name2 in processed: continue # for name2
+                processed2.add(name2)
+
+                item2 = self.schema["table"][name2]
+                for relname in util.getval(item2, "meta", "__tables__", default=[]):
+                    if relname in self.schema["table"]:
+                        result["table"][relname] = self.schema["table"][relname]
             # Take tables and views that views query, recursively
             for name2 in [n for n in result.get("view", {})]:
                 if name2 in processed: continue # for name2
-                processed.add(name2)
+                processed2.add(name2)
 
                 for relcategory, rels in self.get_related("view", name2, data=True).items():
                     for relname, relitem in rels.items():
                         result[relcategory][relname] = relitem
-                        if relname not in deps[name2]: deps[name2].append(relname)
+            processed.update(processed2)
             if processed0 == processed: break # while True
 
-        return result, deps
+        return result
 
 
     def get_keys(self, table, pks_only=False):
