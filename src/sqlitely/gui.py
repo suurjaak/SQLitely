@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.05.2024
+@modified    14.05.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -6382,21 +6382,17 @@ class DatabasePage(wx.Panel):
         is_samefile = util.lceq(self.db.filename, filename2)
         file_exists = is_samefile or os.path.isfile(filename2)
 
-        renames = defaultdict(util.CaselessDict) # {category: {name1: name2}}
-        eschema = defaultdict(util.CaselessDict) # {category: {name: True}}
-        schema2 = {}
-        mynames, requireds = names[:], defaultdict(dict) # {name: {name2: category}}
-        names1_all = util.CaselessDict({x: True for xx in self.db.schema.values() for x in xx})
-        names2_all = util.CaselessDict()
-        if not file_exists:
-            for name in names:
-                category = "table" if name in self.db.schema.get("table", ()) else "view"
-                eschema[category][name] = True
-        else:
+        if is_samefile and wx.YES != controls.YesNoMessageBox(
+            "Target database is the same file as source database.\n\n"
+            "Are you sure you want to continue?", conf.Title, wx.ICON_WARNING, default=wx.NO
+        ): return
+
+        schema2 = defaultdict(util.CaselessDict) # {category: {name: True}}
+        if file_exists:
             if is_samefile:
-                schema2 = {c: {k: True} for c, kk in self.db.schema.items() for k in kk}
+                schema2 = {c: {k: True for k in kk} for c, kk in self.db.schema.items()}
             else:
-                # Check for name conflicts with existing items and ask user choice
+                # Populate target schema and names, for resolving name conflicts
                 schemaname2 = None
                 try:
                     schemas = [x["name"] for x in
@@ -6409,7 +6405,6 @@ class DatabasePage(wx.Panel):
                         "SELECT type, name FROM %s.sqlite_master WHERE sql != '' "
                         "AND name NOT LIKE 'sqlite_%%'" % schemaname2
                     ).fetchall(): schema2[x["type"]][x["name"]] = True
-                    names2_all.update({x: True for xx in schema2.values() for x in xx})
                 except Exception as e:
                     msg = "Failed to read database %s." % filename2
                     logger.exception(msg); guibase.status(msg)
@@ -6419,116 +6414,126 @@ class DatabasePage(wx.Panel):
                     try: self.db.execute("DETACH DATABASE %s" % schemaname2)
                     except Exception: pass
 
-        def add_requireds(name):
-            """Adds entities that the specified item owns or depends on, recursively."""
-            category = next((c for c in self.db.schema if name in self.db.schema[c]), None)
-            if not category:
-                guibase.status("Warning: no item named %s in database to export.",
-                               grammar.quote(name, force=True), log=True)
-                return
-            for category2, items2 in self.db.get_full_related(category, name).items():
-                for name2, item2 in items2.items():
-                    if util.lceq(name, name2): continue # for name2
-                    if name.lower() in util.getval(item2, "meta", "__tables__", default=[]):
-                        requireds[name][name2] = category2
-                    if name2 not in mynames and name2 not in eschema.get(category2, {}) \
-                    and self.db.is_valid_name(name2): # Skip sqlite_* specials
-                        mynames.append(name2)
-
-        def fmt_schema_items(dct):
-            """Returns schema information string as "tables A, B and views C, D"."""
-            return " and ".join(
-                "%s %s" % (util.plural(c, vv, numbers=False),
-                           ", ".join(map(fmt_entity, sorted(vv, key=lambda x: x.lower()))))
-                for c, vv in sorted(dct.items())
-            )
+        names1_all = util.CaselessDict({x: c for c, xx in self.db.schema.items() for x in xx})
+        names2_all = util.CaselessDict({x: c for c, xx in schema2.items() for x in xx})
+        names = sorted(names, key=lambda x: (names1_all[x], x.lower()))
 
 
-        def fmt_dependents(name):
-            """Returns information string with items that require name."""
-            rels = {} # {category: [name, ]}
-            for name0, kv in requireds.items():
-                if name in kv: rels.setdefault(kv[name], []).append(name0)
-            return fmt_schema_items(rels)
+        # Assemble minimum and total relations (minimum: owned items plus tables that views query)
+        min_items, max_items = defaultdict(util.CaselessDict), defaultdict(util.CaselessDict)
+        for name in names:
+            category = names1_all[name]
+            min_items[category][name] = max_items[category][name] = True
+            for foreign, items in enumerate([min_items, max_items]):
+                rels2 = self.db.get_full_related(category, name, foreign=foreign)
+                for category2, name2 in ((c, n) for c, vv in rels2.items() for n in vv):
+                    items[category2][name2] = True
+
+        export_items = defaultdict(util.CaselessDict) # {category: {name: True}}
+        renames = defaultdict(util.CaselessDict) # {category: {name1: name2}}
+        parents = {n: self.db.schema[c][n]["tbl_name"] for c in ("index", "trigger")
+                   for n in max_items.get(c, {}) }
+        display_order = []
+
+        # Allow user to include or exclude individual items, with minimum set pre-selected
+        choices, selections, seen = [], [], util.CaselessDict()
+        listings = [((names1_all[n], n) for n in names),
+                    ((c, n) for c, nn in min_items.items() for n in nn),
+                    ((c, n) for c, nn in max_items.items() for n in nn), ]
+        for i, listing in enumerate(listings):
+            for category, name in ((c, n) for c, n in listing if c in ("table", "view")):
+                if name in seen: continue # for category, name
+                if i < 2: selections.append(len(display_order)) # Select minimum set by default
+                display_order.append((category, name)), seen.update({name: True})
+                choices.append(" %s %s" % (category, fmt_entity(name)))
+                for name2 in (n for c in ("index", "trigger") for n in max_items.get(c, {})
+                              if util.lceq(name, parents[n])):
+                    if name2 in seen: continue # for category2, name2
+                    category2 = names1_all[name2]
+                    if i < 2: selections.append(len(display_order)) # Select minimum set by default
+                    display_order.append((category2, name2)), seen.update({name2: True})
+                    choices.append("     %s %s" % (category2, fmt_entity(name2)))
+        msg = "Select %sitems to export:" % \
+              ("primary and related " if len(display_order) != len(names) else "")
+        dlg = wx.MultiChoiceDialog(self, msg, conf.Title, choices)
+        dlg.Selections = selections
+        if wx.ID_CANCEL == dlg.ShowModal() or not dlg.Selections: return
+        for category, name in (display_order[i] for i in dlg.Selections):
+            export_items[category][name] = True
 
 
-        entrymsg = ("Name conflict on exporting %(category)s %(name)s as %(name2)s%(depend)s.\n"
-                    "Database %(filename2)s %(entryheader)s "
-                    "%(category2)s named %(name2)s.\n\nYou can:\n"
-                    "- keep same name to overwrite %(category2)s %(name2)s,\n"
-                    "- enter another name to export %(category)s %(name2)s as,\n"
-                    "- or set blank to skip %(category)s %(name)s.")
-        while mynames:
-            name = mynames.pop(0)
-            category = next(c for c in self.db.schema if name in self.db.schema[c])
-            if name not in names2_all:
-                add_requireds(name)
-                names2_all[name] = True
-                eschema[category][name] = True
-                continue # while mynames
+        # Resolve name conflicts when exporting to existing database
+        entrymsg = "Name conflict on exporting %(category)s %(name)s.\n\n" \
+                   "Target database %(entryheader)s %(category2)s named %(name2)s.\n" \
+                   "Enter new name for %(name)s in target database.\n\n" \
+                   "NB! Leaving name %(samefooter)sblank will skip exporting this %(category)s."
+        samefooter = "" if is_samefile else \
+                   "unchanged will overwrite the existing %(category2)s,\nand setting it "
+        for category, name in ((c, n) for c, n in display_order if n in export_items.get(c, {})) \
+                              if file_exists else ():
+            if not any(name in xx for xx in schema2.values()):
+                schema2[category][name] = True
+                continue # for category, name
 
-            name2 = name2_prev = name
+            name2 = name2_prev = value = name
             entryheader = "already contains a"
-            depend = "" if name in names else " (required by %s)" % fmt_dependents(name)
             while name2 is not None:
                 category2 = next(c for c, xx in schema2.items() if name2 in xx)
-                entrydialog = wx.TextEntryDialog(self, entrymsg % {
-                    "category":  category, "category2": category2,
-                    "depend": depend,
-                    "name":      fmt_entity(name),
-                    "name2":     fmt_entity(name2),
-                    "filename2": filename2, "entryheader": entryheader
-                }, conf.Title, name2)
-                if wx.ID_OK != entrydialog.ShowModal(): return
+                msg = entrymsg % {"category": category, "category2": category2,
+                                  "name": fmt_entity(name), "name2": fmt_entity(name2),
+                                  "entryheader": entryheader, "samefooter": samefooter}
+                dlg = wx.TextEntryDialog(self, msg, conf.Title, value=value)
+                if wx.ID_OK != dlg.ShowModal(): return
+                value = dlg.GetValue().strip()
 
-                value = entrydialog.GetValue().strip()
-                if value and not self.db.is_valid_name(table=value):
-                    msg = "%s is not a valid %s name." % (grammar.quote(value, force=True), category)
+                if not value:
+                    export_items[category].pop(name)
+                    name2 = None
+                    break # while name2
+                elif not self.db.is_valid_name(table=value):
+                    msg = "%s is not a valid %s name." % (fmt_entity(value), category)
                     wx.MessageBox(msg, conf.Title, wx.OK | wx.ICON_WARNING)
                     continue # while name2
 
-                name2 = name2_prev = value
-                if not name2 \
-                or util.lceq(name, name2) and util.lceq(name, name2_prev): break # while name2
-
-                if not util.lceq(name2, name2_prev) and name2 in names2_all:
-                    # User entered another table existing in db2
+                name2 = value
+                if util.lceq(name, name2): # User chose to overwrite existing item
+                    if is_samefile: # Cannot overwrite if same file: continue asking user
+                        continue # while name2
+                    break # while name2
+                elif name2 in names2_all:
+                    # User entered another item existing in db2
                     entryheader = "already contains a"
                     continue # while name2
-                if not util.lceq(name2, name2_prev) \
-                and (any(name2 in xx for xx in eschema.values())
-                or any(util.lceq(name2, x) for xx in renames.values() for x in xx.values())):
-                    # User entered a duplicate rename
+                elif any(util.lceq(name2, x) for c, xx in export_items.items() for x in xx.values()
+                         if x not in renames.get(c, {})) \
+                or   any(util.lceq(name2, x) for xx in renames.values() for x in xx.values()):
+                    # User entered a duplicate export name or rename
                     entryheader = "will contain another"
                     continue # while name2
-                break # while name2
+                else: # User entered new name for item
+                    break # while name2
 
-            if is_samefile and name2 in names1_all: # Needs rename if same file
-                continue # while mynames
             if name2 is not None:
-                eschema[category][name] = True
+                schema2[category][name2] = True
                 if name != name2: renames[category][name] = name2
-                add_requireds(name)
 
-        deps, reqs = {}, {} # {category: set(name, )}
-        for c, name in ((c, n) for c, nn in eschema.items() for n in nn):
-            for name0, kv in requireds.items():
-                if name in kv and not util.getval(eschema, kv[name], name):
-                    deps.setdefault(c, set()).add(name0)
-                    reqs.setdefault(kv[name], set()).add(name)
-        if deps:
-            return wx.MessageBox("Export cancelled: %s %s required for %s.", 
-                fmt_schema_items(reqs),
-                "are" if len(reqs) > 1 or any(len(x) > 1 for x in reqs.values()) else "is",
-                fmt_schema_items(deps),
-                conf.Title, wx.OK | wx.ICON_WARNING
-            )
+        schema = {c: list(xx) for c, xx in export_items.items() if xx}
+        if not schema: return
 
-        if not eschema: return
-        schema = {c: list(xx) for c, xx in eschema.items()}
-
-        args = {"db": self.db, "filename": filename2, "schema": schema,
-                "renames": renames, "data": data, "selects": selects}
+        msg = "Exporting %s items to %s:\n\n" % (sum(map(len, schema.values())), filename2)
+        for i, (category, name) in enumerate(display_order):
+            if name not in schema.get(category, []):
+                if category in ("table", "view") and any(util.lceq(name, parents.get(n))
+                    for c in ("index", "trigger") for n in schema.get(c, [])
+                ):
+                    msg += "\n%s %s  (SKIPPED IN EXPORT)\n" % (category, fmt_entity(name))
+                continue # for i
+            msg += "%s%s %s%s\n" % ("\n" if category in ("table", "view") else "    ",
+                                    category, fmt_entity(name),
+                                    "  AS %s" % fmt_entity(renames[category][name])
+                                    if name in renames.get(category, {}) else "")
+        if wx.OK != wx.MessageBox(msg, conf.Title, wx.OK | wx.CANCEL | wx.ICON_INFORMATION):
+            return
 
 
         def on_complete(result):
@@ -6558,13 +6563,17 @@ class DatabasePage(wx.Panel):
                                                            for x in next(iter(successes.values())))))
                 guibase.status('Exported %s to "%s".', status, filename2, log=True)
             else:
-                guibase.status("Failed to export to %s.", filename2)
+                guibase.status("Failed to export to %s.", filename2, log=True)
 
             if is_samefile:
                 self.reload_schema(count=True)
                 self.update_page_header(updated=True)
             elif result["result"]:
                 wx.PostEvent(self, OpenDatabaseEvent(self.Id, file=filename2))
+
+
+        args = {"db": self.db, "filename": filename2, "schema": schema,
+                "renames": renames, "data": data, "selects": selects}
 
         if not data:
             # Purely structure export: do not open export panel
@@ -6581,7 +6590,7 @@ class DatabasePage(wx.Panel):
                     if error:
                         t = error
                         if name is not None: t = "%s: %s" % (grammar.quote(name, force=True), t)
-                        guibase.status("Failed to export %s.", t)
+                        guibase.status("Failed to export %s.", t, log=True)
                     if result:
                         busy.Close()
                         result = dict(result, subtasks=subtasks, error=result.get("error", "\n".join(errors)))
