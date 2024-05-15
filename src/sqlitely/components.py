@@ -10897,8 +10897,8 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             menu.AppendSeparator()
 
             item_reidx  = item_trunc = item_rename = None
-            item_schema = menu.Append(wx.ID_ANY, "Open %s &schema\t(Enter)" % catlabel)
-            item_data   = menu.Append(wx.ID_ANY, "Open %s &data"   % catlabel)
+            item_data   = menu.Append(wx.ID_ANY, "Open %s &data\t(Enter)" % catlabel)
+            item_schema = menu.Append(wx.ID_ANY, "Open %s &schema" % catlabel)
 
             copymenu = wx.Menu()
             menu.AppendSubMenu(copymenu, text="&Copy ..")
@@ -10939,8 +10939,8 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                 item_trunc.Enable(can_trunc)
             item_drop = menu.Append(wx.ID_ANY, "Drop %s" % catlabel)
 
-            menu.Bind(wx.EVT_MENU, cmd("schema", None, *names), item_schema)
             menu.Bind(wx.EVT_MENU, cmd("data",   None, *names), item_data)
+            menu.Bind(wx.EVT_MENU, cmd("schema", None, *names), item_schema)
             menu.Bind(wx.EVT_MENU, cmd("drop",   None, *names), item_drop)
 
             for item in copymenu.MenuItems: menu.Bind(wx.EVT_MENU, on_copy, item)
@@ -11272,7 +11272,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             self._movecnvs = False if event.RightDown() else None
             if event.LeftDClick():
                 if item and self._page:
-                    self._page.handle_command("schema", item["type"], item["name"])
+                    self._page.handle_command("data", item["type"], item["name"])
 
         elif self._movepos and (event.Dragging() or event.RightUp()):
             # Continue or stop canvas drag
@@ -11430,7 +11430,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         elif event.KeyCode in (wx.WXK_F2, wx.WXK_NUMPAD_F2) and items and self._page:
             self._page.handle_command("rename", items[0]["type"], items[0]["name"])
         elif event.KeyCode in controls.KEYS.ENTER and items and self._page:
-            for o in items: self._page.handle_command("schema", o["type"], o["name"])
+            for o in items: self._page.handle_command("data", o["type"], o["name"])
         elif event.KeyCode in controls.KEYS.ARROW + controls.KEYS.NUMPAD_ARROW and event.CmdDown():
             x, y = self.GetViewStart()
             if event.KeyCode in controls.KEYS.UP:    y = 0

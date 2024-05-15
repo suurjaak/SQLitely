@@ -12,6 +12,7 @@ CHANGELOG
 - include original encoding pragma in database recovery
 - show pragma SQL in view mode as well
 - skip initial blank rows in spreadsheet imports
+- change default item action on diagram from opening schema to opening data
 - update SQLite keywords from 126 to the latest 147-element list
 - use a custom lockfile implementation for single instance check in Linux
 - fix auto_vacuum and encoding pragmas not being editable in new databases
