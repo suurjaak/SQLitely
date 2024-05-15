@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.3, 2024-05-14
+2.3, 2024-05-15
 ---------------
 - add command-line interface, with export, import, parse, search and stats
 - add option to rename SQL window pages
@@ -17,6 +17,7 @@ CHANGELOG
 - fix auto_vacuum and encoding pragmas not being editable in new databases
 - fix updating main page upon removing databases when home-row is also selected
 - fix foreign key constraint editor not allowing to add a column in duplicate
+- fix intermittent mouse event error on diagram
 - disable automatic update checks and downloads in snaps
 - include third-party license texts in snaps and stand-alone exes
 

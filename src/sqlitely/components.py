@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.11.2023
+@modified    15.05.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -11296,10 +11296,10 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             if event.Dragging() and not self.HasCapture(): self.CaptureMouse()
             if event.RightUp() and self.HasCapture(): self.ReleaseMouse()
 
-        elif event.Dragging() or event.LeftUp():
+        elif self._dragpos and (event.Dragging() or event.LeftUp()):
             # Continue or stop item or selection rectangle drag
             event.Skip()
-            if event.Dragging() and "win" in sys.platform and self._dragpos:
+            if event.Dragging() and "win" in sys.platform:
                 # Windows produces intermediary events with a large jump when out of bounds
                 dragpos = wx.Point(self._dragpos) - viewport.TopLeft
                 if not all(map(wx.Rect(self.Size).Contains, (event.Position, dragpos))) \
