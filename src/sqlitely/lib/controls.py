@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    28.11.2023
+@modified    16.05.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -1235,7 +1235,7 @@ class FormDialog(wx.Dialog):
                 colspan = 1 if isinstance(c, wx.StaticText) or i < len(ctrls) - 2 else \
                           MAXCOL - col - bool(col)
                 brd, BRD = (5, wx.BOTTOM) if isinstance(c, wx.CheckBox) else (0, 0)
-                GRW = 0 if isinstance(c, (wx.CheckBox, wx.TextCtrl)) else wx.GROW
+                GRW = 0 if isinstance(c, (wx.CheckBox, wx.ComboBox)) else wx.GROW
                 sizer.Add(c, border=brd, pos=(self._rows, col), span=(1, colspan), flag=BRD | GRW)
                 col += colspan
 
