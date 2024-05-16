@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    15.05.2024
+@modified    16.05.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -4844,6 +4844,7 @@ class SchemaObjectPage(wx.Panel):
                 wx.MessageBox("Error parsing %s SQL:\n\n%s" % (category.lower(), err),
                               conf.Title, wx.OK | wx.ICON_WARNING)
 
+        format = lambda x: util.unprint(grammar.quote(x, embed=True))
 
         footer = next({
             "label": "%s SQL:" % c.lower().capitalize(),
@@ -4885,8 +4886,8 @@ class SchemaObjectPage(wx.Panel):
             {"name": "fk", "label": "FOREIGN KEY", "toggle": True,
              "togglename": {"toggle": True, "name": "name", "label": "Constraint name"},
              "children": [
-                {"name": "table",  "label": "Foreign table", "choices": self._tables, "link": "key"},
-                {"name": "key",    "label": "Foreign column", "choices": get_foreign_cols},
+                {"name": "table",  "label": "Foreign table", "choices": self._tables, "format": format, "link": "key"},
+                {"name": "key",    "label": "Foreign column", "choices": get_foreign_cols, "format": format},
                 {"name": "DELETE", "label": "ON DELETE", "toggle": True, "choices": self.ON_ACTION, "path": ["fk", "action"]},
                 {"name": "UPDATE", "label": "ON UPDATE", "toggle": True, "choices": self.ON_ACTION, "path": ["fk", "action"]},
                 {"name": "match",   "label": "MATCH", "toggle": True, "choices": self.MATCH,
@@ -4916,9 +4917,9 @@ class SchemaObjectPage(wx.Panel):
 
         if grammar.SQL.FOREIGN_KEY == data["type"]: return [
             {"name": "name", "label": "Constraint name", "type": "text", "toggle": True},
-            {"name": "columns", "label": "Local column", "type": list, "choices": get_table_cols},
-            {"name": "table",   "label": "Foreign table", "choices": self._tables, "link": "key"},
-            {"name": "key",     "label": "Foreign column", "type": list, "choices": get_foreign_cols},
+            {"name": "columns", "label": "Local column", "type": list, "choices": get_table_cols, "format": format},
+            {"name": "table",   "label": "Foreign table", "choices": self._tables, "format": format, "link": "key"},
+            {"name": "key",     "label": "Foreign column", "type": list, "choices": get_foreign_cols, "format": format},
             {"name": "DELETE",  "label": "ON DELETE", "toggle": True, "choices": self.ON_ACTION, "path": ["action"]},
             {"name": "UPDATE",  "label": "ON UPDATE", "toggle": True, "choices": self.ON_ACTION, "path": ["action"]},
             {"name": "match",   "label": "MATCH", "toggle": True, "choices": self.MATCH,
@@ -5308,9 +5309,8 @@ class SchemaObjectPage(wx.Panel):
         title = "Table column"
         if "constraints" == path[0]:
             title = "%s constraint" % data["type"]
-        format = lambda x: util.unprint(grammar.quote(x, embed=True))
         dlg = controls.FormDialog(self.TopLevelParent, title, props, data,
-                                  self._editmode, autocomp=words, footer=footer, format=format)
+                                  self._editmode, autocomp=words, footer=footer)
         wx_accel.accelerate(dlg)
         if wx.ID_OK != dlg.ShowModal() or not self._editmode: return
         data2 = dlg.GetData()

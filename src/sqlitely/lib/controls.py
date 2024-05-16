@@ -982,6 +982,7 @@ class FormDialog(wx.Dialog):
        ?tb:           [{type, ?help, ?toggle, ?on}] for SQLiteTextCtrl component,
                       adds toolbar, supported toolbar buttons "numbers", "wrap",
                       "copy", "paste", "open" and "save", plus "sep" for separator
+       ?format:       function(value) for formatting ComboBox/ListBox items
     }]
     @param   autocomp  list of words to add to SQLiteTextCtrl autocomplete,
                        or a dict for words and subwords
@@ -1171,6 +1172,13 @@ class FormDialog(wx.Dialog):
         return result
 
 
+    def _GetFormat(self, field):
+        """Returns function for formatting field values."""
+        if "format" in field:
+            return field["format"] if field["format"] else lambda x: x
+        return self._format
+
+
     def _AddField(self, field, path=()):
         """Adds field controls to dialog."""
         callback = field["type"] if callable(field.get("type")) \
@@ -1319,7 +1327,7 @@ class FormDialog(wx.Dialog):
                 choices = [x for x in choices if x not in value]
             listbox1, listbox2 = (x for x in ctrls if isinstance(x, wx.ListBox))
             for listbox, vv in zip((listbox1, listbox2), (choices, value)):
-                listbox.SetItems(list(map(self._format, vv)))
+                listbox.SetItems(list(map(self._GetFormat(field), vv)))
                 for j, x in enumerate(vv): listbox.SetClientData(j, x)
                 listbox.Enable(self._editmode)
             for c in ctrls:
@@ -1366,9 +1374,9 @@ class FormDialog(wx.Dialog):
                 else:
                     if isinstance(value, (list, tuple)): value = "".join(value)
                     if isinstance(c, wx.ComboBox):
-                        c.SetItems(list(map(self._format, choices)))
+                        c.SetItems(list(map(self._GetFormat(field), choices)))
                         for j, x in enumerate(choices): c.SetClientData(j, x)
-                        value = self._format(value) if value else value
+                        value = self._GetFormat(field)(value) if value else value
                     c.Value = "" if value is None else value
 
                 if isinstance(c, wx.TextCtrl): c.SetEditable(self._editmode)
@@ -1569,7 +1577,7 @@ class FormDialog(wx.Dialog):
 
         if field.get("exclusive"):
             for i in indexes[::-1]: listbox1.Delete(i)
-        listbox2.AppendItems(list(map(self._format, selecteds)))
+        listbox2.AppendItems(list(map(self._GetFormat(field), selecteds)))
         for j, x in enumerate(selecteds, listbox2.Count - len(selecteds)):
             listbox2.SetClientData(j, x)
         items2 = list(map(listbox2.GetClientData, range(listbox2.Count)))
@@ -1590,8 +1598,8 @@ class FormDialog(wx.Dialog):
         for i in indexes[::-1]: listbox2.Delete(i)
         items2 = list(map(listbox2.GetClientData, range(listbox2.Count)))
         if field.get("exclusive"):
-            allchoices = self._GetChoices(field, path)
-            listbox1.SetItems([self._format(x) for x in allchoices if x not in items2])
+            allchoices, format = self._GetChoices(field, path), self._GetFormat(field)
+            listbox1.SetItems([format(x) for x in allchoices if x not in items2])
             for j, x in enumerate(x for x in allchoices if x not in items2):
                 listbox1.SetClientData(j, x)
         self._SetValue(field, items2, path)
@@ -1612,7 +1620,7 @@ class FormDialog(wx.Dialog):
             i2 = i + direction
             items[i], items[i2] = items[i2], items[i]
 
-        listbox2.SetItems(list(map(self._format, items)))
+        listbox2.SetItems(list(map(self._GetFormat(field), items)))
         for j, x in enumerate(items): listbox2.SetClientData(j, x)
         for i in indexes: listbox2.Select(i + direction)
         self._SetValue(field, items, path)
