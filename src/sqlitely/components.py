@@ -5312,7 +5312,7 @@ class SchemaObjectPage(wx.Panel):
         dlg = controls.FormDialog(self.TopLevelParent, title, props, data,
                                   self._editmode, autocomp=words, footer=footer)
         wx_accel.accelerate(dlg)
-        if wx.ID_OK != dlg.ShowModal() or not self._editmode: return
+        if wx.ID_OK != dlg.ShowModal() or not self._editmode: return dlg.Destroy()
         data2 = dlg.GetData()
         dlg.Destroy()
         if data == data2: return
@@ -5882,7 +5882,7 @@ class SchemaObjectPage(wx.Panel):
         dlg = controls.FormDialog(self.TopLevelParent, "Edit SQL",
                                   props, data, autocomp=words, onclose=onclose, format=format)
         wx_accel.accelerate(dlg)
-        if wx.ID_OK != dlg.ShowModal(): return
+        if wx.ID_OK != dlg.ShowModal(): return dlg.Destroy()
         sql = dlg.GetData().get("sql", "").strip().replace("\r\n", "\n").rstrip(";")
         dlg.Destroy()
         if not sql or sql == data["sql"]: return

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.05.2024
+@modified    16.05.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1926,6 +1926,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                 setattr(conf, k, v)
             util.run_once(conf.save)
             self.MinSize = conf.MinWindowSize
+        dialog.Destroy()
 
 
     def on_open_database(self, event):

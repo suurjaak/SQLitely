@@ -19,6 +19,7 @@ CHANGELOG
 - fix updating main page upon removing databases when home-row is also selected
 - fix foreign key constraint editor not allowing to add a column in duplicate
 - fix intermittent mouse event error on diagram
+- ensure dialog windows get destroyed when closed
 - tweak column/constraint editor layout
 - disable automatic update checks and downloads in snaps
 - include third-party license texts in snaps and stand-alone exes
