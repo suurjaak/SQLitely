@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    28.11.2023
+@modified    16.05.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -1152,7 +1152,8 @@ class Generator(object):
             for (tokentype, _), token in self._tokens.items():
                 if "PAD" != tokentype: continue # for (tokentype, _), token
                 data = self._tokendata[token]
-                widths[data["key"]] = max(len(data["value"].splitlines()[-1]), widths[data["key"]])
+                datalines = data["value"].splitlines() or [""]
+                widths[data["key"]] = max(len(datalines[-1]), widths[data["key"]])
 
             for (tokentype, val), token in sorted(
                 self._tokens.items(), key=lambda x: REPLACE_ORDER.index(x[0][0])
@@ -1162,8 +1163,8 @@ class Generator(object):
                     result = re.sub(r"\s*%s\s*" % re.escape(token), val, result, count=count)
                 elif "PAD" == tokentype: # Insert spaces per padding type/value
                     data = self._tokendata[token]
-                    datalines = data["value"].splitlines()
-                    ws = " " * (widths[data["key"]] - len(datalines[-1] or ""))
+                    datalines = data["value"].splitlines() or [""]
+                    ws = " " * (widths[data["key"]] - len(datalines[-1]))
                     if len(datalines) > 1: ws += self._indent
                     result = result.replace(token, ws, count)
                 elif "CM" == tokentype:
