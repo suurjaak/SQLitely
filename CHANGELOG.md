@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.3, 2024-05-16
+2.3, 2024-05-17
 ---------------
 - add command-line interface, with export, import, parse, search and stats
 - add option to rename SQL window pages
@@ -18,6 +18,7 @@ CHANGELOG
 - fix auto_vacuum and encoding pragmas not being editable in new databases
 - fix updating main page upon removing databases when home-row is also selected
 - fix foreign key constraint editor not allowing to add a column in duplicate
+- fix entering new value in column/constraint editor editable comboboxes like column type
 - fix intermittent mouse event error on diagram
 - ensure dialog windows get destroyed when closed
 - tweak column/constraint editor layout

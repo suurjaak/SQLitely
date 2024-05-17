@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    16.05.2024
+@modified    17.05.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -1547,7 +1547,7 @@ class FormDialog(wx.Dialog):
         if isinstance(value, string_types) \
         and (not isinstance(src, wx.stc.StyledTextCtrl)
         or not value.strip()): value = value.strip()
-        if isinstance(src, wx.ComboBox) and src.HasClientData():
+        if isinstance(src, wx.ComboBox) and not field.get("choicesedit") and src.HasClientData():
             value = src.GetClientData(src.Selection)
         if value in (None, "") and field.get("dropempty"): self._DelValue(field, path)
         else: self._SetValue(field, value, path)
