@@ -15,6 +15,7 @@ CHANGELOG
 - change default item action on diagram from opening schema to opening data
 - update SQLite keywords from 126 to the latest 147-element list
 - use a custom lockfile implementation for single instance check in Linux
+- show descriptive error when trying to save view with blank column names
 - fix auto_vacuum and encoding pragmas not being editable in new databases
 - fix updating main page upon removing databases when home-row is also selected
 - fix foreign key constraint editor not allowing to add a column in duplicate

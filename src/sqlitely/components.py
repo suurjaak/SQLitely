@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.05.2024
+@modified    17.05.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -6029,6 +6029,9 @@ class SchemaObjectPage(wx.Panel):
             errors += ["Action is required."]
         if "view"    == self._category and not meta.get("select"):
             errors += ["Select is required."]
+        if "view"    == self._category and meta.get("columns") \
+        and any(c.get("name") is None for c in meta["columns"]):
+            errors += ["Column name is required."]
         if self._category in ("table", "index") and not meta.get("columns"):
             errors += ["Columns are required."]
 
