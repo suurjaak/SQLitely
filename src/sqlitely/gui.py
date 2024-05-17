@@ -7049,7 +7049,7 @@ class DatabasePage(wx.Panel):
                                                 or item.get("columns") or [])
                         table = self.db.schema.get("table", {}).get(item["tbl_name"])
                         for col in columns if table else ():
-                            if table.get("columns") and col.get("name"):
+                            if table.get("columns") and col.get("name") is not None:
                                 tcol = next((x for x in table["columns"]
                                              if x["name"] == col["name"]), None)
                                 if tcol: col["type"] = tcol.get("type", "")
