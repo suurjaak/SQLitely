@@ -21,6 +21,7 @@ CHANGELOG
 - fix entering new value in column/constraint editor editable comboboxes like column type
 - fix rows-toggle not toggling data table in single item HTML export
 - fix intermittent mouse event error on diagram
+- restore program window on unminimizing from tray if window iconized
 - ensure dialog windows get destroyed when closed
 - tweak column/constraint editor layout
 - disable automatic update checks and downloads in snaps

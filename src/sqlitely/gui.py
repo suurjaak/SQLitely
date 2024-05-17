@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    16.05.2024
+@modified    17.05.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1002,6 +1002,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             if conf.WindowPosition and not conf.WindowMaximized:
                 self.Position = conf.WindowPosition
             self.Show()
+            self.IsIconized() and self.Restore()
             if self.menu_console.IsChecked():
                 self.frame_console.Show(), self.frame_console.Iconize(False)
         wx.CallAfter(setattr, self, "is_minimizing", False)
