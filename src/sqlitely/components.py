@@ -1221,13 +1221,13 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             submenu = wx.Menu()
             tip = self.db.get_sql(self.category, self.name, coldata["name"])
             label = util.ellipsize(util.unprint(coldata["name"]))
-            if any(label in x["name"] for x in lks):
+            if any(coldata["name"] in x["name"] for x in lks):
                 label += u"\t\u1d18\u1d0b" # Unicode small caps "PK"
-            elif any(label in x["name"] for x in fks):
+            elif any(coldata["name"] in x["name"] for x in fks):
                 label += u"\t\u1da0\u1d4f" # Unicode small "fk"
             current_filter = six.text_type(self.filters[col]) if col in self.filters else ""
             fltrval = '"%s"' % util.ellipsize(current_filter, 10) if current_filter else ".."
-            menu_cols.Append(wx.ID_ANY, label, submenu, tip)
+            menu_cols.Append(wx.ID_ANY, label or " ", submenu, tip) # Menu label cannot be empty
             item_col_copy = wx.MenuItem(submenu, -1, "&Copy column value")
             item_col_name = wx.MenuItem(submenu, -1, "Copy column &name")
             item_col_goto = wx.MenuItem(submenu, -1, "&Go to column")
