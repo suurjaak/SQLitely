@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    13.05.2024
+@modified    17.05.2024
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -1435,10 +1435,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
                 if names and myname.lower() not in names:
                     continue # for myname, opts
 
-                if names and column and mycategory in ("table", "view", "index"):
+                if names and column is not None and mycategory in ("table", "view", "index"):
                     columns = opts["columns"]
                     if opts.get("meta", {}).get("columns"): columns = opts["meta"]["columns"]
-                    col = next((c for c in columns if util.lceq(c.get("name") or c["expr"], column)), None)
+                    col = next((c for c in columns if util.lceq(c.get("expr") or c["name"], column)), None)
                     if not col: continue # for myname, opts
                     gentype = "index column" if "index" == mycategory else "column"
                     sql, err = grammar.generate(dict(col, __type__=gentype), indent=False)
