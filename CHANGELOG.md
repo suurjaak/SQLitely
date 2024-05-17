@@ -19,6 +19,7 @@ CHANGELOG
 - fix updating main page upon removing databases when home-row is also selected
 - fix foreign key constraint editor not allowing to add a column in duplicate
 - fix entering new value in column/constraint editor editable comboboxes like column type
+- fix rows-toggle not toggling data table in single item HTML export
 - fix intermittent mouse event error on diagram
 - ensure dialog windows get destroyed when closed
 - tweak column/constraint editor layout

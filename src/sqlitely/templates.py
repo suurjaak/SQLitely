@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.11.2023
+@modified    17.05.2024
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -126,6 +126,10 @@ from sqlitely import conf, images
     }
     ol.title li > div > span {
       font-weight: normal;
+    }
+%else:
+    table.body_table > tbody > tr.collapsed > td {
+      display: none;
     }
 %endif
     table.content_table {
@@ -388,7 +392,7 @@ progress = get("progress")
       Source: <b>{{ db }}</b>{{ " (%s)" % dbsize if dbsize else "" }}.<br />
 %endif
       <b>{{ row_count }}</b> {{ util.plural("row", row_count, numbers=False) }}{{ " in results" if sql else "" }}.
-      <a class="toggle down open" title="Toggle rows" onclick="onToggle(this, '{{ item_id }}', null, 'collapsed')"> </a>
+      <a class="toggle down open" title="Toggle rows" onclick="onToggle(this, '{{ item_id }}{{ "" if get("multiple") else "__rows" }}', null, 'collapsed')"> </a>
       <br />
     </td>
   </tr></table>
