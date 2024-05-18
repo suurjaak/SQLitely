@@ -39,7 +39,7 @@ except ImportError:                         # Py2
 import PIL
 import pytz
 import six
-from six.moves import queue, urllib
+from six.moves import queue, range, urllib
 import step
 import wx
 import wx.adv
@@ -104,8 +104,6 @@ class SQLiteGridBase(wx.grid.GridTableBase):
 
     class NullRenderer(wx.grid.GridCellStringRenderer):
         """Grid cell renderer that draws "<NULL>" as cell value."""
-
-        def __init__(self): super(SQLiteGridBase.NullRenderer, self).__init__()
 
         def Draw(self, grid, attr, dc, rect, row, col, isSelected):
             """Draws "<NULL>" as cell value."""
@@ -739,8 +737,8 @@ class SQLiteGridBase(wx.grid.GridTableBase):
             self.rows_current.sort(key=lambda x: self.idx_all.index(x[self.KEY_ID]))
         else:
             name = self.columns[col]["name"]
-            types = set(type(x[name]) for x in self.rows_current)
-            if types - set(six.integer_types + (bool, type(None))):  # Not only numeric types
+            rowtypes = set(type(x[name]) for x in self.rows_current)
+            if rowtypes - set(six.integer_types + (bool, type(None))):  # Not only numeric types
                 key = lambda x: x[name].lower() if isinstance(x[name], six.string_types) else \
                                 "" if x[name] is None else six.text_type(x[name])
             else:  # Only numeric types
@@ -1580,7 +1578,7 @@ class SQLiteGridBaseMixin(object):
                 chunk.insert(0, idx)
             if chunk: self._grid.DeleteRows(chunk[0], len(chunk))
             if self._grid.NumberRows:
-                row = min(min(rows), self._grid.NumberRows - 1)
+                row = min(rows, self._grid.NumberRows - 1)
                 self._grid.SelectRow(-1)
                 self._grid.GoToCell(row, 0)
 
@@ -2548,8 +2546,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         if not fields: return
 
         row_id = [row[c] for c in fields]
-        iterrange = xrange if sys.version_info < (3, ) else range
-        for i in iterrange(self._grid.Table.GetNumberRows()):
+        for i in range(self._grid.Table.GetNumberRows()):
             row2 = self._grid.Table.GetRowData(i)
             if not row2: break # for i
 
@@ -4119,8 +4116,8 @@ class SchemaObjectPage(wx.Panel):
         self._BindDataHandler(self._OnToggleColumnFlag, check_autoinc, ["columns", check_autoinc, "pk", "autoincrement"])
         ctrls = [text_name, list_type, text_default, check_pk,
                  check_autoinc, check_notnull, check_unique, button_open]
-        for i, c in enumerate(ctrls):
-            c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, i]))
+        for j, c in enumerate(ctrls):
+            c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, j]))
 
         self._ctrls.update({"columns.name.%s"    % rowkey: text_name,
                             "columns.type.%s"    % rowkey: list_type,
@@ -4324,8 +4321,8 @@ class SchemaObjectPage(wx.Panel):
         self._BindDataHandler(self._OnChange, list_collate, ["columns", list_collate, "collate"])
         self._BindDataHandler(self._OnChange, list_order,   ["columns", list_order,   "order"])
         ctrls = [ctrl_index, list_collate, list_order]
-        for i, c in enumerate(ctrls):
-            c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, i]))
+        for j, c in enumerate(ctrls):
+            c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, j]))
 
         self._ctrls.update({"columns.index.%s"   % rowkey: ctrl_index,
                             "columns.collate.%s" % rowkey: list_collate,
@@ -4359,8 +4356,8 @@ class SchemaObjectPage(wx.Panel):
 
         self._BindDataHandler(self._OnChange, list_column, ["columns", list_column, "name"])
         ctrls = [list_column]
-        for i, c in enumerate(ctrls):
-            c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, i]))
+        for j, c in enumerate(ctrls):
+            c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, j]))
 
         self._ctrls.update({"columns.name.%s" % rowkey: list_column})
         if focus: list_column.SetFocus()
@@ -4388,8 +4385,8 @@ class SchemaObjectPage(wx.Panel):
 
         self._BindDataHandler(self._OnChange, text_column, ["columns", text_column, "name"])
         ctrls = [text_column]
-        for i, c in enumerate(ctrls):
-            c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, i]))
+        for j, c in enumerate(ctrls):
+            c.Bind(wx.EVT_SET_FOCUS, functools.partial(self._OnDataEvent, self._OnFocusColumn, [c, j]))
 
         self._ctrls.update({"columns.name.%s" % id(text_column): text_column})
         if focus: text_column.SetFocus()
@@ -4940,8 +4937,7 @@ class SchemaObjectPage(wx.Panel):
 
         if data["type"] in (grammar.SQL.PRIMARY_KEY, grammar.SQL.UNIQUE): return [
             {"name": "name", "label": "Constraint name", "type": "text", "toggle": True},
-            {"name": "columns",  "label": "Index",
-             "type": (lambda *a, **kw: self._CreateDialogConstraints(*a, **kw))},
+            {"name": "columns",  "label": "Index", "type": self._CreateDialogConstraints},
             {"name": "conflict", "label": "ON CONFLICT", "choices": self.CONFLICT},
         ], footer
 
@@ -6614,7 +6610,7 @@ class ImportDialog(wx.Dialog):
         """Custom drop target for column listboxes."""
 
         def __init__(self, side, ctrl, on_drop):
-            super(self.__class__, self).__init__(wx.CustomDataObject("Column"))
+            super(ImportDialog.ListDropTarget, self).__init__(wx.CustomDataObject("Column"))
             self._side    = side
             self._ctrl    = ctrl
             self._on_drop = on_drop
@@ -6654,7 +6650,7 @@ class ImportDialog(wx.Dialog):
 
         def __init__(self, parent, id=wx.ID_ANY, pos=wx.DefaultPosition,
                      size=wx.DefaultSize, style=0):
-            super(self.__class__, self).__init__(parent, id, pos, size, style)
+            super(ImportDialog.ListCtrl, self).__init__(parent, id, pos, size, style)
             self._editable      = False
             self._editable_cols = []  # [editable column index, ] if not all
             self._editable_set  = False
@@ -6757,7 +6753,7 @@ class ImportDialog(wx.Dialog):
         """
         @param   db     database.Database
         """
-        super(self.__class__, self).__init__(parent, id, title, pos, size, style, name)
+        super(ImportDialog, self).__init__(parent, id, title, pos, size, style, name)
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         self._db     = db # database.Database
@@ -7872,7 +7868,7 @@ class DataDialog(wx.Dialog):
         """
         @param   gridbase  SQLiteGridBase instance
         """
-        super(self.__class__, self).__init__(parent, id, title, pos, size, style, name)
+        super(DataDialog, self).__init__(parent, id, title, pos, size, style, name)
         self.Sizer = wx.BoxSizer(wx.VERTICAL)
 
         self._gridbase = gridbase
@@ -8459,7 +8455,7 @@ class HistoryDialog(wx.Dialog):
         """
         @param   db  database.Database instance
         """
-        super(self.__class__, self).__init__(parent, id, title, pos, size, style, name)
+        super(HistoryDialog, self).__init__(parent, id, title, pos, size, style, name)
         self._log = [{k: self._Convert(v) for k, v in x.items()} for x in db.log]
         self._filter = "" # Current filter
         self._filter_timer  = None # Filter callback timer
@@ -8710,7 +8706,7 @@ class ColumnDialog(wx.Dialog):
         @param   rowdata      current row data dictionary, if not taking from gridbase
         @param   columnlabel  label for column in buttons and other texts
         """
-        super(self.__class__, self).__init__(parent, id, title, pos, size, style, name)
+        super(ColumnDialog, self).__init__(parent, id, title, pos, size, style, name)
 
         self._timer    = None               # Delayed change handler
         self._getters  = OrderedDict()      # {view name: get()}
@@ -10761,7 +10757,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
             layout.Redraw(wx.Rect(0, 0, *conf.Defaults["WindowSize"]), layout.LAYOUT_GRID)
 
         if "SVG" == filetype:
-            content = layout.MakeTemplate(filetype, title, embed, selections=selections, items=items)
+            content = layout.MakeTemplate(filetype, title, selections=selections, items=items)
             with open(filename, "wb") as f: f.write(content.encode("utf-8", errors="replace"))
         else:
             layout.MakeBitmap(zoom, selections=selections, items=items).SaveFile(filename, wxtype)

@@ -131,8 +131,8 @@ import wx.lib.wordwrap
 import wx.stc
 
 
-try: import collections.abc as collections_abc             # Py2
-except ImportError: import collections as collections_abc  # Py3
+try: import collections.abc as collections_abc    # Py2
+except ImportError: collections_abc = collections # Py3
 try:
     integer_types, string_types, text_type = (int, long), (basestring, ), unicode  # Py2
 except NameError:
@@ -157,21 +157,21 @@ NewId = (lambda: wx.NewIdRef().Id) if hasattr(wx, "NewIdRef") else wx.NewId
 
 class KEYS(object):
     """Keycode groupings, includes numpad keys."""
-    UP         = wx.WXK_UP,       wx.WXK_NUMPAD_UP
-    DOWN       = wx.WXK_DOWN,     wx.WXK_NUMPAD_DOWN
-    LEFT       = wx.WXK_LEFT,     wx.WXK_NUMPAD_LEFT
-    RIGHT      = wx.WXK_RIGHT,    wx.WXK_NUMPAD_RIGHT
-    PAGEUP     = wx.WXK_PAGEUP,   wx.WXK_NUMPAD_PAGEUP
-    PAGEDOWN   = wx.WXK_PAGEDOWN, wx.WXK_NUMPAD_PAGEDOWN
-    ENTER      = wx.WXK_RETURN,   wx.WXK_NUMPAD_ENTER
-    INSERT     = wx.WXK_INSERT,   wx.WXK_NUMPAD_INSERT
-    DELETE     = wx.WXK_DELETE,   wx.WXK_NUMPAD_DELETE
-    HOME       = wx.WXK_HOME,     wx.WXK_NUMPAD_HOME
-    END        = wx.WXK_END,      wx.WXK_NUMPAD_END
-    SPACE      = wx.WXK_SPACE,    wx.WXK_NUMPAD_SPACE
-    BACKSPACE  = wx.WXK_BACK,
-    TAB        = wx.WXK_TAB,      wx.WXK_NUMPAD_TAB
-    ESCAPE     = wx.WXK_ESCAPE,
+    UP         = (wx.WXK_UP,       wx.WXK_NUMPAD_UP)
+    DOWN       = (wx.WXK_DOWN,     wx.WXK_NUMPAD_DOWN)
+    LEFT       = (wx.WXK_LEFT,     wx.WXK_NUMPAD_LEFT)
+    RIGHT      = (wx.WXK_RIGHT,    wx.WXK_NUMPAD_RIGHT)
+    PAGEUP     = (wx.WXK_PAGEUP,   wx.WXK_NUMPAD_PAGEUP)
+    PAGEDOWN   = (wx.WXK_PAGEDOWN, wx.WXK_NUMPAD_PAGEDOWN)
+    ENTER      = (wx.WXK_RETURN,   wx.WXK_NUMPAD_ENTER)
+    INSERT     = (wx.WXK_INSERT,   wx.WXK_NUMPAD_INSERT)
+    DELETE     = (wx.WXK_DELETE,   wx.WXK_NUMPAD_DELETE)
+    HOME       = (wx.WXK_HOME,     wx.WXK_NUMPAD_HOME)
+    END        = (wx.WXK_END,      wx.WXK_NUMPAD_END)
+    SPACE      = (wx.WXK_SPACE,    wx.WXK_NUMPAD_SPACE)
+    BACKSPACE  = (wx.WXK_BACK, )
+    TAB        = (wx.WXK_TAB,      wx.WXK_NUMPAD_TAB)
+    ESCAPE     = (wx.WXK_ESCAPE, )
 
     ARROW      = UP + DOWN + LEFT + RIGHT
     PAGING     = PAGEUP + PAGEDOWN
@@ -3771,7 +3771,7 @@ class SQLiteTextCtrl(wx.stc.StyledTextCtrl):
     def Enable(self, enable=True):
         """Enables or disables the control, updating display."""
         if self.Enabled == enable: return False
-        result = super(self.__class__, self).Enable(enable)
+        result = super(SQLiteTextCtrl, self).Enable(enable)
         self.SetStyleSpecs()
         return result
 
@@ -4100,7 +4100,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     NUMPAD_NUMS = {wx.WXK_NUMPAD0: 0, wx.WXK_NUMPAD1: 1, wx.WXK_NUMPAD2: 2,
                    wx.WXK_NUMPAD3: 3, wx.WXK_NUMPAD4: 4, wx.WXK_NUMPAD5: 5,
                    wx.WXK_NUMPAD6: 6, wx.WXK_NUMPAD7: 7, wx.WXK_NUMPAD8: 8,
-                   wx.WXK_NUMPAD7: 9}
+                   wx.WXK_NUMPAD9: 9}
 
     FONT_FACE = "Courier New" if os.name == "nt" else "Courier"
     """Acceptable input characters."""
@@ -4179,7 +4179,7 @@ class HexTextCtrl(wx.stc.StyledTextCtrl):
     def Enable(self, enable=True):
         """Enables or disables the control, updating display."""
         if self.Enabled == enable: return False
-        result = super(self.__class__, self).Enable(enable)
+        result = super(HexTextCtrl, self).Enable(enable)
         self.SetStyleSpecs()
         return result
 
@@ -4706,7 +4706,7 @@ class ByteTextCtrl(wx.stc.StyledTextCtrl):
     def Enable(self, enable=True):
         """Enables or disables the control, updating display."""
         if self.Enabled == enable: return False
-        result = super(self.__class__, self).Enable(enable)
+        result = super(ByteTextCtrl, self).Enable(enable)
         self.SetStyleSpecs()
         return result
 
@@ -5188,7 +5188,7 @@ class JSONTextCtrl(wx.stc.StyledTextCtrl):
     def Enable(self, enable=True):
         """Enables or disables the control, updating display."""
         if self.Enabled == enable: return False
-        result = super(self.__class__, self).Enable(enable)
+        result = super(JSONTextCtrl, self).Enable(enable)
         self.SetStyleSpecs()
         return result
 
@@ -5970,7 +5970,7 @@ class TextCtrlAutoComplete(wx.TextCtrl):
             for i, text in enumerate(choices):
                 self._listbox.InsertItem(i, text)
             if choices: # Colour "Clear" item
-                self._listbox.SetItemTextColour(i, self._clear_colour)
+                self._listbox.SetItemTextColour(len(choices) - 1, self._clear_colour)
 
             itemheight = self._listbox.GetItemRect(0)[-1] if choices else 0
             itemcount = min(len(choices), self.DROPDOWN_COUNT_PER_PAGE)
@@ -6245,7 +6245,7 @@ class YAMLTextCtrl(wx.stc.StyledTextCtrl):
     def Enable(self, enable=True):
         """Enables or disables the control, updating display."""
         if self.Enabled == enable: return False
-        result = super(self.__class__, self).Enable(enable)
+        result = super(YAMLTextCtrl, self).Enable(enable)
         self.SetStyleSpecs()
         return result
 

@@ -4649,7 +4649,7 @@ class DatabasePage(wx.Panel):
             if event.Id in (item_bmp.Id, item_sql.Id):
                 self.handle_command("copy", "sql+bmp", None, *names)
             elif event.Id == item_all.Id:
-                  self.handle_command("copy", "related", None, *names)
+                self.handle_command("copy", "related", None, *names)
             elif event.Id == item_svg.Id:
                 text, label = self.diagram.MakeTemplate("SVG", items=names), "diagram SVG"
             elif event.Id == item_names.Id:

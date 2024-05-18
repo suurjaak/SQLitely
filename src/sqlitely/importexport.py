@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.05.2024
+@modified    18.05.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -460,7 +460,7 @@ def export_stats(filename, format, db, data, diagram=None):
     return True
 
 
-def export_dump(filename, db, schema=None, data=True, pragma=True, related=False,
+def export_dump(filename, db, schema=None, data=True, pragma=True,
                 limit=None, maxcount=None, empty=True, reverse=False, progress=None):
     """
     Exports full database dump to SQL file.
@@ -469,11 +469,6 @@ def export_dump(filename, db, schema=None, data=True, pragma=True, related=False
     @param   data      whether to dump table data
     @param   pragma    whether to dump PRAGMA settings
     @param   schema    {category: [name, ]} to export if not all
-    @param   related   auto-include related items if using filters, recursively
-                       (for tables: indexes and triggers, and referenced foreign tables;
-                        for views: triggers, and tables and views referenced in view body;
-                        for indexes: parent tables;
-                        for triggers: parent tables or views, and referenced tables and views)
     @param   limit     query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
     @param   maxcount  maximum total number of rows to export over all tables
     @param   empty     do not skip items with no output rows
@@ -486,7 +481,6 @@ def export_dump(filename, db, schema=None, data=True, pragma=True, related=False
     result = False
     entities, namespace, cursors = copy.deepcopy(db.schema), {}, []
     limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else (limit, )
-    related_includes = collections.defaultdict(list) # {name: [name of owned or required entity, ]}
     counts = collections.defaultdict(int) # {name: number of rows yielded}
 
     def make_iterable(name):
@@ -1144,7 +1138,7 @@ def import_data(filename, db, tables, has_header=True, limit=None, maxcount=None
 
     fmt = get_format(filename)
     has_sheets, has_names, new_tables = "xls" in fmt, fmt in ("json", "yaml"), []
-    table, source, cursor, isolevel = None, None, None, None
+    table, source, cursor = None, None, None
     was_open, file_existed = db.is_open(), os.path.isfile(db.filename)
     try:
         db.open()

@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    14.05.2024
+@modified    18.05.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -698,7 +698,7 @@ def validate_args(action, args, infile=None):
         sys.exit("Nothing to export with %s." %
                  ("limit %r" % args.limit if not args.limit else "max count %r" % args.maxcount))
     if "export" == action and args.schema_only and args.format in ("json", "yaml"):
-        sys.exit("Nothing to export from %s without data as %s." % (dbname, args.format.upper()))
+        sys.exit("Nothing to export from %s without data as %s." % (infile, args.format.upper()))
     if "import" == action and args.columns:
         has_names = importexport.get_format(infile) in ("json", "yaml")
         try: args.columns = parse_columns(args.columns, numeric=not has_names)
@@ -825,7 +825,7 @@ def run_export(dbname, args):
                related      include related entities, like data dependencies or index/trigger items
                progress     show progress bar
     """
-    validate_args("export", args)
+    validate_args("export", args, dbname)
     entity_rgx = util.filters_to_regex(args.filter) if args.filter else None
 
     db = database.Database(dbname)
@@ -977,7 +977,7 @@ def run_search(dbname, args):
                reverse      query rows in reverse order
                maxcount     maximum total number of rows to export over all tables and views
     """
-    validate_args("search", args)
+    validate_args("search", args, dbname)
 
     db = database.Database(dbname)
     queryparser = searchparser.SearchQueryParser()
@@ -1173,7 +1173,7 @@ def run_stats(dbname, args):
     """
     outfile0 = args.OUTFILE
     file_existed = args.OUTFILE and not args.overwrite and os.path.isfile(args.OUTFILE)
-    validate_args("stats", args)
+    validate_args("stats", args, dbname)
 
     db = database.Database(os.path.abspath(dbname))
     stats = {}
@@ -1325,7 +1325,6 @@ def run_import(infile, args):
         bar.update(afterword=" Examining data")
         info = importexport.get_import_file_data(infile)
         if args.progress: bar.pause, _ = True, output()
-        is_spreadsheet = info["format"] in ("csv", "xls", "xlsx")
         has_sheets, has_names = "xls" in info["format"], info["format"] in ("json", "yaml")
         output()
         output("Import from: %s (%s%s)", info["name"], util.format_bytes(info["size"]),
@@ -1527,7 +1526,7 @@ def run(nogui=False):
         argv[:2] = argv[:2][::-1] # Swap "-h option" to "option -h"
 
     arguments, _ = argparser.parse_known_args(argv)
-    infile0, outfile0 = (getattr(arguments, x, None) for x in ("INFILE", "OUTFILE"))
+    infile0 = getattr(arguments, "INFILE", None)
 
     for argname in ("INFILE", "OUTFILE"):
         filearg = filearg0 = getattr(arguments, argname, [])

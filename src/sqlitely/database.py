@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.05.2024
+@modified    18.05.2024
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -585,7 +585,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         try: pragma = self.get_pragma_values(dump=True)
         except Exception: logger.exception("Failed to get PRAGMAs for %s.", self.name)
         pragma_first = {k: v for k, v in pragma.items()
-                        if util.getval(self.PRAGMAS, k, "initial") is True}
+                        if util.getval(self.PRAGMA, k, "initial") is True}
         if pragma_first:
             sql = pragma_tpl.expand(pragma=pragma_first, schema="new")
             self.executescript(sql)
@@ -1330,7 +1330,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     for relname, relitem in rels.items():
                         result[relcategory][relname] = relitem
             # Take foreign tables
-            for name2 in [n for n in result.get("table", {})] if not skip_foreign else ():
+            for name2 in list(result.get("table", {})) if not skip_foreign else ():
                 if name2 in processed: continue # for name2
                 processed2.add(name2)
 
@@ -1339,7 +1339,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                     if relname in self.schema["table"]:
                         result["table"][relname] = self.schema["table"][relname]
             # Take tables and views that views query, recursively
-            for name2 in [n for n in result.get("view", {})]:
+            for name2 in list(result.get("view", {})):
                 if name2 in processed: continue # for name2
                 processed2.add(name2)
 

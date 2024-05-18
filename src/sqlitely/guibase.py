@@ -13,7 +13,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.08.2023
+@modified    17.05.2024
 """
 import datetime
 import logging
@@ -63,7 +63,7 @@ class GUILogHandler(logging.Handler):
 
     def __init__(self):
         self.deferred = [] # Messages logged before main window available
-        super(self.__class__, self).__init__()
+        super(GUILogHandler, self).__init__()
 
 
     def emit(self, record):
