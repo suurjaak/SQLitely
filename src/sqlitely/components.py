@@ -7597,7 +7597,7 @@ class ImportDialog(wx.Dialog):
         ) if (self._progress.get("count") or self._table.get("new")) else ""
 
         dlg = self._dlg_cancel = controls.MessageDialog(self,
-            "Keep changes?\n\n%s" % changes.strip().capitalize(),
+            "Keep changes?\n\n%s" % changes,
             conf.Title, wx.ICON_INFORMATION | wx.YES | wx.NO | wx.CANCEL | wx.CANCEL_DEFAULT
         ) if changes else None
         keep = dlg.ShowModal() if changes else wx.ID_NO
@@ -11830,7 +11830,7 @@ class ImportWizard(wx.adv.Wizard):
             self.FindWindowById(wx.ID_CANCEL).Label = "&Cancel"
             self.FindWindowById(wx.ID_FORWARD).Enable(False if self.importing else bool(self.filename))
             self.FindWindowById(wx.ID_BACKWARD).Enable(not self.importing)
-            self.FindWindowById(wx.ID_CANCEL).ContainingSizer.Layout()
+            self.Layout()
 
 
         def OnCheckPK(self, event):
@@ -12000,14 +12000,14 @@ class ImportWizard(wx.adv.Wizard):
         self.dlg_cancel = None
         if wx.ID_YES != res or not self.page2.importing: return
 
-        changes = "\n- ".join(
-            "%snew table %s." % (
+        changes = "\n".join(
+            "- %snew table %s." % (
                 ("%s in " % util.plural("row", self.page2.progress[i]["count"], sep=","))
                 if self.page2.progress[i].get("count") else "", fmt_entity(item["tname"])
             ) for i, item in self.items.items() if i in self.page2.progress
         )
         dlg = self.dlg_cancel = controls.MessageDialog(self,
-            "Keep changes?\n\n%s" % changes.capitalize(),
+            "Keep changes?\n\n%s" % changes,
             conf.Title, wx.YES | wx.NO | wx.CANCEL | wx.CANCEL_DEFAULT
         ) if changes else None
         keep = dlg.ShowModal() if changes else wx.ID_NO
@@ -12157,14 +12157,14 @@ class ImportWizard(wx.adv.Wizard):
             if total < 0 or count + (errorcount or 0) > total:
                 text2 += util.plural("row", count)
             else:
-                tfraction = count + (errorcount or 0) / float(total)
+                tfraction = (count + (errorcount or 0)) / float(total) if total else 1
                 percent = int(100 * tfraction)
                 text2 += "%s%% (%s of %s)" % (percent, util.plural("row", count), total)
             if errorcount:
                 text2 += ", %s" % util.plural("error", errorcount)
 
             if len(self.items) > 1:
-                percent = int(100 * util.safedivf(itemindex + 1 + tfraction, len(self.items)))
+                percent = int(100 * util.safedivf(itemindex + tfraction, len(self.items)))
                 text1 = "Processing sheet %s of %s (%s%% done)" % \
                         (itemindex + 1, len(self.items), percent)
                 self.page2.label_gauge1.Label = text1
@@ -12217,7 +12217,6 @@ class ImportWizard(wx.adv.Wizard):
             self.page2.FindWindowById(wx.ID_FORWARD ).Enable()
             self.page2.FindWindowById(wx.ID_FORWARD ).Label = "Open database"
             self.page2.FindWindowById(wx.ID_CANCEL  ).Label = "&Close"
-            self.page2.FindWindowById(wx.ID_CANCEL  ).ContainingSizer.Layout()
             if success is None:
                 self.page2.FindWindowById(wx.ID_FORWARD).Disable()
             else:
@@ -12260,6 +12259,10 @@ class ImportWizard(wx.adv.Wizard):
                     self.page2.label_gauge1.Disable()
                     self.page2.label_gauge2.Disable()
                 self.page2.log.AppendText(info)
+            if "linux" in sys.platform:
+                b = self.page2.FindWindowById(wx.ID_FORWARD)
+                b.MinSize = b.BestSize # Will not widen button otherwise
+            self.Layout()
 
         if callable(callback): callback(self.page2.importing)
 
