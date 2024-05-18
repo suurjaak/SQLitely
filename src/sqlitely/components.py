@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.05.2024
+@modified    18.05.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -3409,7 +3409,7 @@ class SchemaObjectPage(wx.Panel):
 
         check_rowid = self._ctrls["without"] = wx.CheckBox(panel, label="WITHOUT &ROWID")
         check_strict = None
-        if self._db.has_strict():
+        if self._db.has_feature("strict"):
             check_strict = self._ctrls["strict"]  = wx.CheckBox(panel, label="STRICT")
         check_exists = self._ctrls["exists"]  = wx.CheckBox(panel, label="IF N&OT EXISTS")
         check_rowid.ToolTip  = "Omit the default internal ROWID column. " \
@@ -4030,7 +4030,7 @@ class SchemaObjectPage(wx.Panel):
 
         self._EmptyControl(self._panel_columns)
         p1, p2 = self._panel_splitter.Children
-        if self._db.has_view_columns() and (items or self._editmode):
+        if self._db.has_feature("view_columns") and (items or self._editmode):
             self._panel_splitter.SplitHorizontally(p1, p2, self._panel_splitter.MinimumPaneSize)
             grid.AppendRows(len(items))
             for i, coldata in enumerate(items):
@@ -4596,7 +4596,7 @@ class SchemaObjectPage(wx.Panel):
         if can_simple and droppedcols:
             can_simple = False # There are deleted columns
         if can_simple and any(colmap2[x]["name"] != colmap1[x]["name"] for x in colmap1):
-            can_simple = self._db.has_rename_column() # There are renamed columns
+            can_simple = self._db.has_feature("rename_column") # There are renamed columns
         if can_simple:
             if any(x["__id__"] not in colmap1 and cols2[i+1]["__id__"] in colmap1
                    for i, x in enumerate(cols2[:-1])):
@@ -4623,7 +4623,8 @@ class SchemaObjectPage(wx.Panel):
                              and ("notnull" not in c2 or default != "NULL") \
                              and not ("fk" in c2 and self._fks_on and default != "NULL")
                 if not can_simple: break # for c2
-        if can_simple and old["name"] != new["name"] and not self._db.has_full_rename_table():
+        if can_simple and old["name"] != new["name"] \
+        and not self._db.has_feature("full_rename_table"):
             if util.lceq(old["name"], new["name"]): # Case changed
                 can_simple = False
             else:
@@ -5960,7 +5961,7 @@ class SchemaObjectPage(wx.Panel):
             # Show or hide view/trigger columns section where not relevant
             if "view" == self._category:
                 splitter, (p1, p2) = self._panel_splitter, self._panel_splitter.Children
-                if self._db.has_view_columns() \
+                if self._db.has_feature("view_columns") \
                 and (self._item["meta"].get("columns") or self._editmode):
                     splitter.SplitHorizontally(p1, p2, splitter.MinimumPaneSize)
                 else: splitter.Unsplit(p1)

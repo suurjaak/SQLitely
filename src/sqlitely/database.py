@@ -55,6 +55,9 @@ class Database(object):
     """Schema data object categories."""
     DATA_CATEGORIES = ["table", "view"]
 
+    """SQLite features and the runtime library version they appeared in."""
+    FEATURE_SUPPORT = {"full_rename_table": (3, 25), "rename_column": (3, 25),
+                       "strict":            (3, 37), "view_columns":  (3,  9)}
 
     """
     SQLite PRAGMA settings, as {
@@ -887,29 +890,6 @@ WARNING: misuse can easily result in a corrupt database file.""",
         ) if mylimit else ""
 
 
-    def has_view_columns(self):
-        """Returns whether SQLite supports view columns (from version 3.9)."""
-        return sqlite3.sqlite_version_info >= (3, 9)
-
-
-    def has_rename_column(self):
-        """Returns whether SQLite supports renaming columns (from version 3.25)."""
-        return sqlite3.sqlite_version_info >= (3, 25)
-
-
-    def has_full_rename_table(self):
-        """
-        Returns whether SQLite supports cascading table rename
-        to triggers/views referring the table (from version 3.25).
-        """
-        return sqlite3.sqlite_version_info >= (3, 25)
-
-
-    def has_strict(self):
-        """Returns whether SQLite supports strict type checking (from version 3.37)."""
-        return sqlite3.sqlite_version_info >= (3, 37)
-
-
     def execute(self, sql, params=(), log=True, cursor=None):
         """
         Shorthand for self.connection.execute(), returns cursor.
@@ -1500,6 +1480,13 @@ WARNING: misuse can easily result in a corrupt database file.""",
         return result
 
 
+    @classmethod
+    def has_feature(cls, name):
+        """Returns whether the current SQLite version supports given feature."""
+        version_min = cls.FEATURE_SUPPORT.get(name, (sys.maxsize, ))
+        return sqlite3.sqlite_version_info >= version_min
+
+
     def get_size(self):
         """Updates and returns database file size (size includes journal files)."""
         self.filesize = get_size(self.filename, self.journalsizes)
@@ -1915,7 +1902,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
         else:
             resets  = defaultdict(dict) # {category: {name: SQL}}
             if "table" == category \
-            and (name2 == grammar.quote(name2) or not self.has_full_rename_table()):
+            and (name2 == grammar.quote(name2) or not self.has_feature("full_rename_table")):
                 # Modify sqlite_master directly, as "ALTER TABLE x RENAME TO y"
                 # sets a quoted name "y" to CREATE statements, including related objects,
                 # regardless of whether the name required quoting.
@@ -1939,7 +1926,7 @@ WARNING: misuse can easily result in a corrupt database file.""",
                    for c in (item or {}).get("meta", {}).get("columns", [])):
             return
         table = item["name"]
-        if self.has_rename_column():
+        if self.has_feature("rename_column"):
             altersql, err = grammar.generate(dict(
                 name=table, name2=table, columns=[(name, name2)]
             ), category="ALTER TABLE")
