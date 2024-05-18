@@ -461,6 +461,7 @@ def except_hook(etype, evalue, etrace):
             conf.PopupUnexpectedErrors = False
             del mqueue[:]
             conf.save()
+        dlg.Destroy()
         if mqueue: mqueue.pop(0)
         if mqueue and conf.PopupUnexpectedErrors: wx.CallAfter(after)
 
@@ -1525,7 +1526,7 @@ def run(nogui=False):
     if argv[0] in ("-h", "--help") and len(argv) > 1:
         argv[:2] = argv[:2][::-1] # Swap "-h option" to "option -h"
 
-    arguments, _ = argparser.parse_known_args(argv)
+    arguments = argparser.parse_args(argv)
     infile0 = getattr(arguments, "INFILE", None)
 
     for argname in ("INFILE", "OUTFILE"):
