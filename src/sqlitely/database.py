@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.05.2024
+@modified    20.05.2024
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -812,13 +812,16 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Returns ROWID name for table, or None if table is WITHOUT ROWID
         or has columns shadowing all ROWID aliases (ROWID, _ROWID_, OID).
         """
+        without_in_sql = False
         if util.getval(self.schema, "table", table) \
         and not util.getval(self.schema, "table", table, "meta") \
         and re.search(r"\bWITHOUT\b.*\bROWID\b", self.schema["table"][table]["sql"], re.I):
             # Parse table SQL if it might be WITHOUT ROWID
             self.populate_schema(category="table", name=table, parse=True)
+            without_in_sql = True
         meta = util.getval(self.schema, "table", table, "meta") or {}
         if any(x.get("without") for x in meta.get("options", [])): return None
+        if not meta and without_in_sql: return None # Parse failed but SQL has it: assume WITHOUT
         ALIASES = ("_rowid_", "rowid", "oid")
         cols = [c["name"].lower() for c in self.schema["table"][table]["columns"]]
         return next((x for x in ALIASES if x not in cols), None)
