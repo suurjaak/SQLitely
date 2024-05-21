@@ -23,6 +23,7 @@ CHANGELOG
 - fix entering new value in column/constraint editor editable comboboxes like column type
 - fix rows-toggle not toggling data table in single item HTML export
 - fix intermittent mouse event error on diagram
+- fix diagram selection rectangle font issues in Linux
 - improve handling tables WITHOUT ROWID
 - restore program window on unminimizing from tray if window iconized
 - ensure dialog windows get destroyed when closed

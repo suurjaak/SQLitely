@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.05.2024
+@modified    21.05.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -11121,8 +11121,10 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
         """Function invoked from bitmap worker, processes items and reports progress."""
         for i, o in enumerate(items):
             if not self or not self._worker_bmp.is_working(): break # for i, o
-            bmp, bmpsel = self._layout.GetItemBitmaps(o)
-            self._layout.SetItemBitmaps(o["name"], bmp=bmp, bmpsel=bmpsel, bmparea=None)
+            (bmp, bmpsel), bmparea = self._layout.GetItemBitmaps(o), None
+            # Non-UI threads in Linux seem unable to use custom wx fonts: draw all for uniformity
+            if "linux" in sys.platform: bmparea = self._layout.GetItemBitmaps(o, dragrect=True)
+            self._layout.SetItemBitmaps(o["name"], bmp=bmp, bmpsel=bmpsel, bmparea=bmparea)
             self._OnBitmapWorkerProgress(index=i, count=len(items))
         if self: self._OnBitmapWorkerProgress(done=True)
 

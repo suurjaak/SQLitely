@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     29.08.2019
-@modified    12.11.2023
+@modified    21.05.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1274,7 +1274,7 @@ class SchemaPlacement(object):
         bmpname = ("bmparea" if self._dragrect else "bmpsel") if o["name"] in self._sels else "bmp"
         bmp = o[bmpname]
         if bmp is None:
-            bmp = self.GetItemBitmaps(o, dragrect=name in self._sels)
+            bmp = self.GetItemBitmaps(o, dragrect=self._dragrect and name in self._sels)
             if isinstance(bmp, tuple):
                 o["bmp"], o["bmpsel"] = bmp
                 bmp = o[bmpname]
@@ -1726,6 +1726,9 @@ class SchemaPlacement(object):
                 self.FONT_FACE = name
                 self.FONT_SIZE = size
                 success = True
+        if success:
+            self._font      = self.MakeFont(self.FONT_FACE, self.FONT_SIZE * self._zoom)
+            self._font_bold = self.MakeFont(self.FONT_FACE, self.FONT_SIZE * self._zoom, bold=True)
 
 
     def EnsureSize(self):
