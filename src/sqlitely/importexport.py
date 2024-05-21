@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.05.2024
+@modified    21.05.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1293,6 +1293,8 @@ def iter_file_rows(filename, columns, sheet=None):
                 yield [row[i] if i < len(row) else None for i in columns]
                 started = True
     elif "json" == fmt:
+        # Keep structures nested in values as JSON strings in database
+        cast = lambda x: json.dumps(x, indent=2) if isinstance(x, (dict, list)) else x
         started, buffer = False, ""
         decoder = json.JSONDecoder(object_pairs_hook=collections.OrderedDict)
         with open(filename) as f:
@@ -1309,7 +1311,7 @@ def iter_file_rows(filename, columns, sheet=None):
                         data, index = decoder.raw_decode(buffer)
                         buffer = buffer[index:]
                         if isinstance(data, collections.OrderedDict):
-                            yield [data.get(x) for x in columns]
+                            yield [cast(data.get(x)) for x in columns]
                     except ValueError: # Not enough data to decode, read more
                         break # while started and buffer
                 if f.tell() >= size: break # for chunk
