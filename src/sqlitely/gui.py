@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.05.2024
+@modified    21.05.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4628,10 +4628,11 @@ class DatabasePage(wx.Panel):
         label = "selected " if self.diagram.Selection else ""
         namelabel = util.plural("name", self.diagram.Selection or self.diagram.Items, numbers=False)
 
+        copy_hotkey = "\t(%s-C)" % controls.KEYS.NAME_CTRL
         item_names = wx.MenuItem(menu, -1, "Copy %s &%s" % (label, namelabel))
-        item_sql   = wx.MenuItem(menu, -1, "Copy %sCREATE S&QL" % label)
+        item_sql   = wx.MenuItem(menu, -1, "Copy %sCREATE S&QL%s" % (label, copy_hotkey))
         item_all   = wx.MenuItem(menu, -1, "Copy all &related SQL")
-        item_bmp   = wx.MenuItem(menu, -1, "Copy %sas &bitmap" % label)
+        item_bmp   = wx.MenuItem(menu, -1, "Copy %sas &bitmap%s" % (label, copy_hotkey))
         item_svg   = wx.MenuItem(menu, -1, "Copy %sas &SVG" % label)
 
         menu.Append(item_bmp)
