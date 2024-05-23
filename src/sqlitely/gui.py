@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.05.2024
+@modified    23.05.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4446,7 +4446,6 @@ class DatabasePage(wx.Panel):
 
     def on_diagram_action(self, event):
         """Handler for other diagram actions, opens popup menu."""
-        menu = wx.Menu()
 
         def on_export_zoom(event=None):
             CHOICES, LEVELS, index, level = [], [], -1, self.diagram.ZOOM_MAX
