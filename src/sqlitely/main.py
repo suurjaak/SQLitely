@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    18.05.2024
+@modified    26.05.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -784,7 +784,7 @@ def do_output(action, args, func, entities, files):
         errput("%s %s: %s (%s)" % (past.capitalize(), adverb, os.path.abspath(args.INFILE),
                                    fmt_bytes(args.INFILE, database.get_size)))
         if args.OUTFILE and args.combine:
-            errput("Wrote %s to %s (%s):" % (util.count(count_total, "row"),
+            errput("Wrote %s to '%s' (%s):" % (util.count(count_total, "row"),
                                              args.OUTFILE, fmt_bytes(args.OUTFILE)))
         elif args.OUTFILE:
             errput("Wrote %s to %s (%s):" % (util.count(count_total, "row"),
@@ -797,9 +797,9 @@ def do_output(action, args, func, entities, files):
             countstr = "" if item.get("count") is None else ", %s" % util.count(item, "row")
             if item["name"] in files:
                 filename = files[item["name"]]
-                errput("  %s%s (%s)" % (filename, countstr, fmt_bytes(filename)))
+                errput("  '%s'%s (%s)" % (filename, countstr, fmt_bytes(filename)))
             else:
-                errput("  %s%s" % (item["title"], countstr))
+                errput("  %s%s" % (util.cap(item["title"], reverse=True), countstr))
 
 
 def run_export(dbname, args):
@@ -885,7 +885,7 @@ def run_export(dbname, args):
             allitems2[name2] = True
 
     for item in (x for x in entities.values() if x["type"] in db.DATA_CATEGORIES):
-        item["title"] = "%s %s" % (item["type"], grammar.quote(item["name"], force=True))
+        item["title"] = "%s %s" % (item["type"].capitalize(), grammar.quote(item["name"], force=True))
         item["count"] = 0
         if args.progress and "table" == item["type"]:
             item.update(db.get_count(item["name"], key="total"))
@@ -933,13 +933,14 @@ def run_export(dbname, args):
             path, prefix = os.path.split(os.path.splitext(args.OUTFILE)[0]) if args.OUTFILE \
                            else (args.path or "",  "")
             for item, make_iterable in make_iterables():
-                title = util.cap(item["title"])
+                title = util.cap(item["title"], reverse=True)
                 basename = util.make_unique(util.safe_filename(title), basenames, suffix=" (%s)")
                 basenames.append(basename)
                 filename = "%s.%s" % (" ".join(filter(bool, (prefix, basename))), args.format)
                 filename = os.path.join(path, filename)
                 if not args.overwrite: filename = util.unique_path(filename)
 
+                title = util.cap(item["title"])
                 result = importexport.export_data(make_iterable, filename, args.format, title, db,
                     item["columns"], category=item["type"], name=item["name"], progress=progress
                 )
@@ -991,7 +992,7 @@ def run_search(dbname, args):
         or "-" + category in kws
         and searchparser.match_words(item["name"], kws["-" + category], any, args.case)):
             continue # for item
-        title = "%s %s" % (item["type"], grammar.quote(item["name"], force=True))
+        title = "%s %s" % (item["type"].capitalize(), grammar.quote(item["name"], force=True))
         entities[item["name"]] = dict(item, **{"count": 0, "title": title})
     maxrow, fromrow = max(-1, -1 if args.limit is None else args.limit), max(-1, args.offset or 0)
     limit = (maxrow, fromrow) if (fromrow > 0) else (maxrow, ) if (maxrow >= 0) else ()
@@ -1011,7 +1012,8 @@ def run_search(dbname, args):
             sql += order_sql + limit_sql
             item.update(query=sql, params=params)
             yield item, functools.partial(db.select, sql, params,
-                                          error="Error querying %s." % item["title"])
+                                          error="Error querying %s." %
+                                                util.cap(item["title"], reverse=True))
 
     if args.overwrite and args.OUTFILE:
         os.path.exists(args.OUTFILE) and os.unlink(args.OUTFILE)
@@ -1051,14 +1053,14 @@ def run_search(dbname, args):
                            else (args.path or "",  "")
             for item, make_iterable in make_iterables():
                 category, name = item["type"], item["name"]
-                title = util.cap(item["title"])
+                title = util.cap(item["title"], reverse=True)
                 basename = util.make_unique(util.safe_filename(title), basenames, suffix=" (%s)")
                 basenames.append(basename)
                 filename = "%s.%s" % (" ".join(filter(bool, (prefix, basename))), args.format)
                 filename = os.path.join(path, filename)
                 if not args.overwrite: filename = util.unique_path(filename)
 
-                title = [title] + make_search_title(args)
+                title = [util.cap(item["title"])] + make_search_title(args)
                 result = importexport.export_data(make_iterable, filename, args.format, title, db,
                     item["columns"], category=category, name=name, progress=progress
                 )
