@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.05.2024
+@modified    26.05.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -218,7 +218,13 @@ def export_data(make_iterable, filename, format, title, db, columns,
                 elif name:
                     # Add CREATE statement
                     transform = {"flags": {"exists": True}} if "sql" == format else None
-                    create_sql = db.get_sql(category, name, transform=transform)
+                    try: create_sql = db.get_sql(category, name, transform=transform)
+                    except Exception:
+                        if transform:
+                            logger.error("Error transforming CREATE SQL statement for %s %s, "
+                                         "falling back to original CREATE SQL.",
+                                         category, grammar.quote(name, force=True), exc_info=True)
+                            create_sql = db.get_sql(category, name)
                     namespace["create_sql"] = create_sql
 
                 tmpfile.flush(), tmpfile.seek(0)
