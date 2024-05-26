@@ -793,7 +793,8 @@ def do_output(action, args, func, entities, files):
         else:
             errput("Printed %s to console:" % util.count(count_total, "row"))
         for item in (x for x in (reversed if args.reverse else list)(entities.values())
-                     if x["type"] in database.Database.DATA_CATEGORIES and x["count"]):
+                     if x["type"] in database.Database.DATA_CATEGORIES):
+            if getattr(args, "no_empty", False) and not item.get("count"): continue # for item
             countstr = "" if item.get("count") is None else ", %s" % util.count(item, "row")
             if item["name"] in files:
                 filename = files[item["name"]]
