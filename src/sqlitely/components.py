@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.05.2024
+@modified    28.05.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -2155,9 +2155,11 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                 if wx.ID_OK != dlg.ShowModal(): return
                 name = dlg.GetValue().strip()
                 if not name: return
+            columns = [x for i, x in enumerate(self._grid.Table.columns)
+                       if self._grid.Table.IsColumnShown(i)] or self._grid.Table.columns
             args = {"make_iterable": make_iterable, "filename": filename, "format": extname,
-                    "db": self._db, "columns": self._grid.Table.columns,
-                    "query": self._grid.Table.sql, "name": name, "title": title}
+                    "db": self._db, "columns": columns, "query": self._grid.Table.sql,
+                    "name": name, "title": title}
             self.Freeze()
             try:
                 for x in self._panel2.Children: x.Hide()
@@ -2797,8 +2799,10 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         if extname in importexport.EXPORT_EXTS: conf.LastExportType = extname
         try:
             grid = self._grid.Table
+            columns = [x for i, x in enumerate(grid.columns) if grid.IsColumnShown(i)] \
+                      or grid.columns
             args = {"make_iterable": grid.GetRowIterator, "filename": filename, "format": extname,
-                    "title": util.unprint(title), "db": self._db, "columns": grid.columns,
+                    "title": util.unprint(title), "db": self._db, "columns": columns,
                     "category": self._category, "name": self._item["name"]}
             opts = {"filename": filename,
                     "callable": functools.partial(importexport.export_data, **args)}

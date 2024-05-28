@@ -16,6 +16,7 @@ CHANGELOG
 - update SQLite keywords from 126 to the latest 147-element list
 - use a custom lockfile implementation for single instance check in Linux
 - show descriptive error when trying to save view with blank column names
+- skip hidden columns in data grid exports
 - fix saving nested structures in JSON/YAML data import
 - fix auto_vacuum and encoding pragmas not being editable in new databases
 - fix updating main page upon removing databases when home-row is also selected
