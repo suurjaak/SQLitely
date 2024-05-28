@@ -23,6 +23,7 @@ CHANGELOG
 - fix entering new value in column/constraint editor editable comboboxes like column type
 - fix rows-toggle not toggling data table in single item HTML export
 - make "Toggle all" toggle item CREATE SQL statements in combined HTML export
+- add program version number and date to HTML export metadata
 - fix intermittent mouse event error on diagram
 - fix diagram selection rectangle font issues in Linux
 - improve handling tables WITHOUT ROWID

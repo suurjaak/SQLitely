@@ -55,7 +55,8 @@ from sqlitely import conf, images
 %><!DOCTYPE HTML><html lang="en">
 <head>
   <meta http-equiv='Content-Type' content='text/html;charset=utf-8' />
-  <meta name="Author" content="{{ conf.Title }}">
+  <meta name="author" content="{{ conf.Title }}">
+  <meta name="generator" content="{{ conf.Title.lower() }} v{{ conf.Version }} ({{ conf.VersionDate }})">
   <title>{{ util.tuplefy(title)[0] }}</title>
   <link rel="shortcut icon" type="image/png" href="data:image/png;base64,{{! images.Icon16x16_8bit.data }}"/>
   <style>
@@ -1876,7 +1877,8 @@ def wrapclass(v):
 %><!DOCTYPE HTML><html lang="en">
 <head>
   <meta http-equiv='Content-Type' content='text/html;charset=utf-8' />
-  <meta name="Author" content="{{ conf.Title }}">
+  <meta name="author" content="{{ conf.Title }}">
+  <meta name="generator" content="{{ conf.Title.lower() }} v{{ conf.Version }} ({{ conf.VersionDate }})">
   <title>{{ title }}</title>
   <link rel="shortcut icon" type="image/png" href="data:image/png;base64,{{! images.Icon16x16_8bit.data }}"/>
   <style>
