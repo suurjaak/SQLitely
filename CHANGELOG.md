@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.3, 2024-05-21
+2.3, 2024-05-28
 ---------------
 - add command-line interface, with export, import, parse, search and stats
 - add option to rename SQL window pages
@@ -22,6 +22,7 @@ CHANGELOG
 - fix foreign key constraint editor not allowing to add a column in duplicate
 - fix entering new value in column/constraint editor editable comboboxes like column type
 - fix rows-toggle not toggling data table in single item HTML export
+- make "Toggle all" toggle item CREATE SQL statements in combined HTML export
 - fix intermittent mouse event error on diagram
 - fix diagram selection rectangle font issues in Linux
 - improve handling tables WITHOUT ROWID

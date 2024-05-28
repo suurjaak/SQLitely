@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    17.05.2024
+@modified    28.05.2024
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -226,7 +226,7 @@ from sqlitely import conf, images
     var onToggleAll = function(a) {
       a.classList.toggle('open');
       var on = !a.classList.contains('open');
-      document.querySelectorAll('table.header_table a.toggle.down').forEach(function(elem) {
+      document.querySelectorAll('table.header_table a.toggle').forEach(function(elem) {
           if (on != !elem.classList.contains('open')) elem.click();
       });
     };
