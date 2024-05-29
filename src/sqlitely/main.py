@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.05.2024
+@modified    29.05.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -314,7 +314,8 @@ ARGUMENTS = {
 
 
 logger = logging.getLogger(__package__)
-window = None  # Application main window instance
+window = None    # Application main window instance
+cli_args = None  # Command-line arguments list in CLI mode
 
 
 class MainApp(wx.App if wx else object):
@@ -921,12 +922,14 @@ def run_export(dbname, args):
     elif args.OUTFILE and args.combine and "sql" == args.format:
         func, posargs = importexport.export_dump, (args.OUTFILE, db, schema)
         kwargs.update(data=not args.schema_only, pragma=not args.filter, limit=limit,
-                      maxcount=args.maxcount, empty=not args.no_empty, reverse=args.reverse)
+                      maxcount=args.maxcount, empty=not args.no_empty, reverse=args.reverse,
+                      info={"Command": " ".join(cli_args)} if cli_args else None)
 
     elif args.OUTFILE and args.combine:
         title = "Export from %s" % os.path.basename(dbname)
         func, posargs = importexport.export_data_multiple, [args.OUTFILE, args.format, title, db]
-        kwargs.update(empty=not args.no_empty, maxcount=args.maxcount, make_iterables=make_iterables)
+        kwargs.update(empty=not args.no_empty, maxcount=args.maxcount, make_iterables=make_iterables,
+                      info={"Command": " ".join(cli_args)} if cli_args else None)
 
     elif args.OUTFILE:
         def do_export():
@@ -943,7 +946,8 @@ def run_export(dbname, args):
 
                 title = util.cap(item["title"])
                 result = importexport.export_data(make_iterable, filename, args.format, title, db,
-                    item["columns"], category=item["type"], name=item["name"], progress=progress
+                    item["columns"], category=item["type"], name=item["name"],
+                    info={"Command": " ".join(cli_args)} if cli_args else None, progress=progress
                 )
                 if not result or args.no_empty and not item["count"]:
                     util.try_ignore(os.unlink, filename)
@@ -1045,7 +1049,8 @@ def run_search(dbname, args):
     elif args.OUTFILE and args.combine:
         func = importexport.export_data_multiple
         posargs.extend((args.OUTFILE, args.format, make_search_title(args), db))
-        kwargs.update(empty=False, make_iterables=make_iterables, progress=progress)
+        kwargs.update(empty=False, make_iterables=make_iterables, progress=progress,
+                      info={"Command": " ".join(cli_args)} if cli_args else None)
 
     elif args.OUTFILE:
         def do_export():
@@ -1063,7 +1068,8 @@ def run_search(dbname, args):
 
                 title = [util.cap(item["title"])] + make_search_title(args)
                 result = importexport.export_data(make_iterable, filename, args.format, title, db,
-                    item["columns"], category=category, name=name, progress=progress
+                    item["columns"], category=category, name=name, progress=progress,
+                    info={"Command": " ".join(cli_args)} if cli_args else None
                 )
                 if result and item["count"]: files[name] = filename
                 else: util.try_ignore(os.unlink, filename)
@@ -1493,7 +1499,7 @@ def run_gui(filenames):
 
 def run(nogui=False):
     """Parses command-line arguments, and runs GUI or a CLI action."""
-    global is_gui_possible, logger
+    global cli_args, is_gui_possible, logger
 
     warnings.simplefilter("ignore", UnicodeWarning)
 
@@ -1583,6 +1589,7 @@ def run(nogui=False):
         if os.path.realpath(arguments.INFILE) == os.path.realpath(arguments.OUTFILE):
             sys.exit("Input file and output file are the same file.")
 
+    cli_args = argv[:]
     if "export" == arguments.command:
         run_export(arguments.INFILE, arguments)
     elif "import" == arguments.command:

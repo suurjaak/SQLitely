@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.05.2024
+@modified    29.05.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -100,7 +100,7 @@ logger = logging.getLogger(__name__)
 
 
 def export_data(make_iterable, filename, format, title, db, columns,
-                query=None, category=None, name=None, multiple=False, progress=None):
+                query=None, category=None, name=None, multiple=False, info=None, progress=None):
     """
     Exports database data to file.
 
@@ -114,6 +114,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
     @param   category        category producing the data, if any, "table" or "view"
     @param   name            name of the table or view producing the data, if any
     @param   multiple        whether to use multi-item template
+    @param   info            additional metadata for export, as {title: text or {label: text}}
     @param   progress        callback(name, count) to report progress,
                              returning false if export should cancel
     @return                  True on success, False on failure, None on cancel
@@ -152,8 +153,10 @@ def export_data(make_iterable, filename, format, title, db, columns,
                     writer = csv_writer(filename)
                     if query: query = query.replace("\r", " ").replace("\n", " ")
                 else:
+                    infostring = "\n\n".join("\n".join("%s: %s" % x for x in v.items()) if isinstance(v, dict)
+                                             else "%s: %s" % (k, v) for k, v in (info or {}).items())
                     props = {"title": "; ".join(("Source: %s" % db, ) + util.tuplefy(title)),
-                             "comments": templates.export_comment()}
+                             "comments": "\n\n".join(filter(bool, (infostring, templates.export_comment())))}
                     writer = xlsx_writer(filename, name if name is not None else "SQL Query", props=props)
                     writer.set_header(True)
                 if query:
@@ -178,6 +181,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
                     "category":   category,
                     "name":       name,
                     "multiple":   multiple,
+                    "info":       info,
                     "progress":   progress,
                 }
                 namespace["namespace"] = namespace # To update row_count
@@ -248,7 +252,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
 
 
 def export_data_multiple(filename, format, title, db, category=None, names=None, make_iterables=None,
-                         limit=None, maxcount=None, empty=True, reverse=False, progress=None):
+                         limit=None, maxcount=None, empty=True, reverse=False, info=None, progress=None):
     """
     Exports database data from multiple tables/views to a single output file.
 
@@ -264,6 +268,7 @@ def export_data_multiple(filename, format, title, db, category=None, names=None,
     @param   maxcount        maximum total number of rows to export over all entities
     @param   empty           do not skip tables and views with no output rows
     @param   reverse         query rows in reverse order if using category
+    @param   info            additional metadata for export, as {title: text or {label: text}}
     @param   progress        callback(name, count) to report progress,
                              returning false if export should cancel
     @return                  True on success, False on failure, None on cancel
@@ -354,8 +359,10 @@ def export_data_multiple(filename, format, title, db, category=None, names=None,
                 if "csv" == format:
                     writer = csv_writer(filename)
                 else:
+                    infostring = "\n\n".join("\n".join("%s: %s" % x for x in v.items()) if isinstance(v, dict)
+                                             else "%s: %s" % (k, v) for k, v in (info or {}).items())
                     props = {"title": "; ".join(("Source: %s" % db, ) + util.tuplefy(title)),
-                             "comments": templates.export_comment()}
+                             "comments": "\n\n".join(filter(bool, (infostring, templates.export_comment())))}
                     writer = xlsx_writer(filename, props=props)
 
             for item_i, (item, make_iterable) in enumerate(make_item_iterables()):
@@ -403,7 +410,7 @@ def export_data_multiple(filename, format, title, db, category=None, names=None,
                                            grammar.quote(name, force=True))
                     result = export_data(make_iterable, tmpname, format, itemtitle, db,
                                          item["columns"], category=item["type"], name=name,
-                                         multiple=True, progress=myprogress)
+                                         multiple=True, info=info, progress=myprogress)
                     itemfiles[tmpname] = myitem
 
                 if not result: break # for item_i
@@ -419,6 +426,8 @@ def export_data_multiple(filename, format, title, db, category=None, names=None,
                     "db":       db,
                     "title":    title,
                     "files":    itemfiles,
+                    "multiple": True,
+                    "info":     info,
                     "progress": progress,
                 }
                 template.stream(f, namespace)
@@ -467,7 +476,7 @@ def export_stats(filename, format, db, data, diagram=None):
 
 
 def export_dump(filename, db, schema=None, data=True, pragma=True,
-                limit=None, maxcount=None, empty=True, reverse=False, progress=None):
+                limit=None, maxcount=None, empty=True, reverse=False, info=None, progress=None):
     """
     Exports full database dump to SQL file.
 
@@ -480,6 +489,7 @@ def export_dump(filename, db, schema=None, data=True, pragma=True,
     @param   empty     do not skip items with no output rows
                        (accounting for limit)
     @param   reverse   query rows in reverse order
+    @param   info      additional metadata for export, as {title: text or {label: text}}
     @param   progress  callback(name, count) to report progress,
                        returning false if export should cancel
     @return            True on success, False on failure, None on cancel
@@ -546,6 +556,7 @@ def export_dump(filename, db, schema=None, data=True, pragma=True,
                 "sql":      sql,
                 "data":     make_datas() if data else [],
                 "pragma":   db.get_pragma_values(dump=True) if pragma else {},
+                "info":     info,
                 "progress": progress,
                 "buffer":   f,
             }

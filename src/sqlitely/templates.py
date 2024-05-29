@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.05.2024
+@modified    29.05.2024
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -157,6 +157,7 @@ from sqlitely import conf, images
     th { padding-left: 5px; padding-right: 5px; text-align: center; white-space: nowrap; }
     .sqlintro { font-family: monospace; white-space: pre-wrap; }
     .sql { font-family: monospace; white-space: pre-wrap; }
+    pre { display: inline; font-family: monospace; white-space: pre-line; }
     a.toggle:hover { cursor: pointer; text-decoration: none; }
     a.toggle::after { content: ".. \\25b6"; font-size: 1.2em; }
     a.toggle.open::after { content: " \\25b2"; font-size: 0.7em; }
@@ -282,6 +283,7 @@ HTML data export template.
 @param   sql          SQL query giving export data, if any
 @param   create_sql   CREATE SQL statement for export object, if any
 @param   ?multiple    whether not doing single item export
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback(name, count) returning whether to cancel, if any
 """
 DATA_HTML = """<%
@@ -305,6 +307,7 @@ HTML export template for multiple items.
 @param   db           database.Database instance
 @param   title        export title, as string or a sequence of strings
 @param   files        files to embed content from, as {file name: {name, title}}
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_HTML_MULTIPLE = """<%
@@ -318,7 +321,7 @@ _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 %>{{! Template(templates.DATA_HTML_HEADER, strip=False).expand(title=title, multiple=True) }}
 <body>
 <div id="root">
-%if len(files) > 1:
+%if get("multiple"):
 
 <table class="body_table">
 <tr><td>
@@ -329,6 +332,9 @@ _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
     </span>
   </div><br />
   Source: <b>{{ db }}</b>{{ " (%s)" % dbsize if dbsize else "" }}.<br />
+%if get("info"):
+  {{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="html").strip() }}
+%endif
   <ol class="title">
 %for item in files.values():
     <li><div>
@@ -368,12 +374,14 @@ HTML export template for item partial file.
 @param   sql          SQL query giving export data, if any
 @param   create_sql   CREATE SQL statement for export object, if any
 @param   ?multiple    whether actually doing multiple item export
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback(name, count) returning whether to cancel, if any
 """
 DATA_HTML_MULTIPLE_PART = """<%
 import os
+from step import Template
 from sqlitely.lib import util
-from sqlitely import grammar
+from sqlitely import grammar, templates
 
 _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 item_id = "item__%s" % hash(util.tuplefy(title))
@@ -391,6 +399,9 @@ progress = get("progress")
       <br />
 %if not get("multiple"):
       Source: <b>{{ db }}</b>{{ " (%s)" % dbsize if dbsize else "" }}.<br />
+    %if get("info"):
+      {{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="html").strip() }}
+    %endif
 %endif
       <b>{{ row_count }}</b> {{ util.plural("row", row_count, numbers=False) }}{{ " in results" if sql else "" }}.
       <a class="toggle down open" title="Toggle rows" onclick="onToggle(this, '{{ item_id }}{{ "" if get("multiple") else "__rows" }}', null, 'collapsed')"> </a>
@@ -609,10 +620,12 @@ SQL insert statements export template.
 @param   data_buffer  iterable yielding rows data in text chunks
 @param   ?sql         SQL query giving export data, if any
 @param   ?create_sql  CREATE SQL statement for export object, if any
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback(name, count) returning whether to cancel, if any
 """
 DATA_SQL = """<%
 import os
+from step import Template
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
@@ -620,6 +633,9 @@ _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %>-- {{ "\\n-- ".join(util.tuplefy(title)) }}.
 -- Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
+%if get("info"):
+{{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="sql").strip() }}
+%endif
 -- {{ templates.export_comment() }}
 -- {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
 %if get("sql"):
@@ -649,16 +665,21 @@ TXT SQL insert statements export template for multiple items.
 
 @param   db          database.Database instance
 @param   files       files to embed content from, as {file name: {name, title}}
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress   callback() returning whether to cancel, if any
 """
 DATA_SQL_MULTIPLE = """<%
 import os
+from step import Template
 from sqlitely.lib import util
 from sqlitely import conf, templates
 
 _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %>-- Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
+%if get("info"):
+{{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="sql").strip() }}
+%endif
 -- {{ templates.export_comment() }}
 
 
@@ -791,10 +812,12 @@ TXT data export template.
 @param   columnwidths  {col name: char length}
 @param   ?sql          SQL query giving export data, if any
 @param   ?create_sql   CREATE SQL statement for export object, if any
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress     callback() returning whether to cancel, if any
 """
 DATA_TXT = """<%
 import os
+from step import Template
 from sqlitely.lib import util
 from sqlitely import grammar, templates
 
@@ -802,6 +825,9 @@ _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %>{{ "\\n".join(util.tuplefy(title)) }}.
 Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
+%if get("info"):
+{{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="txt").strip() }}
+%endif
 {{ templates.export_comment() }}
 {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
 %if get("sql"):
@@ -843,16 +869,21 @@ TXT export template for multiple items.
 
 @param   db           database.Database instance
 @param   files        files to embed content from, as {file name: {..}}
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_TXT_MULTIPLE = """<%
 import os
+from step import Template
 from sqlitely.lib import util
 from sqlitely import templates
 
 _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %>Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
+%if get("info"):
+{{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="txt").strip() }}
+%endif
 {{ templates.export_comment() }}
 
 
@@ -1012,10 +1043,12 @@ YAML export template.
 @param   data_buffer  iterable yielding rows data in text chunks
 @param   ?sql         SQL query giving export data, if any
 @param   ?create_sql  CREATE SQL statement for export object, if any
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_YAML = """<%
 import os
+from step import Template
 from sqlitely.lib import util
 from sqlitely import templates
 
@@ -1023,6 +1056,9 @@ _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %># {{ "\\n# ".join(util.tuplefy(title)) }}
 # Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
+%if get("info"):
+{{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="yaml").strip() }}
+%endif
 # {{ templates.export_comment() }}
 # {{ row_count }} {{ util.plural("row", row_count, numbers=False) }}.
 %if get("sql"):
@@ -1081,10 +1117,12 @@ YAML export template for multiple items.
 @param   db           database.Database instance
 @param   title        export title, as string or a sequence of strings
 @param   files        files to embed content from, as {file name: {..}}
+@param   ?info        additional metadata for export, as {title: text or {label: text}}
 @param   ?progress    callback() returning whether to cancel, if any
 """
 DATA_YAML_MULTIPLE = """<%
 import os
+from step import Template
 from sqlitely.lib import util
 from sqlitely import templates
 
@@ -1092,6 +1130,9 @@ _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 progress = get("progress")
 %># {{ "\\n# ".join(util.tuplefy(title)) }}
 # Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
+%if get("info"):
+{{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="yaml").strip() }}
+%endif
 # {{ templates.export_comment() }}
 
 <%
@@ -1175,6 +1216,44 @@ for i, row in enumerate(rows, 1):
         elif j: value = "  " + value[2:]
         echo(value)
 %>"""
+
+
+
+"""
+Data export template for export info part.
+
+@param   info    additional metadata for export, as {title: text or {label: text}}
+@param   format  export format, one of "html" "sql" "txt" "yaml"
+"""
+DATA_INFO_PART = """<%
+prefix = {"sql": "-- ", "yaml": "# "}.get(format, "")
+%>
+%if "html" == format:
+    %for label, value in info.items():
+        %if value and isinstance(value, dict):
+  {{ label }}:
+  <table>
+            %for k, v in value.items():
+    <tr><td>{{ k }}:</td><td>{{ v }}</td></tr>
+            %endfor
+  </table>
+        %elif value:
+  {{ label }}: <pre>{{ value }}</pre><br />
+        %endif
+    %endfor
+%else:
+    %for label, value in (get("info") or {}).items():
+        %if value and isinstance(value, dict):
+{{ prefix }}{{ label }}:
+            %for k, v in value.items():
+{{ prefix }}  {{ k }}: {{ v }}
+            %endfor
+        %elif value:
+{{ prefix }}{{ label }}: {{ value }}
+        %endif
+    %endfor
+%endif
+"""
 
 
 
@@ -2929,6 +3008,7 @@ Database dump SQL template.
 @param   data       iterable yielding {name, columns, rows}
 @param   pragma     PRAGMA values as {name: value}
 @param   buffer     file or file-like buffer being written to
+@param   ?info      additional metadata for export, as {title: text or {label: text}}
 @param   ?progress  callback(name, count) returning whether to cancel, if any
 """
 DUMP_SQL = """<%
@@ -2947,6 +3027,9 @@ progress = get("progress")
 %>
 -- Database dump.
 -- Source: {{ db }}{{ " (%s)" % dbsize if dbsize else "" }}.
+%if get("info"):
+{{! Template(templates.DATA_INFO_PART, strip=False).expand(info=info, format="sql").strip() }}
+%endif
 -- {{ templates.export_comment() }}
 %if pragma_first:
 

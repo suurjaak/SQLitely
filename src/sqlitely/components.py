@@ -528,6 +528,25 @@ class SQLiteGridBase(wx.grid.GridTableBase):
         self.Filter(rows_before)
 
 
+    def GetSettingsInfo(self, partial_hidden=False):
+        """
+        Returns dictionary with info strings about current filter and sort and hidden state, if any.
+
+        @param   partial_hidden  include info about hidden columns only if not all hidden
+        """
+        result, colnames = {}, [grammar.quote(c["name"]) for c in self.columns]
+        if self.sort_column:
+            result["Sorted by"] = grammar.quote(colnames[self.sort_column]) + \
+                                  ("" if self.sort_ascending else " in reverse")
+        if self.filters:
+            result["Filtered by"] = " and ".join("%s LIKE '%%%s%%'" % (colnames[i], v)
+                                                 for i, v in self.filters.items())
+        if 0 < sum(self.hiddens.values()) < (len(self.columns) + (not partial_hidden)):
+            result["Hidden columns"] = ", ".join(grammar.quote(colnames[i])
+                                                 for i, v in self.hiddens.items() if v)
+        return result
+
+
     def GetChangedInfo(self):
         """Returns an info string about the uncommited changes in this grid."""
         infolist = []
@@ -2157,8 +2176,10 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
                 if not name: return
             columns = [x for i, x in enumerate(self._grid.Table.columns)
                        if self._grid.Table.IsColumnShown(i)] or self._grid.Table.columns
+            info = self._grid.Table.GetSettingsInfo(partial_hidden=True)
             args = {"make_iterable": make_iterable, "filename": filename, "format": extname,
                     "db": self._db, "columns": columns, "query": self._grid.Table.sql,
+                    "info": {"Export options": info} if info else None,
                     "name": name, "title": title}
             self.Freeze()
             try:
@@ -2801,9 +2822,11 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
             grid = self._grid.Table
             columns = [x for i, x in enumerate(grid.columns) if grid.IsColumnShown(i)] \
                       or grid.columns
+            info = self._grid.Table.GetSettingsInfo(partial_hidden=True)
             args = {"make_iterable": grid.GetRowIterator, "filename": filename, "format": extname,
                     "title": util.unprint(title), "db": self._db, "columns": columns,
-                    "category": self._category, "name": self._item["name"]}
+                    "category": self._category, "name": self._item["name"],
+                    "info": {"Export options": info} if info else None}
             opts = {"filename": filename,
                     "callable": functools.partial(importexport.export_data, **args)}
             if grid.IsComplete() and not grid.IsChanged():
