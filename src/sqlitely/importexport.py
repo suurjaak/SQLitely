@@ -155,8 +155,11 @@ def export_data(make_iterable, filename, format, title, db, columns,
                 else:
                     infostring = "\n\n".join("\n".join("%s: %s" % x for x in v.items()) if isinstance(v, dict)
                                              else "%s: %s" % (k, v) for k, v in (info or {}).items())
-                    props = {"title": "; ".join(("Source: %s" % db, ) + util.tuplefy(title)),
-                             "comments": "\n\n".join(filter(bool, (infostring, templates.export_comment())))}
+                    querystring = None if not query else "Query: %s" % query
+                    props = {"title": "; ".join(util.tuplefy(title)),
+                             "subject": "Source: %s" % db, "author": conf.Title,
+                             "comments": "\n\n".join(filter(bool, (infostring, querystring,
+                                                                   templates.export_comment())))}
                     writer = xlsx_writer(filename, name if name is not None else "SQL Query", props=props)
                     writer.set_header(True)
                 if query:
@@ -361,7 +364,8 @@ def export_data_multiple(filename, format, title, db, category=None, names=None,
                 else:
                     infostring = "\n\n".join("\n".join("%s: %s" % x for x in v.items()) if isinstance(v, dict)
                                              else "%s: %s" % (k, v) for k, v in (info or {}).items())
-                    props = {"title": "; ".join(("Source: %s" % db, ) + util.tuplefy(title)),
+                    props = {"title": "; ".join(util.tuplefy(title)),
+                             "subject": "Source: %s" % db, "author": conf.Title,
                              "comments": "\n\n".join(filter(bool, (infostring, templates.export_comment())))}
                     writer = xlsx_writer(filename, props=props)
 

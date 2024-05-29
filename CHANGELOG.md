@@ -11,6 +11,7 @@ CHANGELOG
 - include read-only pragmas in PRAGMA SQL
 - include original encoding pragma in database recovery
 - include current filter/sort/hidden settings in data grid export
+- tweak spreadsheet properties content in Excel export, include SQL query
 - show pragma SQL in view mode as well
 - skip initial blank rows in spreadsheet imports
 - change default item action on diagram from opening schema to opening data
