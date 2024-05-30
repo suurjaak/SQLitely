@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    23.05.2024
+@modified    30.05.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -2824,7 +2824,7 @@ class DatabasePage(wx.Panel):
             "index":    il.Add(images.TreeIndex.Bitmap),
             "trigger":  il.Add(images.TreeTrigger.Bitmap),
             "view":     il.Add(images.TreeView.Bitmap),
-            "columns":  il.Add(wx.ArtProvider.GetBitmap(wx.ART_FOLDER,          wx.ART_TOOLBAR, isize)),
+            "columns":  il.Add(wx.ArtProvider.GetBitmap(wx.ART_FOLDER, wx.ART_TOOLBAR, isize)),
         }
         tree.AssignImageList(il)
 

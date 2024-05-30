@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    28.05.2024
+@modified    30.05.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -1857,7 +1857,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
         ColourManager.Manage(label_rows, "ForegroundColour", wx.SYS_COLOUR_WINDOWTEXT)
 
-        panel_export = self._export = ExportProgressPanel(panel2)
+        panel_export = self._export = ExportProgressPanel(panel2, close_label="&Back to query", multi=False)
         panel_export.Hide()
 
         self.Bind(wx.EVT_TOOL,     self._OnToggleLineNumbers,  id=wx.ID_INDENT)
@@ -2475,7 +2475,8 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
         ColourManager.Manage(label_help, "ForegroundColour", "DisabledColour")
         ColourManager.Manage(label_rows, "ForegroundColour", wx.SYS_COLOUR_WINDOWTEXT)
 
-        panel_export = self._export = ExportProgressPanel(self, self._category)
+        panel_export = self._export = ExportProgressPanel(self, self._category, multi=False,
+                                                          close_label="&Back to %s" % self._category)
         panel_export.Hide()
 
         self.Bind(wx.EVT_TOOL,       self._OnInsert,         id=wx.ID_ADD)
@@ -2845,10 +2846,7 @@ class DataObjectPage(wx.Panel, SQLiteGridBaseMixin):
 
 
     def _OnExportClose(self, event):
-        """
-        Handler for closing export panel.
-        """
-        if getattr(event, "close", False): return self._OnClose(True)
+        """Handler for closing export panel, shows normal view."""
         self.Freeze()
         try:
             for x in self.Children: x.Show()
@@ -6265,36 +6263,34 @@ class ExportProgressPanel(wx.Panel):
     Panel for long-running exports showing their progress.
     """
 
-    def __init__(self, parent, category=None):
+    def __init__(self, parent, category=None, close_label="&Close", multi=True):
         wx.Panel.__init__(self, parent)
 
-        self._tasks = []     # [{callable, pending, count, ?unit, ?multi, ?total, ?is_total_estimated, ?subtasks, ?open}]
-        self._ctrls   = []   # [{title, gauge, text, cancel, open, folder}]
-        self._category = category
-        self._current = None # Current task index
-        self._worker = workers.WorkerThread(self._OnWorker)
+        self._tasks = []   # [{callable, pending, count, ?unit, ?multi, ?total, ?is_total_estimated, ?subtasks, ?open}]
+        self._ctrls = []   # [{title, gauge, text, cancel, open, folder, ?close}]
+        self._category    = category
+        self._close_label = close_label
+        self._multi       = multi
+        self._current     = None # Current task index
+        self._worker      = workers.WorkerThread(self._OnWorker)
 
         sizer = self.Sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer_buttons      = wx.BoxSizer(wx.HORIZONTAL)
+        sizer_buttons      = wx.BoxSizer(wx.HORIZONTAL) if multi else None
         panel_tasks = self._panel = wx.ScrolledWindow(self)
         panel_tasks.Sizer = wx.BoxSizer(wx.VERTICAL)
         panel_tasks.SetScrollRate(0, 20)
 
-        button_open  = self._button_open  = wx.Button(self, label="Open %s" % category) \
-                       if category else None
-        button_close = self._button_close = wx.Button(self, label="&Close")
+        button_close = self._button_close = wx.Button(self, label=close_label) if multi else None
 
-        if button_open: self.Bind(wx.EVT_BUTTON, self._OnClose, button_open)
-        self.Bind(wx.EVT_BUTTON, self._OnClose, button_close)
+        self.Bind(wx.EVT_BUTTON, self._OnClose, button_close) if multi else None
         self.Bind(wx.EVT_SIZE, lambda e: wx.CallAfter(lambda: self and (self.Layout(), self.Refresh())))
 
-        if button_open: sizer_buttons.Add(button_open, border=10, flag=wx.RIGHT)
-        sizer_buttons.Add(button_close)
+        sizer_buttons.Add(button_close) if multi else None
 
         sizer.AddStretchSpacer()
-        sizer.Add(panel_tasks, proportion=5, flag=wx.GROW)
-        sizer.AddStretchSpacer(0)
-        sizer.Add(sizer_buttons, border=16, flag=wx.ALL | wx.ALIGN_RIGHT)
+        sizer.Add(panel_tasks, proportion=10, flag=wx.GROW)
+        sizer.AddStretchSpacer()
+        sizer.Add(sizer_buttons, border=16, flag=wx.ALL | wx.ALIGN_RIGHT) if multi else None
 
 
     def Run(self, tasks):
@@ -6414,11 +6410,16 @@ class ExportProgressPanel(wx.Panel):
             sizer.Add(parent, flag=wx.ALIGN_CENTER)
             sizer.Add(sizer_buttons, border=5, flag=wx.TOP | wx.ALIGN_CENTER)
 
+            if not self._multi:
+                close = ctrls["close"] = wx.Button(panel, label=self._close_label)
+                sizer.Add(close, border=10, flag=wx.TOP | wx.ALIGN_CENTER)
+
             panel.Sizer.Add(sizer, border=10, flag=wx.ALL | wx.GROW)
 
             self.Bind(wx.EVT_BUTTON, functools.partial(self._OnCancel, i), cancel)
             self.Bind(wx.EVT_BUTTON, functools.partial(self._OnOpen,   i), open)
             self.Bind(wx.EVT_BUTTON, functools.partial(self._OnFolder, i), folder)
+            self.Bind(wx.EVT_BUTTON, self._OnClose, close) if not self._multi else None
 
             self._ctrls.append(ctrls)
 
@@ -6458,8 +6459,7 @@ class ExportProgressPanel(wx.Panel):
 
         self.Stop()
         self._Populate()
-        do_close = (event.EventObject is self._button_close)
-        wx.PostEvent(self, ProgressEvent(self.Id, close=do_close))
+        wx.PostEvent(self, ProgressEvent(self.Id, close=True))
         if any(x["pending"] for x in self._tasks): self._OnComplete()
 
 

@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-2.3, 2024-05-28
+2.3, 2024-05-30
 ---------------
 - add command-line interface, with export, import, parse, search and stats
 - add option to rename SQL window pages
@@ -32,6 +32,7 @@ CHANGELOG
 - improve handling tables WITHOUT ROWID
 - restore program window on unminimizing from tray if window iconized
 - ensure dialog windows get destroyed when closed
+- tweak export panel buttons and layout
 - tweak column/constraint editor layout
 - disable automatic update checks and downloads in snaps
 - include third-party license texts in snaps and stand-alone exes
