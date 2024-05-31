@@ -696,7 +696,7 @@ def validate_args(action, args, infile=None):
     @param   infile  input filename if any
     """
     prepare_args(action, args)
-    if 0 in (args.limit, args.maxcount):
+    if action in ("export", "import", "parse", "search") and 0 in (args.limit, args.maxcount):
         sys.exit("Nothing to export with %s." %
                  ("limit %r" % args.limit if not args.limit else "max count %r" % args.maxcount))
     if "export" == action and args.schema_only and args.format in ("json", "yaml"):
