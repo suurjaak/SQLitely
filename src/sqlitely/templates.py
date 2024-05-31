@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.05.2024
+@modified    31.05.2024
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1337,9 +1337,7 @@ wrap_hl = lambda x: "<b>%s</b>" % x.group(0)
 %>
 <tr>
 <td align="right" valign="top">
-  <a href="{{ category }}:{{ item["name"] }}:{{ count }}">
-    <font color="{{ conf.LinkColour }}">{{ count }}</font>
-  </a>
+  <a href="{{ category }}:{{ item["name"] }}:{{ count }}"><font color="{{ conf.LinkColour }}">{{ count }}</font></a>
 </td>
 %for c in item["columns"]:
 <%
