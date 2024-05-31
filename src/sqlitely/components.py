@@ -10943,7 +10943,7 @@ class SchemaDiagramWindow(wx.ScrolledWindow):
                                  if len(items) > 1 else None
             item_export_data   = exportmenu.Append(wx.ID_ANY, "Export data to another &database") if "table" in categories else None
             item_export_schema = exportmenu.Append(wx.ID_ANY, "Export structure to another data&base")
-            item_export_image  = exportmenu.Append(wx.ID_ANY, "Export diagram &image")
+            item_export_image  = exportmenu.Append(wx.ID_ANY, "Export diagram i&mage")
             menu.AppendSeparator()
 
             if len(items) == 1:
