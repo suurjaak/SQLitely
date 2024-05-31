@@ -4276,7 +4276,7 @@ class DatabasePage(wx.Panel):
                 layout.Redraw(wx.Rect(0, 0, *conf.Defaults["WindowSize"]), layout.LAYOUT_GRID)
                 diagrams = {"bmp": layout.MakeBitmap(),
                             "svg": layout.MakeTemplate("SVG", embed=True)}
-            importexport.export_stats(filename, extname, self.db, data, diagrams)
+            importexport.export_stats(self.db, filename, extname, data, diagrams)
             guibase.status('Exported to "%s".', filename, log=True)
             util.start_file(filename)
         except Exception as e:
@@ -5518,7 +5518,7 @@ class DatabasePage(wx.Panel):
         try:
             title = "PRAGMA settings." if "PRAGMA" == title else \
                     "Database %s." % (title or "schema")
-            importexport.export_sql(filename, self.db, sql, title)
+            importexport.export_sql(self.db, filename, sql, title)
             guibase.status('Exported to "%s".', filename, log=True)
             util.start_file(filename)
         except Exception as e:

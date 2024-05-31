@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.05.2024
+@modified    31.05.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -920,14 +920,14 @@ def run_export(dbname, args):
                       renames=renames, reverse=args.reverse)
 
     elif args.OUTFILE and args.combine and "sql" == args.format:
-        func, posargs = importexport.export_dump, (args.OUTFILE, db, schema)
+        func, posargs = importexport.export_dump, [db, args.OUTFILE, schema]
         kwargs.update(data=not args.schema_only, pragma=not args.filter, limit=limit,
                       maxcount=args.maxcount, empty=not args.no_empty, reverse=args.reverse,
                       info={"Command": " ".join(cli_args)} if cli_args else None)
 
     elif args.OUTFILE and args.combine:
         title = "Export from %s" % os.path.basename(dbname)
-        func, posargs = importexport.export_data_multiple, [args.OUTFILE, args.format, title, db]
+        func, posargs = importexport.export_data_multiple, [db, args.OUTFILE, args.format, title]
         kwargs.update(empty=not args.no_empty, maxcount=args.maxcount, make_iterables=make_iterables,
                       info={"Command": " ".join(cli_args)} if cli_args else None)
 
@@ -945,7 +945,7 @@ def run_export(dbname, args):
                 if not args.overwrite: filename = util.unique_path(filename)
 
                 title = util.cap(item["title"])
-                result = importexport.export_data(make_iterable, filename, args.format, title, db,
+                result = importexport.export_data(db, filename, args.format, make_iterable, title,
                     item["columns"], category=item["type"], name=item["name"],
                     info={"Command": " ".join(cli_args)} if cli_args else None, progress=progress
                 )
@@ -960,7 +960,7 @@ def run_export(dbname, args):
 
     else: # Print to console
         func = importexport.export_to_console
-        posargs = [make_iterables, args.format]
+        posargs = [args.format, make_iterables]
         kwargs.update(output=output, multiple=True, progress=progress)
 
     do_output("export", args, functools.partial(func, *posargs, **kwargs), entities, files)
@@ -1048,7 +1048,7 @@ def run_search(dbname, args):
 
     elif args.OUTFILE and args.combine:
         func = importexport.export_data_multiple
-        posargs.extend((args.OUTFILE, args.format, make_search_title(args), db))
+        posargs.extend((db, args.OUTFILE, args.format, make_search_title(args)))
         kwargs.update(empty=False, make_iterables=make_iterables, progress=progress,
                       info={"Command": " ".join(cli_args)} if cli_args else None)
 
@@ -1067,7 +1067,7 @@ def run_search(dbname, args):
                 if not args.overwrite: filename = util.unique_path(filename)
 
                 title = [util.cap(item["title"])] + make_search_title(args)
-                result = importexport.export_data(make_iterable, filename, args.format, title, db,
+                result = importexport.export_data(db, filename, args.format, make_iterable, title,
                     item["columns"], category=category, name=name, progress=progress,
                     info={"Command": " ".join(cli_args)} if cli_args else None
                 )
@@ -1080,7 +1080,7 @@ def run_search(dbname, args):
 
     else: # Print to console
         func = importexport.export_to_console
-        posargs = [make_iterables, args.format, make_search_title(args)]
+        posargs = [args.format, make_iterables, make_search_title(args)]
         kwargs.update(output=output, multiple=True, progress=progress)
 
     do_output("search", args, functools.partial(func, *posargs, **kwargs), entities, files)
@@ -1136,7 +1136,7 @@ def run_parse(dbname, args):
 
         headers = make_search_title(args)
         if args.OUTFILE:
-            importexport.export_sql(args.OUTFILE, db, "\n\n".join(matches), headers)
+            importexport.export_sql(db, args.OUTFILE, "\n\n".join(matches), headers)
     except Exception:
         _, e, tb = sys.exc_info()
         if args.OUTFILE and not file_existed:
@@ -1220,7 +1220,7 @@ def run_stats(dbname, args):
             svg = layout.MakeTemplate("SVG", embed=True)
             diagrams = {"bmp": bmp, "svg": svg}
         bar.update(afterword=" Writing output")
-        importexport.export_stats(args.OUTFILE, args.format, db, stats, diagrams)
+        importexport.export_stats(db, args.OUTFILE, args.format, stats, diagrams)
         bar.stop()
         output()
     except Exception:
@@ -1401,7 +1401,7 @@ def run_import(infile, args):
                 if not args.offset else (args.limit, args.offset)
         maxcount = args.maxcount
         bar.update(afterword=" Importing")
-        importexport.import_data(infile, db, tables, args.row_header, limit, maxcount, progress)
+        importexport.import_data(db, infile, tables, args.row_header, limit, maxcount, progress)
 
     except Exception:
         _, e, tb = sys.exc_info()

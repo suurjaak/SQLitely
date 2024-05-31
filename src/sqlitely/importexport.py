@@ -99,7 +99,7 @@ logger = logging.getLogger(__name__)
 
 
 
-def export_data(make_iterable, filename, format, title, db, columns,
+def export_data(db, filename, format, make_iterable, title, columns,
                 query=None, category=None, name=None, multiple=False, info=None, progress=None):
     """
     Exports database data to file.
@@ -254,7 +254,7 @@ def export_data(make_iterable, filename, format, title, db, columns,
 
 
 
-def export_data_multiple(filename, format, title, db, category=None, names=None, make_iterables=None,
+def export_data_multiple(db, filename, format, title, category=None, names=None, make_iterables=None,
                          limit=None, maxcount=None, empty=True, reverse=False, info=None, progress=None):
     """
     Exports database data from multiple tables/views to a single output file.
@@ -412,7 +412,7 @@ def export_data_multiple(filename, format, title, db, category=None, names=None,
                                                                     (util.safe_filename(name), )))
                     itemtitle = "%s %s" % (item["type"].capitalize(),
                                            grammar.quote(name, force=True))
-                    result = export_data(make_iterable, tmpname, format, itemtitle, db,
+                    result = export_data(db, tmpname, format, make_iterable, itemtitle,
                                          item["columns"], category=item["type"], name=name,
                                          multiple=True, info=info, progress=myprogress)
                     itemfiles[tmpname] = myitem
@@ -452,7 +452,7 @@ def export_data_multiple(filename, format, title, db, category=None, names=None,
     return result
 
 
-def export_sql(filename, db, sql, headers=()):
+def export_sql(db, filename, sql, headers=()):
     """Exports arbitrary SQL to file."""
     template = step.Template(templates.CREATE_SQL, strip=False, postprocess=convert_lf)
     ns = {"headers": util.tuplefy(headers) if headers else (), "db": db, "sql": sql}
@@ -460,7 +460,7 @@ def export_sql(filename, db, sql, headers=()):
     return True
 
 
-def export_stats(filename, format, db, data, diagram=None):
+def export_stats(db, filename, format, data, diagram=None):
     """Exports statistics to HTML or SQL or TXT file."""
     TEMPLATES = {"html": templates.DATA_STATISTICS_HTML,
                  "sql":  templates.DATA_STATISTICS_SQL,
@@ -479,7 +479,7 @@ def export_stats(filename, format, db, data, diagram=None):
     return True
 
 
-def export_dump(filename, db, schema=None, data=True, pragma=True,
+def export_dump(db, filename, schema=None, data=True, pragma=True,
                 limit=None, maxcount=None, empty=True, reverse=False, info=None, progress=None):
     """
     Exports full database dump to SQL file.
@@ -829,7 +829,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
     return result
 
 
-def export_to_console(make_iterables, format, title=None,
+def export_to_console(format, make_iterables, title=None,
                       output=None, multiple=False, progress=None):
     """
     Prints entity rows to console.
@@ -1127,7 +1127,7 @@ def get_import_file_data(filename, progress=None):
 
 
 
-def import_data(filename, db, tables, has_header=True, limit=None, maxcount=None, progress=None):
+def import_data(db, filename, tables, has_header=True, limit=None, maxcount=None, progress=None):
     """
     Imports data from spreadsheet or JSON or YAML data file to database table.
     Will create tables if not existing yet.

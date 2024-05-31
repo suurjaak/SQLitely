@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    30.05.2024
+@modified    31.05.2024
 ------------------------------------------------------------------------------
 """
 import base64
@@ -2391,7 +2391,7 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
 
         filename = controls.get_dialog_path(dialog)
         try:
-            importexport.export_sql(filename, self._db, self._stc.Text, "SQL window.")
+            importexport.export_sql(self._db, filename, self._stc.Text, "SQL window.")
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving SQL to %s." % filename
@@ -5840,7 +5840,7 @@ class SchemaObjectPage(wx.Panel):
         title = " ".join(filter(bool, (category, util.unprint(grammar.quote(name)))))
         if self._show_alter: title = " ".join((action, title))
         try:
-            importexport.export_sql(filename, self._db, self._ctrls["sql"].Text, title)
+            importexport.export_sql(self._db, filename, self._ctrls["sql"].Text, title)
             util.start_file(filename)
         except Exception as e:
             msg = "Error saving SQL to %s." % filename
@@ -7036,8 +7036,7 @@ class ImportDialog(wx.Dialog):
         self._gauge.Pulse()
 
         progress = lambda *_, **__: bool(self) and self._worker_read.is_working()
-        callable = functools.partial(importexport.get_import_file_data,
-                                     filename, progress)
+        callable = functools.partial(importexport.get_import_file_data, filename, progress)
         self._worker_read.work(callable, filename=filename)
 
 
@@ -7433,9 +7432,8 @@ class ImportDialog(wx.Dialog):
                               for a, b in zip(self._cols1, self._cols2))
         tables = [{"name": self._table["name"], "source": self._sheet.get("name"),
                    "columns": columns, "pk": self._table.get("pk")}]
-        callable = functools.partial(importexport.import_data, self._data["name"],
-                                     self._db, tables, self._has_header,
-                                     progress=self._OnProgressCallback)
+        callable = functools.partial(importexport.import_data, self._db, self._data["name"], tables,
+                                     self._has_header, progress=self._OnProgressCallback)
         self._worker_import.work(callable)
 
 
@@ -11645,8 +11643,7 @@ class ImportWizard(wx.adv.Wizard):
             self.Layout()
 
             progress = lambda *_, **__: bool(self) and self.worker.is_working()
-            callable = functools.partial(importexport.get_import_file_data,
-                                         filename, progress)
+            callable = functools.partial(importexport.get_import_file_data, filename, progress)
             self.worker.work(callable, filename=filename)
 
 
@@ -12128,9 +12125,8 @@ class ImportWizard(wx.adv.Wizard):
         tables = [{"name": x["tname"], "source": x["name"], "pk": x.get("pk"), "columns": OrderedDict(
             (a if has_names else i, b) for i, (a, b) in enumerate(zip(x["columns"], x["tcolumns"]))
         )} for _, x in sorted(self.items.items())]
-        callable = functools.partial(importexport.import_data, self.page1.filename,
-                                     self.db, tables, self.page1.use_header,
-                                     progress=self.OnProgressCallback)
+        callable = functools.partial(importexport.import_data, self.db, self.page1.filename, tables,
+                                     self.page1.use_header, progress=self.OnProgressCallback)
         self.db.close()
         try: not self.page2.file_existed and os.unlink(self.db.filename)
         except Exception: pass
