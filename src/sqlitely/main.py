@@ -165,7 +165,8 @@ ARGUMENTS = {
                       "(no START: from first, no END: until last).\n"
                       "Indexes can be numbers starting from 1\n"
                       "or spreadsheet column labels like AB,\n"
-                      "must be column names if import from JSON/YAML."},
+                      "must be column names if import from JSON%s." %
+                      ("/YAML" if importexport.yaml else "")},
              {"args": ["--table-name"], "metavar": "NAME",
               "help": "name of table to import into, defaults to file base name\n"
                       "or worksheet name if Excel spreadsheet"},
@@ -238,7 +239,7 @@ ARGUMENTS = {
               "help": "output format:\n%s\n"
                       "(auto-detected from output filename if not specified)" % "\n".join(sorted(
                         "  %-5s  %s%s" % ("%s:" % k, importexport.EXT_NAMES[k],
-                                          " (default)" if "yaml" == k else "")
+                                          " (default)" if "txt" == k else "")
                         for k in sorted(["db"] + importexport.EXPORT_EXTS)
                       ))},
              {"args": ["-o", "--output"], "dest": "OUTFILE", "metavar": "FILE",
@@ -640,12 +641,12 @@ def prepare_args(action, args):
     @param   action  name like "export" or "search"
     @param   args    argparse.Namespace
     """
-    DEFAULT_FORMATS   = {"export": "sql", "search": "yaml", "stats": "txt"}
+    DEFAULT_FORMATS   = {"export": "sql", "search": "txt", "stats": "txt"}
     ACTION_FORMATS    = {"stats": ["html", "sql", "txt"]}
     OUTFILE_TEMPLATES = {"stats": "%(db)s statistics"}
     FORMATS = {x: [x] for x in importexport.EXPORT_EXTS}
     FORMATS["db"] = [x.lstrip(".") for x in conf.DBExtensions]
-    FORMATS["yaml"] = list(importexport.YAML_EXTS)
+    if importexport.yaml: FORMATS["yaml"] = list(importexport.YAML_EXTS)
     if action in ACTION_FORMATS:
         FORMATS = {k: v for k, v in FORMATS.items() if k in ACTION_FORMATS[action]}
 
@@ -702,7 +703,7 @@ def validate_args(action, args, infile=None):
     if "export" == action and args.schema_only and args.format in ("json", "yaml"):
         sys.exit("Nothing to export from %s without data as %s." % (infile, args.format.upper()))
     if "import" == action and args.columns:
-        has_names = importexport.get_format(infile) in ("json", "yaml")
+        has_names = importexport.get_format(infile) in (["json", "yaml"] if importexport.yaml else ["json"])
         try: args.columns = parse_columns(args.columns, numeric=not has_names)
         except Exception: sys.exit("Invalid columns range: %r" % args.columns)
 
@@ -1335,7 +1336,8 @@ def run_import(infile, args):
         bar.update(afterword=" Examining data")
         info = importexport.get_import_file_data(infile)
         if args.progress: bar.pause, _ = True, output()
-        has_sheets, has_names = "xls" in info["format"], info["format"] in ("json", "yaml")
+        has_sheets = "xls" in info["format"]
+        has_names = info["format"] in (["json", "yaml"] if importexport.yaml else ["json"])
         output()
         output("Import from: %s (%s%s)", info["name"], util.format_bytes(info["size"]),
                ", %s" % util.plural("sheet", info["sheets"]) if has_sheets else "")
