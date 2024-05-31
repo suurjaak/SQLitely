@@ -113,8 +113,6 @@ ARGUMENTS = {
              {"args": ["--overwrite"], "action": "store_true",
               "help": "overwrite output file if already exists\n"
                       "(by default appends unique counter to filename)"},
-             {"args": ["--no-data"], "dest": "schema_only", "action": "store_true",
-              "help": "export database structure only, without data"},
              {"args": ["--no-empty"], "action": "store_true",
               "help": "skip empty tables and views from output altogether,\n"
                       "ignored if exporting to another database,\n"
@@ -697,11 +695,11 @@ def validate_args(action, args, infile=None):
     @param   infile  input filename if any
     """
     prepare_args(action, args)
-    if action in ("export", "import", "parse", "search") and 0 in (args.limit, args.maxcount):
-        sys.exit("Nothing to export with %s." %
-                 ("limit %r" % args.limit if not args.limit else "max count %r" % args.maxcount))
-    if "export" == action and args.schema_only and args.format in ("json", "yaml"):
-        sys.exit("Nothing to export from %s without data as %s." % (infile, args.format.upper()))
+    if action in ("import", "parse", "search") and 0 in (args.limit, args.maxcount):
+        sys.exit("Nothing to %s with %s." % (action,
+                 ("limit %r" % args.limit if not args.limit else "max count %r" % args.maxcount)))
+    if "export" == action and args.limit == 0 and "json" == args.format:
+        sys.exit("Nothing to export as JSON with limit 0.")
     if "import" == action and args.columns:
         has_names = importexport.get_format(infile) in (["json", "yaml"] if importexport.yaml else ["json"])
         try: args.columns = parse_columns(args.columns, numeric=not has_names)
@@ -817,7 +815,6 @@ def run_export(dbname, args):
                path         output directory if not current
                combine      combine all outputs into a single file
                overwrite    overwrite existing file instead of creating unique name
-               schema_only  export database schema only, no data rows
                filter       names of specific tables or views to export or skip
                             (supports * wildcards; initial dash - skips)
                limit        maximum number of rows to export per table or view
@@ -897,7 +894,7 @@ def run_export(dbname, args):
     schema.update((c, [n for n, x in entities.items() if c == x["type"]]) for c in db.CATEGORIES
                   if any(c == x["type"] for x in entities.values()))
     files = collections.OrderedDict()  # {entity name: output filename}
-    maxrow, fromrow = args.limit, args.offset
+    maxrow, fromrow, schema_only = args.limit, args.offset, 0 in (args.limit, args.maxcount)
     limit = (maxrow, fromrow) if (fromrow > 0) else (maxrow, ) if (maxrow >= 0) else ()
     progress = make_progress("export", entities, args)
     func, posargs, kwargs = None, [], dict(progress=progress)
@@ -905,10 +902,9 @@ def run_export(dbname, args):
     def make_iterables():
         """Yields pairs of ({item}, callable returning iterable cursor)."""
         items = [x for c in db.DATA_CATEGORIES for x in entities.values() if c == x["type"]]
-        maxcount = 0 if args.schema_only else args.maxcount
         for item in (reversed if args.reverse else list)(items):
             order_sql = db.get_order_sql(item["name"], reverse=True) if args.reverse else ""
-            limit_sql = db.get_limit_sql(*limit, maxcount=maxcount, totals=entities.values())
+            limit_sql = db.get_limit_sql(*limit, maxcount=args.maxcount, totals=entities.values())
             sql = "SELECT * FROM %s%s%s" % (grammar.quote(item["name"]), order_sql, limit_sql)
 
             make_iterable = functools.partial(db.select, sql,
@@ -917,12 +913,12 @@ def run_export(dbname, args):
 
     if "db" == args.format:
         func, posargs = importexport.export_to_db, [db, args.OUTFILE, schema]
-        kwargs.update(data=not args.schema_only, limit=limit, maxcount=args.maxcount,
+        kwargs.update(data=not schema_only, limit=limit, maxcount=args.maxcount,
                       renames=renames, reverse=args.reverse)
 
     elif args.OUTFILE and args.combine and "sql" == args.format:
         func, posargs = importexport.export_dump, [db, args.OUTFILE, schema]
-        kwargs.update(data=not args.schema_only, pragma=not args.filter, limit=limit,
+        kwargs.update(data=not schema_only, pragma=not args.filter, limit=limit,
                       maxcount=args.maxcount, empty=not args.no_empty, reverse=args.reverse,
                       info={"Command": " ".join(cli_args)} if cli_args else None)
 
