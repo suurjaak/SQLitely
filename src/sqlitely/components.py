@@ -2243,8 +2243,8 @@ class SQLPage(wx.Panel, SQLiteGridBaseMixin):
         Handler for pressing a key in STC, listens for Alt-Enter and
         executes the currently selected line, or currently active line.
         """
-        if self._export.Shown or self._worker.is_working(): return
         event.Skip() # Allow to propagate to other handlers
+        if self._export.Shown or self._worker.is_working(): return
         stc = event.GetEventObject()
         if (event.AltDown() or event.CmdDown()) \
         and event.KeyCode in controls.KEYS.ENTER:
@@ -6423,6 +6423,7 @@ class ExportProgressPanel(wx.Panel):
 
             self._ctrls.append(ctrls)
 
+        wx_accel.accelerate(self)
         self.Layout()
         self.Thaw()
 
