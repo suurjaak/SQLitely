@@ -114,8 +114,7 @@ ARGUMENTS = {
               "help": "overwrite output file if already exists\n"
                       "(by default appends unique counter to filename)"},
              {"args": ["--no-empty"], "action": "store_true",
-              "help": "skip empty tables and views from output altogether,\n"
-                      "ignored if exporting to another database,\n"
+              "help": "skip empty tables and views from output altogether\n"
                       "(affected by offset and limit)"},
              {"args": ["--include-related"], "dest": "related", "action": "store_true",
               "help": "include related entities:\n"
@@ -828,7 +827,6 @@ def run_export(dbname, args):
                reverse      query rows in reverse order
                maxcount     maximum total number of rows to export over all tables and views
                no_empty     skip empty tables and views from output altogether
-                            ignored if exporting to db (affected by offset and limit)
                related      include related entities, like data dependencies or index/trigger items
                progress     show progress bar
     """
@@ -920,7 +918,7 @@ def run_export(dbname, args):
     if "db" == args.format:
         func, posargs = importexport.export_to_db, [db, args.OUTFILE, schema]
         kwargs.update(data=not schema_only, limit=limit, maxcount=args.maxcount,
-                      renames=renames, reverse=args.reverse)
+                      empty=not args.no_empty, renames=renames, reverse=args.reverse)
 
     elif args.OUTFILE and args.combine and "sql" == args.format:
         func, posargs = importexport.export_dump, [db, args.OUTFILE, schema]
