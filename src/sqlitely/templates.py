@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.05.2024
+@modified    01.06.2024
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -145,6 +145,35 @@ from sqlitely import conf, images
     }
     a, a.visited { color: #3399FF; text-decoration: none; }
     a:hover, a.visited:hover { text-decoration: underline; }
+    a#darkmode {
+      color: black;
+      display: inline-block;
+      margin-left: 5px;
+      text-decoration: none;
+    }
+    body.darkmode {
+      background: black;
+      color: white;
+    }
+    body.darkmode table *,
+    body.darkmode table.body_table > tbody > tr > td {
+      background: #1E2224;
+      color: white;
+    }
+    body.darkmode .title,
+    body.darkmode a, body.darkmode a.visited {
+      color: #80FF74;
+    }
+    a#darkmode {
+      color: black;
+      display: inline-block;
+      margin-left: 5px;
+      margin-right: auto;
+      text-decoration: none;
+    }
+    body.darkmode a#darkmode {
+      color: white;
+    }
     #footer {
       text-align: center;
       padding: 10px 0;
@@ -234,6 +263,13 @@ from sqlitely import conf, images
     };
 
 %endif
+
+    /** Toggles dark mode on or off. */
+    function onToggleDarkmode() {
+      document.body.classList.toggle("darkmode");
+      return false;
+    };
+
     /** Filters table rows by current search state for table. */
     var doSearch = function(table_id) {
       var words = String(search_state[table_id].text).split(/\s/g).filter(Boolean);
@@ -327,6 +363,11 @@ _, dbsize = util.try_ignore(lambda: util.format_bytes(db.get_size()))
 <tr><td>
   <div class="title">
     {{! "<br />".join(util.tuplefy(title)) }}
+<%
+# &#x1F313; first quarter moon symbol
+# &#xFE0E;  Unicode variation selector, force preceding character to monochrome text glyph
+%>
+    <a href="javascript:;" onclick="onToggleDarkmode()" id="darkmode" title="Click to toggle dark/light mode">&#x1F313;&#xFE0E;</a>
     <span class="toggle header">
       <a class="toggle down open" title="Toggle all rows opened or closed" onclick="onToggleAll(this)">Toggle all</a>
     </span>
@@ -391,7 +432,16 @@ progress = get("progress")
 <tr><td><table class="header_table">
   <tr>
     <td>
-      <div class="title">{{! "<br />".join(util.tuplefy(title)) }}</div><br />
+      <div class="title">
+        {{! "<br />".join(util.tuplefy(title)) }}
+%if not get("multiple"):
+<%
+# &#x1F313; first quarter moon symbol
+# &#xFE0E;  Unicode variation selector, force preceding character to monochrome text glyph
+%>
+        <a href="javascript:;" onclick="onToggleDarkmode()" id="darkmode" title="Click to toggle dark/light mode">&#x1F313;&#xFE0E;</a>
+%endif
+      </div><br />
       <b>SQL:</b>
       <span class="sql hidden" id="{{ item_id }}__sql">{{ sql or create_sql }}</span>
       <span class="shortsql" id="{{ item_id }}__shortsql">{{ (sql or create_sql).split("\\n", 1)[0] }}</span>
@@ -2093,6 +2143,54 @@ def wrapclass(v):
     a.sort.desc::after { content: "↑"; }
     th a.sort:only-child { display: block; }
     th a.toggle { display: inline-block; }
+    a#darkmode {
+      color: black;
+      display: inline-block;
+      margin-left: 5px;
+      text-decoration: none;
+    }
+    body.darkmode {
+      background: black;
+      color: white;
+    }
+    body.darkmode #body_table > tbody > tr > td {
+      background: #1E2224;
+    }
+    body.darkmode #title,
+    body.darkmode a, body.darkmode a.visited {
+      color: #80FF74;
+    }
+    a#darkmode {
+      color: black;
+      display: inline-block;
+      text-decoration: none;
+    }
+    body.darkmode a#darkmode {
+      color: white;
+    }
+    body.darkmode svg {
+      background: #1E2224;
+    }
+    body.darkmode svg path {
+      stroke: #F5FEA9;
+    }
+    body.darkmode svg text {
+      fill: white;
+    }
+    body.darkmode svg .item .box {
+      stroke: #FF8080;
+      fill: url(#item-background-darkmode);
+    }
+    body.darkmode svg .item .content {
+      fill: #1E2224;
+    }
+    body.darkmode svg .item .separator {
+      stroke: #FF8080;
+    }
+    body.darkmode svg .relation .label {
+      fill: #F5FEA9;
+      filter: url(#clearbg-darkmode);
+    }
     #footer {
       text-align: center;
       padding-bottom: 10px;
@@ -2178,6 +2276,11 @@ def wrapclass(v):
       return false;
     };
 
+    function onToggleDarkmode() {
+      document.body.classList.toggle("darkmode");
+      return false;
+    };
+
     function onSwitch(a1, id1, aid2, id2) {
       var on = a1.classList.contains("open");
       var a2 = document.getElementById(aid2);
@@ -2211,7 +2314,14 @@ dt_created, dt_modified = (dt.strftime("%d.%m.%Y %H:%M") if dt else None
 <tr><td><table id="header_table">
   <tr>
     <td>
-      <div id="title">{{ title }}</div><br />
+      <div id="title">
+        {{ title }}
+<%
+# &#x1F313; first quarter moon symbol
+# &#xFE0E;  Unicode variation selector, force preceding character to monochrome text glyph
+%>
+        <a href="javascript:;" onclick="onToggleDarkmode()" id="darkmode" title="Click to toggle dark/light mode">&#x1F313;&#xFE0E;</a>
+      </div><br />
       Source: <b>{{ db }}</b>.<br />
       Size: <b title="{{ stats.get("size", db.filesize) }}">{{ util.format_bytes(stats.get("size", db.filesize)) }}</b> (<span title="{{ stats.get("size", db.filesize) }}">{{ util.format_bytes(stats.get("size", db.filesize), max_units=False) }}</span>).<br />
 %if dt_created and dt_modified and dt_created != dt_modified:
@@ -3252,6 +3362,10 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
       <stop style="stop-color: {{ wincolour.GetAsString(C2S_HTML) }}; stop-opacity: 1;" offset="0" />
       <stop style="stop-color: {{ gradcolour.GetAsString(C2S_HTML) }}; stop-opacity: 1;" offset="1" />
     </linearGradient>
+    <linearGradient id="item-background-darkmode">
+      <stop style="stop-color: #003131; stop-opacity: 1;" offset="0" />
+      <stop style="stop-color: #80FF80; stop-opacity: 1;" offset="1" />
+    </linearGradient>
 
     <image id="pk" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramPK.data }}" />
     <image id="fk" width="9" height="9" xlink:href="data:image/png;base64,{{! images.DiagramFK.data }}" />
@@ -3259,6 +3373,10 @@ DIAGRAM_WIDTH = (800 - 2*30 - 2*10 - 2*1)
 
     <filter x="0" y="0" width="1" height="1" id="clearbg">
        <feFlood flood-color="{{ wincolour.GetAsString(C2S_HTML) }}" />
+       <feComposite in="SourceGraphic" in2="" />
+    </filter>
+    <filter x="0" y="0" width="1" height="1" id="clearbg-darkmode">
+       <feFlood flood-color="#1E2224" />
        <feComposite in="SourceGraphic" in2="" />
     </filter>
   </defs>
