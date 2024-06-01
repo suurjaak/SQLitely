@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    29.05.2024
+@modified    31.05.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1153,9 +1153,6 @@ def import_data(db, filename, tables, has_header=True, limit=None, maxcount=None
     """
     result = True
     limit = limit if isinstance(limit, (list, tuple)) else () if limit is None else (limit, )
-    if limit and not limit[0] or maxcount == 0:
-        progress and progress(done=True)
-        return result
 
     fmt = get_format(filename)
     has_sheets, has_names, new_tables = "xls" in fmt, fmt in ("json", "yaml"), []
@@ -1203,6 +1200,8 @@ def import_data(db, filename, tables, has_header=True, limit=None, maxcount=None
                 if maxcount and maxcount > 0:
                     indexrange = indexrange or (0, sys.maxsize)
                     indexrange = indexrange[0], min(indexrange[1], maxcount - totalcount)
+                elif maxcount == 0:
+                    indexrange = (sys.maxsize, -1)
                 result = progress(name=table, source=source, index=0, count=0)
                 for row in iter_file_rows(filename, list(columns), source) if result else ():
                     index += 1

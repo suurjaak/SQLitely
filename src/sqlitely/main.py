@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    31.05.2024
+@modified    01.06.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -156,6 +156,9 @@ ARGUMENTS = {
                       "(supports * wildcards; initial ~ skips)"},
              {"args": ["--row-header"], "action": "store_true",
               "help": "use first row of input spreadsheet for column names"},
+             {"args": ["--no-empty"], "action": "store_true",
+              "help": "skip spreadsheets with no content rows\n"
+                      "(affected by offset and limit)"},
              {"args": ["--columns"],
               "help": "columns to import if not all,\n"
                       "as a comma-separated list of indexes or index ranges,\n"
@@ -695,8 +698,11 @@ def validate_args(action, args, infile=None):
     @param   infile  input filename if any
     """
     prepare_args(action, args)
-    if action in ("import", "parse", "search") and 0 in (args.limit, args.maxcount):
+    if action in ("parse", "search") and 0 in (args.limit, args.maxcount):
         sys.exit("Nothing to %s with %s." % (action,
+                 ("limit %r" % args.limit if not args.limit else "max count %r" % args.maxcount)))
+    if action in ("export", "import") and 0 in (args.limit, args.maxcount) and args.no_empty:
+        sys.exit("Nothing to %s with %s if empty entities skipped." % (action,
                  ("limit %r" % args.limit if not args.limit else "max count %r" % args.maxcount)))
     if "export" == action and args.limit == 0 and "json" == args.format:
         sys.exit("Nothing to export as JSON with limit 0.")
@@ -1259,6 +1265,7 @@ def run_import(infile, args):
                table_name     table to import into, defaults to sheet or file name
                create_always  whether to create new table even if matching table exists
                row_header     whether to use first row of input spreadsheet for column names
+               no_empty       skip spreadsheets with no content rows (affected by offset and limit)
                columns        specific column ranges to pick if not all
                add_pk         whether to add auto-increment primary key column to created tables
                assume_yes     whether to skip confirmation prompt
@@ -1344,7 +1351,7 @@ def run_import(infile, args):
             extra = "" if not args.filter else " using sheet filter: %s" % " ".join(args.filter)
             output()
             sys.exit("Nothing to import from %s%s." % (infile, extra))
-        sheets = [x for x in sheets if x["rows"]]
+        sheets = [x for x in sheets if x["rows"] and (not args.no_empty or sheet["total"])]
         if not sheets:
             output()
             sys.exit("Nothing to import from %s." % infile)
@@ -1416,7 +1423,7 @@ def run_import(infile, args):
         output()
         total = sum(x["count"] or 0 for x in sheets)
         errors = [x for x in reports if x.get("error")]
-        for sheet in (x for x in sheets if x["count"]) if total else ():
+        for sheet in (x for x in sheets if x["count"] or not args.no_empty):
             output("Imported %s %sto table %s%s.",
                    util.plural("row", sheet["count"] or 0),
                    "from sheet %s " % grammar.quote(sheet["name"], force=True)
@@ -1424,7 +1431,7 @@ def run_import(infile, args):
                    grammar.quote(sheet["table"], force=True),
                    " (%s failed)" % (util.plural("row", sheet["errorcount"]))
                    if sheet.get("errorcount") else "")
-        if total:
+        if total or (sheets and not args.no_empty):
             output("Import complete, %s inserted to %s (%s).",
                    util.plural("row", total), db.name,
                    util.format_bytes(db.get_size()))
@@ -1442,7 +1449,7 @@ def run_import(infile, args):
 
     finally:
         util.try_ignore(db.close)
-        if not total and not file_existed:
+        if not file_existed and (not total or not args.no_empty):
             util.try_ignore(os.unlink, dbname)
 
 
