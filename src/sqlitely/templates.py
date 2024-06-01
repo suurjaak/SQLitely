@@ -2052,7 +2052,7 @@ def wrapclass(v):
     #diagram { position: relative; }
     #diagram .img {
       max-width: 100%;
-      padding-top: 10px;
+      padding-top: 15px;
     }
     #diagram .diagram-format {
       position: absolute;
