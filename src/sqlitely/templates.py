@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.06.2024
+@modified    03.06.2024
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1467,20 +1467,7 @@ under the MIT License.
       <a href="https://pypi.org/project/XlsxWriter"><font color="{{ conf.LinkColour }}">
           pypi.org/project/XlsxWriter</font></a></li>
 </ul>
-%if conf.LicenseFile:
-Licensing for bundled software:
-<a href="{{ util.path_to_url(conf.LicenseFile) }}"><font color="{{ conf.LinkColour }}">{{ os.path.basename(conf.LicenseFile) }}</font></a>
-%endif
 <br /><br />
-%if conf.Frozen:
-Installer and binary executable created with:
-<ul>
-  <li>Nullsoft Scriptable Install System, <a href="https://nsis.sourceforge.io"><font color="{{ conf.LinkColour }}">nsis.sourceforge.io</font></a></li>
-  <li>PyInstaller, <a href="https://www.pyinstaller.org"><font color="{{ conf.LinkColour }}">pyinstaller.org</font></a></li>
-</ul><br /><br />
-%endif
-
-
 
 Several icons from Fugue Icons, &copy; 2010 Yusuke Kamiyamane<br />
 <a href="https://p.yusukekamiyamane.com/"><font color="{{ conf.LinkColour }}">p.yusukekamiyamane.com</font></a>
@@ -1489,12 +1476,21 @@ Includes fonts Carlito Regular and Carlito bold,
 <a href="https://fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts"><font color="{{ conf.LinkColour }}">fedoraproject.org/wiki/Google_Crosextra_Carlito_fonts</font></a><br /><br />
 Includes fonts Open Sans Regular and Open Sans Bold,
 <a href="https://fonts.google.com/specimen/Open+Sans"><font color="{{ conf.LinkColour }}">fonts.google.com/specimen/Open+Sans</font></a>
+
 %if conf.Frozen:
 <br /><br />
-Installer created with Nullsoft Scriptable Install System,
-<a href="http://nsis.sourceforge.net/"><font color="{{ conf.LinkColour }}">nsis.sourceforge.net</font></a>
+Installer and binary executable created with:
+<ul>
+  <li>Nullsoft Scriptable Install System, <a href="https://nsis.sourceforge.io"><font color="{{ conf.LinkColour }}">nsis.sourceforge.io</font></a></li>
+  <li>PyInstaller, <a href="https://www.pyinstaller.org"><font color="{{ conf.LinkColour }}">pyinstaller.org</font></a></li>
+</ul>
 %endif
 
+%if conf.LicenseFile:
+<br /><br />
+Licensing for bundled software and resources:
+<a href="{{ util.path_to_url(conf.LicenseFile) }}"><font color="{{ conf.LinkColour }}">{{ os.path.basename(conf.LicenseFile) }}</font></a>
+%endif
 </font>
 """
 
