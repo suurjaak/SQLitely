@@ -30,7 +30,7 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.3.dev98"
+Version = "2.3.dev99"
 VersionDate = "03.06.2024"
 
 Frozen, Snapped = getattr(sys, "frozen", False), (sys.executable or "").startswith("/snap/")
@@ -345,7 +345,7 @@ FontDiagramBoldFile = os.path.join(ResourceDirectory, "OpenSansBold.ttf")
 FontDiagramSize     = 9
 
 """Path for licences of bundled open-source software."""
-LicenseFile = os.path.join(ResourceDirectory if Frozen else "/", "3rd-party licenses.txt") \
+LicenseFile = os.path.join(ResourceDirectory, "3rd-party licenses.txt") \
               if Frozen or Snapped else None
 
 
