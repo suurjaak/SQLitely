@@ -30,7 +30,7 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.3.dev96"
+Version = "2.3.dev97"
 VersionDate = "03.06.2024"
 
 Frozen, Snapped = getattr(sys, "frozen", False), (sys.executable or "").startswith("/snap/")
@@ -357,8 +357,8 @@ def load(configfile=None):
     """
     global Defaults, ConfigFile, ConfigFileStatic
 
-    try: VARTYPES = (basestring, bool, int, long, list, tuple, dict, type(None))         # Py2
-    except Exception: VARTYPES = (bytes, str, bool, int, list, tuple, dict, type(None))  # Py3
+    try: VARTYPES = (basestring, bool, float, int, long, list, tuple, dict, type(None))        # Py2
+    except Exception: VARTYPES = (bytes, str, float, bool, int, list, tuple, dict, type(None)) # Py3
 
     def safecopy(v):
         """Tries to return a deep copy, or a shallow copy, or given value if copy fails."""
