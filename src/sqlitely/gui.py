@@ -2572,6 +2572,17 @@ class DatabasePage(wx.Panel):
 
         sizer.Add(notebook, proportion=1, border=5, flag=wx.GROW | wx.ALL)
 
+        # Register Ctrl-Shift-1..7 page handlers
+        def on_page_hotkey(number, event):
+            if notebook and notebook.GetSelection() != number:
+                notebook.SetSelection(number)
+        accelerators = []
+        for i in range(7):
+            id_page = controls.NewId()
+            accelerators += [(wx.ACCEL_CMD | wx.ACCEL_SHIFT, ord(str(i + 1)), id_page)]
+            notebook.Bind(wx.EVT_MENU, functools.partial(on_page_hotkey, i), id=id_page)
+        notebook.SetAcceleratorTable(wx.AcceleratorTable(accelerators))
+
         self.dialog_savefile = wx.FileDialog(
             self, defaultDir=six.moves.getcwd(), wildcard=importexport.EXPORT_WILDCARD,
             style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT | wx.FD_CHANGE_DIR | wx.RESIZE_BORDER)
