@@ -404,7 +404,7 @@ class ConsoleWriter(object):
                 ConsoleWriter.handle = handle
                 ConsoleWriter.realwrite = handle.write
                 sys.stdin = open("CONIN$", "r")
-                if getattr(sys, "frozen", False): atexit.register(self.on_exe_exit)
+                if conf.Frozen: atexit.register(self.on_exe_exit)
             except Exception:
                 try: win32console.FreeConsole()
                 except Exception: pass
@@ -1506,7 +1506,7 @@ def run(nogui=False):
 
     warnings.simplefilter("ignore", UnicodeWarning)
 
-    if (getattr(sys, "frozen", False) # Binary application
+    if (conf.Frozen # Binary application
     or sys.executable.lower().endswith("pythonw.exe")):
         sys.stdout = ConsoleWriter(sys.stdout) # Hooks for attaching to
         sys.stderr = ConsoleWriter(sys.stderr) # a text console

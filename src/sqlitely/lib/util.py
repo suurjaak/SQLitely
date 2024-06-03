@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    04.11.2023
+@modified    03.02.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -785,7 +785,7 @@ def img_pil_resize(img, size, aspect_ratio=True, bg=(255, 255, 255)):
             size2[ratio > 1] = int(size2[ratio > 1] * (ratio if ratio < 1 else 1 / ratio))
             align_pos = [(a - b) // 2 for a, b in zip(size, size2)]
         if result.size[0] > size[0] or result.size[1] > size[1]:
-            result.thumbnail(tuple(map(int, size2)), Image.ANTIALIAS)
+            result.thumbnail(tuple(map(int, size2)), Image.LANCZOS)
         if align_pos:
             result, result0 = Image.new(img.mode, size, bg), result
             result.paste(result0, tuple(map(int, align_pos)))
