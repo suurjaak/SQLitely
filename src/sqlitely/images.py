@@ -7,7 +7,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.08.2023
+@modified    06.06.2024
 ------------------------------------------------------------------------------
 """
 try:
@@ -2028,6 +2028,20 @@ ToolbarCommit = PyEmbeddedImage(
 )
 
 
+"""Toolbar icon for copy-to-clipboard buttons."""
+ToolbarCopy = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAYxJ"
+    "REFUOI2dkk1LAlEUht8rzhjjgPUndIS+Fv2PCFq2iKB9Un5QLmyhpIKriIhoI9amwJ/gd20C"
+    "s8hhfkE1kQpunGbubSGOM6NJ9G7uPZfzvjyHe0gul1nXdG0VfxDH8y/7e5E765tb0/XlaPjo"
+    "L36ks8lFAPaA0aXX64DSSZPLNTx9voWpoW5roSgyWq3mxle3szKdgeAkk0yMKo7jbm0BkiSh"
+    "UisvRcOHMwYZK51NbdoCZFkGYwwA0Ot1Z5p9vvnJEfx+CZVa2azb7fZUczAYNO9mAKWALL+a"
+    "BM7G32QhoPD7JdQa1ZkEztB/EQiCF/1+fxwwGAxA6ZCg8VCfSRAISDAMHc2n5jhA0zQIwtzE"
+    "IjkJLq8uUL+v2t7cHo5/Pjs/NReHEICxyZUUBC9EUcTO9i4oNaB+qihc5+EOhQ6KAIqjxnQ2"
+    "Fdd13eU0W6WqKgo3eYCxR1vjSJr2DY/HA57nIYoiCCFQFAUAwfvH29AMlohF42vEac7m0nlq"
+    "GFvW37CJoQTCSrFI/BgAfgDEu6IJex8thgAAAABJRU5ErkJggg=="
+)
+
+
 """Toolbar icon for data button on search page."""
 ToolbarData = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAcZJ"
@@ -2048,6 +2062,40 @@ ToolbarDelete = PyEmbeddedImage(
     "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAB3RJTUUH3AEbFAgjYsF/DAAA"
     "AAlwSFlzAAALEgAACxIB0t1+/AAAAARnQU1BAACxjwv8YQUAAAAkSURBVHjaY2AYBcMAMCJz"
     "TvDx/SdGk8WnT3B9TAPtg1EwKAAAoFkEBI8Fc8MAAAAASUVORK5CYII="
+)
+
+
+"""Toolbar icon for open-file buttons."""
+ToolbarFileOpen = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAa1J"
+    "REFUOI2VkDFMU1EUhr+XPtE+2kDRpQndcMCNSU2MDgzuhFSCAzEMEqsyOArRwcGFxY3ERiQh"
+    "EIgzEBgIm4OJCQQ2gyYmSmOpBN99XN69x6HlleJrwC93uCfnnv//73H6830vstnsS06htQbg"
+    "UB+OTBWnJ0/3j3GejBbkwdBwbDMIFMV3b9mv7A8uLHyYjRV49HhE8v332NreAsC9kCCdTjUz"
+    "jChXfr0qPBwdd40xJJMe7W2ZqmLCMpC/f6bA3PzMGDDuaq1Ryqfyew+ATEcbAL7/p+mw57VG"
+    "dzcMw4YEYKPmdu1bJ+nuvtZQu0BsgrjHcZw7QSqVJpfLxQso5bOyecBGyQNgYnWmid+nhqq3"
+    "UBQXIJn02Ch5vHl2l0CbM2MDXGpJ8HRiub4DgB97AV92m2//GGMsuSvVtFECAAFEBMdxEBFE"
+    "wIpgrBAa4chYdGgJjXA5fbEuoJRPV0ZRPtB8LysQB4tQO4iAIIjUhIHgyNYFfpZ26bl5i887"
+    "ldpQ1V0ELILggEiU6vrVDpYXl2gPvk05t4der/ktnXfOtbkTePrrx/X3z2/879w//AU2KMqJ"
+    "njkj5wAAAABJRU5ErkJggg=="
+)
+
+
+"""Toolbar icon for save-file buttons."""
+ToolbarFileSave = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAopJ"
+    "REFUOI2NkkFIFGEUx38zjW5qk7uBo2tbrplp2KHCcC0o6lAdkig8hFBYBBWW5alDRXUohArE"
+    "QIoOiV2CLQqKuhZ0UIoQou1QZomZISm6M6y7M/O9DsLaZkH/y/vg8X68//992skrZ89/scv1"
+    "iUl3WkOtAG03UGdoKm0uTv0sXpzpvd959Rz/kLb9dPeh6JraaEWpNbx+lXUmGirY6Hg+ie9J"
+    "3gy8VB9Hxqk2EytvX+379ldA28XOHndm4oQnOuN+kFSghEVGHi27NlNVvoyuh6/wR98SzZ9c"
+    "MCzCZdo62mVkbEhERIa+JmQgMSTtt59J7Ng1ib8eke7n76T5wh15P/xNfpdt29J+pk2MgOGz"
+    "vDTK1NQUwSWl6No0BZIB4O2ncawlBj8mk3wY+kzZ0gLQAIT8/HwADM8FUYKvFE3n7i5Yc2B4"
+    "CtfzuR7v53q8H4CnVw6DzPV1ACUK5Su6jzcC0HpgH42xemZnHcKmzpbYJg41NwFwcMdqlK8Q"
+    "kXmAiBAKBSkviXLjaD299x9RE12BjoaORmxtBX0PntCyrZK9WzZRWFSYCwCwbRvLsqgIV2ch"
+    "jeuqqI5G6Lr3mJZtlezfGsOyLDKZTNaiAaCUwnEcACzLwrIsek4V0HErTtr1ObJrLa17dqLr"
+    "OjMzMziOg2ma84BAIEAkEskJb0NdAy9uNgDgOA6ZTIZUKrUgZANgcHAQ13VzGp7nYRhG9v2n"
+    "QqFQbgae55FIJBgbGyOZTCIiiAiBQIDR0VFM08xW27axbTv3CkopiooKycvLy34SANd1ETUH"
+    "EzV3PuX7uRaCwSDFxcWEw2EA0uk0QDbtmtoalFLU1NailKIsHM5a1k6dbrukaVxcYPI/JMLl"
+    "XzXUOEhXykcYAAAAAElFTkSuQmCC"
 )
 
 
@@ -2090,6 +2138,23 @@ ToolbarFunction = PyEmbeddedImage(
     "yBrQDdAH4sdA/BpNXBCIWYG4AF8YiAKxKhBfw5ImaqGWCeMzQBOIeYD4NIgDTaHlQFwBxBZA"
     "zAbEYlC157DFSC007sWh/BwgvoEkD+ODsDeSJWBgCcRHgXgLgWjngWIGmAGgjPASygclnhQg"
     "fghK5kj4Lxr/P4wGAVDAGCILkpwbKc3OAAEGAOsaUbKinMktAAAAAElFTkSuQmCC"
+)
+
+
+"""Toolbar icon for go-forward buttons."""
+ToolbarGoForward = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAj1J"
+    "REFUOI2VkkFIVFEUhv9zz33PGbUJm8AiplBqISglBMULCsFFQgQFua2gIGwz5izaSK1cjYQQ"
+    "SbgJhKikRVKatYgIH5PCEKkbaRFqOc6Mo2nje857826LaBrHCfKHszn38PGf/1xGGZ2K8HjI"
+    "kDxvevFy78US5ZpKkXGo9kifEZFDZzpQvWMAANxq7/WfPdF+PueXMyc7taYdA1hItDRf0Dsu"
+    "3glV+ipjRkS7Xm6OjIhMQKG2BGv33Rz2xRfGsC9QD11U4cnb+9aXhekRablX3j/Az7+ALql6"
+    "bgxCEIOJQSRAIADAxPxLeMgjULEHB2saMf75jTMWG1pUHp2L3XOmAEACQN5zMf71OVhIMDFA"
+    "BCKAGAB5WM7NYSX5DUcbjmsHautCz8YexozIWtiMOgMcMsTd081tmFn8gFUriXR2AWubaeTJ"
+    "BjgPwQpKOMgpC4vrswhUBshobNPSmURrVVO6XgJAcn0Os6nJQgRSJ6QdAWkLSMmo0P3QhQ+M"
+    "Cuxya8DKDztnqcIKW1IVgJAE1sTv0gGPbYA1NAVbkElsqMF3/damY4fNaH6gALh07HYBwBqB"
+    "pcDoXC+kLrC/+jAadrciNmnmJj6ZCc8tDpGw1P+0Z8sZScIOX+72MTMa97YgKOsw9OLxRiL1"
+    "fVTLlpyx3OcwuqTqvNaNrJdCMpVWr14PW47rhM2oM1A6uy2DP3LcHD7GJzanpuNLbpHlbZn9"
+    "y0GwJriR+bE8IrPu1WLL/+WASJnLq5lHZtTdZrlUvwB/auFCthTxGAAAAABJRU5ErkJggg=="
 )
 
 
@@ -2137,6 +2202,22 @@ ToolbarNumbered = PyEmbeddedImage(
     "u8AJiJOAOAYqtw0pwHBha1g0JgDxDCCWIDUaYV4wBGJNIF4JZdMmELGlWlg6mA7EklBsDvUW"
     "UYbCDJgLxI1AHAjlCwDxFrQAYwZidiDmgOIbQBzKiGQbSHM+EDtADeAiwgHfYf5aC8TPgbiY"
     "rHRACQAIMABAHzmmSdUHSAAAAABJRU5ErkJggg=="
+)
+
+
+"""Toolbar icon for paste-from-clipboard buttons."""
+ToolbarPaste = PyEmbeddedImage(
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAdhJ"
+    "REFUOI2Vkz9oU1EUxn/3vSSCJDFNqSkZikUMuLho1cQUi5SAs4NOLZSKf7qIi0MFKYhDwdW9"
+    "uri7iaAQtIsuTkqkBGo0kvheXmzQRt85DqHPvKaBeqZ7zz3nx/d9cA2DZebn5577vsz2N23b"
+    "erG29rgEaGgYYGmWRUvNqhpGFAtv/Ar5/AksywAgoqyvv+dQ/SkGQRVHRW89eskTc+88ESdq"
+    "3EszR+Ofu1neujkcr8vk5ATG7ACEanWTVDLGydQnxu1NnpU3vNFpTUdaELeMicYiNu8aOVbu"
+    "P8R1XSqVSsjXwsIx0uk0d5dvczn7FVGNV18Ri/QPdbYhmUyiKkxNnRoIJ5FIsP0HfDVBLwCo"
+    "hrKh/PpN6F4s5PfIuw+wu6bPFYKzqiDiDwfoHg87ClQVFSF/9vT/KSgW8ogIIoKq4HkeY2OZ"
+    "/QH6F0V6y+0f7f0rEPEDSO1LjWazMRByGLDrzfd7gHbbo9loUCpdHOYUa5gCz2tR/1ZHRIL+"
+    "9ZtXmZsoD7dwMKo4rkMmkyWTyZLLHcfzWqgKN5auBcu2+Sc5koKt76q/O7/8A2dSH3iwcoef"
+    "/mA0xdGPbHQOA5DSGsaYrSMz2u39xgssGmNWMYwMNRuyiIP2fuNfM/fg29ItLMYAAAAASUVO"
+    "RK5CYII="
 )
 
 
