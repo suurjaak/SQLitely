@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    01.06.2024
+@modified    06.06.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -88,14 +88,6 @@ ARGUMENTS = {
                         "printed to console or written to file.",
          "arguments": [
              {"args": ["INFILE"], "metavar": "DATABASE", "help": "SQLite database to export"},
-             {"args": ["-f", "--format"], "dest": "format",
-              "choices": sorted(["db"] + importexport.EXPORT_EXTS), "type": str.lower,
-              "help": "export format:\n%s\n"
-                      "(auto-detected from output filename if not specified)" % "\n".join(sorted(
-                        "  %-5s  %s%s" % ("%s:" % k, importexport.EXT_NAMES[k],
-                                          " (default)" if "sql" == k else "")
-                        for k in sorted(["db"] + importexport.EXPORT_EXTS)
-                      ))},
              {"args": ["-o", "--output"], "dest": "OUTFILE", "metavar": "FILE",
                        "nargs": "?", "const": "",
               "help": "write output to file instead of printing to console;\n"
@@ -104,6 +96,14 @@ ARGUMENTS = {
                       "automatic for non-printable formats (%s)" %
                       ",".join(["db"] + sorted(set(importexport.EXPORT_EXTS) -
                                                set(importexport.PRINTABLE_EXTS)))},
+             {"args": ["-f", "--format"], "dest": "format",
+              "choices": sorted(["db"] + importexport.EXPORT_EXTS), "type": str.lower,
+              "help": "export format:\n%s\n"
+                      "(auto-detected from output filename if not specified)" % "\n".join(sorted(
+                        "  %-5s  %s%s" % ("%s:" % k, importexport.EXT_NAMES[k],
+                                          " (default)" if "sql" == k else "")
+                        for k in sorted(["db"] + importexport.EXPORT_EXTS)
+                      ))},
              {"args": ["-p", "--path"], "metavar": "DIR",
               "help": "output file directory if not current directory"},
              {"args": ["--combine"], "action": "store_true",
@@ -234,14 +234,6 @@ ARGUMENTS = {
                       "More at https://suurjaak.github.io/SQLitely/help.html." },
              {"args": ["--case"], "action": "store_true",
               "help": "case-sensitive search"},
-             {"args": ["-f", "--format"], "dest": "format",
-              "choices": sorted(["db"] + importexport.EXPORT_EXTS), "type": str.lower,
-              "help": "output format:\n%s\n"
-                      "(auto-detected from output filename if not specified)" % "\n".join(sorted(
-                        "  %-5s  %s%s" % ("%s:" % k, importexport.EXT_NAMES[k],
-                                          " (default)" if "txt" == k else "")
-                        for k in sorted(["db"] + importexport.EXPORT_EXTS)
-                      ))},
              {"args": ["-o", "--output"], "dest": "OUTFILE", "metavar": "FILE",
                        "nargs": "?", "const": "",
               "help": "write output to file instead of printing to console;\n"
@@ -250,6 +242,14 @@ ARGUMENTS = {
                       "automatic for non-printable formats (%s)" %
                       ",".join(["db"] + sorted(set(importexport.EXPORT_EXTS) -
                                                set(importexport.PRINTABLE_EXTS)))},
+             {"args": ["-f", "--format"], "dest": "format",
+              "choices": sorted(["db"] + importexport.EXPORT_EXTS), "type": str.lower,
+              "help": "output format:\n%s\n"
+                      "(auto-detected from output filename if not specified)" % "\n".join(sorted(
+                        "  %-5s  %s%s" % ("%s:" % k, importexport.EXT_NAMES[k],
+                                          " (default)" if "txt" == k else "")
+                        for k in sorted(["db"] + importexport.EXPORT_EXTS)
+                      ))},
              {"args": ["-p", "--path"], "metavar": "DIR",
               "help": "output file directory if not current directory"},
              {"args": ["--combine"], "action": "store_true",
