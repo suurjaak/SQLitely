@@ -964,7 +964,8 @@ def run_export(dbname, args):
         posargs = [args.format, make_iterables]
         kwargs.update(output=output, multiple=True, progress=progress)
 
-    do_output("export", args, functools.partial(func, *posargs, **kwargs), entities, files)
+    try: do_output("export", args, functools.partial(func, *posargs, **kwargs), entities, files)
+    finally: util.try_ignore(db.close)
 
 
 def run_search(dbname, args):
@@ -1084,7 +1085,8 @@ def run_search(dbname, args):
         posargs = [args.format, make_iterables, make_search_title(args)]
         kwargs.update(output=output, multiple=True, progress=progress)
 
-    do_output("search", args, functools.partial(func, *posargs, **kwargs), entities, files)
+    try: do_output("search", args, functools.partial(func, *posargs, **kwargs), entities, files)
+    finally: util.try_ignore(db.close)
 
 
 def run_parse(dbname, args):
@@ -1167,6 +1169,8 @@ def run_parse(dbname, args):
                                              fmt_bytes(dbname, database.get_size)))
             errput("Found %s: %s." % (util.plural("entity", len(matches)), countstr))
             errput("Wrote %s (%s)." % (args.OUTFILE, fmt_bytes(args.OUTFILE)))
+    finally:
+        util.try_ignore(db.close)
 
 
 def run_stats(dbname, args):
@@ -1250,6 +1254,8 @@ def run_stats(dbname, args):
             errput("Wrote statistics to: %s (%s)" % (os.path.abspath(args.OUTFILE),
                                                      fmt_bytes(args.OUTFILE)))
             if args.start_file: util.start_file(args.OUTFILE)
+    finally:
+        util.try_ignore(db.close)
 
 
 def run_import(infile, args):
