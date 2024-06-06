@@ -1475,13 +1475,13 @@ def run_gui(filenames):
         else: logger.error("Failed to communicate with other running instance.")
 
     install_thread_excepthook()
-    sys.excepthook = except_hook
 
     # Create application main window
     app = MainApp(redirect=True) # stdout and stderr redirected to wx popup
     app.SingleChecker, singlechecker = singlechecker, None
     window = gui.MainWindow()
     app.SetTopWindow(window) # stdout/stderr popup closes with MainWindow
+    sys.excepthook = except_hook
 
     if "posix" == os.name:
         # Override stdout/stderr.write to swallow Gtk deprecation warnings
