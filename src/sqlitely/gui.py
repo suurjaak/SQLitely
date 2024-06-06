@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.06.2024
+@modified    06.06.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -74,7 +74,11 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
                  else images.Icon24x24_32bit)
 
     def __init__(self):
-        controls.Patch.patch_wx()
+        # Override default wx images with ones from 4.1.1 for better looks
+        art_imgs = {wx.ART_COPY:  images.ToolbarCopy,  wx.ART_FILE_OPEN: images.ToolbarFileOpen,
+                    wx.ART_PASTE: images.ToolbarPaste, wx.ART_FILE_SAVE: images.ToolbarFileSave,
+                    wx.ART_GO_FORWARD: images.ToolbarGoForward} if "win32" == sys.platform else {}
+        controls.Patch.patch_wx(art={k: v.Bitmap for k, v in art_imgs.items()})
         wx.Frame.__init__(self, parent=None, title=conf.Title, size=conf.WindowSize)
         guibase.TemplateFrameMixIn.__init__(self)
 

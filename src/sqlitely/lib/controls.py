@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    17.05.2024
+@modified    06.06.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -2440,12 +2440,14 @@ class Patch(object):
     _PATCHED = False
 
     @staticmethod
-    def patch_wx():
+    def patch_wx(art=None):
         """
         Patches wx object methods to smooth over version and setup differences.
 
         In wheel-built wxPython in Ubuntu22, floats are no longer auto-converted to ints
         in core wx object method calls like wx.Colour().
+
+        @param   art  image overrides for wx.ArtProvider, as {image ID: wx.Bitmap}
         """
         if Patch._PATCHED: return
 
@@ -2493,6 +2495,15 @@ class Patch(object):
                 return functools.update_wrapper(inner, func)
             wx.ToolBar.SetToolNormalBitmap   = resize_bitmaps(wx.ToolBar.SetToolNormalBitmap)
             wx.ToolBar.SetToolDisabledBitmap = resize_bitmaps(wx.ToolBar.SetToolDisabledBitmap)
+
+        if wx.VERSION >= (4, 2) and art:
+            # Patch wx.ArtProvider.GetBitmap to return given bitmaps for overridden images instead
+            ArtProvider__GetBitmap = wx.ArtProvider.GetBitmap
+            def GetBitmap__Patched(id, client=wx.ART_OTHER, size=wx.DefaultSize):
+                if id in art and size == art[id].Size:
+                    return art[id]
+                return ArtProvider__GetBitmap(id, client, size)
+            wx.ArtProvider.GetBitmap = GetBitmap__Patched
 
         Patch._PATCHED = True
 
