@@ -10,11 +10,11 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.06.2024
+@modified    06.06.2024
 ------------------------------------------------------------------------------
 """
-try: from ConfigParser import RawConfigParser                 # Py2
-except ImportError: from configparser import RawConfigParser  # Py3
+try: from configparser import RawConfigParser                 # Py3
+except ImportError: from ConfigParser import RawConfigParser  # Py2
 import copy
 import datetime
 import json
@@ -22,16 +22,18 @@ import os
 import platform
 import sys
 
-import appdirs
-import six
+try: import appdirs
+except ImportError: appdirs = None
+try: from urllib.parse import quote_plus           # Py3
+except ImportError: from urllib import quote_plus  # Py2
 try: import wx
 except ImportError: wx = None
 
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.3.dev101"
-VersionDate = "03.06.2024"
+Version = "2.3.dev102"
+VersionDate = "06.06.2024"
 
 Frozen, Snapped = getattr(sys, "frozen", False), (sys.executable or "").startswith("/snap/")
 if Frozen: # Running as a pyinstaller executable
@@ -95,9 +97,8 @@ launched instances if not AllowMultipleInstances.
 IPCPort = 59987
 
 """Identifier for inter-process communication."""
-IPCName = six.moves.urllib.parse.quote_plus(
-    "%s-%s" % (wx.GetUserId(), ApplicationFile)
-).encode("latin1", "replace") if wx else ""
+IPCName = quote_plus("%s-%s" % (wx.GetUserId(), ApplicationFile)).encode("latin1", "replace") \
+          if wx else ""
 
 """History of commands entered in console."""
 ConsoleHistoryCommands = []
