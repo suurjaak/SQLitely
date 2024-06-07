@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    16.05.2024
+@modified    07.06.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -79,6 +79,14 @@ def generate(data, indent="  ", category=None):
         logger.exception("Error generating SQL for %s.", data)
         err = util.format_exc(e)
     return result, err
+
+
+def get_first_word(sql):
+    """Returns first word from well-formed SQL text, skipping any preceding comments."""
+    sql = re.sub("%s.*$" % re.escape("--"), "", sql, flags=re.MULTILINE)
+    sql = re.sub(r"/\*.*?\*/", " ", sql, flags=re.DOTALL) # Leave space if e.g. "SELECT/**/COL"
+    first = re.search(r"[\s;]*(\w+)", sql)
+    return first.group(1) if first else ""
 
 
 @util.memoize
