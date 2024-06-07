@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.05.2024
+@modified    07.06.2024
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -928,8 +928,9 @@ WARNING: misuse can easily result in a corrupt database file.""",
         """
         if cursor or self.connection:
             if log and conf.LogSQL: logger.info("SQL: %s", sql)
-            (cursor or self.connection).executescript(sql)
+            cursor = (cursor or self.connection).executescript(sql)
             if name: self.log_query(name, sql)
+            return cursor
 
 
     def log_query(self, action, sql, params=None):
