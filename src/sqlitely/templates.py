@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    03.06.2024
+@modified    08.06.2024
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -176,6 +176,7 @@ from sqlitely import conf, images
     }
     #footer {
       text-align: center;
+      margin-top: -22px;
       padding: 10px 0;
       color: #666;
     }
