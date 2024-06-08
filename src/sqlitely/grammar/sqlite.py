@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    07.06.2024
+@modified    08.06.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -1397,6 +1397,13 @@ def test():
             print("\n%s\nTRANSFORMED:\n" % ("-" * 70))
             sql3, err3 = transform(sql2, renames=renames, indent=indent)
             print(sql3.encode("utf-8") if sql3 else sql3)
+
+
+
+__all__ = [
+    "CTX", "Generator", "ParseError", "Parser", "SQL", "collapse_whitespace", "format", "generate",
+    "get_first_word", "get_type", "parse", "quote", "terminate", "transform", "unquote",
+]
 
 
 
