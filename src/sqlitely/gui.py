@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.06.2024
+@modified    08.06.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -4169,9 +4169,6 @@ class DatabasePage(wx.Panel):
                     wx.lib.agw.flatnotebook.FNB_NO_X_BUTTON |
                     wx.lib.agw.flatnotebook.FNB_X_ON_TAB |
                     wx.lib.agw.flatnotebook.FNB_VC8)
-        if "linux" in sys.platform and wx.VERSION[:3] == (4, 1, 1):
-            # wxPython 4.1.1 on Linux crashes with FNB_VC8
-            agwStyle ^= wx.lib.agw.flatnotebook.FNB_VC8
         return wx.lib.agw.flatnotebook.FlatNotebook(parent, size=(-1, 27), agwStyle=agwStyle)
 
 

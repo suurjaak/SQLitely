@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    06.06.2024
+@modified    08.06.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -2495,6 +2495,15 @@ class Patch(object):
                 return functools.update_wrapper(inner, func)
             wx.ToolBar.SetToolNormalBitmap   = resize_bitmaps(wx.ToolBar.SetToolNormalBitmap)
             wx.ToolBar.SetToolDisabledBitmap = resize_bitmaps(wx.ToolBar.SetToolDisabledBitmap)
+
+        if wx.VERSION[:3] == (4, 1, 1) and "linux" in sys.platform:
+            # wxPython 4.1.1 on Linux crashes with FlatNotebook agwStyle FNB_VC8
+            FlatNotebook__init = wx.lib.agw.flatnotebook.FlatNotebook.__init__
+            def FlatNotebook__Patched(self, parent, id=wx.ID_ANY, pos=wx.DefaultPosition,
+                                      size=wx.DefaultSize, style=0, agwStyle=0, name="FlatNotebook"):
+                agwStyle ^= wx.lib.agw.flatnotebook.FNB_VC8
+                FlatNotebook__init(self, parent, id, pos, size, style, agwStyle, name)
+            wx.lib.agw.flatnotebook.FlatNotebook.__init__ = FlatNotebook__Patched
 
         if wx.VERSION >= (4, 2) and art:
             # Patch wx.ArtProvider.GetBitmap to return given bitmaps for overridden images instead
@@ -5413,9 +5422,6 @@ class TabbedHtmlWindow(wx.Panel):
                     wx.lib.agw.flatnotebook.FNB_MOUSE_MIDDLE_CLOSES_TABS |
                     wx.lib.agw.flatnotebook.FNB_NO_TAB_FOCUS |
                     wx.lib.agw.flatnotebook.FNB_VC8)
-        if "linux" in sys.platform and wx.VERSION[:3] == (4, 1, 1):
-            # wxPython 4.1.1 on Linux crashes with FNB_VC8
-            agwStyle ^= wx.lib.agw.flatnotebook.FNB_VC8
         notebook = self._notebook = wx.lib.agw.flatnotebook.FlatNotebook(
             parent=self, size=(-1, 27), style=wx.NB_TOP,
             agwStyle=agwStyle)
