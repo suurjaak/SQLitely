@@ -20,6 +20,7 @@ import ctypes
 import datetime
 try: import fcntl
 except Exception: fcntl = None
+import functools
 import inspect
 import io
 import itertools
@@ -508,10 +509,9 @@ def memoize(*args, **kwargs):
         ns["func"] = func
         if ns.get("root") is None: ns["root"] = func
         result = nohashget if nohash else hashget
-        result.__module__ = func.__module__
-        result.__name__ = func.__name__
-        result.__doc__  = func.__doc__ or ""
-        result.__doc__  += "\n\nDecorated with %s.memoize()." % __name__
+        functools.update_wrapper(result, func)
+        result.__doc__ = "%s\n\nDecorated with %s.memoize()." % (result.__doc__ or "", __name__)
+        result.__wrapped__ = func
         wrappeds[result] = ns["root"]
         return result
 
