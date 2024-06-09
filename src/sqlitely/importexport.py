@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.06.2024
+@modified    09.06.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -763,7 +763,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
 
         count = 0
         fullname = "%s.%s" % (schema2, grammar.quote(table))
-        if "SELECT" == grammar.get_first_word(query).upper():
+        if "SELECT" == grammar.strip_and_collapse(query)[:6]:
             if create_sql:
                 sql = grammar.transform(create_sql, renames={"schema": schema2})[0]
                 db.executescript(sql)

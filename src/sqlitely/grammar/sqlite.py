@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     04.09.2019
-@modified    08.06.2024
+@modified    09.06.2024
 ------------------------------------------------------------------------------
 """
 import codecs
@@ -79,14 +79,6 @@ def generate(data, indent="  ", category=None):
         logger.exception("Error generating SQL for %s.", data)
         err = util.format_exc(e)
     return result, err
-
-
-def get_first_word(sql):
-    """Returns first word from well-formed SQL text, skipping any preceding comments."""
-    sql = re.sub("%s.*$" % re.escape("--"), "", sql, flags=re.MULTILINE)
-    sql = re.sub(r"/\*.*?\*/", " ", sql, flags=re.DOTALL) # Leave space if e.g. "SELECT/**/COL"
-    first = re.search(r"[\s;]*(\w+)", sql)
-    return first.group(1) if first else ""
 
 
 @util.memoize
@@ -210,6 +202,37 @@ def format(value, coldata=None):
                 value = value.encode("utf-8").decode("latin1")
             result = "'%s'" % value.replace("'", "''")
     return result
+
+
+def strip_and_collapse(sql, literals=True, upper=True):
+    """
+    Returns SQL with comments stripped and string/identifier literals reduced to empty placeholders,
+    surrounding whitespace and semicolons removed and inner whitespace collapsed.
+
+    @param   literals  do collapse string/identifier literals, or retain as is
+    @param   upper     return in uppercase
+    """
+    placeholders = {}
+    def repl(match): # Store match and return placeholder key
+        key = ("<%s>" % (uuid.uuid4())).upper()
+        placeholders[key] = match.group(0)
+        return key
+
+    # Strip single-line comments
+    sql = re.sub("%s.*$" % re.escape("--"), "", sql, flags=re.MULTILINE)
+    # Strip multi-line comments
+    sql = re.sub(r"/\*.*?\*/", " ", sql, flags=re.DOTALL) # Leave space if e.g. "SELECT/**/COL"
+    # Reduce string literals to empty strings or placeholders
+    sql = re.sub('"([^"]|"")*"',  '""' if literals else repl, sql)
+    sql = re.sub("'([^']|'')*'",  "''" if literals else repl, sql)
+    # Reduce identifiers to empty strings or placeholders
+    sql = re.sub("`([^`]|``)*`",  "``" if literals else repl, sql)
+    sql = re.sub(r"\[([^\]])*\]", "[]" if literals else repl, sql)
+    # Collapse all whitespace to single space and strip surrounding whitespace and semicolons
+    sql = re.sub(r"\s+", " ", re.sub(r"^[\s;]+|[\s;]*$", "", sql.upper() if upper else sql))
+    # Replace temporary placeholders with original literals if any
+    for k, v in placeholders.items(): sql = sql.replace(k, v, 1)
+    return sql
 
 
 def terminate(sql, data=None):
@@ -1401,8 +1424,8 @@ def test():
 
 
 __all__ = [
-    "CTX", "Generator", "ParseError", "Parser", "SQL", "collapse_whitespace", "format", "generate",
-    "get_first_word", "get_type", "parse", "quote", "terminate", "transform", "unquote",
+    "CTX", "Generator", "ParseError", "Parser", "SQL", "format", "generate", "get_type",
+    "parse", "quote", "strip_and_collapse", "terminate", "transform", "unquote",
 ]
 
 

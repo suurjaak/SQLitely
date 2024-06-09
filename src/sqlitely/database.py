@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    07.06.2024
+@modified    09.06.2024
 ------------------------------------------------------------------------------
 """
 from collections import defaultdict, OrderedDict
@@ -812,16 +812,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
         Returns ROWID name for table, or None if table is WITHOUT ROWID
         or has columns shadowing all ROWID aliases (ROWID, _ROWID_, OID).
         """
-        without_in_sql = False
-        if util.getval(self.schema, "table", table) \
-        and not util.getval(self.schema, "table", table, "meta") \
-        and re.search(r"\bWITHOUT\b.*\bROWID\b", self.schema["table"][table]["sql"], re.I):
-            # Parse table SQL if it might be WITHOUT ROWID
-            self.populate_schema(category="table", name=table, parse=True)
-            without_in_sql = True
         meta = util.getval(self.schema, "table", table, "meta") or {}
-        if any(x.get("without") for x in meta.get("options", [])): return None
-        if not meta and without_in_sql: return None # Parse failed but SQL has it: assume WITHOUT
+        if any(x.get("without") for x in meta.get("options", [])) or not meta \
+        and "WITHOUT ROWID" in grammar.strip_and_collapse(self.schema["table"][table]["sql"]):
+            return None
         ALIASES = ("_rowid_", "rowid", "oid")
         cols = [c["name"].lower() for c in self.schema["table"][table]["columns"]]
         return next((x for x in ALIASES if x not in cols), None)
@@ -1002,8 +996,10 @@ WARNING: misuse can easily result in a corrupt database file.""",
         ).fetchall():
             if "table" == row["type"] \
             and "ENABLE_ICU" not in self.compile_options: # Unsupported tokenizer
-                if  re.match(r"CREATE\s+VIRTUAL\s+TABLE", row["sql"], re.I) \
-                and re.search(r"TOKENIZE\s*[\W]*icu[\W]", row["sql"], re.I):
+                stripped = grammar.strip_and_collapse(row["sql"], literals=False)
+                if stripped.startswith("CREATE VIRTUAL TABLE") \
+                and re.search(r"USING\W.+((\(icu\W)|(\(.*\Wicu\W))", stripped, re.I):
+                    # Various e.g. USING module_name(icu) or USING module_name(tokenizer=icu) etc
                     continue # for row
 
             sqlraw = row["sql"].strip().replace("\r\n", "\n")
