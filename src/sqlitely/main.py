@@ -717,7 +717,7 @@ def prepare_args(action, args):
     if not args.OUTFILE and (outfile_required or args.format not in importexport.PRINTABLE_EXTS):
         dct = {"action": action.capitalize(), "db": os.path.basename(args.INFILE)}
         base = OUTFILE_TEMPLATES.get(action, "%(action)s from %(db)s") % dct
-        args.OUTFILE = "%s.%s" % (base, args.format)
+        args.OUTFILE = util.unrepeat("%s.%s" % (base, args.format), ".%s" % args.format)
         if outfile_transient:
             with tempfile.NamedTemporaryFile(prefix=base + ".", suffix="." + args.format) as f:
                 args.OUTFILE = f.name

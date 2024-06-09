@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.06.2024
+@modified    09.06.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1343,6 +1343,20 @@ def unprint(s, escape=True):
     """Returns string with unprintable characters escaped or stripped."""
     repl = (lambda m: m.group(0).encode("unicode-escape").decode("latin1")) if escape else ""
     return re.sub(r"[\x00-\x1f]", repl, s)
+
+
+def unrepeat(s, front="", end="", case=False):
+    """
+    Returns text with duplicate substrings removed from front or end.
+
+    @param   front     prefix to deduplicate from front of string
+    @param   end       suffix to deduplicate from end of string
+    @oaram   case      whether deduplication should be case-sensitive
+    @return            deduplicated text, like unrepeat("my.db.db", end=".db") == "my.db"
+    """
+    s = re.sub("^(%s){2,}" % re.escape(front), front, s, flags=0 if case else re.I) if front else s
+    s = re.sub("(%s){2,}$" % re.escape(end),   end,   s, flags=0 if case else re.I) if end   else s
+    return s    
 
 
 def url_to_path(url, double_decode=False):
