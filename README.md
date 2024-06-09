@@ -18,6 +18,10 @@ It can:
 - manage database PRAGMA directives
 - fix database corruption
 
+Also, a [command line interface](https://suurjaak.github.io/SQLitely/help.html#commandline)
+is available, offering functions like exporting, importing, querying, searching, and statistics.
+The graphical version includes a Python console window.
+
 Downloads, help texts, and more screenshots at
 http://suurjaak.github.io/SQLitely.
 
