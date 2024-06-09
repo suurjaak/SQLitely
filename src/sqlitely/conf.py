@@ -32,7 +32,7 @@ except ImportError: wx = None
 
 """Program title, version number and version date."""
 Title = "SQLitely"
-Version = "2.3.dev115"
+Version = "2.3.dev116"
 VersionDate = "09.06.2024"
 
 Frozen, Snapped = getattr(sys, "frozen", False), (sys.executable or "").startswith("/snap/")

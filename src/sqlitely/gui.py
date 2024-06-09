@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.06.2024
+@modified    09.06.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -588,7 +588,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         menu_update = self.menu_update = menu_help.Append(wx.ID_ANY,
             "Check for &updates",
             "Check whether a new version of %s is available" % conf.Title
-        ) if not conf.Snapped else None
+        )
         menu_homepage = self.menu_homepage = menu_help.Append(wx.ID_ANY,
             "Go to &homepage",
             "Open the %s homepage, %s" % (conf.Title, conf.HomeUrl))
@@ -627,7 +627,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_save_active_database_as, menu_save_database_as)
         self.Bind(wx.EVT_MENU, self.on_open_options,            menu_advanced)
         self.Bind(wx.EVT_MENU, self.on_exit,                    menu_exit)
-        self.Bind(wx.EVT_MENU, self.on_check_update,            menu_update) if menu_update else None
+        self.Bind(wx.EVT_MENU, self.on_check_update,            menu_update)
         self.Bind(wx.EVT_MENU, self.on_menu_homepage,           menu_homepage)
         self.Bind(wx.EVT_MENU, self.on_showhide_log,            menu_log)
         self.Bind(wx.EVT_MENU, self.on_toggle_console,          menu_console)
