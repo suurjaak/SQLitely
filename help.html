@@ -35,7 +35,8 @@
           <a href="screens.html">Screenshots</a><br />
           <a href="help.html">Help Texts</a><br />
           <span class="subview">
-            <a href="#search">Search syntax</a><br />
+            <a href="#search-syntax">Search syntax</a><br />
+            <a href="#commandline">Command-line help</a><br />
           </span>
           <a href="changelog.html">Changelog</a><br />
           <a href="https://github.com/suurjaak/SQLitely">View the Project on GitHub <small>suurjaak/SQLitely</small></a>
@@ -53,7 +54,7 @@
 
         <h2>Help Texts</h2>
 
-        <a name="search"><h3>Search Syntax</h3></a>
+        <a name="search-syntax"><h3>Search Syntax</h3></a>
         SQLitely supports a simple query syntax for searching the database:
         <br /><br />
 
@@ -233,8 +234,332 @@
         Keywords are global, even when in bracketed (grouped words). <br />
         Metadata search supports only <code>table:</code> and <code>view:</code> keywords.
 
+      </section>
+
+
+
+      <section>
+        <a name="commandline"><h3>Command-Line Help</h3></a>
+
+        Command-line interface does not require having wx installed,
+        if running from source code.<br />
+        It is likewise available with compiled binaries.
+        <br /><br />
+
+<pre>
+<code>$ sqlitely -h</code>
+
+usage: sqlitely [-h] [--verbose] {export,search,sync,merge,diff,gui} ...
+
+SQLitely - SQLite database tool.
+
+positional arguments:
+  {execute,export,import,parse,search,stats,gui}
+    <a href="#execute">execute</a>             run SQL statements in SQLite database
+    <a href="#export" >export</a>              export SQLite database in various output formats
+    <a href="#gui"    >gui</a>                 launch SQLitely graphical program (default option)
+    <a href="#import" >import</a>              import data from file to database
+    <a href="#parse"  >parse</a>               search in SQLite database schema
+    <a href="#search" >search</a>              search in SQLite database data
+    <a href="#stats"  >stats</a>               print or save database statistics
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -v, --version         show program's version number and exit
+  --verbose             print detailed logging messages to stderr
+  --config-file FILE    path of program configuration file to use
+</pre>
+
+
+<pre id="execute">
+<code>$ sqlitely -h execute</code>
+
+usage: sqlitely execute [-h] [-p PARAM [PARAM ...]] [-o [FILE]]
+                        [-f {csv,db,html,json,sql,txt,xlsx,yaml}] [--overwrite]
+                        [--allow-empty] [--progress] [--verbose] [--config-file FILE]
+                        DATABASE SQL
+
+Run given SQL in an SQLite database,
+query results printed to console or written to file.
+
+positional arguments:
+  DATABASE              SQLite database file to run SQL in
+  SQL                   SQL text to execute, with one or more statements,
+                        or a path to file with SQL statements;
+                        may contain parameter placeholders like ? or :name
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -p PARAM [PARAM ...], --param PARAM [PARAM ...]
+                        positional or keyword parameters for SQL,
+                        keywords as name=value
+  -o [FILE], --output [FILE]
+                        write query output to file instead of printing to console;
+                        filename will be auto-generated if not given;
+                        automatic for non-printable formats (db,html,xlsx)
+  -f {csv,db,html,json,sql,txt,xlsx,yaml}, --format {csv,db,html,json,sql,txt,xlsx,yaml}
+                        output format for query results:
+                          csv:   CSV spreadsheet
+                          db:    SQLite database
+                          html:  HTML document
+                          json:  JSON data
+                          sql:   SQL statements
+                          txt:   text document (default)
+                          xlsx:  Excel workbook
+                          yaml:  YAML data
+                        (auto-detected from output filename if not specified)
+  --overwrite           overwrite output file if already exists
+                        (by default appends unique counter to filename)
+  --allow-empty         write output file even if query has no results
+  --progress            display progress bar
+  --verbose             print detailed logging messages to stderr
+  --config-file FILE    path of program configuration file to use
+</pre>
+
+
+<pre id="export">
+<code>$ sqlitely -h export</code>
+
+usage: sqlitely export [-h] [-o [FILE]] [-f {csv,db,html,json,sql,txt,xlsx,yaml}] [-p DIR]
+                       [--combine] [--overwrite] [--no-empty] [--include-related]
+                       [--filter FILTER [FILTER ...]] [--limit NUM] [--offset NUM]
+                       [--reverse] [--max-count NUM] [--progress] [--verbose]
+                       [--config-file FILE]
+                       DATABASE
+
+Export data or schema from an SQLite database,
+printed to console or written to file.
+
+positional arguments:
+  DATABASE              SQLite database to export
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -o [FILE], --output [FILE]
+                        write output to file instead of printing to console;
+                        filename will be auto-generated if not given;
+                        used as prefix if not --combine;
+                        automatic for non-printable formats (db,html,xlsx)
+  -f {csv,db,html,json,sql,txt,xlsx,yaml}, --format {csv,db,html,json,sql,txt,xlsx,yaml}
+                        export format:
+                          csv:   CSV spreadsheet
+                          db:    SQLite database
+                          html:  HTML document
+                          json:  JSON data
+                          sql:   SQL statements (default)
+                          txt:   text document
+                          xlsx:  Excel workbook
+                          yaml:  YAML data
+                        (auto-detected from output filename if not specified)
+  -p DIR, --path DIR    output file directory if not current directory
+  --combine             combine all outputs into a single file,
+                        instead of each table or view to a separate file;
+                        automatic if exporting to another database.
+  --overwrite           overwrite output file if already exists
+                        (by default appends unique counter to filename)
+  --no-empty            skip empty tables and views from output altogether
+                        (affected by offset and limit)
+  --include-related     include related entities:
+                        foreign tables and view dependencies if using filter,
+                        and indexes and triggers if exporting to database or SQL
+  --filter FILTER [FILTER ...]
+                        names of specific entities to export or skip
+                        (supports * wildcards; initial ~ skips)
+  --limit NUM           maximum number of rows to export per table or view
+  --offset NUM          number of initial rows to skip from each table or view
+  --reverse             query table rows in reverse ROWID/PK order,
+                        view rows in reverse row_number() order
+  --max-count NUM       maximum total number of rows to export over all tables and views
+  --progress            display progress bar
+  --verbose             print detailed logging messages to stderr
+  --config-file FILE    path of program configuration file to use
+</pre>
+
+
+<pre id="gui">
+<code>$ sqlitely -h gui</code>
+
+usage: sqlitely gui [-h] [--config-file FILE] [DATABASE [DATABASE ...]]
+
+Launch SQLitely graphical program (default option)
+
+positional arguments:
+  DATABASE            SQLite database(s) to open on startup, if any
+                      (supports * wildcards)
+
+optional arguments:
+  -h, --help          show this help message and exit
+  --config-file FILE  path of program configuration file to use
+</pre>
+
+
+<pre id="import">
+<code>$ sqlitely -h import</code>
+
+usage: sqlitely import [-h] [--filter FILTER [FILTER ...]] [--row-header] [--no-empty]
+                       [--columns COLUMNS] [--table-name NAME] [--create-always] [--add-pk]
+                       [--assume-yes] [--limit NUM] [--offset NUM] [--max-count NUM]
+                       [--progress] [--verbose] [--config-file FILE]
+                       INFILE DB
+
+Import data from files to a new or existing SQLite database.
+Prompts for confirmation.
+
+positional arguments:
+  INFILE                file to import from.
+                        Supported extensions: {csv,json,xls,xlsx,yaml,yml}.
+  DB                    SQLite database to import to, will be created if not present
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --filter FILTER [FILTER ...]
+                        names of specific Excel worksheets to import or skip
+                        (supports * wildcards; initial ~ skips)
+  --row-header          use first row of input spreadsheet for column names
+  --no-empty            skip spreadsheets with no content rows
+                        (affected by offset and limit)
+  --columns COLUMNS     columns to import if not all,
+                        as a comma-separated list of indexes or index ranges,
+                        range as START..END or START.. or ..END
+                        (no START: from first, no END: until last).
+                        Indexes can be numbers starting from 1
+                        or spreadsheet column labels like AB,
+                        must be column names if import from JSON/YAML.
+  --table-name NAME     name of table to import into, defaults to file base name
+                        or worksheet name if Excel spreadsheet
+  --create-always       create new table even if a matching table already exists
+  --add-pk              add auto-increment primary key column to created tables
+  --assume-yes          skip confirmation prompt for starting import
+  --limit NUM           maximum number of rows to import, per table
+  --offset NUM          number of initial rows to skip from each table
+  --max-count NUM       maximum total number of rows to import over all tables
+  --progress            display progress bar
+  --verbose             print detailed logging messages to stderr
+  --config-file FILE    path of program configuration file to use
+</pre>
+
+
+<pre id="parse">
+<code>$ sqlitely -h parse</code>
+
+usage: sqlitely parse [-h] [--case] [-o [FILE]] [--overwrite] [--limit NUM] [--offset NUM]
+                      [--reverse] [--verbose] [--config-file FILE]
+                      DATABASE [SEARCH]
+
+Parse and search database schema CREATE SQL.
+
+positional arguments:
+  DATABASE              SQLite database file to parse
+  SEARCH                search text if any, with simple query syntax, for example:
+                        "each word present" or "fk_* trigger:on_insert_*".
+                        More at <a href="#search-syntax">search syntax</a>.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --case                case-sensitive search
+  -o [FILE], --output [FILE]
+                        write output to SQL file instead of printing to console;
+                        filename will be auto-generated if not given
+  --overwrite           overwrite output file if already exists
+                        (by default appends unique counter to filename)
+  --limit NUM           maximum number of matches to find
+  --offset NUM          number of initial matches to skip
+  --reverse             find matches in reverse order
+  --verbose             print detailed logging messages to stderr
+  --config-file FILE    path of program configuration file to use
+</pre>
+
+
+<pre id="search">
+<code>$ sqlitely -h search</code>
+
+usage: sqlitely search [-h] [--case] [-o [FILE]] [-f {csv,db,html,json,sql,txt,xlsx,yaml}]
+                       [-p DIR] [--combine] [--overwrite] [--limit NUM] [--offset NUM]
+                       [--reverse] [--max-count NUM] [--progress] [--verbose]
+                       [--config-file FILE]
+                       DATABASE SEARCH
+
+Search over all columns of all rows in an SQLite database,
+matches printed to console or written to file.
+
+positional arguments:
+  DATABASE              SQLite database file to search
+  SEARCH                search text, with simple query syntax, for example:
+                        "each word in some col" or "this OR that column:foo*".
+                        More at <a href="#search-syntax">search syntax</a>.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --case                case-sensitive search
+  -o [FILE], --output [FILE]
+                        write output to file instead of printing to console;
+                        filename will be auto-generated if not given;
+                        used as prefix if not --combine;
+                        automatic for non-printable formats (db,html,xlsx)
+  -f {csv,db,html,json,sql,txt,xlsx,yaml}, --format {csv,db,html,json,sql,txt,xlsx,yaml}
+                        output format:
+                          csv:   CSV spreadsheet
+                          db:    SQLite database
+                          html:  HTML document
+                          json:  JSON data
+                          sql:   SQL statements
+                          txt:   text document (default)
+                          xlsx:  Excel workbook
+                          yaml:  YAML data
+                        (auto-detected from output filename if not specified)
+  -p DIR, --path DIR    output file directory if not current directory
+  --combine             combine all outputs into a single file,
+                        instead of each table or view to a separate file;
+                        automatic if exporting to another database.
+  --overwrite           overwrite output file if already exists
+                        (by default appends unique counter to filename)
+  --limit NUM           maximum number of matches to find from each table or view
+  --offset NUM          number of initial matches to skip from each table or view
+  --reverse             query table matches in reverse ROWID/PK order,
+                        view matches in reverse row_number() order
+  --max-count NUM       maximum total number of rows to export over all tables and views
+  --progress            display progress bar
+  --verbose             print detailed logging messages to stderr
+  --config-file FILE    path of program configuration file to use
+</pre>
+
+
+<pre id="stats">
+<code>$ sqlitely -h stats</code>
+
+usage: sqlitely stats [-h] [-o [FILE]] [-f {html,sql,txt}] [--overwrite] [--start-file]
+                      [--disk-usage] [--progress] [--verbose] [--config-file FILE]
+                      DATABASE
+
+Analyze an SQLite database and produce statistics as HTML, SQL or text.
+
+positional arguments:
+  DATABASE              SQLite database to analyze
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -o [FILE], --output [FILE]
+                        write output to file instead of printing to console,
+                        filename will be auto-generated if not given;
+                        auto-populated for non-printable formats (html)
+  -f {html,sql,txt}, --format {html,sql,txt}
+                        output format:
+                          html:  HTML document
+                          sql:   SQL statements
+                          txt:   text document (default)
+                        (auto-detected from output filename if not specified)
+  --overwrite           overwrite output file if already exists
+                        (by default appends unique counter to filename)
+  --start-file          open output file with registered program
+  --disk-usage          count bytes of disk usage per table and index
+                        (enabled by default in SQL output)
+  --progress            display progress bar
+  --verbose             print detailed logging messages to stderr
+  --config-file FILE    path of program configuration file to use
+</pre>
 
       </section>
+
       <footer>
         
         <p>This project is maintained by <a href="https://github.com/suurjaak">suurjaak</a></p>
