@@ -721,7 +721,7 @@ def export_to_db(db, filename, schema, renames=None, data=False, selects=None,
     return result    
 
 
-def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
+def export_query_to_db(db, filename, table, query, params=(), cursor=None, create_sql=None,
                        empty=True, limit=None, progress=None):
     """
     Exports query results to another database.
@@ -731,6 +731,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
     @param   table       target table name, expected to be unique in target database
     @param   query       SQL query text
     @param   params      SQL query parameters
+    @param   cursor      existing results cursor to use instead of making a new query
     @param   create_sql  CREATE TABLE statement if not auto-generating from query columns
     @param   empty       create target table even if query returns nothing
     @param   limit       query limits, as LIMIT or (LIMIT, ) or (LIMIT, OFFSET)
@@ -763,7 +764,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
 
         count = 0
         fullname = "%s.%s" % (schema2, grammar.quote(table))
-        if "SELECT" == grammar.strip_and_collapse(query)[:6]:
+        if "SELECT" == grammar.strip_and_collapse(query)[:6] and not cursor:
             if create_sql:
                 sql = grammar.transform(create_sql, renames={"schema": schema2})[0]
                 db.executescript(sql)
@@ -777,7 +778,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
             count = db.execute(sql, params).rowcount
             logs.append((sql, None))
         else:
-            cursor = db.execute(query, params)
+            if not cursor: cursor = db.execute(query, params)
             cols = [c[0] for c in cursor.description] if cursor.description else ["rowcount"]
             sql = create_sql
             sql = sql or "CREATE TABLE %s (%s)" % (fullname, ", ".join(map(grammar.quote, cols)))

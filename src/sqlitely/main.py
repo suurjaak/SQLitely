@@ -21,6 +21,7 @@ import copy
 import errno
 import functools
 import glob
+import itertools
 import locale
 import logging
 import math
@@ -28,6 +29,7 @@ import os
 try: import Queue as queue        # Py2
 except ImportError: import queue  # Py3
 import re
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -79,6 +81,44 @@ ARGUMENTS = {
               "help": "SQLite database(s) to open on startup, if any\n"
                       "(supports * wildcards)"},
 
+             {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
+              "help": "path of program configuration file to use"},
+        ]},
+        {"name": "execute",
+         "help": "run SQL statements in SQLite database",
+         "description": "Run given SQL in an SQLite database,\n"
+                        "query results printed to console or written to file.",
+         "arguments": [
+             {"args": ["INFILE"], "metavar": "DATABASE",
+              "help": "SQLite database file to run SQL in"},
+             {"args": ["SQL"], "type": str.strip,
+              "help": "SQL text to execute, with one or more statements,\n"
+                      "or a path to file with SQL statements"},
+             {"args": ["-o", "--output"], "dest": "OUTFILE", "metavar": "FILE",
+                       "nargs": "?", "const": "",
+              "help": "write query output to file instead of printing to console;\n"
+                      "filename will be auto-generated if not given;\n"
+                      "automatic for non-printable formats (%s)" %
+                      ",".join(["db"] + sorted(set(importexport.EXPORT_EXTS) -
+                                               set(importexport.PRINTABLE_EXTS)))},
+             {"args": ["-f", "--format"], "dest": "format",
+              "choices": sorted(["db"] + importexport.EXPORT_EXTS), "type": str.lower,
+              "help": "output format for query results:\n%s\n"
+                      "(auto-detected from output filename if not specified)" % "\n".join(sorted(
+                        "  %-5s  %s%s" % ("%s:" % k, importexport.EXT_NAMES[k],
+                                          " (default)" if "txt" == k else "")
+                        for k in sorted(["db"] + importexport.EXPORT_EXTS)
+                      ))},
+             {"args": ["--overwrite"], "action": "store_true",
+              "help": "overwrite output file if already exists\n"
+                      "(by default appends unique counter to filename)"},
+             {"args": ["--allow-empty"], "dest": "no_empty", "action": "store_false",
+              "help": "write output file even if query has no results"},
+             {"args": ["--progress"], "action": "store_true",
+              "help": "display progress bar"},
+
+             {"args": ["--verbose"], "action": "store_true",
+              "help": "print detailed logging messages to stderr"},
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
               "help": "path of program configuration file to use"},
         ]},
@@ -641,7 +681,7 @@ def prepare_args(action, args):
     @param   action  name like "export" or "search"
     @param   args    argparse.Namespace
     """
-    DEFAULT_FORMATS   = {"export": "sql", "search": "txt", "stats": "txt"}
+    DEFAULT_FORMATS   = {"execute": "txt", "export": "sql", "search": "txt", "stats": "txt"}
     ACTION_FORMATS    = {"stats": ["html", "sql", "txt"]}
     OUTFILE_TEMPLATES = {"stats": "%(db)s statistics"}
     FORMATS = {x: [x] for x in importexport.EXPORT_EXTS}
@@ -800,7 +840,8 @@ def do_output(action, args, func, entities, files):
             errput("Printed %s to console%s" % (util.count(count_total, "row"), punct))
         orderer = reversed if getattr(args, "reverse", False) else list
         for item in (x for x in orderer(entities.values())
-                     if x["type"] in database.Database.DATA_CATEGORIES):
+                     if x["type"] in database.Database.DATA_CATEGORIES
+                     or x["type"] not in database.Database.CATEGORIES):
             if getattr(args, "no_empty", False) and not item.get("count"): continue # for item
             countstr = "" if item.get("count") is None else ", %s" % util.count(item, "row")
             if item["name"] in files:
@@ -808,6 +849,144 @@ def do_output(action, args, func, entities, files):
                 errput("  '%s'%s (%s)" % (filename, countstr, fmt_bytes(filename)))
             else:
                 errput("  %s%s" % (util.cap(item["title"], reverse=True), countstr))
+
+
+def run_execute(dbname, args):
+    """
+    Runs SQL statements in database, writes query results to file or prints to console.
+
+    @param   dbname         path of database to export
+    @param   args
+               SQL          SQL to execute, or path to file with SQL text
+               OUTFILE      path of output file, if any
+               format       export format
+               overwrite    overwrite existing output file instead of creating unique name
+               no_empty     do not write output file if query has no results
+               progress     show progress bar
+    """
+
+    def run_sql(db, sql):
+        """Executes SQL in database, as a script if multiple statements, returns cursor."""
+        try: return db.execute(sql)
+        except sqlite3.Warning as e:
+            if "one statement at a time" in str(e):
+                # Warning('You can only execute one statement at a time.')
+                return db.executescript(sql)
+            _, e, tb = sys.exc_info()
+            six.reraise(type(e), e, tb)
+
+    def make_iterable():
+        """Returns rows iterable, using existing cursor on first call."""
+        if flags["make"] == 0:
+            iterer = itertools.chain([] if row is None else [row], cursor)
+            return type("", (), {"description": cursor.description, "__iter__": iterer.__iter__,
+                                 "__next__": iterer.__next__})()
+        flags["make"] += 1
+        return run_sql(db, args.SQL) # Some export formats require iterating twice
+
+    def make_iterables():
+        """Yields one pair of ({item}, callable returning iterable cursor)."""
+        yield item, make_iterable
+
+
+    validate_args("execute", args, dbname)
+    if os.path.isfile(args.SQL):
+        output("Reading SQL file %r (%s).",
+               args.SQL, util.format_bytes(os.path.getsize(args.SQL), max_units=False))
+        try:
+            with open(args.SQL, "r") as f:
+                sql = f.read().strip()
+        except Exception as e:
+            sys.exit("Error reading SQL file %r\n\n%s" % (args.SQL, e))
+        if not sql:
+            sys.exit("No content in SQL file %r." % args.SQL)
+        args.SQL = sql
+    args.SQL = args.SQL.strip(";")
+    if not args.SQL:
+        sys.exit("SQL text is mandatory.")
+
+
+    output()
+    progressargs = dict(pulse=True, interval=0.05) if args.progress else dict(static=True)
+    afterword = " Opening database %s (%s)" % \
+                (dbname, util.format_bytes(database.get_size(dbname), max_units=False))
+    bar = util.ProgressBar(afterword=afterword, **progressargs)
+
+    db = database.Database(dbname)
+    flags = {"make": 0}
+
+    bar.update(afterword=" Executing SQL")
+    try: cursor = run_sql(db, args.SQL)
+    except Exception as e:
+        util.try_ignore(db.close)
+        sys.exit("Error querying %s\n\n%r" % (dbname, e))
+
+
+    bar.stop()
+    if not cursor.description: # Not a query with result rows
+        if cursor.rowcount >= 0: # INSERT/UPDATE/DELETE
+            output("%s affected.", util.plural("row", cursor.rowcount))
+            if cursor.lastrowid: # INSERT
+                output("Row ID of %sinserted row: %s",
+                       "" if cursor.rowcount > 1 else "last ", cursor.lastrowid)
+        else:
+            output("Query executed.")
+        cursor.close()
+        db.close()
+        output("\nDatabase size after query: %s.",
+               util.format_bytes(db.get_size(), max_units=False))
+        return
+
+    row = next(cursor, None)
+    if row is None and args.OUTFILE and args.no_empty:
+        output("Query yielded no results.")
+        return
+
+    file_existed = args.OUTFILE and not args.overwrite and os.path.isfile(args.OUTFILE)
+    if args.overwrite and args.OUTFILE:
+        os.path.exists(args.OUTFILE) and os.unlink(args.OUTFILE)
+
+    item = {"name": "SQL query", "title": "SQL query", "type": "execute", "sql": args.SQL,
+            "count": 0, "columns": [{"name": x[0]} for x in cursor.description]}
+    entities = {"SQL query": item}
+    progress = make_progress("execute", entities, args)
+
+    files = collections.OrderedDict()  # {entity name: output filename}
+    func, posargs, kwargs = None, [], {}
+
+    if "db" == args.format:
+        def output_to_db():
+            table = item["name"]
+            allnames = util.CaselessDict((n, True) for nn in db.schema.values() for n in nn)
+            table = util.make_unique(table, allnames) if table in allnames else table
+            item.update(name=table, title="table %s" % grammar.quote(table))
+            result = importexport.export_query_to_db(db, args.OUTFILE, table, args.SQL,
+                                                     cursor=make_iterable(), progress=progress)
+            db.close()
+            files["execute"] = args.OUTFILE
+            return result
+
+        func = output_to_db
+
+    elif args.OUTFILE:
+        def do_export():
+            title = "SQL query"
+            result = importexport.export_data(db, args.OUTFILE, args.format, make_iterable,
+                title, item["columns"], query=args.SQL, name=item["name"], progress=progress,
+                info={"Command": " ".join(cli_args)} if cli_args else None
+            )
+            files["query"] = args.OUTFILE
+            return result
+
+        func = do_export
+
+    else: # Print to console
+        func = importexport.export_to_console
+        posargs = [args.format, make_iterables]
+        kwargs.update(output=output, progress=progress)
+
+    try: do_output("execute", args, functools.partial(func, *posargs, **kwargs), entities, files)
+    finally: util.try_ignore(db.close)
 
 
 def run_export(dbname, args):
@@ -1601,7 +1780,9 @@ def run(nogui=False):
             sys.exit("Input file and output file are the same file.")
 
     cli_args = argv[:]
-    if "export" == arguments.command:
+    if "execute" == arguments.command:
+        run_execute(arguments.INFILE, arguments)
+    elif "export" == arguments.command:
         run_export(arguments.INFILE, arguments)
     elif "import" == arguments.command:
         run_import(arguments.INFILE, arguments)
