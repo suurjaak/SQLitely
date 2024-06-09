@@ -30,6 +30,7 @@ try: import Queue as queue        # Py2
 except ImportError: import queue  # Py3
 import re
 import sqlite3
+import string
 import sys
 import tempfile
 import threading
@@ -93,7 +94,11 @@ ARGUMENTS = {
               "help": "SQLite database file to run SQL in"},
              {"args": ["SQL"], "type": str.strip,
               "help": "SQL text to execute, with one or more statements,\n"
-                      "or a path to file with SQL statements"},
+                      "or a path to file with SQL statements;\n"
+                      "may contain parameter placeholders like ? or :name"},
+             {"args": ["-p", "--param"], "nargs": "+", "default": [],
+              "help": "positional or keyword parameters for SQL,\n"
+                      "keywords as name=value"},
              {"args": ["-o", "--output"], "dest": "OUTFILE", "metavar": "FILE",
                        "nargs": "?", "const": "",
               "help": "write query output to file instead of printing to console;\n"
@@ -859,15 +864,29 @@ def run_execute(dbname, args):
     @param   args
                SQL          SQL to execute, or path to file with SQL text
                OUTFILE      path of output file, if any
+               param        positional or keyword parameters for SQL, keywords as name=value
                format       export format
                overwrite    overwrite existing output file instead of creating unique name
                no_empty     do not write output file if query has no results
                progress     show progress bar
     """
 
-    def run_sql(db, sql):
+    def run_sql_params(db, sql, params):
+        """Executes SQL statement with parameters, handling parameter conversion, returns cursor."""
+        paramdict = dict(x.split("=", 1) for x in params) \
+                    if all(re.match(r"\w.*=.+", x) for x in params or ()) else {}
+        try: return db.execute(sql, paramdict or params)
+        except sqlite3.ProgrammingError as e:
+            if "supplied a dictionary" in str(e) or "value for binding" in str(e):
+                # ProgrammingError('Binding 1 has no name, but you supplied a dictionary (wh..).')
+                # ProgrammingError('You did not supply a value for binding 1.')
+                return db.execute(sql, params)
+            _, e, tb = sys.exc_info()
+            six.reraise(type(e), e, tb)
+
+    def run_sql(db, sql, params):
         """Executes SQL in database, as a script if multiple statements, returns cursor."""
-        try: return db.execute(sql)
+        try: return run_sql_params(db, sql, params) if params else db.execute(sql)
         except sqlite3.Warning as e:
             if "one statement at a time" in str(e):
                 # Warning('You can only execute one statement at a time.')
@@ -882,7 +901,7 @@ def run_execute(dbname, args):
             return type("", (), {"description": cursor.description, "__iter__": iterer.__iter__,
                                  "__next__": iterer.__next__})()
         flags["make"] += 1
-        return run_sql(db, args.SQL) # Some export formats require iterating twice
+        return run_sql(db, args.SQL, args.param) # Some export formats require iterating twice
 
     def make_iterables():
         """Yields one pair of ({item}, callable returning iterable cursor)."""
@@ -901,7 +920,7 @@ def run_execute(dbname, args):
         if not sql:
             sys.exit("No content in SQL file %r." % args.SQL)
         args.SQL = sql
-    args.SQL = args.SQL.strip(";")
+    args.SQL = args.SQL.strip(";" + string.whitespace)
     if not args.SQL:
         sys.exit("SQL text is mandatory.")
 
@@ -916,7 +935,7 @@ def run_execute(dbname, args):
     flags = {"make": 0}
 
     bar.update(afterword=" Executing SQL")
-    try: cursor = run_sql(db, args.SQL)
+    try: cursor = run_sql(db, args.SQL, args.param)
     except Exception as e:
         util.try_ignore(db.close)
         sys.exit("Error querying %s\n\n%r" % (dbname, e))
