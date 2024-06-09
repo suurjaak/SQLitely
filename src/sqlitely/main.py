@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    06.06.2024
+@modified    09.06.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -529,7 +529,7 @@ def make_progress(action, entities, args, results=None, **ns):
     @param   ns        namespace defaults
     """
     NAME_MAX = 25
-    infinitive = "%sing" % action
+    infinitive = "%sing" % action.rstrip("e")
 
     ns = dict({"bar": None, "name": None, "afterword": None}, **ns)
     def progress(result=None, **kwargs):
@@ -577,7 +577,7 @@ def make_progress(action, entities, args, results=None, **ns):
                             total = min(total, args.limit)
                         ns["bar"].max = total
                     ns["bar"].draw()
-                    if 0 not in (item.get("total"), args.limit):
+                    if 0 not in (item.get("total"), getattr(args, "limit", None)):
                         ns["bar"].start()
                 else:
                     ns["bar"].update(item["count"], pulse=False)
@@ -769,15 +769,15 @@ def do_output(action, args, func, entities, files):
     @param   entities  {name: {item}} to process
     @param   files     {name: filename} populated by func
     """
-    infinitive, past = "%sing" % action, "%sed" % action
-    adverb = "in" if "search" == action else "from"
+    infinitive, past = (x % action.rstrip("e") for x in ("%sing", "%sed"))
+    adverb = "in" if action in ("execute", "search") else "from"
 
     try:
         if not func(): return
     except Exception:
         _, e, tb = sys.exc_info()
         logger.exception("Error %s %s %s.", infinitive, adverb, args.INFILE)
-        if args.OUTFILE and args.combine and "db" != args.format:
+        if args.OUTFILE and getattr(args, "combine", None) and "db" != args.format:
             util.try_ignore(os.unlink, args.OUTFILE)
         six.reraise(type(e), e, tb)
     else:
@@ -788,16 +788,18 @@ def do_output(action, args, func, entities, files):
         errput()
         errput("%s %s: %s (%s)" % (past.capitalize(), adverb, os.path.abspath(args.INFILE),
                                    fmt_bytes(args.INFILE, database.get_size)))
-        if args.OUTFILE and args.combine:
-            errput("Wrote %s to '%s' (%s):" % (util.count(count_total, "row"),
-                                             args.OUTFILE, fmt_bytes(args.OUTFILE)))
+        punct = ":" if count_total["count"] or not getattr(args, "no_empty", False) else "."
+        if args.OUTFILE and (getattr(args, "combine", None) or len(files) == 1):
+            errput("Wrote %s to '%s' (%s)%s" % (util.count(count_total, "row"),
+                                                args.OUTFILE, fmt_bytes(args.OUTFILE), punct))
         elif args.OUTFILE:
-            errput("Wrote %s to %s (%s):" % (util.count(count_total, "row"),
+            errput("Wrote %s to %s (%s)%s" % (util.count(count_total, "row"),
                 util.plural("file", files),
-                util.format_bytes(sum(os.path.getsize(f) for f in files.values()))))
+                util.format_bytes(sum(os.path.getsize(f) for f in files.values())), punct))
         else:
-            errput("Printed %s to console:" % util.count(count_total, "row"))
-        for item in (x for x in (reversed if args.reverse else list)(entities.values())
+            errput("Printed %s to console%s" % (util.count(count_total, "row"), punct))
+        orderer = reversed if getattr(args, "reverse", False) else list
+        for item in (x for x in orderer(entities.values())
                      if x["type"] in database.Database.DATA_CATEGORIES):
             if getattr(args, "no_empty", False) and not item.get("count"): continue # for item
             countstr = "" if item.get("count") is None else ", %s" % util.count(item, "row")
@@ -962,7 +964,7 @@ def run_export(dbname, args):
     else: # Print to console
         func = importexport.export_to_console
         posargs = [args.format, make_iterables]
-        kwargs.update(output=output, multiple=True, progress=progress)
+        kwargs.update(output=output, multiple=True, empty=not args.no_empty, progress=progress)
 
     try: do_output("export", args, functools.partial(func, *posargs, **kwargs), entities, files)
     finally: util.try_ignore(db.close)
@@ -970,7 +972,7 @@ def run_export(dbname, args):
 
 def run_search(dbname, args):
     """
-    Exports database contents in various formats to file, or prints to console.
+    Searches over all database columns, writes to file in various formats or prints to console.
 
     @param   dbname         path of database to export
     @param   args

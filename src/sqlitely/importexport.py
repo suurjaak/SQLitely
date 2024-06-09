@@ -830,7 +830,7 @@ def export_query_to_db(db, filename, table, query, params=(), create_sql=None,
 
 
 def export_to_console(format, make_iterables, title=None,
-                      output=None, multiple=False, progress=None):
+                      output=None, multiple=False, empty=True, progress=None):
     """
     Prints entity rows to console.
 
@@ -840,6 +840,7 @@ def export_to_console(format, make_iterables, title=None,
     @param   make_iterables  function yielding pairs of ({info}, function yielding rows)
     @param   output          print-function to use if not print()
     @param   multiple        whether to output as multi-item
+    @param   empty           do not skip iterables with no output rows
     @param   progress        callback(?done, ?error) to report export progress,
                              returning false if export should cancel
     @return                  True on success, None on cancel
@@ -890,7 +891,7 @@ def export_to_console(format, make_iterables, title=None,
 
         rows = make_iterable()
         i, row, nextrow = 0, next(rows, None), next(rows, None)
-        while row:
+        while row or (empty and not i):
 
             if not started:
                 allnames.add(name)
@@ -939,6 +940,9 @@ def export_to_console(format, make_iterables, title=None,
                     if multiple:
                         key = yaml.safe_dump({name: None})
                         output("%s:" % key[:key.rindex(":")])
+
+            if not row:
+                break # while row
 
             do_break = not i % 100 and progress and not progress(name=name, count=i + 1)
             if "csv" == format:
