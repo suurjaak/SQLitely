@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.06.2024
+@modified    10.06.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -39,6 +39,7 @@ import traceback
 import warnings
 
 import six
+import step
 try: # For printing to a console from a packaged Windows binary
     import win32console
 except ImportError:
@@ -59,6 +60,7 @@ if is_gui_possible:
 from . import importexport
 from . import scheme
 from . import searchparser
+from . import templates
 from . import workers
 
 
@@ -263,6 +265,25 @@ ARGUMENTS = {
 
              {"args": ["--verbose"], "action": "store_true",
               "help": "print detailed logging messages to stderr"},
+             {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
+              "help": "path of program configuration file to use"},
+        ]},
+        {"name": "pragma",
+         "help": "output SQLite database PRAGMAs",
+         "description": "Output and filter database PRAGMA settings.",
+         "arguments": [
+             {"args": ["INFILE"], "metavar": "DATABASE",
+              "help": "SQLite database file to use"},
+             {"args": ["FILTER"], "nargs": "*", "default": [],
+              "help": "filter PRAGMA directives by name or value"},
+             {"args": ["-o", "--output"], "dest": "OUTFILE", "metavar": "FILE",
+                       "nargs": "?", "const": "",
+              "help": "write output to SQL file instead of printing to console;\n"
+                      "filename will be auto-generated if not given"},
+             {"args": ["--overwrite"], "action": "store_true",
+              "help": "overwrite output file if already exists\n"
+                      "(by default appends unique counter to filename)"},
+
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
               "help": "path of program configuration file to use"},
         ]},
@@ -695,16 +716,16 @@ def prepare_args(action, args):
     if action in ACTION_FORMATS:
         FORMATS = {k: v for k, v in FORMATS.items() if k in ACTION_FORMATS[action]}
 
-    if "import" != action and args.OUTFILE and not args.format: # Detect format from output filename
+    if "import" != action and args.OUTFILE and hasattr(args, "format") and not args.format:
         fmt = os.path.splitext(args.OUTFILE)[-1].lower().lstrip(".")
         if fmt in FORMATS:
-            args.format = fmt
+            args.format = fmt # Detect format from output filename
     if hasattr(args, "format"):
         args.format = args.format or DEFAULT_FORMATS[action]
     if "stats" == action and "sql" == args.format:
         args.disk_usage = True
     if hasattr(args, "combine"):
-        args.combine = args.combine or ("db" == args.format)
+        args.combine = args.combine or ("db" == getattr(args, "format", None))
     if hasattr(args, "maxcount"):
         args.maxcount = None if args.maxcount is None or args.maxcount <  0 else args.maxcount
     if hasattr(args, "limit"):
@@ -712,9 +733,11 @@ def prepare_args(action, args):
     if hasattr(args, "offset"):
         args.offset   =    0 if args.offset   is None or args.offset   <= 0 else args.offset
 
-    outfile_transient = args.OUTFILE is None and args.format in importexport.PRINTABLE_EXTS
+    format_printable = (args.format in importexport.PRINTABLE_EXTS) if hasattr(args, "format") \
+                       else None
+    outfile_transient = args.OUTFILE is None and format_printable
     outfile_required  = "stats" == action or (getattr(args, "combine", False) and args.OUTFILE == "")
-    if not args.OUTFILE and (outfile_required or args.format not in importexport.PRINTABLE_EXTS):
+    if not args.OUTFILE and (outfile_required or format_printable is False):
         dct = {"action": action.capitalize(), "db": os.path.basename(args.INFILE)}
         base = OUTFILE_TEMPLATES.get(action, "%(action)s from %(db)s") % dct
         args.OUTFILE = util.unrepeat("%s.%s" % (base, args.format), ".%s" % args.format)
@@ -1373,6 +1396,50 @@ def run_parse(dbname, args):
         util.try_ignore(db.close)
 
 
+def run_pragma(dbname, args):
+    """
+    Outputs SQLite database PRAGMAs to file or console.
+
+    @param   dbname         path of database to export
+    @param   args
+               FILTER       filter PRAGMA directives by name or value
+               OUTFILE      path of output file, if any
+               overwrite    overwrite existing output file instead of creating unique name
+    """
+    validate_args("pragma", args, dbname)
+
+    output(file=sys.stderr)
+    output("Opening database %s (%s).", dbname, util.format_bytes(database.get_size(dbname)),
+           file=sys.stderr)
+    db = database.Database(dbname)
+    pragmas = db.get_pragma_values()
+    db.close()
+
+    if args.FILTER:
+        rgx_filters = [re.compile(re.escape(x), flags=re.I) for x in args.FILTER]
+        for name, value in list(pragmas.items()):
+            vals = [str(v) for v in (value if isinstance(value, list) else [value])]
+            if isinstance(value, bool): vals.append(str(int(value))) # Match bools as integer also
+            if not all(any(r.search(v) for v in [name] + vals) for r in rgx_filters):
+                pragmas.pop(name)
+
+    if not pragmas:
+        sys.exit("No %spragmas to output." % ("matching " if args.FILTER else ""))
+
+    content = step.Template(templates.PRAGMA_SQL, strip=False).expand(pragma=pragmas, db=db)
+
+    if args.OUTFILE:
+        with open(args.OUTFILE, "w") as f:
+            f.write(content)
+        output("Wrote %s to %r (%s).", util.plural("pragma", pragmas), args.OUTFILE,
+               util.format_bytes(os.path.getsize(args.OUTFILE)), file=sys.stderr)
+    else: # Print to console
+        output("Printing %s%s.", util.plural("pragma", pragmas),
+               " matching filter" if args.FILTER else "", file=sys.stderr)
+        output()
+        output(content)
+
+
 def run_stats(dbname, args):
     """
     Writes database statistics to file or prints to console.
@@ -1807,6 +1874,8 @@ def run(nogui=False):
         run_import(arguments.INFILE, arguments)
     elif "parse" == arguments.command:
         run_parse(arguments.INFILE, arguments)
+    elif "pragma" == arguments.command:
+        run_pragma(arguments.INFILE, arguments)
     elif "search" == arguments.command:
         run_search(arguments.INFILE, arguments)
     elif "stats" == arguments.command:

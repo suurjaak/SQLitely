@@ -1,9 +1,9 @@
 CHANGELOG
 =========
 
-2.3, 2024-06-09
+2.3, 2024-06-10
 ---------------
-- add command-line interface, with execute, export, import, parse, search, and stats
+- add command-line interface, with execute, export, import, parse, pragma, search, and stats
 - add option to rename SQL window pages
 - add support for CREATE TABLE .. STRICT (Python 3.9+)
 - add support for empty or whitespacey table and column and constraint names
