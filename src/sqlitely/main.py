@@ -1191,340 +1191,6 @@ def run_export(dbname, args):
     finally: util.try_ignore(db.close)
 
 
-def run_search(dbname, args):
-    """
-    Searches over all database columns, writes to file in various formats or prints to console.
-
-    @param   dbname         path of database to export
-    @param   args
-               SEARCH       search query
-               OUTFILE      path of output file, if any
-               format       export format
-               path         output directory if not current
-               combine      combine all outputs into a single file
-               overwrite    overwrite existing output file instead of creating unique name
-               case         case-sensitive search
-               limit        maximum number of matches to find per table or view
-               offset       number of initial matches to skip from each table or view
-               reverse      query rows in reverse order
-               maxcount     maximum total number of rows to export over all tables and views
-    """
-    validate_args("search", args, dbname)
-
-    db = database.Database(dbname)
-    queryparser = searchparser.SearchQueryParser()
-
-    entities = util.CaselessDict(insertorder=True)
-    _, _, _, kws = queryparser.Parse(args.SEARCH, args.case)
-    for category, item in ((c, x) for c in db.DATA_CATEGORIES for x in db.schema[c].values()):
-        if (category in kws
-        and not searchparser.match_words(item["name"], kws[category], any, args.case)
-        or "-" + category in kws
-        and searchparser.match_words(item["name"], kws["-" + category], any, args.case)):
-            continue # for item
-        title = "%s %s" % (item["type"].capitalize(), grammar.quote(item["name"], force=True))
-        entities[item["name"]] = dict(item, **{"count": 0, "title": title})
-    maxrow, fromrow = max(-1, -1 if args.limit is None else args.limit), max(-1, args.offset or 0)
-    limit = (maxrow, fromrow) if (fromrow > 0) else (maxrow, ) if (maxrow >= 0) else ()
-
-    if not entities:
-        sys.exit("Nothing to search in %s with %r." % (dbname, args.SEARCH))
-
-
-    def make_iterables():
-        """Yields pairs of ({item}, callable returning iterable cursor)."""
-        for item in (reversed if args.reverse else list)(entities.values()):
-            sql, params, _, _ = queryparser.Parse(args.SEARCH, args.case, item)
-            if not sql: continue  # for item
-
-            order_sql = db.get_order_sql(item["name"], reverse=True) if args.reverse else ""
-            limit_sql = db.get_limit_sql(*limit, maxcount=args.maxcount, totals=entities.values())
-            sql += order_sql + limit_sql
-            item.update(query=sql, params=params)
-            yield item, functools.partial(db.select, sql, params,
-                                          error="Error querying %s." %
-                                                util.cap(item["title"], reverse=True))
-
-    if args.overwrite and args.OUTFILE:
-        os.path.exists(args.OUTFILE) and os.unlink(args.OUTFILE)
-
-    files = collections.OrderedDict()  # {entity name: output filename}
-    progress = make_progress("search", entities, args)
-    func, posargs, kwargs = None, [], {}
-
-    if "db" == args.format:
-        def output_to_db():
-            result = False
-            for item, _ in make_iterables():
-                if args.maxcount is not None \
-                and sum(x.get("count", 0) for x in entities.values()) >= args.maxcount:
-                    break # for item
-
-                sql, params = item["query"], item["params"]
-                create_sql = item["sql"] if "table" == item["type"] else None
-                res = importexport.export_query_to_db(db, args.OUTFILE, item["name"],
-                    sql, params, create_sql=create_sql, empty=False, progress=progress
-                )
-                result = res or result
-                if res is None: break # for item
-            return result
-
-        func = output_to_db
-
-    elif args.OUTFILE and args.combine:
-        func = importexport.export_data_multiple
-        posargs.extend((db, args.OUTFILE, args.format, make_search_title(args)))
-        kwargs.update(empty=False, make_iterables=make_iterables, progress=progress,
-                      info={"Command": " ".join(cli_args)} if cli_args else None)
-
-    elif args.OUTFILE:
-        def do_export():
-            result, basenames = True, []
-            path, prefix = os.path.split(os.path.splitext(args.OUTFILE)[0]) if args.OUTFILE \
-                           else (args.path or "",  "")
-            for item, make_iterable in make_iterables():
-                category, name = item["type"], item["name"]
-                title = util.cap(item["title"], reverse=True)
-                basename = util.make_unique(util.safe_filename(title), basenames, suffix=" (%s)")
-                basenames.append(basename)
-                filename = "%s.%s" % (" ".join(filter(bool, (prefix, basename))), args.format)
-                filename = os.path.join(path, filename)
-                if not args.overwrite: filename = util.unique_path(filename)
-
-                title = [util.cap(item["title"])] + make_search_title(args)
-                result = importexport.export_data(db, filename, args.format, make_iterable, title,
-                    item["columns"], category=category, name=name, progress=progress,
-                    info={"Command": " ".join(cli_args)} if cli_args else None
-                )
-                if result and item["count"]: files[name] = filename
-                else: util.try_ignore(os.unlink, filename)
-                if not result: break # for item
-            return result
-
-        func = do_export
-
-    else: # Print to console
-        func = importexport.export_to_console
-        posargs = [args.format, make_iterables, make_search_title(args)]
-        kwargs.update(output=output, multiple=True, progress=progress)
-
-    try: do_output("search", args, functools.partial(func, *posargs, **kwargs), entities, files)
-    finally: util.try_ignore(db.close)
-
-
-def run_parse(dbname, args):
-    """
-    Searches database schema, and writes matching entities to file or prints to console.
-
-    @param   dbname         path of database to export
-    @param   args
-               SEARCH       search query
-               OUTFILE      path of output file, if any
-               case         case-sensitive search
-               limit        maximum number of matches to find
-               offset       number of initial matches
-               reverse      find matches in reverse order
-               overwrite    overwrite existing output file instead of creating unique name
-    """
-    file_existed = args.OUTFILE and not args.overwrite and os.path.isfile(args.OUTFILE)
-    if args.OUTFILE and not args.overwrite:
-        args.OUTFILE = util.unique_path(args.OUTFILE)
-
-    _, _, words, kws = searchparser.SearchQueryParser().Parse(args.SEARCH, args.case)
-
-    counts = collections.defaultdict(int) # {category: count}
-    matches = [] # [SQL, ]
-    try:
-        i = 0
-        imin = 0 if args.offset is None else max(0, args.offset)
-        imax = imin + (sys.maxsize if args.limit is None or args.limit < 0 else args.limit)
-        db = database.Database(dbname)
-        for category in (reversed if args.reverse else list)(db.CATEGORIES):
-            othercats = set(db.CATEGORIES) - set([category])
-            if category not in kws and othercats & set(kws):
-                continue # for category
-
-            for item in (reversed if args.reverse else list)(db.get_category(category).values()):
-                if (category in kws
-                and not searchparser.match_words(item["name"], kws[category], any, args.case)
-                or "-" + category in kws
-                and searchparser.match_words(item["name"], kws["-" + category], any, args.case)):
-                    continue # for item
-
-                if not searchparser.match_words(item["sql"], words, all, args.case) \
-                and (words or category not in kws):
-                    continue # for item
-
-                if imin <= i < imax:
-                    counts[category] += 1
-                    matches.append(item["sql"])
-                i += 1
-
-        headers = make_search_title(args)
-        if args.OUTFILE:
-            importexport.export_sql(db, args.OUTFILE, "\n\n".join(matches), headers)
-    except Exception:
-        _, e, tb = sys.exc_info()
-        if args.OUTFILE and not file_existed:
-            util.try_ignore(os.unlink, args.OUTFILE)
-        output("Error searching %s.", dbname, file=sys.stderr)
-        six.reraise(type(e), e, tb)
-    else:
-        errput = lambda s="": output(s, file=sys.stderr)
-        countstr = ", ".join(util.plural(c, counts[c]) for c in db.CATEGORIES if c in counts)
-        if not counts:
-            errput()
-            errput("Found nothing in %s%s." %
-                   (dbname, " matching %r" % args.SEARCH if db.schema and args.SEARCH else ""))
-        elif not args.OUTFILE:
-            output("\n-- Source: %s", dbname)
-            for l in headers:
-                output("-- %s", l)
-            if headers: output()
-            output("\n\n".join(matches))
-            if args.SEARCH:
-                output("\n-- Found %s: %s.", util.plural("entity", matches), countstr)
-        else:
-            fmt_bytes = lambda f, s=None: util.format_bytes((s or os.path.getsize)(f))
-
-            errput()
-            errput("Parse from: %s (%s)" % (os.path.abspath(dbname),
-                                             fmt_bytes(dbname, database.get_size)))
-            errput("Found %s: %s." % (util.plural("entity", len(matches)), countstr))
-            errput("Wrote %s (%s)." % (args.OUTFILE, fmt_bytes(args.OUTFILE)))
-    finally:
-        util.try_ignore(db.close)
-
-
-def run_pragma(dbname, args):
-    """
-    Outputs SQLite database PRAGMAs to file or console.
-
-    @param   dbname         path of database to export
-    @param   args
-               FILTER       filter PRAGMA directives by name or value
-               OUTFILE      path of output file, if any
-               overwrite    overwrite existing output file instead of creating unique name
-    """
-    validate_args("pragma", args, dbname)
-
-    output(file=sys.stderr)
-    output("Opening database %s (%s).", dbname, util.format_bytes(database.get_size(dbname)),
-           file=sys.stderr)
-    db = database.Database(dbname)
-    pragmas = db.get_pragma_values()
-    db.close()
-
-    if args.FILTER:
-        rgx_filters = [re.compile(re.escape(x), flags=re.I) for x in args.FILTER]
-        for name, value in list(pragmas.items()):
-            vals = [str(v) for v in (value if isinstance(value, list) else [value])]
-            if isinstance(value, bool): vals.append(str(int(value))) # Match bools as integer also
-            if not all(any(r.search(v) for v in [name] + vals) for r in rgx_filters):
-                pragmas.pop(name)
-
-    if not pragmas:
-        sys.exit("No %spragmas to output." % ("matching " if args.FILTER else ""))
-
-    content = step.Template(templates.PRAGMA_SQL, strip=False).expand(pragma=pragmas, db=db)
-
-    if args.OUTFILE:
-        with open(args.OUTFILE, "w") as f:
-            f.write(content)
-        output("Wrote %s to %r (%s).", util.plural("pragma", pragmas), args.OUTFILE,
-               util.format_bytes(os.path.getsize(args.OUTFILE)), file=sys.stderr)
-    else: # Print to console
-        output("Printing %s%s.", util.plural("pragma", pragmas),
-               " matching filter" if args.FILTER else "", file=sys.stderr)
-        output()
-        output(content)
-
-
-def run_stats(dbname, args):
-    """
-    Writes database statistics to file or prints to console.
-
-    @param   dbname         path of database to analyze
-    @param   args
-               OUTFILE      path of output file, if any
-               format       export format
-               overwrite    overwrite existing output file instead of creating unique name
-               start_file   open output file with registered program
-               disk_usage   count bytes of disk usage per table and index
-               progress     show progress bar
-    """
-    outfile0 = args.OUTFILE
-    file_existed = args.OUTFILE and not args.overwrite and os.path.isfile(args.OUTFILE)
-    validate_args("stats", args, dbname)
-
-    db = database.Database(os.path.abspath(dbname))
-    stats = {}
-    if args.disk_usage:
-        resultqueue = queue.Queue()
-        worker = workers.AnalyzerThread(resultqueue.put)
-
-    output()
-    progressargs = dict(pulse=True, interval=0.05) if args.progress else dict(static=True)
-    bar = util.ProgressBar(**progressargs)
-    try:
-        args.progress and bar.start()
-        if "sql" != args.format:
-            bar.update(afterword=" Parsing schema")
-            db.populate_schema(parse=True)
-            bar.update(afterword=" Counting rows")
-            db.populate_schema(count=True)
-        if args.disk_usage:
-            bar.update(afterword=" Counting disk usage")
-            worker.work(dbname)
-            stats = next((x["data"] for x in [resultqueue.get()] if "data" in x), None)
-            if stats: db.set_sizes(stats)
-        diagrams = None
-        if "html" == args.format:
-            bar.update(afterword=" Generating diagram")
-            a = MainApp() if is_gui_possible else None
-            layout = scheme.SchemaPlacement(db)
-            layout.SetFonts("Verdana",
-                            ("Open Sans", conf.FontDiagramSize,
-                             conf.FontDiagramFile, conf.FontDiagramBoldFile))
-            layout.Populate({"stats": True})
-            layout.Redraw(scheme.Rect(0, 0, *conf.Defaults["WindowSize"]), layout.LAYOUT_GRID)
-            bmp = layout.MakeBitmap() 
-            svg = layout.MakeTemplate("SVG", embed=True)
-            diagrams = {"bmp": bmp, "svg": svg}
-        bar.update(afterword=" Writing output")
-        importexport.export_stats(db, args.OUTFILE, args.format, stats, diagrams)
-        bar.stop()
-        output()
-    except Exception:
-        _, e, tb = sys.exc_info()
-        bar.stop()
-        output()
-        if args.OUTFILE and not file_existed:
-            util.try_ignore(os.unlink, args.OUTFILE)
-        output("Error analyzing %s.", dbname, file=sys.stderr)
-        six.reraise(type(e), e, tb)
-    else:
-        fmt_bytes = lambda f, s=None: util.format_bytes((s or os.path.getsize)(f))
-        errput = lambda s="": output(s, file=sys.stderr)
-
-        if outfile0 is None and args.format in importexport.PRINTABLE_EXTS:
-            output()
-            try:
-                with open(args.OUTFILE) as f:
-                    output(f.read())
-            finally:
-                util.try_ignore(os.unlink, args.OUTFILE)
-        else:
-            errput()
-            errput("Source: %s (%s)" % (os.path.abspath(dbname),
-                                        fmt_bytes(dbname, database.get_size)))
-            errput("Wrote statistics to: %s (%s)" % (os.path.abspath(args.OUTFILE),
-                                                     fmt_bytes(args.OUTFILE)))
-            if args.start_file: util.start_file(args.OUTFILE)
-    finally:
-        util.try_ignore(db.close)
-
-
 def run_import(infile, args):
     """
     Imports data from file to database, prints results.
@@ -1722,6 +1388,340 @@ def run_import(infile, args):
         util.try_ignore(db.close)
         if not file_existed and (not total or not args.no_empty):
             util.try_ignore(os.unlink, dbname)
+
+
+def run_parse(dbname, args):
+    """
+    Searches database schema, and writes matching entities to file or prints to console.
+
+    @param   dbname         path of database to export
+    @param   args
+               SEARCH       search query
+               OUTFILE      path of output file, if any
+               case         case-sensitive search
+               limit        maximum number of matches to find
+               offset       number of initial matches
+               reverse      find matches in reverse order
+               overwrite    overwrite existing output file instead of creating unique name
+    """
+    file_existed = args.OUTFILE and not args.overwrite and os.path.isfile(args.OUTFILE)
+    if args.OUTFILE and not args.overwrite:
+        args.OUTFILE = util.unique_path(args.OUTFILE)
+
+    _, _, words, kws = searchparser.SearchQueryParser().Parse(args.SEARCH, args.case)
+
+    counts = collections.defaultdict(int) # {category: count}
+    matches = [] # [SQL, ]
+    try:
+        i = 0
+        imin = 0 if args.offset is None else max(0, args.offset)
+        imax = imin + (sys.maxsize if args.limit is None or args.limit < 0 else args.limit)
+        db = database.Database(dbname)
+        for category in (reversed if args.reverse else list)(db.CATEGORIES):
+            othercats = set(db.CATEGORIES) - set([category])
+            if category not in kws and othercats & set(kws):
+                continue # for category
+
+            for item in (reversed if args.reverse else list)(db.get_category(category).values()):
+                if (category in kws
+                and not searchparser.match_words(item["name"], kws[category], any, args.case)
+                or "-" + category in kws
+                and searchparser.match_words(item["name"], kws["-" + category], any, args.case)):
+                    continue # for item
+
+                if not searchparser.match_words(item["sql"], words, all, args.case) \
+                and (words or category not in kws):
+                    continue # for item
+
+                if imin <= i < imax:
+                    counts[category] += 1
+                    matches.append(item["sql"])
+                i += 1
+
+        headers = make_search_title(args)
+        if args.OUTFILE:
+            importexport.export_sql(db, args.OUTFILE, "\n\n".join(matches), headers)
+    except Exception:
+        _, e, tb = sys.exc_info()
+        if args.OUTFILE and not file_existed:
+            util.try_ignore(os.unlink, args.OUTFILE)
+        output("Error searching %s.", dbname, file=sys.stderr)
+        six.reraise(type(e), e, tb)
+    else:
+        errput = lambda s="": output(s, file=sys.stderr)
+        countstr = ", ".join(util.plural(c, counts[c]) for c in db.CATEGORIES if c in counts)
+        if not counts:
+            errput()
+            errput("Found nothing in %s%s." %
+                   (dbname, " matching %r" % args.SEARCH if db.schema and args.SEARCH else ""))
+        elif not args.OUTFILE:
+            output("\n-- Source: %s", dbname)
+            for l in headers:
+                output("-- %s", l)
+            if headers: output()
+            output("\n\n".join(matches))
+            if args.SEARCH:
+                output("\n-- Found %s: %s.", util.plural("entity", matches), countstr)
+        else:
+            fmt_bytes = lambda f, s=None: util.format_bytes((s or os.path.getsize)(f))
+
+            errput()
+            errput("Parse from: %s (%s)" % (os.path.abspath(dbname),
+                                             fmt_bytes(dbname, database.get_size)))
+            errput("Found %s: %s." % (util.plural("entity", len(matches)), countstr))
+            errput("Wrote %s (%s)." % (args.OUTFILE, fmt_bytes(args.OUTFILE)))
+    finally:
+        util.try_ignore(db.close)
+
+
+def run_pragma(dbname, args):
+    """
+    Outputs SQLite database PRAGMAs to file or console.
+
+    @param   dbname         path of database to export
+    @param   args
+               FILTER       filter PRAGMA directives by name or value
+               OUTFILE      path of output file, if any
+               overwrite    overwrite existing output file instead of creating unique name
+    """
+    validate_args("pragma", args, dbname)
+
+    output(file=sys.stderr)
+    output("Opening database %s (%s).", dbname, util.format_bytes(database.get_size(dbname)),
+           file=sys.stderr)
+    db = database.Database(dbname)
+    pragmas = db.get_pragma_values()
+    db.close()
+
+    if args.FILTER:
+        rgx_filters = [re.compile(re.escape(x), flags=re.I) for x in args.FILTER]
+        for name, value in list(pragmas.items()):
+            vals = [str(v) for v in (value if isinstance(value, list) else [value])]
+            if isinstance(value, bool): vals.append(str(int(value))) # Match bools as integer also
+            if not all(any(r.search(v) for v in [name] + vals) for r in rgx_filters):
+                pragmas.pop(name)
+
+    if not pragmas:
+        sys.exit("No %spragmas to output." % ("matching " if args.FILTER else ""))
+
+    content = step.Template(templates.PRAGMA_SQL, strip=False).expand(pragma=pragmas, db=db)
+
+    if args.OUTFILE:
+        with open(args.OUTFILE, "w") as f:
+            f.write(content)
+        output("Wrote %s to %r (%s).", util.plural("pragma", pragmas), args.OUTFILE,
+               util.format_bytes(os.path.getsize(args.OUTFILE)), file=sys.stderr)
+    else: # Print to console
+        output("Printing %s%s.", util.plural("pragma", pragmas),
+               " matching filter" if args.FILTER else "", file=sys.stderr)
+        output()
+        output(content)
+
+
+def run_search(dbname, args):
+    """
+    Searches over all database columns, writes to file in various formats or prints to console.
+
+    @param   dbname         path of database to export
+    @param   args
+               SEARCH       search query
+               OUTFILE      path of output file, if any
+               format       export format
+               path         output directory if not current
+               combine      combine all outputs into a single file
+               overwrite    overwrite existing output file instead of creating unique name
+               case         case-sensitive search
+               limit        maximum number of matches to find per table or view
+               offset       number of initial matches to skip from each table or view
+               reverse      query rows in reverse order
+               maxcount     maximum total number of rows to export over all tables and views
+    """
+    validate_args("search", args, dbname)
+
+    db = database.Database(dbname)
+    queryparser = searchparser.SearchQueryParser()
+
+    entities = util.CaselessDict(insertorder=True)
+    _, _, _, kws = queryparser.Parse(args.SEARCH, args.case)
+    for category, item in ((c, x) for c in db.DATA_CATEGORIES for x in db.schema[c].values()):
+        if (category in kws
+        and not searchparser.match_words(item["name"], kws[category], any, args.case)
+        or "-" + category in kws
+        and searchparser.match_words(item["name"], kws["-" + category], any, args.case)):
+            continue # for item
+        title = "%s %s" % (item["type"].capitalize(), grammar.quote(item["name"], force=True))
+        entities[item["name"]] = dict(item, **{"count": 0, "title": title})
+    maxrow, fromrow = max(-1, -1 if args.limit is None else args.limit), max(-1, args.offset or 0)
+    limit = (maxrow, fromrow) if (fromrow > 0) else (maxrow, ) if (maxrow >= 0) else ()
+
+    if not entities:
+        sys.exit("Nothing to search in %s with %r." % (dbname, args.SEARCH))
+
+
+    def make_iterables():
+        """Yields pairs of ({item}, callable returning iterable cursor)."""
+        for item in (reversed if args.reverse else list)(entities.values()):
+            sql, params, _, _ = queryparser.Parse(args.SEARCH, args.case, item)
+            if not sql: continue  # for item
+
+            order_sql = db.get_order_sql(item["name"], reverse=True) if args.reverse else ""
+            limit_sql = db.get_limit_sql(*limit, maxcount=args.maxcount, totals=entities.values())
+            sql += order_sql + limit_sql
+            item.update(query=sql, params=params)
+            yield item, functools.partial(db.select, sql, params,
+                                          error="Error querying %s." %
+                                                util.cap(item["title"], reverse=True))
+
+    if args.overwrite and args.OUTFILE:
+        os.path.exists(args.OUTFILE) and os.unlink(args.OUTFILE)
+
+    files = collections.OrderedDict()  # {entity name: output filename}
+    progress = make_progress("search", entities, args)
+    func, posargs, kwargs = None, [], {}
+
+    if "db" == args.format:
+        def output_to_db():
+            result = False
+            for item, _ in make_iterables():
+                if args.maxcount is not None \
+                and sum(x.get("count", 0) for x in entities.values()) >= args.maxcount:
+                    break # for item
+
+                sql, params = item["query"], item["params"]
+                create_sql = item["sql"] if "table" == item["type"] else None
+                res = importexport.export_query_to_db(db, args.OUTFILE, item["name"],
+                    sql, params, create_sql=create_sql, empty=False, progress=progress
+                )
+                result = res or result
+                if res is None: break # for item
+            return result
+
+        func = output_to_db
+
+    elif args.OUTFILE and args.combine:
+        func = importexport.export_data_multiple
+        posargs.extend((db, args.OUTFILE, args.format, make_search_title(args)))
+        kwargs.update(empty=False, make_iterables=make_iterables, progress=progress,
+                      info={"Command": " ".join(cli_args)} if cli_args else None)
+
+    elif args.OUTFILE:
+        def do_export():
+            result, basenames = True, []
+            path, prefix = os.path.split(os.path.splitext(args.OUTFILE)[0]) if args.OUTFILE \
+                           else (args.path or "",  "")
+            for item, make_iterable in make_iterables():
+                category, name = item["type"], item["name"]
+                title = util.cap(item["title"], reverse=True)
+                basename = util.make_unique(util.safe_filename(title), basenames, suffix=" (%s)")
+                basenames.append(basename)
+                filename = "%s.%s" % (" ".join(filter(bool, (prefix, basename))), args.format)
+                filename = os.path.join(path, filename)
+                if not args.overwrite: filename = util.unique_path(filename)
+
+                title = [util.cap(item["title"])] + make_search_title(args)
+                result = importexport.export_data(db, filename, args.format, make_iterable, title,
+                    item["columns"], category=category, name=name, progress=progress,
+                    info={"Command": " ".join(cli_args)} if cli_args else None
+                )
+                if result and item["count"]: files[name] = filename
+                else: util.try_ignore(os.unlink, filename)
+                if not result: break # for item
+            return result
+
+        func = do_export
+
+    else: # Print to console
+        func = importexport.export_to_console
+        posargs = [args.format, make_iterables, make_search_title(args)]
+        kwargs.update(output=output, multiple=True, progress=progress)
+
+    try: do_output("search", args, functools.partial(func, *posargs, **kwargs), entities, files)
+    finally: util.try_ignore(db.close)
+
+
+def run_stats(dbname, args):
+    """
+    Writes database statistics to file or prints to console.
+
+    @param   dbname         path of database to analyze
+    @param   args
+               OUTFILE      path of output file, if any
+               format       export format
+               overwrite    overwrite existing output file instead of creating unique name
+               start_file   open output file with registered program
+               disk_usage   count bytes of disk usage per table and index
+               progress     show progress bar
+    """
+    outfile0 = args.OUTFILE
+    file_existed = args.OUTFILE and not args.overwrite and os.path.isfile(args.OUTFILE)
+    validate_args("stats", args, dbname)
+
+    db = database.Database(os.path.abspath(dbname))
+    stats = {}
+    if args.disk_usage:
+        resultqueue = queue.Queue()
+        worker = workers.AnalyzerThread(resultqueue.put)
+
+    output()
+    progressargs = dict(pulse=True, interval=0.05) if args.progress else dict(static=True)
+    bar = util.ProgressBar(**progressargs)
+    try:
+        args.progress and bar.start()
+        if "sql" != args.format:
+            bar.update(afterword=" Parsing schema")
+            db.populate_schema(parse=True)
+            bar.update(afterword=" Counting rows")
+            db.populate_schema(count=True)
+        if args.disk_usage:
+            bar.update(afterword=" Counting disk usage")
+            worker.work(dbname)
+            stats = next((x["data"] for x in [resultqueue.get()] if "data" in x), None)
+            if stats: db.set_sizes(stats)
+        diagrams = None
+        if "html" == args.format:
+            bar.update(afterword=" Generating diagram")
+            a = MainApp() if is_gui_possible else None
+            layout = scheme.SchemaPlacement(db)
+            layout.SetFonts("Verdana",
+                            ("Open Sans", conf.FontDiagramSize,
+                             conf.FontDiagramFile, conf.FontDiagramBoldFile))
+            layout.Populate({"stats": True})
+            layout.Redraw(scheme.Rect(0, 0, *conf.Defaults["WindowSize"]), layout.LAYOUT_GRID)
+            bmp = layout.MakeBitmap() 
+            svg = layout.MakeTemplate("SVG", embed=True)
+            diagrams = {"bmp": bmp, "svg": svg}
+        bar.update(afterword=" Writing output")
+        importexport.export_stats(db, args.OUTFILE, args.format, stats, diagrams)
+        bar.stop()
+        output()
+    except Exception:
+        _, e, tb = sys.exc_info()
+        bar.stop()
+        output()
+        if args.OUTFILE and not file_existed:
+            util.try_ignore(os.unlink, args.OUTFILE)
+        output("Error analyzing %s.", dbname, file=sys.stderr)
+        six.reraise(type(e), e, tb)
+    else:
+        fmt_bytes = lambda f, s=None: util.format_bytes((s or os.path.getsize)(f))
+        errput = lambda s="": output(s, file=sys.stderr)
+
+        if outfile0 is None and args.format in importexport.PRINTABLE_EXTS:
+            output()
+            try:
+                with open(args.OUTFILE) as f:
+                    output(f.read())
+            finally:
+                util.try_ignore(os.unlink, args.OUTFILE)
+        else:
+            errput()
+            errput("Source: %s (%s)" % (os.path.abspath(dbname),
+                                        fmt_bytes(dbname, database.get_size)))
+            errput("Wrote statistics to: %s (%s)" % (os.path.abspath(args.OUTFILE),
+                                                     fmt_bytes(args.OUTFILE)))
+            if args.start_file: util.start_file(args.OUTFILE)
+    finally:
+        util.try_ignore(db.close)
 
 
 def run_gui(filenames):
