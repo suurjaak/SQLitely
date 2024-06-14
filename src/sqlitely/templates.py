@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    08.06.2024
+@modified    14.06.2024
 ------------------------------------------------------------------------------
 """
 import datetime
@@ -1417,7 +1417,7 @@ from sqlitely import conf
 <font size="2" face="{{ conf.HtmlFontName }}" color="{{ conf.FgColour }}">
 <table cellpadding="0" cellspacing="0"><tr><td valign="top">
 <img src="memory:{{ conf.Title.lower() }}.png" /></td><td width="10"></td><td valign="center">
-<b>{{ conf.Title }} version {{ conf.Version }}</b>, {{ conf.VersionDate }}.<br /><br />
+<b>{{ conf.Title }}</b> version {{ conf.Version }}, {{ conf.VersionDate }}.<br /><br />
 
 
 {{ conf.Title }} is an SQLite database manager, released as free open source software
