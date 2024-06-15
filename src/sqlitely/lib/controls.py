@@ -96,7 +96,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     13.01.2012
-@modified    08.06.2024
+@modified    15.06.2024
 ------------------------------------------------------------------------------
 """
 import binascii
@@ -2833,15 +2833,15 @@ class ResizeWidget(wx.lib.resizewidget.ResizeWidget):
             w, dc = self.ManagedChild.Size[0], wx.ClientDC(self.ManagedChild)
             t = wx.lib.wordwrap.wordwrap(self.ManagedChild.Value, w, dc)
             linesmax = t.count("\n")
-            # DoGetBorderSize() appears not implemented under Gtk
-            borderw, borderh = (x / 2. for x in self.ManagedChild.GetWindowBorderSize())
         else:
             truelinesmax = self.ManagedChild.GetNumberOfLines()
             while self.ManagedChild.GetLineLength(linesmax + 1) >= 0 and linesmax < truelinesmax - 1:
                 linesmax += 1
                 t = self.ManagedChild.GetLineText(linesmax)
                 widthmax = max(widthmax, self.ManagedChild.GetTextExtent(t)[0])
+        if hasattr(self.ManagedChild, "DoGetBorderSize"): # Depends on wx version and OS
             borderw, borderh = self.ManagedChild.DoGetBorderSize()
+        else: borderw, borderh = (x / 2. for x in self.ManagedChild.GetWindowBorderSize())
         _, charh = self.ManagedChild.GetTextExtent("X")
         size = self.Size
         size[0] -= wx.lib.resizewidget.RW_THICKNESS
