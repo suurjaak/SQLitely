@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    10.06.2024
+@modified    20.06.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -84,6 +84,7 @@ ARGUMENTS = {
               "help": "SQLite database(s) to open on startup, if any\n"
                       "(supports * wildcards)"},
 
+             {"args": ["--verbose"], "action": "store_true", "help": argparse.SUPPRESS},
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
               "help": "path of program configuration file to use"},
         ]},
@@ -284,6 +285,7 @@ ARGUMENTS = {
               "help": "overwrite output file if already exists\n"
                       "(by default appends unique counter to filename)"},
 
+             {"args": ["--verbose"], "action": "store_true", "help": argparse.SUPPRESS},
              {"args": ["--config-file"], "dest": "config_file", "metavar": "FILE",
               "help": "path of program configuration file to use"},
         ]},
