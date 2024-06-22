@@ -1158,7 +1158,7 @@ def run_export(dbname, args):
 
     elif args.OUTFILE and args.combine:
         title = "Export from %s" % os.path.basename(dbname)
-        func, posargs = importexport.export_data_multiple, [db, args.OUTFILE, args.format, title]
+        func, posargs = importexport.export_data_combined, [db, args.OUTFILE, args.format, title]
         kwargs.update(empty=not args.no_empty, maxcount=args.maxcount, make_iterables=make_iterables,
                       info={"Command": " ".join(cli_args)} if cli_args else None)
 
@@ -1609,7 +1609,7 @@ def run_search(dbname, args):
         func = output_to_db
 
     elif args.OUTFILE and args.combine:
-        func = importexport.export_data_multiple
+        func = importexport.export_data_combined
         posargs.extend((db, args.OUTFILE, args.format, make_search_title(args)))
         kwargs.update(empty=False, make_iterables=make_iterables, progress=progress,
                       info={"Command": " ".join(cli_args)} if cli_args else None)

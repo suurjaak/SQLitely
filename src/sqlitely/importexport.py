@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.06.2024
+@modified    22.06.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -254,7 +254,7 @@ def export_data(db, filename, format, make_iterable, title, columns,
 
 
 
-def export_data_multiple(db, filename, format, title, category=None, names=None, make_iterables=None,
+def export_data_combined(db, filename, format, title, category=None, names=None, make_iterables=None,
                          limit=None, maxcount=None, empty=True, reverse=False, info=None, progress=None):
     """
     Exports database data from multiple tables/views to a single output file.

@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.06.2024
+@modified    22.06.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -5741,7 +5741,7 @@ class DatabasePage(wx.Panel):
                 "category": category, "names": names}
         opts = {"filename": filename, "multi": True,
                 "name": "%s%s to single file" % ("" if names else "all ", categorylabel),
-                "callable": functools.partial(importexport.export_data_multiple, **args)}
+                "callable": functools.partial(importexport.export_data_combined, **args)}
         if "table" in categories:
             opts["subtotals"] = {t: {
                     "total": topts.get("count"),
