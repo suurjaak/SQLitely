@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    20.06.2024
+@modified    21.06.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -566,6 +566,7 @@ def output(s="", *args, **kwargs):
     try: BREAK_EXS += (BrokenPipeError, )  # Py3
     except NameError: pass  # Py2
 
+    stream = kwargs.get("file", sys.stdout)
     if args: s %= args
     try: print(s, **kwargs)
     except UnicodeError:
@@ -574,15 +575,15 @@ def output(s="", *args, **kwargs):
         except Exception: pass
     except BREAK_EXS:
         # Redirect remaining output to devnull to avoid another BrokenPipeError
-        try: os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        try: os.dup2(os.open(os.devnull, os.O_WRONLY), stream.fileno())
         except (Exception, KeyboardInterrupt): pass
         sys.exit()
 
     try:
-        sys.stdout.flush() # Uncatchable error otherwise if interrupted
+        stream.flush() # Uncatchable error otherwise if interrupted
     except IOError as e:
         if e.errno in (errno.EINVAL, errno.EPIPE):
-            sys.exit() # Stop work in progress if sys.stdout or pipe closed
+            sys.exit() # Stop work in progress if stream or pipe closed
         raise # Propagate any other errors
 
 
@@ -616,7 +617,8 @@ def make_progress(action, entities, args, results=None, **ns):
             if ns["bar"]:
                 ns["bar"].stop(), ns.update(bar=None)
                 output()
-            output("\nError %s from %s: %s", infinitive, args.INFILE, result["error"])
+            output("\nError %s from %s: %s", infinitive, args.INFILE, result["error"],
+                   file=sys.stderr)
         elif "count" in result and item:
             item["count"] = result["count"]
 
@@ -842,32 +844,34 @@ def do_output(action, args, func, entities, files):
     infinitive, past = (x % action.rstrip("e") for x in ("%sing", "%sed"))
     adverb = "in" if action in ("execute", "search") else "from"
 
+    infostream = sys.stdout if args.OUTFILE else sys.stderr
+    infoput = lambda s="", *a, **kw: output(s, *a, file=infostream, **kw)
+
     try:
         if not func(): return
     except Exception:
         _, e, tb = sys.exc_info()
         logger.exception("Error %s %s %s.", infinitive, adverb, args.INFILE)
-        if args.OUTFILE and getattr(args, "combine", None) and "db" != args.format:
+        if args.OUTFILE and getattr(args, "combine", False) and "db" != getattr(args, "format", ""):
             util.try_ignore(os.unlink, args.OUTFILE)
         six.reraise(type(e), e, tb)
     else:
         count_total = {"count": sum(x.get("count", 0) for x in entities.values())}
         fmt_bytes = lambda f, s=None: util.format_bytes((s or os.path.getsize)(f))
-        errput = lambda s="": output(s, file=sys.stderr)
 
-        errput()
-        errput("%s %s: %s (%s)" % (past.capitalize(), adverb, os.path.abspath(args.INFILE),
-                                   fmt_bytes(args.INFILE, database.get_size)))
+        infoput()
+        infoput("%s %s: %s (%s)", past.capitalize(), adverb, os.path.abspath(args.INFILE),
+                                  fmt_bytes(args.INFILE, database.get_size))
         punct = ":" if count_total["count"] or not getattr(args, "no_empty", False) else "."
-        if args.OUTFILE and (getattr(args, "combine", None) or len(files) == 1):
-            errput("Wrote %s to '%s' (%s)%s" % (util.count(count_total, "row"),
-                                                args.OUTFILE, fmt_bytes(args.OUTFILE), punct))
+        if args.OUTFILE and (getattr(args, "combine", False) or len(files) == 1):
+            infoput("Wrote %s to '%s' (%s)%s", util.count(count_total, "row"),
+                                              args.OUTFILE, fmt_bytes(args.OUTFILE), punct)
         elif args.OUTFILE:
-            errput("Wrote %s to %s (%s)%s" % (util.count(count_total, "row"),
-                util.plural("file", files),
-                util.format_bytes(sum(os.path.getsize(f) for f in files.values())), punct))
+            infoput("Wrote %s to %s (%s)%s",
+                    util.count(count_total, "row"), util.plural("file", files),
+                    util.format_bytes(sum(os.path.getsize(f) for f in files.values())), punct)
         else:
-            errput("Printed %s to console%s" % (util.count(count_total, "row"), punct))
+            infoput("Printed %s to console%s" % (util.count(count_total, "row"), punct))
         orderer = reversed if getattr(args, "reverse", False) else list
         for item in (x for x in orderer(entities.values())
                      if x["type"] in database.Database.DATA_CATEGORIES
@@ -876,9 +880,9 @@ def do_output(action, args, func, entities, files):
             countstr = "" if item.get("count") is None else ", %s" % util.count(item, "row")
             if item["name"] in files:
                 filename = files[item["name"]]
-                errput("  '%s'%s (%s)" % (filename, countstr, fmt_bytes(filename)))
+                infoput("  '%s'%s (%s)", filename, countstr, fmt_bytes(filename))
             else:
-                errput("  %s%s" % (util.cap(item["title"], reverse=True), countstr))
+                infoput("  %s%s", util.cap(item["title"], reverse=True), countstr)
 
 
 def run_execute(dbname, args):
@@ -932,11 +936,13 @@ def run_execute(dbname, args):
         """Yields one pair of ({item}, callable returning iterable cursor)."""
         yield item, make_iterable
 
+    infostream = sys.stdout if args.OUTFILE else sys.stderr
+    infoput = lambda s="", *a, **kw: output(s, *a, file=infostream, **kw)
 
     validate_args("execute", args, dbname)
     if os.path.isfile(args.SQL):
-        output("Reading SQL file %r (%s).",
-               args.SQL, util.format_bytes(os.path.getsize(args.SQL), max_units=False))
+        infoput("Reading SQL file %r (%s).",
+                args.SQL, util.format_bytes(os.path.getsize(args.SQL), max_units=False))
         try:
             with open(args.SQL, "r") as f:
                 sql = f.read().strip()
@@ -969,21 +975,21 @@ def run_execute(dbname, args):
     bar.stop()
     if not cursor.description: # Not a query with result rows
         if cursor.rowcount >= 0: # INSERT/UPDATE/DELETE
-            output("%s affected.", util.plural("row", cursor.rowcount))
+            infoput("%s affected.", util.plural("row", cursor.rowcount))
             if cursor.lastrowid: # INSERT
-                output("Row ID of %sinserted row: %s",
-                       "" if cursor.rowcount > 1 else "last ", cursor.lastrowid)
+                infoput("Row ID of %sinserted row: %s",
+                        "" if cursor.rowcount > 1 else "last ", cursor.lastrowid)
         else:
-            output("Query executed.")
+            infoput("Query executed.")
         cursor.close()
         db.close()
-        output("\nDatabase size after query: %s.",
-               util.format_bytes(db.get_size(), max_units=False))
+        infoput("\nDatabase size after query: %s.",
+                util.format_bytes(db.get_size(), max_units=False))
         return
 
     row = next(cursor, None)
     if row is None and args.OUTFILE and args.no_empty:
-        output("Query yielded no results.")
+        infoput("Query yielded no results.")
         return
 
     file_existed = args.OUTFILE and not args.overwrite and os.path.isfile(args.OUTFILE)
@@ -1410,6 +1416,8 @@ def run_parse(dbname, args):
     if args.OUTFILE and not args.overwrite:
         args.OUTFILE = util.unique_path(args.OUTFILE)
 
+    errput = lambda s="", *a, **kw: output(s, *a, file=sys.stderr, **kw)
+    infoput = errput if args.OUTFILE else output
     _, _, words, kws = searchparser.SearchQueryParser().Parse(args.SEARCH, args.case)
 
     counts = collections.defaultdict(int) # {category: count}
@@ -1447,15 +1455,14 @@ def run_parse(dbname, args):
         _, e, tb = sys.exc_info()
         if args.OUTFILE and not file_existed:
             util.try_ignore(os.unlink, args.OUTFILE)
-        output("Error searching %s.", dbname, file=sys.stderr)
+        errput("Error searching %s.", dbname)
         six.reraise(type(e), e, tb)
     else:
-        errput = lambda s="": output(s, file=sys.stderr)
         countstr = ", ".join(util.plural(c, counts[c]) for c in db.CATEGORIES if c in counts)
         if not counts:
-            errput()
-            errput("Found nothing in %s%s." %
-                   (dbname, " matching %r" % args.SEARCH if db.schema and args.SEARCH else ""))
+            infoput()
+            infoput("Found nothing in %s%s.",
+                    dbname, " matching %r" % args.SEARCH if db.schema and args.SEARCH else "")
         elif not args.OUTFILE:
             output("\n-- Source: %s", dbname)
             for l in headers:
@@ -1467,11 +1474,11 @@ def run_parse(dbname, args):
         else:
             fmt_bytes = lambda f, s=None: util.format_bytes((s or os.path.getsize)(f))
 
-            errput()
-            errput("Parse from: %s (%s)" % (os.path.abspath(dbname),
-                                             fmt_bytes(dbname, database.get_size)))
-            errput("Found %s: %s." % (util.plural("entity", len(matches)), countstr))
-            errput("Wrote %s (%s)." % (args.OUTFILE, fmt_bytes(args.OUTFILE)))
+            infoput()
+            infoput("Parse from: %s (%s)",
+                    os.path.abspath(dbname), fmt_bytes(dbname, database.get_size))
+            infoput("Found %s: %s.", util.plural("entity", len(matches)), countstr)
+            infoput("Wrote %s (%s).", args.OUTFILE, fmt_bytes(args.OUTFILE))
     finally:
         util.try_ignore(db.close)
 
@@ -1488,9 +1495,11 @@ def run_pragma(dbname, args):
     """
     validate_args("pragma", args, dbname)
 
-    output(file=sys.stderr)
-    output("Opening database %s (%s).", dbname, util.format_bytes(database.get_size(dbname)),
-           file=sys.stderr)
+    infostream = sys.stdout if args.OUTFILE else sys.stderr
+    infoput = lambda s="", *a, **kw: output(s, *a, file=infostream, **kw)
+
+    infoput()
+    infoput("Opening database %s (%s).", dbname, util.format_bytes(database.get_size(dbname)))
     db = database.Database(dbname)
     pragmas = db.get_pragma_values()
     db.close()
@@ -1511,12 +1520,12 @@ def run_pragma(dbname, args):
     if args.OUTFILE:
         with open(args.OUTFILE, "w") as f:
             f.write(content)
-        output("Wrote %s to %r (%s).", util.plural("pragma", pragmas), args.OUTFILE,
-               util.format_bytes(os.path.getsize(args.OUTFILE)), file=sys.stderr)
+        infoput("Wrote %s to %r (%s).", util.plural("pragma", pragmas), args.OUTFILE,
+                util.format_bytes(os.path.getsize(args.OUTFILE)))
     else: # Print to console
-        output("Printing %s%s.", util.plural("pragma", pragmas),
-               " matching filter" if args.FILTER else "", file=sys.stderr)
-        output()
+        infoput("Printing %s%s.", util.plural("pragma", pragmas),
+                " matching filter" if args.FILTER else "")
+        infoput()
         output(content)
 
 
@@ -1667,6 +1676,7 @@ def run_stats(dbname, args):
     output()
     progressargs = dict(pulse=True, interval=0.05) if args.progress else dict(static=True)
     bar = util.ProgressBar(**progressargs)
+    errput = lambda s="", *a, **kw: output(s, *a, file=sys.stderr, **kw)
     try:
         args.progress and bar.start()
         if "sql" != args.format:
@@ -1702,11 +1712,10 @@ def run_stats(dbname, args):
         output()
         if args.OUTFILE and not file_existed:
             util.try_ignore(os.unlink, args.OUTFILE)
-        output("Error analyzing %s.", dbname, file=sys.stderr)
+        errput("Error analyzing %s.", dbname)
         six.reraise(type(e), e, tb)
     else:
         fmt_bytes = lambda f, s=None: util.format_bytes((s or os.path.getsize)(f))
-        errput = lambda s="": output(s, file=sys.stderr)
 
         if outfile0 is None and args.format in importexport.PRINTABLE_EXTS:
             output()
@@ -1717,10 +1726,9 @@ def run_stats(dbname, args):
                 util.try_ignore(os.unlink, args.OUTFILE)
         else:
             errput()
-            errput("Source: %s (%s)" % (os.path.abspath(dbname),
-                                        fmt_bytes(dbname, database.get_size)))
-            errput("Wrote statistics to: %s (%s)" % (os.path.abspath(args.OUTFILE),
-                                                     fmt_bytes(args.OUTFILE)))
+            errput("Source: %s (%s)", os.path.abspath(dbname), fmt_bytes(dbname, database.get_size))
+            errput("Wrote statistics to: %s (%s)",
+                   os.path.abspath(args.OUTFILE), fmt_bytes(args.OUTFILE))
             if args.start_file: util.start_file(args.OUTFILE)
     finally:
         util.try_ignore(db.close)
