@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    21.06.2024
+@modified    22.06.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -928,7 +928,7 @@ def run_execute(dbname, args):
         if flags["make"] == 0:
             iterer = itertools.chain([] if row is None else [row], cursor)
             return type("", (), {"description": cursor.description, "__iter__": iterer.__iter__,
-                                 "__next__": iterer.__next__})()
+                                 "__next__": iterer.__next__, "next": lambda *_: next(iterer)})()
         flags["make"] += 1
         return run_sql(db, args.SQL, args.param) # Some export formats require iterating twice
 
@@ -992,7 +992,6 @@ def run_execute(dbname, args):
         infoput("Query yielded no results.")
         return
 
-    file_existed = args.OUTFILE and not args.overwrite and os.path.isfile(args.OUTFILE)
     if args.overwrite and args.OUTFILE:
         os.path.exists(args.OUTFILE) and os.unlink(args.OUTFILE)
 
@@ -1296,7 +1295,7 @@ def run_import(infile, args):
             extra = "" if not args.filter else " using sheet filter: %s" % " ".join(args.filter)
             output()
             sys.exit("Nothing to import from %s%s." % (infile, extra))
-        sheets = [x for x in sheets if x["rows"] and (not args.no_empty or sheet["total"])]
+        sheets = [x for x in sheets if x["rows"] and (not args.no_empty or x["total"])]
         if not sheets:
             output()
             sys.exit("Nothing to import from %s." % infile)
