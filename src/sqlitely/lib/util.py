@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    09.06.2024
+@modified    23.06.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -1133,15 +1133,17 @@ def safe_filename(filename):
     return re.sub(r"[\/\\\:\*\?\"\<\>\|\x00-\x1f]", "", filename)
 
 
-def select_file(filepath):
+def select_file(path):
     """
-    Tries to open the file directory and select file.
+    Tries to open the file directory, and select file if path is a file.
     Falls back to opening directory only (select is Windows-only).
     """
-    if not os.path.exists(filepath):
-        return start_file(os.path.split(filepath)[0])
-    try: subprocess.Popen('explorer /select, "%s"' % shortpath(filepath))
-    except Exception: start_file(os.path.split(filepath)[0])
+    folder = path if os.path.isdir(path) else os.path.dirname(path)
+    if "nt" != os.name or not os.path.exists(path) or path is folder:
+        start_file(folder)
+        return
+    try: subprocess.Popen('explorer /select, "%s"' % shortpath(path))
+    except Exception: start_file(folder)
 
 
 def setval(collection, value, *path):
