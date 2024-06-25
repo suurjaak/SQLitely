@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.06.2024
+@modified    25.06.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -102,6 +102,8 @@ ARGUMENTS = {
              {"args": ["-p", "--param"], "nargs": "+", "default": [],
               "help": "positional or keyword parameters for SQL,\n"
                       "keywords as name=value"},
+             {"args": ["--create"], "action": "store_true",
+              "help": "create DATABASE if file does not exist yet"},
              {"args": ["-o", "--output"], "dest": "OUTFILE", "metavar": "FILE",
                        "nargs": "?", "const": "",
               "help": "write query output to file instead of printing to console;\n"
@@ -958,8 +960,9 @@ def run_execute(dbname, args):
 
     output()
     progressargs = dict(pulse=True, interval=0.05) if args.progress else dict(static=True)
-    afterword = " Opening database %s (%s)" % \
-                (dbname, util.format_bytes(database.get_size(dbname), max_units=False))
+    sz = util.format_bytes(database.get_size(dbname), max_units=False) if os.path.exists(dbname) \
+         else "new file"
+    afterword = " Opening database %s (%s)" % (dbname, sz)
     bar = util.ProgressBar(afterword=afterword, **progressargs)
 
     db = database.Database(dbname)
@@ -1823,7 +1826,7 @@ def run(nogui=False):
     arguments = argparser.parse_args(argv)
     infile0 = getattr(arguments, "INFILE", None)
 
-    for argname in ("INFILE", "OUTFILE"):
+    for argname in ("INFILE", "OUTFILE"): # Expand wildcards, convert Windows shortpaths to long
         filearg = filearg0 = getattr(arguments, argname, [])
         if filearg:
             filearg = sorted(set(util.to_unicode(f) for f in util.tuplefy(filearg)))
@@ -1861,11 +1864,14 @@ def run(nogui=False):
         except Exception: traceback.print_exc()
         return
 
-    if not arguments.INFILE and infile0:
+    infile_must_exist    = False if "execute" == arguments.command and arguments.create else True
+    infile_must_nonempty = False if "execute" == arguments.command else True
+
+    if infile_must_exist and not arguments.INFILE and infile0:
         sys.exit("File not found: %s" % infile0)
-    if not os.path.isfile(arguments.INFILE):
+    if infile_must_exist and not os.path.isfile(arguments.INFILE):
         sys.exit("File not found: %s" % arguments.INFILE)
-    if not os.path.getsize(arguments.INFILE):
+    if infile_must_nonempty and not os.path.getsize(arguments.INFILE):
         sys.exit("Empty file: %s" % arguments.INFILE)
     arguments.INFILE = os.path.normpath(arguments.INFILE)
     if getattr(arguments, "OUTFILE", None):
