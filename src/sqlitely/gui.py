@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.06.2024
+@modified    26.06.2024
 ------------------------------------------------------------------------------
 """
 import ast
@@ -1245,7 +1245,7 @@ class MainWindow(guibase.TemplateFrameMixIn, wx.Frame):
             selected = self.list_db.GetNextSelected(selected)
         if event.GetIndex() >= 0 and event.GetIndex() not in selecteds:
             if event.GetIndex():
-                files, selecteds = [event.GetText()], [event.GetIndex()]
+                files, selecteds = [self.list_db.GetItemText(event.GetIndex())], [event.GetIndex()]
         if not files:
             menu = wx.Menu()
             label1 = "Stop &import from folder" if self.worker_folder.is_working() \
