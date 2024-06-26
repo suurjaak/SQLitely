@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    22.06.2024
+@modified    26.06.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -908,7 +908,8 @@ def export_to_console(format, make_iterables, title=None,
                         writer.writerow([item["name"]])
                     writer.writerow(([""] if multiple else []) + colnames)
                 elif "json" == format:
-                    output("[" if multiple else "  %s: [" % json.dumps(item["name"]))
+                    if started: output("  ],")
+                    output("[" if not multiple else "  %s: [" % json.dumps(item["name"]))
                 elif "sql"  == format:
                     if started:
                         output("\n")
@@ -942,6 +943,7 @@ def export_to_console(format, make_iterables, title=None,
                         key = yaml.safe_dump({name: None})
                         output("%s:" % key[:key.rindex(":")])
 
+            started = True
             if not row:
                 break # while row
 
@@ -956,7 +958,6 @@ def export_to_console(format, make_iterables, title=None,
                     content += ","
                 output(content)
 
-            started = True
             i, row, nextrow = i + 1, nextrow, next(rows, None)
             if do_break:
                 result = None
