@@ -885,7 +885,9 @@ def do_output(action, args, func, entities, files):
                 filename = files[item["name"]]
                 infoput("  '%s'%s (%s)", filename, countstr, fmt_bytes(filename))
             else:
-                infoput("  %s%s", util.cap(item["title"], reverse=True), countstr)
+                title = item["title"] if "execute" == args.command \
+                        else util.cap(item["title"], reverse=True)
+                infoput("  %s%s", title, countstr)
 
 
 def run_execute(dbname, args):
