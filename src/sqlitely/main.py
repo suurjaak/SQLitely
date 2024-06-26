@@ -905,10 +905,18 @@ def run_execute(dbname, args):
                progress     show progress bar
     """
 
+    def cast(v):
+        """Returns value cast to float or integer if convertable else value."""
+        for ctor in (int, float, None):
+            try: return ctor(v) if ctor and re.match(r"-?\d+\.?\d*$", v) else v
+            except Exception: pass
+
     def run_sql_params(db, sql, params):
         """Executes SQL statement with parameters, handling parameter conversion, returns cursor."""
         paramdict = dict(x.split("=", 1) for x in params) \
                     if all(re.match(r"\w.*=.+", x) for x in params or ()) else {}
+        paramdict = {k: cast(v) for k, v in paramdict.items()}
+        params = [cast(v) for v in params]
         try: return db.execute(sql, paramdict or params)
         except sqlite3.ProgrammingError as e:
             if "supplied a dictionary" in str(e) or "value for binding" in str(e):
