@@ -602,6 +602,8 @@ def make_progress(action, entities, args, results=None, **ns):
     NAME_MAX = 25
     infinitive = "%sing" % action.rstrip("e")
 
+    echo = output if args.OUTFILE else lambda s="", *a, **kw: output(s, *a, file=sys.stderr, **kw)
+
     ns = dict({"bar": None, "name": None, "afterword": None}, **ns)
     def progress(result=None, **kwargs):
         """Prints out progress texts, registers counts."""
@@ -613,14 +615,13 @@ def make_progress(action, entities, args, results=None, **ns):
         if itemname and itemname != ns["name"]:
             if ns["bar"]:
                 ns["bar"].stop(), ns.update(bar=None)
-                output()
+                echo()
 
         if "error" in result:
             if ns["bar"]:
                 ns["bar"].stop(), ns.update(bar=None)
-                output()
-            output("\nError %s from %s: %s", infinitive, args.INFILE, result["error"],
-                   file=sys.stderr)
+                echo()
+            echo("\nError %s from %s: %s", infinitive, args.INFILE, result["error"])
         elif "count" in result and item:
             item["count"] = result["count"]
 
@@ -641,7 +642,7 @@ def make_progress(action, entities, args, results=None, **ns):
                     pulse = ("import" == action and (item["total"] == -1 or item["total"] < 100)) or \
                             ("search" == action) or ("export" == action and "table" != item["type"])
                     ns["bar"] = util.ProgressBar(pulse=pulse, interval=0.05, value=item["count"],
-                                                 afterword=ns["afterword"], echo=output)
+                                                 afterword=ns["afterword"], echo=echo)
                     if action in ("export", "import") and "view" != item["type"] \
                     and item.get("total", -1) != -1:
                         total = max(0, item["total"] - (args.offset or 0))
@@ -658,7 +659,7 @@ def make_progress(action, entities, args, results=None, **ns):
         elif "index" in result and "total" in result and args.progress: # E.g. db.populate_schema()
             if not ns["bar"]:
                 ns["bar"] = util.ProgressBar(value=result["index"], max=result["total"],
-                                             afterword=ns["afterword"], echo=output)
+                                             afterword=ns["afterword"], echo=echo)
                 ns["bar"].draw()
             else:
                 ns["bar"].update(result["index"])
@@ -666,7 +667,7 @@ def make_progress(action, entities, args, results=None, **ns):
             if ns["bar"]:
                 ns["bar"].update(value=ns["bar"].max, pulse=False)
                 ns["bar"].stop(), ns.update(bar=None)
-                output()
+                echo()
             ns["name"] = None
         if result.get("errorcount") and item:
             item["errorcount"] = result["errorcount"]
@@ -960,6 +961,7 @@ def run_execute(dbname, args):
 
     output()
     progressargs = dict(pulse=True, interval=0.05) if args.progress else dict(static=True)
+    if not args.OUTFILE: progressargs.update(echo=infoput)
     sz = util.format_bytes(database.get_size(dbname), max_units=False) if os.path.exists(dbname) \
          else "new file"
     afterword = " Opening database %s (%s)" % (dbname, sz)
@@ -1359,7 +1361,7 @@ def run_import(infile, args):
         _, e, tb = sys.exc_info()
         bar.stop()
         output()
-        output("Error reading %s.", infile, file=sys.stderr)
+        output("Error reading %s.", infile)
         six.reraise(type(e), e, tb)
     else:
         bar.update(afterword=" Finalizing", pause=False)
@@ -1674,11 +1676,13 @@ def run_stats(dbname, args):
     if args.disk_usage:
         resultqueue = queue.Queue()
         worker = workers.AnalyzerThread(resultqueue.put)
+    errput = lambda s="", *a, **kw: output(s, *a, file=sys.stderr, **kw)
 
     output()
     progressargs = dict(pulse=True, interval=0.05) if args.progress else dict(static=True)
+    if outfile0 is None and args.format in importexport.PRINTABLE_EXTS:
+        progressargs.update(echo=errput)
     bar = util.ProgressBar(**progressargs)
-    errput = lambda s="", *a, **kw: output(s, *a, file=sys.stderr, **kw)
     try:
         args.progress and bar.start()
         if "sql" != args.format:
