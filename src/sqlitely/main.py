@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    25.06.2024
+@modified    26.06.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -931,7 +931,8 @@ def run_execute(dbname, args):
         if flags["make"] == 0:
             iterer = itertools.chain([] if row is None else [row], cursor)
             return type("", (), {"description": cursor.description, "__iter__": iterer.__iter__,
-                                 "__next__": iterer.__next__, "next": lambda *_: next(iterer)})()
+                                 "__next__": lambda *_: next(iterer),
+                                 "next": lambda *_: next(iterer)})()
         flags["make"] += 1
         return run_sql(db, args.SQL, args.param) # Some export formats require iterating twice
 
