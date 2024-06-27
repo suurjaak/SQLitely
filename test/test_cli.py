@@ -9,12 +9,15 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     24.06.2024
-@modified    26.06.2024
+@modified    27.06.2024
 ------------------------------------------------------------------------------
 """
+import glob
 import json
 import logging
 import os
+import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -56,13 +59,40 @@ class TestCLI(unittest.TestCase):
 
 
     def tearDown(self):
-        """Deletes temoorary files, closes subprocess if any."""
+        """Deletes temoorary files and folders, closes subprocess if any."""
         try: self._proc and self._proc.terminate()
         except Exception: pass
         for path in self._paths:
-            try: os.remove(path)
+            try: (shutil.rmtree if os.path.isdir(path) else os.remove)(path)
             except Exception: pass
         super(TestCLI, self).tearDown()
+
+
+    def populate_db(self, filename):
+        """Populates an SQLite database with schema and data."""
+        with sqlite3.connect(filename) as db:
+            db.execute("CREATE TABLE parent (id)")
+            db.execute("CREATE TABLE related (id, fk REFERENCES parent (id))")
+            db.execute("INSERT INTO parent VALUES %s" % ", ".join("(%s)" % i for i in range(10)))
+            db.execute("INSERT INTO related VALUES %s" %
+                       ", ".join("(%s, %s)" % (i, i) for i in range(10)))
+
+
+    def run_cmd(self, command, *args):
+        """Executes SQLitely command, returns (exit code, stdout, stderr)."""
+        TIMEOUT = dict(timeout=60) if sys.version_info > (3, 2) else {}
+        workdir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
+        args = [str(x) for x in args]
+        #cmd = [r"c:\Program Files\Python\python.exe", "-m", "sqlitely", command] + list(args)
+        cmd = ["python", "-m", "sqlitely", command] + list(args)
+        logger.debug("Executing command %r.", " ".join(repr(x) if " " in x else x for x in cmd))
+        self._proc = subprocess.Popen(cmd, universal_newlines=True, cwd=workdir,
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = (x.strip() for x in self._proc.communicate(**TIMEOUT))
+        logger.debug("Command result: %r.", self._proc.poll())
+        if out: logger.debug("Command stdout:\n%s", out)
+        if err: logger.debug("Command stderr:\n%s", err)
+        return self._proc.returncode, out, err
 
 
     def test_execute(self):
@@ -74,6 +104,17 @@ class TestCLI(unittest.TestCase):
         self.verify_execute_file_args()
         self.verify_execute_formats()
         self.verify_execute_flags()
+
+
+    def test_export(self):
+        """Tests 'export' command in command-line interface."""
+        logger.info("Testing 'export' command.")
+        self.populate_db(self._dbname)
+
+        self.verify_export_formats()
+        self.verify_export_filters()
+        self.verify_export_limits()
+        self.verify_export_flags()
 
 
     def verify_execute_blank(self):
@@ -180,6 +221,7 @@ class TestCLI(unittest.TestCase):
 
     def verify_execute_formats(self):
         """Tests 'execute': output to console and file in different formats."""
+        logger.info("Testing query export in all formats.")
         for fmt in self.PRINTABLE_FORMATS:
             logger.info("Testing query export as %s.", fmt.upper())
             res, out, err = self.run_cmd("execute", self._dbname, "SELECT * FROM foo", "-f", fmt)
@@ -219,21 +261,129 @@ class TestCLI(unittest.TestCase):
         self.assertGreater(os.path.getsize(outfile), 6, "Output file not overwritten in query export.")
 
 
-    def run_cmd(self, command, *args):
-        """Executes SQLitely command, returns (exit code, stdout, stderr)."""
-        TIMEOUT = dict(timeout=60) if sys.version_info > (3, 2) else {}
-        workdir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
-        args = [str(x) for x in args]
-        #cmd = [r"c:\Program Files\Python\python.exe", "-m", "sqlitely", command] + list(args)
-        cmd = ["python", "-m", "sqlitely", command] + list(args)
-        logger.debug("Executing command %r.", " ".join(repr(x) if " " in x else x for x in cmd))
-        self._proc = subprocess.Popen(cmd, universal_newlines=True, cwd=workdir,
-                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out, err = (x.strip() for x in self._proc.communicate(**TIMEOUT))
-        logger.debug("Command result: %r.", self._proc.poll())
-        if out: logger.debug("Command stdout:\n%s", out)
-        if err: logger.debug("Command stderr:\n%s", err)
-        return self._proc.returncode, out, err
+    def verify_export_formats(self):
+        """Tests 'export': output to console and file in different formats."""
+        logger.info("Testing export in all formats.")
+        for fmt in self.PRINTABLE_FORMATS:
+            logger.info("Testing export as %s.", fmt.upper())
+            res, out, err = self.run_cmd("export", self._dbname, "-f", fmt)
+            self.assertFalse(res, "Unexpected failure from export.")
+            self.assertTrue(out, "Unexpected lack of output from export.")
+
+        for fmt in self.FORMATS:
+            logger.info("Testing export to file as combined %s.", fmt.upper())
+            outfile = self.mktemp("." + fmt)
+            res, out, err = self.run_cmd("export", self._dbname, "-o", outfile, "--combine")
+            self.assertFalse(res, "Unexpected failure from export.")
+            self.assertTrue(os.path.isfile(outfile), "Output file not created in export.")
+            self.assertTrue(os.path.getsize(outfile), "Output file has no content in export.")
+
+        for fmt in self.FORMATS:
+            logger.info("Testing export to separate files as %s.", fmt.upper())
+            outpath = tempfile.mkdtemp()
+            self._paths.append(outpath)
+            res, out, err = self.run_cmd("export", self._dbname, "-f", "html", "--path", outpath)
+            self.assertFalse(res, "Unexpected failure from export.")
+            files = glob.glob(os.path.join(outpath, "*"))
+            self.assertTrue(files, "Output files not created in export.")
+
+
+    def verify_export_filters(self):
+        """Tests 'export': output to console with table filters."""
+        logger.info("Testing export with filters.")
+
+        res, out, err = self.run_cmd("export", self._dbname, "-f", "json", "--filter", "parent")
+        self.assertFalse(res, "Unexpected failure from export.")
+        self.assertEqual(json.loads(out), {"parent": [{"id": i} for i in range(10)]},
+                        "Unexpected output from export.")
+
+        res, out, err = self.run_cmd("export", self._dbname, "-f", "json", "--filter", "~related")
+        self.assertFalse(res, "Unexpected failure from export.")
+        self.assertEqual(json.loads(out), {"parent": [{"id": i} for i in range(10)]},
+                        "Unexpected output from export.")
+
+        res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
+                                     "--filter", "~parent", "related")
+        self.assertFalse(res, "Unexpected failure from export.")
+        self.assertEqual(json.loads(out), {"related": [{"id": i, "fk": i} for i in range(10)]},
+                        "Unexpected output from export.")
+
+        logger.info("Testing export with --include-related.")
+        res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
+                                     "--filter", "~parent", "related", "--include-related")
+        self.assertFalse(res, "Unexpected failure from export.")
+        self.assertEqual(json.loads(out), {"parent": [{"id": i} for i in range(10)],
+                                           "related": [{"id": i, "fk": i} for i in range(10)]},
+                        "Unexpected output from export.")
+
+
+    def verify_export_limits(self):
+        """Tests 'export': output to console with limits and offsets."""
+        logger.info("Testing export with result limiting.")
+
+        logger.info("Testing export with --limit.")
+        res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
+                                     "--filter", "parent", "--limit", 5)
+        self.assertFalse(res, "Unexpected failure from export.")
+        self.assertEqual(json.loads(out), {"parent": [{"id": i} for i in range(5)]},
+                        "Unexpected output from export.")
+
+        logger.info("Testing export with --limit --offset.")
+        res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
+                                     "--filter", "parent", "--limit", 5, "--offset", 5)
+        self.assertFalse(res, "Unexpected failure from export.")
+        self.assertEqual(json.loads(out), {"parent": [{"id": i + 5} for i in range(5)]},
+                        "Unexpected output from export.")
+
+        logger.info("Testing export with --limit --max-count.")
+        res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
+                                     "--limit", 5, "--max-count", 6)
+        self.assertFalse(res, "Unexpected failure from export.")
+        self.assertEqual(json.loads(out), {"parent": [{"id": i} for i in range(5)],
+                                           "related": [{"id": 0, "fk": 0}]},
+                        "Unexpected output from export.")
+
+        logger.info("Testing export with --reverse.")
+        res, out, err = self.run_cmd("export", self._dbname, "-f", "json", "--reverse")
+        self.assertFalse(res, "Unexpected failure from export.")
+        self.assertEqual(json.loads(out), {"parent": [{"id": i} for i in range(10)[::-1]],
+                                           "related": [{"id": i, "fk": i} for i in range(10)[::-1]]},
+                        "Unexpected output from export.")
+
+
+    def verify_export_flags(self):
+        """Tests 'export': various command-line flags."""
+        logger.info("Testing export with --no-empty.")
+        with sqlite3.connect(self._dbname) as db:
+            db.execute("CREATE TABLE empty (_)")
+        outpath = tempfile.mkdtemp()
+        self._paths.append(outpath)
+        res, out, err = self.run_cmd("export", self._dbname, "-f", "html", "--path", outpath)
+        self.assertFalse(res, "Unexpected failure from export.")
+        files = glob.glob(os.path.join(outpath, "*"))
+        self.assertTrue(files, "Output files not created in export.")
+        self.assertTrue(any("empty" in f for f in files), "Emtpy table not exported.")
+
+        outpath = tempfile.mkdtemp()
+        self._paths.append(outpath)
+        res, out, err = self.run_cmd("export", self._dbname, "-f", "html",
+                                     "--path", outpath, "--no-empty")
+        self.assertFalse(res, "Unexpected failure from export.")
+        files = glob.glob(os.path.join(outpath, "*"))
+        self.assertTrue(files, "Output files not created in export.")
+        self.assertFalse(any("empty" in f for f in files), "Emtpy table exported.")
+        with sqlite3.connect(self._dbname) as db:
+            db.execute("DROP TABLE empty")
+
+        logger.info("Testing export with --overwrite.")
+        outfile = self.mktemp(".html", "custom")
+        res, out, err = self.run_cmd("export", self._dbname, "-o", outfile, "--combine")
+        self.assertFalse(res, "Unexpected failure from export.")
+        self.assertEqual(os.path.getsize(outfile), 6, "Output file overwritten in export.")
+        res, out, err = self.run_cmd("export", self._dbname,
+                                     "-o", outfile, "--combine", "--overwrite")
+        self.assertFalse(res, "Unexpected failure from export.")
+        self.assertGreater(os.path.getsize(outfile), 6, "Output file not overwritten in export.")
 
 
     def mktemp(self, suffix=None, content=None):
