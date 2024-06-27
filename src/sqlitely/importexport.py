@@ -8,7 +8,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.06.2024
+@modified    27.06.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -18,6 +18,7 @@ import copy
 import csv
 import datetime
 import functools
+import io
 import json
 import logging
 import os
@@ -210,7 +211,7 @@ def export_data(db, filename, format, make_iterable, title, columns,
 
                 # Write out data to temporary file first, to populate row count.
                 fh, tmpname = tempfile.mkstemp(prefix="%s.rows." % os.path.basename(filename))
-                tmpfile = open(fh, "wb+")
+                tmpfile = io.open(fh, "wb+")
                 template = step.Template(TEMPLATES["rows"][format], postprocess=convert_lf,
                                          strip=False, escape="html" == format)
                 template.stream(tmpfile, namespace)
