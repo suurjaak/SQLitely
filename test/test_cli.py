@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     24.06.2024
-@modified    27.06.2024
+@modified    28.06.2024
 ------------------------------------------------------------------------------
 """
 import glob
@@ -112,7 +112,7 @@ class TestCLI(unittest.TestCase):
         self.populate_db(self._dbname)
 
         self.verify_export_formats()
-        self.verify_export_filters()
+        self.verify_export_selections()
         self.verify_export_limits()
         self.verify_export_flags()
 
@@ -288,29 +288,29 @@ class TestCLI(unittest.TestCase):
             self.assertTrue(files, "Output files not created in export.")
 
 
-    def verify_export_filters(self):
-        """Tests 'export': output to console with table filters."""
-        logger.info("Testing export with filters.")
+    def verify_export_selections(self):
+        """Tests 'export': output to console with table selections."""
+        logger.info("Testing export with table selections.")
 
-        res, out, err = self.run_cmd("export", self._dbname, "-f", "json", "--filter", "parent")
+        res, out, err = self.run_cmd("export", self._dbname, "-f", "json", "--select", "parent")
         self.assertFalse(res, "Unexpected failure from export.")
         self.assertEqual(json.loads(out), {"parent": [{"id": i} for i in range(10)]},
                         "Unexpected output from export.")
 
-        res, out, err = self.run_cmd("export", self._dbname, "-f", "json", "--filter", "~related")
+        res, out, err = self.run_cmd("export", self._dbname, "-f", "json", "--select", "~related")
         self.assertFalse(res, "Unexpected failure from export.")
         self.assertEqual(json.loads(out), {"parent": [{"id": i} for i in range(10)]},
                         "Unexpected output from export.")
 
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
-                                     "--filter", "~parent", "related")
+                                     "--select", "~parent", "related")
         self.assertFalse(res, "Unexpected failure from export.")
         self.assertEqual(json.loads(out), {"related": [{"id": i, "fk": i} for i in range(10)]},
                         "Unexpected output from export.")
 
         logger.info("Testing export with --include-related.")
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
-                                     "--filter", "~parent", "related", "--include-related")
+                                     "--select", "~parent", "related", "--include-related")
         self.assertFalse(res, "Unexpected failure from export.")
         self.assertEqual(json.loads(out), {"parent": [{"id": i} for i in range(10)],
                                            "related": [{"id": i, "fk": i} for i in range(10)]},
@@ -323,14 +323,14 @@ class TestCLI(unittest.TestCase):
 
         logger.info("Testing export with --limit.")
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
-                                     "--filter", "parent", "--limit", 5)
+                                     "--select", "parent", "--limit", 5)
         self.assertFalse(res, "Unexpected failure from export.")
         self.assertEqual(json.loads(out), {"parent": [{"id": i} for i in range(5)]},
                         "Unexpected output from export.")
 
         logger.info("Testing export with --limit --offset.")
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
-                                     "--filter", "parent", "--limit", 5, "--offset", 5)
+                                     "--select", "parent", "--limit", 5, "--offset", 5)
         self.assertFalse(res, "Unexpected failure from export.")
         self.assertEqual(json.loads(out), {"parent": [{"id": i + 5} for i in range(5)]},
                         "Unexpected output from export.")

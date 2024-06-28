@@ -9,7 +9,7 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     21.08.2019
-@modified    26.06.2024
+@modified    28.06.2024
 ------------------------------------------------------------------------------
 """
 from __future__ import print_function
@@ -168,9 +168,9 @@ ARGUMENTS = {
                       "(affected by offset and limit)"},
              {"args": ["--include-related"], "dest": "related", "action": "store_true",
               "help": "include related entities:\n"
-                      "foreign tables and view dependencies if using filter,\n"
+                      "foreign tables and view dependencies if using --select,\n"
                       "and indexes and triggers if exporting to database or SQL"},
-             {"args": ["--filter"], "nargs": "+",
+             {"args": ["--select"], "nargs": "+",
               "help": "names of specific entities to export or skip\n"
                       "(supports * wildcards; initial ~ skips)"},
              {"args": ["--limit"], "type": int, "metavar": "NUM",
@@ -200,7 +200,7 @@ ARGUMENTS = {
                       ",".join(sorted(importexport.IMPORT_EXTS))},
              {"args": ["OUTFILE"], "metavar": "DB",
               "help": "SQLite database to import to, will be created if not present"},
-             {"args": ["--filter"], "nargs": "+",
+             {"args": ["--select"], "nargs": "+",
               "help": "names of specific Excel worksheets to import or skip\n"
                       "(supports * wildcards; initial ~ skips)"},
              {"args": ["--row-header"], "action": "store_true",
@@ -1066,7 +1066,7 @@ def run_export(dbname, args):
                path         output directory if not current
                combine      combine all outputs into a single file
                overwrite    overwrite existing file instead of creating unique name
-               filter       names of specific tables or views to export or skip
+               select       names of specific tables or views to export or skip
                             (supports * wildcards; initial dash - skips)
                limit        maximum number of rows to export per table or view
                offset       number of initialrows to skip from each table or view
@@ -1077,7 +1077,7 @@ def run_export(dbname, args):
                progress     show progress bar
     """
     validate_args("export", args, dbname)
-    entity_rgx = util.filters_to_regex(args.filter) if args.filter else None
+    entity_rgx = util.filters_to_regex(args.select) if args.select else None
 
     db = database.Database(dbname)
     if args.related or args.format in ("db", "sql"):
@@ -1088,19 +1088,19 @@ def run_export(dbname, args):
 
     entities = util.CaselessDict((kv for c in db.DATA_CATEGORIES for kv in db.schema[c].items()))
     renames = collections.defaultdict(util.CaselessDict) # {category: {name1: name2}}
-    if args.filter:
+    if args.select:
         entities.clear()
         # First pass: select all data entities matching by name
         for category in db.CATEGORIES if args.format in ("db", "sql") else db.DATA_CATEGORIES:
             for name, item in db.schema.get(category, {}).items():
                 if entity_rgx.match(name):
                     entities[name] = item
-    if args.filter and args.format in ("db", "sql"):
+    if args.select and args.format in ("db", "sql"):
         # Second pass: select dependent tables and views for views, recursively
         for item in [x for x in entities.values() if "view" == x["type"]]:
             for category, items in db.get_full_related(item["type"], item["name"]).items():
                 if category in db.DATA_CATEGORIES: entities.update(items)
-    if args.filter and args.related:
+    if args.select and args.related:
         # Third pass: select foreign tables for tables, recursively
         for item in [x for x in entities.values() if "table" == x["type"]]:
             for category, items in db.get_full_related(item["type"], item["name"]).items():
@@ -1110,7 +1110,7 @@ def run_export(dbname, args):
         for item in list(entities.values()):
             for items in db.get_related(item["type"], item["name"], own=True, clone=False).values():
                 entities.update(items)
-    if args.filter and args.related and args.format in ("db", "sql"):
+    if args.select and args.related and args.format in ("db", "sql"):
         # Fifth pass: select referred tables/views for triggers, recursively
         for item in [x for x in entities.values() if "trigger" == x["type"]]:
             for category, items in db.get_full_related(item["type"], item["name"]).items():
@@ -1119,7 +1119,7 @@ def run_export(dbname, args):
                                   for n, d in entities.items() if c == d["type"]], insertorder=True)
 
     if not entities:
-        extra = "" if not args.filter else " using filter: %s" % " ".join(args.filter)
+        extra = "" if not args.select else " using selection: %s" % " ".join(args.select)
         sys.exit("Nothing to export as %s from %s%s." % (args.format.upper(), dbname, extra))
 
     if "db" == args.format and args.overwrite:
@@ -1168,7 +1168,7 @@ def run_export(dbname, args):
 
     elif args.OUTFILE and args.combine and "sql" == args.format:
         func, posargs = importexport.export_dump, [db, args.OUTFILE, schema]
-        kwargs.update(data=not schema_only, pragma=not args.filter, limit=limit,
+        kwargs.update(data=not schema_only, pragma=not args.select, limit=limit,
                       maxcount=args.maxcount, empty=not args.no_empty, reverse=args.reverse,
                       info={"Command": " ".join(cli_args)} if cli_args else None)
 
@@ -1221,7 +1221,7 @@ def run_import(infile, args):
     @param   infile           path of data file to import
     @param   args
                OUTFILE        path of database to create or update
-               filter         names of worksheets to import, supports * wildcards, leading - skips
+               select         names of worksheets to import, supports * wildcards, leading - skips
                table_name     table to import into, defaults to sheet or file name
                create_always  whether to create new table even if matching table exists
                row_header     whether to use first row of input spreadsheet for column names
@@ -1287,7 +1287,7 @@ def run_import(infile, args):
 
     columns0 = args.columns
     validate_args("import", args, infile)
-    entity_rgx = util.filters_to_regex(args.filter) if args.filter else None
+    entity_rgx = util.filters_to_regex(args.select) if args.select else None
     dbname, file_existed, total = args.OUTFILE, os.path.isfile(args.OUTFILE), 0
     db = database.Database(dbname)
 
@@ -1308,7 +1308,7 @@ def run_import(infile, args):
         sheets = info["sheets"]
         if entity_rgx: sheets = [x for x in sheets if entity_rgx.match(x["name"])]
         if not sheets:
-            extra = "" if not args.filter else " using sheet filter: %s" % " ".join(args.filter)
+            extra = "" if not args.select else " using sheet selection: %s" % " ".join(args.select)
             output()
             sys.exit("Nothing to import from %s%s." % (infile, extra))
         sheets = [x for x in sheets if x["rows"] and (not args.no_empty or x["total"])]
