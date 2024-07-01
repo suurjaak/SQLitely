@@ -9,15 +9,17 @@ Released under the MIT License.
 
 @author      Erki Suurjaak
 @created     24.06.2024
-@modified    28.06.2024
+@modified    01.07.2024
 ------------------------------------------------------------------------------
 """
+import csv
 import glob
 import json
 import logging
 import os
 import shutil
 import sqlite3
+import string
 import subprocess
 import sys
 import tempfile
@@ -40,6 +42,28 @@ class TestCLI(unittest.TestCase):
     FORMATS = list(filter(bool, FORMATS))
 
     PRINTABLE_FORMATS = [x for x in FORMATS if x not in ("html", "xlsx")]
+
+    IMPORT_FORMATS = [xlsxwriter and "xlsx", "csv", "json", yaml and "yaml"]
+    IMPORT_FORMATS = list(filter(bool, IMPORT_FORMATS))
+
+    ROWCOUNT = 10
+
+    SCHEMA = {
+        "parent":  ["id"],
+        "related": ["id", "fk"],
+        "empty":   ["id"],
+    }
+
+    SCHEMA_SQL = """CREATE TABLE parent (id);
+                    CREATE TABLE related (id, fk REFERENCES parent (id));
+                    CREATE TABLE empty (id)"""
+
+    DATA = {
+        "parent": [{"id": i} for i in range(ROWCOUNT)],
+        "related": [{"id": i, "fk": i} for i in range(ROWCOUNT)],
+        "empty": [],
+    }
+
 
 
     def __init__(self, *args, **kwargs):
@@ -70,12 +94,49 @@ class TestCLI(unittest.TestCase):
 
     def populate_db(self, filename):
         """Populates an SQLite database with schema and data."""
+        logger.debug("Populating test database %r with %s tables and %s rows.",
+                     filename, len(self.DATA), sum(map(len, self.DATA.values())))
         with sqlite3.connect(filename) as db:
-            db.execute("CREATE TABLE parent (id)")
-            db.execute("CREATE TABLE related (id, fk REFERENCES parent (id))")
-            db.execute("INSERT INTO parent VALUES %s" % ", ".join("(%s)" % i for i in range(10)))
-            db.execute("INSERT INTO related VALUES %s" %
-                       ", ".join("(%s, %s)" % (i, i) for i in range(10)))
+            db.executescript(self.SCHEMA_SQL)
+            for item_name, data in self.DATA.items():
+                if not data: continue # for
+                rowstr = "(%s)" % ", ".join("?" * len(self.SCHEMA[item_name]))
+                paramstr = ", ".join([rowstr] * len(self.DATA[item_name]))
+                params = [r[c] for r in data for c in self.SCHEMA[item_name]]
+                db.execute("INSERT INTO %s VALUES %s" % (item_name, paramstr), params)
+
+
+    def populate_datafile(self, filename, format, data, schema, combined=False, header=True):
+        """Populates file with data as given format."""
+        logger.debug("Populating %s data in %s with %s tables and %s rows.",
+                     format.upper(), filename, len(schema), sum(map(len, data.values())))
+        if "xlsx" == format:
+            wb = xlsxwriter.Workbook(filename)
+            for item_name in schema:
+                sheet = wb.add_worksheet(item_name)
+                for j, col_name in enumerate(schema[item_name]) if header else ():
+                    sheet.write(0, j, col_name)
+                for i, row in enumerate(data[item_name]):
+                    for j, col_name in enumerate(schema[item_name]):
+                        sheet.write(i + int(bool(header)), j, row[col_name])
+            wb.close()
+        elif "csv" == format:
+            with open(filename, "w") as f:
+                prefix = [""] if combined else []
+                writer = csv.writer(f, csv.excel, delimiter=";", lineterminator="\n")
+                for item_name in schema:
+                    if combined: writer.writerow([item_name])
+                    if header: writer.writerow(prefix + schema[item_name])
+                    for row in data[item_name]:
+                        writer.writerow(prefix + [str(row[k]) for k in schema[item_name]])
+        elif "json" == format:
+            obj = data if combined else next(data[k] for k in schema)
+            with open(filename, "w") as f:
+                json.dump(obj, f)
+        elif "yaml" == format:
+            obj = data if combined else next(data[k] for k in schema)
+            with open(filename, "w") as f:
+                yaml.safe_dump(obj, f)
 
 
     def run_cmd(self, command, *args):
@@ -117,6 +178,20 @@ class TestCLI(unittest.TestCase):
         self.verify_export_flags()
 
 
+    def test_import(self):
+        """Tests 'import' command in command-line interface."""
+        logger.info("Testing 'import' command.")
+
+        self.verify_import_formats()
+        self.verify_import_limits()
+        self.verify_import_noempty()
+        self.verify_import_addpk()
+        self.verify_import_rowheader()
+        self.verify_import_selections()
+        self.verify_import_columns()
+        self.verify_import_flags()
+
+
     def verify_execute_blank(self):
         """Tests 'execute': queries on missing or blank database."""
         logger.info("Testing failure of query on nonexistent file.")
@@ -146,7 +221,7 @@ class TestCLI(unittest.TestCase):
         res, out, err = self.run_cmd("execute", self._dbname, "CREATE TABLE foo (bar)")
         self.assertFalse(res, "Unexpected failure from CREATE TABLE query.")
         self.assertFalse(out, "Unexpected output from CREATE TABLE query.")
-        self.assertTrue(os.path.getsize(self._dbname), "Expected database file to not empty.")
+        self.assertTrue(os.path.getsize(self._dbname), "Expected database file to not be empty.")
 
         logger.info("Testing INSERT query.") # Table foo, rows 1 2
         res, out, err = self.run_cmd("execute", self._dbname, "INSERT INTO foo VALUES (1), (2)")
@@ -294,26 +369,25 @@ class TestCLI(unittest.TestCase):
 
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json", "--select", "parent")
         self.assertFalse(res, "Unexpected failure from export.")
-        self.assertEqual(json.loads(out), {"parent": [{"id": i} for i in range(10)]},
+        self.assertEqual(json.loads(out), {"parent": self.DATA["parent"]},
                         "Unexpected output from export.")
 
-        res, out, err = self.run_cmd("export", self._dbname, "-f", "json", "--select", "~related")
+        res, out, err = self.run_cmd("export", self._dbname, "-f", "json", "--select", "~related", "~empty")
         self.assertFalse(res, "Unexpected failure from export.")
-        self.assertEqual(json.loads(out), {"parent": [{"id": i} for i in range(10)]},
+        self.assertEqual(json.loads(out), {"parent": self.DATA["parent"]},
                         "Unexpected output from export.")
 
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
-                                     "--select", "~parent", "related")
+                                     "--select", "~parent", "related", "~empty")
         self.assertFalse(res, "Unexpected failure from export.")
-        self.assertEqual(json.loads(out), {"related": [{"id": i, "fk": i} for i in range(10)]},
+        self.assertEqual(json.loads(out), {"related": self.DATA["related"]},
                         "Unexpected output from export.")
 
         logger.info("Testing export with --include-related.")
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
                                      "--select", "~parent", "related", "--include-related")
         self.assertFalse(res, "Unexpected failure from export.")
-        self.assertEqual(json.loads(out), {"parent": [{"id": i} for i in range(10)],
-                                           "related": [{"id": i, "fk": i} for i in range(10)]},
+        self.assertEqual(json.loads(out), {k: self.DATA[k] for k in ("parent", "related")},
                         "Unexpected output from export.")
 
 
@@ -325,37 +399,35 @@ class TestCLI(unittest.TestCase):
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
                                      "--select", "parent", "--limit", 5)
         self.assertFalse(res, "Unexpected failure from export.")
-        self.assertEqual(json.loads(out), {"parent": [{"id": i} for i in range(5)]},
+        self.assertEqual(json.loads(out), {"parent": self.DATA["parent"][:5]},
                         "Unexpected output from export.")
 
         logger.info("Testing export with --limit --offset.")
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
                                      "--select", "parent", "--limit", 5, "--offset", 5)
         self.assertFalse(res, "Unexpected failure from export.")
-        self.assertEqual(json.loads(out), {"parent": [{"id": i + 5} for i in range(5)]},
+        self.assertEqual(json.loads(out), {"parent": self.DATA["parent"][5:]},
                         "Unexpected output from export.")
 
         logger.info("Testing export with --limit --max-count.")
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json",
                                      "--limit", 5, "--max-count", 6)
         self.assertFalse(res, "Unexpected failure from export.")
-        self.assertEqual(json.loads(out), {"parent": [{"id": i} for i in range(5)],
-                                           "related": [{"id": 0, "fk": 0}]},
+        self.assertEqual(json.loads(out), {"empty": [], "parent": self.DATA["parent"][:5],
+                                           "related": self.DATA["related"][:1]},
                         "Unexpected output from export.")
 
         logger.info("Testing export with --reverse.")
         res, out, err = self.run_cmd("export", self._dbname, "-f", "json", "--reverse")
         self.assertFalse(res, "Unexpected failure from export.")
-        self.assertEqual(json.loads(out), {"parent": [{"id": i} for i in range(10)[::-1]],
-                                           "related": [{"id": i, "fk": i} for i in range(10)[::-1]]},
+        self.assertEqual(json.loads(out), {"empty": [], "parent": self.DATA["parent"][::-1],
+                                           "related": self.DATA["related"][::-1]},
                         "Unexpected output from export.")
 
 
     def verify_export_flags(self):
         """Tests 'export': various command-line flags."""
         logger.info("Testing export with --no-empty.")
-        with sqlite3.connect(self._dbname) as db:
-            db.execute("CREATE TABLE empty (_)")
         outpath = tempfile.mkdtemp()
         self._paths.append(outpath)
         res, out, err = self.run_cmd("export", self._dbname, "-f", "html", "--path", outpath)
@@ -372,8 +444,6 @@ class TestCLI(unittest.TestCase):
         files = glob.glob(os.path.join(outpath, "*"))
         self.assertTrue(files, "Output files not created in export.")
         self.assertFalse(any("empty" in f for f in files), "Emtpy table exported.")
-        with sqlite3.connect(self._dbname) as db:
-            db.execute("DROP TABLE empty")
 
         logger.info("Testing export with --overwrite.")
         outfile = self.mktemp(".html", "custom")
@@ -386,12 +456,313 @@ class TestCLI(unittest.TestCase):
         self.assertGreater(os.path.getsize(outfile), 6, "Output file not overwritten in export.")
 
 
+    def verify_import_formats(self):
+        """Tests 'import': from different formats."""
+
+        for fmt in self.IMPORT_FORMATS:
+            logger.info("Testing import from %s.", fmt.upper())
+            combined = ("xlsx" == fmt)
+            single_name = None if combined else "parent"
+            schema = {k: self.SCHEMA[k] for k in (self.SCHEMA if combined else [single_name])}
+            data   = {k: self.DATA[k]   for k in (self.SCHEMA if combined else [single_name])}
+            infile = self.mktemp("." + fmt)
+            self.populate_datafile(infile, fmt, data, schema, combined)
+
+            outfile = self.mktemp(".db")
+            res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes", "--row-header")
+            self.assertFalse(res, "Unexpected failure from import.")
+            self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
+            basename = os.path.splitext(os.path.basename(infile))[0]
+            with sqlite3.connect(outfile) as db:
+                db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
+                for item_name in schema:
+                    table_name = item_name if combined else basename
+                    rows = db.execute("SELECT * FROM %s" % table_name).fetchall()
+                    if "csv" == fmt: rows = [{k: intify(v) for k, v in r.items()} for r in rows]
+                    self.assertEqual(rows, data[item_name],
+                                     "Unexpected data in import %r." % item_name)
+
+
+    def verify_import_limits(self):
+        """Tests 'import': with limits and offsets."""
+        logger.info("Testing import with result limiting.")
+
+        FLAGSETS = [("--limit", 3), ("--offset", 7), ("--limit", 5, "--offset", 7),
+                    ("--max-count", 6), ("--max-count", 16), ("--limit", 3, "--max-count", 6)]
+
+        for fmt in self.IMPORT_FORMATS:
+            logger.info("Testing import from %s.", fmt.upper())
+            combined = ("xlsx" == fmt)
+            single_name = None if combined else "parent"
+            schema = {k: self.SCHEMA[k] for k in (self.SCHEMA if combined else [single_name])}
+            data   = {k: self.DATA[k]   for k in (self.SCHEMA if combined else [single_name])}
+            infile = self.mktemp("." + fmt)
+            self.populate_datafile(infile, fmt, data, schema, combined)
+
+            for flags in FLAGSETS:
+                logger.info("Testing import from %s with %s.", fmt.upper(), " ".join(map(str, flags)))
+                outfile = self.mktemp(".db")
+                res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes",
+                                             "--row-header", *flags)
+                self.assertFalse(res, "Unexpected failure from import.")
+                self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
+                basename = os.path.splitext(os.path.basename(infile))[0]
+                with sqlite3.connect(outfile) as db:
+                    db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
+                    total = 0
+                    for item_name in schema:
+                        table_name = item_name if combined else basename
+                        expected = data[item_name]
+                        if "--offset" in flags:
+                            expected = expected[ flags[flags.index("--offset") + 1]:]
+                        if "--limit"  in flags:
+                            expected = expected[:flags[flags.index("--limit")  + 1]]
+                        if "--max-count" in flags:
+                            maxcount = flags[flags.index("--max-count") + 1]
+                            if total + len(expected) > maxcount:
+                                expected = expected[:maxcount - total - len(expected)]
+                        rows = db.execute("SELECT * FROM %s" % table_name).fetchall()
+                        if "csv" == fmt: rows = [{k: intify(v) for k, v in r.items()} for r in rows]
+                        self.assertEqual(rows, expected,
+                                         "Unexpected data in import %r." % item_name)
+                        total += len(expected)
+
+
+    def verify_import_noempty(self):
+        """Tests 'import': with --no-empty."""
+        logger.info("Testing import with --no-empty.")
+
+        for fmt in self.IMPORT_FORMATS:
+            logger.info("Testing import from %s with --no-empty.", fmt.upper())
+            combined = ("xlsx" == fmt)
+            single_name = None if combined else "parent"
+            schema = {k: self.SCHEMA[k] for k in (self.SCHEMA if combined else [single_name])}
+            data   = {k: self.DATA[k]   for k in (self.SCHEMA if combined else [single_name])}
+            infile = self.mktemp("." + fmt)
+            self.populate_datafile(infile, fmt, data, schema, combined)
+
+            outfile = self.mktemp(".db")
+            res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes",
+                                         "--row-header", "--no-empty")
+            self.assertFalse(res, "Unexpected failure from import.")
+            self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
+            basename = os.path.splitext(os.path.basename(infile))[0]
+            with sqlite3.connect(outfile) as db:
+                db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
+                rows = db.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+                received = set(r["name"] for r in rows)
+                expected = set(schema) if combined else set([basename])
+                self.assertEqual(received, expected, "Unexpected data in import with --no-empty.")
+
+
+    def verify_import_addpk(self):
+        """Tests 'import': with --add-pk."""
+        logger.info("Testing import with --add-pk.")
+
+        for fmt in self.IMPORT_FORMATS:
+            logger.info("Testing import from %s with --add-pk.", fmt.upper())
+            combined = ("xlsx" == fmt)
+            single_name = None if combined else "parent"
+            schema = {k: self.SCHEMA[k] for k in (self.SCHEMA if combined else [single_name])}
+            data   = {k: self.DATA[k]   for k in (self.SCHEMA if combined else [single_name])}
+            infile = self.mktemp("." + fmt)
+            self.populate_datafile(infile, fmt, data, schema, combined)
+
+            outfile = self.mktemp(".db")
+            res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes",
+                                         "--row-header", "--add-pk")
+            self.assertFalse(res, "Unexpected failure from import.")
+            self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
+            basename = os.path.splitext(os.path.basename(infile))[0]
+            with sqlite3.connect(outfile) as db:
+                db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
+                for item_name in schema:
+                    table_name = item_name if combined else basename
+                    expected = [dict(r, id_2=i + 1) for i, r in enumerate(data[item_name])]
+                    rows = db.execute("SELECT * FROM %s" % table_name).fetchall()
+                    if "csv" == fmt: rows = [{k: intify(v) for k, v in r.items()} for r in rows]
+                    self.assertEqual(rows, expected, "Unexpected data in import %r." % item_name)
+
+
+    def verify_import_rowheader(self):
+        """Tests 'import': with --row-header."""
+        logger.info("Testing import with --row-header.")
+
+        for fmt in (x for x in self.IMPORT_FORMATS if x in ("csv", "xlsx")):
+            logger.info("Testing import from %s with --row-header.", fmt.upper())
+            combined = ("xlsx" == fmt)
+            single_name = None if combined else "parent"
+            schema = {k: self.SCHEMA[k] for k in (self.SCHEMA if combined else [single_name])}
+            data   = {k: self.DATA[k]   for k in (self.SCHEMA if combined else [single_name])}
+            infile = self.mktemp("." + fmt)
+            self.populate_datafile(infile, fmt, data, schema, combined, header=False)
+
+            outfile = self.mktemp(".db")
+            res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes")
+            self.assertFalse(res, "Unexpected failure from import.")
+            self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
+            basename = os.path.splitext(os.path.basename(infile))[0]
+            with sqlite3.connect(outfile) as db:
+                db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
+                for item_name in schema:
+                    table_name = item_name if combined else basename
+                    table_row = db.execute("SELECT name FROM sqlite_master "
+                                           "WHERE type = 'table' AND name = ?",
+                                           [table_name]).fetchone()
+                    self.assertEqual(bool(table_row), bool(data[item_name]),
+                                     "Unexpected result from existence check on %r." % item_name)
+                    if not table_row: continue # for item_name
+                    expected = [{c: r[k] for k, c in zip(self.SCHEMA[item_name], string.ascii_uppercase)}
+                                for r in data[item_name]]
+                    rows = db.execute("SELECT * FROM %s" % table_name).fetchall()
+                    if "csv" == fmt: rows = [{k: intify(v) for k, v in r.items()} for r in rows]
+                    self.assertEqual(rows, expected, "Unexpected data in import %r." % item_name)
+
+
+    def verify_import_selections(self):
+        """Tests 'import': with table selections."""
+        logger.info("Testing import with table selections.")
+
+        SELECTSETS = ({"parent": True}, {"related": False}, {"parent": True, "related": False})
+
+        for fmt in (x for x in self.IMPORT_FORMATS if x in ("csv", "xlsx")):
+            logger.info("Testing import from %s with table selections.", fmt.upper())
+            combined = ("xlsx" == fmt)
+
+            for selectset in SELECTSETS:
+                flags = ["--select"] + [("" if v else "~") + k for k, v in selectset.items()]
+                schema = {k: self.SCHEMA[k] for k in self.SCHEMA if selectset.get(k)}
+                if not any(selectset.values()):
+                    schema.update({k: self.SCHEMA[k] for k in self.SCHEMA if selectset.get(k, True)})
+                data   = {k: self.DATA[k] for k in schema}
+                infile = self.mktemp("." + fmt)
+                self.populate_datafile(infile, fmt, data, schema, combined)
+
+                outfile = self.mktemp(".db")
+                res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes", *flags)
+                self.assertFalse(res, "Unexpected failure from import.")
+                self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
+                basename = os.path.splitext(os.path.basename(infile))[0]
+                with sqlite3.connect(outfile) as db:
+                    db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
+                    rows = db.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+                    received = set(r["name"] for r in rows)
+                    expected = set(schema) if combined else set([basename])
+                    self.assertEqual(received, expected,
+                                     "Unexpected data in import with %s." % " ".join(flags))
+
+
+    def verify_import_columns(self):
+        """Tests 'import': with column selections."""
+        logger.info("Testing import with column selections.")
+
+        COLSETS = {
+            None: ("id", "id,fk"),
+            "csv": ("1", "1..1", "1..2", "1,2", "A..A", "A..B", "A..Z"),
+        }
+        COLSETS["xlsx"] = COLSETS["csv"]
+        EXPECTEDS = {
+            "id": ["id"], "id,fk": ["id", "fk"], "1": ["id"], "1..1": ["id"], "1..2": ["id", "fk"],
+            "1,2": ["id", "fk"], "A..A": ["id"], "A..B": ["id", "fk"], "A..Z": ["id", "fk"],
+        }
+
+        for fmt in self.IMPORT_FORMATS:
+            logger.info("Testing import from %s with column selections.", fmt.upper())
+            combined = ("xlsx" == fmt)
+            single_name = None if combined else "related"
+            schema = {k: self.SCHEMA[k] for k in (self.SCHEMA if combined else [single_name])}
+            data   = {k: self.DATA[k]   for k in (self.SCHEMA if combined else [single_name])}
+            infile = self.mktemp("." + fmt)
+            self.populate_datafile(infile, fmt, data, schema, combined)
+
+            basename = os.path.splitext(os.path.basename(infile))[0]
+            for colset in COLSETS[None] + COLSETS.get(fmt, ()):
+                flags = ["--columns", colset]
+                outfile = self.mktemp(".db")
+                logger.info("Testing import from %s with --colset %s.", fmt.upper(), colset)
+                res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes",
+                                             "--row-header", "--columns", colset)
+                self.assertFalse(res, "Unexpected failure from import.")
+                self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
+                with sqlite3.connect(outfile) as db:
+                    db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
+                    for item_name in schema:
+                        table_name = item_name if combined else basename
+                        rows = db.execute("PRAGMA table_info(%s)" % table_name).fetchall()
+                        received = [r["name"] for r in rows]
+                        expected = [c for c in EXPECTEDS[colset] if c in schema[item_name]]
+                        self.assertEqual(received, expected,
+                                         "Unexpected columns in import with --colset %r." % colset)
+
+
+    def verify_import_flags(self):
+        """Tests 'import': various command-line flags."""
+
+        TABLE = "mytable"
+        for fmt in self.IMPORT_FORMATS:
+            logger.info("Testing import from %s with --table-name.", fmt.upper())
+            combined = ("xlsx" == fmt)
+            single_name = None if combined else "related"
+            schema = {k: self.SCHEMA[k] for k in (self.SCHEMA if combined else [single_name])}
+            data   = {k: self.DATA[k]   for k in (self.SCHEMA if combined else [single_name])}
+            infile = self.mktemp("." + fmt)
+            self.populate_datafile(infile, fmt, data, schema, combined)
+
+            outfile = self.mktemp(".db")
+            res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes",
+                                         "--row-header", "--table-name", TABLE)
+            self.assertFalse(res, "Unexpected failure from import.")
+            self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
+            with sqlite3.connect(outfile) as db:
+                db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
+                rows = db.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+                received = set(r["name"] for r in rows)
+                expected = set([TABLE + ("_%s" % (i + 1) if i else "") for i in range(len(schema))])
+                self.assertEqual(received, expected, "Unexpected tables in import.")
+
+            # Verify data getting inserted into existing tables
+            logger.info("Testing import from %s with --create-always.", fmt.upper())
+            res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes",
+                                         "--row-header", "--table-name", TABLE)
+            self.assertFalse(res, "Unexpected failure from import.")
+            self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
+            with sqlite3.connect(outfile) as db:
+                db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
+                rows = db.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+                received = set(r["name"] for r in rows)
+                expected = set([TABLE + ("_%s" % (i + 1) if i else "") for i in range(len(schema))])
+                self.assertEqual(received, expected, "Unexpected tables in import.")
+                for i, item_name in enumerate(schema):
+                    table_name = TABLE + ("_%s" % (i + 1) if i else "")
+                    expected = data[item_name] * 2
+                    rows = db.execute("SELECT * FROM %s" % table_name).fetchall()
+                    if "csv" == fmt: rows = [{k: intify(v) for k, v in r.items()} for r in rows]
+                    self.assertEqual(rows, expected, "Unexpected data in import %r." % item_name)
+
+            # Verify data getting inserted into new tables
+            res, out, err = self.run_cmd("import", infile, outfile, "--assume-yes",
+                                         "--row-header", "--table-name", TABLE, "--create-always")
+            self.assertFalse(res, "Unexpected failure from import.")
+            self.assertTrue(os.path.getsize(outfile), "Expected database not created.")
+            with sqlite3.connect(outfile) as db:
+                db.row_factory = lambda cursor, row: dict(sqlite3.Row(cursor, row))
+                rows = db.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+                received = set(r["name"] for r in rows)
+                expected = set([TABLE + ("_%s" % (i + 1) if i else "") for i in range(len(schema) * 2)])
+                self.assertEqual(received, expected, "Unexpected tables in import.")
+
+
     def mktemp(self, suffix=None, content=None):
         """Returns path of a new temporary file, optionally retained on disk with given content."""
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=not content) as f:
             if content: f.write(content.encode("utf-8"))
             self._paths.append(f.name)
             return f.name
+
+
+def intify(v):
+    """Returns value as integer if numeric string."""
+    return int(v) if isinstance(v, str) and v.isdigit() else v
 
 
 if "__main__" == __name__:
